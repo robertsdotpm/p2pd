@@ -40,4 +40,5 @@ P2PD offers engineers the following features:
    **MQTT** for signaling messages, and **TURN** for last resort proxying.
    All of these protocols have public infrastructure.
 
-Click through the table of contents to learn how to use P2PD.
+Learn how to use the software:
+https://p2pd.readthedocs.io/
