@@ -1,0 +1,19 @@
+#pywin32; sys_platform == 'win32'
+#pyuac == 0.0.3; sys_platform == 'win32'
+netifaces == 0.11.0; sys_platform != 'win32'
+gmqtt == 0.6.11
+ntplib == 0.4.0
+readchar == 3.0.5
+#llist -- Requires build tools on windows which makes it less portable.
+#aiomultiprocess == 0.9.0
+#nest_asyncio
+
+aiounittest == 1.4.2 #; python_version < '3.8'
+
+# Needed for UPnP
+xmltodict
+
+
+#uvloop == 0.15.0 -- interesting but disabled for now.
+# https://github.com/secdev/scapy/archive/refs/tags/v2.4.5rc1.zip; sys_platform == 'windows'
+

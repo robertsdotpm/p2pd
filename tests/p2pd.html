@@ -1,0 +1,144 @@
+<html>
+<head>
+<title>P2PD El8 Test Page</title>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.1/jquery.min.js"></script>
+
+<script type="text/javascript">
+// URL encode shorthand.
+en = encodeURIComponent;
+
+// Compare two arrays for equality.
+// Used to compare UInt8Arrays for asserts.
+function cmp_arrays(x, y)
+{
+    if(x.length != y.length) return false;
+    for(var i = 0; i < x.length; i++)
+    {
+        if(x[i] != y[i]) return false;
+    }
+
+    return true;
+}
+
+// Append out to a textarea.
+function print_out(out)
+{
+    // Output.
+    var stdout = $("#stdout");
+    var nl = '\r\n'; var br = nl + nl;
+    var txt = url + nl + out + br;
+    stdout.val(stdout.val() + txt);
+}
+
+// Conduct basic API tests against a server IP.
+// server = IP:port of P2PD.
+async function p2pd_test(server) 
+{
+    // Input field for connection name.
+    var c = $("#con_name").val();
+    $("#stdout").val('');
+
+    // Do these in order to test some P2PD APIs.
+    sub = en("[hH]e[l]+o");
+    var paths = [
+        "/version",
+        "/p2p/open/" + c + "/self",
+        "/p2p/sub/" + c + "/msg_p/" + sub,
+        "/p2p/send/" + c + "/" + en("ECHO Hello, world!"),
+        "/p2p/recv/" + c + "/msg_p/" + sub + "/timeout/2",
+
+        // Flush hello world from the SUB_ALL queue.
+        "/p2p/recv/" + c,
+        "/ifs"
+    ];
+
+    // Make requests to the API.
+    for(var i = 0; i < paths.length; i++) 
+    {
+        // Make API request.
+        url = 'http://' + server + paths[i];
+        var out = await $.ajax({
+            url: url,
+            type: 'GET',
+            dataType: "text"
+        });
+
+        // Show output in text area.
+        print_out(out);
+    }
+
+    // Binary data to send -- outside printable ASCII.
+    // Will send an echo request to the Node server.
+    var x = new Uint8Array(9);
+    x[0] = 69; // 'E'
+    x[1] = 67; // 'C'
+    x[2] = 72; // 'H'
+    x[3] = 79; // 'O'
+    x[4] = 32; // ' '
+    x[5] = 200; // ... binary codes,
+    x[6] = 201;
+    x[7] = 202;
+    x[8] = 203;
+
+    // Send as encoded binary data using POST to API.
+    // This demonstrates that binary POST works.
+    url = 'http://' + server + '/p2p/binary/' + c;
+    var out = await $.ajax({
+        url: url,
+        type: "POST",
+        data: x,    
+        contentType: "application/octet-stream",
+        dataType: "text",
+        processData: false
+    });
+
+    // Show post status.
+    print_out(out);
+
+    // Receive back binary buffer.
+    // Node server should echo back the last 4 bytes.
+    out = await $.ajax({
+        url: url,
+        type: 'GET',
+        processData: 'false',
+        dataType: 'binary',
+        xhrFields:{
+            responseType: 'blob'
+        },
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+
+    // Convert output blob to array buffer.
+    // Then convert that to a Uint8Array.
+    mem_view = await out.arrayBuffer();
+    out_bytes = new Uint8Array(mem_view);
+
+    // Check integrity of received data.
+    if(  cmp_arrays( out_bytes, x.slice(5, 9) )  )
+    {
+        print_out("Got back binary bytes.")
+    }
+    else
+    {
+        print_out("Error receiving back binary bytes.")
+    }
+}
+</script>
+</head>
+<body>
+<center>
+    <h1>P2PD El8 Test Page</h1>
+
+    <button onclick="p2pd_test('127.0.0.1:12333');">Start Test</button>
+
+    <br clear="all">
+    <br clear="all">
+
+    <input id="con_name" type="text" value="con_name">
+
+    <br clear="all">
+
+    <textarea id="stdout" style="margin-top: 10px; width: 1000px; height: 600px;"></textarea>
+</center>
+</body>
+</html>

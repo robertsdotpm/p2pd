@@ -1,0 +1,183 @@
+# OCD so I want all sections commented.
+version: 2.1
+
+# Kind of like includes.
+orbs:
+  win: circleci/windows@5.0
+  macos: circleci/macos@2.3.2
+
+# Main process to do the package install and run the tests.
+commands:
+  # Command to run the tests with Python.
+  test_it:
+    parameters:
+      py:
+        default: "python3"
+        type: string
+      pip:
+        default: "pip3"
+        type: string
+    steps:
+      - run: pwd
+      - checkout
+      - run: <<parameters.py>> --version
+      - run: <<parameters.pip>> install -r requirements.txt
+      - run: <<parameters.pip>> install -e .
+      - run: <<parameters.py>> -m unittest
+  ch_py:
+    parameters:
+      pyver:
+        default: "3.6.0"
+        type: string
+    steps:
+      - run: sudo apt-get update
+      - run: pyenv install <<parameters.pyver>>
+      - run: pyenv global <<parameters.pyver>>
+      - run: python3 --version
+  show_log:
+      steps:
+        - run:
+            command: cat program.log
+            name: show_log
+            when: on_fail
+
+# Defines the list of OS test jobs.
+# What image to use and the command to run.
+jobs:
+  win-server-2019-job:
+    executor: win/server-2019
+    working_directory: ~/p2pd-revive
+    steps:
+      - test_it:
+          py: "python"
+          pip: "pip"
+      - show_log
+      - store_artifacts:
+          path: ~/p2pd-revive/program.log
+          destination: program.log
+  win-server-2022-job:
+    executor: win/server-2022
+    working_directory: ~/p2pd-revive
+    steps:
+      - test_it:
+          py: "python"
+          pip: "pip"
+      - show_log
+      - store_artifacts:
+          path: ~/p2pd-revive/program.log
+          destination: program.log
+  macos-job:
+    macos:
+      xcode: 11.7
+    working_directory: ~/p2pd-revive
+    steps:
+      - test_it
+      - show_log
+      - store_artifacts:
+          path: ~/p2pd-revive/program.log
+          destination: program.log
+  ubuntu-job:
+    docker:
+      - image: cimg/base:2022.09
+    working_directory: ~/p2pd-revive
+    steps:
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y python3-pip
+      - test_it
+      - show_log
+      - store_artifacts:
+          path: ~/p2pd-revive/program.log
+          destination: program.log
+  ubuntu-py-3-6-job:
+    docker:
+      - image: cimg/python:3.10.7
+    working_directory: ~/p2pd-revive
+    steps:
+      - ch_py:
+          pyver: "3.6.7"
+      - test_it:
+          pip: "python3 -m pip"
+      - show_log
+      - store_artifacts:
+          path: ~/p2pd-revive/program.log
+          destination: program.log
+  ubuntu-py-3-7-job:
+    docker:
+      - image: cimg/python:3.10.7
+    working_directory: ~/p2pd-revive
+    steps:
+      - ch_py:
+          pyver: "3.7.0"
+      - test_it:
+          pip: "python3 -m pip"
+      - show_log
+      - store_artifacts:
+          path: ~/p2pd-revive/program.log
+          destination: program.log
+  ubuntu-py-3-8-job:
+    docker:
+      - image: cimg/python:3.10.7
+    working_directory: ~/p2pd-revive
+    steps:
+      - ch_py:
+          pyver: "3.8.0"
+      - test_it:
+          pip: "python3 -m pip"
+      - show_log
+      - store_artifacts:
+          path: ~/p2pd-revive/program.log
+          destination: program.log
+  ubuntu-py-3-9-job:
+    docker:
+      - image: cimg/python:3.10.7
+    working_directory: ~/p2pd-revive
+    steps:
+      - ch_py:
+          pyver: "3.9.0"
+      - test_it:
+          pip: "python3 -m pip"
+      - show_log
+      - store_artifacts:
+          path: ~/p2pd-revive/program.log
+          destination: program.log
+  ubuntu-py-3-10-job:
+    docker:
+      - image: cimg/python:3.10.7
+    working_directory: ~/p2pd-revive
+    steps:
+      - ch_py:
+          pyver: "3.10.0"
+      - test_it:
+          pip: "python3 -m pip"
+      - show_log
+      - store_artifacts:
+          path: ~/p2pd-revive/program.log
+          destination: program.log
+  ubuntu-py-3-12-dev-job:
+    docker:
+      - image: cimg/python:3.10.7
+    working_directory: ~/p2pd-revive
+    steps:
+      - ch_py:
+          pyver: "3.12-dev"
+      - test_it:
+          pip: "python3 -m pip"
+      - show_log
+      - store_artifacts:
+          path: ~/p2pd-revive/program.log
+          destination: program.log
+
+# Schedules all the independent OS test jobs.
+workflows:
+  p2pd-os-tests:
+    jobs:
+      - win-server-2019-job
+      - win-server-2022-job
+      - macos-job
+      - ubuntu-job
+      - ubuntu-py-3-6-job
+      - ubuntu-py-3-7-job
+      - ubuntu-py-3-8-job
+      - ubuntu-py-3-9-job
+      - ubuntu-py-3-10-job
+      - ubuntu-py-3-12-dev-job
