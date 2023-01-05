@@ -11,10 +11,11 @@ except:
 import os
 from p2pd.utils import log_exception, what_exception
 from p2pd import STUNClient, Interface
+from p2pd.settings import *
 from p2pd.net import VALID_AFS, TCP, UDP
 from p2pd.nat import *
 from p2pd.base_stream import pipe_open, SUB_ALL, BaseProto
-from p2pd.stun_client import STUN_TEMP_SERVERS, tran_info_patterns, do_stun_request
+from p2pd.stun_client import tran_info_patterns, do_stun_request
 from p2pd.stun_client import changeRequest, changePortRequest
 from p2pd.ip_range import IPRange
 
@@ -51,7 +52,7 @@ class TestStunClient(unittest.IsolatedAsyncioTestCase):
 
             # Stun server addr.
             route = await i.route(af).bind()
-            stun_server = STUN_TEMP_SERVERS[0]
+            stun_server = STUNT_SERVERS[af][0]
             dest = await Address(
                 stun_server[0],
                 stun_server[1],

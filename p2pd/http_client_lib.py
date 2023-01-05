@@ -1,8 +1,5 @@
 import copy
-from http.server import BaseHTTPRequestHandler
 from http.client import HTTPResponse
-from io import BytesIO
-import json
 from .net import *
 from .base_stream import *
 
@@ -56,18 +53,6 @@ def http_parse_headers(self):
     # Save header list.
     self.hdrs = hdrs
 
-class ParseHTTPRequest(BaseHTTPRequestHandler):
-    def __init__(self, request_text):
-        self.rfile = BytesIO(request_text)
-        self.raw_requestline = self.rfile.readline()
-        self.error_code = self.error_message = None
-        self.parse_request()
-        http_parse_headers(self)
-
-    def send_error(self, code, message):
-        self.error_code = code
-        self.error_message = message
-
 class ParseHTTPResponse(HTTPResponse):
     def __init__(self, resp_text):
         self.resp_len = len(resp_text)
@@ -98,53 +83,3 @@ async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, h
         out = ParseHTTPResponse(out)
         
     return p, out
-
-# Create a HTTP server response.
-# Supports JSON or binary.
-def http_res(payload, mime, req, client_tup=None):
-    # Support JSON responses.
-    if mime == "json":
-        # Document content is a JSON string with good indenting.
-        payload = json.dumps(payload, indent=4, sort_keys=True)
-        payload = to_b(payload)
-        content_type = b"application/json"
-
-    # Support binary responses.
-    if mime == "binary":
-        content_type = b"application/octet-stream"
-
-    # CORS policy header line.
-    allow_origin = b"Access-Control-Allow-Origin: %s" % (
-        to_b(req.hdrs["Origin"])
-    )
-
-    # List of HTTP headers to send for our el8 web server.
-    res  = b"HTTP/1.1 200 OK\r\n"
-    res += b"%s\r\n" % (allow_origin)
-    if client_tup is not None:
-        res += b"x-client-tup: %s:%d\r\n" % ( 
-            to_b(client_tup[0]),
-            client_tup[1]
-        )
-    else:
-        res += b"x-client-tup: unknown\r\n"
-    res += b"Content-Type: %s\r\n" % (content_type)
-    res += b"Connection: close\r\n"
-    res += b"Content-Length: %d\r\n\r\n" % (len(payload))
-    res += payload
-    
-    return res
-
-async def send_json(a_dict, req, client_tup, pipe):
-    remote_client_tup = None
-    if "client_tup" in a_dict:
-        remote_client_tup = a_dict["client_tup"]
-
-    res = http_res(a_dict, "json", req, remote_client_tup)
-    await pipe.send(res, client_tup)
-    await pipe.close()
-
-async def send_binary(out, req, client_tup, pipe):
-    res = http_res(out[1], "binary", req, client_tup=out[0])
-    await pipe.send(res, client_tup)
-    await pipe.close()

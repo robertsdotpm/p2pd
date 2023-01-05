@@ -17,6 +17,11 @@ Note to self:
 Don't try use TURNs TCP connection mode again. Even using an edge-case where you can get TURN to connect to its own relay addresses (in Coturn) doesn't work because Coturn limits active connections to 1 per IP. Therefore it would only support a one-way channel to one peer. Very much useless. I have found no way around TURNs limitations for TCP and think it was poorly designed. TURN is the worst protocol I have ever implemented so this does not surprise me.
 
 https://datatracker.ietf.org/doc/html/draft-ietf-behave-turn-tcp-07
+
+TODO: Future feature = implement shared secrets 
+https://datatracker.ietf.org/doc/html/draft-rosenberg-midcom-turn-08#page-9
+
+matrix.org seems to use them over static credentials
 """
 
 import asyncio
@@ -39,8 +44,12 @@ class TURNClient(BaseProto):
         msg_cb: any = None,
         conf: any = NET_CONF
     ):
+        # Can received relay messages have a blank header?
+        self.blank_rudp_headers = False
+
         # Remote address for the TURN server.
         # Username and password are optional.
+        self.requires_auth = True
         self.turn_addr = turn_addr
         self.turn_user = turn_user
         self.turn_pw = turn_pw
@@ -95,6 +104,25 @@ class TURNClient(BaseProto):
         self.auth_event = asyncio.Event()
         self.relay_event = asyncio.Event()
         self.node_events = {} # by node_id
+
+    def get_turn_server(self, af=None):
+        return {
+            "host": self.turn_addr.host,
+            "port": self.turn_addr.port,
+            "afs": [af],
+            "user": self.turn_user,
+            "pass": self.turn_pw,
+            "realm": self.realm
+        }
+    
+    def get_relay_tup(self, peer_ip):
+        if peer_ip in self.peers:
+            return self.peers[peer_ip]
+        else:
+            return None
+
+    def toggle_blank_rudp_headers(self, val):
+        self.blank_rudp_headers = val
 
     # Make this whole clas look like a 'pipe' object.
     def super_init(self,  transport, sock, route, conf=NET_CONF):
@@ -156,7 +184,7 @@ class TURNClient(BaseProto):
         client_tup = await self.client_tup_future
 
         # White list ourselves.
-        await self.accept_peer(client_tup, relay_tup)
+        #await self.accept_peer(client_tup, relay_tup)
 
         # Refresh allocations.
         async def refresher():
@@ -221,9 +249,10 @@ class TURNClient(BaseProto):
     # Will write credential and HMAC if a message needs 'signing.'
     async def send_turn_msg(self, msg: TurnMessage, do_sign=False):
         buf, _ = TurnMessage.unpack(msg.encode())
-        if do_sign and self.key:
-            buf.write_credential(self.turn_user, self.realm, self.nonce)
-            buf.write_hmac(self.key)
+        if self.requires_auth:
+            if do_sign and self.key:
+                buf.write_credential(self.turn_user, self.realm, self.nonce)
+                buf.write_hmac(self.key)
 
         buf = buf.encode()
         await self.turn_pipe.send(buf, self.turn_addr.tup)
@@ -263,6 +292,7 @@ class TURNClient(BaseProto):
     # Retry up to 3 times if no response to the packet.
     # Allows a peer to send messages to our relay address.
     async def accept_peer(self, peer_tup, peer_relay_tup):
+        #peer_tup = (peer_tup[0], 0)
         peer_ip = peer_tup[0]
         already_accepted = peer_ip in self.peers
         async def handler(peer_tup, peer_relay_tup):

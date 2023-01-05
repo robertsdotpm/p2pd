@@ -1,8 +1,13 @@
+from .settings import *
 from .nat import *
 from .ip_range import *
 
+
 # No more than 4 interfaces per address family in peer addr.
 PEER_ADDR_MAX_INTERFACES = 4
+
+# No more than 2 signal pipes to send signals to nodes.
+SIGNAL_PIPE_NO = 2
 
 """
         can be up to N interfaces
@@ -19,9 +24,14 @@ PEER_ADDR_MAX_INTERFACES = 4
     ,... more interfaces for AF family
 ],[IP6 nics ...],node_id
 """
-def make_peer_addr(node_id, interface_list, port=NODE_PORT, ip=None, nat=None, if_index=None):
+def make_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=None, nat=None, if_index=None):
     ensure_resolved(interface_list)
-    bufs = []
+    signal_offsets_as_str = [to_b(str((x))) for x in signal_offsets]
+    bufs = [
+        # Make signal pipe buf.
+        b','.join(signal_offsets_as_str)
+    ]
+
     for af in [IP4, IP6]:
         af_bufs = []
         for i, interface in enumerate(interface_list):
@@ -66,13 +76,27 @@ def make_peer_addr(node_id, interface_list, port=NODE_PORT, ip=None, nat=None, i
 
 def parse_peer_addr(addr):
     af_parts = addr.split(b'-')
-    if len(af_parts) != 3:
+    if len(af_parts) != 4:
         log("p2p addr invalid parts")
         return None
 
+    # Parse signal server offsets.
+    p = af_parts.pop(0).split(b",")
+    signal = [int(n) for n in p if in_range(int(n), [0, len(MQTT_SERVERS) - 1])]
+    if len(signal) > SIGNAL_PIPE_NO:
+        log("p2p addr invalid signal no for p2p addr")
+        return None
+
+    # Parsed dict.
     schema = [is_no, is_b, is_b, is_no,  is_no, is_no, is_no]
     translate = [to_n, to_b, to_b, to_n, to_n, to_n, to_n]
-    out = {IP4: [], IP6: [], "node_id": af_parts[2]}
+    out = {
+        IP4: [],
+        IP6: [],
+        "node_id": af_parts[2],
+        "signal": signal
+    }
+
     for af_index, af_part in enumerate(af_parts[:2]):
         interface_infos = af_part.split(b'|')
         for info in interface_infos:

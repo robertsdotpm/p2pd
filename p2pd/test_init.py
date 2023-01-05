@@ -21,7 +21,7 @@ from .base_stream import *
 from .stun_client import *
 
 
-P2PD_NET_ADDR_BYTES = b'[0,149.56.128.148,149.56.128.148,10001,1,1,0]-[0,2607:5300:0201:3100:0000:0000:0000:8d2f,fe80:0000:0000:0000:f816:3eff:feae:b2d9,10001,1,1,0]-p2pd_test_node'
+P2PD_NET_ADDR_BYTES = b'0,3-[0,149.56.128.148,149.56.128.148,10001,1,1,0]-[0,2607:5300:0201:3100:0000:0000:0000:8d2f,fe80:0000:0000:0000:f816:3eff:feae:b2d9,10001,1,1,0]-p2pd_test_node'
 
 # Only load the test interface on the right machine.
 # Otherwise the name (probably) won't exist.
@@ -46,6 +46,7 @@ async def check_pipe(pipe, dest_tup=None):
     # Sanity check.
     data = b"Meow"
     if pipe is None:
+        log("> Check pipe: pipe is none")
         return False
 
     # Indicate any message is acceptable to queue.
@@ -63,12 +64,14 @@ async def check_pipe(pipe, dest_tup=None):
     # Wait for message with timeout.
     buf = await pipe.recv(timeout=3)
     if buf is None:
+        log("Check pipe: recv buf is none")
         return False
 
     # May not have echo process hooked up.
     if data in buf:
         return True
     else:
+        log(f"Check pipe: invalid recv buf {buf}")
         return False
 
 # If a random node ID is generated and subbed to over and over.

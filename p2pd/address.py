@@ -6,8 +6,8 @@ from .net import *
 # TODO: address doesn't support domain resolution
 # from a specific interface. This may not matter though.
 class Address():
-    def __init__(self, host, port, sock_type=socket.SOCK_STREAM, sock_timeout=1):
-        self.sock_timeout = sock_timeout
+    def __init__(self, host, port, sock_type=socket.SOCK_STREAM, timeout=1):
+        self.timeout = timeout
         self.resolved = False
         self.sock_type = sock_type
         self.host = host
@@ -80,7 +80,7 @@ class Address():
                 type=self.sock_type,
                 family=family
             )
-            results = await asyncio.wait_for(addr_infos, self.sock_timeout)
+            results = await asyncio.wait_for(addr_infos, self.timeout)
         except Exception as e:
             log(f"{target} {self.port} {family} {self.sock_type}")
             log_exception()

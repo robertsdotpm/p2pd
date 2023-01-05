@@ -52,3 +52,11 @@ I think it would be worthwhile making a list of common failure scenarios and wri
 code to prevent it from occuring. Really only the most basic networking features
 are provided in programming languages. There are many other ways sessions can fail
 and most developers manually handle the edge-cases themselves (like reconnect.)
+
+Other ideas
+-------------
+
+1.  Send duplicate signaling msgs in case a MQTT server goes down.
+2.  Ability to restart broken TCP connections after disruptions in Internet. Many
+    simple servers start a fresh state per connection and in some scenarios (like
+    multiplayer games -- it can mean being unable to rejoin sessions.) 

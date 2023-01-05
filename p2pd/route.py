@@ -217,7 +217,8 @@ class Route(Bind):
         if self.route_pool is None:
             raise Exception("e = route_pool not linked.")
 
-    def _convert_other(self, other):
+    @staticmethod
+    def _convert_other(other):
         if isinstance(other, Route):
             if len(other.ext_ips):
                 return other.ext_ips[0]
@@ -233,12 +234,10 @@ class Route(Bind):
         if isinstance(other, (str, int)):
             ipa = ipaddress.ip_address(other)
             ipr = IPRange(other, cidr=CIDR_WAN)
-            assert(ipr.af == self.af)
             return ipr
 
         if isinstance(other, IPA_TYPES):
             af = v_to_af(other.version)
-            assert(af == self.af)
             ipr = IPRange(other, cidr=CIDR_WAN)
             return ipr
 
@@ -282,8 +281,9 @@ class Route(Bind):
     def to_dict(self):
         nic_ips = []
         ext_ips = []
-        list_info =  [[nic_ips, self.nic_ips], [ext_ips, self.ext_ips]]
-        for dest_list, src_list in list_info:
+        list_infos =  [[nic_ips, self.nic_ips], [ext_ips, self.ext_ips]]
+        for list_info in list_infos:
+            dest_list, src_list = list_info
             for ipr in src_list:
                 dest_list.append(ipr.to_dict())
 
@@ -365,7 +365,7 @@ class Route(Bind):
         return self.__repr__()
 
     def __eq__(self, other):
-        other = self._convert_other(other)
+        other = Route._convert_other(other)
         if self.bad_len(other):
             return False
 
@@ -458,6 +458,21 @@ class RoutePool():
         o = self.from_dict(state)
         self.__dict__ = o.__dict__
 
+    def locate(self, other):
+        for route in self.routes:
+            if route == other:
+                return route
+
+        return None
+
+    # Is a route in this route pool?
+    def __contains__(self, other):
+        route = self.locate(other)
+        if route is not None:
+            return True
+        else:
+            return False
+
     # Simulate fetching a route off a stack of routes.
     # Just hides certain pointer offsets when indexing, lel.
     def pop(self):
@@ -492,7 +507,7 @@ class RoutePool():
         rel_host_offset = rel_host_offset % self.wan_hosts
         
         # Build a route corrosponding to these offsets.
-        wan_ip = IPRange(wan_ipr[rel_host_offset], cidr=CIDR_WAN)
+        wan_ip = IPRange(str(wan_ipr[rel_host_offset]), cidr=CIDR_WAN)
         new_route = Route(
             af=route.af,
             nic_ips=copy.deepcopy(route.nic_ips),

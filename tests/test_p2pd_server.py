@@ -3,7 +3,7 @@ from p2pd.net import *
 from p2pd.interface import *
 from p2pd.base_stream import *
 from p2pd.rest_api import *
-from p2pd.http_lib import *
+from p2pd.http_client_lib import *
 
 class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
     async def test_p2pd_server(self):

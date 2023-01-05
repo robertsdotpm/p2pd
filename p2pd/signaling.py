@@ -12,12 +12,14 @@ async def f_proto_print(data):
     print(data)
 
 class SignalMock():
-    def __init__(self, peer_id, f_proto, conf=MQTT_CONF):
+    def __init__(self, peer_id, f_proto, mqtt_server, conf=MQTT_CONF):
         # Setup.
         self.peer_id = to_s(peer_id)
         self.conf = conf
         self.f_proto = f_proto
         self.sub_ready = asyncio.Event()
+        self.mqtt_server = mqtt_server
+        self.is_connected = False
 
         # Other.
         self.client = None
@@ -29,7 +31,7 @@ class SignalMock():
         self.pending_tasks.append(
             asyncio.create_task(
                 async_wrap_errors(
-                    self.f_proto(payload),
+                    self.f_proto(payload, self),
 
                     # Set a timeout of 20 seconds to do tasks.
                     # Make everything timeout and end if it meets this.
@@ -39,6 +41,7 @@ class SignalMock():
         )
 
     def on_connect(self, client, flags, rc, properties):
+        self.is_connected = True
         client.subscribe(self.peer_id, qos=2)
 
     def on_disconnect(self, client, packet, exc=None):
@@ -48,7 +51,7 @@ class SignalMock():
         self.sub_ready.set()
 
     async def start(self):
-        self.client = await self.get_client(MQTT_SERVERS[0])
+        self.client = await self.get_client(self.mqtt_server)
         return self
 
     async def send(self, data, client_tup):
@@ -70,7 +73,11 @@ class SignalMock():
         client.on_disconnect = self.on_disconnect
         client.on_subscribe = self.on_subscribe
 
-        await client.connect(host=mqtt_server[0], port=mqtt_server[1])
+        await asyncio.wait_for(
+            client.connect(host=mqtt_server[0], port=mqtt_server[1]),
+            5
+        )
+
         return client
 
     async def close(self):

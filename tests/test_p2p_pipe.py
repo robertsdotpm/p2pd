@@ -13,20 +13,21 @@ from p2pd.interface import *
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 async def test_setup():
     # Suppress socket unclosed warnings.
-    netifaces = await init_p2pd()
-    warnings.filterwarnings('ignore', message="unclosed", category=ResourceWarning)
+    if not hasattr(test_setup, "netifaces"):
+        test_setup.netifaces = await init_p2pd()
+        warnings.filterwarnings('ignore', message="unclosed", category=ResourceWarning)
 
     # Static setup because it's fast.
-    i = Interface()
-    if socket.gethostname() == "p2pd.net":
-        ifs = P2PD_IFS
-        clock_skew = Dec("0.06")
-    else:
-        # Load a list of interfaces to use for the tests.
-        ifs = await load_interfaces(netifaces=netifaces)
-        #d = if_list_to_dict(ifs)
-        # ifs = ...
-        clock_skew = Dec("0")
+    if not hasattr(test_setup, "ifs"):
+        if socket.gethostname() == "p2pd.net":
+            test_setup.ifs = P2PD_IFS
+        else:
+            # Load a list of interfaces to use for the tests.
+            test_setup.ifs = await load_interfaces(netifaces=test_setup.netifaces)
+
+    # Load clock skew for test machine.
+    if not hasattr(test_setup, "clock_skew"):
+        test_setup.clock_skew = (await SysClock(test_setup.ifs[0]).start()).clock_skew
 
     # Load process pool executors.
     pp_executors = await get_pp_executors(workers=2)
@@ -38,8 +39,8 @@ async def test_setup():
         # Get brand new unassigned listen port.
         # Avoid TIME_WAIT buggy sockets from port reuse.
         port=0,
-        ifs=ifs,
-        clock_skew=clock_skew,
+        ifs=test_setup.ifs,
+        clock_skew=test_setup.clock_skew,
         pp_executors=pp_executors
     )
 
@@ -50,8 +51,8 @@ async def test_setup():
         # Get brand new unassigned listen port.
         # Avoid TIME_WAIT buggy sockets from port reuse.
         port=0,
-        ifs=ifs,
-        clock_skew=clock_skew,
+        ifs=test_setup.ifs,
+        clock_skew=test_setup.clock_skew,
         pp_executors=pp_executors
     )
 
@@ -233,7 +234,13 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertTrue(pipe is not None)
-        dest_tup = await pipe.relay_tup_future
+
+        # Get the relay address of the test peer.
+        p2pd_ip = list(pipe.peers.keys())[0]
+        dest_tup = pipe.get_relay_tup(p2pd_ip)
+
+        # Use it to do the echo test on TURN client.
+        # Use the peers relay address as the destination.
         pipe_okay = await check_pipe(pipe, dest_tup=dest_tup)
         self.assertTrue(pipe_okay)
         await pipe.close()

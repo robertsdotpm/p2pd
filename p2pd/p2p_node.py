@@ -13,16 +13,17 @@ NODE_CONF = dict_child({
 }, NET_CONF)
 
 class P2PNode(Daemon):
-    def __init__(self, if_list, port=NODE_PORT, node_id=None, ip=None, enable_upnp=False, conf=NODE_CONF):
+    def __init__(self, if_list, port=NODE_PORT, node_id=None, ip=None, signal_offsets=None, enable_upnp=False, conf=NODE_CONF):
         super().__init__()
         self.conf = conf
+        self.signal_offsets = signal_offsets
         self.port = port
         self.enable_upnp = enable_upnp
         self.ip = ip
         self.if_list = if_list
         self.ifs = Interfaces(if_list)
         self.node_id = node_id or rand_plain(15)
-        self.signal_pipe = SignalMock(to_s(self.node_id), self.signal_protocol)
+        self.signal_pipes = {} # offset into MQTT_SERVERS
         self.expected_addrs = {} # by [pipe_id]
         self.pipe_events = {} # by [pipe_id]
         self.pipes = {} # by [pipe_id]
@@ -30,7 +31,7 @@ class P2PNode(Daemon):
         self.pp_executor = None
         self.mp_manager = None
         self.tcp_punch_clients = None # [...]
-        self.turn_clients = [ None for _ in self.if_list ]
+        self.turn_clients = []
 
         # Handlers for the node's custom protocol functions.
         self.msg_cbs = []
@@ -40,6 +41,36 @@ class P2PNode(Daemon):
         self.is_running = True
         self.listen_all_task = None
         self.signal_worker_task = None
+        self.signal_worker_tasks = {} # offset into MQTT_SERVERS
+
+    # Given a dict of credentials find the associated client.
+    def find_turn_client(self, turn_server, af=None, interface=None):
+        for turn_client in self.turn_clients:
+            # Get credentials for turn client.
+            credentials = turn_client.get_turn_server(af=af)
+
+            # Compare credentials to turn_server.
+            is_same = find_turn_server(credentials, [turn_server])
+            if not is_same:
+                continue
+
+            # Not the same interface.
+            if interface is not None:
+                if turn_client.turn_pipe.route.interface != interface:
+                    continue
+
+            # Otherwise found it.
+            return turn_client
+
+        return None
+
+    def find_signal_pipe(self, addr):
+        our_offsets = list(self.signal_pipes)
+        for offset in addr["signal"]:
+            if offset in our_offsets:
+                return self.signal_pipes[offset]
+
+        return None
 
     async def forward(self, port):
         tasks = []
@@ -68,8 +99,54 @@ class P2PNode(Daemon):
             await asyncio.gather(*tasks)
 
     async def start(self, protos=[TCP]):
-        # Start signal pipe.
-        self.signal_worker_task = await self.signal_pipe.start()
+        # MQTT server offsets to try.
+        if self.signal_offsets is None:
+            offsets = [0] + shuffle([i for i in range(1, len(MQTT_SERVERS))])
+        else:
+            offsets = self.signal_offsets
+
+        # Get list of N signal pipes.
+        for _ in range(0, SIGNAL_PIPE_NO):
+            async def set_signal_pipe(offset):
+                mqtt_server = MQTT_SERVERS[offset]
+                signal_pipe = SignalMock(
+                    peer_id=to_s(self.node_id),
+                    f_proto=self.signal_protocol,
+                    mqtt_server=mqtt_server
+                )
+
+                try:
+                    await signal_pipe.start()
+                    self.signal_pipes[offset] = signal_pipe
+                    return signal_pipe
+                except Exception:
+                    if signal_pipe.is_connected:
+                        await signal_pipe.close()
+                    return None
+            
+            # Traverse list of shuffled server indexes.
+            while 1:
+                # If tried all then we're done.
+                if not len(offsets):
+                    break
+
+                # Get the next offset to try.
+                offset = offsets.pop(0)
+
+                # Try to use the server at the offset for a signal pipe.
+                signal_pipe = await async_wrap_errors(
+                    set_signal_pipe(offset)
+                )
+
+                # The connection failed so keep trying.
+                if signal_pipe is None:
+                    continue
+                else:
+                    break
+
+        # Check at least one signal pipe was set.
+        if not len(self.signal_pipes):
+            raise Exception("Unable to get any signal pipes.")
 
         # Make a list of routes based on supported address families.
         routes = []
@@ -110,7 +187,7 @@ class P2PNode(Daemon):
         # First server, field 3 == base_proto.
         # sock = listen sock, getsocketname = (bind_ip, bind_port, ...)
         port = self.servers[0][2].sock.getsockname()[1]
-        self.addr_bytes = make_peer_addr(self.node_id, self.if_list, port=port, ip=self.ip)
+        self.addr_bytes = make_peer_addr(self.node_id, self.if_list, list(self.signal_pipes), port=port, ip=self.ip)
         self.p2p_addr = parse_peer_addr(self.addr_bytes)
         log(f"> P2P node = {self.addr_bytes}")
 
@@ -186,7 +263,7 @@ class P2PNode(Daemon):
         their_if_info = their_if_infos[r["if"]["them"]]
         return r, p2p_dest, their_if_infos, their_if_info
 
-    async def signal_protocol(self, msg):
+    async def signal_protocol(self, msg, signal_pipe):
         # Convert to string because this is a plain-text protocol.
         if isinstance(msg, memoryview):
             msg = to_s(msg.tobytes())
@@ -214,7 +291,7 @@ class P2PNode(Daemon):
                     if isinstance(out, memoryview):
                         out = out.tobytes()
 
-                    await self.signal_pipe.send_msg(out, chan_dest)
+                    await signal_pipe.send_msg(out, chan_dest)
 
             return
 
@@ -237,7 +314,7 @@ class P2PNode(Daemon):
             p2p_pipe = P2PPipe(self)
             try:
                 pipe = await asyncio.wait_for(
-                    p2p_pipe.direct_connect(p2p_dest, pipe_id, proto),
+                    p2p_pipe.direct_connect(p2p_dest, pipe_id, proto=proto),
                     10
                 )
             except asyncio.TimeoutError:
@@ -301,7 +378,7 @@ class P2PNode(Daemon):
             # Send first protocol signal message to peer.
             send_task = asyncio.create_task(
                 async_wrap_errors(
-                    self.signal_pipe.send_msg(
+                    signal_pipe.send_msg(
                         out,
                         to_s(r["src_addr"]["node_id"])
                     )
@@ -361,7 +438,7 @@ class P2PNode(Daemon):
         mapped and relay address back to the source.
         """
         if cmd == "TURN_REQUEST":
-            if len(parts) != 11:
+            if len(parts) != 12:
                 log("> turn_req: invalid parts len")
                 return
             
@@ -375,15 +452,18 @@ class P2PNode(Daemon):
             peer_port = int(parts[7])
             relay_ip = parts[8]
             relay_port = int(parts[9])
-            turn_server = int(parts[10])
-            turn_host = TURN_SERVERS[turn_server]["host"]
-            turn_port = TURN_SERVERS[turn_server]["port"]
-            turn_user = TURN_SERVERS[turn_server]["user"]
-            turn_pass = TURN_SERVERS[turn_server]["pass"]
-            turn_realm = TURN_SERVERS[turn_server]["realm"]
+            turn_server_index = int(parts[10])
+            turn_client_index = int(parts[11])
+
+            # Check turn server index.
+            if not in_range(turn_server_index, [0, len(TURN_SERVERS) - 1]):
+                log(f"> turn req: servers offset {turn_server_index}")
+                return
+            else:
+                turn_server = TURN_SERVERS[turn_server_index]
 
             # Check address family is valid.
-            if af not in VALID_AFS:
+            if af not in VALID_AFS or af not in turn_server["afs"]:
                 log("> turn_req: invalid af")
                 return
             
@@ -393,36 +473,35 @@ class P2PNode(Daemon):
                 return
 
             # Check ports are valid.
-            for port in [relay_port, turn_port]:
+            for port in [relay_port]:
                 if not in_range(port, [1, MAX_PORT]):
                     log("> turn_req: invalid port")
                     return
 
-            # See if a TURN client exists.
+            # See if TURN server is already connected.
             interface = self.if_list[our_if_index]
-            if self.turn_clients[our_if_index] is not None:
-                turn_client = self.turn_clients[our_if_index]
-            else:
+            turn_client = self.find_turn_client(turn_server, interface=interface)
+            if turn_client is None:
                 # Resolve the TURN address.
                 route = await interface.route(af).bind()
                 turn_addr = await Address(
-                    turn_host,
-                    turn_port
+                    turn_server["host"],
+                    turn_server["port"]
                 ).res(route)
 
                 # Make a TURN client instance to whitelist them.
                 turn_client = TURNClient(
                     route=route,
                     turn_addr=turn_addr,
-                    turn_user=turn_user,
-                    turn_pw=turn_pass,
-                    turn_realm=turn_realm,
+                    turn_user=turn_server["user"],
+                    turn_pw=turn_server["pass"],
+                    turn_realm=turn_server["realm"],
                     msg_cb=self.msg_cb
                 )
 
                 # Start the TURN client.
                 try:
-                    start_task = await asyncio.wait_for(
+                    await asyncio.wait_for(
                         turn_client.start(),
                         10
                     )
@@ -431,7 +510,7 @@ class P2PNode(Daemon):
                     return
 
                 # Set new TURN client.
-                self.turn_clients[our_if_index] = turn_client
+                self.turn_clients.append(turn_client)
 
             # Resolve the peer address.
             # The address here is their XorMappedAddress.
@@ -467,7 +546,7 @@ class P2PNode(Daemon):
             ))
 
             # Form response with our addressing info.
-            out = b"TURN_RESPONSE %s %s %d %d %s %d %s %d" % (
+            out = b"TURN_RESPONSE %s %s %d %d %s %d %s %d %d" % (
                 pipe_id,
                 self.node_id,
                 af,
@@ -479,12 +558,15 @@ class P2PNode(Daemon):
 
                 # Our XorMappedAddress.
                 to_b(client_tup[0]),
-                client_tup[1]
+                client_tup[1],
+
+                # Their client to use.
+                turn_client_index
             )
             
             # Send response to recipient.
             p2p_src_addr = parse_peer_addr(src_addr_bytes)
-            send_task = await self.signal_pipe.send_msg(
+            await signal_pipe.send_msg(
                 out,
                 to_s(p2p_src_addr["node_id"])
             )
@@ -503,7 +585,7 @@ class P2PNode(Daemon):
         """
         if cmd == "TURN_RESPONSE":
             # Invalid packet.
-            if len(parts) != 9:
+            if len(parts) != 10:
                 log("> turn_res: invalid parts len")
                 return
 
@@ -516,6 +598,7 @@ class P2PNode(Daemon):
             relay_port = int(parts[6])
             client_ip = IPRange(parts[7])
             client_port = int(parts[8])
+            turn_client_index = int(parts[9])
 
             # Check pipe_id exists.
             if pipe_id not in self.pipe_events:
@@ -547,8 +630,13 @@ class P2PNode(Daemon):
                 log("> turn_res: if index invalid.")
                 return
 
+            # Get turn client.
+            if not in_range(turn_client_index, [0, len(self.turn_clients) - 1]):
+                log("> turn_resp: invalid turn clietn index.")
+                return
+
             # Get turn client reference.
-            turn_client = self.turn_clients[if_index]
+            turn_client = self.turn_clients[turn_client_index]
             if turn_client is None:
                 log("> turn_res: turn client none")
                 return
@@ -566,7 +654,9 @@ class P2PNode(Daemon):
         self.is_running = False
 
         # Close the MQTT client.
-        await self.signal_pipe.close()
+        for offset in list(self.signal_pipes):
+            signal_pipe = self.signal_pipes[offset]
+            await signal_pipe.close()
 
         # Close TCP punch clients.
         for punch_client in self.tcp_punch_clients:
@@ -659,7 +749,7 @@ class P2PNode(Daemon):
                 self.pipes[pipe_id] = pipe
                 pipe_event.set()
 
-    async def connect(self, addr_bytes, strategies, timeout=60):
+    async def connect(self, addr_bytes, strategies=P2P_STRATEGIES, timeout=60):
         p2p_pipe = P2PPipe(self)
         return await p2p_pipe.pipe(
             addr_bytes,
@@ -690,7 +780,7 @@ async def get_pp_executors(workers=2):
     return pp_executor
 
 # delay with sys clock and get_pp_executors.
-async def start_p2p_node(port=NODE_PORT, node_id=None, ifs=None, clock_skew=Dec(0), ip=None, pp_executors=None, enable_upnp=False, netifaces=None):
+async def start_p2p_node(port=NODE_PORT, node_id=None, ifs=None, clock_skew=Dec(0), ip=None, pp_executors=None, enable_upnp=False, signal_offsets=None, netifaces=None):
     # Load NAT info for interface.
     ifs = ifs or await load_interfaces(netifaces=netifaces)
     assert(len(ifs))
@@ -715,29 +805,13 @@ async def start_p2p_node(port=NODE_PORT, node_id=None, ifs=None, clock_skew=Dec(
         nat = await stun_client.get_nat_info()
         interface.set_nat(nat)
 
-    # Used for slow-running tasks.
-    tasks = []
-    slow_results = { "pp_executors": None, "sys_clock": None }
-
-    # Pre-start event loop in pp executors.
     if pp_executors is None:
-        async def set_pp_executor(r):
-            r["pp_executors"] = await get_pp_executors(workers=4)
-
-        tasks.append(set_pp_executor(slow_results))
-
-    # Used for synchronizing TCP hole punching.
-    async def set_clock_skew(r):
-        r["sys_clock"] = await SysClock(ifs[0], clock_skew=clock_skew).start()
-    tasks.append(set_clock_skew(slow_results))
-
-    # Wait for slow tasks to finish.
-    await asyncio.gather(*tasks)
-    if pp_executors is None:
-        pp_executors = slow_results["pp_executors"]
+        pp_executors = await get_pp_executors(workers=4)
 
     if clock_skew == Dec(0):
-        sys_clock = slow_results["sys_clock"]
+        sys_clock = await SysClock(ifs[0]).start()
+    else:
+        sys_clock = SysClock(ifs[0], clock_skew)
 
     # Log sys clock details.
     assert(sys_clock.clock_skew) # Must be set for meetings!
@@ -749,6 +823,7 @@ async def start_p2p_node(port=NODE_PORT, node_id=None, ifs=None, clock_skew=Dec(
         port=port,
         node_id=node_id,
         ip=ip,
+        signal_offsets=signal_offsets,
         enable_upnp=enable_upnp
     ).start()
 
@@ -759,7 +834,8 @@ async def start_p2p_node(port=NODE_PORT, node_id=None, ifs=None, clock_skew=Dec(
     node.setup_tcp_punching()
 
     # Wait for MQTT sub.
-    await node.signal_pipe.sub_ready.wait()
+    for offset in list(node.signal_pipes):
+        await node.signal_pipes[offset].sub_ready.wait()
 
     return node
 

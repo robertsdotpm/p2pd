@@ -1,91 +1,9 @@
 import asyncio
-import re
-import urllib
 from .p2p_node import *
 from .var_names import *
-from .http_lib import *
-
-P2PD_PORT = 12333
-P2PD_CORS = ['null', 'http://127.0.0.1']
+from .http_server_lib import *
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
-
-# Support passing in GET params using path seperators.
-# Ex: /timeout/10/sub/all -> {'timeout': '10', 'sub': 'all'}
-def get_params(field_names, url_path):
-    # Return empty.
-    if field_names == []:
-        return {}
-
-    # Build regex match string.
-    p = ""
-    for field in field_names:
-        # Escape any regex-specific characters.
-        as_literal = re.escape(field)
-        as_literal = as_literal.replace("/", "")
-
-        # (/ field name / non dir chars )
-        # All are marked as optional.
-        p += f"(?:/({as_literal})/([^/]+))|"
-
-    # Repeat to match optional instances of the params.
-    p = f"(?:{p[:-1]})+"
-
-    # Convert the marked pairs to a dict.
-    params = {}
-    safe_url = re.escape(url_path)
-    results = re.findall(p, safe_url)
-    if len(results):
-        results = results[0]
-        for i in range(0, int(len(results) / 2)):
-            # Every 2 fields is a named value.
-            name = results[i * 2]
-            value = results[(i * 2) + 1]
-            value = re.unescape(value)
-
-            # Param not set.
-            if name == "":
-                continue
-
-            # Save by name.
-            name = re.unescape(name)
-            params[name] = value
-
-    # Return it for use.
-    return params
-
-def api_closure(url_path):
-    # Fields list names a p result and is in a fixed order.
-    # Get names matches named values and is in a variable order.
-    def api(p, field_names=[], get_names=[]): 
-        out = re.findall(p, url_path)
-        as_dict = {}
-        if len(out):
-            if isinstance(out[0], tuple):
-                out = out[0]
-
-            if len(field_names):
-                for i in range(  min( len(out), len(field_names) )  ):
-                    as_dict[field_names[i]] = out[i]
-            else:
-                as_dict["out"] = out
-            
-
-        params = get_params(get_names, url_path)
-        if len(params) and len(as_dict):
-            return dict_merge(params, as_dict)
-        else:
-            return as_dict
-
-    return api
-
-# p = {}, optional = [ named ... ]
-# default = [ matching values ... ]
-def set_defaults(p, optional, default):
-    # Set default param values.
-    for i, named in enumerate(optional):
-        if named not in p:
-            p[named] = default[i]
 
 def con_info(self, p, con):
     return {
@@ -111,53 +29,13 @@ class P2PDServer(Daemon):
         self.cons = {}
 
     async def msg_cb(self, msg, client_tup, pipe):
-        # Parse http request.
-        try:
-            req = ParseHTTPRequest(msg)
-        except Exception:
-            log_exception()
-            return
-
-        # Deny restricted origins.
-        if req.hdrs["Origin"] not in P2PD_CORS:
-            resp = {
-                "msg": "Invalid origin.",
-                "error": 5
-            }
-            await send_json(resp, req, client_tup, pipe)
-            return
-
-        # Implements 'pre-flight request checks.'
-        cond_1 = "Access-Control-Request-Method" in req.hdrs
-        cond_2 = "Access-Control-Request-Headers" in req.hdrs
-        if cond_1 and cond_2:
-            # CORS policy header line.
-            allow_origin = "Access-Control-Allow-Origin: %s" % (
-                req.hdrs["Origin"]
-            )
-
-            # HTTP response.
-            out  = b"HTTP/1.1 200 OK\r\n"
-            out += b"Content-Length: 0\r\n"
-            out += b"Connection: keep-alive\r\n"
-            out += b"Access-Control-Allow-Methods: POST, GET, DELETE\r\n"
-            out += b"Access-Control-Allow-Headers: *\r\n"
-            out += b"%s\r\n\r\n" % (to_b(allow_origin))
-            await pipe.send(out, client_tup)
-            return
-
-        # Critical URL path part is encoded.
-        url_parts = urllib.parse.urlparse(req.path)
-        url_path = urllib.parse.unquote(url_parts.path)
-
-        # Luckily URL decodes.
-        url_query = urllib.parse.parse_qs(url_parts.query)
-        api = api_closure(url_path)
+        # Parse HTTP message and handle CORS.
+        req = await rest_service(msg, client_tup, pipe)
 
         # Output JSON response for the API.
         async def get_response():
             # Show version information.
-            if api("/version"):
+            if req.api("/version"):
                 return {
                     "title": "P2PD",
                     "author": "Matthew@Roberts.PM", 
@@ -166,14 +44,14 @@ class P2PDServer(Daemon):
                 }
 
             # All interface details.
-            if api("(/ifs)"):
+            if req.api("(/ifs)"):
                 return {
                     "ifs": if_list_to_dict(self.interfaces),
                     "error": 0
                 }
 
             # Node's own 'p2p address.'
-            if api("/p2p/addr"):
+            if req.api("/p2p/addr"):
                 return {
                     "addr": to_s(self.node.addr_bytes),
                     "error": 0
@@ -181,7 +59,7 @@ class P2PDServer(Daemon):
 
             # Create a new connection and name it.
             named = ["con_name", "dest_addr"]
-            p = api("/p2p/open/([^/]*)/([^/]*)", named)
+            p = req.api("/p2p/open/([^/]*)/([^/]*)", named)
             if p:
                 # Need a unique name per con.
                 if p["con_name"] in self.cons:
@@ -230,7 +108,7 @@ class P2PDServer(Daemon):
                     }
 
             # Return con info.
-            p = api("/p2p/con/([^/]*)", ["con_name"])
+            p = req.api("/p2p/con/([^/]*)", ["con_name"])
             if p:
                 # Check con exists.
                 if p["con_name"] not in self.cons:
@@ -246,7 +124,7 @@ class P2PDServer(Daemon):
             named = ["con_name"]
             params = ["msg_p", "addr_p"]
             defaults = [b"", b""]
-            p = api("/p2p/sub/([^/]*)", named, params)
+            p = req.api("/p2p/sub/([^/]*)", named, params)
             if p:
                 # Check con exists.
                 if p["con_name"] not in self.cons:
@@ -284,7 +162,7 @@ class P2PDServer(Daemon):
             
             # Send a text-based message to a named con.
             named = ["con_name", "txt"]
-            p = api("/p2p/send/([^/]*)/([\s\S]+)", named)
+            p = req.api("/p2p/send/([^/]*)/([\s\S]+)", named)
             if p:
                 # Check con exists.
                 if p["con_name"] not in self.cons:
@@ -313,7 +191,7 @@ class P2PDServer(Daemon):
             optional = ["timeout", "msg_p", "addr_p"]
             defaults = [0, b"", b""]
             named = ["con_name"]
-            p = api("/p2p/recv/([^/]*)", named, optional)
+            p = req.api("/p2p/recv/([^/]*)", named, optional)
             if p:
                 # Check con exists.
                 if p["con_name"] not in self.cons:
@@ -349,7 +227,7 @@ class P2PDServer(Daemon):
                     }
 
             # Chain together connections -- fully async.
-            p = api("/p2p/pipe/([^/]*)", named)
+            p = req.api("/p2p/pipe/([^/]*)", named)
             if p:
                 # Check con exists.
                 if p["con_name"] not in self.cons:
@@ -374,7 +252,7 @@ class P2PDServer(Daemon):
                 return None
 
             # Binary send / recv methods.
-            p = api("/p2p/binary/([^/]*)", named, optional)
+            p = req.api("/p2p/binary/([^/]*)", named, optional)
             if p:
                 # Check con exists.
                 if p["con_name"] not in self.cons:
@@ -432,7 +310,7 @@ class P2PDServer(Daemon):
                         return None
 
             # Close a connection.
-            p = api("/p2p/close/([^/]*)", named)
+            p = req.api("/p2p/close/([^/]*)", named)
             if p:
                 # Check con exists.
                 if p["con_name"] not in self.cons:

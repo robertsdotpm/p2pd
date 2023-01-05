@@ -89,3 +89,45 @@ Though I have not done this for now. That was a lot of text so let's look at som
     # Cleanup.
     await client.close()
 
+Using TURN as a fall-back option
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In P2P pipes there are three main methods used to establish a connection.
+All of these methods use TCP. By default TURN is disabled as a method for
+establishing a 'connection.' The reason for this is it does not provide ordered
+delivery like TCP does which might come as a shock to most developers.
+However, it can be enabled should a developer choose to use it.
+
+.. code-block:: python
+
+    from p2pd import *
+
+    async def make_p2p_con():
+        # Initalize p2pd.
+        netifaces = await init_p2pd()
+        #
+        # Start our main node server.
+        # The node implements your protocol.
+        node = await start_p2p_node(netifaces=netifaces)
+
+        # Strategies used to make a P2P connection.
+        # Note that P2P_RELAY enables TURN.
+        strategies = [ P2P_DIRECT, P2P_REVERSE, P2P_PUNCH, P2P_RELAY ]
+
+        """
+        Spawns a new pipe from a P2P connection.
+        In this case it's connecting to our own node server.
+        There will be no barriers to do this so this will just use
+        a plain direct TCP connection / P2P_DIRECT.
+        Feel free to experiment with how it works.
+        """
+        pipe = await node.connect(node.addr_bytes, strategies)
+
+        # Do some stuff on the pipe ...
+        # Cleanup.
+        await pipe.close()
+        await node.close()
+
+    # Run the coroutine.
+    # Or await make_p2p_con() if in async REPL.
+    async_test(make_p2p_con)

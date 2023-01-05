@@ -11,13 +11,15 @@ these addresses are assigned to routers. They work quite well for regular
 servers but in a peer-to-peer context much more information is needed to
 describe a peer's network setup. Here is what a peer's address looks like.
 
-``[0,8.8.8.8,192.168.21.21,58959,3,2,0]-0-zmUGXPOFxUBuToh``
+``0,1-[0,8.8.8.8,192.168.21.21,58959,3,2,0]-0-zmUGXPOFxUBuToh``
 
 As you can see there are already pieces of information you may recognize.
 There is an IPv4 address and a private LAN IP that belongs to the NIC
 interface associated with that external IP. But what is the other information?
 Well, the address format includes the following details.
 
+-   **Signaling offsets.** Peers include a list of offsets for the MQTT
+    servers to use in the settings file for signaling messages.
 -   **Interface offset.** Peers include a list of interfaces to listen on. 
     The interface offset is referenced in protocol messages so the correct
     interface is used.

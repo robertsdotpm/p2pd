@@ -78,7 +78,7 @@ async def process_attributes(self, msg):
 
             self.mapped = turn_peer_attr_to_tup(
                 attr_data,
-                self.txid,
+                msg.txn_id,
                 self.turn_addr.af
             )
             log("> Turn setting mapped address = {}".format(self.mapped))
@@ -92,7 +92,7 @@ async def process_attributes(self, msg):
             # Extract the relay address info to a tup.
             self.relay_tup = turn_peer_attr_to_tup(
                 attr_data,
-                self.txid,
+                msg.txn_id,
                 self.turn_addr.af
             )
 
@@ -194,8 +194,12 @@ async def process_replies(self):
             will be unknown so we skip it.
             """
             if payload is None:
-                log(f"Payload from in turn was None {msg_data}")
-                continue
+                log(f"Payload from turn was None but msg data = {msg_data}")
+                if not self.blank_rudp_headers:
+                    continue
+                else:
+                    self.handle_data(msg_data, peer_relay_tup)
+                    continue
 
             """
             The senders message has been stripped of the ACK header.
@@ -251,6 +255,13 @@ async def process_replies(self):
 
             # Notify sender that message was received.
             self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
+            if turn_status == TurnMessageCode.SuccessResp:
+                if self.state != TURN_TRY_ALLOCATE:
+                    #self.txid = txid
+                    #self.requires_auth = False
+                    self.auth_event.set()
+                
+        
 
             """
             The first 'allocate' message makes the server return attributes

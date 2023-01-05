@@ -71,7 +71,7 @@ def turn_write_error_attr(error_no, error_msg):
 def turn_peer_attr_to_tup(peer_data, txid, af):
     if af == socket.AF_INET:
         # IPv4 and port.
-        addr = TurnIPAddress(do_xor=True).unpack(peer_data, family=b"\x00\x01")
+        addr = TurnIPAddress(do_xor=True, xor_extra=txid).unpack(peer_data, family=b"\x00\x01")
     else:
         # IPv6 - needs extra XOR part.
         addr = TurnIPAddress(
@@ -376,4 +376,43 @@ def turn_write_peer_addr(msg, client_tup, attr_type=TurnAttribute.XorPeerAddress
     af = b"\x00\x01" if af == socket.AF_INET else b"\x00\x02"
     xor_extra = b"" if af == b"\x00\x01" else msg.txn_id
     msg.write_attr(attr_type, TurnIPAddress(do_xor=True, ip=peer_host, port=peer_port, family=af, xor_extra=xor_extra))
+
+def turn_vars_to_server(var_list, af):
+    return {
+        "host": var_list[0],
+        "port": var_list[1],
+        "user": var_list[2],
+        "pass": var_list[3],
+        "realm": var_list[4]
+    }
     
+def find_turn_server(turn_server, turn_servers, af=None):
+    for needle in turn_servers:
+        # Not the same server host or IP.
+        if needle["host"] != turn_server["host"]:
+            continue
+
+        # Not the same port.
+        if needle["port"] != turn_server["port"]:
+            continue
+
+        # Not the same user.
+        if needle["user"] != turn_server["user"]:
+            continue
+
+        # Not the same pass.
+        if needle["pass"] != turn_server["pass"]:
+            continue
+
+        # Not the same realm.
+        if needle["realm"] != turn_server["realm"]:
+            continue
+
+        # Not the same AF.
+        if af is not None:
+            if af not in needle["afs"]:
+                continue
+
+        return True
+
+    return False

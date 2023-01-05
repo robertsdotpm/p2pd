@@ -5,7 +5,6 @@ import time
 import binascii
 import ipaddress
 import sys, os
-import ctypes
 import platform
 import logging
 import traceback
@@ -88,9 +87,6 @@ STATUS_RETRY = 1
 STATUS_SUCCESS = 2
 STATUS_FAILURE = 3
 MAX_PORT = 65535
-_COPY          = ctypes.pythonapi._PyUnicode_Copy
-_COPY.argtypes = [ctypes.py_object]
-_COPY.restype  = ctypes.py_object
 
 re.unescape = lambda x: re.sub(r'\\(.)', r'\1', x)
 to_b = lambda x: x if type(x) == bytes else x.encode("ascii")
@@ -119,12 +115,12 @@ b_and = lambda abytes, bbytes: bytes(map(lambda a,b: a & b, abytes, bbytes))
 b_or = lambda abytes, bbytes: bytes(map(lambda a,b: a | b, abytes, bbytes))
 len_range = lambda r: r[1] - r[0]
 get_bits = lambda n, l, p=0: ( ((1 << l) - 1)  &  (n >> p ) )
-actual_copy = _COPY
 is_no = lambda x: to_s(x).isnumeric()
 is_b = lambda x: isinstance(x, bytes)
 rm_whitespace = lambda x: re.sub(r"\s+", "", x, flags=re.UNICODE)
 urlencode = lambda x: to_b(urllib.parse.quote(x))
 urldecode = lambda x: to_b(urllib.parse.unquote(x))
+shuffle = lambda x: random.shuffle(x) or x
 
 # Take a dict template called Y and a child dict called X.
 # Yield a new dict with Y's vals overwritten by X's.

@@ -175,8 +175,8 @@ class IPRange():
         self.__dict__ = o.__dict__
 
     def __deepcopy__(self, memo):
-        ip = actual_copy(self.ip)
-        netmask = actual_copy(self.netmask)
+        ip = self.ip
+        netmask = self.netmask
         params = (ip, netmask, copy.deepcopy(self.cidr))
         return IPRange(*params)
 

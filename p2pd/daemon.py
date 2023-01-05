@@ -32,6 +32,9 @@ class Daemon():
             self.iface_lookup[iface.name] = iface
         self.rp = None
 
+    def set_rp(self, rp):
+        self.rp = rp
+
     def restrict_proto(self, proto):
         self.restricted_proto = proto
 
@@ -169,7 +172,9 @@ class Daemon():
             # Convert RoutePool to Routes.
             # Makes new instances of the routes.
             if isinstance(target, RoutePool):
-                routes += target[:]
+                # There could be massive blocks of IPs in a RoutePool.
+                # It's not practical to index all of them.
+                routes += target[:10]
 
             # Route.
             if isinstance(target, Route):

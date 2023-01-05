@@ -84,52 +84,23 @@ STUN_CONF = dict_child({
 
     # Retry no -- if an individual call fails how
     # many times to retry the whole thing.
-    "retry_no": 1,
+    "retry_no": 3,
 
     # Reuse address tuple for bind() socket call.
     "reuse_addr": True,
 }, NET_CONF)
 
-# Used for all servers until monitor is complete.
-"""
-if socket.gethostname() == "p2pd.net":
-    STUN_TEMP_SERVERS = [['stun.stunprotocol.org', 3478]]
-else:
-    STUN_TEMP_SERVERS = [['p2pd.net', 34780]]
-"""
-
-
-"""
-# The 'change' hosts return valid responses to the changed IP attribute.
-STUN_SERVERS_CHANGE_UDP_V4 = [['stun.voipconnect.com', 3478], ['stun.kotter.net', 3478], ['stun.voicetrading.com', 3478], ['stun.voipbuster.com', 3478], ['stun.telbo.com', 3478], ['stun.qcol.net', 3478], ['stun.vozelia.com', 3478], ['stun.cheapvoip.com', 3478], ['stun.solcon.nl', 3478], ['stun.teamfon.de', 3478], ['stun.syrex.co.za', 3478], ['stun.freevoipdeal.com', 3478], ['stun.syncthing.net', 3478], ['stun.myvoiptraffic.com', 3478], ['stun.talkho.com', 3478], ['stun.axeos.nl', 3478], ['stun.smslisto.com', 3478], ['stun.ppdi.com', 3478], ['stun.ixc.ua', 3478], ['stun.stunprotocol.org', 3478], ['stun.intervoip.com', 3478], ['stun.gigaset.net', 3478], ['stun.voipbusterpro.com', 3478], ['stun.connecteddata.com', 3478], ['stun.freecall.com', 3478], ['stun.liveo.fr', 3478], ['stun.justvoip.com', 3478], ['stun.voipcheap.com', 3478], ['stun.plexicomm.net', 3478], ['stun.voipwise.com', 3478], ['stun.netappel.com', 3478], ['stun.meowsbox.com', 3478], ['stun.fathomvoice.com', 3478], ['stun.voipinfocenter.com', 3478], ['stun.hoiio.com', 3478], ['stun.voipcheap.co.uk', 3478], ['stun.12voip.com', 3478], ['stun.smartvoip.com', 3478], ['stun.voipzoom.com', 3478], ['stun.voipdiscount.com', 3478], ['stun.lowratevoip.com', 3478], ['stun.jumblo.com', 3478], ['stun.voipstunt.com', 3478], ['stun.uls.co.za', 3478], ['stun.nonoh.net', 3478], ['stun.voipgain.com', 3478], ['stun.poivy.com', 3478], ['stun.voippro.com', 3478], ['stun.smsdiscount.com', 3478], ['stun.epygi.com', 3478], ['stun.issabel.org', 3478], ['stun.powervoip.com', 3478], ['stun.voipblast.com', 3478], ['stun.sipdiscount.com', 3478], ['stun.miwifi.com', 3478], ['stun.easyvoip.com', 3478], ['stun.rynga.com', 3478], ['stun.lineaencasa.com', 3478], ['stun.webcalldirect.com', 3478], ['stun.siptraffic.com', 3478], ['stun.voipraider.com', 3478], ['stun.savemgo.com', 3478], ['stun.3wayint.com', 3478], ['stun.bluesip.net', 3478], ['stun.actionvoip.com', 3478], ['stun.internetcalls.com', 3478], ['stun.sparvoip.de', 3478], ['stun.dls.net', 3478]]
-
-STUN_SERVERS_CHANGE_UDP_V6 = [['stun.stunprotocol.org', 3478], ['stun.hot-chilli.net', 3478], ['stun.simlar.org', 3478], ['stun.issabel.org', 3478]]
-
-
-STUN_SERVERS_CHANGE_TCP_V4 = [['stun.stunprotocol.org', 3478], ['stun.issabel.org', 3478]]
-
-STUN_SERVERS_CHANGE_TCP_V6 = [['stun.stunprotocol.org', 3478], ['stun.issabel.org', 3478]]
-
-# The 'map' type hosts respond to regular bind requests.
-# They may not include correct info for the changed IP attribute.
-STUN_SERVERS_MAP_UDP_V4 = [['stun.eol.co.nz', 3478], ['stun.actionvoip.com', 3478], ['stun.nottingham.ac.uk', 3478], ['stun.meowsbox.com', 3478], ['stun.aa.net.uk', 3478], ['stun.peeters.com', 3478], ['stun.wxnz.net', 3478], ['stun.axeos.nl', 3478], ['stun.surjaring.it', 3478], ['stun.marcelproust.it', 3478], ['stun.sipy.cz', 3478], ['stun.axialys.net', 3478], ['stun.kotter.net', 3478], ['stun.acrobits.cz', 3478], ['stun.12voip.com', 3478], ['stun.tng.de', 3478], ['stun.nexxtmobile.de', 3478], ['stun.bernardoprovenzano.net', 3478], ['stun.trivenet.it', 3478], ['stun.teamfon.de', 3478], ['stun.fitauto.ru', 3478], ['stun.soho66.co.uk', 3478], ['stun.swrag.de', 3478], ['stun.twt.it', 3478], ['stun.palava.tv', 3478], ['stun.qcol.net', 3478], ['stun.h4v.eu', 3478], ['stun.landvast.nl', 3478], ['stun.leonde.org', 3478], ['stun.olimontel.it', 3478], ['stun.siplogin.de', 3478], ['stun.bluesip.net', 3478], ['stun.hicare.net', 3478], ['stun.uiltucssicilia.it', 3478], ['stun.anlx.net', 3478], ['stun.miwifi.com', 3478], ['stun.ivao.aero', 3478], ['stun.totalcom.info', 3478], ['stun.intervoip.com', 3478], ['stun.next-gen.ro', 3478], ['stun.graftlab.com', 3478], ['stun.mywatson.it', 3478], ['stun.ortopediacoam.it', 3478], ['stun.demos.su', 3478], ['stun.siptraffic.com', 3478], ['stun.siedle.com', 3478], ['stun.voipwise.com', 3478], ['stun.junet.se', 3478], ['stun.rynga.com', 3478], ['stun.lowratevoip.com', 3478], ['stun.autosystem.com', 3478], ['stun.tel.lu', 3478], ['stun.logic.ky', 3478], ['stun.jumblo.com', 3478], ['stun.vivox.com', 3478], ['stun.halonet.pl', 3478], ['stun.odr.de', 3478], ['stun.neomedia.it', 3478], ['stun.vadacom.co.nz', 3478], ['stun.callwithus.com', 3478], ['stun.syncthing.net', 3478], ['stun.medvc.eu', 3478], ['stun.sparvoip.de', 3478], ['stun.voipdiscount.com', 3478], ['stun.dus.net', 3478], ['stun.officinabit.com', 3478], ['stun.zepter.ru', 3478], ['stun.sipthor.net', 3478], ['stun.easter-eggs.com', 3478], ['stun.voicetrading.com', 3478], ['stun.vozelia.com', 3478], ['stun.hosteurope.de', 3478], ['stun.leucotron.com.br', 3478], ['stun.voipbusterpro.com', 3478], ['stun.simlar.org', 3478], ['stun.alpirsbacher.de', 3478], ['stun.imafex.sk', 3478], ['stun.aaisp.co.uk', 3478], ['stun.webcalldirect.com', 3478], ['stun.provectio.fr', 3478], ['stun.sipgate.net', 10000], ['stun.muoversi.net', 3478], ['stun.voip.blackberry.com', 3478], ['stun.poivy.com', 3478], ['stun.nautile.nc', 3478], ['stun.smsdiscount.com', 3478], ['stun.nfon.net', 3478], ['stun.eleusi.com', 3478], ['stun.westtel.ky', 3478], ['stun.istitutogramscisiciliano.it', 3478], ['stun.tichiamo.it', 3478], ['stun.ekiga.net', 3478], ['stun.voipvoice.it', 3478], ['stun.lineaencasa.com', 3478], ['stun.savemgo.com', 3478], ['stun.alphacron.de', 3478], ['stun.thebrassgroup.it', 3478], ['stun.sipnet.com', 3478], ['stun.stunprotocol.org', 3478], ['stun.voipcheap.com', 3478], ['stun.voipraider.com', 3478], ['stun.solomo.de', 3478], ['stun.cheapvoip.com', 3478], ['stun.telbo.com', 3478], ['stun.3deluxe.de', 3478], ['stun.fmo.de', 3478], ['stun.ctafauni.it', 3478], ['stun.sipgate.net', 3478], ['stun.nexphone.ch', 3478], ['stun.rolmail.net', 3478], ['stun.siptrunk.com', 3478], ['stun.justvoip.com', 3478], ['stun.studio71.it', 3478], ['stun.nstelcom.com', 3478], ['stun.taxsee.com', 3478], ['stun.url.net.au', 3478], ['stun.demos.ru', 3478], ['stun.syrex.co.za', 3478], ['stun.londonweb.net', 3478], ['stun.jabbim.cz', 3478], ['stun.hot-chilli.net', 3478], ['stun.ixc.ua', 3478], ['stun.hide.me', 3478], ['stun.voztovoice.org', 3478], ['stun.ladridiricette.it', 3478], ['stun.voipxs.nl', 3478], ['stun.freecall.com', 3478], ['stun.eoni.com', 3478], ['stun.vo.lu', 3478], ['stun.voipcheap.co.uk', 3478], ['stun.nonoh.net', 3478], ['stun.liveo.fr', 3478], ['stun.carlovizzini.it', 3478], ['stun.sky.od.ua', 3478], ['stun.futurasp.es', 3478], ['stun.tel2.co.uk', 3478], ['stun.m-online.net', 3478], ['stun.babelforce.com', 3478], ['stun.internetcalls.com', 3478], ['stun.1-voip.com', 3478], ['stun.planetarium.com.br', 3478], ['stun.voipinfocenter.com', 3478], ['stun.lundimatin.fr', 3478], ['stun.waterpolopalermo.it', 3478], ['stun.voicetech.se', 3478], ['stun.stadtwerke-eutin.de', 3478], ['stun.comrex.com', 3478], ['stun.issabel.org', 3478], ['stun.commpeak.com', 3478], ['stun.baltmannsweiler.de', 3478], ['stun.sipdiscount.com', 3478], ['stun.solcon.nl', 3478], ['stun.infra.net', 3478], ['stun.smartvoip.com', 3478], ['stun.voipia.net', 3478], ['stun.voipgain.com', 3478], ['stun.verbo.be', 3478], ['stun.peethultra.be', 3478], ['stun.fondazioneroccochinnici.it', 3478], ['stun.hoiio.com', 3478], ['stun.voipblast.com', 3478], ['stun.gntel.nl', 3478], ['stun.megatel.si', 3478], ['stun.voztele.com', 3478], ['stun.wemag.com', 3478], ['stun.deepfinesse.com', 3478], ['stun.plexicomm.net', 3478], ['stun.myhowto.org', 3478], ['stun.voip.eutelia.it', 3478], ['stun.otos.pl', 3478], ['stun.atagverwarming.nl', 3478], ['stun.talkho.com', 3478], ['stun.clickphone.ro', 3478], ['stun.sipnet.net', 3478], ['stun.sewan.fr', 3478], ['stun.wia.cz', 3478], ['stun.rackco.com', 3478], ['stun.voippro.com', 3478], ['stun.epygi.com', 3478], ['stun.webmatrix.com.br', 3478], ['stun.netappel.com', 3478], ['stun.3wayint.com', 3478], ['stun.solnet.ch', 3478], ['stun.openvoip.it', 3478], ['stun.bcs2005.net', 3478], ['stun.rockenstein.de', 3478], ['stun.connecteddata.com', 3478], ['stun.gigaset.net', 3478], ['stun.acquageraci.it', 3478], ['stun.voipconnect.com', 3478], ['stun.jay.net', 3478], ['stun.voip.aebc.com', 3478], ['stun.bitburger.de', 3478], ['stun.myvoiptraffic.com', 3478], ['stun.easyvoip.com', 3478], ['stun.sip.us', 3478], ['stun.smslisto.com', 3478], ['stun.cablenet-as.net', 3478], ['stun.voipzoom.com', 3478], ['stun.ukh.de', 3478], ['stun.ippi.fr', 3478], ['stun.fathomvoice.com', 3478], ['stun.powervoip.com', 3478], ['stun.dls.net', 3478], ['stun.ipshka.com', 3478], ['stun.voipbuster.com', 3478], ['stun.goldfish.ie', 3478], ['stun.mixvoip.com', 3478], ['stun.synergiejobs.be', 3478], ['stun.sipnet.ru', 3478], ['stun.eurosys.be', 3478], ['stun.fairytel.at', 3478], ['stun.ppdi.com', 3478], ['stun.srce.hr', 3478], ['stun.freevoipdeal.com', 3478], ['stun.t-online.de', 3478], ['stun.voipstunt.com', 3478], ['stun.ippi.com', 3478], ['stun.telnyx.com', 3478], ['stun.uls.co.za', 3478], ['stun.1cbit.ru', 3478], ['stun.voipgate.com', 3478], ['stun.levigo.de', 3478]]
-
-STUN_SERVERS_MAP_UDP_V6 = [['stun.issabel.org', 3478], ['stun.expandable.io', 3478], ['stun1.l.google.com', 19302], ['stun.nextcloud.com', 443], ['stun3.l.google.com', 19302], ['stun.antisip.com', 3478], ['stun.chaosmos.de', 3478], ['stun.nextcloud.com', 3478], ['stun.hot-chilli.net', 3478], ['stun.streamnow.ch', 3478], ['stun.stunprotocol.org', 3478], ['stun.funwithelectronics.com', 3478], ['stun.shy.cz', 3478], ['stun.imp.ch', 3478], ['relay.webwormhole.io', 3478], ['stun3.l.google.com', 19305], ['stun.yeymo.com', 3478], ['stun2.l.google.com', 19305], ['stun.training-online.eu', 3478], ['stun.wtfismyip.com', 3478], ['stun1.l.google.com', 19305], ['stun.simlar.org', 3478], ['stun.beebeetle.com', 3478], ['stun.l.google.com', 19302], ['stun.eaclipt.org', 3478], ['stun.tula.nu', 3478], ['stun4.l.google.com', 19302], ['stun.l.google.com', 19305], ['stun.zottel.net', 3478], ['stun.framasoft.org', 3478], ['stun4.l.google.com', 19305], ['stun2.l.google.com', 19302], ['stun.draci.info', 3478]]
-
-STUN_SERVERS_MAP_TCP_V4 = [['stun.cellmail.com', 3478], ['stun.eurosys.be', 3478], ['stun.zepter.ru', 3478], ['stun.3deluxe.de', 3478], ['stun.bitburger.de', 3478], ['stun.sipnet.com', 3478], ['stun.atagverwarming.nl', 3478], ['stun.fmo.de', 3478], ['stun.issabel.org', 3478], ['stun.sipnet.net', 3478], ['stun.verbo.be', 3478], ['stun.synergiejobs.be', 3478], ['stun.sipnet.ru', 3478], ['stun.isp.net.au', 3478], ['stun.graftlab.com', 3478], ['stun.peethultra.be', 3478], ['stun.stunprotocol.org', 3478], ['stun.baltmannsweiler.de', 3478], ['stun.bergophor.de', 3478], ['stun.onthenet.com.au', 3478], ['stun.moonlight-stream.org', 3478], ['stun.siedle.com', 3478], ['stun.alpirsbacher.de', 3478], ['stun.3wayint.com', 3478], ['stun.acronis.com', 3478], ['stun.ukh.de', 3478], ['stun.1cbit.ru', 3478]]
-
-STUN_SERVERS_MAP_TCP_V6 = [['stun.issabel.org', 3478], ['stun.stunprotocol.org', 3478]]
-"""
-
-# Will be removed when monitoring daemon is done.
-STUN_SERVERS_MAP_TCP_V6 = STUN_TEMP_SERVERS
-STUN_SERVERS_MAP_TCP_V4 = STUN_TEMP_SERVERS
-STUN_SERVERS_MAP_UDP_V6 = STUN_TEMP_SERVERS
-STUN_SERVERS_MAP_UDP_V4 = STUN_TEMP_SERVERS
-STUN_SERVERS_CHANGE_UDP_V4 = STUN_TEMP_SERVERS
-STUN_SERVERS_CHANGE_UDP_V6 = STUN_TEMP_SERVERS
-STUN_SERVERS_CHANGE_TCP_V4 = STUN_TEMP_SERVERS
-STUN_SERVERS_CHANGE_TCP_V6 = STUN_TEMP_SERVERS
+# Replace with servers from settings.
+# Remove distinction between 'map' and 'change' servers.
+# Just keep change servers to keep things simple.
+STUN_SERVERS_MAP_UDP_V6 = [STUND_SERVERS[IP6][0]] + shuffle(STUND_SERVERS[IP6][1:])
+STUN_SERVERS_CHANGE_UDP_V6 = [STUND_SERVERS[IP6][0]] + shuffle(STUND_SERVERS[IP6][1:])
+STUN_SERVERS_MAP_UDP_V4 = [STUND_SERVERS[IP4][0]] + shuffle(STUND_SERVERS[IP4][1:])
+STUN_SERVERS_CHANGE_UDP_V4 = [STUND_SERVERS[IP4][0]] + shuffle(STUND_SERVERS[IP4][1:])
+STUN_SERVERS_MAP_TCP_V6 = [STUNT_SERVERS[IP6][0]] + shuffle(STUNT_SERVERS[IP6][1:])
+STUN_SERVERS_CHANGE_TCP_V6 = [STUNT_SERVERS[IP6][0]] + shuffle(STUNT_SERVERS[IP6][1:])
+STUN_SERVERS_MAP_TCP_V4 = [STUNT_SERVERS[IP4][0]] + shuffle(STUNT_SERVERS[IP4][1:])
+STUN_SERVERS_CHANGE_TCP_V4 = [STUNT_SERVERS[IP4][0]] + shuffle(STUNT_SERVERS[IP4][1:])
 
 # Apply funcs easier to all server lists.
 STUN_SERVERS = [
@@ -355,7 +326,7 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
     recieved = False
 
     # Convenience function to call on failure or complete.
-    def handle_cleanup(msg="ok"):
+    def handle_cleanup(ret, msg="ok"):
         log("> STUN do request status = %s" % (msg))
 
         if msg != "ok":
@@ -441,18 +412,21 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
                         ip, port = extract_addr(buf, dest_addr.chosen, base)
                         ret['rip'] = ip
                         ret['rport'] = port
+                        log(f"set mapped address {ip}:{port}")
 
                     # Original address of the server. Not really that important.
                     if attr_type == SourceAddress:
                         ip, port = extract_addr(buf, dest_addr.chosen, base)
                         ret['sip'] = ip
                         ret['sport'] = port
+                        log(f"set SourceAddress {ip}:{port}")
 
                     # Address that the STUN server would send change reqs from.
                     if attr_type == ChangedAddress:
                         ip, port = extract_addr(buf, dest_addr.chosen, base)
                         ret['cip'] = ip
                         ret['cport'] = port
+                        log(f"set ChangedAddress {ip}:{port}")
 
                     base = base + 4 + attr_len
                     len_remain -= (4 + attr_len)
@@ -471,7 +445,7 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
         # Allow other coroutines to do work.
         await asyncio.sleep(0.5)
 
-    return handle_cleanup()    
+    return handle_cleanup(ret)    
 
 # Build new pipe or return existing ones
 # based on proto. Handle initialization.
@@ -572,13 +546,15 @@ async def stun_sub_test(msg, dest, interface, af, proto, source_port, changed, e
             return None, None
 
     pipe.subscribe(tran_info[:2])
-    return await do_stun_request(
-        pipe,
-        dest,
-        tran_info,
-        extra,
-        changed_addr=changed,
-        conf=conf
+    return await async_wrap_errors(
+        do_stun_request(
+            pipe,
+            dest,
+            tran_info,
+            extra,
+            changed_addr=changed,
+            conf=conf
+        )
     ), pipe
 
 """
@@ -863,92 +839,95 @@ class STUNClient():
         # something else is wrong.
         servers = servers or get_stun_servers(af, proto, group)
         stun_addr = None
-        for i in range(conf["retry_no"]):
-            # Get a valid STUN Address.
-            for j in range(conf["addr_retry"]):
-                # Basic server address check.
-                server = random.choice(servers)
-                stun_port = 3479 if alt_port else server[1]
+        for server in servers:
+            for i in range(conf["retry_no"]):
+                # Get a valid STUN Address.
+                for j in range(conf["addr_retry"]):
+                    # Basic server address check.
+                    stun_port = 3479 if alt_port else server[1]
 
-                # Resolve address with a timeout.
-                try:
-                    stun_addr = await asyncio.wait_for(
-                        stun_check_addr_info(
-                            server[0],
-                            stun_port,
-                            af,
-                            proto,
-                            interface,
-                            local_addr
-                        ),
-                        conf["dns_timeout"]
-                    )
-                except asyncio.TimeoutError:
-                    log("> stun addr_task timeout in _getfield")
-                    stun_addr = None
-                    continue
+                    # Resolve address with a timeout.
+                    try:
+                        stun_addr = await asyncio.wait_for(
+                            stun_check_addr_info(
+                                server[0],
+                                stun_port,
+                                af,
+                                proto,
+                                interface,
+                                local_addr
+                            ),
+                            conf["dns_timeout"]
+                        )
+                    except asyncio.TimeoutError:
+                        log("> stun addr_task timeout in _getfield")
+                        stun_addr = None
+                        continue
 
-                # Check address was resolved.
+                    # Check address was resolved.
+                    if stun_addr is None:
+                        log("> get field error stun addr is None")
+                        continue
+
+                    break
+
+                # Monitor basic loop exit.
                 if stun_addr is None:
-                    log("> get field error stun addr is None")
                     continue
 
-                break
+                # Do stun test.
+                msg = "doing stun sub test for %s" % (name)
+                ret = await stun_sub_test(msg, stun_addr, interface, af, proto, source_port, stun_addr, "", local_addr=local_addr, conf=conf)
+                nat_info, pipe = ret
 
-            # Monitor basic loop exit.
-            if stun_addr is None:
-                continue
+                # Check response.
+                error = stun_check_reply(stun_addr, nat_info, lax)
+                stop_time = time.time() - start_time
+                if error:
+                    log("> get field error = %s" % (str(error)))
+                    if pipe is not None:
+                        log("> closing stream get field")
+                        await pipe.close()
+                        pipe = None
 
-            # Do stun test.
-            msg = "doing stun sub test for %s" % (name)
-            ret = await stun_sub_test(msg, stun_addr, interface, af, proto, source_port, stun_addr, "", local_addr=local_addr, conf=conf)
-            nat_info, pipe = ret
-
-            # Check response.
-            error = stun_check_reply(stun_addr, nat_info, lax)
-            stop_time = time.time() - start_time
-            if error:
-                log("> get field error = %s" % (str(error)))
-                if pipe is not None:
-                    log("> closing stream get field")
-                    await pipe.close()
-                    pipe = None
-
-                continue
-
-            # Return IP section of STUN reply.
-            if do_close:
-                if pipe is not None:
-                    await pipe.close()
-                    pipe = None
-
-            # Return results.
-            stop_time = time.time() - start_time
-            if name == "nat_info":
-                # Valid STUN reply has main fields set.
-                stun_fields = ["rip", "rport", 'lport', 'lip']
-                do_continue = False
-                for stun_field in stun_fields:
-                    if nat_info[stun_field] is None:
-                        do_continue = True
-                        break
-
-                # Field wasn't properly set.
-                if do_continue:
                     continue
+
+                # Return IP section of STUN reply.
+                if do_close:
+                    if pipe is not None:
+                        await pipe.close()
+                        pipe = None
+
+                # Return results.
+                stop_time = time.time() - start_time
+                if name == "nat_info":
+                    # Valid STUN reply has main fields set.
+                    stun_fields = ["rip", "rport", 'lport', 'lip']
+                    do_continue = False
+                    for stun_field in stun_fields:
+                        if nat_info[stun_field] is None:
+                            do_continue = True
+                            break
+
+                    # Field wasn't properly set.
+                    if do_continue:
+                        continue
+                    else:
+                        return nat_info, pipe, stop_time
                 else:
-                    return nat_info, pipe, stop_time
-            else:
-                # Field wasn't set in STUN reply.
-                if nat_info[name] is None:
-                    continue
-                else:
-                    return nat_info[name], pipe, stop_time
+                    # Field wasn't set in STUN reply.
+                    if nat_info[name] is None:
+                        continue
+                    else:
+                        return nat_info[name], pipe, stop_time
 
         # Retry failed.
         return f_fail()
 
     async def get_nat_type(self, af=None, servers=None):
+        if self.proto != UDP:
+            raise Exception("NAT type test requires udp proto.")
+
         # Setup conf for NAT type.
         conf = copy.deepcopy(STUN_CONF)
         conf["packet_retry"] = 3
@@ -1088,6 +1067,28 @@ class STUNClient():
 #######################################################################
 if __name__ == "__main__": # pragma: no cover
     """
+    Some custom STUN servers don't include the rip attribute
+    for change requests -- in this case we issue get_wan_ips
+    to both test addresses and use the result for the tests.
+    for ip_check in [[1, stun_addr], [3, nat_tests[1][2]]]:
+        n, addr = ip_check
+        if test[n]['rip'] is None:
+            ret, test_pipe = await stun_sub_test(
+                "custom get ip for non conforming server",
+                addr,
+                interface,
+                af,
+                proto,
+                0,
+                addr,
+                ""
+            )
+
+            print(ret)
+
+            await test_pipe.close()
+            test[n]['rip'] = ret['rip']
+
     # Filters out invalid servers based on response.
     async def get_valid_stun_servers(interface, af, proto, group="map", sock_timeout=2, check_change=0):
         return
@@ -1174,16 +1175,23 @@ if __name__ == "__main__": # pragma: no cover
     async def test_stun_client():
         from .interface import Interface, load_interfaces, init_p2pd
 
+
+        # Maybe has a turn server.
+        # https://wiki.innovaphone.com/index.php?#title=Howto:Innovaphones_public_services#TURN
+        server = ['stun.innovaphone.com', 3478]
+
         netifaces = await init_p2pd()
-        print(netifaces.interfaces())
 
-        x = await Interface("Realtek Gaming 2.5GbE Family Controller").start()
-        
-        print(x)
 
-        y = await Interface("Intel(R) Wi-Fi 6 AX200 160MHz").start()
+        i = await Interface().start_local()
+        s = STUNClient(interface=i, proto=UDP)
+        out = await s.get_nat_type()
+        print(out)
+        out = await s.get_mapping(proto=TCP)
+        print(out)
 
-        print(y)
+        i = await Interface().start()
+        print(i)
 
         return
 

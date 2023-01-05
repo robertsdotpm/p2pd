@@ -44,9 +44,10 @@ it may not work properly with P2PD.
         await pipe.send(b"ECHO " + msg)
         out = await pipe.recv()
         #
-        # Cleanup the pipe.
+        # Cleanup.
         assert(msg in out)
         await pipe.close()
+        await node.close()
 
     # Run the coroutine.
     # Or await make_p2p_con() if in async REPL.
@@ -99,4 +100,5 @@ but with more control.
     daemons
     turn
     stun
+    examples
 

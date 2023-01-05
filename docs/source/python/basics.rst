@@ -245,6 +245,9 @@ Connect to Google.com and get a response from it.
         # Wait for any message response.
         out = await pipe.recv(timeout=3)
         print(out)
+        #
+        # Cleanup.
+        await pipe.close()
 
     # From inside the async REPL.
     await main()

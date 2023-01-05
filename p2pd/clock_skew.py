@@ -18,17 +18,26 @@ Address hence it defaults to the default route.
 https://datatracker.ietf.org/doc/html/rfc5905#section-6
 """
 
+import random
 from decimal import Decimal as Dec
 from .address import *
 from .ntp_client import NTPClient
 from .settings import *
 
-async def get_ntp(server, interface):
+NTP_RETRY = 2
+NTP_TIMEOUT = 2
+
+async def get_ntp(interface, server=None, retry=NTP_RETRY):
+    server = server or random.choice(NTP_SERVERS)[0]
     try:
-        client = NTPClient(interface)
-        response = await client.request(server, version=3)
-        ntp = response.tx_time
-        return ntp
+        for _ in range(retry):
+            client = NTPClient(interface)
+            response = await client.request(server, version=3)
+            if response is None:
+                continue
+
+            ntp = response.tx_time
+            return ntp
     except Exception as e:
         log_exception()
         return None
@@ -37,7 +46,7 @@ class SysClock:
     def __init__(self, interface, clock_skew=Dec(0)):
         self.interface = interface
         self.enough_data = 40
-        self.min_data = 20
+        self.min_data = 10
         self.max_sdev = 60
         self.clean_steps = 3
         self.data_points = []
@@ -46,7 +55,6 @@ class SysClock:
             self.clock_skew = Dec(clock_skew)
 
     async def start(self):
-        global ntp_server
         if not self.clock_skew:
             # Test whether this host has an NTPD.
             """
@@ -55,43 +63,61 @@ class SysClock:
             """
             # NTPD listens on all interfaces so
             # the LAN IP doesn't matter.
+            server = None
             local_ip = "localhost"
-            ntp_ret = await get_ntp(
-                local_ip,
-                self.interface
+            ntp_ret = await async_wrap_errors(
+                get_ntp(
+                    self.interface,
+                    local_ip
+                ),
+                timeout=NTP_RETRY * NTP_TIMEOUT
             )
+
             if ntp_ret is not None:
                 log("> clockskew using local ntp daemon")
-                ntp_server = local_ip
+                server = local_ip
 
             # Calculate clock skew.
+            for i in range(0, 3):
+                if self.clock_skew == Dec(0):
+                    await self.collect_data_points(server=server)
+                    if not len(self.data_points):
+                        continue
+
+                    self.clock_skew = self.calculate_clock_skew()
+                else:
+                    break
+
+            # Raise exception.
             if self.clock_skew == Dec(0):
-                await self.collect_data_points()
-                assert(len(self.data_points))
-                self.clock_skew = self.calculate_clock_skew()
+                raise Exception("Could not get clock skew.")
     
         return self
 
     def time(self):
         return Dec(timestamp(1)) - self.clock_skew
 
-    async def collect_data_points(self):
+    async def collect_data_points(self, server=None):
         async def get_clock_skew():
-            ntp_ret = await get_ntp(NTP_SERVER, self.interface)
+            ntp_ret = await async_wrap_errors(
+                get_ntp(self.interface, server=server),
+                timeout=NTP_RETRY * NTP_TIMEOUT
+            )
+
             if ntp_ret is None:
                 return None
 
             return Dec(timestamp(1)) - Dec(ntp_ret)
 
         tasks = []
-        for i in range(0, self.enough_data + 10):
+        for _ in range(0, self.enough_data + 10):
             tasks.append(
                 get_clock_skew()
             )
 
         results = await asyncio.gather(*tasks)
         results = strip_none(results)
-        self.data_points = results
+        self.data_points += results
 
     def statx_n(self, data_points):
         return len(data_points)
@@ -99,7 +125,6 @@ class SysClock:
     def statx_avg(self, data_points):
         total = Dec("0")
         n = self.statx_n(data_points)
-
         for i in range(0, n):
             total += data_points[i]
 
@@ -110,7 +135,7 @@ class SysClock:
             # Return sum of square deviations
             # of sequence data.
             c = self.statx_avg(data)
-            return sum((x - c )** 2 for x in data)
+            return sum( (x - c ) ** 2 for x in data )
 
         def pstdev(data):
             # Calculates the population standard deviation.
@@ -137,6 +162,7 @@ class SysClock:
         deviation.
         """
         if n < 1:
+            log("n < 1 in cal clock skew")
             return Dec("0")
 
         avg = self.statx_avg(self.data_points)
@@ -195,13 +221,21 @@ class SysClock:
 
 
 async def test_clock_skew(): # pragma: no cover
-    interface = Interface("enp3s0")
-    n = 946684801
-    sys_clock = await SysClock().start()
-    #print(time.time())
-    ret = sys_clock.time()
-    print(ret)
-    print(ntp_server)
+    from p2pd.interface import init_p2pd, Interface
+    await init_p2pd()
+    interface = await Interface().start_local()
+    s = await SysClock(interface=interface).start()
+    print(s.clock_skew)
+
+
+    return
+    f = []
+    for i in range(len(NTP_SERVERS)):
+        out = await get_ntp(interface, server=NTP_SERVERS[i][0])
+        if out is None:
+            f.append(i)
+
+    print(f)
         
 if __name__ == "__main__":
     #sys_clock = SysClock()

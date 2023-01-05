@@ -61,7 +61,7 @@ from .utils import *
 from .net import *
 from .address import *
 from .base_stream import *
-from .http_lib import *
+from .http_client_lib import *
 
 UPNP_LEASE_TIME = 86399
 UPNP_PORT = 1900

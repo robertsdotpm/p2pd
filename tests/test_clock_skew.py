@@ -6,7 +6,7 @@ class TestClockSkew(unittest.IsolatedAsyncioTestCase):
     async def test_get_ntp_pool_ntp(self):
         await init_p2pd()
         i = await Interface().start_local()
-        ntp = await get_ntp("time.google.com", i)
+        ntp = await get_ntp(i, server="time.google.com")
         self.assertTrue(ntp)
 
     async def test_get_clock_skew(self):
