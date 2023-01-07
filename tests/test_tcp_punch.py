@@ -32,7 +32,12 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
         sys_clock = SysClock(Dec("0.01"))
         pe = await get_pp_executors()
         #pe2 = await get_pp_executors(workers=2)
-        qm = multiprocessing.Manager()
+        
+        if pe is not None:
+            qm = multiprocessing.Manager()
+        else:
+            qm = None
+            
         pipe_id = b"pipe_id"
 
         # Load interfaces is slow AF on Windows.
@@ -154,13 +159,15 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
 
         # Try close the multiprocess manager.
         try:
-            qm.shutdown()
+            if qm is not None:
+                qm.shutdown()
         except Exception:
             pass
 
         # Try close the process pool executor.
         try:
-            pe.shutdown()
+            if pe is not None:
+                pe.shutdown()
         except Exception:
             pass
 

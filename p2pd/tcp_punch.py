@@ -184,7 +184,10 @@ class TCPPunch():
         # Pythons garbage collector reaps it and will call
         # close, we want to save it until after a hole punch.
         self.stun_socks = []
-        self.sock_queue = queue_manager.Queue()
+        if queue_manager is not None:
+            self.sock_queue = queue_manager.Queue()
+        else:
+            self.sock_queue = None
 
         # Simple garbage collector for state.
         self.do_state_cleanup = True
@@ -887,32 +890,49 @@ class TCPPunch():
         # These arguments are all able to be 'pickled.'
         # This requirement is annoying as hell.
         dest_addr = state_info["data"]["their_dest"]
-        queue = self.queue_manager.Queue()
+        if self.queue_manager is not None:
+            queue = self.queue_manager.Queue()
+        else:
+            queue = None
         af = af_from_ip_s(dest_addr)
         route = self.interface.route(af)
         addr = await Address(dest_addr, 0).res(route)
         args = self.get_punch_args(node_id, pipe_id)
-        args.append(state_info["data"]["mode"])
-        args.append(queue)
-        args.append(self.sock_queue)
-        args.append(side)
         
         # The executor pool is used to start processes.
         loop = asyncio.get_event_loop()
-        assert(self.executors is not None)
-        loop.run_in_executor(
-            self.executors, proc_do_punching, args
-        )
+        sock = None
+        
+        # Multiprocessing pool is enabled.
+        if self.executors is not None:
+            # Setup args list for executor.
+            args.append(state_info["data"]["mode"])
+            args.append(queue)
+            args.append(self.sock_queue)
+            args.append(side)
+            
+            # Schedule TCP punching in process pool executor.
+            loop.run_in_executor(
+                self.executors, proc_do_punching, args
+            )
+            
+            # Wait for queue result with timeout.
+            for _ in range(0, 30):
+                if not queue.empty():
+                    break
 
-        # Wait for queue result with timeout.
-        for _ in range(0, 30):
-            if not queue.empty():
-                break
+                await asyncio.sleep(1)
 
-            await asyncio.sleep(1)
+            # Executor pushes back socket to queue.
+            sock = queue.get(timeout=2)
+        
+        # Otherwise do the punching in this event loop.
+        if self.executors is None:
+            sock = await async_wrap_errors(
+                TCPPunch.do_punching(side, *args, state_info["data"]["mode"], self.sock_queue)
+            )
 
-        # Process return result.
-        sock = queue.get(timeout=2)
+        # Wrap returned socket in a pipe.
         pipe = None
         if sock is not None: 
             log(f"> TCP hole made {sock}.")

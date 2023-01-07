@@ -103,3 +103,48 @@ async def get_nic_private_ips(interface, af, netifaces, loop=None):
         nic_iprs.append(nic_ipr)
 
     return nic_iprs
+
+def netiface_gateways(netifaces, get_interface_type, preference=AF_ANY):
+    gws = netifaces.gateways()
+    gateway = None
+    iface = None
+    
+    # Netifaces may not always find the default gateway.
+    # Use first interface that get_interface_type finds.
+    if gws["default"] == {}:
+        # Create a list of address families to check.
+        if preference == AF_ANY:
+            afs = VALID_AFS
+        else:
+            afs = [preference]
+            
+        # Check the address families of related GWs.
+        for af in afs:
+            # No entry for AF found in GW info.
+            if af not in gws:
+                continue
+                
+            # Check that there is info to check.
+            if not len(gws[af]):
+                continue
+                
+            # Check the interface name.
+            for net_info in gws[af]:
+                # Af already set.
+                if af in gws["default"]:
+                    continue
+                
+                # Try to determine interface type from name.
+                if_name = net_info[1]
+                if_type = get_interface_type(if_name)
+                
+                # Unknown / bad interface type.
+                if if_type == INTERFACE_UNKNOWN:
+                    continue
+                    
+                # Use this interface GW info as the default.
+                gws["default"][af] = net_info
+                break
+                
+    return gws
+

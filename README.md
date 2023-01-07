@@ -1,6 +1,6 @@
 # P2PD
 
-``[Coverage >= 82%] [Python >= 3.6] [Win, Nix, BSD, Apple]``
+``[Coverage >= 82%] [Python >= 3.6] [Mac, Win, Nix, BSD, Android]``
 
 **P2PD** is a new project aiming to make peer-to-peer networking
 simple and ubiquitous. P2PD can be used either as a library or as a service.
@@ -36,6 +36,8 @@ P2PD offers engineers the following features:
 - **Language-agnostic REST API.** You can call **/p2p/open/name/addr**
    then **/p2p/pipe/name** to turn any HTTP connection into a two-way relay
    between a peer-to-peer connection.
+- **Minimal dependencies.** Most of the code in P2PD uses the Python
+  standard library to improve portability and reduce packaging issues.
 - **Built on open protocols.** P2PD uses **STUN** for address lookups,
    **MQTT** for signaling messages, and **TURN** for last resort proxying.
    All of these protocols have public infrastructure.

@@ -218,7 +218,12 @@ class P2PNode(Daemon):
         return closure
 
     def setup_multiproc(self, pp_executor, mp_manager):
-        assert(pp_executor)
+        # Process pools are disabled.
+        if pp_executor is None:
+            self.pp_executor = None
+            self.mp_manager = None
+            return
+            
         assert(mp_manager)
         self.pp_executor = pp_executor
         self.mp_manager = mp_manager
@@ -685,13 +690,15 @@ class P2PNode(Daemon):
 
         # Try close the multiprocess manager.
         try:
-            self.mp_manager.shutdown()
+            if self.mp_manager is not None:
+                self.mp_manager.shutdown()
         except Exception:
             pass
 
         # Try close the process pool executor.
         try:
-            self.pp_executor.shutdown()
+            if self.pp_executor is not None:
+                self.pp_executor.shutdown()
         except Exception:
             pass
 
@@ -769,7 +776,18 @@ def init_process_pool():
     loop = asyncio.get_event_loop()
 
 async def get_pp_executors(workers=2):
-    pp_executor = ProcessPoolExecutor(max_workers=workers)
+    try:
+        pp_executor = ProcessPoolExecutor(max_workers=workers)
+    except Exception:
+        """
+        Not all platform have a working implementation of sem_open / semaphores.
+        Android is one such platform. It does support multiprocessing but
+        this semaphore feature is missing and will throw an error here.
+        In this case -- log the error and revert to using a single event loop.
+        """
+        log_exception()
+        return None
+    
     loop = asyncio.get_event_loop()
     tasks = []
     for i in range(0, workers):
@@ -828,7 +846,11 @@ async def start_p2p_node(port=NODE_PORT, node_id=None, ifs=None, clock_skew=Dec(
     ).start()
 
     # Configure node for TCP punching.
-    mp_manager = multiprocessing.Manager()
+    if pp_executors is not None:
+        mp_manager = multiprocessing.Manager()
+    else:
+        mp_manager = None
+
     node.setup_multiproc(pp_executors, mp_manager)
     node.setup_coordination(sys_clock)
     node.setup_tcp_punching()

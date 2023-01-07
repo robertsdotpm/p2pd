@@ -35,10 +35,10 @@ async def init_p2pd():
     return netifaces
 
 def get_default_iface(netifaces, preference=AF_ANY, exp=1, duel_stack_test=True):
-    gws = netifaces.gateways()
+    gws = netiface_gateways(netifaces, get_interface_type, preference=preference)
     gateway = None
     iface = None
-
+                    
     # Convert any to netifaces.af.
     if preference == AF_ANY:
         # First valid address family for default gateway.
@@ -390,8 +390,8 @@ class Interface():
     should be a way to detect loss of internet connection though.
     """
     def is_default(self, af, gws=None):
-        gws = gws or self.netifaces.gateways()
         af = af_to_netiface(af)
+        gws = gws or netiface_gateways(self.netifaces, get_interface_type, preference=af)
         def_gws = gws["default"]
         if af not in def_gws:
             return False
@@ -447,7 +447,15 @@ async def filter_trash_interfaces(netifaces=None):
             tasks.append(worker(if_name))
 
         results = await asyncio.gather(*tasks)
-        return strip_none(results)
+        results = strip_none(results)
+        
+        """
+        The 'is_interface_if' function depends on using the 'route' binary.
+        If it does not exist then the code will fail and return no results.
+        In this case default to name-based filtering of netifaces.
+        """
+        if len(results):
+            return results
 
     # Otherwise use the interface type function.
     # Looks at common patterns for interface names (not accurate.)
