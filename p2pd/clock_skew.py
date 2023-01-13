@@ -94,6 +94,15 @@ class SysClock:
     
         return self
 
+    def __await__(self):
+        return self.start().__await__()
+
+    def __str__(self):
+        return '{0:f}'.format(self.clock_skew)
+
+    def __repr__(self):
+        return f'Dec("{str(self)}")'
+
     def time(self):
         return Dec(timestamp(1)) - self.clock_skew
 
@@ -219,13 +228,34 @@ class SysClock:
 
         return avg
 
+    def to_dict(self):
+        return {
+            "if": self.interface.to_dict(),
+            "clock_skew": self.clock_skew
+        }
+
+    @staticmethod
+    def from_dict(d):
+        from p2pd.interface import Interface
+        i = Interface.from_dict(d["if"])
+        x = SysClock(interface=i, clock_skew=d["clock_skew"])
+        return x
+
+    # Pickle.
+    def __getstate__(self):
+        return self.to_dict()
+
+    # Unpickle.
+    def __setstate__(self, state):
+        o = self.from_dict(state)
+        self.__dict__ = o.__dict__
 
 async def test_clock_skew(): # pragma: no cover
     from p2pd.interface import init_p2pd, Interface
     await init_p2pd()
     interface = await Interface().start_local()
-    s = await SysClock(interface=interface).start()
-    print(s.clock_skew)
+    s = await SysClock(interface=interface)
+    print(repr(s))
 
 
     return

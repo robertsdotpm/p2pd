@@ -1,6 +1,6 @@
 import asyncio
 import re
-import inspect
+import pickle
 from .ack_udp import *
 from .net import *
 
@@ -21,6 +21,7 @@ class BaseStream(ACKUDP):
     def __init__(self, proto, loop=None, conf=NET_CONF):
         super().__init__()
         self.conf = conf
+        self.dest = None
         self.dest_tup = None
         self.loop = loop or asyncio.get_event_loop()
 
@@ -231,6 +232,12 @@ class BaseProto(BaseACKProto):
         self.tcp_server_task = None
         self.endpoint_type = None
 
+        # Used for TCP server awaitable.
+        self.p_client_entry = 0 # Location of the pipe in client futures.
+        self.p_client_insert = 0 # Last insert location in client futures.
+        self.p_client_get = 0 # Offset that increases per await over the futures.
+        self.client_futures = { 0: asyncio.Future() } # Table for TCP client pipes.
+
         # Bind / route.
         self.route = route
 
@@ -310,7 +317,45 @@ class BaseProto(BaseACKProto):
         return client_tup
 
     def add_tcp_client(self, client):
+        # Save location of this client pipe in the table.
+        client.p_client_entry = self.p_client_insert
+
+        # Point to next entry in table and initialize it.
+        self.p_client_insert = (self.p_client_insert + 1) % sys.maxsize
+        self.client_futures[self.p_client_insert] = asyncio.Future()
+
+        # Store this pipe in the Future.
         self.tcp_clients.append(client)
+        self.client_futures[client.p_client_entry].set_result(client)
+
+    async def make_awaitable(self):
+        if self.endpoint_type == TYPE_TCP_SERVER:
+            # (p_cl_get to p_cl_insert) % (0 to p_cl_get - 1)
+            for p in range(0, self.p_client_insert + 1):
+                # Get reference to the current future to await on.
+                cur_p_get = (self.p_client_get + p) % sys.maxsize
+
+                # Skip empty entries deleted on connection lost.
+                if self.client_futures[cur_p_get] is None:
+                    continue
+
+                # Increment the pointer to the next future in line.
+                # This sets it up for the next await call to work.
+                # Only increment it if the current location is taken.
+                if self.client_futures[cur_p_get].done():
+                    self.p_client_get = (cur_p_get + 1) % sys.maxsize
+
+                # Await on the future at the head of the futures.
+                return await self.client_futures[cur_p_get]
+
+            raise Exception("Could not find awaitable future accept().")
+        else:
+            # TCP con -> one pipe so no reason to await it.
+            # UDP server or con -> multiplex so one pipe for everything.
+            return self
+
+    def __await__(self):
+        return self.make_awaitable().__await__()
 
     def set_tcp_server(self, server):
         self.transport = server
@@ -582,6 +627,7 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
         # Will represent us.
         # Servers route above will be reused for this.
         self.client_proto = None
+        self.client_offset = 0
 
         # Main class variables.
         self.sock = None
@@ -627,6 +673,12 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
     def connection_lost(self, exc):
         # Remove this as an object to close and manage in the server.
         super().connection_lost(exc)
+
+        # Cleanup client futures entry.
+        p_client_entry = self.client_proto.p_client_entry
+        client_future = self.proto.client_futures[p_client_entry]
+        if client_future.done():
+            del self.proto.client_futures[p_client_entry]
 
         # Run disconnect handlers if any set.
         client_tup = self.remote_tup
@@ -687,7 +739,16 @@ It supports using IPv4 and IPv6 destination addresses.
 You can pull data from it based on a regex pattern.
 You can execute code on new messages or connection disconnects.
 """
-async def pipe_open(route, proto, dest=None, sock=None, msg_cb=None, conf=NET_CONF):
+async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, conf=NET_CONF):
+    # If no route is set assume default interface route 0.
+    if route is None:
+        # Load internal addresses.
+        i = await Interface().start_local()
+
+        # Bind to route 0.
+        route = await i.route()
+
+    # Build the base protocol object.
     base_proto = None
     try:
         # Get event loop reference.
@@ -799,6 +860,7 @@ async def pipe_open(route, proto, dest=None, sock=None, msg_cb=None, conf=NET_CO
 
         # Set dest if it's present.
         if dest is not None:
+            base_proto.stream.dest = dest
             base_proto.stream.set_dest_tup(dest.tup)
 
         # Register pipes, msg callbacks, and subscriptions.
@@ -836,7 +898,7 @@ if __name__ == "__main__": # pragma: no cover
         )
         """
 
-        dest_addr = await Address("127.0.0.1", 12344).res(route)
+        dest_addr = await Address("127.0.0.1", 12344, route).res()
         base_proto = await pipe_open(
             route=route,
             proto=proto,

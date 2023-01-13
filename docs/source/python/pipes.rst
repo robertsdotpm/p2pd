@@ -7,12 +7,12 @@ and message processing. A pipe supports UDP or TCP and IPv4 or IPv6.
 
 .. code-block:: python
 
-    async def pipe_open(route, proto, dest=None, sock=None, msg_cb=None, conf=NET_CONF):
+    async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, conf=NET_CONF):
         """
         route = Route object that's been bound with await route.bind().
         proto = TCP or UDP.
         dest  = If it's a client pipe a destionation should be included.
-                    await Address('host/ip', port).res(route)
+                    await Address('host/ip', port, route).res()
                 A server includes no destination.
         sock  = Used to wrap a pre-existing socket in a pipe. If the protocol is
                 TCP and dest is included the socket is assumed to be connected.
@@ -54,12 +54,12 @@ and a pipe that can be used to interact with that client.
         route = await i.route().bind() # Port 0 = any unused port.
         #
         # Start the server and use msg_cb to process messages.
-        server = await pipe_open(route, TCP, msg_cb=msg_cb)
+        server = await pipe_open(TCP, route=route, msg_cb=msg_cb)
         #
         # Connect to the server.
         # Use the IP of the route and unused port for the destination.
-        dest = await Address(*server.sock.getsockname()[0:2]).res(route)
-        client = await pipe_open(route, TCP, dest)
+        dest = await Address(*server.sock.getsockname()[0:2], route).res()
+        client = await pipe_open(TCP, dest, route)
         client.subscribe()
         #
         # Send data to the server and check receipt.
@@ -111,9 +111,9 @@ asychnronous. The event loop is free to run other tasks until a match occurs.
     # Subscribe to all messages.
     pipe = (
         await pipe_open(
-            route,
             UDP,
-            await Address("p2pd.net", 34780).res(route)
+            await Address("p2pd.net", 34780, route).res(),
+            route
         )
     ).subscribe()
 
@@ -302,4 +302,4 @@ options look like this:
     }
 
     # Here's where to use these options.
-    pipe = pipe_open(route, TCP, dest, conf=NET_CONF)
+    pipe = pipe_open(TCP, dest, route, conf=NET_CONF)

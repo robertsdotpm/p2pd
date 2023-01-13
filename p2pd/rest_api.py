@@ -1,5 +1,6 @@
 import asyncio
 from .p2p_node import *
+from .p2p_utils import *
 from .var_names import *
 from .http_server_lib import *
 

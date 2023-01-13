@@ -209,6 +209,9 @@ class TURNClient(BaseProto):
 
         return relay_tup
 
+    def __await__(self):
+        return self.start().__await__()
+
     async def reconnect(self, n=0):
         await self.close()
 
@@ -437,7 +440,7 @@ if __name__ == '__main__': # pragma: no cover
         turn_user=b""
         turn_pw=b""
         route = interface.route(af)
-        turn_addr = await Address("", 3478).res(route)
+        turn_addr = await Address("", 3478, route).res()
 
 
         """

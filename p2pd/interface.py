@@ -314,6 +314,9 @@ class Interface():
         self.resolved = True
         return self
 
+    def __await__(self):
+        return self.start().__await__()
+
     def set_nat(self, nat):
         assert(isinstance(nat, dict))
         assert(nat.keys() == nat_info().keys())
@@ -577,7 +580,7 @@ class Interfaces():
         return self.by_af[af][0]
 
     # Load default interfaces.
-    async def start(self, do_start=1): # pragma: no cover
+    async def _start(self, do_start=1): # pragma: no cover
         tasks = []
 
         # Load default interfaces.

@@ -127,10 +127,10 @@ from Python code.
         #
         # Echo server address.
         route = await i.route().bind()
-        echo_dest = await Address("p2pd.net", 7).res(route)
+        echo_dest = await Address("p2pd.net", 7, route).res()
         #
         # Open a connection to the echo server.
-        pipe = await pipe_open(route, TCP, echo_dest)
+        pipe = await pipe_open(TCP, echo_dest, route)
         #
         # Create a new queue for a related subscription.
         # Subscription = [b"msg pattern regex", b"address pattern regex"]

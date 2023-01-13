@@ -329,8 +329,9 @@ class P2PPipe():
                 # Connect to this address.
                 dest = await Address(
                     str(info["ext"]),
-                    info["port"]
-                ).res(route)
+                    info["port"],
+                    route
+                ).res()
 
                 # Schedule the coroutine.
                 tasks.append(
@@ -443,7 +444,11 @@ class P2PPipe():
 
                 # Calculate punch mode
                 route = interface.route(af)
-                their_addr = await Address(str(their_info["ext"]), 80).res(route)
+                their_addr = await Address(
+                    str(their_info["ext"]),
+                    80,
+                    route
+                ).res()
                 punch_mode = initiator.get_punch_mode(their_addr)
 
                 log(f"Loaded punc mode = {punch_mode}")
@@ -545,8 +550,9 @@ class P2PPipe():
             route = await interface.route(af).bind()
             turn_addr = await Address(
                 turn_server["host"],
-                turn_server["port"]
-            ).res(route)
+                turn_server["port"],
+                route
+            ).res()
 
             # Build TURN client.
             turn_client = TURNClient(

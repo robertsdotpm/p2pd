@@ -228,10 +228,10 @@ Connect to Google.com and get a response from it.
         # Lookup Google.com's IP address -- specify a specific address family.
         # Most websites support IPv4 but not always IPv6.
         # Interface is needed to resolve some specialty edge-cases.
-        dest = await Address("www.google.com", 80).res(route)
+        dest = await Address("www.google.com", 80, route).res()
         #
         # Now open a TCP connection to that the destination.
-        pipe = await pipe_open(route, TCP, dest)
+        pipe = await pipe_open(TCP, dest, route)
         #
         # Indicate that messages received should also be queued.
         # This enables the pull / push API.

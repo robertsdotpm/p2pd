@@ -40,12 +40,12 @@ class TestAFsWork(unittest.IsolatedAsyncioTestCase):
 
             # Echo server address.
             route = await i.route(af).bind()
-            echo_dest = await Address(echo_ip[af], 7).res(route)
+            echo_dest = await Address(echo_ip[af], 7, route).res()
 
             # Test echo server with AF.
             msg = b"echo test\r\n"
             for proto in [TCP, UDP]:
-                pipe = await pipe_open(route, proto, echo_dest)
+                pipe = await pipe_open(proto, echo_dest, route)
                 
                 # Interested in any message.
                 pipe.subscribe(SUB_ALL)

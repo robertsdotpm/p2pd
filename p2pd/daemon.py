@@ -105,7 +105,7 @@ class Daemon():
                 route.link_route_pool(self.rp[route.af])
 
             # Save list of servers.
-            listen_task = pipe_open(route, proto, msg_cb=msg_cb, conf=self.conf)
+            listen_task = pipe_open(proto, route=route, msg_cb=msg_cb, conf=self.conf)
             base_proto = await listen_task
             if base_proto is None:
                 raise Exception("Could not start server.")

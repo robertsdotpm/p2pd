@@ -55,8 +55,9 @@ Though I have not done this for now. That was a lot of text so let's look at som
     # Address of a TURN server.
     dest = await Address(
         "p2pd.net",
-        3478
-    ).res(r)
+        3478,
+        r
+    ).res()
 
     # Sync message callback -- do something here if you like.
     # Can be async too.

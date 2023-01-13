@@ -493,8 +493,9 @@ async def stun_check_addr_info(stun_host, stun_port, af, proto, interface, local
         dest_addr = await Address(
             stun_host,
             stun_port,
+            route,
             proto,
-        ).res( route )
+        ).res()
     except Exception as e:
         # Unable to find A or AAA record for address family.
         log("> STUN get_nat_type can't load A/AAA %s" % (str(e)))
@@ -652,8 +653,9 @@ async def do_nat_test(stun_addr, interface, af=IP4, proto=UDP, group="change", d
             await Address(
                 test[1]['cip'],
                 test[1]['cport'],
+                route,
                 proto
-            ).res(route),
+            ).res(),
             changeRequest
         ],
         [
@@ -662,13 +664,15 @@ async def do_nat_test(stun_addr, interface, af=IP4, proto=UDP, group="change", d
             await Address(
                 test[1]['cip'],
                 stun_addr.port,
+                route,
                 proto
-            ).res(route),
+            ).res(),
             await Address(
                 test[1]['cip'],
                 stun_addr.port,
+                route,
                 proto
-            ).res(route),
+            ).res(),
             ""
         ],
         [
@@ -677,13 +681,15 @@ async def do_nat_test(stun_addr, interface, af=IP4, proto=UDP, group="change", d
             await Address(
                 test[1]['cip'],
                 stun_addr.port,
+                route,
                 proto
-            ).res(route),
+            ).res(),
             await Address(
                 test[1]['cip'],
                 test[1]['cport'],
+                route,
                 proto
-            ).res(route),
+            ).res(),
             changePortRequest
         ]
     ]

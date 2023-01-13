@@ -6,10 +6,11 @@ from .net import *
 # TODO: address doesn't support domain resolution
 # from a specific interface. This may not matter though.
 class Address():
-    def __init__(self, host, port, sock_type=socket.SOCK_STREAM, timeout=1):
+    def __init__(self, host, port, route, sock_type=socket.SOCK_STREAM, timeout=1):
         self.timeout = timeout
         self.resolved = False
         self.sock_type = sock_type
+        self.route = route
         self.host = host
         self.host_type = None
         self.port = int(port)
@@ -18,8 +19,9 @@ class Address():
         self.host = to_s(host) if host is not None else host
         log("> Address: %s:%d" % (self.host, self.port))
 
-    async def res(self, route):
+    async def res(self):
         # Lookup IPs for domain.
+        route = self.route
         loop = asyncio.get_event_loop()
 
         # Determine if IP or domain.
@@ -102,13 +104,16 @@ class Address():
             self.chosen = AF_NONE
             raise Exception("couldnt translate address")
         else:
-            self.as_tup = self.tup = self.tuple = addr_tup
+            self.tup = addr_tup
 
         # Set attributes of the IP like if private or loopback.
         self.ip_set_info(addr_tup[0])
         self.afs_found = afs_found
         self.resolved = True
         return self
+
+    def __await__(self):
+        return self.res().__await__()
 
     def supported(self):
         return self.afs_found
@@ -135,6 +140,55 @@ class Address():
     def as_tuple(self):
         return self.as_tup
 
+    def to_dict(self):
+        return {
+            "host_type": self.host_type,
+            "host": self.host,
+            "port": self.port,
+            "sock_type": self.sock_type,
+            "timeout": self.timeout,
+            "ips": self.ips,
+            "chosen": self.chosen,
+            "afs_found": self.afs_found,
+            "is_private": self.is_private,
+            "is_public": self.is_public,
+            "is_loopback": self.is_loopback,
+            "tup": self.tup,
+            "resolved": self.resolved
+        }
+
+    @staticmethod
+    def from_dict(d):
+        a = Address(
+            host=d["host"],
+            port=d["port"],
+            sock_type=d["sock_type"],
+            timeout=d["timeout"]
+        )
+
+        for key in d:
+            setattr(a, key, d[key])
+            #a.__setattr__("self." + key, d[key])
+
+        return a
+
+    # Pickle.
+    def __getstate__(self):
+        return self.to_dict()
+
+    # Unpickle.
+    def __setstate__(self, state):
+        o = self.from_dict(state)
+        self.__dict__ = o.__dict__
+
+    # Show a representation of this object.
+    def __repr__(self):
+        return f"Address.from_dict({self.to_dict()})"
+
+    # Make this interface printable because it's useful.
+    def __str__(self):
+        return str(self.tup)
+
     def __hash__(self):
         return hash(repr(self))
 
@@ -142,10 +196,20 @@ class Address():
         return 0
 
 async def test_address(): # pragma: no cover
-    iface = Interface("enp3s0")
-    start = timestamp()
-    a = await Address("www.google.com", 80).res(iface.route())
-    end = timestamp() - start
+    from p2pd.interface import init_p2pd, Interface
+    netifaces = await init_p2pd()
+    i = await Interface()
+    print(i)
+    a = await Address("www.google.com", 80, i.route()).res()
+
+    d = a.to_dict()
+    print(d)
+
+    x = Address.from_dict(d)
+    print(str(x))
+
+    y = repr(x)
+    print(type(y))
 
 if __name__ == "__main__": # pragma: no cover
     from .interface import Interface

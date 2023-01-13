@@ -1,6 +1,7 @@
 import asyncio
 from p2pd.test_init import *
 from p2pd.p2p_node import *
+from p2pd.p2p_utils import *
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 from decimal import Decimal as Dec
@@ -78,7 +79,7 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
 
         # Get punch mode.
         route = interface.route(af)
-        dest_addr = await Address(dest, 80).res(route)
+        dest_addr = await Address(dest, 80, route).res()
         mode = i_client.get_punch_mode(dest_addr)
         self.assertEqual(mode, TCP_PUNCH_SELF)
 

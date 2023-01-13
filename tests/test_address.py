@@ -8,7 +8,7 @@ class TestIPRange(unittest.IsolatedAsyncioTestCase):
         await init_p2pd()
         i = await Interface().start_local()
         r = i.route()
-        a = await Address("www.google.com", 80).res(r)
+        a = await Address("www.google.com", 80, r).res()
         self.assertEqual(a.host_type, HOST_TYPE_DOMAIN)
 
     async def test_v6_resolve(self):
@@ -16,7 +16,7 @@ class TestIPRange(unittest.IsolatedAsyncioTestCase):
         i = await Interface().start_local()
         ip = "2402:1f00:8101:083f:0000:0000:0000:0001"
         r = i.route(IP6)
-        a = await Address(ip, 80).res(r)
+        a = await Address(ip, 80, r).res()
         self.assertEqual(a.host_type, HOST_TYPE_IP)
         self.assertTrue(a.is_public)
 
@@ -25,7 +25,7 @@ class TestIPRange(unittest.IsolatedAsyncioTestCase):
         i = await Interface().start_local()
         r = i.route(IP4)
         ip = "192.168.0.1"
-        a = await Address(ip, 80).res(r)
+        a = await Address(ip, 80, r).res()
         self.assertEqual(a.host_type, HOST_TYPE_IP)
         self.assertTrue(a.is_private)
 

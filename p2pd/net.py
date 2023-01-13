@@ -564,6 +564,8 @@ class Bind():
         self._bind_tups = {NIC_BIND: None, EXT_BIND: None}
         self.bind = bind_closure(self)
 
+    def __await__(self):
+        return self.bind().__await__()
 
     """
     ips param can be one of any number of types. The idea is to

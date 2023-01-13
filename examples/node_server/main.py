@@ -3,6 +3,7 @@ from p2pd.test_init import *
 from p2pd.utils import async_test
 from p2pd.nat import *
 from p2pd.p2p_node import *
+from p2pd.p2p_utils import *
 from p2pd.stun_client import STUNClient
 
 if __name__ == "__main__":

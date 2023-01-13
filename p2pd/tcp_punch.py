@@ -669,8 +669,8 @@ class TCPPunch():
             route = await interface.route(af).bind(local_port)
 
             # Open connection -- return only sock.
-            #sock = await pipe_open(route, TCP, dest, conf=PUNCH_CONF) 
-            sock = await socket_factory(route, dest, conf=PUNCH_CONF)
+            #sock = await pipe_open(TCP, dest, route=route, conf=PUNCH_CONF) 
+            sock = await socket_factory(route=route, dest_addr=dest, conf=PUNCH_CONF)
             #sock_queue.put_nowait(sock)
             #sock.settimeout(0.1)
             try:
@@ -720,7 +720,12 @@ class TCPPunch():
             route = interface.route(af)
             log(f"TCP PUNCH REMOTE local = {local}")
             for i in range(0, len(local)):
-                dest = await Address(dest_addr, rmaps[i][0]).res(route)
+                dest = await Address(
+                    dest_addr,
+                    rmaps[i][0],
+                    route
+                ).res()
+
                 #print(f"connect to {dest.tup}")
                 for sleep_time in range(0, steps):
                     tasks.append(
@@ -896,7 +901,7 @@ class TCPPunch():
             queue = None
         af = af_from_ip_s(dest_addr)
         route = self.interface.route(af)
-        addr = await Address(dest_addr, 0).res(route)
+        addr = await Address(dest_addr, 0, route).res()
         args = self.get_punch_args(node_id, pipe_id)
         
         # The executor pool is used to start processes.
@@ -944,8 +949,9 @@ class TCPPunch():
                 route=route,
                 proto=TCP,
                 dest=await Address(
-                    *sock.getpeername()
-                ).res(route),
+                    *sock.getpeername(),
+                    route
+                ).res(),
                 sock=sock,
                 msg_cb=msg_cb
             )

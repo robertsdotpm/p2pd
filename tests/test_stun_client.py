@@ -56,8 +56,9 @@ class TestStunClient(unittest.IsolatedAsyncioTestCase):
             dest = await Address(
                 stun_server[0],
                 stun_server[1],
+                route,
                 UDP
-            ).res(route)
+            ).res()
 
             # Check NAT test result is as expected.
             # Then check that other STUN requests work.
@@ -69,9 +70,9 @@ class TestStunClient(unittest.IsolatedAsyncioTestCase):
                 for req in [changeRequest, changePortRequest]:
                     # Test change port request.
                     pipe = (await pipe_open(
-                        route,
                         UDP,
-                        dest
+                        dest,
+                        route
                     )).subscribe(SUB_ALL)
 
                     # Used for matching the TXID for the stun reply.

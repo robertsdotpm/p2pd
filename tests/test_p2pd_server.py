@@ -22,7 +22,7 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
         server.node.add_msg_cb(proto_extension)
 
         # Server address.
-        dest = await Address(r.bind_ip(), P2PD_PORT).res(r)
+        dest = await Address(r.bind_ip(), P2PD_PORT, r).res()
 
         # List of API end points to check.
         en = lambda x: to_s(urlencode(x))

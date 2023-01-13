@@ -92,7 +92,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                 addrs.append(route.ext())
 
             for addr in addrs:
-                dest = await Address(addr, server_port).res(route)
+                dest = await Address(addr, server_port, route).res()
                 msg = b"hello world ay lmaoo"
                 for proto in [UDP, TCP]:
                     # Daemon instance.
@@ -104,9 +104,9 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
                     # Spawn a pipe to the echo server.
                     pipe = await pipe_open(
-                        route,
                         proto,
-                        dest
+                        dest,
+                        route
                     )
                     self.assertTrue(pipe is not None)
 
@@ -117,7 +117,17 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                     await pipe.send(msg, dest.tup)
 
                     # Receive data back.
-                    data = await pipe.recv(SUB_ALL, 4)
+                    data = await pipe.recv(SUB_ALL)
+                    self.assertEqual(data, msg)
+
+                    # Test accept() await.
+                    # Send message from pipe to server's client pipe.
+                    # Then manually call it's receive and check for receipt.
+                    client_pipe = await pipe
+                    self.assertTrue(client_pipe is not None)
+                    client_pipe.subscribe(SUB_ALL)
+                    await pipe.send(msg, dest.tup)
+                    data = await client_pipe.recv(SUB_ALL)
                     self.assertEqual(data, msg)
 
                     """

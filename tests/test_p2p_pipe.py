@@ -7,6 +7,7 @@ from decimal import Decimal as Dec
 from p2pd.utils import *
 from p2pd.p2p_addr import is_p2p_addr_us
 from p2pd.p2p_node import *
+from p2pd.p2p_utils import *
 from p2pd.p2p_pipe import *
 from p2pd.interface import *
 

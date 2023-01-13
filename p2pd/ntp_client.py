@@ -291,10 +291,10 @@ class NTPClient:
         """
         # lookup server address
         route = await self.interface.route().bind()
-        dest = await Address(host, port).res(route)
+        dest = await Address(host, port, route).res()
 
         # create the socket
-        pipe = await pipe_open(route, UDP, dest)
+        pipe = await pipe_open(UDP, dest, route)
         pipe.subscribe()
         try:
             # create the request packet - mode 3 is client

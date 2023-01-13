@@ -41,8 +41,8 @@ class NetDebugServer(Daemon):
 
                 # Make pipe used to send hello message.
                 proto = PROTO_LOOKUP[p["proto"].upper()]
-                dest_addr = await Address(p["dest_addr"], dest_port).res(route)
-                hello_pipe = await pipe_open(route, proto, dest_addr)
+                dest_addr = await Address(p["dest_addr"], dest_port, route).res()
+                hello_pipe = await pipe_open(proto, dest_addr, route)
                 hello_from = hello_pipe.sock.getsockname()
 
                 # Send hello and close the pipe.
@@ -70,9 +70,7 @@ class NetDebugServer(Daemon):
                 dest_tup = (pipe.sock.getpeername()[0], dest_port)                
                 try:
                     # Resolve dest tuple to address.
-                    dest_addr = await Address(*dest_tup, timeout=1).res(
-                        pipe.route
-                    )
+                    dest_addr = await Address(*dest_tup, pipe.route, timeout=1).res()
 
                     # Attempt to make TCP con to dest_port.
                     route = copy.deepcopy(pipe.route)

@@ -162,7 +162,11 @@ class Route(Bind):
         assert(self.resolved)
         port = port or self.bind_port
         ip = self.bind_ip(self.af)
-        src_addr = await Address(ip, port).res(self.interface)
+        src_addr = await Address(
+            ip,
+            port,
+            self
+        ).res()
         return await port_forward(
             interface=self.interface,
             ext_port=port,

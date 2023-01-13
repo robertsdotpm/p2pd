@@ -20,14 +20,16 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
         # Will be used to send packets from.
         dest_p2pd = await Address(
             "p2pd.net",
-            20000
-        ).res(r)
+            20000,
+            r
+        ).res()
 
         # Address of a TURN server.
         dest = await Address(
             TURN_SERVERS[n]["host"],
-            TURN_SERVERS[n]["port"]
-        ).res(r)
+            TURN_SERVERS[n]["port"],
+            r
+        ).res()
 
         # Implement the TURN protocol for UDP send / recv.
         client = TURNClient(
