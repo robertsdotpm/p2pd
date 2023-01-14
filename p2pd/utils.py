@@ -80,8 +80,7 @@ if "P2PD_DEBUG" in os.environ:
         logging.info(m)
 else:
     IS_DEBUG = 0
-    log = lambda m: 1
-
+    log = lambda m: None
 
 STATUS_RETRY = 1
 STATUS_SUCCESS = 2
@@ -349,7 +348,10 @@ def sync_wrap_errors(f, args=[]):
             return f()
     except Exception:
         # Log all errors.
-        log_exception()
+        try:
+            log_exception()
+        except Exception:
+            pass
 
 async def async_retry(gen, count, timeout=4):
     # Timeout counter and retry counter.
@@ -485,17 +487,23 @@ def run_in_executor(f):
 # Wait for tasks to finish up until a timeout.
 # Otherwise cancel them and wait for errors.
 async def gather_or_cancel(tasks, timeout):
+    group_task = asyncio.gather(*tasks)
     try:
         await asyncio.wait_for(
-            asyncio.gather(*tasks),
+            group_task,
             timeout
         )
     except asyncio.TimeoutError:
         for task in tasks:
             task.cancel()
-        await asyncio.gather(*tasks)
+
+        try:
+            await group_task
+        except Exception:
+            pass
+        await asyncio.sleep(0)
     except asyncio.CancelledError:
-        pass
+        return []
     finally:
         return []
 

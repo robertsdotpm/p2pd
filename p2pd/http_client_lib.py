@@ -68,12 +68,26 @@ async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, h
     # Get a new con 
     r = copy.deepcopy(route)
     r = await r.bind()
-    p = await pipe_open(route=r, proto=TCP, dest=dest)
-    p.subscribe(SUB_ALL)
+    
+    assert(dest is not None)
+    log(f"{route} {dest}")
+    try:
+        p = await pipe_open(route=r, proto=TCP, dest=dest)
+    except Exception:
+        log_exception()
 
-    buf = http_req_buf(route.af, dest.tup[0], dest.tup[1], path, method=method, payload=payload, headers=headers)
-    await p.send(buf, dest.tup)
-    out = await p.recv(SUB_ALL)
+    if p is None:
+        return None, None
+
+    try:
+        p.subscribe(SUB_ALL)
+        buf = http_req_buf(route.af, dest.tup[0], dest.tup[1], path, method=method, payload=payload, headers=headers)
+        await p.send(buf, dest.tup)
+        out = await p.recv(SUB_ALL)
+    except Exception:
+        log_exception()
+        await p.close()
+        return None, None
 
     if do_close:
         await p.close()

@@ -167,6 +167,7 @@ class TURNClient(BaseProto):
                 process_replies(self)
             )
         )
+        #self.tasks.append(self.processing_loop_task)
         
         # Add any message handlers.
         if self.msg_cb is not None:
@@ -205,7 +206,12 @@ class TURNClient(BaseProto):
 
         # First run of this function.
         if not n:
-            self.allocate_refresher_task = asyncio.create_task(refresher())
+            self.allocate_refresher_task = asyncio.create_task(
+                async_wrap_errors(
+                    refresher()
+                )
+            )
+            self.tasks.append(self.allocate_refresher_task)
 
         return relay_tup
 
@@ -241,9 +247,11 @@ class TURNClient(BaseProto):
     async def send(self, data, dest_tup):
         # Make sure the channel is setup before continuing.
         task = asyncio.create_task(
-            self.stream.ack_send(
-                data,
-                dest_tup
+            async_wrap_errors(
+                self.stream.ack_send(
+                    data,
+                    dest_tup
+                )
             )
         )
         self.tasks.append(task)
@@ -321,7 +329,11 @@ class TURNClient(BaseProto):
             await async_retry(f, count=5, timeout=5)
 
             # Start the loop to refresh the permission.
-            task = asyncio.create_task(refresher())
+            task = asyncio.create_task(
+                async_wrap_errors(
+                    refresher()
+                )
+            )
             self.tasks.append(task)
 
     # Relay addresses are only valid for a certain 'life time.'

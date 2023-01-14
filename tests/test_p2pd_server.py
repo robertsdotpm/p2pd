@@ -13,7 +13,7 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
         # Start the P2PD server.
         i = await Interface().start()
         r = await i.route().bind()
-        server = await start_p2pd_server([i], r, port=P2PD_PORT, do_loop=False, do_init=False)
+        server = await start_p2pd_server([i], r, port=P2PD_PORT, do_loop=False, do_init=False, enable_upnp=False)
 
         # Make server implement a custom ping protocol extension.
         async def proto_extension(msg, client_tup, pipe):
@@ -53,7 +53,7 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
         # Not the best unit test but over it.
         for url in urls:
             # Convert HTTP response to JSON.
-            _, resp = await http_req(r, dest, url)
+            _, resp = await http_req(r, dest, url, do_close=True)
             out = resp.out()
             j = json.loads(out)
 
@@ -62,7 +62,7 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
 
         # Make a new con.
         c2 = "pipe_test"
-        await http_req(r, dest, "/p2p/open/" + c2 + "/self")
+        await http_req(r, dest, "/p2p/open/" + c2 + "/self", do_close=True)
 
         # Request a new pipe to a named p2p con.
         # This is a cool feature.
@@ -81,7 +81,6 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
         # TODO: Test binary stuff.
 
         # Cleanup.
-        await server.node.close()
         await server.close()
 
 

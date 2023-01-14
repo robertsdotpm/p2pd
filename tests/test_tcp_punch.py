@@ -118,16 +118,28 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
 
         #print(i_client.state)
 
-        results = await asyncio.gather(
-            i_client.proto_do_punching(PUNCH_INITIATOR, r_node_id, pipe_id),
-            r_client.proto_do_punching(PUNCH_RECIPIENT, i_node_id, pipe_id)
-        )
+        try:
+            results = await asyncio.wrait_for(
+                asyncio.gather(
+                    async_wrap_errors(
+                        i_client.proto_do_punching(PUNCH_INITIATOR, r_node_id, pipe_id)
+                    ),
+                    async_wrap_errors(
+                        r_client.proto_do_punching(PUNCH_RECIPIENT, i_node_id, pipe_id)
+                    )
+                ),
+                10
+            )
+        except Exception:
+            results = []
 
         #print("Got results = ")
         #print(results)
 
         async def process_results(results):
-            self.assertTrue(len(results) == 2)
+            if len(results) != 2:
+                return False
+
             msg = b"a test msg"
             for pipe in results:
                 if pipe is None:

@@ -929,7 +929,11 @@ class TCPPunch():
                 await asyncio.sleep(1)
 
             # Executor pushes back socket to queue.
-            sock = queue.get(timeout=2)
+            try:
+                sock = queue.get(timeout=2)
+            except Exception:
+                log_exception()
+                sock = None
         
         # Otherwise do the punching in this event loop.
         if self.executors is None:

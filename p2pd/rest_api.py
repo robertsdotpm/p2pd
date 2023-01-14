@@ -344,11 +344,17 @@ class P2PDServer(Daemon):
                 pipe
             )
 
+    async def close(self):
+        await self.node.close()
+        await super().close()
+
 # pragma: no cover
-async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=True):
+async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=True, enable_upnp=True):
     print("Loading interfaces...")
     print("If you've just connected a new NIC ")
     print("there can be a slight delay until it's online.")
+    if enable_upnp:
+        print("Doing node port forwarding and pin hole rules. Please wait.")
 
     # Load netifaces.
     netifaces = None
@@ -363,7 +369,7 @@ async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=
         # If in use a random port will be used.
         port=-1,
         ifs=ifs,
-        enable_upnp=True
+        enable_upnp=enable_upnp
     )
 
     # Start P2PD server.

@@ -190,6 +190,7 @@ def port_forward_task(route, dest, service, lan_ip, lan_port, ext_port, proto, d
         route,
         dest,
         service["controlURL"],
+        do_close=True,
         method="POST",
         payload=payload,
         headers=headers
@@ -300,7 +301,11 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
         if out is None:
             break
 
-        reply = ParseHTTPResponse(out)
+        try:
+            reply = ParseHTTPResponse(out)
+        except Exception:
+            continue
+
         replies.append(reply)
 
     # Cleanup multicast socket.
@@ -342,7 +347,10 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
         tasks = []
         try:
             # Request rootDesc.xml.
-            _, http_resp = await http_req(route, dest, path)
+            _, http_resp = await http_req(route, dest, path, do_close=True)
+            if http_resp is None:
+                return []
+
             xml = http_resp.out()
             d = xmltodict.parse(xml)
 
@@ -400,7 +408,13 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
 
         # Request rootDesc.xml.
         http_route = await interface.route(af).bind(ips=src_addr.tup[0])
-        results = await get_root_desc(http_route, xml_dest, url.path)
+        results = await async_wrap_errors(
+            get_root_desc(http_route, xml_dest, url.path)
+        )
+
+        if results is None:
+            continue
+        
         if len(results):
             tasks += results
 
@@ -409,8 +423,6 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
 
     # Return port forward tasks.
     return tasks
-
-
 
 if __name__ == "__main__":
     async def upnp_main():

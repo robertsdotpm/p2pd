@@ -226,6 +226,7 @@ class BaseProto(BaseACKProto):
         self.loop = loop
 
         # Socket of underlying connection.
+        self.client_tup = None
         self.sock = sock
         self.tcp_clients = []
         self.tcp_server = None
@@ -411,6 +412,7 @@ class BaseProto(BaseACKProto):
             # Record the endpoint.
             if transport is not None:
                 self.transport = transport
+                self.client_tup = self.get_client_tup()
 
             # Set stream object for doing I/O.
             self.stream = BaseStream(self, loop=self.loop)
@@ -425,8 +427,7 @@ class BaseProto(BaseACKProto):
             pipe.del_pipe(self)
         
         # Execute any cleanup handlers.
-        client_tup = self.get_client_tup()
-        self.run_handlers(self.end_cbs, client_tup)
+        self.run_handlers(self.end_cbs, self.client_tup)
 
     def route_msg(self, data, client_tup):
         # No data to route.
@@ -647,6 +648,9 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
             loop=self.loop
         )
 
+        # Log connection details.
+        log(f"New TCP client l={self.sock.getsockname()}, r={self.remote_tup}")
+
         # Setup stream object.
         self.client_proto.set_endpoint_type(TYPE_TCP_CLIENT)
         self.client_proto.msg_cbs = self.proto.msg_cbs
@@ -865,19 +869,18 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, conf=N
 
         # Register pipes, msg callbacks, and subscriptions.
         return base_proto
-
-    # Timeouts, Connection failures, network changes, etc.
-    except asyncio.TimeoutError:
-        # Boring, ignore.
-        pass
     except Exception as e:
         log_exception()
         if conf["no_close"] == False:
             log("no close is false so trying to clean up.")
             if sock is not None:
+                log(f"closing socket. {sock.getsockname()}")
                 sock.close()
             if base_proto is not None:
+                log("closing bas proto")
                 await base_proto.close()
+        else:
+            log("no close set to true so no cleanup")
 
 if __name__ == "__main__": # pragma: no cover
     from .interface import Interface
