@@ -331,10 +331,10 @@ class BaseProto(BaseACKProto):
 
     async def make_awaitable(self):
         if self.endpoint_type == TYPE_TCP_SERVER:
-            # (p_cl_get to p_cl_insert) % (0 to p_cl_get - 1)
-            for p in range(0, self.p_client_insert + 1):
+            bound = self.p_client_insert + 1
+            for p in range(0, bound):
                 # Get reference to the current future to await on.
-                cur_p_get = (self.p_client_get + p) % sys.maxsize
+                cur_p_get = (self.p_client_get + p) % bound
 
                 # Skip empty entries deleted on connection lost.
                 if self.client_futures[cur_p_get] is None:
@@ -344,7 +344,7 @@ class BaseProto(BaseACKProto):
                 # This sets it up for the next await call to work.
                 # Only increment it if the current location is taken.
                 if self.client_futures[cur_p_get].done():
-                    self.p_client_get = (cur_p_get + 1) % sys.maxsize
+                    self.p_client_get = (cur_p_get + 1) % bound
 
                 # Await on the future at the head of the futures.
                 return await self.client_futures[cur_p_get]
