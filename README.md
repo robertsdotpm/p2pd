@@ -2,6 +2,97 @@
 
 ``[Coverage >= 82%] [Python >= 3.6] [Mac, Win, Nix, BSD, Android]``
 
+**P2PD** is a new async networking library for Python. It's based on solving some of the problems with Python's existing APIs and supports P2P networking among other features.
+
+Let's look at some examples.
+Start the Python REPL with await support with:
+
+> python3 -m asyncio
+
+Initialise information about your network interfaces.
+
+```python
+from p2pd import *
+netifaces = await init_p2pd() # Same API as netifaces
+```
+
+Load default interface and load details about it's NAT.
+
+```python
+i = await Interface(netifaces=netifaces)
+await i.load_nat()
+```
+
+Choose an external address to use for an endpoint.
+Resolve the address of an echo server.
+
+```python
+route = await i.route().bind()
+dest = await Address("p2pd.net", 7, route)
+```
+
+Build an async UDP pipe to the server.
+
+```python
+pipe = await pipe_open(UDP, dest, route)
+pipe.subscribe()
+```
+
+Do some I/O on the pipe and cleanup.
+
+```python
+# UDP so may not arrive.
+await pipe.send(b"some message", dest_tup)
+out = await pipe.recv(timeout=2)
+print(out)
+```
+
+## P2P networking
+
+How about an example that does P2P networking?
+
+```python
+from p2pd import *
+
+# Put your custom protocol code here.
+async def custom_protocol(msg, client_tup, pipe):
+    # E.G. add a ping feature to your protocol.
+    if b"PING" in msg:
+        await pipe.send(b"PONG")
+
+async def make_p2p_con():
+    # Initalize p2pd.
+    netifaces = await init_p2pd()
+    #
+    # Start our main node server.
+    # The node implements your protocol.
+    node = await start_p2p_node(netifaces=netifaces)
+    node.add_msg_cb(custom_protocol)
+    #
+    # Spawn a new pipe from a P2P con.
+    # Connect to our own node server.
+    pipe = await node.connect(node.addr_bytes)
+    pipe.subscribe(SUB_ALL)
+    #
+    # Test send / receive.
+    msg = b"test send"
+    await pipe.send(b"ECHO " + msg)
+    out = await pipe.recv()
+    #
+    # Cleanup.
+    assert(msg in out)
+    await pipe.close()
+    await node.close()
+
+# Run the coroutine.
+# Or await make_p2p_con() if in async REPL.
+async_test(make_p2p_con)
+```
+
+In this example the node connects to itself but it could just as easily be used to connect to another peer.
+
+## Features
+
 **P2PD** is a new project aiming to make peer-to-peer networking
 simple and ubiquitous. P2PD can be used either as a library or as a service.
 As a library P2PD is written in Python 3 using asyncio for everything.
