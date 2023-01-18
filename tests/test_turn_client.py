@@ -1,14 +1,17 @@
 import multiprocessing
-from p2pd.test_init import *
+
 from p2pd.base_stream import *
-from p2pd.turn_defs import *
-from p2pd.turn_client import *
 from p2pd.http_client_lib import *
+from p2pd.test_init import *
+from p2pd.turn_client import *
+from p2pd.turn_defs import *
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
+
+
 class TestTurn(unittest.IsolatedAsyncioTestCase):
     async def test_turn(self):
-        #print(sys.modules.keys())
+        # print(sys.modules.keys())
         # Network interface details.
         await init_p2pd()
         log(">>> test_turn")
@@ -16,19 +19,19 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
         i = await Interface().start_local()
         af = i.supported()[0]
         r = await i.route(af).bind()
-        
+
         # Will be used to send packets from.
         dest_p2pd = await Address(
             "p2pd.net",
             20000,
-            r
+            r,
         ).res()
 
         # Address of a TURN server.
         dest = await Address(
             TURN_SERVERS[n]["host"],
             TURN_SERVERS[n]["port"],
-            r
+            r,
         ).res()
 
         # Implement the TURN protocol for UDP send / recv.
@@ -37,7 +40,7 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
             turn_user=TURN_SERVERS[n]["user"],
             turn_pw=TURN_SERVERS[n]["pass"],
             turn_realm=TURN_SERVERS[n]["realm"],
-            route=r
+            route=r,
         )
 
         # Enable blank UDP headers.
@@ -46,7 +49,7 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
         # Wait for authentication and relay address allocation.
         await async_wrap_errors(
             client.start(),
-            timeout=10
+            timeout=10,
         )
 
         # The external address of ourself seen by the TURN server.
@@ -62,9 +65,8 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
         # Interested in any messages to queue.
         client.subscribe(SUB_ALL)
 
-        
-        #await client.accept_peer(client_tup, relay_tup)
-        #await client.accept_peer(relay_tup, relay_tup)
+        # await client.accept_peer(client_tup, relay_tup)
+        # await client.accept_peer(relay_tup, relay_tup)
         """
         m = TurnMessage(msg_type=TurnMessageMethod.SendResponse, msg_code=TurnMessageCode.Request)
         m.write_attr(
@@ -76,7 +78,6 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
         buf.write_hmac(client.key)
         """
 
-        
         # Attempt to get a reply at our relay address.
         # Do it up to 3 times due to UDP being unreliable.
         got_reply = False
@@ -97,11 +98,11 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
 
         # If refresh is done too soon it can error.
         # await asyncio.sleep(2)
-        
+
         # Test refresh.
         client.lifetime = 0
         await async_retry(
-            lambda: client.refresh_allocation(), count=3, timeout=5
+            lambda: client.refresh_allocation(), count=3, timeout=5,
         )
         self.assertTrue(client.lifetime)
 
@@ -110,6 +111,7 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
 
         # Cleanup the client.
         await client.close()
+
 
 if __name__ == '__main__':
     main()

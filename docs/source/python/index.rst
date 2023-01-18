@@ -45,7 +45,7 @@ it may not work properly with P2PD.
         out = await pipe.recv()
         #
         # Cleanup.
-        assert(msg in out)
+        assert msg in out
         await pipe.close()
         await node.close()
 

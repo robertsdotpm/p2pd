@@ -1,18 +1,20 @@
-from p2pd.test_init import *
-import platform
 import multiprocessing
-from p2pd.net import VALID_AFS
+import platform
+
+from p2pd import IP4, IP6, Interface
 from p2pd.cmd_tools import *
-from p2pd import Interface, IP4, IP6
-from p2pd.route_table import is_internet_if, get_route_table
+from p2pd.net import VALID_AFS
+from p2pd.route_table import get_route_table, is_internet_if
+from p2pd.test_init import *
 
 RELATED_PLATFORMS = ["Linux", "Darwin", "FreeBSD"]
+
 
 class TestRouteTable(unittest.IsolatedAsyncioTestCase):
     async def test_route_table(self):
         if platform.system() in RELATED_PLATFORMS:
             netifaces = await init_p2pd()
-        
+
         applies = False
         one_worked = False
         for af in VALID_AFS:
@@ -32,7 +34,7 @@ class TestRouteTable(unittest.IsolatedAsyncioTestCase):
                         r = await is_internet_if(i.nic_no)
                     else:
                         r = await is_internet_if(i.name)
-                        
+
                     one_worked = True
                 except Exception:
                     log_exception()
@@ -44,5 +46,5 @@ class TestRouteTable(unittest.IsolatedAsyncioTestCase):
                 print("If the system has a route command this may be an error.")
 
 
-if __name__ == '__main__':  
+if __name__ == '__main__':
     main()

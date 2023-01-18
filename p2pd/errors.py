@@ -4,8 +4,10 @@
 class NoGatewayForAF(Exception):
     pass
 
+
 class InterfaceNotFound(Exception):
     pass
+
 
 class InterfaceInvalidAF(Exception):
     pass

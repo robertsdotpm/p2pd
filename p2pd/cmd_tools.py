@@ -1,12 +1,13 @@
-import ctypes
-import shlex
 import asyncio
-import tempfile
+import ctypes
 import os
-import uuid
 import platform
-import sys
+import shlex
 import subprocess
+import sys
+import tempfile
+import uuid
+
 from .utils import *
 
 """
@@ -34,7 +35,7 @@ async def nt_set_pshell_unrestricted():
         key = winreg.OpenKey(
             winreg.HKEY_LOCAL_MACHINE,
             path,
-            access=winreg.KEY_SET_VALUE
+            access=winreg.KEY_SET_VALUE,
         )
 
         # Set the sub key.
@@ -44,7 +45,7 @@ async def nt_set_pshell_unrestricted():
             "ExecutionPolicy",
             0,
             winreg.REG_SZ,
-            "Unrestricted"
+            "Unrestricted",
         )
 
         # We want to be certain the registry
@@ -63,7 +64,7 @@ async def nt_set_pshell_unrestricted():
 def nt_is_admin():
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
+    except Exception:
         return False
 
 # Surrounds with DOUBLE quotes.
@@ -77,6 +78,7 @@ def mac_arg_escape(arg):
             buf += ch
 
     return '"' + buf + '"'
+
 
 """
 Note: this function escapes an argument string
@@ -112,9 +114,10 @@ def win_arg_escape(arg, allow_vars=0):
 
     # Souround entire arg with quotes.
     # This avoids spaces breaking a command.
-    buf = '"%s"' % (buf)
+    buf = f'"{buf}"'
 
     return buf
+
 
 """
 There is an issue with create_subprocess_shell on Windows 10
@@ -140,7 +143,7 @@ async def cmd(value, io=None, timeout=10):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=this_dir,
-            shell=True
+            shell=True,
         )
 
         if timeout:
@@ -165,7 +168,7 @@ async def cmd(value, io=None, timeout=10):
                 return ''
 
             return stdout, stderr
-        
+
         # Use an executor to run the blocking command so the event loop isn't wrekt.
         stdout, stderr = await blocking_cmd()
 
@@ -181,12 +184,12 @@ async def cmd(value, io=None, timeout=10):
 
 async def is_pshell_restricted():
     out = await cmd("powershell Get-ExecutionPolicy", timeout=None)
-    return not "Unrestricted" in out
+    return "Unrestricted" not in out
 
 async def nt_pshell(value, timeout=10):
     # Allow powershell scripts to be run
     # by modifying registry if needed.
-    if(await is_pshell_restricted()):
+    if await is_pshell_restricted():
         await nt_set_pshell_unrestricted()
 
     # Write a temp file into the temp dir
@@ -199,9 +202,7 @@ async def nt_pshell(value, timeout=10):
         f.close()
 
     # Command to tell powershell to run the script.
-    cmd_str = 'powershell.exe -file %s' % (
-        win_arg_escape(cmd_path)
-    )
+    cmd_str = f'powershell.exe -file {win_arg_escape(cmd_path)}'
 
     # Wait for powershell to execute the script.
     if timeout:
@@ -242,18 +243,14 @@ async def run_py_script(script, root_pw=None, cleanup=False):
         # Sudo prefix.
         prefix = ""
         if platform.system() != "Windows":
-            if root_pw != None:
+            if root_pw is not None:
                 prefix = "{ echo %s; } | sudo -k -S " % (
                     escape_arg(root_pw)
                 )
 
         # Build cmd to execute the new script.
-        exe_cmd = '%s%s %s' % (
-            prefix,
-            escape_arg(sys.executable),
-            escape_arg(cmd_path)
-        )
-        
+        exe_cmd = f'{prefix}{escape_arg(sys.executable)} {escape_arg(cmd_path)}'
+
         # Execute the command.
         out = await cmd(exe_cmd, timeout=None)
 

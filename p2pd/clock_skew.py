@@ -5,7 +5,7 @@ from the NTP time (clock skew.) The algorithm was
 taken from gtk-gnutella.
 
 https://github.com/gtk-gnutella/gtk-gnutella/
-blob/devel/src/core/clock.c 
+blob/devel/src/core/clock.c
 
 Original Python version by... myself! Now with async.
 
@@ -20,6 +20,7 @@ https://datatracker.ietf.org/doc/html/rfc5905#section-6
 
 import random
 from decimal import Decimal as Dec
+
 from .address import *
 from .ntp_client import NTPClient
 from .settings import *
@@ -68,9 +69,9 @@ class SysClock:
             ntp_ret = await async_wrap_errors(
                 get_ntp(
                     self.interface,
-                    local_ip
+                    local_ip,
                 ),
-                timeout=NTP_RETRY * NTP_TIMEOUT
+                timeout=NTP_RETRY * NTP_TIMEOUT,
             )
 
             if ntp_ret is not None:
@@ -91,14 +92,14 @@ class SysClock:
             # Raise exception.
             if self.clock_skew == Dec(0):
                 raise Exception("Could not get clock skew.")
-    
+
         return self
 
     def __await__(self):
         return self.start().__await__()
 
     def __str__(self):
-        return '{0:f}'.format(self.clock_skew)
+        return f'{self.clock_skew:f}'
 
     def __repr__(self):
         return f'Dec("{str(self)}")'
@@ -110,7 +111,7 @@ class SysClock:
         async def get_clock_skew():
             ntp_ret = await async_wrap_errors(
                 get_ntp(self.interface, server=server),
-                timeout=NTP_RETRY * NTP_TIMEOUT
+                timeout=NTP_RETRY * NTP_TIMEOUT,
             )
 
             if ntp_ret is None:
@@ -121,7 +122,7 @@ class SysClock:
         tasks = []
         for _ in range(0, self.enough_data + 10):
             tasks.append(
-                get_clock_skew()
+                get_clock_skew(),
             )
 
         results = await asyncio.gather(*tasks)
@@ -144,7 +145,7 @@ class SysClock:
             # Return sum of square deviations
             # of sequence data.
             c = self.statx_avg(data)
-            return sum( (x - c ) ** 2 for x in data )
+            return sum((x - c) ** 2 for x in data)
 
         def pstdev(data):
             # Calculates the population standard deviation.
@@ -231,7 +232,7 @@ class SysClock:
     def to_dict(self):
         return {
             "if": self.interface.to_dict(),
-            "clock_skew": self.clock_skew
+            "clock_skew": self.clock_skew,
         }
 
     @staticmethod
@@ -250,13 +251,12 @@ class SysClock:
         o = self.from_dict(state)
         self.__dict__ = o.__dict__
 
-async def test_clock_skew(): # pragma: no cover
-    from p2pd.interface import init_p2pd, Interface
+async def test_clock_skew():  # pragma: no cover
+    from p2pd.interface import Interface, init_p2pd
     await init_p2pd()
     interface = await Interface().start_local()
     s = await SysClock(interface=interface)
     print(repr(s))
-
 
     return
     f = []
@@ -266,12 +266,11 @@ async def test_clock_skew(): # pragma: no cover
             f.append(i)
 
     print(f)
-        
-if __name__ == "__main__":
-    #sys_clock = SysClock()
-    #print(sys_clock.clock_skew)
-    async_test(test_clock_skew)
 
+if __name__ == "__main__":
+    # sys_clock = SysClock()
+    # print(sys_clock.clock_skew)
+    async_test(test_clock_skew)
 
     # print(get_ntp())
     # print(get_ntp())

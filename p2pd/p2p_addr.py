@@ -1,13 +1,13 @@
-from .settings import *
-from .nat import *
 from .ip_range import *
-
+from .nat import *
+from .settings import *
 
 # No more than 4 interfaces per address family in peer addr.
 PEER_ADDR_MAX_INTERFACES = 4
 
 # No more than 2 signal pipes to send signals to nodes.
 SIGNAL_PIPE_NO = 2
+
 
 """
         can be up to N interfaces
@@ -24,12 +24,14 @@ SIGNAL_PIPE_NO = 2
     ,... more interfaces for AF family
 ],[IP6 nics ...],node_id
 """
+
+
 def make_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=None, nat=None, if_index=None):
     ensure_resolved(interface_list)
     signal_offsets_as_str = [to_b(str((x))) for x in signal_offsets]
     bufs = [
         # Make signal pipe buf.
-        b','.join(signal_offsets_as_str)
+        b','.join(signal_offsets_as_str),
     ]
 
     for af in [IP4, IP6]:
@@ -59,20 +61,21 @@ def make_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=N
                 port,
                 nat_type,
                 delta_type,
-                delta_value
+                delta_value,
             ))
 
         if len(af_bufs):
             af_bufs = b'|'.join(af_bufs)
         else:
             af_bufs = b''
-        
+
         # The as_buf may be empty if AF has no routes.
         # Expected and okay.
         bufs.append(af_bufs or b"0")
-    
+
     bufs.append(node_id)
     return b'-'.join(bufs)
+
 
 def parse_peer_addr(addr):
     af_parts = addr.split(b'-')
@@ -88,13 +91,13 @@ def parse_peer_addr(addr):
         return None
 
     # Parsed dict.
-    schema = [is_no, is_b, is_b, is_no,  is_no, is_no, is_no]
+    schema = [is_no, is_b, is_b, is_no, is_no, is_no, is_no]
     translate = [to_n, to_b, to_b, to_n, to_n, to_n, to_n]
     out = {
         IP4: [],
         IP6: [],
         "node_id": af_parts[2],
-        "signal": signal
+        "signal": signal,
     }
 
     for af_index, af_part in enumerate(af_parts[:2]):
@@ -155,7 +158,7 @@ def parse_peer_addr(addr):
             if not in_range(parts[6], [0, MAX_PORT]):
                 log("p2p addr: Delta value invalid")
                 continue
-                    
+
             # Build dictionary of results.
             delta = delta_info(parts[5], parts[6])
             nat = nat_info(parts[4], delta)
@@ -164,7 +167,7 @@ def parse_peer_addr(addr):
                 "ext": IPRange(to_s(parts[1])),
                 "nic": IPRange(to_s(parts[2])),
                 "nat": nat,
-                "port": parts[3]
+                "port": parts[3],
             }
 
             # Save results.
@@ -172,6 +175,7 @@ def parse_peer_addr(addr):
             out[af].append(as_dict)
 
     return out
+
 
 def peer_addr_extract_exts(p2p_addr):
     exts = []
@@ -181,6 +185,7 @@ def peer_addr_extract_exts(p2p_addr):
             exts.append(info["nic"])
 
     return exts
+
 
 def is_p2p_addr_us(addr_bytes, if_list):
     # Parse address bytes to address.
@@ -210,8 +215,10 @@ def is_p2p_addr_us(addr_bytes, if_list):
     # Nothing found that matches.
     return False
 
-if __name__ == "__main__": # pragma: no cover
+
+if __name__ == "__main__":  # pragma: no cover
     from .interface import Interface
+
     async def test_p2p_addr():
         x = await Interface("enp3s0").start()
         if_list = [x]

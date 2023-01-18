@@ -1,14 +1,16 @@
-from p2pd.test_init import *
-from p2pd import IPRange, HOST_TYPE_IP, HOST_TYPE_DOMAIN
-from p2pd import IP6, IP4, Route, Interface
-from p2pd.net import VALID_AFS, ip_norm, TCP, UDP, Bind
-from p2pd.echo_server import EchoServer
-from p2pd.base_stream import pipe_open, SUB_ALL
+from p2pd import (HOST_TYPE_DOMAIN, HOST_TYPE_IP, IP4, IP6, Interface, IPRange,
+                  Route)
 from p2pd.address import Address
-from p2pd.utils import what_exception
+from p2pd.base_stream import SUB_ALL, pipe_open
 from p2pd.daemon import Daemon
+from p2pd.echo_server import EchoServer
+from p2pd.net import TCP, UDP, VALID_AFS, Bind, ip_norm
+from p2pd.test_init import *
+from p2pd.utils import what_exception
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
+
+
 class TestDaemon(unittest.IsolatedAsyncioTestCase):
     async def test_listen_all_interface_target(self):
         await init_p2pd()
@@ -21,7 +23,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         echod = await EchoServer().listen_all(
             [i],
             [server_port],
-            [proto]
+            [proto],
         )
 
         await echod.close()
@@ -37,7 +39,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         await d._listen(
             target=b,
             port=p,
-            proto=TCP
+            proto=TCP,
         )
 
         await d.close()
@@ -61,7 +63,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         server_port = 10123
         loopbacks = {
             IP4: "127.0.0.1",
-            IP6: "::1"
+            IP6: "::1",
         }
 
         at_least_one = False
@@ -99,14 +101,14 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                     echod = await EchoServer().listen_all(
                         [route],
                         [server_port],
-                        [proto]
+                        [proto],
                     )
 
                     # Spawn a pipe to the echo server.
                     pipe = await pipe_open(
                         proto,
                         dest,
-                        route
+                        route,
                     )
                     self.assertTrue(pipe is not None)
 
@@ -145,6 +147,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(at_least_one)
         await asyncio.sleep(0.1)
+
 
 if __name__ == '__main__':
     main()

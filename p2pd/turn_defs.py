@@ -1,7 +1,8 @@
-import socket
-from struct import pack
 import hmac
+import socket
 from hashlib import sha1
+from struct import pack
+
 from .net import *
 from .settings import *
 
@@ -11,7 +12,7 @@ TURN_MAX_RETRANSMITS = 5
 TURN_MAIN_REPLY_TIMEOUT = 5
 
 # secs - Turn recommends 1 minute before expiry.
-TURN_REFRESH_EXPIRY = 600 
+TURN_REFRESH_EXPIRY = 600
 TURN_MAX_DICT_LEN = 1000
 TURN_MAX_RECV_PACKETS = 100
 
@@ -76,21 +77,21 @@ def turn_peer_attr_to_tup(peer_data, txid, af):
         # IPv6 - needs extra XOR part.
         addr = TurnIPAddress(
             do_xor=True,
-            xor_extra=txid
+            xor_extra=txid,
         ).unpack(peer_data, family=b"\x00\x02")
 
     return (addr.ip, int(addr.port))
 
 class TurnMessageMethod:
-    Reversed            = b"\x00\x00" # RFC5389
+    Reversed            = b"\x00\x00"  # RFC5389
     Binding             = b"\x00\x01"
-    SharedSecret        = b"\x00\x02" # Reserved - RFC5389
-    
+    SharedSecret        = b"\x00\x02"  # Reserved - RFC5389
+
     # https://tools.ietf.org/html/rfc5766#section-13
     # https://datatracker.ietf.org/doc/html/draft-rosenberg-midcom-turn-08#section-9.1
     Allocate            = b"\x00\x03"
     Refresh             = b"\x00\x04"
-    Send                = b"\x00\x06" # 4 or 6? send was previously wrong
+    Send                = b"\x00\x06"  # 4 or 6? send was previously wrong
     SendResponse        = b"\x01\x04"
     DataIndication      = b"\x01\x15"
     Data                = b"\x00\x07"
@@ -98,9 +99,9 @@ class TurnMessageMethod:
     ChannelBind         = b"\x00\x09"
 
     # https://tools.ietf.org/html/rfc6062#section-6.1
-    Connect             = b"\x00\x0a" # RFC6062
-    ConnectionBind      = b"\x00\x0b" # RFC6062
-    ConnectionAttempt   = b"\x00\x0c" # RFC6062
+    Connect             = b"\x00\x0a"  # RFC6062
+    ConnectionBind      = b"\x00\x0b"  # RFC6062
+    ConnectionAttempt   = b"\x00\x0c"  # RFC6062
 
     get = classmethod(lambda cls, val, type_=int: _get_const_name(cls, val, type_))
 
@@ -113,84 +114,85 @@ class TurnMessageCode:
     get = classmethod(lambda cls, val, type_=int: _get_const_name(cls, val, type_))
 
 class TurnAttribute:
-    Reserved            = b"\x00\x00" # RFC5389
-    MappedAddress       = b"\x00\x01" # RFC5389
-    ResponseAddress     = b"\x00\x02" # Reserved - RFC5389
-    ChangeRequest       = b"\x00\x03" # Reserved - RFC5389
-    SourceAddress       = b"\x00\x04" # Reserved - RFC5389
-    ChangedAddress      = b"\x00\x05" # Reserved - RFC5389
-    Username            = b"\x00\x06" # RFC5389
-    Password            = b"\x00\x07" # Reserved - RFC5389
-    MessageIntegrity    = b"\x00\x08" # RFC5389
-    ErrorCode           = b"\x00\x09" # RFC5389
-    UnknownAttribute    = b"\x00\x0A" # RFC5389
-    ReflectedFrom       = b"\x00\x0B" # Reserved - RFC5389
+    Reserved            = b"\x00\x00"  # RFC5389
+    MappedAddress       = b"\x00\x01"  # RFC5389
+    ResponseAddress     = b"\x00\x02"  # Reserved - RFC5389
+    ChangeRequest       = b"\x00\x03"  # Reserved - RFC5389
+    SourceAddress       = b"\x00\x04"  # Reserved - RFC5389
+    ChangedAddress      = b"\x00\x05"  # Reserved - RFC5389
+    Username            = b"\x00\x06"  # RFC5389
+    Password            = b"\x00\x07"  # Reserved - RFC5389
+    MessageIntegrity    = b"\x00\x08"  # RFC5389
+    ErrorCode           = b"\x00\x09"  # RFC5389
+    UnknownAttribute    = b"\x00\x0A"  # RFC5389
+    ReflectedFrom       = b"\x00\x0B"  # Reserved - RFC5389
 
-
-    ChannelNumber       = b"\x00\x0C" # RFC5766
-    Lifetime            = b"\x00\x0D" # RFC5766
-    Bandwidth           = b"\x00\x10" # Reserved - RFC5766
+    ChannelNumber       = b"\x00\x0C"  # RFC5766
+    Lifetime            = b"\x00\x0D"  # RFC5766
+    Bandwidth           = b"\x00\x10"  # Reserved - RFC5766
     DestinationAddress  = b"\x00\x11"
 
-    XorPeerAddress      = b"\x00\x12" # RFC5766
-    Data                = b"\x00\x13" # RFC5766
+    XorPeerAddress      = b"\x00\x12"  # RFC5766
+    Data                = b"\x00\x13"  # RFC5766
 
-    Realm               = b"\x00\x14" # RFC5389
-    Nonce               = b"\x00\x15" # RFC5389
-    
-    XorRelayedAddress   = b"\x00\x16" # RFC5766
-    EvenPort            = b"\x00\x18" # RFC5766
-    RequestedTransport  = b"\x00\x19" # RFC5766
-    RequestedAddress    = b"\x00\x17" # draft-ietf-behave-turn-ipv6
-    DontFragment        = b"\x00\x1A" # RFC5766
+    Realm               = b"\x00\x14"  # RFC5389
+    Nonce               = b"\x00\x15"  # RFC5389
 
-    XorMappedAddress    = b"\x00\x20" # RFC5389
+    XorRelayedAddress   = b"\x00\x16"  # RFC5766
+    EvenPort            = b"\x00\x18"  # RFC5766
+    RequestedTransport  = b"\x00\x19"  # RFC5766
+    RequestedAddress    = b"\x00\x17"  # draft-ietf-behave-turn-ipv6
+    DontFragment        = b"\x00\x1A"  # RFC5766
 
-    TimerVal            = b"\x00\x21" # Reserved - RFC5766
-    ReservationToken    = b"\x00\x22" # RFC5766
+    XorMappedAddress    = b"\x00\x20"  # RFC5389
 
-    ConnectionID        = b"\x00\x2A" # RFC6062
+    TimerVal            = b"\x00\x21"  # Reserved - RFC5766
+    ReservationToken    = b"\x00\x22"  # RFC5766
+
+    ConnectionID        = b"\x00\x2A"  # RFC6062
 
     XorMappedAddressX   = b"\x80\x20"
-    Software            = b"\x80\x22" # RFC5389
-    AlternateServer     = b"\x80\x23" # RFC5389
-    Fingerprint         = b"\x80\x28" # RFC5389
+    Software            = b"\x80\x22"  # RFC5389
+    AlternateServer     = b"\x80\x23"  # RFC5389
+    Fingerprint         = b"\x80\x28"  # RFC5389
     UnknownAddress2     = b"\x80\x2b"
     UnknownAddress3     = b"\x80\x2c"
-    
+
     get = classmethod(lambda cls, val, type_=bytes: _get_const_name(cls, val, type_))
 
 class TurnIPAddress:
-    def __init__(self,  ip=None, port=None, family=b"\x00\x01", do_xor=True, xor_extra=b""):
-        self.family = family # 1 for ipv4, 2 for ipv6
+    def __init__(self, ip=None, port=None, family=b"\x00\x01", do_xor=True, xor_extra=b""):
+        self.family = family  # 1 for ipv4, 2 for ipv6
         self.af = None
-        self.ip = ip # type: str
+        self.ip = ip  # type: str
         self.ip_b = None
-        self.port = port 
+        self.port = port
         self.do_xor = do_xor
         self.xor_extra = xor_extra
         if ip is not None:
             if family == b"\x00\x01":
                 self.ip_b = socket.inet_pton(
                     socket.AF_INET,
-                    self.ip
+                    self.ip,
                 )
             else:
                 self.ip_b = socket.inet_pton(
                     socket.AF_INET6,
-                    self.ip
+                    self.ip,
                 )
 
     def _xor_cookie(self, a):
         # Make virtual bytearray using pointers.
         b = bytearray().join([
             memoryview(TURN_MAGIC_XOR),
-            memoryview(self.xor_extra)
+            memoryview(self.xor_extra),
         ])
 
         # Create a list of ints representing XOR cookie.
-        r = bytearray(); b_len = len(b); a_len = len(a);
-        for i in range(0, max(a_len, b_len) ):
+        r = bytearray()
+        b_len = len(b)
+        a_len = len(a)
+        for i in range(0, max(a_len, b_len)):
             r.append(a[i % a_len] ^ b[i % b_len])
 
         # Return cookie as bytearray to avoid making a copy.
@@ -201,7 +203,7 @@ class TurnIPAddress:
         buf = bytearray().join([
             self.family,
             memoryview(pack('!H', self.port)),
-            self.ip_b
+            self.ip_b,
         ])
 
         # XOR IPAddress required for IPv6.
@@ -235,17 +237,17 @@ class TurnIPAddress:
         return inst
 
     def __str__(self):
-        return '{}:{}'.format(self.ip, self.port)
+        return f'{self.ip}:{self.port}'
 
 class TurnMessage:
     def __init__(self, msg_type=None, msg_code=TurnMessageCode.Request):
         self.msg_code = msg_code
-        self.msg_type = msg_type # type: int
-        self.msg_len = 0 # type: int
+        self.msg_type = msg_type  # type: int
+        self.msg_len = 0  # type: int
         self.magic_cookie = TURN_MAGIC_COOKIE
-        self.txn_id = memoryview(rand_b(12)) # type: bytes
+        self.txn_id = memoryview(rand_b(12))  # type: bytes
         self.msg = bytearray()
-        self.attr_cursor = 0 # type: int
+        self.attr_cursor = 0  # type: int
 
     def reset_attr(self):
         self.msg_len = 0
@@ -270,7 +272,7 @@ class TurnMessage:
             memoryview(attr),
             memoryview(pack("!H", len(data))),
             memoryview(data),
-            memoryview(padding)
+            memoryview(padding),
         ])
 
         self.msg_len += len(buf)
@@ -284,7 +286,7 @@ class TurnMessage:
     def _hmac(self, key: bytes, msg: bytes) -> bytes:
         hashed = hmac.new(key, msg, sha1)
         return hashed.digest()
-    
+
     def write_hmac(self, key: bytes):
         self.msg_len += 24
         msg_hmac = self.encode()
@@ -312,7 +314,7 @@ class TurnMessage:
                     # Get attribute data.
                     m_data = msg[self.attr_cursor:self.attr_cursor + m_len]
 
-                    # Rule of block 4: 
+                    # Rule of block 4:
                     # https://tools.ietf.org/html/rfc5766#section-14
                     attr_pad = 0
                     if m_len % 4 != 0:
@@ -324,8 +326,7 @@ class TurnMessage:
                     raise Exception("TURN attribute len invalid.")
 
         # Return results.
-        return m_attr, m_len, m_data 
-
+        return m_attr, m_len, m_data
 
     def encode(self) -> bytes:
         return bytearray().join([
@@ -333,7 +334,7 @@ class TurnMessage:
             memoryview(pack("!H", self.msg_len)),
             memoryview(self.magic_cookie),
             memoryview(self.txn_id),
-            memoryview(self.msg)
+            memoryview(self.msg),
         ])
 
     def decode(self, msg: memoryview) -> memoryview:
@@ -361,7 +362,7 @@ class TurnMessage:
     def pack(cls, msg_type: bytes, msg: memoryview) -> memoryview:
         inst = cls(msg_type=msg_type, msg=msg, msg_len=len(msg))
         return inst.encode()
-    
+
     @classmethod
     def unpack(cls, msg: memoryview) -> tuple:
         inst = cls()
@@ -383,9 +384,9 @@ def turn_vars_to_server(var_list, af):
         "port": var_list[1],
         "user": var_list[2],
         "pass": var_list[3],
-        "realm": var_list[4]
+        "realm": var_list[4],
     }
-    
+
 def find_turn_server(turn_server, turn_servers, af=None):
     for needle in turn_servers:
         # Not the same server host or IP.

@@ -1,11 +1,13 @@
 import asyncio
+
 from gmqtt import Client as MQTTClient
+
 from .net import *
 from .settings import *
 
 MQTT_CONF = dict_child({
     "con_timeout": 4,
-    "recv_timeout": 4
+    "recv_timeout": 4,
 }, NET_CONF)
 
 async def f_proto_print(data):
@@ -35,9 +37,9 @@ class SignalMock():
 
                     # Set a timeout of 20 seconds to do tasks.
                     # Make everything timeout and end if it meets this.
-                    #20
-                )
-            )
+                    # 20
+                ),
+            ),
         )
 
     def on_connect(self, client, flags, rc, properties):
@@ -75,7 +77,7 @@ class SignalMock():
 
         await asyncio.wait_for(
             client.connect(host=mqtt_server[0], port=mqtt_server[1]),
-            5
+            5,
         )
 
         return client
@@ -84,7 +86,8 @@ class SignalMock():
         if self.client is not None:
             await self.client.disconnect()
 
-if __name__ == "__main__": # pragma: no cover
+
+if __name__ == "__main__":  # pragma: no cover
     async def f_proto(msg):
         print(type(msg))
         print(msg)

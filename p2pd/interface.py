@@ -1,21 +1,24 @@
-import sys
-import re
-import platform
 import multiprocessing
+import platform
+import re
+import sys
+
 from .errors import *
-from .route import *
 from .nat import *
+from .route import *
 from .route_table import *
+
 if sys.platform == "win32":
     from .win_netifaces import *
 else:
-    import netifaces as netifaces
+    import netifaces
+
 
 async def init_p2pd():
     netifaces = Interface.get_netifaces()
     if netifaces is not None:
         return netifaces
-    
+
     multiprocessing.set_start_method("spawn")
     if sys.platform == "win32":
         """
@@ -34,25 +37,26 @@ async def init_p2pd():
     Interface.get_netifaces = lambda: netifaces
     return netifaces
 
+
 def get_default_iface(netifaces, preference=AF_ANY, exp=1, duel_stack_test=True):
     gws = netiface_gateways(netifaces, get_interface_type, preference=preference)
     gateway = None
     iface = None
-                    
+
     # Convert any to netifaces.af.
     if preference == AF_ANY:
         # First valid address family for default gateway.
         preference = list(gws["default"])[0]
     else:
         preference = af_to_netiface(preference)
-    
+
     # Get address of gateway for 'default' interface.
     preference = int(preference)
     if preference in gws["default"]:
         iface = gws["default"][preference][1]
-            
+
     # Check found a default interface for ipv4 or ipv6.
-    if iface == None:
+    if iface is None:
         raise Exception("Couldn't find default WAN interface. Specify IPs manually in config to bypass this error.")
 
     # See if this iface is duel-stack.
@@ -67,12 +71,13 @@ def get_default_iface(netifaces, preference=AF_ANY, exp=1, duel_stack_test=True)
             other_iface = None
         if other_iface == iface:
             af = DUEL_STACK
-        
+
     return [iface, af]
+
 
 def get_interface_type(name):
     name = name.lower()
-    if re.match("en[0-9]+", name) != None:
+    if re.match("en[0-9]+", name) is not None:
         return INTERFACE_ETHERNET
 
     eth_names = ["eth", "eno", "ens", "enp", "enx", "ethernet"]
@@ -90,6 +95,7 @@ def get_interface_type(name):
 
     return INTERFACE_UNKNOWN
 
+
 def get_interface_stack(rp):
     stacks = []
     for af in [IP4, IP6]:
@@ -103,6 +109,7 @@ def get_interface_stack(rp):
         return stacks[0]
 
     return UNKNOWN_STACK
+
 
 # Used for specifying the interface for sending out packets on
 # in TCP streams and UDP streams.
@@ -118,13 +125,13 @@ class Interface():
 
         # Check NAT is valid if set.
         if nat is not None:
-            assert(isinstance(nat, dict))
-            assert(nat.keys() == nat_info().keys())
+            assert isinstance(nat, dict)
+            assert nat.keys() == nat_info().keys()
 
         # Can provide a stack type to skip processing unsupported AFs.
         # Otherwise all AFs are checked when start() is called.
         self.stack = stack
-        assert(self.stack in VALID_STACKS)
+        assert self.stack in VALID_STACKS
 
         # Assume its an AF.
         if isinstance(name, int):
@@ -183,18 +190,18 @@ class Interface():
             "mac": self.mac,
             "is_default": {
                 int(IP4): self.is_default(IP4),
-                int(IP6): self.is_default(IP6)
+                int(IP6): self.is_default(IP6),
             },
             "nat": {
                 "type": self.nat["type"],
-                "nat_info": TXT["nat"][ self.nat["type"] ],
+                "nat_info": TXT["nat"][self.nat["type"]],
                 "delta": self.nat["delta"],
-                "delta_info": TXT["delta"][ self.nat["delta"]["type"] ]
+                "delta_info": TXT["delta"][self.nat["delta"]["type"]],
             },
             "rp": {
                 int(IP4): self.rp[IP4].to_dict(),
-                int(IP6): self.rp[IP6].to_dict()
-            }
+                int(IP6): self.rp[IP6].to_dict(),
+            },
         }
 
     @staticmethod
@@ -211,6 +218,7 @@ class Interface():
         i.nic_no = d["nic_no"]
         i.id = d["id"]
         i.mac = d["mac"]
+
         def is_default_wrapper(af, gws=None):
             return d["is_default"][af]
         i.is_default = is_default_wrapper
@@ -218,7 +226,7 @@ class Interface():
         # Set the interface route pool.
         i.rp = {
             IP4: RoutePool.from_dict(d["rp"][int(IP4)]),
-            IP6: RoutePool.from_dict(d["rp"][int(IP6)])
+            IP6: RoutePool.from_dict(d["rp"][int(IP6)]),
         }
 
         # Set interface part of routes.
@@ -257,7 +265,7 @@ class Interface():
 
     async def start_local(self, rp=None, skip_resolve=False):
         # Get routes for AF.
-        if rp == None:
+        if rp is None:
             af_list = VALID_AFS
             tasks = []
             for af in af_list:
@@ -278,13 +286,13 @@ class Interface():
 
         # Update stack type based on routable.
         self.stack = get_interface_stack(self.rp)
-        assert(self.stack in VALID_STACKS)
+        assert self.stack in VALID_STACKS
         self.resolved = True
         return self
 
     async def start(self, rp=None, skip_resolve=False):
         # Get routes for AF.
-        if rp == None:
+        if rp is None:
             af_list = VALID_AFS
             tasks = []
             for af in af_list:
@@ -294,13 +302,13 @@ class Interface():
                             [self],
                             af,
                             self.netifaces,
-                            skip_resolve
+                            skip_resolve,
                         )
                     except NoGatewayForAF:
                         # Empty route pool.
                         self.rp[af] = RoutePool()
                         log(f"No route for gw {af}")
-                
+
                 tasks.append(helper(af))
 
             # Get all the routes concurrently.
@@ -310,7 +318,7 @@ class Interface():
 
         # Update stack type based on routable.
         self.stack = get_interface_stack(self.rp)
-        assert(self.stack in VALID_STACKS)
+        assert self.stack in VALID_STACKS
         self.resolved = True
         return self
 
@@ -318,13 +326,13 @@ class Interface():
         return self.start().__await__()
 
     def set_nat(self, nat):
-        assert(isinstance(nat, dict))
-        assert(nat.keys() == nat_info().keys())
+        assert isinstance(nat, dict)
+        assert nat.keys() == nat_info().keys()
         self.nat = nat
 
     async def load_nat(self):
         from .stun_client import STUNClient
-        
+
         # Prefer IP4 if available.
         af = IP4
         if af not in self.supported():
@@ -333,7 +341,7 @@ class Interface():
         # STUN is used to test the NAT.
         stun_client = STUNClient(
             self,
-            af
+            af,
         )
 
         # Load NAT type and delta info.
@@ -343,7 +351,7 @@ class Interface():
         return nat
 
     def get_scope_id(self):
-        assert(self.resolved)
+        assert self.resolved
 
         # Interface specified by no on windows.
         if platform.system() == "Windows":
@@ -355,7 +363,7 @@ class Interface():
     def nic(self, af):
         # Sanity check.
         if self.resolved:
-            assert(af in self.what_afs())
+            assert af in self.what_afs()
         if self.rp != {} and len(self.rp[af].routes):
             return self.route(af).nic()
 
@@ -363,7 +371,7 @@ class Interface():
         # Sanity check.
         if self.resolved:
             af = af or self.supported()[0]
-            assert(af in self.what_afs())
+            assert af in self.what_afs()
 
         # Main route is last.
         if af in self.rp:
@@ -382,7 +390,7 @@ class Interface():
             af=af,
             nic_ips=nic_ips,
             ext_ips=[IPRange(BLACK_HOLE_IPS[af])],
-            interface=self
+            interface=self,
         )
 
     """
@@ -400,13 +408,10 @@ class Interface():
             return False
         else:
             info = def_gws[af]
-            if info[1] == self.name:
-                return True
-            else:
-                return False
+            return info[1] == self.name
 
     def supported(self):
-        assert(self.resolved)
+        assert self.resolved
         if self.stack == UNKNOWN_STACK:
             raise Exception("Unknown stack")
 
@@ -416,8 +421,9 @@ class Interface():
             return [self.stack]
 
     def what_afs(self):
-        assert(self.resolved)
+        assert self.resolved
         return self.supported()
+
 
 """
 Given a list of interfaces returned from netifaces
@@ -426,6 +432,8 @@ so that only interfaces that are used for the Internet remain.
 Already done in win_netifaces. Uses route tables for Linux and Mac.
 Other OS is based on the interface name (not that accurate.)
 """
+
+
 async def filter_trash_interfaces(netifaces=None):
     netifaces = netifaces or Interface.get_netifaces()
     ifs = netifaces.interfaces()
@@ -451,7 +459,7 @@ async def filter_trash_interfaces(netifaces=None):
 
         results = await asyncio.gather(*tasks)
         results = strip_none(results)
-        
+
         """
         The 'is_interface_if' function depends on using the 'route' binary.
         If it does not exist then the code will fail and return no results.
@@ -470,6 +478,7 @@ async def filter_trash_interfaces(netifaces=None):
 
     return clean_ifs
 
+
 def log_interface_rp(interface):
     for af in VALID_AFS:
         if not len(interface.rp[af].routes):
@@ -479,6 +488,7 @@ def log_interface_rp(interface):
         log(f"> AF {af} = {route_s}")
         log(f"> nic() = {interface.route(af).nic()}")
         log(f"> ext() = {interface.route(af).ext()}")
+
 
 async def load_interfaces(netifaces=None):
     # Get list of good interfaces with ::/0 or 0.0.0.0 routes.
@@ -496,6 +506,7 @@ async def load_interfaces(netifaces=None):
         if_info = str(netifaces.ifaddresses(if_name))
         log(f"Attempt to start if name {if_name}")
         log(f"Net iface results for that if = {if_info}")
+
         async def worker(if_name):
             try:
                 interface = await Interface(if_name, netifaces=netifaces).start()
@@ -526,6 +537,7 @@ async def load_interfaces(netifaces=None):
 
     return good_ifs
 
+
 # Given a list of Interface objs.
 # Convert to dict and return a list.
 def if_list_to_dict(if_list):
@@ -536,6 +548,7 @@ def if_list_to_dict(if_list):
 
     return dict_list
 
+
 # Given a list of Interface dicts.
 # Convert them back to Interfaces and return a list.
 def dict_to_if_list(dict_list):
@@ -545,7 +558,8 @@ def dict_to_if_list(dict_list):
         if_list.append(interface)
 
     return if_list
-            
+
+
 # Stores a list of interfaces for the machine.
 class Interfaces():
     def __init__(self, interfaces=[]):
@@ -553,7 +567,7 @@ class Interfaces():
         self.by_name = {}
         self.by_af = {
             AF_INET: [],
-            AF_INET6: []
+            AF_INET6: [],
         }
 
         # Interfaces are added once we know their stack type.
@@ -580,7 +594,7 @@ class Interfaces():
         return self.by_af[af][0]
 
     # Load default interfaces.
-    async def _start(self, do_start=1): # pragma: no cover
+    async def _start(self, do_start=1):  # pragma: no cover
         tasks = []
 
         # Load default interfaces.
@@ -596,7 +610,7 @@ class Interfaces():
                         interface = Interface(name)
                         if do_start:
                             tasks.append(
-                                interface.start()
+                                interface.start(),
                             )
 
                         self.names[name] = interface
@@ -614,17 +628,18 @@ class Interfaces():
         self.started = True
         return self
 
-if __name__ == "__main__": # pragma: no cover
+
+if __name__ == "__main__":  # pragma: no cover
     async def test_interface():
-        #out = await cmd("route print")
+        # out = await cmd("route print")
         out = await nt_route_print("Realtek Gaming 2.5GbE Family Controller")
         print(out)
         return
 
-        i = Interface(AF_ANY)   
+        i = Interface(AF_ANY)
         await i.start()
-        #af = i.stack if i.stack != DUEL_STACK else IP4
-        #b = Bind(i, af)
+        # af = i.stack if i.stack != DUEL_STACK else IP4
+        # b = Bind(i, af)
 
         return
         if1 = await Interface("enp3s0").start()
@@ -633,4 +648,3 @@ if __name__ == "__main__": # pragma: no cover
         print(ifs.by_af)
 
     async_test(test_interface)
-

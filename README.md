@@ -80,7 +80,7 @@ async def make_p2p_con():
     out = await pipe.recv()
     #
     # Cleanup.
-    assert(msg in out)
+    assert msg in out
     await pipe.close()
     await node.close()
 

@@ -1,7 +1,8 @@
-from p2pd.test_init import *
 from p2pd.settings import *
 from p2pd.signaling import SignalMock
+from p2pd.test_init import *
 from p2pd.utils import rand_plain, to_s
+
 
 class TestSignaling(unittest.IsolatedAsyncioTestCase):
     async def test_signaling(self):
@@ -28,7 +29,7 @@ class TestSignaling(unittest.IsolatedAsyncioTestCase):
             try:
                 out = await asyncio.wait_for(
                     f,
-                    8
+                    8,
                 )
                 break
             except Exception:
@@ -39,10 +40,10 @@ class TestSignaling(unittest.IsolatedAsyncioTestCase):
         if client is None:
             raise Exception("Couldn't connect to an mqtt server.")
 
-
         # Check results and cleanup.
         self.assertTrue(msg in out)
         await client.close()
+
 
 if __name__ == '__main__':
     main()

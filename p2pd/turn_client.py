@@ -18,7 +18,7 @@ Don't try use TURNs TCP connection mode again. Even using an edge-case where you
 
 https://datatracker.ietf.org/doc/html/draft-ietf-behave-turn-tcp-07
 
-TODO: Future feature = implement shared secrets 
+TODO: Future feature = implement shared secrets
 https://datatracker.ietf.org/doc/html/draft-rosenberg-midcom-turn-08#page-9
 
 matrix.org seems to use them over static credentials
@@ -26,11 +26,13 @@ matrix.org seems to use them over static credentials
 
 import asyncio
 from struct import pack
+
 from .address import *
+from .base_stream import *
 from .interface import *
 from .turn_defs import *
 from .turn_process import *
-from .base_stream import *
+
 
 # Main class for handling TURN sessions with a server.
 class TURNClient(BaseProto):
@@ -38,11 +40,11 @@ class TURNClient(BaseProto):
         self,
         route: any,
         turn_addr: Address,
-        turn_user: bytes = None, # turn username
-        turn_pw: bytes = None, # turn password
+        turn_user: bytes = None,  # turn username
+        turn_pw: bytes = None,  # turn password
         turn_realm: bytes = None,
         msg_cb: any = None,
-        conf: any = NET_CONF
+        conf: any = NET_CONF,
     ):
         # Can received relay messages have a blank header?
         self.blank_rudp_headers = False
@@ -82,7 +84,7 @@ class TURNClient(BaseProto):
 
         # Event set when protocol completed and chan messages can be sent.
         self.processing_loop_task = None
-        #self.allocate_refresher_task = None
+        # self.allocate_refresher_task = None
 
         # The protocol client uses a state machine.
         # Each state has a set duration for it to be completed in.
@@ -103,7 +105,7 @@ class TURNClient(BaseProto):
         self.relay_tup_future = loop.create_future()
         self.auth_event = asyncio.Event()
         self.relay_event = asyncio.Event()
-        self.node_events = {} # by node_id
+        self.node_events = {}  # by node_id
 
     def get_turn_server(self, af=None):
         return {
@@ -112,9 +114,9 @@ class TURNClient(BaseProto):
             "afs": [af],
             "user": self.turn_user,
             "pass": self.turn_pw,
-            "realm": self.realm
+            "realm": self.realm,
         }
-    
+
     def get_relay_tup(self, peer_ip):
         if peer_ip in self.peers:
             return self.peers[peer_ip]
@@ -125,7 +127,7 @@ class TURNClient(BaseProto):
         self.blank_rudp_headers = val
 
     # Make this whole clas look like a 'pipe' object.
-    def super_init(self,  transport, sock, route, conf=NET_CONF):
+    def super_init(self, transport, sock, route, conf=NET_CONF):
         super().__init__(sock=sock, route=route, conf=conf)
         self.connection_made(transport)
         self.stream.set_handle(transport, client_tup=None)
@@ -142,7 +144,7 @@ class TURNClient(BaseProto):
         self.turn_pipe = await pipe_open(
             route=self.route,
             proto=UDP,
-            dest=self.turn_addr
+            dest=self.turn_addr,
         )
         log(f"> Turn socket = {self.turn_pipe.sock}")
 
@@ -157,18 +159,18 @@ class TURNClient(BaseProto):
         self.super_init(
             transport=self.turn_pipe.transport,
             sock=self.turn_pipe.sock,
-            route=self.route, 
-            conf=self.conf
+            route=self.route,
+            conf=self.conf,
         )
 
         # Start processing UDP replies.
         self.processing_loop_task = asyncio.create_task(
             async_wrap_errors(
-                process_replies(self)
-            )
+                process_replies(self),
+            ),
         )
-        #self.tasks.append(self.processing_loop_task)
-        
+        # self.tasks.append(self.processing_loop_task)
+
         # Add any message handlers.
         if self.msg_cb is not None:
             self.add_msg_cb(self.msg_cb)
@@ -177,15 +179,15 @@ class TURNClient(BaseProto):
         await async_retry(lambda: self.allocate_relay(sign=False), count=5)
 
         # Wait for client to be ready.
-        await self.auth_event.wait() # Authentication success.
-        await self.relay_event.wait() # Our relay address available.
+        await self.auth_event.wait()  # Authentication success.
+        await self.relay_event.wait()  # Our relay address available.
 
         # Return our relay tup.
         relay_tup = await self.relay_tup_future
         client_tup = await self.client_tup_future
 
         # White list ourselves.
-        #await self.accept_peer(client_tup, relay_tup)
+        # await self.accept_peer(client_tup, relay_tup)
 
         # Refresh allocations.
         async def refresher():
@@ -195,7 +197,7 @@ class TURNClient(BaseProto):
                     await async_retry(
                         lambda: self.refresh_allocation(),
                         count=5,
-                        timeout=5
+                        timeout=5,
                     )
                 except Exception:
                     try:
@@ -208,8 +210,8 @@ class TURNClient(BaseProto):
         if not n:
             self.allocate_refresher_task = asyncio.create_task(
                 async_wrap_errors(
-                    refresher()
-                )
+                    refresher(),
+                ),
             )
             self.tasks.append(self.allocate_refresher_task)
 
@@ -229,7 +231,7 @@ class TURNClient(BaseProto):
             turn_pw=self.turn_pw,
             turn_realm=self.realm,
             msg_cb=self.msg_cb,
-            conf=self.conf
+            conf=self.conf,
         )
 
         # Try start it again.
@@ -237,7 +239,7 @@ class TURNClient(BaseProto):
 
     # Changes the protocol state machine.
     def set_state(self, state):
-        log("> Turn moving state from %s to %s." % (self.state, state))
+        log(f"> Turn moving state from {self.state} to {state}.")
         self.state = state
 
     def new_node_event(self, node_id):
@@ -250,9 +252,9 @@ class TURNClient(BaseProto):
             async_wrap_errors(
                 self.stream.ack_send(
                     data,
-                    dest_tup
-                )
-            )
+                    dest_tup,
+                ),
+            ),
         )
         self.tasks.append(task)
 
@@ -275,7 +277,7 @@ class TURNClient(BaseProto):
         self.msgs[msg.txn_id] = {
             "status": f,
             "timestamp": timestamp(),
-            "msg": msg
+            "msg": msg,
         }
 
         def new_future():
@@ -303,9 +305,10 @@ class TURNClient(BaseProto):
     # Retry up to 3 times if no response to the packet.
     # Allows a peer to send messages to our relay address.
     async def accept_peer(self, peer_tup, peer_relay_tup):
-        #peer_tup = (peer_tup[0], 0)
+        # peer_tup = (peer_tup[0], 0)
         peer_ip = peer_tup[0]
         already_accepted = peer_ip in self.peers
+
         async def handler(peer_tup, peer_relay_tup):
             # Generate message to send.
             msg = await self.white_list_msg(peer_tup)
@@ -317,6 +320,7 @@ class TURNClient(BaseProto):
 
         # Refresh permissions.
         f = lambda: handler(peer_tup, peer_relay_tup)
+
         async def refresher():
             while self.state != TURN_ERROR_STOPPED:
                 await asyncio.sleep(TURN_REFRESH_EXPIRY - 60)
@@ -331,8 +335,8 @@ class TURNClient(BaseProto):
             # Start the loop to refresh the permission.
             task = asyncio.create_task(
                 async_wrap_errors(
-                    refresher()
-                )
+                    refresher(),
+                ),
             )
             self.tasks.append(task)
 
@@ -343,30 +347,30 @@ class TURNClient(BaseProto):
         msg = await self.refresh_msg()
         f, retransmit, new_future = self.record_msg(msg)
         return f, retransmit, new_future
-        
+
     # Main step 1 -- allocate a relay address msg.
     async def allocate_msg(self):
         reply = TurnMessage(msg_type=TurnMessageMethod.Allocate)
         reply.write_attr(
             TurnAttribute.RequestedTransport,
-            TURN_RPOTOCOL_UDP
+            TURN_RPOTOCOL_UDP,
         )
 
         self.txid = reply.txn_id
         return reply
-        
+
     # Main step 2 -- white list a peer to use our relay address msg.
     # Apparently the port number is irrelevant.
     # Permissions are made per IP.
-    async def white_list_msg(self, src_tup):        
+    async def white_list_msg(self, src_tup):
         # Try write the peer address.
         reply = TurnMessage(msg_type=TurnMessageMethod.CreatePermission)
         try:
             turn_write_peer_addr(
                 reply,
-                src_tup
+                src_tup,
             )
-        except:
+        except Exception:
             log_exception()
             return None
 
@@ -378,7 +382,7 @@ class TURNClient(BaseProto):
         reply = TurnMessage(msg_type=TurnMessageMethod.Refresh)
         reply.write_attr(
             TurnAttribute.Lifetime,
-            pack("!I", TURN_REFRESH_EXPIRY)
+            pack("!I", TURN_REFRESH_EXPIRY),
         )
 
         """
@@ -389,7 +393,7 @@ class TURNClient(BaseProto):
         """
 
         # Return reply message.
-        #reply.txn_id = self.txid
+        # reply.txn_id = self.txid
         return reply
 
     # Close the client socket and move state to done.
@@ -426,7 +430,8 @@ class TURNClient(BaseProto):
         # Wait for permission refresher tasks or cancel them.
         await gather_or_cancel(self.tasks, 2)
 
-if __name__ == '__main__': # pragma: no cover
+
+if __name__ == '__main__':  # pragma: no cover
     """
     // If left out, will use openrelay public TURN servers from metered.ca
     see if these servers work?
@@ -449,11 +454,10 @@ if __name__ == '__main__': # pragma: no cover
         """
         interface = await Interface("enp1s0f0").start()
         af = AF_INET
-        turn_user=b""
-        turn_pw=b""
+        turn_user = b""
+        turn_pw = b""
         route = interface.route(af)
         turn_addr = await Address("", 3478, route).res()
-
 
         """
         A faulty network interface will cause hosts with multiple
@@ -467,7 +471,7 @@ if __name__ == '__main__': # pragma: no cover
             turn_addr=turn_addr,
             turn_user=turn_user,
             turn_pw=turn_pw,
-            interface=interface
+            interface=interface,
         )
 
         client_tup_future, relay_tup_future, in_chan_event = await client1.start()
@@ -484,11 +488,7 @@ if __name__ == '__main__': # pragma: no cover
         await client1.send_turn_msg(reply, do_sign=True)
         """
 
-
         while 1:
             await asyncio.sleep(1)
 
-
     async_test(test_turn)
-
-

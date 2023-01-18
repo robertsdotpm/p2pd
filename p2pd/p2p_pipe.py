@@ -1,12 +1,13 @@
 import asyncio
 import copy
+
 from .p2p_addr import *
+from .signaling import *
 from .tcp_punch import *
 from .turn_client import *
-from .signaling import *
 
 """
-TCP 
+TCP
 nc -4 -l 127.0.0.1 10001 -k
 nc -6 -l ::1 10001 -k
 """
@@ -28,9 +29,9 @@ async def get_tcp_hole(side, pipe_id, node_id, punch_client, node):
             side,
             node_id,
             pipe_id,
-            node.msg_cb
+            node.msg_cb,
         )
-    except:
+    except Exception:
         log_exception()
 
     if pipe is not None:
@@ -74,7 +75,7 @@ def work_behind_same_router(src_addr, dest_addr):
     return new_addr
 
 def build_reverse_msg(pipe_id, addr_bytes, b_proto=b"TCP"):
-    out = b"P2P_DIRECT %s %s %s" % (pipe_id, b_proto, addr_bytes) 
+    out = b"P2P_DIRECT %s %s %s" % (pipe_id, b_proto, addr_bytes)
     return out
 
 def build_punch_response(cmd, pipe_id, punch_ret, src_addr_bytes, af, our_if_index, their_if_index):
@@ -82,7 +83,7 @@ def build_punch_response(cmd, pipe_id, punch_ret, src_addr_bytes, af, our_if_ind
         pairs = []
         for pair in mappings:
             # remote, reply, local.
-            pairs.append( b"%d,%d,%d" % (pair[0], pair[1], pair[2]) )
+            pairs.append(b"%d,%d,%d" % (pair[0], pair[1], pair[2]))
 
         return b"|".join(pairs)
 
@@ -90,13 +91,13 @@ def build_punch_response(cmd, pipe_id, punch_ret, src_addr_bytes, af, our_if_ind
     out = b"%s %s %d %s %s %s %d %d %d" % (
         cmd,
         pipe_id,
-        0, # session id.
-        to_b(str(punch_ret[1])), # ntp
-        mappings_to_bytes(punch_ret[0]), # predictions
+        0,  # session id.
+        to_b(str(punch_ret[1])),  # ntp
+        mappings_to_bytes(punch_ret[0]),  # predictions
         src_addr_bytes,
         af,
         our_if_index,
-        their_if_index
+        their_if_index,
     )
 
     return out
@@ -132,9 +133,10 @@ def parse_punch_response(parts):
         "af": to_n(parts[6]),
         "if": {
             "them": to_n(parts[7]),
-            "us": to_n(parts[8])
-        }
+            "us": to_n(parts[8]),
+        },
     }
+
 
 f_punch_index = lambda ses, addr, pipe: b"%d %b %b" % (ses, addr, pipe)
 class P2PPipe():
@@ -158,7 +160,7 @@ class P2PPipe():
             if timeout:
                 await asyncio.wait_for(
                     pipe_event.wait(),
-                    timeout
+                    timeout,
                 )
             else:
                 await pipe_event.wait()
@@ -167,7 +169,7 @@ class P2PPipe():
         except asyncio.TimeoutError:
             log(f"> Pipe waiter timeout {pipe_id} {timeout}")
             return None
-        
+
     # Implements the p2p connection techniques.
     async def open_pipe(self, pipe_id, dest_bytes, strategies=P2P_STRATEGIES):
         log(f"> Pipe open = {pipe_id}; {dest_bytes}; {strategies}")
@@ -186,7 +188,7 @@ class P2PPipe():
                 signal_pipe = SignalMock(
                     peer_id=to_s(self.node.node_id),
                     f_proto=self.node.signal_protocol,
-                    mqtt_server=mqtt_server
+                    mqtt_server=mqtt_server,
                 )
 
                 # If it fails unset the client.
@@ -223,7 +225,7 @@ class P2PPipe():
                 out = build_reverse_msg(pipe_id, self.node.addr_bytes)
                 await signal_pipe.send_msg(
                     out,
-                    to_s(p2p_dest["node_id"])
+                    to_s(p2p_dest["node_id"]),
                 )
 
                 # Wait for the new pipe to appear.
@@ -236,9 +238,9 @@ class P2PPipe():
                 self.tasks.append(
                     asyncio.create_task(
                         async_wrap_errors(
-                            self.tcp_hole_punch(dest_patch, pipe_id, signal_pipe)
-                        )
-                    )
+                            self.tcp_hole_punch(dest_patch, pipe_id, signal_pipe),
+                        ),
+                    ),
                 )
 
                 # Wait for the hole to appear.
@@ -264,7 +266,7 @@ class P2PPipe():
                 log(f"> Got pipe = {pipe.sock} from {repr(pipe.route)} using {strategy}.")
                 return [pipe, strategy]
 
-        log(f"> Uh oh, pipe was None.")
+        log("> Uh oh, pipe was None.")
         return [pipe, None]
 
     # Main function for scheduling p2p connections.
@@ -272,13 +274,13 @@ class P2PPipe():
         # Identify a pipe.
         strategy = p2p_pipe = None
         pipe_id = rand_plain(15)
-        assert(isinstance(pipe_id, bytes))
+        assert isinstance(pipe_id, bytes)
 
         # Wrap open pipe in a task so it can be cancelled.
         task = asyncio.create_task(
             async_wrap_errors(
-                self.open_pipe(pipe_id, dest_bytes, strategies)
-            )
+                self.open_pipe(pipe_id, dest_bytes, strategies),
+            ),
         )
 
         # Record the task in a pending state.
@@ -286,7 +288,7 @@ class P2PPipe():
         try:
             await asyncio.wait_for(
                 task,
-                timeout
+                timeout,
             )
             p2p_pipe, strategy = task.result()
         except asyncio.CancelledError:
@@ -295,7 +297,7 @@ class P2PPipe():
         # When it's done delete the pending reference.
         if pipe_id in self.node.pending_pipes:
             del self.node.pending_pipes[pipe_id]
-            
+
         return [p2p_pipe, strategy]
 
     """
@@ -305,7 +307,7 @@ class P2PPipe():
     (4) Only connections to an address if the AF is supported.
 
                  (currently 3) * (valid af no = ip4, ip6)
-    max cons = PEER_ADDR_MAX_INTERFACES * 2 
+    max cons = PEER_ADDR_MAX_INTERFACES * 2
     """
     async def direct_connect(self, p2p_dest, pipe_id, signal_pipe=None, proto=TCP):
         tasks = []
@@ -330,7 +332,7 @@ class P2PPipe():
                 dest = await Address(
                     str(info["ext"]),
                     info["port"],
-                    route
+                    route,
                 ).res()
 
                 # Schedule the coroutine.
@@ -339,8 +341,8 @@ class P2PPipe():
                         route=route,
                         proto=proto,
                         dest=dest,
-                        msg_cb=self.node.msg_cb
-                    )
+                        msg_cb=self.node.msg_cb,
+                    ),
                 )
 
         # Do all connections concurrently.
@@ -417,13 +419,13 @@ class P2PPipe():
                     # Save interface details we're interested in.
                     nat_pairs[af][addr_index].append([
                         if_info["nat"]["type"],
-                        if_info
+                        if_info,
                     ])
 
                 # Sort the details list based on the first field (NAT type.)
                 nat_pairs[af][addr_index] = sorted(
                     nat_pairs[af][addr_index],
-                    key=lambda x: x[0]
+                    key=lambda x: x[0],
                 )
 
             # Step through interface details for both addresses.
@@ -447,7 +449,7 @@ class P2PPipe():
                 their_addr = await Address(
                     str(their_info["ext"]),
                     80,
-                    route
+                    route,
                 ).res()
                 punch_mode = initiator.get_punch_mode(their_addr)
 
@@ -457,7 +459,7 @@ class P2PPipe():
                 else:
                     use_addr = str(their_info["nic"])
                 log(f"using addr = {use_addr}")
-                
+
                 # Step 1 -- set initial mappings for initiator.
                 punch_ret = await initiator.proto_send_initial_mappings(
                     use_addr,
@@ -465,7 +467,7 @@ class P2PPipe():
                     p2p_dest["node_id"],
                     pipe_id,
                     stun_client,
-                    mode=punch_mode
+                    mode=punch_mode,
                 )
 
                 # Build first (required) punch message for peer.
@@ -480,7 +482,7 @@ class P2PPipe():
                     our_info["if_index"],
 
                     # Which iface they should use.
-                    their_info["if_index"]
+                    their_info["if_index"],
                 )
                 log(f"Sending {out}")
 
@@ -489,9 +491,9 @@ class P2PPipe():
                     async_wrap_errors(
                         signal_pipe.send_msg(
                             out,
-                            to_s(p2p_dest["node_id"])
-                        )
-                    )
+                            to_s(p2p_dest["node_id"]),
+                        ),
+                    ),
                 )
 
                 # Allow for time to receive updated mappings.
@@ -499,7 +501,7 @@ class P2PPipe():
                 try:
                     await asyncio.wait_for(
                         punch_ret[2].wait(),
-                        4
+                        4,
                     )
                     log("punch: updated mappings received.")
                 except asyncio.TimeoutError:
@@ -513,7 +515,7 @@ class P2PPipe():
                     pipe_id,
                     p2p_dest["node_id"],
                     initiator,
-                    self.node
+                    self.node,
                 )
 
                 # Exit loops if success.
@@ -551,7 +553,7 @@ class P2PPipe():
             turn_addr = await Address(
                 turn_server["host"],
                 turn_server["port"],
-                route
+                route,
             ).res()
 
             # Build TURN client.
@@ -561,7 +563,7 @@ class P2PPipe():
                 turn_user=turn_server["user"],
                 turn_pw=turn_server["pass"],
                 turn_realm=turn_server["realm"],
-                msg_cb=self.node.msg_cb
+                msg_cb=self.node.msg_cb,
             )
 
             # Start TURN client.
@@ -591,7 +593,7 @@ class P2PPipe():
                 list(self.node.signal_pipes),
                 ip=to_b(client_tup[0]),
                 port=client_tup[1],
-                if_index=if_index
+                if_index=if_index,
             )
 
             # Send relay message to peer.
@@ -607,22 +609,22 @@ class P2PPipe():
                 to_b(relay_tup[0]),
                 int(relay_tup[1]),
                 int(turn_server_index),
-                int(turn_client_index)
+                int(turn_client_index),
             )
-            
+
             # Send out direct con msg using the above addr.
             node_id = to_s(p2p_dest["node_id"])
             turn_client.new_node_event(node_id)
             await signal_pipe.send_msg(
                 to_s(out),
-                node_id
+                node_id,
             )
 
             # Return TURN client if it's setup successfully.
             try:
                 await asyncio.wait_for(
                     turn_client.node_events[node_id].wait(),
-                    10
+                    10,
                 )
 
                 self.node.pipes[pipe_id] = turn_client
@@ -675,7 +677,7 @@ class P2PPipe():
                         # Too many attempts.
                         if i >= retry_no:
                             return None
-                        
+
                         # Other peer can't handle this address family.
                         if not len(p2p_dest[af]):
                             continue
@@ -687,13 +689,13 @@ class P2PPipe():
                         # Make a new TURN client.
                         turn_client = await async_wrap_errors(
                             setup_turn_client(
-                                turn_server=turn_server, 
+                                turn_server=turn_server,
                                 interface=interface,
-                                af=af
+                                af=af,
                             ),
-                            timeout=5
+                            timeout=5,
                         )
-                        
+
                         # Exception occured.
                         if turn_client is None:
                             i += 1
@@ -721,7 +723,8 @@ class P2PPipe():
             # Got a valid client -- return reference.
             return out
 
-if __name__ == "__main__": # pragma: no cover
+
+if __name__ == "__main__":  # pragma: no cover
     async def test_p2p_con():
         p2p_dest = None
         if1 = await Interface("enp3s0").start()
@@ -729,7 +732,6 @@ if __name__ == "__main__": # pragma: no cover
         pipe_id = rand_plain(10)
         p2p_pipe = P2PPipe(if_list, 0)
         await p2p_pipe.direct_connect(p2p_dest, pipe_id, proto=TCP)
-
 
         while 1:
             await asyncio.sleep(1)

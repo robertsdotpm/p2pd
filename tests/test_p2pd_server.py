@@ -1,9 +1,10 @@
-from p2pd.test_init import *
-from p2pd.net import *
-from p2pd.interface import *
 from p2pd.base_stream import *
-from p2pd.rest_api import *
 from p2pd.http_client_lib import *
+from p2pd.interface import *
+from p2pd.net import *
+from p2pd.rest_api import *
+from p2pd.test_init import *
+
 
 class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
     async def test_p2pd_server(self):
@@ -46,7 +47,7 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
             "/p2p/recv/" + c,
 
             # Test connection close works.
-            "/p2p/close/" + c
+            "/p2p/close/" + c,
         ]
 
         # Just load a bunch of URLs and check for errors.
@@ -58,7 +59,7 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
             j = json.loads(out)
 
             # IE: no error set.
-            assert(j["error"] == 0)
+            assert j["error"] == 0
 
         # Make a new con.
         c2 = "pipe_test"
@@ -70,12 +71,12 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
         msg = b"this is a test"
         await p.send(b"ECHO " + msg)
         got = await p.recv(SUB_ALL, timeout=3)
-        assert(msg in got)
+        assert msg in got
 
         # Test custom protocol extension works.
         await p.send(b"PING")
         out = await p.recv()
-        assert(b"PONG" in out)
+        assert b"PONG" in out
         await p.close()
 
         # TODO: Test binary stuff.

@@ -1,13 +1,14 @@
-import sys
-import socket
-import platform
-import struct
-import ipaddress
-import random
 import copy
+import ipaddress
+import platform
+import random
+import socket
+import struct
+import sys
 from io import BytesIO
-from .errors import *
+
 from .cmd_tools import *
+from .errors import *
 
 """
 You're supposed to have unique [src ip, src port, dest ip, dest port] 'tuples' for every end point but you can easily bypass this with UDP. But if you end up with multiple 'sockets' bound to the same endpoint then the OS is not going to route packets correctly. It might make sense to detect this somehow if debug mode is on and show a warning if such actions are detected.
@@ -84,7 +85,7 @@ ZERO_NETMASK_IP4 = "0.0.0.0"
 ZERO_NETMASK_IP6 = "0000:0000:0000:0000:0000:0000:0000:0000"
 BLACK_HOLE_IPS = {
     IP4: "192.0.2.1",
-    IP6: "0100:0000:0000:0000:0000:0000:0000:0001"
+    IP6: "0100:0000:0000:0000:0000:0000:0000:0001",
 }
 
 # A value meaning 'listen to' or 'subscribe to' all messages.
@@ -103,12 +104,12 @@ IPA_TYPES = ipa_types = (ipaddress.IPv4Address, ipaddress.IPv6Address)
 PROTO_LOOKUP = {
     "TCP": TCP,
     "UDP": UDP,
-    "RUDP": RUDP
+    "RUDP": RUDP,
 }
 
 DATAGRAM_TYPES = [
     asyncio.selector_events._SelectorDatagramTransport,
-    asyncio.DatagramTransport
+    asyncio.DatagramTransport,
 ]
 if sys.platform == "win32":
     if hasattr(asyncio.proactor_events, "_ProactorDatagramTransport"):
@@ -165,7 +166,7 @@ NET_CONF = {
     "linger": None,
 
     # Ref to an event loop.
-    "loop": None
+    "loop": None,
 }
 
 v_to_af = lambda v: IP4 if v == 4 else IP6
@@ -191,25 +192,25 @@ def generate_mac(uaa=False, multicast=False, oui=None, separator=':', byte_fmt='
     if oui:
         if type(oui) == str:
             oui = [int(chunk) for chunk in oui.split(separator)]
-        mac = oui + rand_by(num=6-len(oui))
+        mac = oui + rand_by(num=6 - len(oui))
     else:
         if multicast:
-            mac[0] |= 1 # set bit 0
+            mac[0] |= 1  # set bit 0
         else:
-            mac[0] &= ~1 # clear bit 0
+            mac[0] &= ~1  # clear bit 0
         if uaa:
-            mac[0] &= ~(1 << 1) # clear bit 1
+            mac[0] &= ~(1 << 1)  # clear bit 1
         else:
-            mac[0] |= 1 << 1 # set bit 1
+            mac[0] |= 1 << 1  # set bit 1
     return separator.join(byte_fmt % b for b in mac)
 
 def mac_to_b(mac_str):
     mac = mac_str.replace(":", "")
     mac = mac.strip()
-    while len(mac) < 12 :
+    while len(mac) < 12:
         mac = '0' + mac
     macb = b''
-    for i in range(0, 12, 2) :
+    for i in range(0, 12, 2):
         m = int(mac[i:i + 2], 16)
         macb += struct.pack('!B', m)
     return macb
@@ -218,7 +219,7 @@ async def sock_close_all(sock_list):
     if sock_list is not None:
         # Make it iterable.
         if type(sock_list) != list:
-            sock_list = [ sock_list ]
+            sock_list = [sock_list]
 
         # Close all socks.
         for sock in sock_list:
@@ -235,7 +236,7 @@ def ip_str_to_int(ip_str):
     else:
         ip_str = str(ip_obj.exploded)
         hex_str = to_h(socket.inet_pton(
-            AF_INET6, ip_str
+            AF_INET6, ip_str,
         ))
         return to_i(hex_str)
 
@@ -244,7 +245,7 @@ def netmask_to_cidr(netmask):
     if "/" in netmask:
         return int(netmask.replace("/", ""))
 
-    as_int = ip_str_to_int(netmask) 
+    as_int = ip_str_to_int(netmask)
     return bin(as_int).count("1")
 
 def cidr_to_netmask(cidr, af):
@@ -281,6 +282,7 @@ def toggle_host_bits(netmask, ip_str, toggle=0):
 def get_broadcast_ip(netmask, gw_ip):
     return toggle_host_bits(netmask, gw_ip, toggle=1)
 
+
 """
 Host IP just needs to be any valid host IP in
 the given subnet that corrosponds to the netmask.
@@ -297,7 +299,7 @@ Want the last valid IP? Set it to 0. Or the 10th from
 the last? Then set it to 9.
 """
 def ip_from_last(n, netmask, host_ip):
-    assert(n)
+    assert n
     min_ip_str = toggle_host_bits(netmask, host_ip, toggle=0)
     max_ip_str = toggle_host_bits(netmask, host_ip, toggle=1)
     ip_obj = ipaddress.ip_address(host_ip)
@@ -332,7 +334,7 @@ def ipv6_rand_link_local():
 
     # Blank host portion placeholder.
     buf += ("0" * 64)
-    assert(len(buf) == 128)
+    assert len(buf) == 128
 
     # Convert to IPv6 adddress.
     ip_obj = ipaddress.IPv6Address(int(buf, 2))
@@ -341,32 +343,32 @@ def ipv6_rand_link_local():
     # Get result with a random host part.
     return ipv6_rand_host(ip_val, 64)
 
-async def get_v4_lan_ips(bcast_ip, timeout=4): # pragma: no cover
-    assert(type(timeout) == int)
+async def get_v4_lan_ips(bcast_ip, timeout=4):  # pragma: no cover
+    assert type(timeout) == int
     info_index = {
         "Windows": {
             "ping": 'ping %s -n %d' % (
                 # Surrounds with double-quotes.
-                win_arg_escape(bcast_ip), 
-                int(timeout / 2) or 2
+                win_arg_escape(bcast_ip),
+                int(timeout / 2) or 2,
             ),
-            "r": "(([0-9]+[.]?){4})+"
+            "r": "(([0-9]+[.]?){4})+",
         },
         "Linux": {
             "ping": 'ping %s -b -w %d' % (
                 # Surrounds with single quotes.
                 nix_arg_escape(bcast_ip),
-                timeout
+                timeout,
             ),
-            "r": "[(](([0-9]+[.]?){4})[)]"
+            "r": "[(](([0-9]+[.]?){4})[)]",
         },
         "Darwin": {
             # Surrounds with double-quotes.
             "ping": 'ping %s -t %d' % (
                 mac_arg_escape(bcast_ip),
-                timeout
+                timeout,
             ),
-            "r": "[(](([0-9]+[.]?){4})[)]"
+            "r": "[(](([0-9]+[.]?){4})[)]",
         },
     }
 
@@ -410,7 +412,7 @@ def ip_strip_if(ip):
         if "%" in ip:
             parts = ip.split("%")
             return parts[0]
-    
+
     return ip
 
 def ip_strip_cidr(ip):
@@ -441,16 +443,14 @@ def ip6_patch_bind_ip(ip_obj, bind_ip, interface):
             if platform.system() == "Windows":
                 bind_ip = "%s%%%d" % (
                     bind_ip,
-                    interface.nic_no
+                    interface.nic_no,
                 )
             else:
                 # Other platforms just use the name
-                bind_ip = "%s%%%s" % (
-                    bind_ip,
-                    interface.name
-                )
+                bind_ip = f"{bind_ip}%{interface.name}"
 
     return bind_ip
+
 
 """
 Provides an interface that allows for bind() to be called
@@ -488,7 +488,7 @@ def bind_closure(self):
             bind_type, bind_ip = bind_info
             if bind_ip is None:
                 # Set a blank bind tuple for this.
-                log("> bind type = {} was None".format(bind_type))
+                log(f"> bind type = {bind_type} was None")
                 self._bind_tups[bind_type] = (None, None)
                 continue
 
@@ -499,26 +499,23 @@ def bind_closure(self):
 
                 # Add interface descriptor if it's link local.
                 is_priv = ip_obj.is_private
-                not_all = bind_ip != "::" # Needed for V6 AF_ANY for some reason.
+                not_all = bind_ip != "::"  # Needed for V6 AF_ANY for some reason.
                 if is_priv and not_all:
                     # Interface specified by no on windows.
                     if platform.system() == "Windows":
                         bind_ip = "%s%%%d" % (
                             bind_ip,
-                            self.interface.nic_no
+                            self.interface.nic_no,
                         )
                     else:
                         # Other platforms just use the name
-                        bind_ip = "%s%%%s" % (
-                            bind_ip,
-                            self.interface.name
-                        )
+                        bind_ip = f"{bind_ip}%{self.interface.name}"
 
                 # Get bind info using get address.
                 # This includes the special 'flow info' and 'scope id'
                 addr_infos = await loop.getaddrinfo(
                     bind_ip,
-                    port
+                    port,
                 )
 
                 # (Host, port, flow info, interface ID)
@@ -530,12 +527,13 @@ def bind_closure(self):
                 # Otherwise this is all you need.
                 self._bind_tups[bind_type] = (bind_ip, port)
 
-        #bind.addr = getattr(bind, 'addr', self._addr)
+        # bind.addr = getattr(bind, 'addr', self._addr)
         self.nic_bind, self.ext_bind = nic_bind, ext_bind
         self.resolved = True
         return self
-        
+
     return bind
+
 
 """
 Mostly this class will not be used directly by users.
@@ -543,8 +541,8 @@ It's code is also shitty for res. Routes have superseeded this.
 """
 class Bind():
     def __init__(self, interface, af, port=0, ips=None, leave_none=0):
-        #if IS_DEBUG:
-        #assert("Interface" in str(type(interface)))
+        # if IS_DEBUG:
+        # assert "Interface" in str(type(interface))
 
         self.ips = ips
         self.interface = interface
@@ -557,7 +555,7 @@ class Bind():
             self.nic_bind, self.ext_bind = self._convert_ips(
                 ips=ips,
                 af=af,
-                interface=interface
+                interface=interface,
             )
 
         # Will store a tuple that can be passed to bind.
@@ -570,7 +568,7 @@ class Bind():
     """
     ips param can be one of any number of types. The idea is to
     extract a target IP to bind on. This is a bit excessive but
-    still. Here it is. 
+    still. Here it is.
     """
     def _convert_ips(self, ips, af, interface=None):
         # Use interface IPs.
@@ -585,8 +583,8 @@ class Bind():
             # the bind tuple.
             if af == IP6 and not interface.resolved:
                 ext_bind = None
-                
-            return nic_bind, ext_bind 
+
+            return nic_bind, ext_bind
 
         # Only choose the version we need.
         if ips is not None and isinstance(ips, dict):
@@ -599,7 +597,7 @@ class Bind():
 
         # No idea what ips is.
         if ip_val is None:
-            raise NotImplemented("Can't bind to that type.")
+            raise NotImplementedError("Can't bind to that type.")
 
         # Convert special values in IP val.
         if ip_val in ["", "*"]:
@@ -610,7 +608,7 @@ class Bind():
         else:
             ip_val = ip_norm(ip_val)
             ip_obj = ip_f(ip_val)
-            assert(af == v_to_af(ip_obj.version))
+            assert af == v_to_af(ip_obj.version)
             nic_bind = ip_val
             ext_bind = ip_val
 
@@ -650,7 +648,7 @@ class Bind():
             e += "Also possible there were no link locals."
             raise Exception(e)
 
-        #log("> binding to tup = {}".format(tup))
+        # log("> binding to tup = {}".format(tup))
         return tup
 
     def supported(self):
@@ -688,8 +686,8 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-        except:
-            #log("> sock fac: cant set reuse port")
+        except Exception:
+            # log("> sock fac: cant set reuse port")
             pass
             # Doesn't work on Windows.
 
@@ -708,15 +706,15 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
         if route.interface is not None:
             is_default = route.interface.is_default(route.af)
             if not is_default and NOT_WINDOWS:
-                #log("> attemping to bind to non default iface")
+                # log("> attemping to bind to non default iface")
                 sock.setsockopt(socket.SOL_SOCKET, 25, to_b(route.interface.id))
-                #log("> success: bound to non default iface")
+                # log("> success: bound to non default iface")
     except Exception:
         log_exception()
         log("> couldnt bind to specific iface.")
         if sock is not None:
             sock.close()
-        return None 
+        return None
 
     # Default = use any IPv4 NIC.
     # For IPv4 -- bind address depends on destination type.

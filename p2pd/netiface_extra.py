@@ -1,17 +1,19 @@
-from .net import *
 from .ip_range import *
+from .net import *
+
 
 # Netifaces apparently doesn't use their own values...
 def af_to_netiface(af):
     if af == IP4:
         return int(IP4)
         return netifaces.AF_INET
-        
+
     if af == IP6:
         return int(IP6)
         return netifaces.AF_INET6
 
     return af
+
 
 def netiface_to_af(af, netifaces):
     if af == netifaces.AF_INET:
@@ -22,13 +24,16 @@ def netiface_to_af(af, netifaces):
 
     return af
 
+
 def is_af_routable(af, netifaces):
     af = af_to_netiface(af)
     return af in netifaces.gateways()
 
+
 def get_mac_address(name, netifaces):
     return netifaces.ifaddresses(name)[netifaces.AF_LINK][0]["addr"]
-    
+
+
 # Note: Discards subnet for single addresses.
 async def netiface_addr_to_ipr(af, info, interface, loop, skip_bind_test):
     # Some interfaces might not have valid information set.
@@ -36,7 +41,7 @@ async def netiface_addr_to_ipr(af, info, interface, loop, skip_bind_test):
         return None
     if "netmask" not in info:
         return None
-    
+
     nic_ipr = IPRange(info["addr"], info["netmask"])
 
     """
@@ -64,7 +69,7 @@ async def netiface_addr_to_ipr(af, info, interface, loop, skip_bind_test):
             try:
                 addr_infos = await loop.getaddrinfo(
                     bind_ip,
-                    0
+                    0,
                 )
                 s.bind(addr_infos[0][4])
             except Exception:
@@ -72,7 +77,7 @@ async def netiface_addr_to_ipr(af, info, interface, loop, skip_bind_test):
                 log(f"af = {af}, bind_ip = {bind_ip}")
                 log(f"{addr_infos[0][4]}")
                 log(f"{s}")
-                log(">get routes invalid subnet for {}".format(str(nic_ipr)))
+                log(f">get routes invalid subnet for {str(nic_ipr)}")
                 invalid_subnet = True
             finally:
                 s.close()
@@ -83,6 +88,7 @@ async def netiface_addr_to_ipr(af, info, interface, loop, skip_bind_test):
             return None
 
     return nic_ipr
+
 
 async def get_nic_private_ips(interface, af, netifaces, loop=None):
     loop = loop or asyncio.get_event_loop()
@@ -104,11 +110,12 @@ async def get_nic_private_ips(interface, af, netifaces, loop=None):
 
     return nic_iprs
 
+
 def netiface_gateways(netifaces, get_interface_type, preference=AF_ANY):
     gws = netifaces.gateways()
     gateway = None
     iface = None
-    
+
     # Netifaces may not always find the default gateway.
     # Use first interface that get_interface_type finds.
     if gws["default"] == {}:
@@ -117,34 +124,33 @@ def netiface_gateways(netifaces, get_interface_type, preference=AF_ANY):
             afs = VALID_AFS
         else:
             afs = [preference]
-            
+
         # Check the address families of related GWs.
         for af in afs:
             # No entry for AF found in GW info.
             if af not in gws:
                 continue
-                
+
             # Check that there is info to check.
             if not len(gws[af]):
                 continue
-                
+
             # Check the interface name.
             for net_info in gws[af]:
                 # Af already set.
                 if af in gws["default"]:
                     continue
-                
+
                 # Try to determine interface type from name.
                 if_name = net_info[1]
                 if_type = get_interface_type(if_name)
-                
+
                 # Unknown / bad interface type.
                 if if_type == INTERFACE_UNKNOWN:
                     continue
-                    
+
                 # Use this interface GW info as the default.
                 gws["default"][af] = net_info
                 break
-                
-    return gws
 
+    return gws

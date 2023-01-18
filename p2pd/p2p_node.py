@@ -1,9 +1,10 @@
 import asyncio
-from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
 from decimal import Decimal as Dec
-from .p2p_pipe import *
+
 from .daemon import *
+from .p2p_pipe import *
 from .p2p_protocol import *
 from .signaling import *
 
@@ -85,8 +86,8 @@ class P2PUtils():
             self.pp_executor = None
             self.mp_manager = None
             return
-            
-        assert(mp_manager)
+
+        assert mp_manager
         self.pp_executor = pp_executor
         self.mp_manager = mp_manager
 
@@ -100,7 +101,7 @@ class P2PUtils():
                 self.if_list,
                 self.sys_clock,
                 self.pp_executor,
-                self.mp_manager
+                self.mp_manager,
             )
             for interface in self.if_list
         ]
@@ -117,25 +118,25 @@ class P2PNode(Daemon, P2PUtils):
         self.if_list = if_list
         self.ifs = Interfaces(if_list)
         self.node_id = node_id or rand_plain(15)
-        self.signal_pipes = {} # offset into MQTT_SERVERS
-        self.expected_addrs = {} # by [pipe_id]
-        self.pipe_events = {} # by [pipe_id]
-        self.pipes = {} # by [pipe_id]
+        self.signal_pipes = {}  # offset into MQTT_SERVERS
+        self.expected_addrs = {}  # by [pipe_id]
+        self.pipe_events = {}  # by [pipe_id]
+        self.pipes = {}  # by [pipe_id]
         self.sys_clock = None
         self.pp_executor = None
         self.mp_manager = None
-        self.tcp_punch_clients = None # [...]
+        self.tcp_punch_clients = None  # [...]
         self.turn_clients = []
 
         # Handlers for the node's custom protocol functions.
         self.msg_cbs = []
 
         # Maps p2p's ext to pipe_id.
-        self.pending_pipes = {} # by [pipe_id]
+        self.pending_pipes = {}  # by [pipe_id]
         self.is_running = True
         self.listen_all_task = None
         self.signal_worker_task = None
-        self.signal_worker_tasks = {} # offset into MQTT_SERVERS
+        self.signal_worker_tasks = {}  # offset into MQTT_SERVERS
 
     # Used by the MQTT clients.
     async def signal_protocol(self, msg, signal_pipe):
@@ -169,7 +170,7 @@ class P2PNode(Daemon, P2PUtils):
                 signal_pipe = SignalMock(
                     peer_id=to_s(self.node_id),
                     f_proto=self.signal_protocol,
-                    mqtt_server=mqtt_server
+                    mqtt_server=mqtt_server,
                 )
 
                 try:
@@ -180,7 +181,7 @@ class P2PNode(Daemon, P2PUtils):
                     if signal_pipe.is_connected:
                         await signal_pipe.close()
                     return None
-            
+
             # Traverse list of shuffled server indexes.
             while 1:
                 # If tried all then we're done.
@@ -192,7 +193,7 @@ class P2PNode(Daemon, P2PUtils):
 
                 # Try to use the server at the offset for a signal pipe.
                 signal_pipe = await async_wrap_errors(
-                    set_signal_pipe(offset)
+                    set_signal_pipe(offset),
                 )
 
                 # The connection failed so keep trying.
@@ -223,12 +224,12 @@ class P2PNode(Daemon, P2PUtils):
                     self.listen_all_task = await self.listen_all(
                         routes,
                         [self.port],
-                        protos
+                        protos,
                     )
                     break
                 except Exception:
                     # Use any port.
-                    log(f"Deterministic bind for node server failed.")
+                    log("Deterministic bind for node server failed.")
                     log(f"Port {self.port} was not available.")
                     self.port = 0
         else:
@@ -237,7 +238,7 @@ class P2PNode(Daemon, P2PUtils):
             self.listen_all_task = await self.listen_all(
                 routes,
                 [self.port],
-                protos
+                protos,
             )
 
         # Translate any port 0 to actual assigned port.
@@ -253,9 +254,9 @@ class P2PNode(Daemon, P2PUtils):
         if self.enable_upnp:
             # UPnP has no unit tests so wrap all errors for now.
             await async_wrap_errors(
-                self.forward(port)
+                self.forward(port),
             )
-            
+
         return self
 
     # Connect to a remote P2P node using a number of techniques.
@@ -264,7 +265,7 @@ class P2PNode(Daemon, P2PUtils):
         return await p2p_pipe.pipe(
             addr_bytes,
             strategies=strategies,
-            timeout=timeout
+            timeout=timeout,
         )
 
     # Get our node server's address.
@@ -321,40 +322,35 @@ class P2PNode(Daemon, P2PUtils):
         except Exception:
             pass
 
-if __name__ == "__main__": # pragma: no cover
-    from .p2p_pipe import P2PPipe, P2P_DIRECT, P2P_REVERSE, P2P_PUNCH, P2P_RELAY
+
+if __name__ == "__main__":  # pragma: no cover
     from .nat import *
+    from .p2p_pipe import (P2P_DIRECT, P2P_PUNCH, P2P_RELAY, P2P_REVERSE,
+                           P2PPipe)
+
     async def test_p2p_node():
         sys_clock = SysClock(Dec("-0.02839018452552057081653225806"))
         pp_executor = ProcessPoolExecutor()
         mp_manager = multiprocessing.Manager()
-        #internode_out = await Interface("enp3s0").start()
+        # internode_out = await Interface("enp3s0").start()
         starlink_out = await Interface("wlp2s0").start()
         internode_nat = nat_info(PRESERV_NAT, delta_info(PRESERV_NAT, 0))
         starlink_nat = nat_info(RESTRICT_PORT_NAT, delta_info(RANDOM_DELTA, 0), [34000, MAX_PORT])
-        #internode_out.set_nat(internode_nat)
+        # internode_out.set_nat(internode_nat)
         starlink_out.set_nat(starlink_nat)
-
-
-
-
 
         alice_node = await P2PNode([starlink_out], 11111).start()
         alice_node.setup_multiproc(pp_executor, mp_manager)
         alice_node.setup_coordination(sys_clock)
         alice_node.setup_tcp_punching()
 
-        
         bob_node = await P2PNode([starlink_out], 22222).start()
         bob_node.setup_multiproc(pp_executor, mp_manager)
         bob_node.setup_coordination(sys_clock)
         bob_node.setup_tcp_punching()
         alice_p2p_pipe = P2PPipe(alice_node)
-        
 
-        #print(alice_node.tcp_punch_clients[0].interface.route(IP4))
-
-
+        # print(alice_node.tcp_punch_clients[0].interface.route(IP4))
 
         """
         print("Testing direct connect.")
@@ -385,16 +381,15 @@ if __name__ == "__main__": # pragma: no cover
         print("Testing p2p relay.")
         relay_pipe = await alice_p2p_pipe.pipe(
             bob_node.addr_bytes,
-            [P2P_RELAY]
+            [P2P_RELAY],
         )
 
         print("Got this pipe from relay = ")
         print(relay_pipe)
-        
-        await relay_pipe.send(b"Test msg back to bob via turn chan.")   
+
+        await relay_pipe.send(b"Test msg back to bob via turn chan.")
         print("sent")
         while 1:
             await asyncio.sleep(1)
 
     async_test(test_p2p_node)
-

@@ -1,8 +1,9 @@
 import platform
-from p2pd.test_init import *
-from p2pd import IPRange, HOST_TYPE_IP, HOST_TYPE_DOMAIN
-from p2pd import IP6, IP4, Route
+
+from p2pd import HOST_TYPE_DOMAIN, HOST_TYPE_IP, IP4, IP6, IPRange, Route
 from p2pd.net import *
+from p2pd.test_init import *
+
 
 class TestNet(unittest.IsolatedAsyncioTestCase):
     async def test_ip_norm(self):
@@ -13,8 +14,7 @@ class TestNet(unittest.IsolatedAsyncioTestCase):
             ["::", ("0000:" * 8)[:-1]],
             ["::%test/24", ("0000:" * 8)[:-1]],
             ["::", ("0000:" * 8)[:-1]],
-            ["2402:1f00:8101:083f:0000:0000:0000:0001", "2402:1f00:8101:083f:0000:0000:0000:0001"]
-        ]
+            ["2402:1f00:8101:083f:0000:0000:0000:0001", "2402:1f00:8101:083f:0000:0000:0000:0001"]]
 
         for src_ip, out_ip in tests:
             self.assertEqual(ip_norm(src_ip), out_ip)
@@ -50,7 +50,7 @@ class TestNet(unittest.IsolatedAsyncioTestCase):
         b = mac_to_b(m)
 
     """
-    TODO: 
+    TODO:
     async def test_nt_net(self):
         if platform.system() == "Windows":
             out = await nt_ipconfig()
@@ -59,7 +59,6 @@ class TestNet(unittest.IsolatedAsyncioTestCase):
             out = await nt_route_print(desc=None)
             print(out)
     """
-
 
 
 if __name__ == '__main__':

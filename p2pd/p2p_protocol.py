@@ -1,5 +1,7 @@
 import asyncio
+
 from .p2p_pipe import *
+
 
 def parse_mappings(self, parts):
     if len(parts) != 9:
@@ -46,7 +48,6 @@ async def signal_protocol(self, msg, signal_pipe):
             else:
                 chan_dest = parts[1]
 
-
             # cmd sp node_id sp msg
             offset = (6 + len(chan_dest))
             out = msg[offset:]
@@ -78,7 +79,7 @@ async def signal_protocol(self, msg, signal_pipe):
         try:
             pipe = await asyncio.wait_for(
                 p2p_pipe.direct_connect(p2p_dest, pipe_id, proto=proto),
-                10
+                10,
             )
         except asyncio.TimeoutError:
             log("p2p direct timeout in node.")
@@ -111,14 +112,14 @@ async def signal_protocol(self, msg, signal_pipe):
         their_addr = await Address(
             str(their_if_info["ext"]),
             80,
-            interface.route(r["af"])
-            ).res()
+            interface.route(r["af"]),
+        ).res()
         punch_mode = recipient.get_punch_mode(their_addr)
         if punch_mode == TCP_PUNCH_REMOTE:
             use_addr = str(their_if_info["ext"])
         else:
             use_addr = str(their_if_info["nic"])
-        
+
         # Step 2 -- exchange initiator mappings with recipient.
         punch_ret = await recipient.proto_recv_initial_mappings(
             use_addr,
@@ -128,7 +129,7 @@ async def signal_protocol(self, msg, signal_pipe):
             r["predictions"],
             stun_client,
             r["ntp_time"],
-            mode=punch_mode
+            mode=punch_mode,
         )
 
         # Build second (optional) punch message for peer.
@@ -138,8 +139,8 @@ async def signal_protocol(self, msg, signal_pipe):
             punch_ret,
             self.addr_bytes,
             r["af"],
-            r["if"]["us"], # Which iface we're using from our addr.
-            r["if"]["them"] # Which iface they should use.
+            r["if"]["us"],  # Which iface we're using from our addr.
+            r["if"]["them"],  # Which iface they should use.
         )
 
         # Send first protocol signal message to peer.
@@ -147,9 +148,9 @@ async def signal_protocol(self, msg, signal_pipe):
             async_wrap_errors(
                 signal_pipe.send_msg(
                     out,
-                    to_s(r["src_addr"]["node_id"])
-                )
-            )
+                    to_s(r["src_addr"]["node_id"]),
+                ),
+            ),
         )
 
         # Do the hole punching.
@@ -160,9 +161,9 @@ async def signal_protocol(self, msg, signal_pipe):
                     r["pipe_id"],
                     r["src_addr"]["node_id"],
                     recipient,
-                    self
+                    self,
                 ),
-                30
+                30,
             )
         except asyncio.TimeoutError:
             log("node tcp punch timeout.")
@@ -190,7 +191,7 @@ async def signal_protocol(self, msg, signal_pipe):
             r["src_addr"]["node_id"],
             r["pipe_id"],
             r["predictions"],
-            stun_client
+            stun_client,
         )
 
         return
@@ -208,7 +209,7 @@ async def signal_protocol(self, msg, signal_pipe):
         if len(parts) != 12:
             log("> turn_req: invalid parts len")
             return
-        
+
         # Extract all fields from the signal msg.
         pipe_id = to_b(parts[1])
         af = int(parts[2])
@@ -233,7 +234,7 @@ async def signal_protocol(self, msg, signal_pipe):
         if af not in VALID_AFS or af not in turn_server["afs"]:
             log("> turn_req: invalid af")
             return
-        
+
         # Check interface index is valid.
         if not in_range(our_if_index, [0, len(self.if_list) - 1]):
             log("> turn_req: invalid if_index")
@@ -254,7 +255,7 @@ async def signal_protocol(self, msg, signal_pipe):
             turn_addr = await Address(
                 turn_server["host"],
                 turn_server["port"],
-                route
+                route,
             ).res()
 
             # Make a TURN client instance to whitelist them.
@@ -264,14 +265,14 @@ async def signal_protocol(self, msg, signal_pipe):
                 turn_user=turn_server["user"],
                 turn_pw=turn_server["pass"],
                 turn_realm=turn_server["realm"],
-                msg_cb=self.msg_cb
+                msg_cb=self.msg_cb,
             )
 
             # Start the TURN client.
             try:
                 await asyncio.wait_for(
                     turn_client.start(),
-                    10
+                    10,
                 )
             except asyncio.TimeoutError:
                 log("Turn client start timeout in node.")
@@ -287,21 +288,21 @@ async def signal_protocol(self, msg, signal_pipe):
         peer_addr = await Address(
             str(peer_ip),
             peer_port,
-            route
+            route,
         ).res()
 
         # Resolve relay address.
         relay_addr = await Address(
             relay_ip,
             relay_port,
-            route
+            route,
         ).res()
 
         # White list peer.
         try:
             await asyncio.wait_for(
                 turn_client.accept_peer(peer_addr.tup, relay_addr.tup),
-                6
+                6,
             )
         except asyncio.TimeoutError:
             log("node turn accept peer timeout.")
@@ -312,7 +313,7 @@ async def signal_protocol(self, msg, signal_pipe):
         our_relay_tup = await turn_client.relay_tup_future
         self.pipes[pipe_id] = turn_client
         log("> turn_req: our relay tup = {}:{}".format(
-            *our_relay_tup
+            *our_relay_tup,
         ))
 
         # Form response with our addressing info.
@@ -331,14 +332,14 @@ async def signal_protocol(self, msg, signal_pipe):
             client_tup[1],
 
             # Their client to use.
-            turn_client_index
+            turn_client_index,
         )
-        
+
         # Send response to recipient.
         p2p_src_addr = parse_peer_addr(src_addr_bytes)
         await signal_pipe.send_msg(
             out,
-            to_s(p2p_src_addr["node_id"])
+            to_s(p2p_src_addr["node_id"]),
         )
 
     """
@@ -446,7 +447,7 @@ async def node_protocol(self, msg, client_tup, pipe):
         pipe_id = parts[1]
         pipe.add_end_cb(self.rm_pipe_id(pipe_id))
         if pipe_id not in self.pipe_events:
-            assert(isinstance(pipe_id, bytes))
+            assert isinstance(pipe_id, bytes)
             log(f"pipe = '{pipe_id}' not in pipe events. saving.")
             self.pipes[pipe_id] = pipe
         else:

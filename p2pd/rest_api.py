@@ -18,9 +18,9 @@ def con_info(self, p, con):
         "if": {
             "name": con.route.interface.name,
             "offset": self.interfaces.index(
-                con.route.interface
-            )
-        }
+                con.route.interface,
+            ),
+        },
     }
 
 class P2PDServer(Daemon):
@@ -39,23 +39,23 @@ class P2PDServer(Daemon):
             if req.api("/version"):
                 return {
                     "title": "P2PD",
-                    "author": "Matthew@Roberts.PM", 
+                    "author": "Matthew@Roberts.PM",
                     "version": "0.1.0",
-                    "error": 0
+                    "error": 0,
                 }
 
             # All interface details.
             if req.api("(/ifs)"):
                 return {
                     "ifs": if_list_to_dict(self.interfaces),
-                    "error": 0
+                    "error": 0,
                 }
 
             # Node's own 'p2p address.'
             if req.api("/p2p/addr"):
                 return {
                     "addr": to_s(self.node.addr_bytes),
-                    "error": 0
+                    "error": 0,
                 }
 
             # Create a new connection and name it.
@@ -66,7 +66,7 @@ class P2PDServer(Daemon):
                 if p["con_name"] in self.cons:
                     return {
                         "msg": "Con name already exists.",
-                        "error": 2
+                        "error": 2,
                     }
 
                 # Connect to ourself for tests.
@@ -78,7 +78,7 @@ class P2PDServer(Daemon):
                     to_b(p["dest_addr"]),
 
                     # All connection strats except TURN by default.
-                    P2P_STRATEGIES
+                    P2P_STRATEGIES,
                 )
 
                 # Success -- store pipe.
@@ -89,8 +89,8 @@ class P2PDServer(Daemon):
                     # Remove con from table.
                     def build_do_cleanup():
                         def do_cleanup(msg, client_tup, pipe):
-                            del self.cons[ p["con_name"] ]
-                        
+                            del self.cons[p["con_name"]]
+
                         return do_cleanup
 
                     # Add cleanup handler.
@@ -98,14 +98,14 @@ class P2PDServer(Daemon):
 
                     # Return the results.
                     con.strat = TXT["p2p_strat"][strat]
-                    self.cons[ p["con_name"] ] = con
+                    self.cons[p["con_name"]] = con
                     return con_info(self, p, con)
 
                 # Failed to connect.
                 if con is None:
                     return {
                         "msg": f"Con {p['con_name']} failed connect.",
-                        "error": 3
+                        "error": 3,
                     }
 
             # Return con info.
@@ -118,7 +118,7 @@ class P2PDServer(Daemon):
                         "error": 4,
                     }
 
-                con = self.cons[ p["con_name"] ]
+                con = self.cons[p["con_name"]]
                 return con_info(self, p, con)
 
             # Subscribe to certain message patterns.
@@ -136,8 +136,8 @@ class P2PDServer(Daemon):
 
                 # Set default values for $_GET.
                 set_defaults(p, params, defaults)
-                sub = [ to_b(p["msg_p"]), to_b(p["addr_p"]) ]
-                con = self.cons[ p["con_name" ] ]
+                sub = [to_b(p["msg_p"]), to_b(p["addr_p"])]
+                con = self.cons[p["con_name"]]
 
                 # Subscribe.
                 if req.command == "GET":
@@ -147,7 +147,7 @@ class P2PDServer(Daemon):
                     return {
                         "name": p["con_name"],
                         "sub": f"{sub}",
-                        "error": 0
+                        "error": 0,
                     }
 
                 # Unsubscribe.
@@ -158,12 +158,12 @@ class P2PDServer(Daemon):
                     return {
                         "name": p["con_name"],
                         "unsub": f"{sub}",
-                        "error": 0
+                        "error": 0,
                     }
-            
+
             # Send a text-based message to a named con.
             named = ["con_name", "txt"]
-            p = req.api("/p2p/send/([^/]*)/([\s\S]+)", named)
+            p = req.api(r"/p2p/send/([^/]*)/([\s\S]+)", named)
             if p:
                 # Check con exists.
                 if p["con_name"] not in self.cons:
@@ -173,19 +173,19 @@ class P2PDServer(Daemon):
                     }
 
                 # Connection to send to.
-                con = self.cons[ p["con_name"] ]
+                con = self.cons[p["con_name"]]
 
                 # Send data.
                 await con.send(
                     data=to_b(p["txt"]),
-                    dest_tup=con.stream.dest_tup
+                    dest_tup=con.stream.dest_tup,
                 )
 
                 # Return success.
                 return {
                     "name": p["con_name"],
                     "sent": len(p["txt"]),
-                    "error": 0
+                    "error": 0,
                 }
 
             # Send a text-based message to a named con.
@@ -205,26 +205,26 @@ class P2PDServer(Daemon):
                 set_defaults(p, optional, defaults)
 
                 # Get something from recv buffer.
-                con = self.cons[ p["con_name"] ]
+                con = self.cons[p["con_name"]]
                 try:
-                    sub = [ to_b(p["msg_p"]), to_b(p["addr_p"]) ]
+                    sub = [to_b(p["msg_p"]), to_b(p["addr_p"])]
                     timeout = to_n(p["timeout"])
                     out = await con.recv(sub, timeout=timeout, full=True)
                     if out is None:
                         return {
                             "msg": f"recv buffer {sub} empty.",
-                            "error": 6
+                            "error": 6,
                         }
 
                     return {
                         "client_tup": out[0],
                         "data": to_s(out[1]),
-                        "error": 0
+                        "error": 0,
                     }
                 except asyncio.TimeoutError:
                     return {
                         "msg": "recv timeout",
-                        "error": 5
+                        "error": 5,
                     }
 
             # Chain together connections -- fully async.
@@ -235,7 +235,7 @@ class P2PDServer(Daemon):
                     await pipe.close()
                     return None
 
-                con = self.cons[ p["con_name"] ]
+                con = self.cons[p["con_name"]]
 
                 # Remove this server handler from con.
                 # This pipe is no longer for HTTP!
@@ -249,7 +249,7 @@ class P2PDServer(Daemon):
                 # con  -> pipe
                 con.add_pipe(pipe)
 
-                # con <-----> pipe 
+                # con <-----> pipe
                 return None
 
             # Binary send / recv methods.
@@ -263,13 +263,13 @@ class P2PDServer(Daemon):
                     }
 
                 # Send binary data from octet-stream POST.
-                con = self.cons[ p["con_name"] ]
+                con = self.cons[p["con_name"]]
                 if req.command == "POST":
                     # Content len header must exist.
                     if "Content-Length" not in req.hdrs:
                         return {
                             "msg": "content len header in binary POST",
-                            "error": 6
+                            "error": 6,
                         }
 
                     # Content len must not exceed msg len.
@@ -277,7 +277,7 @@ class P2PDServer(Daemon):
                     if not in_range(payload_len, [1, len(msg)]):
                         return {
                             "msg": "invalid content len for bin POST",
-                            "error": 7
+                            "error": 7,
                         }
 
                     # Last content-len bytes == payload.
@@ -288,21 +288,21 @@ class P2PDServer(Daemon):
                     return {
                         "name": p["con_name"],
                         "sent": payload_len,
-                        "error": 0
+                        "error": 0,
                     }
 
                 # Get buffer and send as binary stream.
                 if req.command == "GET":
                     set_defaults(p, optional, defaults)
                     timeout = to_n(p["timeout"])
-                    sub = [ p["msg_p"], p["addr_p"] ]
+                    sub = [p["msg_p"], p["addr_p"]]
 
                     # Get binary from matching buffer.
                     out = await con.recv(sub, timeout=timeout, full=True)
                     if out is None:
                         return {
                             "msg": f"recv buffer {sub} empty.",
-                            "error": 6
+                            "error": 6,
                         }
 
                     # Send it if any.
@@ -321,18 +321,18 @@ class P2PDServer(Daemon):
                     }
 
                 # Close the con -- fires cleanup handler.
-                con = self.cons[ p["con_name"] ]
+                con = self.cons[p["con_name"]]
                 await con.close()
 
                 # Indicate closed.
                 return {
                     "closed": p["con_name"],
-                    "error": 0
+                    "error": 0,
                 }
 
             return {
                 "msg": "No API method found.",
-                "error": 1
+                "error": 1,
             }
 
         resp = await get_response()
@@ -341,7 +341,7 @@ class P2PDServer(Daemon):
                 resp,
                 req,
                 client_tup,
-                pipe
+                pipe,
             )
 
     async def close(self):
@@ -363,13 +363,13 @@ async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=
 
     # Start node server.
     ifs = ifs or await load_interfaces(netifaces=netifaces)
-    #port = get_port_by_ip
+    # port = get_port_by_ip
     node = await start_p2p_node(
         # Attempt deterministic port allocation based on NICs.
         # If in use a random port will be used.
         port=-1,
         ifs=ifs,
-        enable_upnp=enable_upnp
+        enable_upnp=enable_upnp,
     )
 
     # Start P2PD server.
@@ -378,7 +378,7 @@ async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=
     await p2p_server.listen_all(
         [route],
         [port],
-        [TCP]
+        [TCP],
     )
 
     # Stop this thread exiting.
@@ -389,6 +389,7 @@ async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=
             await asyncio.sleep(1)
 
     return p2p_server
+
 
 if __name__ == "__main__":
     async_test(start_p2pd_server)

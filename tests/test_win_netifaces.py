@@ -1,7 +1,8 @@
 import platform
+
+from p2pd.net import VALID_AFS
 from p2pd.test_init import *
 from p2pd.utils import *
-from p2pd.net import VALID_AFS
 from p2pd.win_netifaces import *
 
 if platform.system() == "Windows":
@@ -41,7 +42,7 @@ if platform.system() == "Windows":
         async def test_get_default_gw_by_if_index(self):
             out = await get_ifaces()
             result = extract_if_fields(out)[0]
-            
+
             found_one = False
             for af in VALID_AFS:
                 gw_info = await get_default_gw_by_if_index(af, result["no"])

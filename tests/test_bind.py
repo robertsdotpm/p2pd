@@ -1,7 +1,8 @@
+from p2pd import Bind, Interface, IPRange, Route
+from p2pd.net import (BLACK_HOLE_IPS, DUEL_STACK, EXT_BIND, IP4, IP6, NIC_BIND,
+                      TCP, ip_norm, socket_factory)
 from p2pd.test_init import *
-from p2pd import IPRange, Bind, Route, Interface
-from p2pd.net import BLACK_HOLE_IPS, ip_norm, DUEL_STACK, IP6, IP4
-from p2pd.net import NIC_BIND, EXT_BIND, TCP, socket_factory
+
 
 class TestBind(unittest.IsolatedAsyncioTestCase):
     async def test_bind(self):
@@ -32,7 +33,7 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
             s = await socket_factory(b)
             self.assertTrue(isinstance(s, socket.socket))
             s.close()
-        except:
+        except Exception:
             return
 
     async def test_ip_val_v4_bind_types(self):
@@ -68,21 +69,20 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
             b = await r.bind()
             tup = b.bind_tup(flag=EXT_BIND)
             self.assertTrue(tup[0])
-        except:
+        except Exception:
             return
 
     # TODO: netifaces is pulling invalid net masks for some IPs?
     async def test_bind_assumptions(self):
         ip = "139.99.209.1"
-        #socket.socket(IP4, TCP)
-
+        # socket.socket(IP4, TCP)
 
     async def test_bind_start_v4_all_addr(self):
         await init_p2pd()
         af = IP4
         try:
             i = await Interface(af).start_local()
-        except:
+        except Exception:
             # If not supported.
             return
 
@@ -90,7 +90,7 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
         bind_tup = ("0.0.0.0", 13453)
         expected_tups = {
             EXT_BIND: bind_tup,
-            NIC_BIND: bind_tup
+            NIC_BIND: bind_tup,
         }
         self.assertEqual(route._bind_tups, expected_tups)
         s = await socket_factory(route)
@@ -110,21 +110,22 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
 
                 # NIC no and scope ID stuff from getaddrinfo.
                 route._bind_tups[EXT_BIND][2],
-                route._bind_tups[EXT_BIND][3]
+                route._bind_tups[EXT_BIND][3],
             )
             expected_tups = {
                 EXT_BIND: bind_tup,
-                NIC_BIND: bind_tup
+                NIC_BIND: bind_tup,
             }
             self.assertEqual(route._bind_tups, expected_tups)
             s = await socket_factory(route)
             self.assertTrue(s is not None)
             if s is not None:
                 s.close()
-        except:
+        except Exception:
             return
 
 # TODO loopback tests.
+
 
 if __name__ == '__main__':
     main()

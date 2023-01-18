@@ -28,15 +28,18 @@ functions.
 """
 
 
+import asyncio
 import datetime
 import struct
 import time
-import asyncio
+
 from .address import *
 from .base_stream import *
 
+
 class NTPException(Exception):
     """Exception raised by this module."""
+
     pass
 
 
@@ -51,38 +54,38 @@ class NTP:
     """delta between system and NTP time"""
 
     REF_ID_TABLE = {
-        "GOES":  "Geostationary Orbit Environment Satellite",
+        "GOES": "Geostationary Orbit Environment Satellite",
         "GPS\0": "Global Position System",
         "GAL\0": "Galileo Positioning System",
         "PPS\0": "Generic pulse-per-second",
-        "IRIG":  "Inter-Range Instrumentation Group",
-        "WWVB":  "LF Radio WWVB Ft. Collins, CO 60 kHz",
+        "IRIG": "Inter-Range Instrumentation Group",
+        "WWVB": "LF Radio WWVB Ft. Collins, CO 60 kHz",
         "DCF\0": "LF Radio DCF77 Mainflingen, DE 77.5 kHz",
         "HBG\0": "LF Radio HBG Prangins, HB 75 kHz",
         "MSF\0": "LF Radio MSF Anthorn, UK 60 kHz",
         "JJY\0": "LF Radio JJY Fukushima, JP 40 kHz, Saga, JP 60 kHz",
-        "LORC":  "MF Radio LORAN C station, 100 kHz",
+        "LORC": "MF Radio LORAN C station, 100 kHz",
         "TDF\0": "MF Radio Allouis, FR 162 kHz",
         "CHU\0": "HF Radio CHU Ottawa, Ontario",
         "WWV\0": "HF Radio WWV Ft. Collins, CO",
-        "WWVH":  "HF Radio WWVH Kauai, HI",
-        "NIST":  "NIST telephone modem",
-        "ACTS":  "NIST telephone modem",
-        "USNO":  "USNO telephone modem",
+        "WWVH": "HF Radio WWVH Kauai, HI",
+        "NIST": "NIST telephone modem",
+        "ACTS": "NIST telephone modem",
+        "USNO": "USNO telephone modem",
         "PTB\0": "European telephone modem",
-        "LOCL":  "uncalibrated local clock",
-        "CESM":  "calibrated Cesium clock",
-        "RBDM":  "calibrated Rubidium clock",
-        "OMEG":  "OMEGA radionavigation system",
+        "LOCL": "uncalibrated local clock",
+        "CESM": "calibrated Cesium clock",
+        "RBDM": "calibrated Rubidium clock",
+        "OMEG": "OMEGA radionavigation system",
         "DCN\0": "DCN routing protocol",
         "TSP\0": "TSP time protocol",
         "DTS\0": "Digital Time Service",
-        "ATOM":  "Atomic clock (calibrated)",
+        "ATOM": "Atomic clock (calibrated)",
         "VLF\0": "VLF radio (OMEGA,, etc.)",
-        "1PPS":  "External 1 PPS input",
-        "FREE":  "(Internal clock)",
-        "INIT":  "(Initialization)",
-        "\0\0\0\0":   "NULL",
+        "1PPS": "External 1 PPS input",
+        "FREE": "(Internal clock)",
+        "INIT": "(Initialization)",
+        "\0\0\0\0": "NULL",
     }
     """reference identifier table"""
 
@@ -120,7 +123,6 @@ class NTPPacket:
     """
 
     _PACKET_FORMAT = "!B B B b 11I"
-    """packet format to pack/unpack"""
 
     def __init__(self, version=2, mode=3, tx_timestamp=0):
         """Constructor.
@@ -168,22 +170,23 @@ class NTPPacket:
         """
         try:
             packed = struct.pack(NTPPacket._PACKET_FORMAT,
-                (self.leap << 6 | self.version << 3 | self.mode),
-                self.stratum,
-                self.poll,
-                self.precision,
-                _to_int(self.root_delay) << 16 | _to_frac(self.root_delay, 16),
-                _to_int(self.root_dispersion) << 16 |
-                _to_frac(self.root_dispersion, 16),
-                self.ref_id,
-                _to_int(self.ref_timestamp),
-                _to_frac(self.ref_timestamp),
-                _to_int(self.orig_timestamp),
-                _to_frac(self.orig_timestamp),
-                _to_int(self.recv_timestamp),
-                _to_frac(self.recv_timestamp),
-                _to_int(self.tx_timestamp),
-                _to_frac(self.tx_timestamp))
+                                 (self.leap << 6 | self.version << 3 | self.mode),
+                                 self.stratum,
+                                 self.poll,
+                                 self.precision,
+                                 _to_int(self.root_delay) << 16 | _to_frac(
+                                     self.root_delay, 16),
+                                 _to_int(self.root_dispersion) << 16 |
+                                 _to_frac(self.root_dispersion, 16),
+                                 self.ref_id,
+                                 _to_int(self.ref_timestamp),
+                                 _to_frac(self.ref_timestamp),
+                                 _to_int(self.orig_timestamp),
+                                 _to_frac(self.orig_timestamp),
+                                 _to_int(self.recv_timestamp),
+                                 _to_frac(self.recv_timestamp),
+                                 _to_int(self.tx_timestamp),
+                                 _to_frac(self.tx_timestamp))
         except struct.error:
             raise NTPException("Invalid NTP packet fields.")
         return packed
@@ -200,7 +203,7 @@ class NTPPacket:
         """
         try:
             unpacked = struct.unpack(NTPPacket._PACKET_FORMAT,
-                    data[0:struct.calcsize(NTPPacket._PACKET_FORMAT)])
+                                     data[0:struct.calcsize(NTPPacket._PACKET_FORMAT)])
         except struct.error:
             raise NTPException("Invalid NTP packet.")
 
@@ -210,8 +213,8 @@ class NTPPacket:
         self.stratum = unpacked[1]
         self.poll = unpacked[2]
         self.precision = unpacked[3]
-        self.root_delay = float(unpacked[4])/2**16
-        self.root_dispersion = float(unpacked[5])/2**16
+        self.root_delay = float(unpacked[4]) / 2**16
+        self.root_dispersion = float(unpacked[5]) / 2**16
         self.ref_id = unpacked[6]
         self.ref_timestamp = _to_time(unpacked[7], unpacked[8])
         self.orig_timestamp = _to_time(unpacked[9], unpacked[10])
@@ -236,7 +239,7 @@ class NTPStats(NTPPacket):
     def offset(self):
         """offset"""
         return ((self.recv_timestamp - self.orig_timestamp) +
-                (self.tx_timestamp - self.dest_timestamp))/2
+                (self.tx_timestamp - self.dest_timestamp)) / 2
 
     @property
     def delay(self):
@@ -299,7 +302,7 @@ class NTPClient:
         try:
             # create the request packet - mode 3 is client
             query_packet = NTPPacket(mode=3, version=version,
-                                tx_timestamp=system_to_ntp_time(time.time()))
+                                     tx_timestamp=system_to_ntp_time(time.time()))
 
             # send the request
             buf = query_packet.to_data()
@@ -312,7 +315,7 @@ class NTPClient:
             dest_timestamp = system_to_ntp_time(time.time())
         except asyncio.TimeoutError:
             await pipe.close()
-            raise NTPException("No response received from %s." % host)
+            raise NTPException(f"No response received from {host}.")
         except Exception as e:
             log_exception()
         finally:
@@ -361,7 +364,7 @@ def _to_time(integ, frac, n=32):
     Retuns:
     timestamp
     """
-    return integ + float(frac)/2**n
+    return integ + float(frac) / 2**n
 
 
 def ntp_to_system_time(timestamp):
@@ -439,9 +442,9 @@ def stratum_to_text(stratum):
     if stratum in NTP.STRATUM_TABLE:
         return NTP.STRATUM_TABLE[stratum] % (stratum)
     elif 1 < stratum < 16:
-        return "secondary reference (%s)" % (stratum)
+        return f"secondary reference ({stratum})"
     elif stratum == 16:
-        return "unsynchronized (%s)" % (stratum)
+        return f"unsynchronized ({stratum})"
     else:
         raise NTPException("Invalid stratum or reserved.")
 
@@ -467,7 +470,7 @@ def ref_id_to_text(ref_id, stratum=2):
         if text in NTP.REF_ID_TABLE:
             return NTP.REF_ID_TABLE[text]
         else:
-            return "Unidentified reference source '%s'" % (text)
+            return f"Unidentified reference source '{text}'"
     elif 2 <= stratum < 255:
         return '%d.%d.%d.%d' % fields
     else:

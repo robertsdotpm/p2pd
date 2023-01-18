@@ -1,7 +1,9 @@
 import asyncio
-import socket
 import ipaddress
+import socket
+
 from .net import *
+
 
 # TODO: address doesn't support domain resolution
 # from a specific interface. This may not matter though.
@@ -14,10 +16,10 @@ class Address():
         self.host = host
         self.host_type = None
         self.port = int(port)
-        self.afs_found = [] # Supported AFs once resolved.
-        self.ips = {} # Destination indexed by IP.
+        self.afs_found = []  # Supported AFs once resolved.
+        self.ips = {}  # Destination indexed by IP.
         self.host = to_s(host) if host is not None else host
-        log("> Address: %s:%d" % (self.host, self.port))
+        log(f"> Address: {self.host}:{self.port}")
 
     async def res(self):
         # Lookup IPs for domain.
@@ -65,7 +67,7 @@ class Address():
                 target = ip6_patch_bind_ip(
                     self.ip_obj,
                     target,
-                    route.interface
+                    route.interface,
                 )
         else:
             # Target is a domain name.
@@ -80,17 +82,17 @@ class Address():
                 target,
                 self.port,
                 type=self.sock_type,
-                family=family
+                family=family,
             )
             results = await asyncio.wait_for(addr_infos, self.timeout)
         except Exception as e:
             log(f"{target} {self.port} {family} {self.sock_type}")
             log_exception()
-            log("> Address: res e = %s" % (str(e)))
+            log(f"> Address: res e = {str(e)}")
 
         # Choose a tuple that matches requirements.
         addr_tup = None
-        afs_found = []  
+        afs_found = []
         for addr_info in results:
             for af in afs_wanted:
                 if af == addr_info[0]:
@@ -154,7 +156,7 @@ class Address():
             "is_public": self.is_public,
             "is_loopback": self.is_loopback,
             "tup": self.tup,
-            "resolved": self.resolved
+            "resolved": self.resolved,
         }
 
     @staticmethod
@@ -163,12 +165,12 @@ class Address():
             host=d["host"],
             port=d["port"],
             sock_type=d["sock_type"],
-            timeout=d["timeout"]
+            timeout=d["timeout"],
         )
 
         for key in d:
             setattr(a, key, d[key])
-            #a.__setattr__("self." + key, d[key])
+            # a.__setattr__("self." + key, d[key])
 
         return a
 
@@ -192,11 +194,12 @@ class Address():
     def __hash__(self):
         return hash(repr(self))
 
-    def  __len__(self):
+    def __len__(self):
         return 0
 
-async def test_address(): # pragma: no cover
-    from p2pd.interface import init_p2pd, Interface
+
+async def test_address():  # pragma: no cover
+    from p2pd.interface import Interface, init_p2pd
     netifaces = await init_p2pd()
     i = await Interface()
     print(i)
@@ -211,8 +214,8 @@ async def test_address(): # pragma: no cover
     y = repr(x)
     print(type(y))
 
-if __name__ == "__main__": # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     from .interface import Interface
     from .net import IP6
-    from .utils import timestamp, async_test
+    from .utils import async_test, timestamp
     async_test(test_address)

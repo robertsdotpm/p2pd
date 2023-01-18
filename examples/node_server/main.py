@@ -1,10 +1,11 @@
 from decimal import Decimal as Dec
-from p2pd.test_init import *
-from p2pd.utils import async_test
+
 from p2pd.nat import *
 from p2pd.p2p_node import *
 from p2pd.p2p_utils import *
 from p2pd.stun_client import STUNClient
+from p2pd.test_init import *
+from p2pd.utils import async_test
 
 if __name__ == "__main__":
     async def test_p2p_node():
@@ -23,7 +24,7 @@ if __name__ == "__main__":
 
             # Reference to interface details using netifaces.
             # Awaitable as it is a wrapper on Windows.
-            netifaces=netifaces
+            netifaces=netifaces,
         )
         print(node.addr_bytes)
 

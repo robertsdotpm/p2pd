@@ -1,7 +1,7 @@
 """
 FIN and RST on close:
 
-Something important to note about TCP hole punching: suppose your NAT type is one that reuses mappings under certain conditions. You go ahead and use STUN to setup the mapping and then retrieve what it is. At this point if you were to go ahead and close() the socket used for the STUN transactions it would send out a 'FIN' packet. 
+Something important to note about TCP hole punching: suppose your NAT type is one that reuses mappings under certain conditions. You go ahead and use STUN to setup the mapping and then retrieve what it is. At this point if you were to go ahead and close() the socket used for the STUN transactions it would send out a 'FIN' packet.
 
 Now, if the router saw that FIN it may decide to close the port mapping. We would hope that multiple outbound connections with the same local tuple to different destinations would mean that a single FIN wouldn't cause the NAT to disregard other packets. But in any cause the STUN connection ought to stay open at least until the TCP punching has been completed.
 
@@ -72,19 +72,20 @@ is hard to guarantee in practice.
 Edge-case: making another connection to the same STUN server, from the same local endpoint due to another TCP punch occuring.
 """
 
-import socket
-import multiprocessing
-import warnings
 import asyncio
+import multiprocessing
+import socket
+import warnings
 from concurrent.futures import ProcessPoolExecutor
-from .nat import *
-from .ip_range import *
-from .stun_client import *
-from .clock_skew import *
-from .base_stream import *
-from .interface import *
 
-#nest_asyncio.apply()
+from .base_stream import *
+from .clock_skew import *
+from .interface import *
+from .ip_range import *
+from .nat import *
+from .stun_client import *
+
+# nest_asyncio.apply()
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 
 # Config #######################################################
@@ -115,7 +116,7 @@ PUNCH_CONF = dict_child({
     "no_close": True,
 
     # Ref to async event loop func.
-    "loop": lambda: selector_event_loop()
+    "loop": lambda: selector_event_loop(),
 }, NET_CONF)
 
 # Just merges two specific lists into slightly different format.
@@ -125,7 +126,7 @@ def map_info_to_their_maps(map_info):
         their_map = [
             map_info["remote"][i],
             map_info["reply"][i],
-            map_info["local"][i]
+            map_info["local"][i],
         ]
 
         their_maps.append(their_map)
@@ -150,16 +151,14 @@ def proc_do_punching(args):
     loop = asyncio.get_event_loop()
     f = asyncio.ensure_future(
         async_wrap_errors(
-            TCPPunch.do_punching(side, *args, sq)
+            TCPPunch.do_punching(side, *args, sq),
         ),
-        loop=loop
+        loop=loop,
     )
-
-
 
     f.add_done_callback(lambda t: q.put(t.result()))
     loop.run_until_complete(f)
-    #return f.result()
+    # return f.result()
 
 
 state_info_index = lambda x, y: repr(x) + "@" + str(y)
@@ -195,8 +194,8 @@ class TCPPunch():
         self.stop_running = asyncio.Event()
         self.cleanup_task = asyncio.create_task(
             async_wrap_errors(
-                self.cleanup_by_timeout()
-            )
+                self.cleanup_by_timeout(),
+            ),
         )
 
     async def close(self):
@@ -261,7 +260,7 @@ class TCPPunch():
             "pipe_id": pipe_id,
             "state": state,
             "data": data,
-            "timestamp": timestamp()
+            "timestamp": timestamp(),
         }
 
         # Create session table for node.
@@ -302,7 +301,7 @@ class TCPPunch():
             self.active_no -= 1
 
         return 1
-        
+
     """
     The TCP hole punching process builds up connection state.
     It's important that old state gets deleted to avoid filling up memory.
@@ -312,19 +311,20 @@ class TCPPunch():
     async def cleanup_by_timeout(self, max_elapsed=5 * 60):
         while not self.stop_running.is_set():
             now = timestamp()
+
             async def do_cleanup(state_info):
                 elapsed = now - state_info["timestamp"]
                 if elapsed >= max_elapsed:
                     await self.cleanup_state(
                         state_info["node_id"],
-                        state_info["pipe_id"]
+                        state_info["pipe_id"],
                     )
 
             # Check for timeouts every ten mins.
             try:
                 await asyncio.wait_for(
                     self.stop_running.wait(),
-                    max_elapsed
+                    max_elapsed,
                 )
             except asyncio.TimeoutError:
                 pass
@@ -350,7 +350,7 @@ class TCPPunch():
 
     # Initiator: Step 1 -- send Initiators predicted mappings to Recipient.
     async def proto_send_initial_mappings(self, dest_addr, dest_nat, dest_node_id, pipe_id, stun_client, process_replies=None, con_list=None, mode=TCP_PUNCH_REMOTE):
-        assert(stun_client.interface == self.interface)
+        assert stun_client.interface == self.interface
 
         # Log warning if dest_addr is our ext address.
         af = af_from_ip_s(dest_addr)
@@ -363,7 +363,7 @@ class TCPPunch():
             mode,
             stun_client,
             self.interface.nat,
-            dest_nat
+            dest_nat,
         )
 
         """
@@ -381,7 +381,7 @@ class TCPPunch():
 
         # Triggered on receiving updated mappings (if any.)
         update_event = asyncio.Event()
-        
+
         # Save session data.
         our_maps = map_info_to_their_maps(map_info)
         ntp_meet = self.get_ntp_meet_time()
@@ -421,7 +421,7 @@ class TCPPunch():
             "con_list": con_list,
 
             # Future time for hole punching to occur.
-            "ntp_meet": ntp_meet
+            "ntp_meet": ntp_meet,
         }
 
         # First state progression -- no need to check existing.
@@ -430,14 +430,14 @@ class TCPPunch():
             dest_node_id,
             pipe_id,
             TCP_PUNCH_SEND_INITIAL_MAPPINGS,
-            data
+            data,
         )
 
         return our_maps, ntp_meet, update_event
 
     # Recipient: Step 2 -- get Initiators mappings. Generate our own.
     async def proto_recv_initial_mappings(self, recv_addr, recv_nat, recv_node_id, pipe_id, their_maps, stun_client, ntp_meet=0, process_replies=None, con_list=None, mode=TCP_PUNCH_REMOTE):
-        assert(stun_client.interface == self.interface)
+        assert stun_client.interface == self.interface
 
         # Invalid len.
         if not is_valid_rmaps(their_maps):
@@ -467,7 +467,7 @@ class TCPPunch():
             stun_client,
             self.interface.nat,
             recv_nat,
-            their_maps
+            their_maps,
         )
 
         # Expect them to use our reply port if set.
@@ -503,7 +503,7 @@ class TCPPunch():
             "their_nat": recv_nat,
             "their_dest": recv_addr,
             "their_node_id": recv_node_id,
-            "pipe_id": pipe_id
+            "pipe_id": pipe_id,
         }
 
         # Update state.
@@ -513,14 +513,14 @@ class TCPPunch():
             recv_node_id,
             pipe_id,
             TCP_PUNCH_RECV_INITIAL_MAPPINGS,
-            data
+            data,
         )
 
         # Sent update won't be important.
         # I just wanted the first two sides to have the same ret.
         sent_update = asyncio.Event()
         return our_maps, ntp_meet, sent_update
-        
+
     """
     Initiator: optional -- may receive Recipients mappings.
     If they do not, then they assume they are using any
@@ -568,7 +568,7 @@ class TCPPunch():
                             lmaps["last_mapped"],
                             use_range,
                             self.interface.nat,
-                            stun_client
+                            stun_client,
                         )
 
                         # Update our local port.
@@ -578,19 +578,19 @@ class TCPPunch():
                             lmaps["remote"][i] = reply_port
 
                     # Else = they can't connect.
-            
+
             # Trucate our maps if needed.
             data["rmaps"] = their_maps
             lmaps["local"] = lmaps["local"][:test_no]
             lmaps["remote"] = lmaps["remote"][:test_no]
             lmaps["reply"] = lmaps["reply"][:test_no]
-            
+
             # Indicate our recipient mappings were updated.
             self.set_state(
                 dest_node_id,
                 pipe_id,
                 TCP_PUNCH_UPDATE_RECIPIENT_MAPPINGS,
-                data
+                data,
             )
 
             data["update_event"].set()
@@ -616,7 +616,7 @@ class TCPPunch():
         warnings.filterwarnings('ignore', message="unclosed", category=ResourceWarning)
 
         # Init.
-        log(f"> TCP punch interface rp pool")
+        log("> TCP punch interface rp pool")
         log_interface_rp(interface)
         is_connected = [False]
         socks = []
@@ -635,8 +635,7 @@ class TCPPunch():
                 remaining_time = float(ntp_meet - current_ntp)
                 if remaining_time:
                     log(
-                        "> punch waiting for meeting = %s" %
-                        (str(remaining_time))
+                        f"> punch waiting for meeting = {str(remaining_time)}",
                     )
 
                     await asyncio.sleep(remaining_time)
@@ -652,7 +651,7 @@ class TCPPunch():
         async def delay_con(start_time, ms_delay, local_port, remote_port, dest, sock_timeout, is_connected, loop):
             # Used for making new cons.
             conf = copy.deepcopy(PUNCH_CONF)
-            conf["con_timeout"] = sock_timeout 
+            conf["con_timeout"] = sock_timeout
 
             """
             Schedule connection to run across time.
@@ -669,16 +668,16 @@ class TCPPunch():
             route = await interface.route(af).bind(local_port)
 
             # Open connection -- return only sock.
-            #sock = await pipe_open(TCP, dest, route=route, conf=PUNCH_CONF) 
+            # sock = await pipe_open(TCP, dest, route=route, conf=PUNCH_CONF)
             sock = await socket_factory(route=route, dest_addr=dest, conf=PUNCH_CONF)
-            #sock_queue.put_nowait(sock)
-            #sock.settimeout(0.1)
+            # sock_queue.put_nowait(sock)
+            # sock.settimeout(0.1)
             try:
                 await loop.sock_connect(
                     sock,
-                    dest.tup
+                    dest.tup,
                 )
-            except:
+            except Exception:
                 return None
 
             # Failure.
@@ -696,7 +695,6 @@ class TCPPunch():
             """
             return [remote_port, sock]
 
-
         """
         Smarter code that is less spammy used for remote
         punching. Won't overwhelm the event loop like the
@@ -705,10 +703,10 @@ class TCPPunch():
         Optimized and tested for remote connections.
         """
         async def remote_mode(dest_addr, af, interface, local, remote, rmaps, is_connected):
-            #print("mode = remote")
-            #print(f"bound on {local}")
+            # print("mode = remote")
+            # print(f"bound on {local}")
 
-            # Con occuring every 
+            # Con occuring every
             # second for 3 seconds for
             # all tests at once.
             secs = 6
@@ -723,10 +721,10 @@ class TCPPunch():
                 dest = await Address(
                     dest_addr,
                     rmaps[i][0],
-                    route
+                    route,
                 ).res()
 
-                #print(f"connect to {dest.tup}")
+                # print(f"connect to {dest.tup}")
                 for sleep_time in range(0, steps):
                     tasks.append(
                         delay_con(
@@ -752,10 +750,10 @@ class TCPPunch():
                             # on and exceeding total secs
                             2,
                             is_connected,
-                            asyncio.get_event_loop()
-                        )
+                            asyncio.get_event_loop(),
+                        ),
                     )
-            
+
             # Start running tasks.
             all_tasks = asyncio.gather(*tasks)
             outs = await all_tasks
@@ -766,7 +764,7 @@ class TCPPunch():
         log(mode)
 
         # Use local punching algorithm.
-        
+
         if mode in [TCP_PUNCH_SELF, TCP_PUNCH_LAN]:
             # Updated mapping error occured.
             # Cannot bind to same port as other side on same host.
@@ -785,7 +783,7 @@ class TCPPunch():
                 # rmap = [ remote, reply, local ]
                 # connect to their local port.
                 rmaps=[[rmap[2]] for rmap in rmaps],
-                is_connected=is_connected
+                is_connected=is_connected,
             )
 
         # Use remote punching algorithm.
@@ -797,11 +795,11 @@ class TCPPunch():
                 local=local,
                 remote=remote,
                 rmaps=rmaps,
-                is_connected=is_connected
+                is_connected=is_connected,
             )
 
         # Make both sides choose the same socket.
-        #print(outs)
+        # print(outs)
         try:
             our_ip_num = ip_str_to_int(our_wan)
             chosen_sock = None
@@ -809,7 +807,7 @@ class TCPPunch():
             for remote_port, sock in outs:
                 their_ip_host, their_r_port = sock.getpeername()
                 their_ip_num = ip_str_to_int(
-                    their_ip_host
+                    their_ip_host,
                 )
 
                 """
@@ -831,7 +829,7 @@ class TCPPunch():
 
                 # Mix values into a somewhat unique result.
                 h = abs(hash(str(x)))
-                assert(h > 0)
+                assert h > 0
                 if h > h_val:
                     h_val = h
                     chosen_sock = sock
@@ -844,7 +842,7 @@ class TCPPunch():
             if sock != chosen_sock:
                 sock.close()
                 pass
-        
+
         # Return sock result.
         if chosen_sock is not None:
             return chosen_sock
@@ -866,7 +864,7 @@ class TCPPunch():
         current_ntp = 0
         if self.sys_clock is not None:
             current_ntp = self.sys_clock.time()
-    
+
         return [
             interface,
             interface.route(af).ext(),
@@ -876,7 +874,7 @@ class TCPPunch():
             lmaps["remote"],
             rmaps,
             current_ntp,
-            state_info["data"]["ntp_meet"]
+            state_info["data"]["ntp_meet"],
         ]
 
     """
@@ -903,11 +901,11 @@ class TCPPunch():
         route = self.interface.route(af)
         addr = await Address(dest_addr, 0, route).res()
         args = self.get_punch_args(node_id, pipe_id)
-        
+
         # The executor pool is used to start processes.
         loop = asyncio.get_event_loop()
         sock = None
-        
+
         # Multiprocessing pool is enabled.
         if self.executors is not None:
             # Setup args list for executor.
@@ -915,12 +913,12 @@ class TCPPunch():
             args.append(queue)
             args.append(self.sock_queue)
             args.append(side)
-            
+
             # Schedule TCP punching in process pool executor.
             loop.run_in_executor(
-                self.executors, proc_do_punching, args
+                self.executors, proc_do_punching, args,
             )
-            
+
             # Wait for queue result with timeout.
             for _ in range(0, 30):
                 if not queue.empty():
@@ -934,19 +932,19 @@ class TCPPunch():
             except Exception:
                 log_exception()
                 sock = None
-        
+
         # Otherwise do the punching in this event loop.
         if self.executors is None:
             sock = await async_wrap_errors(
-                TCPPunch.do_punching(side, *args, state_info["data"]["mode"], self.sock_queue)
+                TCPPunch.do_punching(side, *args, state_info["data"]["mode"], self.sock_queue),
             )
 
         # Wrap returned socket in a pipe.
         pipe = None
-        if sock is not None: 
+        if sock is not None:
             log(f"> TCP hole made {sock}.")
             route = await self.interface.route(af).bind(
-                sock.getsockname()[1]
+                sock.getsockname()[1],
             )
 
             pipe = await pipe_open(
@@ -954,10 +952,10 @@ class TCPPunch():
                 proto=TCP,
                 dest=await Address(
                     *sock.getpeername(),
-                    route
+                    route,
                 ).res(),
                 sock=sock,
-                msg_cb=msg_cb
+                msg_cb=msg_cb,
             )
 
         # Cleanup state.
@@ -965,8 +963,8 @@ class TCPPunch():
             await self.cleanup_state(node_id, pipe_id)
 
         return pipe
-    
-async def test_tcp_punch(): # pragma: no cover
+
+async def test_tcp_punch():  # pragma: no cover
     # Use IPv4 for protocol.
     """
     import resource
@@ -1000,20 +998,19 @@ async def test_tcp_punch(): # pragma: no cover
     # nat type = 5 (restrict nat) - preserving delta.
     # Sends to invalid dest port -- where the hell
     # is this dest port coming from??
-    #interfaces = await Interfaces(["enp3s0", "wlp2s0"]).load()
-    #internode_out = interfaces.by_name("enp3s0")
+    # interfaces = await Interfaces(["enp3s0", "wlp2s0"]).load()
+    # internode_out = interfaces.by_name("enp3s0")
     internode_out = await Interface("enp3s0").start()
     internode_out.set_nat(internode_nat)
 
+    # sys_clock = await SysClock().start()
+    sys_clock = None  # disable for testing
 
-    #sys_clock = await SysClock().start()
-    sys_clock = None # disable for testing
-
-    #print(internode_out.wan_ips)
-    #return
+    # print(internode_out.wan_ips)
+    # return
     internode_stun_client = STUNClient(internode_out)
     internode_dest = internode_out.route(af).ext()
-    
+
     """
     if sabotage:
         internode_dest = await Address(
@@ -1023,21 +1020,19 @@ async def test_tcp_punch(): # pragma: no cover
     """
     print(internode_dest)
 
-
     initiator = internode_tcp_punch = TCPPunch(
         internode_out,
         None,
         sys_clock,
         executors,
-        m
+        m,
     )
 
     # NAT type = restrict port nat, random delta.
-    #starlink_out = interfaces.by_name("wlp2s0")
-    #print("starlink out wan ips = %s " % (str(starlink_out.wan_ips)))
+    # starlink_out = interfaces.by_name("wlp2s0")
+    # print("starlink out wan ips = %s " % (str(starlink_out.wan_ips)))
     starlink_out = await Interface("wlp2s0").start()
     starlink_out.set_nat(starlink_nat)
-
 
     starlink_dest = starlink_out.route(af).ext()
     """
@@ -1048,15 +1043,15 @@ async def test_tcp_punch(): # pragma: no cover
     print(starlink_dest)
 
     starlink_stun_client = STUNClient(starlink_out)
-    #delta = await mapping_test(internode_stun_client)
-    #print(delta)
+    # delta = await mapping_test(internode_stun_client)
+    # print(delta)
 
     recipient = starlink_tcp_punch = TCPPunch(
         starlink_out,
         None,
         sys_clock,
         executors,
-        m
+        m,
     )
 
     """
@@ -1074,10 +1069,9 @@ async def test_tcp_punch(): # pragma: no cover
     i_session, i_their_maps, i_ntp_meet = await initiator.proto_send_initial_mappings(
         starlink_dest,
         starlink_nat,
-        internode_stun_client
+        internode_stun_client,
     )
 
-    
     print("I punch details:")
     print(i_session)
     print(i_their_maps)
@@ -1094,7 +1088,7 @@ async def test_tcp_punch(): # pragma: no cover
         i_session,
         i_their_maps,
         starlink_stun_client,
-        i_ntp_meet
+        i_ntp_meet,
     )
 
     print("R punch details:")
@@ -1108,12 +1102,12 @@ async def test_tcp_punch(): # pragma: no cover
     print(initiator.state)
     print()
 
-    print("internode dest = %s" % (internode_dest))
-    print("starlink dest = %s" % (starlink_dest))
+    print(f"internode dest = {internode_dest}")
+    print(f"starlink dest = {starlink_dest}")
 
     results = await asyncio.gather(
         initiator.proto_do_punching(starlink_dest, i_session),
-        recipient.proto_do_punching(internode_dest, r_session)
+        recipient.proto_do_punching(internode_dest, r_session),
     )
 
     results = strip_none(results)
@@ -1150,7 +1144,7 @@ async def test_tcp_punch(): # pragma: no cover
     same port then clients that are port restricted are all
     going to request the same reply ports which is kind of
     not ideal to have 5 identical tests on its partner running
-    
+
     options:
         - less tests? - not ideal
         - more variety in reply ports
@@ -1159,29 +1153,24 @@ async def test_tcp_punch(): # pragma: no cover
 
     """
 
-
     return
 
     """
     concurrent tcp punches:
 
-    protocol = 
+    protocol =
 
     """
 
-
-
     return
 
-    #delta = await delta_n_test(stun_client)
-    #print("Delta = %d" % (delta))
-
-
+    # delta = await delta_n_test(stun_client)
+    # print("Delta = %d" % (delta))
 
     """
     class TCPPunch():
     def __init__(self, interfaces, stun_client, nat_type=RestricPortNAT, delta=RANDOM_DELTA):
     """
 
-if __name__ == "__main__": # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     async_test(test_tcp_punch)

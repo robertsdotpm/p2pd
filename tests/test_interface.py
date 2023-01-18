@@ -1,13 +1,15 @@
-from p2pd.test_init import *
-from p2pd import IP6, IP4, Route, Interface
-from p2pd.net import AF_ANY, VALID_AFS, VALID_ANY_ADDR
+from p2pd import IP4, IP6, Interface, Route
 from p2pd.errors import *
+from p2pd.interface import (dict_to_if_list, filter_trash_interfaces,
+                            if_list_to_dict, load_interfaces)
 from p2pd.nat import nat_info
+from p2pd.net import AF_ANY, VALID_AFS, VALID_ANY_ADDR
+from p2pd.test_init import *
 from p2pd.utils import what_exception
-from p2pd.interface import load_interfaces, filter_trash_interfaces
-from p2pd.interface import if_list_to_dict, dict_to_if_list
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
+
+
 class TestInterface(unittest.IsolatedAsyncioTestCase):
     # Should find at least a valid iface on whatever OS.
     async def test_default_interface(self):
@@ -27,6 +29,7 @@ class TestInterface(unittest.IsolatedAsyncioTestCase):
 
     async def test_invalid_interface_name(self):
         await init_p2pd()
+
         def invalid_interface_name():
             i = Interface("meow")
 
@@ -75,7 +78,7 @@ class TestInterface(unittest.IsolatedAsyncioTestCase):
         ifs = await load_interfaces(netifaces=netifaces)
         self.assertTrue(len(ifs))
 
-        # Check nic IP fetch. 
+        # Check nic IP fetch.
         i = ifs[0]
         af = i.supported()[0]
         n = i.nic(af)
@@ -94,6 +97,7 @@ class TestInterface(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(isinstance(x, Interface))
         as_s = str(i)
         self.assertTrue(as_s in repr(i))
+
 
 if __name__ == '__main__':
     main()

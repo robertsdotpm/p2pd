@@ -66,7 +66,7 @@ and a pipe that can be used to interact with that client.
         msg = b"test msg."
         await client.send(msg)
         out = await client.recv()
-        assert(msg == out)
+        assert msg == out
         #
         # Close both.
         await client.close()

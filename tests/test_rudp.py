@@ -1,9 +1,10 @@
-from p2pd.test_init import *
-from p2pd import IPRange, HOST_TYPE_IP, HOST_TYPE_DOMAIN, Address
-from p2pd import IP6, IP4, Route, Interface
-from p2pd.net import ip_norm, RUDP, UDP, NET_CONF
-from p2pd.base_stream import pipe_open, SUB_ALL, BaseProto
+from p2pd import (HOST_TYPE_DOMAIN, HOST_TYPE_IP, IP4, IP6, Address, Interface,
+                  IPRange, Route)
 from p2pd.ack_udp import ACKUDP, BaseACKProto
+from p2pd.base_stream import SUB_ALL, BaseProto, pipe_open
+from p2pd.net import NET_CONF, RUDP, UDP, ip_norm
+from p2pd.test_init import *
+
 
 class TestRUDP(unittest.IsolatedAsyncioTestCase):
     async def test_rudp(self):
@@ -17,15 +18,14 @@ class TestRUDP(unittest.IsolatedAsyncioTestCase):
         pipe = (await pipe_open(
             route=r,
             proto=RUDP,
-            dest=dest
+            dest=dest,
         )).subscribe(SUB_ALL)
-
 
         msg = b"test meow"
         task, event = await pipe.stream.ack_send(msg, dest_tup)
         await asyncio.wait_for(
             event.wait(),
-            2
+            2,
         )
         out = await pipe.recv(SUB_ALL)
         self.assertEqual(out, msg)
@@ -39,12 +39,11 @@ class TestRUDP(unittest.IsolatedAsyncioTestCase):
         r = b.is_unique_msg(
             pipe=None,
             data=d,
-            client_tup=c
+            client_tup=c,
         )
 
         self.assertTrue(r)
         s.close()
-
 
 
 if __name__ == '__main__':

@@ -1,25 +1,23 @@
 import asyncio
-import unittest
+import hashlib
 import platform
 import socket
-import hashlib
-from unittest import main
-from os import environ
 import sys
+import unittest
+from os import environ
+from unittest import main
 
-from .errors import *
-from .settings import *
-from .utils import *
-from .cmd_tools import *
-from .net import *
 from .address import *
-from .interface import *
-
 # Loads interface info on Windows.
 # Make it available for all tests.
 from .base_stream import *
+from .cmd_tools import *
+from .errors import *
+from .interface import *
+from .net import *
+from .settings import *
 from .stun_client import *
-
+from .utils import *
 
 P2PD_NET_ADDR_BYTES = b'0,3-[0,149.56.128.148,149.56.128.148,10001,1,1,0]-[0,2607:5300:0201:3100:0000:0000:0000:8d2f,fe80:0000:0000:0000:f816:3eff:feae:b2d9,10001,1,1,0]-p2pd_test_node'
 
@@ -31,7 +29,8 @@ else:
     P2PD_IFS = []
 
 vmaj, vmin, _ = platform.python_version_tuple()
-vmaj = int(vmaj); vmin = int(vmin)
+vmaj = int(vmaj)
+vmin = int(vmin)
 if vmaj < 3:
     raise Exception("Python 2 not supported.")
 if vmin <= 4:
@@ -40,6 +39,7 @@ if vmin <= 4:
 if not hasattr(unittest, "IsolatedAsyncioTestCase"):
     import aiounittest
     unittest.IsolatedAsyncioTestCase = aiounittest.AsyncTestCase
+
 
 # Basic echo client test.
 async def check_pipe(pipe, dest_tup=None):
@@ -89,7 +89,7 @@ class FakeSTUNClient():
         self.interface = interface
         self.rip = "1.3.3.7"
         self.sock = None
-        self.mappings = [] # [local, mapped] ...
+        self.mappings = []  # [local, mapped] ...
         self.p = 0
         self.wan_ip = None
         self.af = af

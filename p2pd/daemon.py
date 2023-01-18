@@ -1,10 +1,11 @@
 from .address import *
-from .interface import *
 from .base_stream import *
+from .interface import *
 
 DAEMON_CONF = dict_child({
-    "reuse_addr": True
+    "reuse_addr": True,
 }, NET_CONF)
+
 
 """
 interface = listen on all addresses given by af
@@ -21,6 +22,8 @@ called on new messages from a stream.
 process the message.
 f = lambda msg, stream: ...
 """
+
+
 class Daemon():
     def __init__(self, interfaces=None, conf=DAEMON_CONF):
         self.conf = conf
@@ -48,7 +51,7 @@ class Daemon():
         # Overwritten by inherited classes.
         print("This is a default proto msg_cb! Specify your own in a child class.")
         pass
-    
+
     async def _listen(self, target, port, proto, msg_cb=None):
         msg_cb = msg_cb or self.msg_cb
 
@@ -56,7 +59,7 @@ class Daemon():
         if self.restricted_proto is not None:
             if self.restricted_proto != proto:
                 raise Exception("That protocol is not supported for this server.")
-    
+
         # Convert Bind to routes.
         routes = []
 
@@ -81,7 +84,6 @@ class Daemon():
                             log("> bind inst: af_val not in iface afs")
                             continue
 
-
                         # Gets the route associated with the bind IP.
                         route = await bind_to_route(target)
 
@@ -89,15 +91,10 @@ class Daemon():
                         routes.append(route)
 
         # Start server on every address.
-        assert(len(routes))
+        assert len(routes)
         for route in routes:
             await route.bind(port)
-            log('starting server {}:{} p={}, af={}'.format(
-                route.bind_ip(),
-                port,
-                proto,
-                route.af
-            ))
+            log(f'starting server {route.bind_ip()}:{port} p={proto}, af={route.af}')
 
             # Link route to a route pool.
             # So it can do cool tricks.
@@ -110,9 +107,9 @@ class Daemon():
             if base_proto is None:
                 raise Exception("Could not start server.")
 
-            self.servers.append([ route, proto, base_proto, listen_task ])
+            self.servers.append([route, proto, base_proto, listen_task])
             return base_proto
-    
+
     # [[Bound, proto], ...]
     # Allows for servers to be bound to specific addresses and transports.
     # The other start method is more general.
@@ -128,7 +125,7 @@ class Daemon():
                 target=bound,
                 proto=proto,
                 port=bound.bind_port,
-                msg_cb=msg_cb
+                msg_cb=msg_cb,
             )
 
     # Start all the servers listening.
@@ -153,10 +150,7 @@ class Daemon():
                     if af_val not in target.what_afs():
                         log("> listen all af not in what afs")
                         if error_on_af:
-                            e = "IF {} doesn't support AF {}".format(
-                                target.id,
-                                af
-                            )
+                            e = f"IF {target.id} doesn't support AF {af}"
                             raise Exception(e)
 
                 # Build routes from afs + interface.
@@ -179,7 +173,7 @@ class Daemon():
             # Route.
             if isinstance(target, Route):
                 routes.append(
-                    copy.deepcopy(target)
+                    copy.deepcopy(target),
                 )
 
         # Targets are Interfaces to listen on or Bind objects.
@@ -216,8 +210,9 @@ class Daemon():
             _, _, server, _ = server_info
             await server.close()
 
-        self.servers = []
+        self.servers = [s]
 
-if __name__ == "__main__": # pragma: no cover
+
+if __name__ == "__main__":  # pragma: no cover
     pass
-    #async_test(test_tcp_punch)
+    # async_test(test_tcp_punch)

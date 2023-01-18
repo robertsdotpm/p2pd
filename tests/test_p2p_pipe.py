@@ -1,15 +1,15 @@
-from p2pd.test_init import *
-
-import warnings
-import socket
 import multiprocessing
+import socket
+import warnings
 from decimal import Decimal as Dec
-from p2pd.utils import *
+
+from p2pd.interface import *
 from p2pd.p2p_addr import is_p2p_addr_us
 from p2pd.p2p_node import *
-from p2pd.p2p_utils import *
 from p2pd.p2p_pipe import *
-from p2pd.interface import *
+from p2pd.p2p_utils import *
+from p2pd.test_init import *
+from p2pd.utils import *
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 async def test_setup():
@@ -42,7 +42,7 @@ async def test_setup():
         port=0,
         ifs=test_setup.ifs,
         clock_skew=test_setup.clock_skew,
-        pp_executors=pp_executors
+        pp_executors=pp_executors,
     )
 
     # Test local punching algorithm.
@@ -54,16 +54,18 @@ async def test_setup():
         port=0,
         ifs=test_setup.ifs,
         clock_skew=test_setup.clock_skew,
-        pp_executors=pp_executors
+        pp_executors=pp_executors,
     )
 
     print(f"Node a = {node_a.p2p_addr}")
     print(f"Node b = {node_b.p2p_addr}")
     return node_a, node_b
 
+
 async def test_cleanup(node_a, node_b):
     await node_a.close()
     await node_b.close()
+
 
 class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
     async def test_self_turn_connect(self):
@@ -71,7 +73,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         node_a, node_b = await test_setup()
         pipe, _ = await node_a.connect(
             node_b.address(),
-            strategies=[P2P_RELAY]
+            strategies=[P2P_RELAY],
         )
 
         self.assertTrue(pipe is not None)
@@ -98,10 +100,10 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
             strategies=[
                 # Direct will fail.
                 P2P_DIRECT,
-                
+
                 # Reverse should succeed.
-                P2P_REVERSE
-            ]
+                P2P_REVERSE,
+            ],
         )
         self.assertTrue(pipe is not None)
 
@@ -117,7 +119,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         node_a, node_b = await test_setup()
         pipe, _ = await node_a.connect(
             node_b.address(),
-            strategies=[P2P_REVERSE]
+            strategies=[P2P_REVERSE],
         )
         self.assertTrue(pipe is not None)
 
@@ -133,7 +135,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         node_a, node_b = await test_setup()
         pipe, _ = await node_a.connect(
             node_b.address(),
-            strategies=[P2P_DIRECT]
+            strategies=[P2P_DIRECT],
         )
         self.assertTrue(pipe is not None)
 
@@ -149,7 +151,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         node_a, node_b = await test_setup()
         pipe, _ = await node_a.connect(
             P2PD_NET_ADDR_BYTES,
-            strategies=[P2P_DIRECT]
+            strategies=[P2P_DIRECT],
         )
         self.assertTrue(pipe is not None)
 
@@ -166,7 +168,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         node_a, node_b = await test_setup()
         pipe, _ = await node_a.connect(
             node_b.address(),
-            strategies=[P2P_PUNCH]
+            strategies=[P2P_PUNCH],
         )
 
         # Test pipe is valid.
@@ -188,7 +190,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
             if interface.nat["type"] == OPEN_INTERNET:
                 pipe, _ = await node_a.connect(
                     P2PD_NET_ADDR_BYTES,
-                    strategies=[P2P_REVERSE]
+                    strategies=[P2P_REVERSE],
                 )
                 self.assertTrue(pipe is not None)
 
@@ -213,7 +215,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
             # Connect to p2pd.net test server.
             pipe, _ = await node_a.connect(
                 P2PD_NET_ADDR_BYTES,
-                strategies=[P2P_PUNCH]
+                strategies=[P2P_PUNCH],
             )
             self.assertTrue(pipe is not None)
 
@@ -231,7 +233,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         node_a, node_b = await test_setup()
         pipe, _ = await node_a.connect(
             P2PD_NET_ADDR_BYTES,
-            strategies=[P2P_RELAY]
+            strategies=[P2P_RELAY],
         )
 
         self.assertTrue(pipe is not None)
@@ -247,6 +249,6 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         await pipe.close()
         await test_cleanup(node_a, node_b)
 
+
 if __name__ == '__main__':
     main()
-

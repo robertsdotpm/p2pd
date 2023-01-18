@@ -1,7 +1,8 @@
 import asyncio
-import struct
 import random
+import struct
 from struct import pack
+
 from .utils import *
 
 UDP_MAX_DICT_LEN = 1000
@@ -15,7 +16,7 @@ guarantee ordered delivery. Inherited by udp_stream.
 
 class ACKUDP():
     def __init__(self):
-        self.seq = {} # Waiting for acks.
+        self.seq = {}  # Waiting for acks.
         self.ack_send_tasks = []
 
     # Returns a sequence number if a message is an ack.
@@ -96,8 +97,8 @@ class ACKUDP():
         if ack is not None:
             task = asyncio.create_task(
                 async_wrap_errors(
-                    f_send(ack)
-                )
+                    f_send(ack),
+                ),
             )
 
             self.ack_send_tasks.append(task)
@@ -137,7 +138,7 @@ class ACKUDP():
             buf = bytearray().join([
                 pack("!Q", seq),
                 pack("!B", 0),
-                memoryview(data)
+                memoryview(data),
             ])
 
             # Await on ACK events.
@@ -159,7 +160,7 @@ class ACKUDP():
                     # Otherwise it suspends for other code to execute.
                     await asyncio.wait_for(
                         self.seq[seq].wait(),
-                        3
+                        3,
                     )
 
                     # No timeout error = success.

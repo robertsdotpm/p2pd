@@ -1,5 +1,6 @@
 from p2pd import *
 
+
 class NetDebugServer(Daemon):
     async def msg_cb(self, msg, client_tup, pipe):
         # Parse HTTP message and handle CORS.
@@ -17,7 +18,7 @@ class NetDebugServer(Daemon):
                 if not valid_port(dest_port):
                     return {
                         "error": 1,
-                        "msg": "invalid port for /hello"
+                        "msg": "invalid port for /hello",
                     }
 
                 # Check src port.
@@ -26,7 +27,7 @@ class NetDebugServer(Daemon):
                     if not valid_port(src_port):
                         return {
                             "error": 6,
-                            "msg": "invalid src port for /hello"
+                            "msg": "invalid src port for /hello",
                         }
 
                 # Error thrown and logged in handler if not valid.
@@ -36,7 +37,7 @@ class NetDebugServer(Daemon):
                 if route is None:
                     return {
                         "error": 3,
-                        "msg": "this server doesn't control that IP."
+                        "msg": "this server doesn't control that IP.",
                     }
 
                 # Make pipe used to send hello message.
@@ -51,23 +52,23 @@ class NetDebugServer(Daemon):
 
                 return {
                     "error": 0,
-                    "msg": f"sent hello to {p['proto']}:{dest_addr.tup} from {hello_from} route = {route}"
+                    "msg": f"sent hello to {p['proto']}:{dest_addr.tup} from {hello_from} route = {route}",
                 }
 
             # Make a TCP connection back to a service to test port forwarding.
             named = ["port"]
-            p = req.api(f"/reverse/([0-9]+)", named)
+            p = req.api("/reverse/([0-9]+)", named)
             if p:
                 # Get port and check it's valid.
                 dest_port = to_n(p["port"])
                 if not valid_port(dest_port):
                     return {
                         "error": 4,
-                        "msg": "invalid port for /reverse"
+                        "msg": "invalid port for /reverse",
                     }
 
                 # Peers address of this connection.
-                dest_tup = (pipe.sock.getpeername()[0], dest_port)                
+                dest_tup = (pipe.sock.getpeername()[0], dest_port)
                 try:
                     # Resolve dest tuple to address.
                     dest_addr = await Address(*dest_tup, pipe.route, timeout=1).res()
@@ -79,8 +80,8 @@ class NetDebugServer(Daemon):
                         proto=TCP,
                         dest=dest_addr,
                         conf=dict_child({
-                            "con_timeout": 1
-                        }, NET_CONF) 
+                            "con_timeout": 1,
+                        }, NET_CONF),
                     )
 
                     # Failure.
@@ -91,12 +92,12 @@ class NetDebugServer(Daemon):
                     await tcp_pipe.close()
                     return {
                         "error": 0,
-                        "msg": f"tcp service {dest_tup} is reachable."
+                        "msg": f"tcp service {dest_tup} is reachable.",
                     }
                 except Exception:
                     return {
                         "error": 5,
-                        "msg": f"tcp service {dest_tup} is not reachable."
+                        "msg": f"tcp service {dest_tup} is not reachable.",
                     }
 
             # Show information of the connection to the peer.
@@ -110,14 +111,14 @@ class NetDebugServer(Daemon):
                     "raddr": sock.getpeername(),
                     "route": pipe.route.to_dict(),
                     "if": {
-                        "name": pipe.route.interface.name
-                    }
+                        "name": pipe.route.interface.name,
+                    },
                 }
 
             # Fallback and serve all other purposes.
             return {
                 "error": 2,
-                "msg": "method not implemented"
+                "msg": "method not implemented",
             }
 
         # Return JSON response to browser.
@@ -127,8 +128,9 @@ class NetDebugServer(Daemon):
                 resp,
                 req,
                 client_tup,
-                pipe
+                pipe,
             )
+
 
 async def start_net_debug():
     netifaces = await init_p2pd()
@@ -138,7 +140,7 @@ async def start_net_debug():
     await net_debug_server.listen_all(
         [i.rp[IP4], i.rp[IP6]],
         [20000],
-        [TCP, UDP]
+        [TCP, UDP],
     )
 
     while 1:

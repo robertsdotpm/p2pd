@@ -1,13 +1,15 @@
 import copy
 from http.client import HTTPResponse
-from .net import *
+
 from .base_stream import *
+from .net import *
 
 HTTP_HEADERS = [
     [b"User-Agent", b"curl/7.54.0"],
     [b"Origin", b"null"],
-    [b"Accept", b"*/*"]
+    [b"Accept", b"*/*"],
 ]
+
 
 def http_req_buf(af, host, port, path=b"/", method=b"GET", payload=None, headers=None):
     # Format headers.
@@ -18,7 +20,7 @@ def http_req_buf(af, host, port, path=b"/", method=b"GET", payload=None, headers
         headers += HTTP_HEADERS
 
     # Raw http request.
-    buf  = b"%s %s HTTP/1.1\r\n" % (to_b(method), to_b(path))
+    buf = b"%s %s HTTP/1.1\r\n" % (to_b(method), to_b(path))
     if af == IP4:
         host = to_b(host)
     else:
@@ -29,13 +31,14 @@ def http_req_buf(af, host, port, path=b"/", method=b"GET", payload=None, headers
         if n not in hdrs:
             buf += b"%s: %s\r\n" % (n, v)
             hdrs[n] = 1
-    
+
     # Terminate request.
     buf += b"\r\n\r\n"
     if payload is not None:
         buf += to_b(payload)
 
     return buf
+
 
 def http_parse_headers(self):
     # Get headers from named pair list.
@@ -53,6 +56,7 @@ def http_parse_headers(self):
     # Save header list.
     self.hdrs = hdrs
 
+
 class ParseHTTPResponse(HTTPResponse):
     def __init__(self, resp_text):
         self.resp_len = len(resp_text)
@@ -64,12 +68,13 @@ class ParseHTTPResponse(HTTPResponse):
     def out(self):
         return self.read(self.resp_len)
 
+
 async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, headers=None):
-    # Get a new con 
+    # Get a new con
     r = copy.deepcopy(route)
     r = await r.bind()
-    
-    assert(dest is not None)
+
+    assert dest is not None
     log(f"{route} {dest}")
     try:
         p = await pipe_open(route=r, proto=TCP, dest=dest)
@@ -95,5 +100,5 @@ async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, h
 
     if out is not None:
         out = ParseHTTPResponse(out)
-        
+
     return p, out

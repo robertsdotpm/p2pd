@@ -1,6 +1,7 @@
 import asyncio
-import re
 import pickle
+import re
+
 from .ack_udp import *
 from .net import *
 
@@ -66,7 +67,7 @@ class BaseStream(ACKUDP):
             self.subs[offset] = [
                 sub,
                 asyncio.Queue(self.conf["max_qsize"]),
-                handler
+                handler,
             ]
 
         return self
@@ -101,7 +102,7 @@ class BaseStream(ACKUDP):
                 q.get_nowait()
 
             # Put an item on the queue.
-            assert(isinstance(client_tup, tuple))
+            assert isinstance(client_tup, tuple)
             q.put_nowait([client_tup, data])
 
         # Apply bool filters to message.
@@ -144,7 +145,7 @@ class BaseStream(ACKUDP):
             _, q, handler = self.subs[offset]
             ret = await asyncio.wait_for(
                 q.get(),
-                recv_timeout
+                recv_timeout,
             )
 
             # Run handler if one is set.
@@ -182,7 +183,7 @@ class BaseStream(ACKUDP):
             if isinstance(handle, DATAGRAM_TYPES):
                 handle.sendto(
                     data,
-                    dest_tup
+                    dest_tup,
                 )
                 return 1
 
@@ -205,6 +206,7 @@ class BaseStream(ACKUDP):
             log(f"{self.handle}")
             log_exception()
             return 0
+
 
 """
 In Python's asyncio code you can use so-called 'protocol' classes
@@ -234,10 +236,10 @@ class BaseProto(BaseACKProto):
         self.endpoint_type = None
 
         # Used for TCP server awaitable.
-        self.p_client_entry = 0 # Location of the pipe in client futures.
-        self.p_client_insert = 0 # Last insert location in client futures.
-        self.p_client_get = 0 # Offset that increases per await over the futures.
-        self.client_futures = { 0: asyncio.Future() } # Table for TCP client pipes.
+        self.p_client_entry = 0  # Location of the pipe in client futures.
+        self.p_client_insert = 0  # Last insert location in client futures.
+        self.p_client_get = 0  # Offset that increases per await over the futures.
+        self.client_futures = {0: asyncio.Future()}  # Table for TCP client pipes.
 
         # Bind / route.
         self.route = route
@@ -308,7 +310,7 @@ class BaseProto(BaseACKProto):
         if self.sock is not None:
             # Use local socket details (for servers.)
             client_tup = self.sock.getsockname()
-            
+
             # Try use remote peer info if it exists.
             try:
                 client_tup = self.sock.getpeername()
@@ -425,7 +427,7 @@ class BaseProto(BaseACKProto):
         # Remove self from any parent pipes.
         for pipe in self.parent_pipes:
             pipe.del_pipe(self)
-        
+
         # Execute any cleanup handlers.
         self.run_handlers(self.end_cbs, self.client_tup)
 
@@ -439,8 +441,8 @@ class BaseProto(BaseACKProto):
             task = asyncio.create_task(
                 pipe.send(
                     data,
-                    pipe.stream.dest_tup
-                )
+                    pipe.stream.dest_tup,
+                ),
             )
 
             self.tasks.append(task)
@@ -450,7 +452,7 @@ class BaseProto(BaseACKProto):
         # there is a need to convert ip to bytes.
         self.stream.add_msg(
             data,
-            (client_tup[0], client_tup[1])
+            (client_tup[0], client_tup[1]),
         )
 
         # Process messages using any registered handlers.
@@ -463,7 +465,7 @@ class BaseProto(BaseACKProto):
 
         # Record msg received.
         log(
-            'data recv {} = {}'.format(client_tup, data)
+            f'data recv {client_tup} = {data}',
         )
 
         # Ack UDP msg if enabled.
@@ -478,7 +480,7 @@ class BaseProto(BaseACKProto):
                 data,
                 self.is_ack,
                 self.is_ackable,
-                lambda buf: self.stream.send(buf, client_tup)
+                lambda buf: self.stream.send(buf, client_tup),
             )
 
             """
@@ -507,7 +509,7 @@ class BaseProto(BaseACKProto):
     def datagram_received(self, data, client_tup):
         log(f"Base proto recv udp = {data}")
         if self.transport is None:
-            log(f"Skipping process data cause transport none 1.")
+            log("Skipping process data cause transport none 1.")
             return
 
         self.handle_data(data, client_tup)
@@ -516,12 +518,12 @@ class BaseProto(BaseACKProto):
     def data_received(self, data):
         log(f"Base proto recv tcp = {data}")
         if self.transport is None:
-            log(f"Skipping process data cause transport none 2.")
+            log("Skipping process data cause transport none 2.")
             return
 
         self.handle_data(
             data,
-            self.transport.get_extra_info('socket').getpeername()
+            self.transport.get_extra_info('socket').getpeername(),
         )
 
     async def close(self, do_sleep=True):
@@ -609,6 +611,7 @@ class BaseProto(BaseACKProto):
         buf = bytearray().join([b"ECHO ", msg])
         await self.send(buf, dest_tup)
 
+
 """
 StreamReaderProtocol provides a way to "translate" between
 Protocol and StreamReader. Mostly we're interested in having
@@ -645,7 +648,7 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
             sock=self.sock,
             route=self.proto.route,
             conf=self.conf,
-            loop=self.loop
+            loop=self.loop,
         )
 
         # Log connection details.
@@ -669,7 +672,7 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
             self._stream_writer,
 
             # Index writers by peer connection.
-            self.remote_tup
+            self.remote_tup,
         )
 
     # If close was called on a pipe on a server then clients will already be closed.
@@ -703,10 +706,10 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
 
     def data_received(self, data):
         # This just adds data to reader which we are handling ourselves.
-        #super().connection_lost(exc)
+        # super().connection_lost(exc)
         log(f"Hacked server recv = {data}")
         if self.client_proto is None:
-            log(f"CLIENT PROTO NONE")
+            log("CLIENT PROTO NONE")
             return
 
         if not len(self.client_proto.msg_cbs):
@@ -718,20 +721,21 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
 async def base_start_server(sock, base_proto, *, loop=None, conf=NET_CONF, **kwds):
     # Main vars.
     loop = loop or asyncio.get_event_loop()
+
     def factory():
         reader = asyncio.StreamReader(limit=conf["reader_limit"], loop=loop)
         return BaseStreamReaderProto(
             reader,
             base_proto,
             loop,
-            conf
+            conf,
         )
 
     # Call the regular create server func with custom protocol factory.
     server = await loop.create_server(
         factory,
         sock=sock,
-        **kwds
+        **kwds,
     )
 
     return server
@@ -767,7 +771,7 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, conf=N
                 route=route,
                 dest_addr=dest,
                 sock_type=UDP if proto == RUDP else proto,
-                conf=conf
+                conf=conf,
             )
 
             # Check if sock succeeded.
@@ -784,11 +788,11 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, conf=N
                 # Connect the socket task.
                 con_task = asyncio.create_task(
                     loop.sock_connect(
-                        sock, 
-                        dest.tup
-                    )
+                        sock,
+                        dest.tup,
+                    ),
                 )
-                
+
                 # Wait for connection, async style.
                 await asyncio.wait_for(con_task, conf["con_timeout"])
 
@@ -797,7 +801,7 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, conf=N
             return sock
 
         # Main protocol instance for routing messages.
-        #if base_proto is None:
+        # if base_proto is None:
         base_proto = BaseProto(sock=sock, route=route, loop=loop, conf=conf)
 
         # Add message handler.
@@ -808,7 +812,7 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, conf=N
         if proto in [UDP, RUDP]:
             transport, _ = await loop.create_datagram_endpoint(
                 lambda: base_proto,
-                sock=sock
+                sock=sock,
             )
 
             await base_proto.stream_ready.wait()
@@ -823,7 +827,7 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, conf=N
         if proto == RUDP:
             base_proto.set_ack_handlers(
                 is_ack=base_proto.stream.is_ack,
-                is_ackable=base_proto.stream.is_ackable
+                is_ackable=base_proto.stream.is_ackable,
             )
 
         # Start processing messages for TCP.
@@ -835,11 +839,11 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, conf=N
                     sock=sock,
                     base_proto=base_proto,
                     loop=loop,
-                    conf=conf
+                    conf=conf,
                 )
 
                 # Make the server start serving requests.
-                assert(server is not None)
+                assert server is not None
                 base_proto.set_tcp_server(server)
 
                 # Saving the task is apparently needed
@@ -854,7 +858,7 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, conf=N
                 # base_proto.set_handle(writer, sock.getpeername())
                 await loop.create_connection(
                     protocol_factory=lambda: base_proto,
-                    sock=sock
+                    sock=sock,
                 )
 
                 # Set transport handle.
@@ -871,7 +875,7 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, conf=N
         return base_proto
     except Exception as e:
         log_exception()
-        if conf["no_close"] == False:
+        if not conf["no_close"]:
             log("no close is false so trying to clean up.")
             if sock is not None:
                 log(f"closing socket. {sock.getsockname()}")
@@ -882,12 +886,15 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, conf=N
         else:
             log("no close set to true so no cleanup")
 
-if __name__ == "__main__": # pragma: no cover
-    from .interface import Interface
-    from .http_client import http_req
+if __name__ == "__main__":  # pragma: no cover
     from .address import Address
+    from .http_client import http_req
+    from .interface import Interface
+
     async def test_base():
-        af = IP4; proto = TCP; port = 10101
+        af = IP4
+        proto = TCP
+        port = 10101
         interface = await Interface("enp3s0").start()
         route = await interface.route(af).bind(port)
 
@@ -905,13 +912,13 @@ if __name__ == "__main__": # pragma: no cover
         base_proto = await pipe_open(
             route=route,
             proto=proto,
-            dest=dest_addr
+            dest=dest_addr,
         )
 
         # Simple message callback that prints inbound data and client addr tups.
         base_proto.add_msg_cb(
             # Data, client tup, stream, route
-            lambda d, c, s: print(d, c)
+            lambda d, c, s: print(d, c),
         )
 
         # Build HTTP req and send to Google con writer.

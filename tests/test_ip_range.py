@@ -1,6 +1,7 @@
-from p2pd.test_init import *
 from p2pd import IPRange
 from p2pd.net import BLACK_HOLE_IPS, ip_norm
+from p2pd.test_init import *
+
 
 class TestIPRange(unittest.IsolatedAsyncioTestCase):
     async def test_ip_range_iter(self):
@@ -47,7 +48,7 @@ class TestIPRange(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(ipr.is_public)
 
     async def test_single_v4_broadcast(self):
-        ip = "255.255.255.255"  
+        ip = "255.255.255.255"
         ipr = IPRange(ip)
         self.assertEqual(str(ipr[0]), ip)
         self.assertEqual(len(ipr), 1)
@@ -56,7 +57,7 @@ class TestIPRange(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(ipr.is_public)
 
     async def test_block_v6_public(self):
-        ip = "2402:1f00:8101:83f::"  
+        ip = "2402:1f00:8101:83f::"
         cidr = 64
         ipr = IPRange(ip, netmask=None, cidr=cidr)
         self.assertEqual(ipr.host_no, (2 ** 64) - 1)
@@ -146,6 +147,7 @@ class TestIPRange(unittest.IsolatedAsyncioTestCase):
             IPRange("192.168.0.3"),
         ]
         self.assertEqual(ipr_list, hey_list)
+
 
 if __name__ == '__main__':
     main()

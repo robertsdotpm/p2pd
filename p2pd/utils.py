@@ -1,37 +1,39 @@
-import functools
 import asyncio
-import re
-import time
 import binascii
-import ipaddress
-import sys, os
-import platform
-import logging
-import traceback
-import random
-import inspect
-#import uvloop
-import itertools
-import ctypes
-import urllib.parse
-import platform
-import selectors
 import copy
+import ctypes
+import functools
+import inspect
+import ipaddress
+# import uvloop
+import itertools
+import logging
+import os
+import platform
+import random
+import re
+import selectors
+import sys
+import time
+import traceback
+import urllib.parse
 
 # Yoloswaggins.
 if not hasattr(asyncio, 'create_task'):
     asyncio.create_task = asyncio.ensure_future
 
 vmaj, vmin, _ = platform.python_version_tuple()
-vmaj = int(vmaj); vmin = int(vmin)
+vmaj = int(vmaj)
+vmin = int(vmin)
 if vmaj < 3:
     raise Exception("Python 2 not supported.")
 if vmin < 8:
     if sys.platform == 'win32':
-        #raise Exception("Windows needs Python 3.8 or higher.")
+        # raise Exception("Windows needs Python 3.8 or higher.")
         pass
 if vmin < 5:
     raise Exception("Non-Windows OS needs Python 3.5 or higher")
+
 
 def proactorfy(self=None):
     """
@@ -44,7 +46,7 @@ def proactorfy(self=None):
     """
     try:
         loop = asyncio.get_event_loop()
-    except:
+    except Exception:
         loop = asyncio.ProactorEventLoop()
 
     asyncio.set_event_loop(loop)
@@ -53,6 +55,7 @@ def proactorfy(self=None):
         return self.my_loop
 
     return loop
+
 
 if sys.platform == 'win32':
     # Won't work on older Python < 3.6.
@@ -64,13 +67,13 @@ if sys.platform == 'win32':
     except Exception:
         pass
 
-if "P2PD_DEBUG" in os.environ: 
+if "P2PD_DEBUG" in os.environ:
     IS_DEBUG = 1
     logging.basicConfig(
         filename='program.log',
         level=logging.DEBUG,
         format='[%(asctime)s.%(msecs)03d] @ [%(filename)s:%(lineno)d] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        datefmt='%Y-%m-%d %H:%M:%S',
     )
 
     def log(m):
@@ -110,16 +113,17 @@ rand_rang = random.randrange
 list_join = lambda l: list(itertools.chain.from_iterable(l))
 from_range = lambda r: rand_rang(r[0], r[1] + 1)
 in_range = lambda x, r: x >= r[0] and x <= r[1]
-b_and = lambda abytes, bbytes: bytes(map(lambda a,b: a & b, abytes, bbytes))
-b_or = lambda abytes, bbytes: bytes(map(lambda a,b: a | b, abytes, bbytes))
+b_and = lambda abytes, bbytes: bytes(map(lambda a, b: a & b, abytes, bbytes))
+b_or = lambda abytes, bbytes: bytes(map(lambda a, b: a | b, abytes, bbytes))
 len_range = lambda r: r[1] - r[0]
-get_bits = lambda n, l, p=0: ( ((1 << l) - 1)  &  (n >> p ) )
+get_bits = lambda n, l, p=0: (((1 << l) - 1) & (n >> p))
 is_no = lambda x: to_s(x).isnumeric()
 is_b = lambda x: isinstance(x, bytes)
 rm_whitespace = lambda x: re.sub(r"\s+", "", x, flags=re.UNICODE)
 urlencode = lambda x: to_b(urllib.parse.quote(x))
 urldecode = lambda x: to_b(urllib.parse.unquote(x))
 shuffle = lambda x: random.shuffle(x) or x
+
 
 # Take a dict template called Y and a child dict called X.
 # Yield a new dict with Y's vals overwritten by X's.
@@ -134,15 +138,17 @@ def dict_merge(x, y):
     x.update(y)
     return x
 
+
 def rand_plain(n):
-    charset =  b"012345678abcdefghijklmnopqrs"
+    charset = b"012345678abcdefghijklmnopqrs"
     charset += b"tuvxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
     buf = b""
     for meow in range(0, n):
         ch = random.choice(charset)
         buf += bytes([ch])
-        
+
     return buf
+
 
 def ensure_resolved(targets):
     if not isinstance(targets, list):
@@ -150,11 +156,7 @@ def ensure_resolved(targets):
 
     for i, target in enumerate(targets):
         if not target.resolved:
-            e = "Target offset = {}, id = {}, type = {} not resolved".format(
-                i,
-                id(target),
-                type(target)
-            )
+            e = f"Target offset = {i}, id = {id(target)}, type = {type(target)} not resolved"
 
             raise Exception(e)
 
@@ -321,21 +323,17 @@ def log_exception():
     exc_type, exc_obj, exc_tb = sys.exc_info()
     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
     exc_out = traceback.format_exc()
-    log("> {}, line {} = {}".format(
-        fname,
-        exc_tb.tb_lineno,
-        exc_out
-    ))
+    log(f"> {fname}, line {exc_tb.tb_lineno} = {exc_out}")
 
 async def async_wrap_errors(coro, timeout=None):
     try:
         # Don't bound wait time.
         if timeout is None:
-            return (await coro)
+            return await coro
 
         # Bound wait time.
         if isinstance(timeout, int):
-            return (await asyncio.wait_for(coro, timeout))
+            return await asyncio.wait_for(coro, timeout)
     except Exception as e:
         # Log all errors.
         log_exception()
@@ -364,7 +362,7 @@ async def async_retry(gen, count, timeout=4):
             init_coro = gen()
             status_future, retry_coro, new_future = await asyncio.wait_for(
                 async_wrap_errors(init_coro),
-                timeout
+                timeout,
             )
 
             # Do first retry coroutine.
@@ -434,25 +432,26 @@ def run_handler(pipe, handler, client_tup, data=None):
         # Lets you process messages from an async func.
         task = asyncio.create_task(
             async_wrap_errors(
-                handler(data, client_tup, pipe)
-            )
+                handler(data, client_tup, pipe),
+            ),
         )
 
         # Process result if anyone.
         task.add_done_callback(
-            handler_done_builder(pipe, handler, task)
+            handler_done_builder(pipe, handler, task),
         )
 
         # Needed or they might be garbage collected.
         pipe.handler_tasks.append(task)
-    else: 
+    else:
         # It's a callback.
         result = sync_wrap_errors(
-            handler, [data, client_tup, pipe]
+            handler, [data, client_tup, pipe],
         )
 
         # Process result if any.
         handler_done_builder(pipe, handler)(result)
+
 
 # Used for event-based programming.
 # Can execute code on new cons, dropped cons, and new msgs.
@@ -462,6 +461,7 @@ def run_handlers(pipe, handlers, client_tup, data=None):
     for handler in handlers:
         # Run the handler as a callback or coroutine.
         run_handler(pipe, handler, client_tup, data)
+
 
 def run_in_executor(f):
     @functools.wraps(f)
@@ -491,7 +491,7 @@ async def gather_or_cancel(tasks, timeout):
     try:
         await asyncio.wait_for(
             group_task,
-            timeout
+            timeout,
         )
     except asyncio.TimeoutError:
         for task in tasks:
@@ -529,9 +529,9 @@ def get_loop(loop=None):
 
 # Will be used in sample code to avoid boilerplate.
 def async_test(f, args=[], loop=None):
-    #uvloop.install()
+    # uvloop.install()
     loop = get_loop(loop)
-    #if IS_DEBUG:
+    # if IS_DEBUG:
     #    loop.set_debug(True)
     loop.set_debug(False)
     if len(args):
@@ -542,7 +542,7 @@ def async_test(f, args=[], loop=None):
 
 async def return_true(result=None):
     return True
-            
+
 # If there's an error that its already in a loop
 # Run nest_asyncio.apply()
 def async_to_sync(f, params=None, loop=None):
@@ -550,12 +550,12 @@ def async_to_sync(f, params=None, loop=None):
     if params is not None:
         def closure(args):
             return loop.run_until_complete(f(*args))
-            
+
         return closure
     else:
         def closure():
             return loop.run_until_complete(f())
-            
+
         return closure
 
 def get_running_loop():
@@ -569,22 +569,19 @@ def get_running_loop():
         return None
 
 
-if __name__ == "__main__": # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     x = [1, 1]
     y = [2, 2]
-    assert(range_intersects(x, y) == False)
+    assert not range_intersects(x, y)
 
     x = [1, 2]
     y = [2, 2]
-    assert(range_intersects(x, y) == True)
+    assert range_intersects(x, y)
 
     x = [1, 2]
     y = [1, 2]
-    assert(range_intersects(x, y) == True)
+    assert range_intersects(x, y)
 
-    
     x = [1, 10]
     y = [5, 20]
-    assert(range_intersects(x, y) == True)
-
-    
+    assert range_intersects(x, y)

@@ -1,6 +1,8 @@
-import re
 import platform
+import re
+
 from .net import *
+
 
 async def windows_get_route_table(af):
     table = []
@@ -10,7 +12,7 @@ async def windows_get_route_table(af):
         cmd_buf = 'powershell "Get-NetRoute -AddressFamily IPv6"'
 
     out = await cmd(cmd_buf, timeout=4)
-    p = "([0-9]+)\s+([^\s]+)\s+([^\s]+)\s+([0-9]+)\s+([0-9]+)\s+([^\s]+)[\r\n]*"
+    p = r"([0-9]+)\s+([^\s]+)\s+([^\s]+)\s+([0-9]+)\s+([0-9]+)\s+([^\s]+)[\r\n]*"
     results = re.findall(p, out)
     for result in results:
         entry = {
@@ -20,7 +22,7 @@ async def windows_get_route_table(af):
             "next_hop": result[2],
             "route_metric": int(result[3]),
             "if_metric": int(result[4]),
-            "policy_store": result[5]
+            "policy_store": result[5],
         }
 
         table.append(entry)
@@ -31,9 +33,9 @@ async def linux_get_route_table(af):
     table = []
     bin_path = "/usr/sbin/route"
     if af == IP4:
-        cmd_buf = "{} -4".format(bin_path)
+        cmd_buf = f"{bin_path} -4"
         out = await cmd(cmd_buf, timeout=4)
-        p = "([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([-0-9]+)\s+([-0-9]+)\s+([-0-9]+)\s+([^\r\n]+)[\r\n]*"
+        p = r"([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([-0-9]+)\s+([-0-9]+)\s+([-0-9]+)\s+([^\r\n]+)[\r\n]*"
         results = re.findall(p, out)
         for result in results:
             entry = {
@@ -44,15 +46,15 @@ async def linux_get_route_table(af):
                 "metric": int(result[4]),
                 "ref": int(result[5]),
                 "use": int(result[6]),
-                "if": result[7]
+                "if": result[7],
             }
 
             table.append(entry)
 
     if af == IP6:
-        cmd_buf = "{} -6".format(bin_path)
+        cmd_buf = f"{bin_path} -6"
         out = await cmd(cmd_buf, timeout=4)
-        p = "([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([-0-9]+)\s+([-0-9]+)\s+([-0-9]+)\s+([^\r\n]+)[\r\n]*"
+        p = r"([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([-0-9]+)\s+([-0-9]+)\s+([-0-9]+)\s+([^\r\n]+)[\r\n]*"
         results = re.findall(p, out)
         for result in results:
             entry = {
@@ -62,16 +64,17 @@ async def linux_get_route_table(af):
                 "metric": int(result[3]),
                 "ref": int(result[4]),
                 "use": int(result[5]),
-                "if": result[6]
+                "if": result[6],
             }
 
             table.append(entry)
 
     return table
 
+
 async def darwin_get_route_table(af):
     table = []
-    p = "([^\r\n]+?)[ ]+([^\r\n]+?)[ ]+([^\r\n]+?)[ ]+([^\r\n ]+)[ ]*(([^\r\n]+)[ ]*)?[\r\n]+"
+    p = r"([^\r\n]+?)[ ]+([^\r\n]+?)[ ]+([^\r\n]+?)[ ]+([^\r\n ]+)[ ]*(([^\r\n]+)[ ]*)?[\r\n]+"
     if af == IP4:
         cmd_buf = "netstat -rn -f inet"
     if af == IP6:
@@ -85,12 +88,13 @@ async def darwin_get_route_table(af):
             "gw": result[1],
             "flags": result[2],
             "if": result[3],
-            "expiry": result[4]
+            "expiry": result[4],
         }
 
         table.append(entry)
 
     return table
+
 
 async def get_route_table(af):
     if platform.system() == "Windows":
@@ -104,6 +108,7 @@ async def get_route_table(af):
 
     return []
 
+
 def find_rt_entry(dest, if_name, table):
     for entry in table:
         if entry["dest"] != dest:
@@ -113,6 +118,7 @@ def find_rt_entry(dest, if_name, table):
             continue
 
         return entry
+
 
 async def darwin_is_internet_if(if_name):
     def is_internet_if(table):
@@ -136,6 +142,7 @@ async def darwin_is_internet_if(if_name):
 
     return False
 
+
 async def linux_is_internet_if(if_name):
     def is_internet_if(table, af):
         if af == IP6:
@@ -152,7 +159,7 @@ async def linux_is_internet_if(if_name):
 
                 try:
                     ip_s = ip_norm(entry["dest"])
-                except:
+                except Exception:
                     continue
 
                 ip_obj = ip_f(ip_s)
@@ -179,12 +186,13 @@ async def linux_is_internet_if(if_name):
 
     return False
 
+
 async def windows_is_internet_if(if_index):
     def is_internet_if(table, af):
         if af == IP4:
             dest = "0.0.0.0/0"
         if af == IP6:
-            dest = "::/0" # Probably what it will be.
+            dest = "::/0"  # Probably what it will be.
 
         return find_rt_entry(dest, if_index, table) is not None
 
@@ -194,6 +202,7 @@ async def windows_is_internet_if(if_index):
             return True
 
     return False
+
 
 async def is_internet_if(if_name):
     if platform.system() == "Linux":
@@ -207,8 +216,9 @@ async def is_internet_if(if_name):
 
     return False
 
-if __name__ == "__main__": # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     from .interface import Interface
+
     async def test_route_table():
         i = Interface()
         if i.nic_no:
@@ -218,4 +228,3 @@ if __name__ == "__main__": # pragma: no cover
         print(r)
 
     async_test(test_route_table)
-

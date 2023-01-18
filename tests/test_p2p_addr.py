@@ -1,7 +1,7 @@
+from p2pd import IP4, IP6
+from p2pd.p2p_addr import parse_peer_addr
 from p2pd.test_init import *
 
-from p2pd import IP6, IP4
-from p2pd.p2p_addr import parse_peer_addr
 
 class TestP2PAddr(unittest.IsolatedAsyncioTestCase):
     async def test_p2p_addr(self):
@@ -10,6 +10,6 @@ class TestP2PAddr(unittest.IsolatedAsyncioTestCase):
         print(out)
         self.assertTrue(len(out[IP4]))
 
+
 if __name__ == '__main__':
     main()
-

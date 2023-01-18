@@ -4,18 +4,21 @@ nc -4 -u p2pd.net 7
 """
 
 from p2pd.test_init import *
+
 try:
     from .static_route import *
-except:
+except Exception:
     from static_route import *
-from p2pd.utils import what_exception, log_exception
-from p2pd import IPRange, Bind, Route, Interface, pipe_open
-from p2pd import Address
-from p2pd.net import BLACK_HOLE_IPS, ip_norm, DUEL_STACK, IP6, IP4
-from p2pd.net import NIC_BIND, EXT_BIND, VALID_AFS, TCP, UDP
+
+from p2pd import Address, Bind, Interface, IPRange, Route, pipe_open
 from p2pd.base_stream import SUB_ALL
+from p2pd.net import (BLACK_HOLE_IPS, DUEL_STACK, EXT_BIND, IP4, IP6, NIC_BIND,
+                      TCP, UDP, VALID_AFS, ip_norm)
+from p2pd.utils import log_exception, what_exception
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
+
+
 class TestAFsWork(unittest.IsolatedAsyncioTestCase):
     async def test_afs(self):
         # Public IPs.
@@ -23,7 +26,7 @@ class TestAFsWork(unittest.IsolatedAsyncioTestCase):
         await init_p2pd()
         echo_ip = {
             IP4: P2PD_NET_V4_IP,
-            IP6: P2PD_NET_V6_IP
+            IP6: P2PD_NET_V6_IP,
         }
 
         one_worked = False
@@ -46,7 +49,7 @@ class TestAFsWork(unittest.IsolatedAsyncioTestCase):
             msg = b"echo test\r\n"
             for proto in [TCP, UDP]:
                 pipe = await pipe_open(proto, echo_dest, route)
-                
+
                 # Interested in any message.
                 pipe.subscribe(SUB_ALL)
 
@@ -64,6 +67,7 @@ class TestAFsWork(unittest.IsolatedAsyncioTestCase):
                 await pipe.close()
 
         self.assertTrue(one_worked)
+
 
 if __name__ == '__main__':
     main()

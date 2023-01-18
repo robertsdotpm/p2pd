@@ -1,9 +1,11 @@
+import multiprocessing
+import os
 import platform
 import sys
-import os
-import multiprocessing
-from p2pd.test_init import *
+
 from p2pd.cmd_tools import *
+from p2pd.test_init import *
+
 
 async def test_esc(arg):
     # So paths with spaces don't break the command.
@@ -12,6 +14,7 @@ async def test_esc(arg):
     buf = rf"""{py} -c "{c}" {arg}"""
     return await cmd(buf)
 
+
 class TestCmd(unittest.IsolatedAsyncioTestCase):
     async def test_escape(self):
         if platform.system() in ["Windows"]:
@@ -19,40 +22,40 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
                 # Regular command with double quotes in it.
                 [
                     'test "something"',
-                    '"test ""something"""'
+                    '"test ""something"""',
                 ],
 
                 # Sneaky attempt to escape enclosing last slash.
                 [
                     'test x\\',
-                    '"test x\\\\"'
+                    '"test x\\\\"',
                 ],
 
                 # Another attempt to escape last enclosing slash.
                 # As long as it's in double quotes it has no effect.
                 [
                     'test x^',
-                    '"test x^"'
+                    '"test x^"',
                 ],
 
                 # Test some special charas.
                 [
                     'test ! %',
-                    '"test ! %"'
+                    '"test ! %"',
 
                 ],
 
                 # Test escape list impact inside string.
                 [
                     ',:;=\t&><|',
-                    '",:;=\t&><|"'
+                    '",:;=\t&><|"',
                 ],
 
                 # Test unbalanced double quotes escape.
                 [
                     'hax """',
-                    '"hax """""""'
-                ]
+                    '"hax """""""',
+                ],
             ]
 
         if platform.system() == "Linux":
@@ -60,34 +63,34 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
                 # Regular command with double quotes in it.
                 [
                     'test "something"',
-                    "'test \"something\"'"
+                    "'test \"something\"'",
                 ],
 
                 # Sneaky attempt to escape enclosing last slash.
                 [
                     'test x\\',
-                    "'test x\\'"
+                    "'test x\\'",
                 ],
 
                 # Test some special charas.
                 [
                     'test ! %',
-                    "'test ! %'"
+                    "'test ! %'",
 
                 ],
 
                 # Test escape list impact inside string.
                 [
                     ',:;=\t&><|',
-                    "',:;=\t&><|'"
+                    "',:;=\t&><|'",
                 ],
 
                 # Test unbalanced double quotes escape.
                 # IDK why it's escaped like this but seems it works.
                 [
                     'hax \'\'\'',
-                    '\'hax \'"\'"\'\'"\'"\'\'"\'"\'\''
-                ]
+                    '\'hax \'"\'"\'\'"\'"\'\'"\'"\'\'',
+                ],
             ]
 
         if platform.system() in ["FreeBSD", "Darwin"]:
@@ -95,40 +98,40 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
                 # Regular command with double quotes in it.
                 [
                     'test "something"',
-                    '"test \\"something\\""'
+                    '"test \\"something\\""',
                 ],
 
                 # Sneaky attempt to escape enclosing last slash.
                 [
                     'test x\\',
-                    '"test x\\\\"'
+                    '"test x\\\\"',
                 ],
 
                 # Another attempt to escape last enclosing slash.
                 # As long as it's in double quotes it has no effect.
                 [
                     'test x^',
-                    '"test x^"'
+                    '"test x^"',
                 ],
 
                 # Test some special charas.
                 [
                     'test ! %',
-                    '"test ! %"'
+                    '"test ! %"',
 
                 ],
 
                 # Test escape list impact inside string.
                 [
                     ',:;=\t&><|',
-                    '",:;=\t&><|"'
+                    '",:;=\t&><|"',
                 ],
 
                 # Test unbalanced double quotes escape.
                 [
                     'hax """',
-                    '"hax \\"\\"\\""'
-                ]
+                    '"hax \\"\\"\\""',
+                ],
             ]
 
         esc = get_arg_escape_func()
@@ -175,6 +178,7 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
         await nt_set_pshell_unrestricted()
         out = await is_pshell_restricted()
         self.assertTrue(out in (True, False))
+
 
 if __name__ == '__main__':
     multiprocessing.set_start_method("spawn")

@@ -1,7 +1,6 @@
+from p2pd import HOST_TYPE_DOMAIN, HOST_TYPE_IP, IP4, IP6, Address, Interface
 from p2pd.test_init import *
-from p2pd import Address, HOST_TYPE_IP, HOST_TYPE_DOMAIN
-from p2pd import IP6, IP4
-from p2pd import Interface
+
 
 class TestIPRange(unittest.IsolatedAsyncioTestCase):
     async def test_domain_resolve(self):
@@ -28,6 +27,7 @@ class TestIPRange(unittest.IsolatedAsyncioTestCase):
         a = await Address(ip, 80, r).res()
         self.assertEqual(a.host_type, HOST_TYPE_IP)
         self.assertTrue(a.is_private)
+
 
 if __name__ == '__main__':
     main()

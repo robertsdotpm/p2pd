@@ -1,28 +1,31 @@
 import asyncio
-from p2pd.test_init import *
-from p2pd.p2p_node import *
-from p2pd.p2p_utils import *
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 from decimal import Decimal as Dec
 
+from p2pd.p2p_node import *
+from p2pd.p2p_utils import *
+from p2pd.test_init import *
+
 asyncio.set_event_loop_policy(SelectorEventPolicy())
+
+
 class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
     async def test_map_info_to_their_maps(self):
         await init_p2pd()
         map_info = {
             "remote": [5000],
             "reply": [0],
-            "local": [10000]
+            "local": [10000],
         }
 
         expected = [
-            [ 5000, 0, 10000 ]
+            [5000, 0, 10000],
         ]
 
         self.assertEqual(
             map_info_to_their_maps(map_info),
-            expected
+            expected,
         )
 
     async def test_self_punch_no_networking(self):
@@ -32,13 +35,13 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
         netifaces = await init_p2pd()
         sys_clock = SysClock(Dec("0.01"))
         pe = await get_pp_executors()
-        #pe2 = await get_pp_executors(workers=2)
-        
+        # pe2 = await get_pp_executors(workers=2)
+
         if pe is not None:
             qm = multiprocessing.Manager()
         else:
             qm = None
-            
+
         pipe_id = b"pipe_id"
 
         # Load interfaces is slow AF on Windows.
@@ -53,7 +56,7 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
         # Pretend we're using an open internet.
         # This is because we're doing a self-test.
         dest = interface.rp[af].routes[0].nic()
-        #nat = nat_info(OPEN_INTERNET, delta_info(NA_DELTA, 0))
+        # nat = nat_info(OPEN_INTERNET, delta_info(NA_DELTA, 0))
         nat = nat_info(FULL_CONE, delta_info(PRESERV_DELTA, 0))
         nat["is_concurrent"] = random.choice([True, False])
         for i in ifs:
@@ -64,7 +67,7 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
 
         # Used to get external mappings (not needed for self-test.)
         stun_client = STUNClient(interface, af)
-        
+
         # Initiator client -- starts the protocol.
         # Sends the first mapping details.
         i_node_id = b"i_node_id"
@@ -90,10 +93,10 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
             dest_node_id=r_node_id,
             pipe_id=pipe_id,
             stun_client=stun_client,
-            mode=mode
+            mode=mode,
         )
 
-        #print(i_maps, ntp_meet)
+        # print(i_maps, ntp_meet)
 
         # Receive their mappings.
         r_maps, _, sent_update = await r_client.proto_recv_initial_mappings(
@@ -104,37 +107,37 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
             their_maps=i_maps,
             stun_client=stun_client,
             ntp_meet=ntp_meet,
-            mode=mode
+            mode=mode,
         )
 
-        #print(r_maps)
+        # print(r_maps)
 
         await i_client.proto_update_recipient_mappings(
             dest_node_id=r_node_id,
             pipe_id=pipe_id,
             their_maps=r_maps,
-            stun_client=stun_client
+            stun_client=stun_client,
         )
 
-        #print(i_client.state)
+        # print(i_client.state)
 
         try:
             results = await asyncio.wrait_for(
                 asyncio.gather(
                     async_wrap_errors(
-                        i_client.proto_do_punching(PUNCH_INITIATOR, r_node_id, pipe_id)
+                        i_client.proto_do_punching(PUNCH_INITIATOR, r_node_id, pipe_id),
                     ),
                     async_wrap_errors(
-                        r_client.proto_do_punching(PUNCH_RECIPIENT, i_node_id, pipe_id)
-                    )
+                        r_client.proto_do_punching(PUNCH_RECIPIENT, i_node_id, pipe_id),
+                    ),
                 ),
-                10
+                10,
             )
         except Exception:
             results = []
 
-        #print("Got results = ")
-        #print(results)
+        # print("Got results = ")
+        # print(results)
 
         async def process_results(results):
             if len(results) != 2:
@@ -158,10 +161,9 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
             return True
 
         status = await process_results(results)
-        if status == False:
+        if not status:
             print("Self punch test no networking failed.")
             print("Test is optional but noting it here.")
-
 
         for pipe in results:
             if pipe is not None:
@@ -183,6 +185,7 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
                 pe.shutdown()
         except Exception:
             pass
+
 
 if __name__ == '__main__':
     main()

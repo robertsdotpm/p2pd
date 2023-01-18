@@ -1,4 +1,5 @@
 import random
+
 from .address import *
 
 STUN_PORT = 3478
@@ -40,9 +41,9 @@ BLOCKED_NAT = 7
 
 # DELTA types: ------------------
 # Mappings are easy to reuse and reach.
-NA_DELTA = 1 # Not applicable.
+NA_DELTA = 1  # Not applicable.
 EQUAL_DELTA = 2
-PRESERV_DELTA = 3 # Or not applicable like in open internet.
+PRESERV_DELTA = 3  # Or not applicable like in open internet.
 INDEPENDENT_DELTA = 4
 DEPENDENT_DELTA = 5
 RANDOM_DELTA = 6
@@ -60,7 +61,7 @@ DELTA_N = [
     INDEPENDENT_DELTA,
 
     # Remote x; y = remote x + delta only when local x + delta
-    DEPENDENT_DELTA
+    DEPENDENT_DELTA,
 ]
 
 # The NATs here have various properties that allow their
@@ -71,7 +72,7 @@ PREDICTABLE_NATS = [
 
     # Same local IP + port = same mapping.
     RESTRICT_NAT,
-    
+
     # Same as above but reply port needs to match original dest.
     RESTRICT_PORT_NAT,
 ]
@@ -83,7 +84,7 @@ FUSSY_NATS = [
 
 # Peer will be unreachable.
 BLOCKING_NATS = [
-    BLOCKED_NAT
+    BLOCKED_NAT,
 ]
 
 # Punch modes.
@@ -95,15 +96,19 @@ TCP_PUNCH_SELF = 3
 # delta, nat_type
 f_is_open = lambda n, d: n in [OPEN_INTERNET, SYMMETRIC_UDP_FIREWALL]
 f_can_predict = lambda n, d: n in PREDICTABLE_NATS
+
+
 def f_is_hard(n, d):
     not_easy = n not in EASY_NATS
     return not_easy and d["type"] not in [PRESERV_DELTA, EQUAL_DELTA]
 
+
 def delta_info(delta_type, delta_value):
     return {
         "type": delta_type,
-        "value": delta_value
+        "value": delta_value,
     }
+
 
 def nat_info(nat_type=None, delta=None, map_range=None):
     # Defaults.
@@ -114,11 +119,11 @@ def nat_info(nat_type=None, delta=None, map_range=None):
     # Main NAT dic with simple lookup types.
     nat = {
         "type": nat_type,
-        "delta": delta, # type, value
-        "range": map_range, # start, stop
+        "delta": delta,  # type, value
+        "range": map_range,  # start, stop
         "is_open": f_is_open(nat_type, delta),
         "can_predict": f_can_predict(nat_type, delta),
-        "is_hard": f_is_hard(nat_type, delta)
+        "is_hard": f_is_hard(nat_type, delta),
     }
 
     # Setup whether this NAT type is good for concurrent punches.
@@ -127,6 +132,7 @@ def nat_info(nat_type=None, delta=None, map_range=None):
 
     # Return results.
     return nat
+
 
 def valid_mappings_len(mappings):
     if not len(mappings):
@@ -137,6 +143,7 @@ def valid_mappings_len(mappings):
 
     return 1
 
+
 """
 The algorithm for selecting the same connection is based on
 choosing the highest remote port on the 'master.'
@@ -144,6 +151,8 @@ Thus, if multiple cons have the same remote
 port (on port over-loaded NATs - this is possible) --
 then the code will fail. What we want is unique mappings.
 """
+
+
 def rmaps_strip_duplicates(rmaps):
     remote_list = []
     reply_list = []
@@ -159,13 +168,14 @@ def rmaps_strip_duplicates(rmaps):
 
         if local in local_list:
             continue
-        
+
         remote_list.append(remote)
         reply_list.append(reply)
         local_list.append(local)
         filtered_list.append(rmap)
 
     return filtered_list
+
 
 def is_valid_rmaps(rmaps):
     if type(rmaps) != list:
@@ -197,6 +207,7 @@ def is_valid_rmaps(rmaps):
 
     return 1
 
+
 """
 Determine any numerical patterns in port mapping allocations.
 
@@ -223,6 +234,8 @@ they results will be 'out of order' or unpredictable and
 lead to invalid results. Concurrency is thus disabled.
 This code is very badly written but it's at least tested.
 """
+
+
 async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="map", concurrency=True):
     """
     - When getting a list of ports to use for tests
@@ -236,7 +249,7 @@ async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="ma
     def get_start_port(port_dist, range_info=[]):
         # Random port skipping reserved and max ports.
         rand_start_port = lambda: random.randrange(
-            4000, MAX_PORT - (test_no * port_dist)
+            4000, MAX_PORT - (test_no * port_dist),
         )
 
         # Return if no other port range to check for conflicts.
@@ -286,7 +299,7 @@ async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="ma
                     proto,
                     do_close=0,
                     source_port=src_port,
-                    group=group
+                    group=group,
                 )
 
                 # Return mapping results.
@@ -340,9 +353,9 @@ async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="ma
                         local_dist[mapped_dist] = local_dist.get(mapped_dist, 0) + 1
 
     # Offset names for port test results.
-    LOCAL_INDEX = 0 # Source port.
-    MAPPED_INDEX = 1 # External mapped port.
-    SOCK_INDEX = 2 # Ref to sock used for STUN test.
+    LOCAL_INDEX = 0  # Source port.
+    MAPPED_INDEX = 1  # External mapped port.
+    SOCK_INDEX = 2  # Ref to sock used for STUN test.
     socks = []
 
     # Used for info about port ranges used for tests.
@@ -364,7 +377,7 @@ async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="ma
         equal delta: src_port == mapped_port
         preserving delta NATs: dist(src_a, src_b) == dist(map_a, map_b)
         delta n (independent): dist(map_a, map_b) == delta n
-    """ 
+    """
     delta_no = {}
     dist_no = {}
     preserv_dist = {}
@@ -375,9 +388,9 @@ async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="ma
     socks = await sock_close_all(socks)
 
     # See if any of the above tests succeeded.
-    test_names = [ EQUAL_DELTA, PRESERV_DELTA ]
+    test_names = [EQUAL_DELTA, PRESERV_DELTA]
     if len(preserv_dist) <= 1:
-        test_names = [ EQUAL_DELTA]
+        test_names = [EQUAL_DELTA]
 
     for test_name in test_names:
         if test_name not in list(delta_no.keys()):
@@ -385,11 +398,11 @@ async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="ma
 
         no = delta_no[test_name]
         if no >= threshold:
-            return delta_info( test_name, 0 )
+            return delta_info(test_name, 0)
     for port_dist in list(dist_no.keys()):
         no = dist_no[port_dist]
         if no >= threshold:
-            return delta_info( INDEPENDENT_DELTA, port_dist )
+            return delta_info(INDEPENDENT_DELTA, port_dist)
 
     """
     Check for:
@@ -418,10 +431,10 @@ async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="ma
     for port_dist in list(local_dist.keys()):
         no = local_dist[port_dist]
         if no >= threshold:
-            return delta_info( DEPENDENT_DELTA, port_dist )
+            return delta_info(DEPENDENT_DELTA, port_dist)
 
     # Return delta value.
-    return delta_info( RANDOM_DELTA, 0 )
+    return delta_info(RANDOM_DELTA, 0)
 
 """
 A NAT may only allocate mappings from within a fixed range.
@@ -431,7 +444,9 @@ It probably chose to do this for security reasons.
 E.g. most known services use low range ports. If it only
 uses higher range ports for mappings it won't show up
 for port scanners as much.
-""" 
+"""
+
+
 def nats_intersect_range(our_nat, their_nat, test_no):
     # Calculate intersection range.
     is_intersect = range_intersects(our_nat["range"], their_nat["range"])
@@ -440,7 +455,7 @@ def nats_intersect_range(our_nat, their_nat, test_no):
         # Between our[range] and their[range] if any.
         r = intersect_range(
             our_nat["range"],
-            their_nat["range"]
+            their_nat["range"],
         )
 
         # If range is long enough then use it.
@@ -453,6 +468,7 @@ def nats_intersect_range(our_nat, their_nat, test_no):
         use_range = our_nat["range"]
 
     return use_range
+
 
 ###############################################################
 # [ [ local, remote, reply, sock ] ... ]
@@ -524,7 +540,7 @@ async def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, stun_c
     Increasing the test_no and rounding to powers of 2
     may help to increase accuracy of the ranges.
     """
-        
+
     # Poor concurrency support.
     if our_nat["delta"]["type"] == INDEPENDENT_DELTA:
         # We can use anything for a local port.
@@ -532,7 +548,7 @@ async def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, stun_c
         next_local = from_range([2000, MAX_PORT])
         next_remote = field_wrap(
             last_remote + our_nat["delta"]["value"],
-            use_range
+            use_range,
         )
 
         # Return port predictions.
@@ -546,7 +562,7 @@ async def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, stun_c
         next_local = port_wrap(last_local + 1)
         next_remote = field_wrap(
             last_remote + our_nat["delta"]["value"],
-            use_range
+            use_range,
         )
 
         # Return port predictions.
@@ -560,7 +576,7 @@ async def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, stun_c
     if our_nat["type"] in PREDICTABLE_NATS:
         # Get a mapping to use.
         _, s, local_port, remote_port, _, _ = await stun_client.get_mapping(
-            proto=STREAM
+            proto=STREAM,
         )
 
         # Calculate reply port.
@@ -579,6 +595,7 @@ async def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, stun_c
     """
 
     raise Exception("Can't predict this NAT type.")
+
 
 """
 The code in this function is mostly error checking for
@@ -630,6 +647,7 @@ def nats_can_predict(our_nat, their_nat):
                 use_stun_port = 1
 
     return use_stun_port
+
 
 # Generates a list of local ports to remote mapped ports,
 # and / or required reply ports for TCP hole punching.
@@ -684,7 +702,7 @@ async def get_nat_predictions(mode, stun_client, our_nat, their_nat, their_maps=
     last_mapped = [None, None]
     if our_nat["delta"]["type"] in DELTA_N:
         _, s, local_port, remote_port, _, _ = await stun_client.get_mapping(
-            proto=STREAM
+            proto=STREAM,
         )
 
         last_mapped = [local_port, remote_port]
@@ -716,7 +734,7 @@ async def get_nat_predictions(mode, stun_client, our_nat, their_nat, their_maps=
             our_nat,
 
             # Reference to do a STUN request to get a mapping.
-            stun_client
+            stun_client,
         )
 
         """
@@ -746,20 +764,20 @@ async def get_nat_predictions(mode, stun_client, our_nat, their_nat, their_maps=
             stun_socks.append(sock)
 
     # Invalid state -- caller handle this pl0x.
-    if not(len(local_ports)):
+    if not len(local_ports):
         raise Exception("Unable to predict mappings")
 
     ###############################################################
     # Make a list of duplicate offsets to strip.
-    assert(len(local_ports) == len(remote_ports))
-    assert(len(remote_ports) == len(reply_ports))
-    check_lists = [ local_ports, remote_ports, reply_ports ]
-    dups = [ [], [], [] ]
+    assert len(local_ports) == len(remote_ports)
+    assert len(remote_ports) == len(reply_ports)
+    check_lists = [local_ports, remote_ports, reply_ports]
+    dups = [[], [], []]
     offending_offsets = []
     for j in range(0, len(check_lists)):
         check_list = check_lists[j]
         for i in range(0, len(check_list)):
-            if check_list in [ local_ports, reply_ports ]:
+            if check_list in [local_ports, reply_ports]:
                 if not check_list[i]:
                     continue
 
@@ -768,7 +786,7 @@ async def get_nat_predictions(mode, stun_client, our_nat, their_nat, their_maps=
                 continue
 
             dups[j].append(check_list[i])
-            
+
     # Delete the offending elements.
     # Offsets are adjusted to account for the
     # changed / new size of the list after changes.
@@ -789,5 +807,5 @@ async def get_nat_predictions(mode, stun_client, our_nat, their_nat, their_maps=
         "reply": reply_ports,
         "stun_socks": stun_socks,
         "default_maps": their_maps,
-        "last_mapped": last_mapped
+        "last_mapped": last_mapped,
     }

@@ -14,7 +14,7 @@ In IPv4 a lease time of 0 (unlimited) is allowed which is the approach
 taken here. So duel-stack hosts will at least have one route that's
 reachable. Assuming that the rules aren't wiped out after the router
 is rebooted. It's quite possible they are. Maybe useful for security
-and cleanup purposes. 
+and cleanup purposes.
 
 Finally, the response messages after port mapping can be inconsistent
 with the true outcome of the request. In testing IPv4 port forwarding
@@ -22,7 +22,7 @@ on an Open-WRT VirtualBox VM using the miniupnpd package it replies
 with a 501 error message when follow-up calls indicate the mappings
 were created successfully. UPnP stacks aren't perfect.
 
-Developer resources: 
+Developer resources:
 https://github.com/jeremypoulter/DeveloperToolsForUPnP
     - The AV server does IPv6 and is useful for testing IPv6 code.
 https://openwrt.org/docs/guide-user/virtualization/vmware#upgradedupdated_ova_for_openwrt21
@@ -30,7 +30,7 @@ https://openwrt.org/docs/guide-user/virtualization/vmware#upgradedupdated_ova_fo
     Do not follow the first part. Skip directly to the section that
     has an 'updated OVA for VMWare' this file is gold.
     Don't use VMWare for it. Open this in VirtualBox.
-    It is configured to use LAN IP 192.168.1.1 by default. 
+    It is configured to use LAN IP 192.168.1.1 by default.
 
     This is important:
         - When you start the VM enter passwd and set a password for root
@@ -56,18 +56,20 @@ https://community.ui.com/questions/Ports-required-for-upnp2/6692d89e-1dd6-4abd-a
 """
 
 import socket
+
 import xmltodict
-from .utils import *
-from .net import *
+
 from .address import *
 from .base_stream import *
 from .http_client_lib import *
+from .net import *
+from .utils import *
 
 UPNP_LEASE_TIME = 86399
 UPNP_PORT = 1900
-UPNP_IP   = {
+UPNP_IP = {
     IP4: b"239.255.255.250",
-    IP6: b"FF02::C"
+    IP6: b"FF02::C",
 }
 
 """
@@ -99,12 +101,12 @@ def m_search_buf(af):
         host = f"[{to_s(UPNP_IP[af])}]"
 
     buf = \
-    f'M-SEARCH * HTTP/1.1\r\n' \
-    f'HOST: {host}:{UPNP_PORT}\r\n' \
-    f'ST: upnp:rootdevice\r\n' \
-    f'MX: 5\r\n' \
-    f'MAN: "ssdp:discover"\r\n' \
-    f'\r\n'
+        f'M-SEARCH * HTTP/1.1\r\n' \
+        f'HOST: {host}:{UPNP_PORT}\r\n' \
+        f'ST: upnp:rootdevice\r\n' \
+        f'MX: 5\r\n' \
+        f'MAN: "ssdp:discover"\r\n' \
+        f'\r\n'
 
     return to_b(buf)
 
@@ -179,11 +181,11 @@ def port_forward_task(route, dest, service, lan_ip, lan_port, ext_port, proto, d
     headers = [
         [
             b"SOAPAction",
-            to_b(f"\"{service['serviceType']}#{soap_action}\"")
+            to_b(f"\"{service['serviceType']}#{soap_action}\""),
         ],
         [b"Connection", b"Close"],
         [b"Content-Type", b"text/xml"],
-        [b"Content-Length", to_b(f"{len(payload)}")]
+        [b"Content-Length", to_b(f"{len(payload)}")],
     ]
 
     return http_req(
@@ -193,7 +195,7 @@ def port_forward_task(route, dest, service, lan_ip, lan_port, ext_port, proto, d
         do_close=True,
         method="POST",
         payload=payload,
-        headers=headers
+        headers=headers,
     )
 
 async def add_fixed_paths(interface, af, get_root_desc):
@@ -227,17 +229,18 @@ async def add_fixed_paths(interface, af, get_root_desc):
 
         # Default web server ports.
         80,
-        8080
+        8080,
     ]
 
     # List of control urls to try.
     paths = [
         "/rootDesc.xml",
-        "/"
+        "/",
     ]
 
     # Used to carry out the work.
     tasks = []
+
     async def worker(host, port, path):
         route = await interface.route(af).bind()
         dest = await Address(host, port, route).res()
@@ -249,8 +252,8 @@ async def add_fixed_paths(interface, af, get_root_desc):
             for path in paths:
                 tasks.append(
                     async_wrap_errors(
-                        worker(host, port, path)
-                    )
+                        worker(host, port, path),
+                    ),
                 )
 
     # Execute fetch attempts.
@@ -267,11 +270,11 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
     af = src_addr.af
     if af == IP4:
         sock_conf = dict_child({
-            "sock_proto": socket.IPPROTO_UDP
+            "sock_proto": socket.IPPROTO_UDP,
         }, NET_CONF)
     if af == IP6:
         sock_conf = dict_child({
-            "sock_proto": socket.IPPROTO_UDP
+            "sock_proto": socket.IPPROTO_UDP,
         }, NET_CONF)
 
     # Make multicast socket for M-search.
@@ -323,7 +326,7 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
 
         unique[location] = reply
 
-    # Save only unique replies.    
+    # Save only unique replies.
     replies = list(unique.values())
 
     # Main code that gets a list of port forward tasks for a device.
@@ -331,7 +334,7 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
         # Service type lookup table.
         service_types = {
             IP4: "WANIPConnection",
-            IP6: "WANIPv6FirewallControl"
+            IP6: "WANIPv6FirewallControl",
         }
 
         # Bind ip for http forwarding.
@@ -373,10 +376,10 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
                     src_addr.tup[1],
                     ext_port,
                     proto,
-                    desc
-                )
+                    desc,
+                ),
             )
-            
+
             # Save task.
             tasks.append(task)
 
@@ -403,18 +406,18 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
         xml_dest = await Address(
             hostname,
             url.port,
-            route
+            route,
         ).res()
 
         # Request rootDesc.xml.
         http_route = await interface.route(af).bind(ips=src_addr.tup[0])
         results = await async_wrap_errors(
-            get_root_desc(http_route, xml_dest, url.path)
+            get_root_desc(http_route, xml_dest, url.path),
         )
 
         if results is None:
             continue
-        
+
         if len(results):
             tasks += results
 
@@ -432,7 +435,6 @@ if __name__ == "__main__":
         port = 31375
         desc = b"test 10003"
 
-
         print(i.route(IP4).nic())
 
         # respondes dont indicate success.
@@ -443,7 +445,7 @@ if __name__ == "__main__":
                 self.af = af
 
         f = F(i, IP4)
-        #src_addr = await Address("fe80::1131:b51a:3f8f:1f2d", port).res(f)
+        # src_addr = await Address("fe80::1131:b51a:3f8f:1f2d", port).res(f)
         src_addr = await Address("192.168.21.21", port, f).res()
         tasks = await port_forward(i, port, src_addr, desc)
         results = await asyncio.gather(*tasks)
@@ -459,4 +461,3 @@ if __name__ == "__main__":
         print(x)
 
     async_test(upnp_main)
-

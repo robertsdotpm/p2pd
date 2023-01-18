@@ -2,24 +2,28 @@
 nc -4 -u p2pd.net 7
 
 """
+import os
 
 from p2pd.test_init import *
+
 try:
     from .static_route import *
-except:
+except Exception:
     from static_route import *
-import os
-from p2pd.utils import log_exception, what_exception
-from p2pd import STUNClient, Interface
-from p2pd.settings import *
-from p2pd.net import VALID_AFS, TCP, UDP
-from p2pd.nat import *
-from p2pd.base_stream import pipe_open, SUB_ALL, BaseProto
-from p2pd.stun_client import tran_info_patterns, do_stun_request
-from p2pd.stun_client import changeRequest, changePortRequest
+
+from p2pd import Interface, STUNClient
+from p2pd.base_stream import SUB_ALL, BaseProto, pipe_open
 from p2pd.ip_range import IPRange
+from p2pd.nat import *
+from p2pd.net import TCP, UDP, VALID_AFS
+from p2pd.settings import *
+from p2pd.stun_client import (changePortRequest, changeRequest,
+                              do_stun_request, tran_info_patterns)
+from p2pd.utils import log_exception, what_exception
 
 env = os.environ.copy()
+
+
 class TestStunClient(unittest.IsolatedAsyncioTestCase):
     async def test_stun_client(self):
         await init_p2pd()
@@ -28,7 +32,7 @@ class TestStunClient(unittest.IsolatedAsyncioTestCase):
             try:
                 # Get default Interface for AF type.
                 i = Interface(af)
-                #rp = use_fixed_rp(i)
+                # rp = use_fixed_rp(i)
                 await i.start()
                 one_valid = True
             except Exception:
@@ -40,15 +44,15 @@ class TestStunClient(unittest.IsolatedAsyncioTestCase):
             wan_ip = await stun_client.get_wan_ip()
             self.assertTrue(wan_ip)
 
-            m = await stun_client.get_mapping(proto=TCP) 
-            self.assertTrue(isinstance(m[0], Interface)) # Interface used for stun.
+            m = await stun_client.get_mapping(proto=TCP)
+            self.assertTrue(isinstance(m[0], Interface))  # Interface used for stun.
             self.assertTrue(isinstance(m[1], BaseProto))  # Instance of open socket to stun server.
-            self.assertTrue(isinstance(m[2], int)) # Local port
-            self.assertTrue(isinstance(m[3], int)) # Remote mapping
-            self.assertTrue(isinstance(m[4], str)) # Remote IP
-            self.assertTrue(m[2]) # Local port
-            self.assertTrue(m[3]) # Mapped port
-            IPRange(m[4]) # Is valid IP
+            self.assertTrue(isinstance(m[2], int))  # Local port
+            self.assertTrue(isinstance(m[3], int))  # Remote mapping
+            self.assertTrue(isinstance(m[4], str))  # Remote IP
+            self.assertTrue(m[2])  # Local port
+            self.assertTrue(m[3])  # Mapped port
+            IPRange(m[4])  # Is valid IP
 
             # Stun server addr.
             route = await i.route(af).bind()
@@ -57,7 +61,7 @@ class TestStunClient(unittest.IsolatedAsyncioTestCase):
                 stun_server[0],
                 stun_server[1],
                 route,
-                UDP
+                UDP,
             ).res()
 
             # Check NAT test result is as expected.
@@ -72,12 +76,12 @@ class TestStunClient(unittest.IsolatedAsyncioTestCase):
                     pipe = (await pipe_open(
                         UDP,
                         dest,
-                        route
+                        route,
                     )).subscribe(SUB_ALL)
 
                     # Used for matching the TXID for the stun reply.
                     tran_info = tran_info_patterns(dest.tup)
-                    tran_info[1] = 0 # Match any host tuple.
+                    tran_info[1] = 0  # Match any host tuple.
                     extra_data = req
                     pipe.subscribe(tran_info[:2])
 
@@ -88,7 +92,7 @@ class TestStunClient(unittest.IsolatedAsyncioTestCase):
                     await pipe.close()
 
         self.assertTrue(one_valid)
-                
+
 
 if __name__ == '__main__':
     main()

@@ -1,9 +1,9 @@
 # Python version 3.5 and up.
 
-from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
+from setuptools import find_packages, setup
 
 here = path.abspath(path.dirname(__file__))
 install_reqs = None
@@ -29,6 +29,6 @@ setup(
     install_requires=install_reqs,
     classifiers=[
         'Intended Audience :: Developers',
-        'Programming Language :: Python :: 3'
+        'Programming Language :: Python :: 3',
     ],
 )

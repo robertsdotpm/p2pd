@@ -2,7 +2,7 @@
 This is my attempt to visualize the association between private, NIC
 addresses and public WAN addresses on a network interface. I have
 learned the following information about network addresses:
- 
+
     * A NIC can have one or more addresses.
     * A NIC can be assigned a block or range of addresses.
     * A NIC doesn't have to use private addresses. It's common for
@@ -25,12 +25,12 @@ learned the following information about network addresses:
     Thus, if there are multiple gateways for a NIC then its
     possible for the external WAN address to change under
     high network load. This is not really ideal.
- 
+
 The purpose of this module is to have easy access to the
 external addresses of the machine and any associated NIC
 addresses needed for Bind calls in order to use them. I
 use the following simple rules to make this possible:
- 
+
     1. All private addresses for a NIC form a group. This
     group points to the same external address for that NIC.
     2. Any public addresses are tested using STUN. If STUN
@@ -43,7 +43,7 @@ use the following simple rules to make this possible:
     only the first address is checked. If success then
     I assume the whole block is valid. Ranges of
     addresses are fully supported.
- 
+
 When it comes to complex routing tables that have
 strange setups with multiple default gateways for
 a NIC I am for now ignoring this possibility. I
@@ -65,6 +65,7 @@ import asyncio
 import copy
 import ipaddress
 from functools import total_ordering
+
 from .ip_range import *
 from .netiface_extra import *
 from .upnp import *
@@ -98,20 +99,20 @@ class RoutePoolIter():
             raise StopIteration
 
         # Offset used for absolute position of WAN host.
-        if self.reverse == False:
+        if not self.reverse:
             host_offset = self.host_p
         else:
             host_offset = (len(self.rp) - 1) - self.host_p
-        
+
         # Get a route object encapsulating that WAN host.
         route = self.rp.get_route_info(
             self.route_offset,
-            self.host_p
+            self.host_p,
         )
 
         # Adjust position of pointers.
         self.host_p += 1
-        if self.reverse == False:
+        if not self.reverse:
             if self.host_p >= self.rp.len_list[self.route_offset]:
                 if self.route_offset < len(self.rp.routes) - 1:
                     self.route_offset += 1
@@ -127,26 +128,26 @@ class RoutePoolIter():
 class Route(Bind):
     def __init__(self, af, nic_ips, ext_ips, interface=None, ext_check=1):
         # Sanity tests.
-        assert(af in VALID_AFS)
-        assert(isinstance(nic_ips, list))
-        assert(isinstance(ext_ips, list))
-        assert(len(ext_ips))
-        assert(len(nic_ips))
+        assert af in VALID_AFS
+        assert isinstance(nic_ips, list)
+        assert isinstance(ext_ips, list)
+        assert len(ext_ips)
+        assert len(nic_ips)
 
         # Check value and type of ext_ip.
-        assert(isinstance(ext_ips[0], IPRange))
-        assert(ext_ips[0].i_ip) # IP must not be 0.
-        assert(ext_ips[0].af == af)
+        assert isinstance(ext_ips[0], IPRange)
+        assert ext_ips[0].i_ip  # IP must not be 0.
+        assert ext_ips[0].af == af
 
         # Check NIC values.
         for nic_ipr in nic_ips:
-            assert(isinstance(nic_ipr, IPRange))
-            assert(nic_ipr.af == af)
+            assert isinstance(nic_ipr, IPRange)
+            assert nic_ipr.af == af
 
         # Allow ext to be private if check is disabled.
         # Needed to allow for conversion from a Bind to a Route.
         if ext_check:
-            assert(ext_ips[0].is_public)
+            assert ext_ips[0].is_public
 
         # Interface my be None.
         super().__init__(interface, af, leave_none=1)
@@ -159,20 +160,20 @@ class Route(Bind):
         self.route_pool = self.route_offset = self.host_offset = None
 
     async def forward(self, port=None, proto="TCP"):
-        assert(self.resolved)
+        assert self.resolved
         port = port or self.bind_port
         ip = self.bind_ip(self.af)
         src_addr = await Address(
             ip,
             port,
-            self
+            self,
         ).res()
         return await port_forward(
             interface=self.interface,
             ext_port=port,
             src_addr=src_addr,
             desc=f"P2PD {hash(src_addr.tup)}"[0:8],
-            proto=proto
+            proto=proto,
         )
 
     async def rebind(self, port, ips=None):
@@ -245,13 +246,10 @@ class Route(Bind):
             ipr = IPRange(other, cidr=CIDR_WAN)
             return ipr
 
-        raise NotImplemented("Cannot convert other to IPRange in route.")
+        raise NotImplementedError("Cannot convert other to IPRange in route.")
 
     def bad_len(self, other):
-        if not len(self) or not len(other):
-            return True
-        else:
-            return False
+        return not len(self) or not len(other)
 
     # Get a list of N routes that don't use this WAN IP.
     # Incrementally adjusts route offset so its efficent.
@@ -285,7 +283,7 @@ class Route(Bind):
     def to_dict(self):
         nic_ips = []
         ext_ips = []
-        list_infos =  [[nic_ips, self.nic_ips], [ext_ips, self.ext_ips]]
+        list_infos = [[nic_ips, self.nic_ips], [ext_ips, self.ext_ips]]
         for list_info in list_infos:
             dest_list, src_list = list_info
             for ipr in src_list:
@@ -301,7 +299,7 @@ class Route(Bind):
     def from_dict(d):
         nic_ips = []
         ext_ips = []
-        list_info =  [[nic_ips, d["nic_ips"]], [ext_ips, d["ext_ips"]]]
+        list_info = [[nic_ips, d["nic_ips"]], [ext_ips, d["ext_ips"]]]
         for dest_list, src_list in list_info:
             for ipr_d in src_list:
                 ipr = IPRange.from_dict(ipr_d)
@@ -311,7 +309,7 @@ class Route(Bind):
         return Route(
             af=af,
             nic_ips=nic_ips,
-            ext_ips=ext_ips
+            ext_ips=ext_ips,
         )
 
     # Pickle.
@@ -332,7 +330,7 @@ class Route(Bind):
 
         # Otherwise get a list of routes, not matching the ones provided.
         if not isinstance(other, list):
-            raise NotImplemented("Route != ? not implemented")
+            raise NotImplementedError("Route != ? not implemented")
         else:
             return self.alt(limit=len(other), exclude_wans=other)
 
@@ -357,11 +355,7 @@ class Route(Bind):
             return len(self.ext_ips[0])
 
     def __repr__(self):
-        s = "[NICs = {}, WAN = {}, AF = {}]".format(
-            str(self.nic_ips),
-            str(self.ext_ips),
-            self.af
-        )
+        s = f"[NICs = {str(self.nic_ips)}, WAN = {str(self.ext_ips)}, AF = {self.af}]"
 
         return s
 
@@ -403,6 +397,7 @@ class Route(Bind):
         route.resolved = self.resolved
 
         return route
+
 
 class RoutePool():
     def __init__(self, routes=None):
@@ -472,10 +467,7 @@ class RoutePool():
     # Is a route in this route pool?
     def __contains__(self, other):
         route = self.locate(other)
-        if route is not None:
-            return True
-        else:
-            return False
+        return route is not None
 
     # Simulate fetching a route off a stack of routes.
     # Just hides certain pointer offsets when indexing, lel.
@@ -490,13 +482,13 @@ class RoutePool():
 
     def get_route_info(self, route_offset, abs_host_offset):
         # Route to use for the WAN addresses.
-        assert(route_offset <= (len(self.routes) - 1))
+        assert route_offset <= (len(self.routes) - 1)
         route = self.routes[route_offset]
-        
+
         # Convert host_offset to a index inside route's WAN subnet.
         prev_len = self.len_list[route_offset - 1] if route_offset else 0
         rel_host_offset = abs_host_offset - prev_len
-        assert(rel_host_offset <= self.len_list[route_offset] - 1)
+        assert rel_host_offset <= self.len_list[route_offset] - 1
 
         # Get references to member objs.
         wan_ipr = route.ext_ips[0]
@@ -505,18 +497,18 @@ class RoutePool():
         # For pub ranges assigned to NIC -- they will line up.
         # For N or more private addressess -> a WAN = probably won't.
         # In such a case it doesn't matter as any NIC IP = the same WAN.
-        assert(rel_host_offset + 1 <= self.wan_hosts)
-        assert(len(wan_ipr))
-        assert(len(nic_ipr))
+        assert rel_host_offset + 1 <= self.wan_hosts
+        assert len(wan_ipr)
+        assert len(nic_ipr)
         rel_host_offset = rel_host_offset % self.wan_hosts
-        
+
         # Build a route corrosponding to these offsets.
         wan_ip = IPRange(str(wan_ipr[rel_host_offset]), cidr=CIDR_WAN)
         new_route = Route(
             af=route.af,
             nic_ips=copy.deepcopy(route.nic_ips),
             ext_ips=[wan_ip],
-            interface=route.interface
+            interface=route.interface,
         )
         new_route.set_offsets(route_offset, abs_host_offset)
         new_route.link_route_pool(self)
@@ -548,7 +540,7 @@ class RoutePool():
         elif isinstance(key, tuple):
             return [self[x] for x in key]
         else:
-            raise TypeError('Invalid argument type: {}'.format(type(key)))
+            raise TypeError(f'Invalid argument type: {type(key)}')
 
     def __iter__(self):
         return RoutePoolIter(self)
@@ -556,7 +548,8 @@ class RoutePool():
     def __reversed__(self):
         return RoutePoolIter(self, reverse=True)
 
-def rp_from_fixed(fixed, interface, af): # pragma: no cover
+
+def rp_from_fixed(fixed, interface, af):  # pragma: no cover
     """
     [
         [
@@ -566,7 +559,6 @@ def rp_from_fixed(fixed, interface, af): # pragma: no cover
         route ...
     ]
     """
-
     routes = []
     for route in fixed:
         nic_iprs = []
@@ -588,7 +580,7 @@ def rp_from_fixed(fixed, interface, af): # pragma: no cover
     return RoutePool(routes)
 
 async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, netifaces=None, stun_client=None):
-    from .stun_client import STUNClient, STUN_CONF
+    from .stun_client import STUN_CONF, STUNClient
 
     # Settings to use for external addresses over STUN.
     if interface is not None:
@@ -599,8 +591,8 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
 
     # Route-specific config options for STUN.
     stun_conf = copy.deepcopy(STUN_CONF)
-    stun_conf["retry_no"] = 2 # Slower but more fault-tolerant.
-    stun_conf["consensus"] = ROUTE_CONSENSUS # N of M for a result.
+    stun_conf["retry_no"] = 2  # Slower but more fault-tolerant.
+    stun_conf["consensus"] = ROUTE_CONSENSUS  # N of M for a result.
     loop = asyncio.get_event_loop()
 
     # Other important variables.
@@ -655,13 +647,13 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                         stun_client.interface,
                         af=stun_client.af,
                         port=0,
-                        ips=src_ip
+                        ips=src_ip,
                     ).res()
 
                     # Get external IP and compare to bind IP.
                     wan_ip = await stun_client.get_wan_ip(
                         local_addr=local_addr,
-                        conf=stun_conf
+                        conf=stun_conf,
                     )
 
                     # Check if address is actually public.
@@ -672,7 +664,7 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                             af=af,
                             nic_ips=[nic_ipr],
                             ext_ips=[copy.deepcopy(nic_ipr)],
-                            interface=stun_client.interface
+                            interface=stun_client.interface,
                         )
                     else:
                         # In a 'public range' but used privately.
@@ -680,11 +672,11 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                         nic_ipr.is_private = True
                         nic_ipr.is_public = False
                         main_nics.append(nic_ipr)
-    
-                if skip_resolve == False:
+
+                if not skip_resolve:
                     # Determine if this address is really public.
                     tasks.append(
-                        ipr_is_public(nic_ipr, stun_client, main_nics)
+                        ipr_is_public(nic_ipr, stun_client, main_nics),
                     )
                     continue
                 else:
@@ -696,7 +688,7 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                         af=af,
                         nic_ips=[nic_ipr],
                         ext_ips=[copy.deepcopy(nic_ipr)],
-                        interface=stun_client.interface
+                        interface=stun_client.interface,
                     )
 
                     routes.append(route)
@@ -714,7 +706,7 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
         if len(main_nics):
             if af == IP4:
                 wan_ip = None
-                if skip_resolve == False:
+                if not skip_resolve:
                     # Loop over main NICs.
                     # Discard all broken until WAN IP works.
                     # Then add all afterwards.
@@ -728,13 +720,13 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                                 stun_client.interface,
                                 af=stun_client.af,
                                 port=0,
-                                ips=src_ip
+                                ips=src_ip,
                             ).res()
 
                             # Get external address for main interface.
                             ext_result = await stun_client.get_wan_ip(
                                 local_addr=local_addr,
-                                conf=stun_conf
+                                conf=stun_conf,
                             )
 
                             # Save valid main NICs.
@@ -765,8 +757,8 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                             af=af,
                             nic_ips=main_nics,
                             ext_ips=[wan_ipr],
-                            interface=interface
-                        )
+                            interface=interface,
+                        ),
                     )
             else:
                 # If it's v6 associate the link locals with
@@ -783,7 +775,7 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                 manage external addresses but link local nic bind
                 code is still simple to achieve.
                 """
-                assert(isinstance(main_nics, list))
+                assert isinstance(main_nics, list)
                 for route in routes:
                     # Add link local IPs as routes NIC IPs.
                     # This will make the nic() code fast for IPv6.
@@ -797,7 +789,7 @@ async def Routes(interface_list, af, netifaces, skip_resolve=False):
     # Optimization: check if an AF has a default gateway first.
     # If it doesn't return an empty route pool for AF.
     if not is_af_routable(af, netifaces):
-        log("> af {} has no default route".format(af))
+        log(f"> af {af} has no default route")
         return RoutePool([])
 
     # Hold results.
@@ -812,8 +804,8 @@ async def Routes(interface_list, af, netifaces, skip_resolve=False):
         else:
             tasks.append(
                 async_wrap_errors(
-                    get_routes(iface, af, skip_resolve, netifaces=netifaces)
-                )
+                    get_routes(iface, af, skip_resolve, netifaces=netifaces),
+                ),
             )
 
     # Tasks that need to be run.
@@ -836,7 +828,7 @@ def interfaces_to_rp(interface_list):
                 continue
 
             route_lists.append(
-                copy.deepcopy(iface.rp[af].routes)
+                copy.deepcopy(iface.rp[af].routes),
             )
 
         routes = sum(route_lists, [])
@@ -858,12 +850,12 @@ async def bind_to_route(bind_obj):
     ips = both set to ips value
     nic_bind or ext_bind based on dest address in sock_factory
     """
-    assert(bind_obj.resolved)
+    assert bind_obj.resolved
     interface = bind_obj.interface
     nic_bind = bind_obj._bind_tups[NIC_BIND][0]
     ext_bind = bind_obj._bind_tups[EXT_BIND][0]
     af = bind_obj.af
-    assert(interface.resolved)
+    assert interface.resolved
 
     """
     If the ext_bind contains a valid public address then
@@ -898,17 +890,17 @@ async def bind_to_route(bind_obj):
         nic_ips=[nic_ipr],
         ext_ips=[ext_ipr],
         interface=interface,
-        ext_check=0
+        ext_check=0,
     )
 
     # Bind to port in route.
     await route.bind(port=bind_obj.bind_port)
     return route
 
-if __name__ == "__main__": # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     from .interface import Interface
 
-    async def test_get_routes(): # pragma: no cover
+    async def test_get_routes():  # pragma: no cover
         internode_iface = Interface("enp3s0")
         starlink_iface = Interface("wlp2s0")
         iface_list = [internode_iface, starlink_iface]
@@ -919,11 +911,11 @@ if __name__ == "__main__": # pragma: no cover
         nr1, _ = ~r1
 
         # Should compare two routes WAN portions.
-        assert(r1 != nr1)
-        assert(r1 == r1)
+        assert r1 != nr1
+        assert r1 == r1
 
         r_list = r1 != [r1]
-        assert(r_list[0][0] != r1)
+        assert r_list[0][0] != r1
         """
 
         # Test no WAN route.
@@ -950,7 +942,7 @@ if __name__ == "__main__": # pragma: no cover
 
         ipr = IPRange("192.168.0.0", "255.255.255.0")
         r = RoutePool([ipr])
-        #ipr2 = copy.deepcopy(ipr)
+        # ipr2 = copy.deepcopy(ipr)
 
         print(id(ipr.ip))
         print(id(r.routes[0].ip))
@@ -963,5 +955,3 @@ if __name__ == "__main__": # pragma: no cover
         print(route.ext_ips)
 
     async_test(test_get_routes)
-
-

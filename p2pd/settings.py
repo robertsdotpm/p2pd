@@ -28,22 +28,22 @@ STUNT_SERVERS = {
     # Presumably these are the most reliable.
     IP4: [
         ['p2pd.net', 34780],
-        ['stun.sipnet.ru', 3478], # 19 Sept 2005
-        ['stun.1cbit.ru', 3478], # 30 Aug 2017
-        ['stun.acronis.com', 3478], # 30 Aug 2017
-        ['stun.bitburger.de', 3478], # 30 Aug 2017
-        ['stun.innovaphone.com', 3478], # 30 Aug 2017
-        ['stun.onthenet.com.au', 3478], # 30 Aug 2017
-        ['stun.zepter.ru', 3478], # 30 Aug 2017
-        ['stun.stunprotocol.org', 3478], # 19 Sept 2005
-        ['stun.siedle.com', 3478], # 12 Apr 2018
+        ['stun.sipnet.ru', 3478],  # 19 Sept 2005
+        ['stun.1cbit.ru', 3478],  # 30 Aug 2017
+        ['stun.acronis.com', 3478],  # 30 Aug 2017
+        ['stun.bitburger.de', 3478],  # 30 Aug 2017
+        ['stun.innovaphone.com', 3478],  # 30 Aug 2017
+        ['stun.onthenet.com.au', 3478],  # 30 Aug 2017
+        ['stun.zepter.ru', 3478],  # 30 Aug 2017
+        ['stun.stunprotocol.org', 3478],  # 19 Sept 2005
+        ['stun.siedle.com', 3478],  # 12 Apr 2018
     ],
 
     # There's basically none unfortunately.
     IP6: [
         ['p2pd.net', 34780],
         ['stun.stunprotocol.org', 3478],
-    ]
+    ],
 }
 
 STUND_SERVERS = {
@@ -51,39 +51,39 @@ STUND_SERVERS = {
     IP4: [
         ['p2pd.net', 34780],
         ['stun.stunprotocol.org', 3478],
-        ['stun.voipcheap.co.uk', 3478], # 19 Sept 2005
-        ['stun.usfamily.net', 3478], # 19 Sept 2005
-        ['stun.ozekiphone.com', 3478], # 19 Sept 2005
-        ['stun.voipwise.com', 3478], # 19 Sept 2005
-        ['stun.mit.de', 3478], # 19 Sept 2005
-        ['stun.hot-chilli.net', 3478], # 14 Aug 2012
-        ['stun.counterpath.com', 3478], # 19 Sept 2005
-        ['stun.cheapvoip.com', 3478], # 19 Sept 2005
-        ['stun.voip.blackberry.com', 3478], # 19 Sept 2005
-        ['webrtc.free-solutions.org', 3478], # 17 Nov 2008
-        ['stun.t-online.de', 3478], # 12 Apr 2004
-        ['stun.sipgate.net', 3478], # 19 Sept 2005
-        ['stun.voip.aebc.com', 3478], # 19 Sept 2005
-        ['stun.callwithus.com', 3478], # 19 Sept 2005
-        ['stun.counterpath.net', 3478], # 19 Sept 2005
-        ['stun.ekiga.net', 3478], # 18 Sept 2005 
-        ['stun.internetcalls.com', 3478], # 19 Sept 2005
-        ['stun.voipbuster.com', 3478], # 19 Sept 2005
-        ['stun.12voip.com', 3478], # 19 Sept 2005
-        ['stun.freecall.com', 3478], # 19 Sept 2005
-        ['stun.nexxtmobile.de', 3478], # 13 June 2018
-        ['stun.siptrunk.com', 3478], # 1 May 2014 
+        ['stun.voipcheap.co.uk', 3478],  # 19 Sept 2005
+        ['stun.usfamily.net', 3478],  # 19 Sept 2005
+        ['stun.ozekiphone.com', 3478],  # 19 Sept 2005
+        ['stun.voipwise.com', 3478],  # 19 Sept 2005
+        ['stun.mit.de', 3478],  # 19 Sept 2005
+        ['stun.hot-chilli.net', 3478],  # 14 Aug 2012
+        ['stun.counterpath.com', 3478],  # 19 Sept 2005
+        ['stun.cheapvoip.com', 3478],  # 19 Sept 2005
+        ['stun.voip.blackberry.com', 3478],  # 19 Sept 2005
+        ['webrtc.free-solutions.org', 3478],  # 17 Nov 2008
+        ['stun.t-online.de', 3478],  # 12 Apr 2004
+        ['stun.sipgate.net', 3478],  # 19 Sept 2005
+        ['stun.voip.aebc.com', 3478],  # 19 Sept 2005
+        ['stun.callwithus.com', 3478],  # 19 Sept 2005
+        ['stun.counterpath.net', 3478],  # 19 Sept 2005
+        ['stun.ekiga.net', 3478],  # 18 Sept 2005
+        ['stun.internetcalls.com', 3478],  # 19 Sept 2005
+        ['stun.voipbuster.com', 3478],  # 19 Sept 2005
+        ['stun.12voip.com', 3478],  # 19 Sept 2005
+        ['stun.freecall.com', 3478],  # 19 Sept 2005
+        ['stun.nexxtmobile.de', 3478],  # 13 June 2018
+        ['stun.siptrunk.com', 3478],  # 1 May 2014
     ],
 
     # Still not many support IP6 with multiple IPs..
     IP6: [
         ['p2pd.net', 34780],
-        ['stun.einfachcallback.de', 3478], # 21 Apr 2021
-        ['stun.hot-chilli.net', 3478], # 14 Aug 2012
-        ['stun.palava.tv', 3478], # 21 Apr 2021
-        ['stun.simlar.org', 3478], # 21 Apr 2021
-        ['stun.stunprotocol.org', 3478] # 19 Sept 2005
-    ]
+        ['stun.einfachcallback.de', 3478],  # 21 Apr 2021
+        ['stun.hot-chilli.net', 3478],  # 14 Aug 2012
+        ['stun.palava.tv', 3478],  # 21 Apr 2021
+        ['stun.simlar.org', 3478],  # 21 Apr 2021
+        ['stun.stunprotocol.org', 3478],  # 19 Sept 2005
+    ],
 }
 
 # The main server used to exchange 'signaling' messages.
@@ -94,7 +94,7 @@ MQTT_SERVERS = [
     [b"broker.mqttdashboard.com", 1883],
     [b"test.mosquitto.org", 1883],
     [b"broker.emqx.io", 1883],
-    [b"broker.hivemq.com", 1883]
+    [b"broker.hivemq.com", 1883],
 ]
 
 # Port is ignored for now.
@@ -148,7 +148,7 @@ Note:
 -----------------------------------------------------------------------
 These servers don't seem to return a reply on the relay address.
 Most likely this is due to the server using a reply port that is different
-to the relay port and TURN server port. This will effect most types of 
+to the relay port and TURN server port. This will effect most types of
 NATs, unfortunately. So they've been removed from the server list for now.
 
 {
@@ -177,7 +177,7 @@ TURN_SERVERS = [
         "afs": [IP4, IP6],
         "user": None,
         "pass": None,
-        "realm": b"p2pd.net"
+        "realm": b"p2pd.net",
     },
     {
         "host": b"turn.obs.ninja",
@@ -185,7 +185,7 @@ TURN_SERVERS = [
         "afs": [IP4, IP6],
         "user": b"steve",
         "pass": b"setupYourOwnPlease",
-        "realm": None
+        "realm": None,
     },
     {
         "host": b"us-0.turn.peerjs.com",
@@ -193,7 +193,7 @@ TURN_SERVERS = [
         "afs": [IP4, IP6],
         "user": b"peerjs",
         "pass": b"peerjsp",
-        "realm": None
+        "realm": None,
     },
     {
         "host": b"stun.contus.us",
@@ -201,7 +201,7 @@ TURN_SERVERS = [
         "afs": [IP4],
         "user": b"contus",
         "pass": b"SAE@admin",
-        "realm": None
+        "realm": None,
     },
     {
         "host": b"turn.quickblox.com",
@@ -209,7 +209,7 @@ TURN_SERVERS = [
         "afs": [IP4],
         "user": b"quickblox",
         "pass": b"baccb97ba2d92d71e26eb9886da5f1e0",
-        "realm": None
+        "realm": None,
     },
     {
         "host": b"turn.threema.ch",
@@ -217,8 +217,6 @@ TURN_SERVERS = [
         "afs": [IP4],
         "user": b"threema-angular",
         "pass": b"Uv0LcCq3kyx6EiRwQW5jVigkhzbp70CjN2CJqzmRxG3UGIdJHSJV6tpo7Gj7YnGB",
-        "realm": None
+        "realm": None,
     },
 ]
-
-
