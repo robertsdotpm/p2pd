@@ -126,11 +126,14 @@ you want to execute to powershell.
 Example: 'powershell "route print"'
 """
 async def cmd(value, io=None, timeout=10):
+    # Output type.
+    out_type = value
+    null_out = to_type('', out_type)
+
     # Setup STDIN pipes.
     in_val = None
     if io is not None:
         in_val = asyncio.subprocess.PIPE
-        io = to_b(io)
 
     this_dir = os.path.dirname(__file__)
     try:
@@ -149,7 +152,7 @@ async def cmd(value, io=None, timeout=10):
                 stdout, stderr = await asyncio.wait_for(task, timeout)
             except asyncio.TimeoutError:
                 log(f"command {value} timed out")
-                return ''
+                return null_out
         else:
             stdout, stderr = await proc.communicate(input=io)
     except NotImplementedError:
@@ -162,7 +165,7 @@ async def cmd(value, io=None, timeout=10):
                 stderr = proc.stderr
             except subprocess.TimeoutExpired:
                 log(f"command {value} timed out")
-                return ''
+                return null_out
 
             return stdout, stderr
         
@@ -175,9 +178,9 @@ async def cmd(value, io=None, timeout=10):
 
     # Return command output.
     if stdout is None:
-        return ""
+        return null_out
     else:
-        return to_s(stdout)
+        return to_type(stdout, out_type)
 
 async def is_pshell_restricted():
     out = await cmd("powershell Get-ExecutionPolicy", timeout=None)

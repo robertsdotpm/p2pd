@@ -6,7 +6,10 @@ Running async examples
 
 Alr1ght people, P2PD uses Python's 'asynchronous' features to run
 everything in an event loop. You might want to use the special 'REPL'
-that the asyncio module provides to run these examples:
+that the asyncio module provides to run these examples. It's available
+on (very) recent versions of Python like 3.8 or higher. Otherwise,
+P2PD has a function called async_test(name_of_async_func, arg_tup)
+that can be used to run async code.
 
 .. code-block:: shell
 

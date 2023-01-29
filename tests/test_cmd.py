@@ -18,8 +18,8 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
             tests = [
                 # Regular command with double quotes in it.
                 [
-                    'test "something"',
-                    '"test ""something"""'
+                    'test "somèthing"',
+                    '"test ""somèthing"""'
                 ],
 
                 # Sneaky attempt to escape enclosing last slash.
@@ -59,8 +59,8 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
             tests = [
                 # Regular command with double quotes in it.
                 [
-                    'test "something"',
-                    "'test \"something\"'"
+                    'tèst "something"',
+                    "'tèst \"something\"'"
                 ],
 
                 # Sneaky attempt to escape enclosing last slash.
@@ -94,8 +94,8 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
             tests = [
                 # Regular command with double quotes in it.
                 [
-                    'test "something"',
-                    '"test \\"something\\""'
+                    'tèst "something"',
+                    '"tèst \\"something\\""'
                 ],
 
                 # Sneaky attempt to escape enclosing last slash.
@@ -140,6 +140,7 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
             # How is param serialized.
             exp_param = await test_esc(safe_param)
             self.assertEqual(exp_param, unsafe_param)
+            self.assertTrue(isinstance(exp_param, str))
 
     async def test_cmd(self):
         py = os.path.basename(sys.executable)

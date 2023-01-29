@@ -89,7 +89,7 @@ MAX_PORT = 65535
 
 re.unescape = lambda x: re.sub(r'\\(.)', r'\1', x)
 to_b = lambda x: x if type(x) == bytes else x.encode("ascii")
-to_s = lambda x: x if type(x) == str else x.decode("ascii")
+to_s = lambda x: x if type(x) == str else x.decode("utf-8")
 to_hs = lambda x: to_s(binascii.hexlify(to_b(x)))
 to_h = lambda x: to_hs(x) if len(x) else "00"
 to_i = lambda x: x if isinstance(x, int) else int(x, 16)
@@ -120,6 +120,15 @@ rm_whitespace = lambda x: re.sub(r"\s+", "", x, flags=re.UNICODE)
 urlencode = lambda x: to_b(urllib.parse.quote(x))
 urldecode = lambda x: to_b(urllib.parse.unquote(x))
 shuffle = lambda x: random.shuffle(x) or x
+
+def to_type(x, out_type):
+    # String.
+    if isinstance(out_type, str):
+        return to_s(x)
+
+    # Bytes.
+    if isinstance(out_type, bytes):
+        return to_b(x)
 
 # Take a dict template called Y and a child dict called X.
 # Yield a new dict with Y's vals overwritten by X's.
