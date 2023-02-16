@@ -27,7 +27,8 @@ STUNT_SERVERS = {
     # Try to use the oldest servers around.
     # Presumably these are the most reliable.
     IP4: [
-        ['p2pd.net', 34780],
+        # ['p2pd.net', 34780],
+        ['stun.stunprotocol.org', 3478], # 19 Sept 2005
         ['stun.sipnet.ru', 3478], # 19 Sept 2005
         ['stun.1cbit.ru', 3478], # 30 Aug 2017
         ['stun.acronis.com', 3478], # 30 Aug 2017
@@ -35,13 +36,12 @@ STUNT_SERVERS = {
         ['stun.innovaphone.com', 3478], # 30 Aug 2017
         ['stun.onthenet.com.au', 3478], # 30 Aug 2017
         ['stun.zepter.ru', 3478], # 30 Aug 2017
-        ['stun.stunprotocol.org', 3478], # 19 Sept 2005
         ['stun.siedle.com', 3478], # 12 Apr 2018
     ],
 
     # There's basically none unfortunately.
     IP6: [
-        ['p2pd.net', 34780],
+        # ['p2pd.net', 34780],
         ['stun.stunprotocol.org', 3478],
     ]
 }
@@ -49,7 +49,7 @@ STUNT_SERVERS = {
 STUND_SERVERS = {
     # A few aged, OG stun servers/
     IP4: [
-        ['p2pd.net', 34780],
+        # ['p2pd.net', 34780],
         ['stun.stunprotocol.org', 3478],
         ['stun.voipcheap.co.uk', 3478], # 19 Sept 2005
         ['stun.usfamily.net', 3478], # 19 Sept 2005
@@ -77,24 +77,24 @@ STUND_SERVERS = {
 
     # Still not many support IP6 with multiple IPs..
     IP6: [
-        ['p2pd.net', 34780],
+        # ['p2pd.net', 34780],
+        ['stun.stunprotocol.org', 3478], # 19 Sept 2005
         ['stun.einfachcallback.de', 3478], # 21 Apr 2021
         ['stun.hot-chilli.net', 3478], # 14 Aug 2012
         ['stun.palava.tv', 3478], # 21 Apr 2021
         ['stun.simlar.org', 3478], # 21 Apr 2021
-        ['stun.stunprotocol.org', 3478] # 19 Sept 2005
     ]
 }
 
 # The main server used to exchange 'signaling' messages.
 # These are messages that help nodes create connections.
 MQTT_SERVERS = [
-    [b"p2pd.net", 1883],
+    # [b"p2pd.net", 1883],
     [b"mqtt.eclipseprojects.io", 1883],
     [b"broker.mqttdashboard.com", 1883],
     [b"test.mosquitto.org", 1883],
     [b"broker.emqx.io", 1883],
-    [b"broker.hivemq.com", 1883]
+    [b"broker.hivemq.com", 1883],
 ]
 
 # Port is ignored for now.
@@ -169,8 +169,7 @@ NATs, unfortunately. So they've been removed from the server list for now.
     "pass": b"openrelayproject",
     "realm": None
 }
-"""
-TURN_SERVERS = [
+    
     {
         "host": b"p2pd.net",
         "port": 3478,
@@ -179,20 +178,22 @@ TURN_SERVERS = [
         "pass": None,
         "realm": b"p2pd.net"
     },
-    {
-        "host": b"turn.obs.ninja",
-        "port": 443,
-        "afs": [IP4, IP6],
-        "user": b"steve",
-        "pass": b"setupYourOwnPlease",
-        "realm": None
-    },
+"""
+TURN_SERVERS = [
     {
         "host": b"us-0.turn.peerjs.com",
         "port": 3478,
         "afs": [IP4, IP6],
         "user": b"peerjs",
         "pass": b"peerjsp",
+        "realm": None
+    },
+    {
+        "host": b"turn.obs.ninja",
+        "port": 443,
+        "afs": [IP4, IP6],
+        "user": b"steve",
+        "pass": b"setupYourOwnPlease",
         "realm": None
     },
     {
