@@ -10,6 +10,9 @@ def init_process_pool():
     # Create new event loop in the process.
     loop = asyncio.get_event_loop()
 
+    # Handle exceptions on close.
+    loop.set_exception_handler(handle_exceptions)
+
 async def get_pp_executors(workers=2):
     try:
         pp_executor = ProcessPoolExecutor(max_workers=workers)
@@ -33,7 +36,7 @@ async def get_pp_executors(workers=2):
     return pp_executor
 
 # delay with sys clock and get_pp_executors.
-async def start_p2p_node(port=NODE_PORT, node_id=None, ifs=None, clock_skew=Dec(0), ip=None, pp_executors=None, enable_upnp=False, signal_offsets=None, netifaces=None):
+async def start_p2p_node(port=NODE_PORT, node_id=None, ifs=None, clock_skew=Dec(0), ip=None, pp_executors=False, enable_upnp=False, signal_offsets=None, netifaces=None):
     # Load NAT info for interface.
     ifs = ifs or await load_interfaces(netifaces=netifaces)
     assert(len(ifs))

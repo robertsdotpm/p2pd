@@ -16,15 +16,5 @@ server with multiple IPv4/6s on TCP and UDP.
 
 Here is how to use the STUN client.
 
-.. code-block:: python
-
-    from p2pd import *
-
-    i = await Interface().start()
-
-    # Test echo server with AF.
-    stun_client = STUNClient(i, i.supported()[0])
-    wan_ip = await stun_client.get_wan_ip()
-    nat = await stun_client.get_nat_info()
-    results = await stun_client.get_mapping(TCP)
-
+.. literalinclude:: examples/example_12.py
+    :language: python3

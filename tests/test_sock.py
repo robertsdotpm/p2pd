@@ -34,8 +34,8 @@ class TestSock(unittest.IsolatedAsyncioTestCase):
         i = await Interface().start_local()
         af = i.supported()[0]
         r = await i.route(af).bind()
-        d = await Address("p2pd.net", 34780, r, UDP).res()
-        s = await socket_factory(r, dest_addr=d, sock_type=UDP)
+        d = await Address("google.com", 80, r, TCP).res()
+        s = await socket_factory(r, dest_addr=d, sock_type=TCP)
         await loop.sock_connect(
             s, 
             d.tup

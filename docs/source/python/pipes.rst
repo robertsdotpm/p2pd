@@ -39,41 +39,8 @@ pipes for the sender. If this example works you should see nothing.
 Notice that msg handlers include a field for the senders addressing information
 and a pipe that can be used to interact with that client.
 
-.. code-block:: python
-
-    from p2pd import *
-
-    async def msg_cb(msg, client_tup, pipe):
-        await pipe.send(msg, client_tup)
-
-    async def main():
-        #
-        # Start default interface and get the first route.
-        # No AF for route use i.supported()[0] 
-        i = await Interface().start()
-        route = await i.route().bind() # Port 0 = any unused port.
-        #
-        # Start the server and use msg_cb to process messages.
-        server = await pipe_open(TCP, route=route, msg_cb=msg_cb)
-        #
-        # Connect to the server.
-        # Use the IP of the route and unused port for the destination.
-        dest = await Address(*server.sock.getsockname()[0:2], route).res()
-        client = await pipe_open(TCP, dest, route)
-        client.subscribe()
-        #
-        # Send data to the server and check receipt.
-        msg = b"test msg."
-        await client.send(msg)
-        out = await client.recv()
-        assert(msg == out)
-        #
-        # Close both.
-        await client.close()
-        await server.close()
-    
-    # From inside the async REPL.
-    await main()
+.. literalinclude:: examples/example_5.py
+    :language: python3
 
 UDP await example
 ------------------
@@ -96,36 +63,8 @@ with TCP usually has retransmissions built-in after a set duration. But no such
 logic here has been included. Note that the await for the recv is fully
 asychnronous. The event loop is free to run other tasks until a match occurs.
 
-.. code-block:: python
-
-    import random
-    import binascii
-    from p2pd import *
-
-    # Open default interface.
-    # Get a route for the first AF supported.
-    i = await Interface().start()
-    route = await i.route().bind()
-
-    # Open a UDP pipe to p2pd.net's STUN server.
-    # Subscribe to all messages.
-    pipe = (
-        await pipe_open(
-            UDP,
-            await Address("p2pd.net", 34780, route).res(),
-            route
-        )
-    ).subscribe()
-
-    # Build a STUN request and send it.
-    msg_id = ''.join([str(random.randrange(10, 99)) for _ in range(16)])
-    req_hex = "00010000" + msg_id
-    req_buf = binascii.unhexlify(req_hex)
-    await pipe.send(req_buf)
-
-    # Get the response.
-    resp = await pipe.recv()
-    print(resp)
+.. literalinclude:: examples/example_6.py
+    :language: python3
 
 Pipe methods
 --------------

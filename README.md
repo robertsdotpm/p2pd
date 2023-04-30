@@ -4,92 +4,15 @@
 
 **P2PD** is a new async networking library for Python. It's based on solving some of the problems with Python's existing APIs and supports P2P networking among other features.
 
-Let's look at some examples.
-Start the Python REPL with await support with:
+## Installation
 
-> python3 -m asyncio
+On non-windows systems make sure you have gcc and python3-devel installed.
 
-Initialise information about your network interfaces.
+   python3 -m pip install p2pd
 
-```python
-from p2pd import *
-netifaces = await init_p2pd() # Same API as netifaces
-```
+## Documentation
 
-Load default interface and load details about it's NAT.
-
-```python
-i = await Interface(netifaces=netifaces)
-await i.load_nat()
-```
-
-Choose an external address to use for an endpoint.
-Resolve the address of an echo server.
-
-```python
-route = await i.route().bind()
-dest = await Address("p2pd.net", 7, route)
-```
-
-Build an async UDP pipe to the server.
-
-```python
-pipe = await pipe_open(UDP, dest, route)
-pipe.subscribe()
-```
-
-Do some I/O on the pipe and cleanup.
-
-```python
-# UDP so may not arrive.
-await pipe.send(b"some message", dest_tup)
-out = await pipe.recv(timeout=2)
-print(out)
-```
-
-## P2P networking
-
-How about an example that does P2P networking?
-
-```python
-from p2pd import *
-
-# Put your custom protocol code here.
-async def custom_protocol(msg, client_tup, pipe):
-    # E.G. add a ping feature to your protocol.
-    if b"PING" in msg:
-        await pipe.send(b"PONG")
-
-async def make_p2p_con():
-    # Initalize p2pd.
-    netifaces = await init_p2pd()
-    #
-    # Start our main node server.
-    # The node implements your protocol.
-    node = await start_p2p_node(netifaces=netifaces)
-    node.add_msg_cb(custom_protocol)
-    #
-    # Spawn a new pipe from a P2P con.
-    # Connect to our own node server.
-    pipe = await node.connect(node.addr_bytes)
-    pipe.subscribe(SUB_ALL)
-    #
-    # Test send / receive.
-    msg = b"test send"
-    await pipe.send(b"ECHO " + msg)
-    out = await pipe.recv()
-    #
-    # Cleanup.
-    assert(msg in out)
-    await pipe.close()
-    await node.close()
-
-# Run the coroutine.
-# Or await make_p2p_con() if in async REPL.
-async_test(make_p2p_con)
-```
-
-In this example the node connects to itself but it could just as easily be used to connect to another peer.
+https://p2pd.readthedocs.io/
 
 ## Features
 
@@ -132,6 +55,3 @@ P2PD offers engineers the following features:
 - **Built on open protocols.** P2PD uses **STUN** for address lookups,
    **MQTT** for signaling messages, and **TURN** for last resort proxying.
    All of these protocols have public infrastructure.
-
-Learn how to use the software:
-https://p2pd.readthedocs.io/

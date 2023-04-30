@@ -44,51 +44,8 @@ The downside is... it's UDP. It offers no reliable delivery or sequencing. But a
 hacks add delivery back in. It wouldn't be possible to add sequencing, too.
 Though I have not done this for now. That was a lot of text so let's look at some code.
 
-.. code-block:: python
-
-    from p2pd import *
-
-    # Network interface details.
-    i = await Interface().start()
-    r = await i.route().bind()
-
-    # Address of a TURN server.
-    dest = await Address(
-        "p2pd.net",
-        3478,
-        r
-    ).res()
-
-    # Sync message callback -- do something here if you like.
-    # Can be async too.
-    msg_cb = lambda msg, client_tup, pipe: print(msg)
-
-    # Implement the TURN protocol for UDP send / recv.
-    client = TURNClient(
-        turn_addr=dest,
-        turn_user=None,
-        turn_pw=None,
-        turn_realm=b"p2pd.net",
-        route=r,
-        msg_cb=msg_cb
-    )
-
-    # Wait for authentication and relay address allocation.
-    await async_wrap_errors(
-        client.start()
-    )
-    client.subscribe(SUB_ALL)
-
-    # Send a message to ourselves.
-    await client.send(b"hello, world!", await client.relay_tup_future)
-    # You should see the message printed.
-
-    # Alternatively the pub-sub API is available since we called subscribe.
-    out = await client.recv()
-    print(out)
-
-    # Cleanup.
-    await client.close()
+.. literalinclude:: examples/example_10.py
+    :language: python3
 
 Using TURN as a fall-back option
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -99,36 +56,5 @@ establishing a 'connection.' The reason for this is it does not provide ordered
 delivery like TCP does which might come as a shock to most developers.
 However, it can be enabled should a developer choose to use it.
 
-.. code-block:: python
-
-    from p2pd import *
-
-    async def make_p2p_con():
-        # Initalize p2pd.
-        netifaces = await init_p2pd()
-        #
-        # Start our main node server.
-        # The node implements your protocol.
-        node = await start_p2p_node(netifaces=netifaces)
-
-        # Strategies used to make a P2P connection.
-        # Note that P2P_RELAY enables TURN.
-        strategies = [ P2P_DIRECT, P2P_REVERSE, P2P_PUNCH, P2P_RELAY ]
-
-        """
-        Spawns a new pipe from a P2P connection.
-        In this case it's connecting to our own node server.
-        There will be no barriers to do this so this will just use
-        a plain direct TCP connection / P2P_DIRECT.
-        Feel free to experiment with how it works.
-        """
-        pipe = await node.connect(node.addr_bytes, strategies)
-
-        # Do some stuff on the pipe ...
-        # Cleanup.
-        await pipe.close()
-        await node.close()
-
-    # Run the coroutine.
-    # Or await make_p2p_con() if in async REPL.
-    async_test(make_p2p_con)
+.. literalinclude:: examples/example_11.py
+    :language: python3

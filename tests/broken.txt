@@ -1,0 +1,16 @@
+Broken tests:
+
+net_afs -- no echo servers online
+    low priority
+
+test_turn_client -- no api server to test message receipt
+    low priority (make optional maybe)
+
+test_p2p_pipe -- no remote node
+    whhich tests?
+    
+test_signaling -- no remote node to test it
+    edit this
+
+test_tcp_punc -- failing (self punch but optional) maybe a bad sign
+

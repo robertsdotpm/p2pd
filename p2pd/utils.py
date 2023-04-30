@@ -536,6 +536,10 @@ def get_loop(loop=None):
 
     return loop
 
+# Handle stray exceptions in the event loop.
+def handle_exceptions(loop, context):
+    pass
+
 # Will be used in sample code to avoid boilerplate.
 def async_test(f, args=[], loop=None):
     #uvloop.install()
@@ -543,11 +547,16 @@ def async_test(f, args=[], loop=None):
     #if IS_DEBUG:
     #    loop.set_debug(True)
     loop.set_debug(False)
-    if len(args):
-        loop.run_until_complete(f(*args))
-    else:
-        loop.run_until_complete(f())
-    loop.close()
+
+    # Can have cleanup errors.
+    try:
+        if len(args):
+            loop.run_until_complete(async_wrap_errors(f(*args)))
+        else:
+            loop.run_until_complete(async_wrap_errors(f()))
+        loop.close()
+    except:
+        log_exception()
 
 async def return_true(result=None):
     return True

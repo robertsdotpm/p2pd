@@ -38,17 +38,8 @@ interface and interacting with it. Starting the interface looks up all
 its internal and external addresses, builds basic routing tables, and
 enumerates the NAT qualities of associated gateways.
 
-.. code-block:: python3
-
-    # Start the default interface.
-    i = await Interface().start()
-
-    # Load additional NAT details.
-    # Restrict, random port NAT assumed by default.
-    await i.load_nat()
-
-    # Show the interface details.
-    repr(i)
+.. literalinclude:: examples/example_2.py
+    :language: python3
 
 .. code-block:: text
 
@@ -94,11 +85,8 @@ contain loopback devices, and other adapters that aren't directly
 useful for networking. Often we are only interested in the adapters
 that are usable for WAN or LAN networking.
 
-.. code-block:: python
-
-    # Returns a list of Interface objects for Inter/networking.
-    netifaces = await init_p2pd()
-    ifs = await load_interfaces(netifaces=netifaces)
+.. literalinclude:: examples/example_3.py
+    :language: python3
 
 Now you know how to lookup interfaces and start them. It's time to
 learn about 'routes.'
@@ -208,52 +196,8 @@ A first networking program
 
 Connect to Google.com and get a response from it.
 
-.. code-block:: python
-
-    from p2pd import *
-
-    async def main():
-        #
-        # Load default interface.
-        i = await Interface().start()
-        #
-        # Get first supported address family.
-        # E.g. if the NIC only supports IPv4 this will == [AF_INET].
-        # If it supports both families it will == [AF_INET, AF_INET6].
-        # If no AF for route and address specified = use i.supported()[0].
-        af = i.supported()[0]
-        #
-        # Get a route to use for sockets.
-        # This will give you a copy of the first route for that address family.
-        # Routes belong to an interface and include a reference to it.
-        route = await i.route(af).bind()
-        #
-        # Lookup Google.com's IP address -- specify a specific address family.
-        # Most websites support IPv4 but not always IPv6.
-        # Interface is needed to resolve some specialty edge-cases.
-        dest = await Address("www.google.com", 80, route).res()
-        #
-        # Now open a TCP connection to that the destination.
-        pipe = await pipe_open(TCP, dest, route)
-        #
-        # Indicate that messages received should also be queued.
-        # This enables the pull / push API.
-        # You specify regex here. By default it will subscribe to everything.
-        pipe.subscribe()
-        #
-        # Send it a malformed HTTP request.
-        buf = b"Test\r\n\r\n"
-        await pipe.send(buf)
-        #
-        # Wait for any message response.
-        out = await pipe.recv(timeout=3)
-        print(out)
-        #
-        # Cleanup.
-        await pipe.close()
-
-    # From inside the async REPL.
-    await main()
+.. literalinclude:: examples/example_4.py
+    :language: python3
 
 You can see from this example that P2PD supports duel-stack networking,
 multiple network interface cards, external addressing, DNS / IP / target parsing,

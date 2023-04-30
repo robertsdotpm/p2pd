@@ -115,41 +115,8 @@ For brevity I won't go into using the library in this section.
 This is just an example to get a sense of what subscriptions look like
 from Python code.
 
-.. code-block:: python
-
-    from p2pd import *
-
-    async def sub_example():
-        #
-        # Start default interface.
-        # Don't bother resolving external addresses.
-        i = await Interface().start()
-        #
-        # Echo server address.
-        route = await i.route().bind()
-        echo_dest = await Address("p2pd.net", 7, route).res()
-        #
-        # Open a connection to the echo server.
-        pipe = await pipe_open(TCP, echo_dest, route)
-        #
-        # Create a new queue for a related subscription.
-        # Subscription = [b"msg pattern regex", b"address pattern regex"]
-        # SUB_ALL = [b"", b""] meaning 'any message', 'from any address.'
-        pipe.subscribe(SUB_ALL)
-        #
-        # Send data down the pipe.
-        msg = b"do echo test\r\n"
-        await pipe.send(msg, echo_dest.tup)
-        #
-        # Receive data back.
-        data = await pipe.recv(SUB_ALL, 4)
-        self.assertEqual(data, msg)
-        #
-        # Close the sockets.
-        await pipe.close()
-
-    # Utility function to run an async function.
-    async_test(sub_example)
+.. literalinclude:: examples/example_7.py
+    :language: python3
 
 Last words on queues
 ----------------------

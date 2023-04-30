@@ -14,44 +14,8 @@ it may not work properly with P2PD.
 | Let's start with how to open a P2P connection to a peer.
 | We'll connect to ourselves for this example.
 
-
-.. code-block:: python
-
-    from p2pd import *
-
-    # Put your custom protocol code here.
-    async def msg_cb(msg, client_tup, pipe):
-        # E.G. add a ping feature to your protocol.
-        if b"PING" in msg:
-            await pipe.send(b"PONG")
-
-    async def make_p2p_con():
-        # Initalize p2pd.
-        netifaces = await init_p2pd()
-        #
-        # Start our main node server.
-        # The node implements your protocol.
-        node = await start_p2p_node(netifaces=netifaces)
-        node.add_msg_cb(msg_cb)
-        #
-        # Spawn a new pipe from a P2P con.
-        # Connect to our own node server.
-        pipe = await node.connect(node.addr_bytes)
-        pipe.subscribe(SUB_ALL)
-        #
-        # Test send / receive.
-        msg = b"test send"
-        await pipe.send(b"ECHO " + msg)
-        out = await pipe.recv()
-        #
-        # Cleanup.
-        assert(msg in out)
-        await pipe.close()
-        await node.close()
-
-    # Run the coroutine.
-    # Or await make_p2p_con() if in async REPL.
-    async_test(make_p2p_con)
+.. literalinclude:: examples/example_1.py
+    :language: python3
 
 You can use this library as a black box if you want. The code automatically
 handles loading network interfaces, enumerating routers, bypassing NATs,

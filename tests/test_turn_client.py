@@ -10,10 +10,10 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
     async def test_turn(self):
         #print(sys.modules.keys())
         # Network interface details.
-        await init_p2pd()
         log(">>> test_turn")
         n = 0
-        i = await Interface().start_local()
+        n = await init_p2pd()
+        i = await Interface(netifaces=n).start_local()
         af = i.supported()[0]
         r = await i.route(af).bind()
         

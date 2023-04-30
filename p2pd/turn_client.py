@@ -245,6 +245,12 @@ class TURNClient(BaseProto):
 
     # Overwrite the BaseProto send method and require ACKs.
     async def send(self, data, dest_tup):
+        # Detect invalid self-send.
+        if self.relay_tup_future.done():
+            relay_tup = await self.relay_tup_future
+            if dest_tup == relay_tup:
+                raise Exception("Coturn doesn't support self-send.")
+
         # Make sure the channel is setup before continuing.
         task = asyncio.create_task(
             async_wrap_errors(

@@ -1,4 +1,5 @@
 import asyncio
+import gc
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
 from decimal import Decimal as Dec
@@ -320,6 +321,17 @@ class P2PNode(Daemon, P2PUtils):
                 self.pp_executor.shutdown()
         except Exception:
             pass
+
+        """
+        Node close will throw: 
+        Exception ignored in: <function BaseEventLoop.__del__
+        with socket error -1
+
+        So you need to make sure to wrap coroutines for exceptions.
+        """
+        self.mp_manager = None
+        self.pp_executor = None
+        await asyncio.sleep(.25)
 
 if __name__ == "__main__": # pragma: no cover
     from .p2p_pipe import P2PPipe, P2P_DIRECT, P2P_REVERSE, P2P_PUNCH, P2P_RELAY

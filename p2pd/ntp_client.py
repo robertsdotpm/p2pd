@@ -311,12 +311,12 @@ class NTPClient:
             # build the destination timestamp
             dest_timestamp = system_to_ntp_time(time.time())
         except asyncio.TimeoutError:
-            await pipe.close()
             raise NTPException("No response received from %s." % host)
         except Exception as e:
             log_exception()
         finally:
-            await pipe.close()
+            if pipe is not None:
+                await pipe.close()
 
         # construct corresponding statistics
         stats = NTPStats()

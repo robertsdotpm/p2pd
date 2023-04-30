@@ -12,31 +12,8 @@ To use it you sub class it and define your own msg_cb function.
 listen_all
 -----------
 
-.. code-block:: python
-
-    from p2pd import *
-
-    class EchoServer(Daemon):
-        def __init__(self):
-            super().__init__()
-        #
-        async def msg_cb(self, msg, client_tup, pipe):
-            await pipe.send(msg, client_tup)
-    
-    async def main():
-        i = await Interface().start()
-        #
-        # Daemon instance.
-        server_port = 10126
-        echod = await EchoServer().listen_all(
-            [i],
-            [server_port],
-            [TCP]
-        )
-        #
-        await echod.close()
-
-    await main()
+.. literalinclude:: examples/example_8.py
+    :language: python3
 
 The listen_all method of the Daemon class is as follows.
 
@@ -86,16 +63,7 @@ The listen_all function is useful for applying the same AFs, protocols, and port
 
 The format of targets here is given as **[[target, protocol], ...]**.
 
-.. code-block:: python
-
-        p = 10233
-        d = Daemon()
-        i = await Interface().start()
-        b = await i.route(i.supported()[0]).bind(ips="127.0.0.1")
-        await d.listen_specific(
-            targets=[[b, TCP]],
-        )
-
-        await d.close()
+.. literalinclude:: examples/example_9.py
+    :language: python3
 
 The listen_specific code hasn't been tested too much so it's better to use **listen_all**.

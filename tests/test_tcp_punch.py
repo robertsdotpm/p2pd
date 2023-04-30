@@ -119,7 +119,7 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
         #print(i_client.state)
 
         try:
-            results = await asyncio.wrait_for(
+            results = await asyncio.wait_for(
                 asyncio.gather(
                     async_wrap_errors(
                         i_client.proto_do_punching(PUNCH_INITIATOR, r_node_id, pipe_id)
@@ -133,8 +133,8 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
         except Exception:
             results = []
 
-        #print("Got results = ")
-        #print(results)
+        print("Got results = ")
+        print(results)
 
         async def process_results(results):
             if len(results) != 2:
