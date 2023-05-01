@@ -9,10 +9,10 @@ async def example():
     # The node implements your protocol.
     node = await start_p2p_node(
         netifaces=netifaces,
-        clock_skew=Dec(0.1),
+        #
+        # Set to true for port forwarding + pin holes.
         enable_upnp=False
     )
-    #
     #
     # Strategies used to make a P2P connection.
     # Note that P2P_RELAY enables TURN.

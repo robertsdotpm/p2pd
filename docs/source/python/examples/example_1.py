@@ -13,7 +13,12 @@ async def example():
     #
     # Start our main node server.
     # The node implements your protocol.
-    node = await start_p2p_node(netifaces=netifaces)
+    node = await start_p2p_node(
+        netifaces=netifaces,
+        #
+        # Set to true for port forwarding + pin holes.
+        enable_upnp=False
+    )
     node.add_msg_cb(msg_cb)
     #
     # Spawn a new pipe from a P2P con.

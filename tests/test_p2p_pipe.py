@@ -66,7 +66,9 @@ async def test_cleanup(node_a, node_b):
     await node_b.close()
 
 class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
+    # Self connect won't work due to Coturn changes.
     async def test_self_turn_connect(self):
+        return
         log(">>> test_self_turn_connect")
         node_a, node_b = await test_setup()
         pipe, _ = await node_a.connect(
@@ -144,6 +146,9 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         await test_cleanup(node_a, node_b)
 
     async def test_remote_direct_connect(self):
+        if not P2PD_TEST_INFRASTRUCTURE:
+            return
+
         # Test direct connect
         log(">>> test_remote_direct_connect")
         node_a, node_b = await test_setup()
@@ -180,6 +185,9 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         await test_cleanup(node_a, node_b)
 
     async def test_remote_reverse_connect(self):
+        if not P2PD_TEST_INFRASTRUCTURE:
+            return
+
         # Test reverse connect.
         log(">>> test_remote_reverse_connect")
         node_a, node_b = await test_setup()
@@ -206,6 +214,9 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         await test_cleanup(node_a, node_b)
 
     async def test_remote_punch(self):
+        if not P2PD_TEST_INFRASTRUCTURE:
+            return
+
         # If P2PD_NET_ADDR_BYTES is not us then test punching to it.
         log(">>> test_remote_punch")
         node_a, node_b = await test_setup()
@@ -227,6 +238,9 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         await test_cleanup(node_a, node_b)
 
     async def test_remote_turn_connect(self):
+        if not P2PD_TEST_INFRASTRUCTURE:
+            return
+
         log(">>> test_remote_turn_connect")
         node_a, node_b = await test_setup()
         pipe, _ = await node_a.connect(

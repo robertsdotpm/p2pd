@@ -12,17 +12,10 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
         # Network interface details.
         log(">>> test_turn")
         n = 0
-        n = await init_p2pd()
-        i = await Interface(netifaces=n).start_local()
+        netifaces = await init_p2pd()
+        i = await Interface(netifaces=netifaces).start_local()
         af = i.supported()[0]
         r = await i.route(af).bind()
-        
-        # Will be used to send packets from.
-        dest_p2pd = await Address(
-            "p2pd.net",
-            20000,
-            r
-        ).res()
 
         # Address of a TURN server.
         dest = await Address(
@@ -55,48 +48,52 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
         # The relay address used to reach our peer at the TURN server.
         relay_tup = await client.relay_tup_future
 
-        # Whitelist rest API.
-        p2pd_tup = dest_p2pd.tup
-        await client.accept_peer(p2pd_tup, p2pd_tup)
+        if P2PD_TEST_INFRASTRUCTURE:
+            # Will be used to send packets from.
+            dest_p2pd = await Address(
+                "p2pd.net",
+                20000,
+                r
+            ).res()
 
-        # Interested in any messages to queue.
-        client.subscribe(SUB_ALL)
+            # Whitelist rest API.
+            p2pd_tup = dest_p2pd.tup
+            await client.accept_peer(p2pd_tup, p2pd_tup)
 
-        
-        #await client.accept_peer(client_tup, relay_tup)
-        #await client.accept_peer(relay_tup, relay_tup)
-        """
-        m = TurnMessage(msg_type=TurnMessageMethod.SendResponse, msg_code=TurnMessageCode.Request)
-        m.write_attr(
-            TurnAttribute.Data,
-            b"test message to send."
-        )
-        buf, _ = TurnMessage.unpack(m.encode())
-        buf.write_credential(client.turn_user, client.realm, client.nonce)
-        buf.write_hmac(client.key)
-        """
+            # Interested in any messages to queue.
+            client.subscribe(SUB_ALL)
 
-        
-        # Attempt to get a reply at our relay address.
-        # Do it up to 3 times due to UDP being unreliable.
-        got_reply = False
-        for i in range(0, 3):
-            http_route = copy.deepcopy(r)
-            await http_route.bind()
-            rest_path = f"/hello/udp/{relay_tup[0]}/{relay_tup[1]}/{dest_p2pd.tup[0]}/63248"
-            _, resp = await http_req(http_route, dest_p2pd, rest_path)
+            #await client.accept_peer(client_tup, relay_tup)
+            #await client.accept_peer(relay_tup, relay_tup)
+            """
+            m = TurnMessage(msg_type=TurnMessageMethod.SendResponse, msg_code=TurnMessageCode.Request)
+            m.write_attr(
+                TurnAttribute.Data,
+                b"test message to send."
+            )
+            buf, _ = TurnMessage.unpack(m.encode())
+            buf.write_credential(client.turn_user, client.realm, client.nonce)
+            buf.write_hmac(client.key)
+            """
 
-            # Attempt to read the message back.
-            out = await client.recv(SUB_ALL, 2)
-            if out == b"hello":
-                got_reply = True
-                break
 
-        # Make sure we got a valid reply.
-        self.assertTrue(got_reply)
+            # Attempt to get a reply at our relay address.
+            # Do it up to 3 times due to UDP being unreliable.
+            got_reply = False
+            for i in range(0, 3):
+                http_route = copy.deepcopy(r)
+                await http_route.bind()
+                rest_path = f"/hello/udp/{relay_tup[0]}/{relay_tup[1]}/{dest_p2pd.tup[0]}/63248"
+                _, resp = await http_req(http_route, dest_p2pd, rest_path)
 
-        # If refresh is done too soon it can error.
-        # await asyncio.sleep(2)
+                # Attempt to read the message back.
+                out = await client.recv(SUB_ALL, 2)
+                if out == b"hello":
+                    got_reply = True
+                    break
+
+            # Make sure we got a valid reply.
+            self.assertTrue(got_reply)
         
         # Test refresh.
         client.lifetime = 0
@@ -104,9 +101,6 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
             lambda: client.refresh_allocation(), count=3, timeout=5
         )
         self.assertTrue(client.lifetime)
-
-        # Permission refresh.
-        await client.accept_peer(client_tup, relay_tup)
 
         # Cleanup the client.
         await client.close()

@@ -4,7 +4,10 @@ from p2pd.signaling import SignalMock
 from p2pd.utils import rand_plain, to_s
 
 class TestSignaling(unittest.IsolatedAsyncioTestCase):
-    async def test_signaling(self):
+    async def test_node_signaling(self):
+        if not P2PD_TEST_INFRASTRUCTURE:
+            return
+
         # Channel that the test node subs to.
         await init_p2pd()
         dest_id = "p2pd_test_node"
