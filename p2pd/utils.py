@@ -546,17 +546,15 @@ def async_test(f, args=[], loop=None):
     loop = get_loop(loop)
     #if IS_DEBUG:
     #    loop.set_debug(True)
-    loop.set_debug(False)
+    loop.set_debug(True)
 
     # Can have cleanup errors.
-    try:
-        if len(args):
-            loop.run_until_complete(async_wrap_errors(f(*args)))
-        else:
-            loop.run_until_complete(async_wrap_errors(f()))
-        loop.close()
-    except:
-        log_exception()
+    if len(args):
+        loop.run_until_complete(f(*args))
+    else:
+        loop.run_until_complete(f())
+    loop.close()
+ 
 
 async def return_true(result=None):
     return True

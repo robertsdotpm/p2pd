@@ -23,7 +23,7 @@ def http_req_buf(af, host, port, path=b"/", method=b"GET", payload=None, headers
         host = to_b(host)
     else:
         host = to_b(f"[{to_s(host)}]")
-    buf += b"Host: %s:%d\r\n" % (host, port)
+    buf += b"Host: %s\r\n" % (host)
     for header in headers:
         n, v = header
         if n not in hdrs:
@@ -63,8 +63,21 @@ class ParseHTTPResponse(HTTPResponse):
 
     def out(self):
         return self.read(self.resp_len)
+    
+def get_hdr(name, hdrs):
+    # Hdrs none probably.
+    if not isinstance(hdrs, list):
+        return (-1, None)
+    
+    # Look for particular HTTP header.
+    for index, hdr in enumerate(hdrs):
+        if hdr[0].lower() == name.lower():
+            return (index, hdr[1])
+        
+    # Not found.
+    return (-1, None)
 
-async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, headers=None):
+async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, headers=None, conf=NET_CONF):
     # Get a new con 
     r = copy.deepcopy(route)
     r = await r.bind()
@@ -72,7 +85,7 @@ async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, h
     assert(dest is not None)
     log(f"{route} {dest}")
     try:
-        p = await pipe_open(route=r, proto=TCP, dest=dest)
+        p = await pipe_open(route=r, proto=TCP, dest=dest, conf=conf)
     except Exception:
         log_exception()
 
@@ -81,7 +94,27 @@ async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, h
 
     try:
         p.subscribe(SUB_ALL)
-        buf = http_req_buf(route.af, dest.tup[0], dest.tup[1], path, method=method, payload=payload, headers=headers)
+
+        # Set host and port from con service.
+        host, port = dest.tup
+
+        # But overwrite host if it's set.
+        hdr_index, new_host = get_hdr(b"Host", headers)
+        if new_host is not None:
+            host = new_host
+            del headers[hdr_index]
+
+        # Build raw HTTP request.
+        buf = http_req_buf(
+            route.af,
+            host,
+            port,
+            path,
+            method=method,
+            payload=payload,
+            headers=headers
+        )
+
         await p.send(buf, dest.tup)
         out = await p.recv(SUB_ALL)
     except Exception:
