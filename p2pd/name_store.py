@@ -1,19 +1,48 @@
+import copy
 import asyncio
+import sqlite3
+import binascii
 from nacl.signing import SigningKey
-from nacl.signing import VerifyKey
 from .address import *
 from .interface import *
 from .base_stream import *
 from .http_client_lib import *
 
+"""
+Provides a simple async client for using a key-value database provided by a PHP script. Many useful services can be built
+on top of such a construct. DNS is a perfect example.
+
+By implementing the KV-store using PHP and doing auth with
+signatures any client is free to use the DB without the 
+tedious process of registration while the basic infrastructure
+can be setup on any number of free hosts.
+
+Note: Using the PHP name store script on free PHP web hosts like
+000webhost may filter requests from the same IP that are made too
+quickly. Hence it might be a good idea to throttle requests.
+"""
+
+KVS_MEM_DB = 0
 class NameStore():
-    def __init__(self, route, url, db_path, timeout=3):
+    def __init__(self, route, url, db_path=None, timeout=3, throttle=1):
+        # Enable throttling for API calls.
+        self.throttle = throttle
+
         # DNS, TCP CON, and RECV timeout for slow free hosts.
-        self.timeout = 3
+        self.timeout = timeout
         self.route = route
         self.url = url
-        self.db = {}
 
+        # Keep local copy of names and their update keys.
+        if KVS_MEM_DB:
+            self.db = {}
+            self.cur = None
+        else:
+            self.db = sqlite3.connect(db_path)
+            self.db.row_factory = sqlite_dict_factory
+            self.cur = self.db.cursor()
+
+    # Resolve domain from URL and split URL into parts.
     async def start(self):
         # Split URL into host and port.
         port = 80
@@ -38,6 +67,10 @@ class NameStore():
 
     # Make an API request against the provider.
     async def req(self, params, timeout=3):
+        # Throttle request.
+        if self.throttle:
+            await asyncio.sleep(self.throttle)
+
         # Encode GET params.
         get_vars = ""
         for name in params:
@@ -55,11 +88,11 @@ class NameStore():
         # Request path.
         path = f"{self.path}?{get_vars}"
 
-        # Buld 
+        # Buld GET params.
         name = to_s(urlencode(name))
 
         # Make req.
-        conf = NET_CONF
+        conf = copy.deepcopy(NET_CONF)
         conf["con_timeout"] = timeout
         conf["recv_timeout"] = timeout
         _, resp = await http_req(
@@ -72,9 +105,10 @@ class NameStore():
             conf=conf
         )
 
-        # Return API output as srting.
+        # Return API output as string.
         return to_s(resp.out())
 
+    # Nonce used to prevent replay attacks for updating keys.
     async def get_nonce(self, name):
         nonce = await self.req({
             "action": "get_nonce",
@@ -83,48 +117,68 @@ class NameStore():
 
         return int(nonce)
     
+    # Sign a request to update a name.
     def sign_store(self, name, value, nonce, sign_key):
         msg = to_b(str(nonce)) + to_b(name) + to_b(value)
         signed = sign_key.sign(msg)
         sig_b = signed.signature # 64 bytes.
         return to_h(sig_b) # 128 bytes (hex).
     
-    def db_save(self, name, nonce, priv_key):
-        self.db[name] = {
-            "nonce": nonce,
-            "priv_key": priv_key
-        }
+    # Save details for a name locally.
+    def db_save(self, name, nonce, sign_key):
+        priv_key = to_h(sign_key.encode())
+        if KVS_MEM_DB:
+            self.db[name] = {
+                "nonce": nonce,
+                "priv_key": priv_key
+            }
+        else:
+            sql = "INSERT INTO names (name, nonce, priv_key) "
+            sql += "VALUES (?, ?, ?)"
+            self.cur.execute(sql, (name, nonce, priv_key,))
+            self.db.commit()
 
+    # Get details for a name locally.
     def db_get(self, name):
-        if name in self.db:
-            return self.db[name]
-        
-    def db_nonce_plus(self, name):
-        if name in self.db:
-            self.db[name]["nonce"] += 1
+        if KVS_MEM_DB:
+            if name in self.db:
+                return self.db[name]
+        else:
+            sql = "SELECT * FROM names WHERE name=?"
+            res = self.cur.execute(sql, (name,))
+            return self.cur.fetchone()
 
+    # Increment nonce for replay protection.
+    def db_nonce_plus(self, name):
+        if KVS_MEM_DB:
+            if name in self.db:
+                self.db[name]["nonce"] += 1
+        else:
+            sql = "UPDATE names SET nonce = nonce + 1 WHERE name == ?"
+            self.cur.execute(sql, (name,))
+            self.db.commit()
+
+    # Update value at a name.
     async def store(self, name, value):
         # Reload existing details.
         row = self.db_get(name)
         if row is not None:
+            sign_key = SigningKey(
+                binascii.unhexlify(row["priv_key"])
+            )
+
             nonce = row["nonce"]
-            sign_key = SigningKey(row["priv_key"])
+            if nonce == 0:
+                nonce = await self.get_nonce(name) or 1
 
         # Otherwise get needed details.
         if row is None:
-            # Used to prevent replay attacks for name updates.
-            nonce = await self.get_nonce(name)
-            if nonce != 0:
-                raise Exception("Name already claimed.")
-            else:
-                nonce = 1
-
             # Generate key pairs.
             sign_key = SigningKey.generate()
-            priv_key = sign_key.encode()
 
             # Record these details.
-            self.db_save(name, nonce, priv_key)
+            nonce = 1
+            self.db_save(name, nonce, sign_key)
 
         # Sign API request.
         verify_key = sign_key.verify_key
@@ -149,56 +203,46 @@ class NameStore():
         else:
             raise Exception(out)
 
+    # Get value at a name.
+    async def get(self, name):
+        out = await self.req({
+            "action": "get_val",
+            "name": name
+        })
 
-
-
+        if "KVS_ERROR" in out:
+            raise Exception(out)
+        else:
+            return out
 
 if __name__ == '__main__':
     async def test_name_store():
-        # Generate a new random signing key (32)
-        signing_key = SigningKey.generate()
-        priv_key = signing_key.encode()
-        signing_key = SigningKey(priv_key)
-
-        # Sign a message with the signing key (64)
-        signed = signing_key.sign(b"Attack at Dawn")
-
-        # Obtain the verify key for a given signing key
-        verify_key = signing_key.verify_key
-
-        # Serialize the verify key to send it to a third party (32)
-        verify_key_bytes = verify_key.encode()
-
-        # Create a VerifyKey object from a hex serialized public key
-        verify_key = VerifyKey(verify_key_bytes)
-
-        # Check the validity of a message's signature
-        # The message and the signature can either be passed together, or
-        # separately if the signature is decoded to raw bytes.
-        # These are equivalent:
-        verify_key.verify(signed.message, signed.signature)
-
         await init_p2pd()
         i = await Interface().start_local()
         route = i.route()
-        name = "test"
         url = "http://net-debug.000webhostapp.com/name_store.php"
         db_path = "/home/lounge-linux-vm/Desktop/kvs.db"
         kvs = NameStore(route, url, db_path)
         await kvs.start()
-        #nonce = await kvs.get_nonce(name)
-        #print(nonce)
 
-        name = "test25"
+        name = "test51"
         val = "val"
+
+
         try:
             out = await kvs.store(name, val)
             print(out)
 
-            out = await kvs.store(name, val)
+            out = await kvs.store(name, "val2")
+            print(out)
+
+            print("get results")
+            out = await kvs.get(name)
             print(out)
         except:
+            what_exception()
             pass
 
 
     async_test(test_name_store)
+

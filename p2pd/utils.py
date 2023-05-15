@@ -584,6 +584,11 @@ def get_running_loop():
     except RuntimeError:
         return None
 
+def sqlite_dict_factory(cursor, row):
+    d = {}
+    for idx, col in enumerate(cursor.description):
+        d[col[0]] = row[idx]
+    return d
 
 if __name__ == "__main__": # pragma: no cover
     x = [1, 1]

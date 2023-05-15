@@ -107,7 +107,8 @@ function kv_validate($db, $row, $pub_key, $name, $value, $sig)
     }
     
     // Update the none and value.
-    $sql = $db->prepare("UPDATE names SET value = :value, nonce = :none, timestamp = :timestamp WHERE name == :name");
+    $sql = $db->prepare("UPDATE names SET value = :value, nonce = :nonce, timestamp = :timestamp WHERE name == :name");
+    $sql->bindValue(':name', $name, SQLITE3_TEXT);
     $sql->bindValue(':value', $value, SQLITE3_TEXT);
     $sql->bindValue(':timestamp', time(), SQLITE3_INTEGER);
     
