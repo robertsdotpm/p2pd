@@ -48,52 +48,78 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
         # The relay address used to reach our peer at the TURN server.
         relay_tup = await client.relay_tup_future
 
-        if P2PD_TEST_INFRASTRUCTURE:
-            # Will be used to send packets from.
-            dest_p2pd = await Address(
-                "p2pd.net",
-                20000,
-                r
-            ).res()
+        print("relay tup = ")
+        print(relay_tup)
 
-            # Whitelist rest API.
-            p2pd_tup = dest_p2pd.tup
-            await client.accept_peer(p2pd_tup, p2pd_tup)
+        # Server hosting a PHP script that can send traffic.
+        net_debug_url = NET_DEBUG_PROVIDERS[af][0]
+        url_parts = await url_res(r, net_debug_url)
+        outbound_ip = await url_open(
+            r,
+            url_parts,
+            {
+                "action": "host",
+                "version": str(af_to_v(af))
+            },
+            timeout=6,
+            throttle=1
+        )
 
-            # Interested in any messages to queue.
-            client.subscribe(SUB_ALL)
+        print(outbound_ip)
 
-            #await client.accept_peer(client_tup, relay_tup)
-            #await client.accept_peer(relay_tup, relay_tup)
-            """
-            m = TurnMessage(msg_type=TurnMessageMethod.SendResponse, msg_code=TurnMessageCode.Request)
-            m.write_attr(
-                TurnAttribute.Data,
-                b"test message to send."
+        # Whitelist outbound addr of server.
+        # Note that the send port doesn't matter here.
+        bind_port = 60009
+        peer_tup = (outbound_ip, bind_port)
+        print(peer_tup)
+        await client.accept_peer(peer_tup, peer_tup)
+
+        # Interested in any messages to queue.
+        client.subscribe(SUB_ALL)
+
+        #await client.accept_peer(client_tup, relay_tup)
+        #await client.accept_peer(relay_tup, relay_tup)
+        """
+        m = TurnMessage(msg_type=TurnMessageMethod.SendResponse, msg_code=TurnMessageCode.Request)
+        m.write_attr(
+            TurnAttribute.Data,
+            b"test message to send."
+        )
+        buf, _ = TurnMessage.unpack(m.encode())
+        buf.write_credential(client.turn_user, client.realm, client.nonce)
+        buf.write_hmac(client.key)
+        """
+
+        # Attempt to get a reply at our relay address.
+        # Do it up to 3 times due to UDP being unreliable.
+        got_reply = False
+        for i in range(0, 3):
+            http_route = copy.deepcopy(r)
+            await http_route.bind()
+            out = await url_open(
+                http_route,
+                url_parts,
+                {
+                    "action": "hello",
+                    "proto": "udp",
+                    "host": relay_tup[0],
+                    "port": str(relay_tup[1]),
+                    "bind": str(bind_port)
+                },
+                timeout=6,
+                throttle=1
             )
-            buf, _ = TurnMessage.unpack(m.encode())
-            buf.write_credential(client.turn_user, client.realm, client.nonce)
-            buf.write_hmac(client.key)
-            """
+            print(out)
 
+            # Attempt to read the message back.
+            out = await client.recv(SUB_ALL, 2)
+            print(out)
+            if out == b"hello":
+                got_reply = True
+                break
 
-            # Attempt to get a reply at our relay address.
-            # Do it up to 3 times due to UDP being unreliable.
-            got_reply = False
-            for i in range(0, 3):
-                http_route = copy.deepcopy(r)
-                await http_route.bind()
-                rest_path = f"/hello/udp/{relay_tup[0]}/{relay_tup[1]}/{dest_p2pd.tup[0]}/63248"
-                _, resp = await http_req(http_route, dest_p2pd, rest_path)
-
-                # Attempt to read the message back.
-                out = await client.recv(SUB_ALL, 2)
-                if out == b"hello":
-                    got_reply = True
-                    break
-
-            # Make sure we got a valid reply.
-            self.assertTrue(got_reply)
+        # Make sure we got a valid reply.
+        self.assertTrue(got_reply)
         
         # Test refresh.
         client.lifetime = 0

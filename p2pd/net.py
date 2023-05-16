@@ -168,6 +168,7 @@ NET_CONF = {
     "loop": None
 }
 
+af_to_v = lambda af: 4 if af == IP4 else 6
 v_to_af = lambda v: IP4 if v == 4 else IP6
 max_cidr = lambda af: 32 if af == IP4 else 128
 

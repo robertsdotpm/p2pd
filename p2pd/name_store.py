@@ -44,85 +44,17 @@ class NameStore():
 
     # Resolve domain from URL and split URL into parts.
     async def start(self):
-        # Split URL into host and port.
-        port = 80
-        url_parts = urllib.parse.urlparse(self.url)
-        host = netloc = url_parts.netloc
-        self.path = url_parts.path
+        self.url_parts = await url_res(self.route, self.url, self.timeout)
 
-        # Overwrite default port 80.
-        if ":" in netloc:
-            host, port = netloc.split(":")
-            port = int(port)
-
-        # Resolve domain of URL.
-        self.port = port
-        self.host = host
-        self.dest = await Address(
-            self.host,
-            self.port,
+    # Wrapper for url open.
+    async def req(self, params):
+        return await url_open(
             self.route,
-            timeout=self.timeout
+            self.url_parts,
+            params,
+            timeout=self.timeout,
+            throttle=self.throttle
         )
-
-    # Make an API request against the provider.
-    async def req(self, params, timeout=3):
-        # Throttle request.
-        if self.throttle:
-            await asyncio.sleep(self.throttle)
-
-        # Encode GET params.
-        get_vars = ""
-        for name in params:
-            # Encode the value.
-            v = to_s(
-                urlencode(
-                    params[name]
-                )
-            )
-
-            # Pass the params in the URL.
-            n = to_s(urlencode(name))
-            get_vars += f"&{n}={v}"
-
-        # Request path.
-        path = f"{self.path}?{get_vars}"
-
-        # Buld GET params.
-        name = to_s(urlencode(name))
-
-        # Make req.
-        conf = copy.deepcopy(NET_CONF)
-        conf["con_timeout"] = timeout
-        conf["recv_timeout"] = timeout
-        _, resp = await http_req(
-            self.route,
-            self.dest,
-            path,
-
-            # Specify the right sub/domain.
-            headers=[[b"Host", to_b(self.host)]],
-            conf=conf
-        )
-
-        # Return API output as string.
-        return to_s(resp.out())
-
-    # Nonce used to prevent replay attacks for updating keys.
-    async def get_nonce(self, name):
-        nonce = await self.req({
-            "action": "get_nonce",
-            "name": name
-        })
-
-        return int(nonce)
-    
-    # Sign a request to update a name.
-    def sign_store(self, name, value, nonce, sign_key):
-        msg = to_b(str(nonce)) + to_b(name) + to_b(value)
-        signed = sign_key.sign(msg)
-        sig_b = signed.signature # 64 bytes.
-        return to_h(sig_b) # 128 bytes (hex).
     
     # Save details for a name locally.
     def db_save(self, name, nonce, sign_key):
@@ -158,8 +90,24 @@ class NameStore():
             self.cur.execute(sql, (name,))
             self.db.commit()
 
+    # Sign a request to update a name.
+    def sign_store(self, name, value, nonce, sign_key):
+        msg = to_b(str(nonce)) + to_b(name) + to_b(value)
+        signed = sign_key.sign(msg)
+        sig_b = signed.signature # 64 bytes.
+        return to_h(sig_b) # 128 bytes (hex).
+
+    # Nonce used to prevent replay attacks for updating keys.
+    async def get_nonce(self, name):
+        nonce = await self.req({
+            "action": "get_nonce",
+            "name": name
+        })
+
+        return int(nonce)
+    
     # Update value at a name.
-    async def store(self, name, value):
+    async def store_val(self, name, value):
         # Reload existing details.
         row = self.db_get(name)
         if row is not None:
@@ -204,12 +152,12 @@ class NameStore():
             raise Exception(out)
 
     # Get value at a name.
-    async def get(self, name):
+    async def get_val(self, name):
         out = await self.req({
             "action": "get_val",
             "name": name
         })
-
+        
         if "KVS_ERROR" in out:
             raise Exception(out)
         else:
@@ -230,14 +178,14 @@ if __name__ == '__main__':
 
 
         try:
-            out = await kvs.store(name, val)
+            out = await kvs.store_val(name, val)
             print(out)
 
-            out = await kvs.store(name, "val2")
+            out = await kvs.store_val(name, "val2")
             print(out)
 
             print("get results")
-            out = await kvs.get(name)
+            out = await kvs.get_val(name)
             print(out)
         except:
             what_exception()

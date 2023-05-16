@@ -18,6 +18,22 @@ point all of these servers to your private infrastructure.
 """
 
 
+NET_DEBUG_PROVIDERS = {
+    IP4: [
+        "http://net-debug.000webhostapp.com/net_debug.php"
+    ],
+    IP6: [
+        "http://net-debug.000webhostapp.com/net_debug.php"
+    ]
+}
+
+NAME_STORE_PROVIDERS = [
+    {
+        "afs": [IP4, IP6],
+        "url": "http://net-debug.000webhostapp.com/name_store.php"
+    }
+]
+
 """
 Used to lookup what a nodes IP is and do NAT enumeration.
 Supports IPv6 / IPv4 / TCP / UDP -- change IP and port requests.
