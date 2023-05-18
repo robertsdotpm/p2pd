@@ -2,7 +2,9 @@ import sys
 import re
 import platform
 import multiprocessing
+import socket
 from .errors import *
+from .settings import *
 from .route import *
 from .nat import *
 from .route_table import *
@@ -12,26 +14,66 @@ else:
     import netifaces as netifaces
 
 async def init_p2pd():
+    global ENABLE_UDP
+    global ENABLE_STUN
+
+    # Attempt to get monkey patched netifaces.
     netifaces = Interface.get_netifaces()
-    if netifaces is not None:
-        return netifaces
+    if netifaces is None:
+        multiprocessing.set_start_method("spawn")
+        if sys.platform == "win32":
+            """
+            loop = get_running_loop()
+
+            # This happens if the asyncio REPL is used.
+            # Nested event loops are a work around.
+            if loop is not None:
+                import nest_asyncio
+                nest_asyncio.apply()
+            """
+            netifaces = await Netifaces().start()
+        else:
+            netifaces = sys.modules["netifaces"]
+
+        Interface.get_netifaces = lambda: netifaces
+
+    # Are UDP sockets blocked?
+    # Firewalls like iptables on freehosts can do this.
+    sock = None
+    try:
+        # Figure out what address family default interface supports.
+        _, af = get_default_iface(netifaces)
+        if af == AF_ANY: # Duel stack. Just use v4.
+            af = IP4
+
+        # Set destination based on address family.
+        if af == IP4:
+            dest = ('8.8.8.8', 60000)
+        else:
+            dest = ('2001:4860:4860::8888', 60000)
+
+        # Build new UDP socket.
+        sock = socket.socket(family=af, type=socket.SOCK_DGRAM)
+
+        # Attempt to send small msg to dest.
+        sock.sendto(b'testing UDP. disregard this sorry.', 0, dest)
+    except Exception:
+        """
+        Maybe in the future I write code as a fail-safe but for
+        now I don't have time. It's better to show a clear reason
+        why the library won't work then to silently fail.
+        """
+        raise Exception("Error this library needs UDP support to work.")
     
-    multiprocessing.set_start_method("spawn")
-    if sys.platform == "win32":
-        """
-        loop = get_running_loop()
 
-        # This happens if the asyncio REPL is used.
-        # Nested event loops are a work around.
-        if loop is not None:
-            import nest_asyncio
-            nest_asyncio.apply()
-        """
-        netifaces = await Netifaces().start()
-    else:
-        netifaces = sys.modules["netifaces"]
+        ENABLE_UDP = False
+        ENABLE_STUN = False
+        log("UDP sockets blocked! Disabling STUN.")
+        log_exception()
+    finally:
+        if sock is not None:
+            sock.close()
 
-    Interface.get_netifaces = lambda: netifaces
     return netifaces
 
 def get_default_iface(netifaces, preference=AF_ANY, exp=1, duel_stack_test=True):
@@ -301,10 +343,18 @@ class Interface():
                         self.rp[af] = RoutePool()
                         log(f"No route for gw {af}")
                 
-                tasks.append(helper(af))
+                tasks.append(
+                    asyncio.wait_for(
+                        helper(af),
+                        15
+                    )
+                )
 
             # Get all the routes concurrently.
-            await asyncio.gather(*tasks)
+            try:
+                await asyncio.gather(*tasks)
+            except asyncio.TimeoutError:
+                raise Exception("Could not start iface in 15s.")
         else:
             self.rp = rp
 
@@ -480,7 +530,22 @@ def log_interface_rp(interface):
         log(f"> nic() = {interface.route(af).nic()}")
         log(f"> ext() = {interface.route(af).ext()}")
 
-async def load_interfaces(netifaces=None):
+def get_ifs_by_af_intersect(if_list):
+    largest = []
+    af_used = None
+    for af in VALID_AFS:
+        hay = []
+        for iface in if_list:
+            if af in iface.supported():
+                hay.append(iface)
+
+        if len(hay) > len(largest):
+            largest = hay
+            af_used = af
+
+    return [largest, af_used]
+
+async def load_interfaces(netifaces=None, load_nat=True):
     # Get list of good interfaces with ::/0 or 0.0.0.0 routes.
     netifaces = netifaces or Interface.get_netifaces()
     ifs = await filter_trash_interfaces(netifaces)
@@ -499,7 +564,8 @@ async def load_interfaces(netifaces=None):
         async def worker(if_name):
             try:
                 interface = await Interface(if_name, netifaces=netifaces).start()
-                await interface.load_nat()
+                if load_nat:
+                    await interface.load_nat()
                 if_list.append(interface)
             except Exception:
                 log_exception()

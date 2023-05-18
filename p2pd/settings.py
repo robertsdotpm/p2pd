@@ -1,5 +1,9 @@
-from .net import IP4, IP6
+import socket
+IP4 = socket.AF_INET
+IP6 = socket.AF_INET6
 
+ENABLE_STUN = True
+ENABLE_UDP = True
 P2PD_TEST_INFRASTRUCTURE = False
 
 """

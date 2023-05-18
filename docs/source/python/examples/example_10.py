@@ -43,6 +43,10 @@ async def example():
     To receive messages back from a given client you will have
     to call: await client.accept_peer(their_client_tup, their_relay_tup) which implies you have your own way to
     exchange these details between clients (I use MQTT.)
+
+    Example (after exchanging relay tups):
+        await client_a.send(b'hello b', client_b_relay_tup)
+        await client_b.send(b"hello a", client_a_relay_tup)
     """
     # Cleanup.
     await client.close()
