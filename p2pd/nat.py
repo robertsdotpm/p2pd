@@ -452,6 +452,12 @@ def nats_intersect_range(our_nat, their_nat, test_no):
     else:
         use_range = our_nat["range"]
 
+    # Ensure bind ports don't end up in low port ranges.
+    if use_range[0] < 1024:
+        use_range[0] = 1024
+        if use_range[0] >= use_range[1]:
+            raise Exception("Can't find intersecting port range.")
+        
     return use_range
 
 ###############################################################
@@ -472,7 +478,7 @@ async def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, stun_c
     a non-conflicting port.
     """
     if mode == TCP_PUNCH_SELF:
-        while 1:
+        for _ in range(0, 1000):
             bind_port = random.randrange(2000, MAX_PORT)
             if bind_port != remote_port:
                 break
@@ -683,11 +689,32 @@ async def get_nat_predictions(mode, stun_client, our_nat, their_nat, their_maps=
     # Set initial mapping needed for delta type NATs.
     last_mapped = [None, None]
     if our_nat["delta"]["type"] in DELTA_N:
-        _, s, local_port, remote_port, _, _ = await stun_client.get_mapping(
-            proto=STREAM
-        )
+        # NOTE: if local < 1024 it may not be possible to reuse.
+        r = stun_client.interface.route(stun_client.af)
+        s = None
+        for i in range(0, 5):
+            try:
+                # Reserve a sock for use.
+                # Close it so it can be used.
+                reserved_sock, high_port = await get_high_port_socket(r, sock_type=TCP)
+                #reserved_sock.close()
 
-        last_mapped = [local_port, remote_port]
+                
+                _, s, local_port, remote_port, _, _ = await stun_client.get_mapping(
+                    proto=STREAM,
+                    source_port=high_port
+                )
+
+                #socket.setsockopt(s, socket.SO_REUSEPORT)
+                last_mapped = [local_port, remote_port]
+                break
+            except:
+                log_exception()
+                s = None
+                continue
+
+        if s is None:
+            raise Exception("high port sock fail in init map punch.")
         stun_socks.append(s)
 
     # Make a list of tasks to build port predictions.
@@ -791,3 +818,18 @@ async def get_nat_predictions(mode, stun_client, our_nat, their_nat, their_maps=
         "default_maps": their_maps,
         "last_mapped": last_mapped
     }
+
+"""
+It's extremely important that all predicts are above a certain
+value otherwise admin or root will be needed to bind to the port
+"""
+def nat_check_for_low_ports(map_info):
+    for k in ["local"]:
+        for p in map_info[k]:
+            if p <= 1024:
+                error = f"invalid low port found for mapping {p}"
+                log(error)
+                raise Exception(error)
+
+
+

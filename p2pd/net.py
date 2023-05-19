@@ -747,3 +747,29 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
         log_exception()
         if sock is not None:
             sock.close()
+
+async def get_high_port_socket(route, sock_type=TCP):
+    # Minimal config to pass socket factory.
+    conf = {
+        "broadcast": False,
+        "linger": None,
+        "sock_proto": 0,
+        "reuse_addr": True
+    }
+
+    # Get a new socket bound to a high order port.
+    for i in range(0, 20):
+        n = rand_rang(2000, MAX_PORT - 1000)
+        await route.bind(n)
+        try:
+            s = await socket_factory(
+                route,
+                sock_type=sock_type,
+                conf=conf
+            )
+        except:
+            continue
+
+        return s, n
+    
+    raise Exception("Could not bind high range port.")

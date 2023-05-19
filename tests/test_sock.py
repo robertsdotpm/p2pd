@@ -44,6 +44,27 @@ class TestSock(unittest.IsolatedAsyncioTestCase):
         if s is not None:
             s.close()
 
+    async def test_high_port_reuse(self):
+        # Config for reuse.
+        conf = copy.deepcopy(NET_CONF)
+        conf["reuse_addr"] = True
+
+        # Load default interface.
+        n = await init_p2pd()
+        i = await Interface(netifaces=n).start_local()
+        r = i.route()
+
+        # Make a new socket bound to a high order port.
+        high_sock, high_port = await get_high_port_socket(r)
+
+        # Make a new socket that shares the same port.
+        r = await i.route().bind(high_port)
+        reuse_sock = await socket_factory(r, conf=conf)
+
+        # Cleanup both socket handles.
+        high_sock.close()
+        reuse_sock.close()
+
 
 
 if __name__ == '__main__':

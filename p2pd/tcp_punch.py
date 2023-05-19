@@ -366,6 +366,9 @@ class TCPPunch():
             dest_nat
         )
 
+        # Sanity check.
+        nat_check_for_low_ports(map_info)
+
         """
         The NAT prediction code tries to choose ports in a way
         where both parties trying to connect can use the same
@@ -469,6 +472,9 @@ class TCPPunch():
             recv_nat,
             their_maps
         )
+
+        # Sanity check.
+        nat_check_for_low_ports(map_info)
 
         # Expect them to use our reply port if set.
         """
