@@ -12,10 +12,13 @@ from p2pd.p2p_pipe import *
 from p2pd.interface import *
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
-async def test_setup():
+async def test_setup(netifaces=None, ifs=None):
     # Suppress socket unclosed warnings.
     if not hasattr(test_setup, "netifaces"):
-        test_setup.netifaces = await init_p2pd()
+        if netifaces is None:
+            test_setup.netifaces = await init_p2pd()
+        else:
+            test_setup.netifaces = netifaces
         warnings.filterwarnings('ignore', message="unclosed", category=ResourceWarning)
 
     # Static setup because it's fast.
@@ -34,25 +37,27 @@ async def test_setup():
     pp_executors = await get_pp_executors(workers=2)
 
     # Main node used for testing p2p functionality.
+    node_a_ifs = [ifs[0]] if ifs is not None else test_setup.ifs
     node_a = await start_p2p_node(
         node_id=node_name(b"node_a"),
 
         # Get brand new unassigned listen port.
         # Avoid TIME_WAIT buggy sockets from port reuse.
         port=0,
-        ifs=test_setup.ifs,
+        ifs=node_a_ifs,
         clock_skew=test_setup.clock_skew,
         pp_executors=pp_executors
     )
 
     # Test local punching algorithm.
+    node_b_ifs = [ifs[1  % len(ifs)]] if ifs is not None else test_setup.ifs
     node_b = await start_p2p_node(
         node_id=node_name(b"node_b"),
 
         # Get brand new unassigned listen port.
         # Avoid TIME_WAIT buggy sockets from port reuse.
         port=0,
-        ifs=test_setup.ifs,
+        ifs=node_b_ifs,
         clock_skew=test_setup.clock_skew,
         pp_executors=pp_executors
     )
@@ -213,13 +218,37 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
 
         await test_cleanup(node_a, node_b)
 
-    async def test_remote_punch(self):
-        if not P2PD_TEST_INFRASTRUCTURE:
+    async def test_remote_punch_duel_ifs(self):
+        # Load interface list.
+        netifaces = await init_p2pd()
+        ifs, af = await duel_if_setup(netifaces, load_nat=True)
+        if af is None:
+            return
+        
+        # Start nodes on different interfaces.
+        node_a, node_b = await test_setup(netifaces, ifs)
+        pipe, _ = await node_a.connect(
+            node_b.address(),
+            strategies=[P2P_PUNCH]
+        )
+
+        # Check if a connection was spawned.
+        self.assertTrue(pipe is not None)
+        pipe_okay = await check_pipe(pipe)
+        self.assertTrue(pipe_okay is not None)
+
+        # Cleanup        
+        if pipe is not None:
+            await pipe.close()
+        await test_cleanup(node_a, node_b)
+
+    async def test_remote_punch(self, netifaces=None, ifs=None, is_optional=False):
+        if not P2PD_TEST_INFRASTRUCTURE and ifs is None:
             return
 
         # If P2PD_NET_ADDR_BYTES is not us then test punching to it.
         log(">>> test_remote_punch")
-        node_a, node_b = await test_setup()
+        node_a, node_b = await test_setup(netifaces, ifs)
         if not is_p2p_addr_us(P2PD_NET_ADDR_BYTES, node_a.if_list):
             # Connect to p2pd.net test server.
             pipe, _ = await node_a.connect(
@@ -230,7 +259,10 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
 
             # Test pipe is valid.
             pipe_okay = await check_pipe(pipe)
-            self.assertTrue(pipe_okay)
+            if not pipe_okay and is_optional:
+                log("remote punch failed but was optional.")
+            else:
+                self.assertTrue(pipe_okay)
             await pipe.close()
         else:
             print("> p2pd net addr is us. Skipping remote punch test.")

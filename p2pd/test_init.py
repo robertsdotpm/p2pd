@@ -111,6 +111,20 @@ class FakeSTUNClient():
         self.p = (self.p + 1) % len(self.mappings)
 
         return out
+    
+async def duel_if_setup(netifaces, load_nat=False):
+    # Load interface list.
+    ifs = await load_interfaces(netifaces, load_nat=load_nat)
+    ifs, af = get_ifs_by_af_intersect(ifs)
+    if len(ifs) <= 1:
+        return
+    
+    # Only need at most 2.
+    ifs = ifs[:2]
+    if(ifs[0].route(af).ext() != ifs[1].route(af).ext()):
+        return ifs, af
+    else:
+        return [], None
 
 class FakeNetifaces():
     def __init__(self):

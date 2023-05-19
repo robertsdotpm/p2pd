@@ -45,14 +45,9 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
 
         # Load interface list.
         netifaces = await init_p2pd()
-        ifs = await load_interfaces(netifaces, load_nat=False)
-        ifs, af = get_ifs_by_af_intersect(ifs)
-        if len(ifs) <= 1:
+        ifs, af = await duel_if_setup(netifaces)
+        if af is None:
             return
-        
-        # Only need at most 2.
-        ifs = ifs[:2]
-        assert(ifs[0].route(af).ext() != ifs[1].route(af).ext())
 
         # Will store the turn clients.
         turn_clients = []
@@ -92,7 +87,8 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
 
             # Send data to the relay endpoint.
             relay_tup = await turn_client.relay_tup_future
-            await turn_clients[if_index].send(msg, relay_tup)
+            for i in range(0, 3):
+                await turn_clients[if_index].send(msg, relay_tup)
 
             # Recv data back.
             out = await turn_client.recv(SUB_ALL, 2)

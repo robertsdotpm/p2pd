@@ -68,6 +68,8 @@ STUNT_SERVERS = {
     ]
 }
 
+
+
 STUND_SERVERS = {
     # A few aged, OG stun servers/
     IP4: [
@@ -107,6 +109,10 @@ STUND_SERVERS = {
         ['stun.simlar.org', 3478], # 21 Apr 2021
     ]
 }
+
+stun_test = [["stunserver.stunprotocol.org", 3478]]
+STUNT_SERVERS = { IP4: stun_test, IP6: stun_test }
+STUND_SERVERS = STUNT_SERVERS
 
 # The main server used to exchange 'signaling' messages.
 # These are messages that help nodes create connections.
