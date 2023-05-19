@@ -117,7 +117,7 @@ async def duel_if_setup(netifaces, load_nat=False):
     ifs = await load_interfaces(netifaces, load_nat=load_nat)
     ifs, af = get_ifs_by_af_intersect(ifs)
     if len(ifs) <= 1:
-        return
+        return [], None
     
     # Only need at most 2.
     ifs = ifs[:2]

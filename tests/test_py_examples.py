@@ -35,6 +35,8 @@ class TestPyExamples(unittest.IsolatedAsyncioTestCase):
                 coro = globals().get("example")
                 await coro()
 
+            log(f"py example {no} passed")
+
         await asyncio.sleep(.25)
 
 if __name__ == '__main__':

@@ -46,7 +46,8 @@ async def test_setup(netifaces=None, ifs=None):
         port=0,
         ifs=node_a_ifs,
         clock_skew=test_setup.clock_skew,
-        pp_executors=pp_executors
+        pp_executors=pp_executors,
+        enable_upnp=False
     )
 
     # Test local punching algorithm.
@@ -59,7 +60,8 @@ async def test_setup(netifaces=None, ifs=None):
         port=0,
         ifs=node_b_ifs,
         clock_skew=test_setup.clock_skew,
-        pp_executors=pp_executors
+        pp_executors=pp_executors,
+        enable_upnp=False
     )
 
     print(f"Node a = {node_a.p2p_addr}")

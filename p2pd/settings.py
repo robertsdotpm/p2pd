@@ -50,7 +50,7 @@ STUNT_SERVERS = {
     # Presumably these are the most reliable.
     IP4: [
         # ['p2pd.net', 34780],
-        ['stun.stunprotocol.org', 3478], # 19 Sept 2005
+        ['stunserver.stunprotocol.org', 3478], # 19 Sept 2005
         ['stun.sipnet.ru', 3478], # 19 Sept 2005
         ['stun.1cbit.ru', 3478], # 30 Aug 2017
         ['stun.acronis.com', 3478], # 30 Aug 2017
@@ -64,7 +64,7 @@ STUNT_SERVERS = {
     # There's basically none unfortunately.
     IP6: [
         # ['p2pd.net', 34780],
-        ['stun.stunprotocol.org', 3478],
+        ['stunserver.stunprotocol.org', 3478],
     ]
 }
 
@@ -74,7 +74,7 @@ STUND_SERVERS = {
     # A few aged, OG stun servers/
     IP4: [
         # ['p2pd.net', 34780],
-        ['stun.stunprotocol.org', 3478],
+        ['stunserver.stunprotocol.org', 3478],
         ['stun.voipcheap.co.uk', 3478], # 19 Sept 2005
         ['stun.usfamily.net', 3478], # 19 Sept 2005
         ['stun.ozekiphone.com', 3478], # 19 Sept 2005
@@ -102,7 +102,7 @@ STUND_SERVERS = {
     # Still not many support IP6 with multiple IPs..
     IP6: [
         # ['p2pd.net', 34780],
-        ['stun.stunprotocol.org', 3478], # 19 Sept 2005
+        ['stunserver.stunprotocol.org', 3478], # 19 Sept 2005
         ['stun.einfachcallback.de', 3478], # 21 Apr 2021
         ['stun.hot-chilli.net', 3478], # 14 Aug 2012
         ['stun.palava.tv', 3478], # 21 Apr 2021
@@ -110,9 +110,11 @@ STUND_SERVERS = {
     ]
 }
 
+"""
 stun_test = [["stunserver.stunprotocol.org", 3478]]
 STUNT_SERVERS = { IP4: stun_test, IP6: stun_test }
 STUND_SERVERS = STUNT_SERVERS
+"""
 
 # The main server used to exchange 'signaling' messages.
 # These are messages that help nodes create connections.
