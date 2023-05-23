@@ -558,23 +558,6 @@ async def stun_sub_test(msg, dest, interface, af, proto, source_port, changed, e
         )
     ), pipe
 
-"""
-Does multiple sub tests to determine NAT type.
-It will differ dest ips, reply ips and/or reply ports.
-Reply success or failure + external ports reported
-by servers are used to infer the type of NAT.
-Note: complete resolution of NAT type is only
-possible with proto = SOCK_DGRAM. This is because
-the router doesn't just allow inbound connects
-that either haven't been forwarded or
-contacted specifically.
-"""
-async def do_nat_test(stun_addr, interface, af=IP4, proto=UDP, group="change", do_close=1, conf=STUN_CONF):
-    # Important vars / init.
-    test = {} # test[test_no] = test result
-    source_port = 0
-    pipe_list = []
-
     # Log errors, cleanup and retry.
     async def handle_error(msg, pipe_list, do_close=1):
         log("> STUN handle = %s" % (to_s(msg)))
@@ -606,6 +589,24 @@ async def do_nat_test(stun_addr, interface, af=IP4, proto=UDP, group="change", d
         )
 
         return [test_name, ret, pipe]
+
+
+"""
+Does multiple sub tests to determine NAT type.
+It will differ dest ips, reply ips and/or reply ports.
+Reply success or failure + external ports reported
+by servers are used to infer the type of NAT.
+Note: complete resolution of NAT type is only
+possible with proto = SOCK_DGRAM. This is because
+the router doesn't just allow inbound connects
+that either haven't been forwarded or
+contacted specifically.
+"""
+async def do_nat_test(stun_addr, interface, af=IP4, proto=UDP, group="change", do_close=1, conf=STUN_CONF):
+    # Important vars / init.
+    test = {} # test[test_no] = test result
+    source_port = 0
+    pipe_list = []
 
     # Do first NAT test.
     _, test[1], pipe = await run_nat_test(None, [
@@ -644,6 +645,14 @@ async def do_nat_test(stun_addr, interface, af=IP4, proto=UDP, group="change", d
     # ID, log msg, dest addr, resp addr, extra req data.
     assert(stun_addr.tup[0] != test[1]['cip'])
     assert(stun_addr.tup[1] != test[1]['cport'])
+
+
+    pipe_list, _, _ = await handle_error(
+        "stun test success",
+        pipe_list,
+        do_close
+    )
+
     route = interface.route(af)
     nat_tests = [
         [
