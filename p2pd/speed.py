@@ -2,7 +2,7 @@ import time
 from .interface import *
 from .stun_client import *
 
-NAT_TEST_NO = 1
+NAT_TEST_NO = 5
 NAT_TEST_TIMEOUT = 2
 
 stun_new = {
@@ -121,11 +121,38 @@ stun_new = {
     IP6: []
 }
 
+"""
+labnet = 4 ()
+nbn = 5 () (success with 5 test no)
+
+not so sure about full cone
+"""
+
+"""
+Regarding TEST[2]:
+
+Original pystun3 uses secondary, secondary here which is a bug.
+
+The dest (ip AND port) needs to be 'whitelisted' in a port restrict NAT
+so using secondary, secondary meant that test 4 would also succeed on a port restrict NAT since it's reply tup had already been whitelisted
+in test 3. A reply is meant to only occur on a restrict NAT.
+
+Requirements: your external IP and mapping stay the same when
+the same internal source IP and port are used.
+"""
+
 # STUN payload to send, Send IP, send port, reply IP, reply port
 NAT_TEST_SCHEMA = [
-    [               "",   "primary", "primary",   "primary",   "primary"],
-    [    changeRequest,   "primary", "primary", "secondary", "secondary"],
-    [               "", "secondary", "primary", "secondary",   "primary"],
+    # Detects: open NAT.
+    ["", "primary", "primary", "primary", "primary"],
+
+    # Detects: full cone NAT.
+    [changeRequest, "primary", "primary", "secondary", "secondary"],
+
+    # Detects: non-symmetric NAT.
+    ["", "secondary", "primary", "secondary", "primary"],
+
+    # Detects: between restrict and port restrict.
     [changePortRequest, "secondary", "primary", "secondary", "secondary"],
 ]
 
@@ -283,7 +310,6 @@ async def fast_nat_test(pipe, test_servers):
         source_ip = test_pipe.route.bind_ip()
         if ip_f(ret['rip']) == ip_f(source_ip):
             return OPEN_INTERNET
-
         return None
 
     # Full cone NAT.
@@ -317,9 +343,7 @@ async def fast_nat_test(pipe, test_servers):
         # print(workers)
         main_workers += workers
 
-    print(main_workers)
-    return
-
+    """
     x = await main_workers[0]
     print(x)
     print(q_list)
@@ -328,12 +352,13 @@ async def fast_nat_test(pipe, test_servers):
     print(y)
     print(q_list)
     return
+    """
 
     # Run NAT tests.
     log("Main nat tests starting.")
     try:
         # iterate over awaitables with a timeout
-        for task in asyncio.as_completed(main_workers, timeout=6):
+        for task in asyncio.as_completed(main_workers, timeout=2):
             # get the next result
             ret = await task
             if ret is not None:
@@ -342,22 +367,18 @@ async def fast_nat_test(pipe, test_servers):
     except asyncio.TimeoutError:
         log("Extended NAT tests starting.")
 
-    print(q_list)
-    return
-
     # Full cone NAT.
     async def test_three(ret, test_pipe):
         if non_symmetric_check(q_list):
-            q_list[3] = RESTRICT_PORT_NAT
-
-        await asyncio.sleep(60)
+            q_list[4] = RESTRICT_PORT_NAT
+        return None
 
     # Full cone NAT.
     async def test_four(ret, test_pipe):
         if non_symmetric_check(q_list):
             return RESTRICT_NAT
-        
-        await asyncio.sleep(60)
+
+        return None
     
     # Get a list of workers for last two NAT tests.
     extra_workers = []
@@ -374,16 +395,19 @@ async def fast_nat_test(pipe, test_servers):
     # Process results for extended tests.
     try:
         # iterate over awaitables with a timeout
-        for task in asyncio.as_completed(main_workers, timeout=2):
+        for task in asyncio.as_completed(extra_workers, timeout=2):
             # get the next result
-            return await task
+            ret = await task
+            if ret is not None:
+                return ret
     except asyncio.TimeoutError:
         log("Extended NAT test timeout.")
-        if no_stun_resp_check(q_list):
-            return BLOCKED_NAT
-        else:
-            # Symmetric NAT or RESTRICT_PORT_NAT.
-            return q_list[-1] 
+
+    if no_stun_resp_check(q_list):
+        return BLOCKED_NAT
+    else:
+        # Symmetric NAT or RESTRICT_PORT_NAT.
+        return q_list[-1] 
 
 async def main():
     # Load internal interface details.
@@ -395,7 +419,7 @@ async def main():
 
     # Start interface time.
     t1 = timestamp(1)
-    i = await Interface(netifaces=netifaces)
+    i = await Interface("ens37", netifaces=netifaces) # ens37
     t2 = timestamp(1)
     duration = t2 - t1
     print(f"Interface().start() = {duration}")
@@ -456,6 +480,7 @@ async def main():
 
     t1 = timestamp()
 
+    """
     send_addr = await Address(
         stun_new[af][0]["primary"]["ip"],
         stun_new[af][0]["primary"]["port"],
@@ -480,9 +505,11 @@ async def main():
         None
     )
     print(out)
+    """
 
     t1 = timestamp()
 
+    """
     change_addr = await Address(
         stun_new[af][0]["secondary"]["ip"],
         stun_new[af][0]["secondary"]["port"],
@@ -507,13 +534,14 @@ async def main():
         None
     )
     print(out)
+    """
 
 
-    #nat_type = await fast_nat_test(pipe, stun_new)
-
+    nat_type = await fast_nat_test(pipe, stun_new)
+    print(nat_type)
 
     t2 = timestamp() - t1
-    #print(f"nat time = {t2}")
+    print(f"nat time = {t2}")
     await pipe.close()
 
 
