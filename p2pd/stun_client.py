@@ -312,7 +312,7 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
         # Port server will send change requests from.
         'cport': None
     }
-    print(ret)
+    #print(ret)
 
     # Sanity checking.
     if pipe is None:
@@ -523,9 +523,6 @@ async def stun_sub_test(msg, dest, interface, af, proto, source_port, changed, e
     if tran_info is None:
         tran_info = tran_info_patterns(changed.tup)
 
-    print(tran_info)
-    print(pipe)
-
     # New con for every req if it's TCP.
     if proto == TCP:
         if pipe is not None:
@@ -719,6 +716,8 @@ async def do_nat_test(stun_addr, interface, af=IP4, proto=UDP, group="change", d
     for task in tasks:
         result = await task
         results.append(result)
+
+    print(results)
 
     # Check results and index them.
     #results = await asyncio.gather(*tasks)
@@ -1022,6 +1021,8 @@ class STUNClient():
 
         # Return threshold results.
         f_filter = lambda r: [x[1] for x in r if isinstance(x[1], int)]
+        
+
         return await threshold_gather(tasks, f_filter, threshold_t)
 
     async def get_wan_ip(self, af=None, interface=None, fast_fail=0, servers=None, local_addr=None, conf=STUN_CONF):

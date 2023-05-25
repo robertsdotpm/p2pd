@@ -110,11 +110,11 @@ STUND_SERVERS = {
     ]
 }
 
-"""
+
 stun_test = [["stunserver.stunprotocol.org", 3478]]
 STUNT_SERVERS = { IP4: stun_test, IP6: stun_test }
 STUND_SERVERS = STUNT_SERVERS
-"""
+
 
 # The main server used to exchange 'signaling' messages.
 # These are messages that help nodes create connections.

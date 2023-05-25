@@ -109,7 +109,6 @@ def nat_info(nat_type=None, delta=None, map_range=None):
     # Defaults.
     delta = delta or delta_info(RANDOM_DELTA, 0)
     map_range = map_range or [1, MAX_PORT]
-    nat_type = nat_type or RESTRICT_PORT_NAT
 
     # Main NAT dic with simple lookup types.
     nat = {

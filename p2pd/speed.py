@@ -2,7 +2,7 @@ import time
 from .interface import *
 from .stun_client import *
 
-NAT_TEST_NO = 5
+NAT_TEST_NO = 1
 NAT_TEST_TIMEOUT = 2
 
 stun_new = {
@@ -169,9 +169,9 @@ async def do_nat_test(dest_addr, reply_addr, payload, pipe, q, test_coro):
         }
     )
 
-    print(f"dest addr = {dest_addr.tup}")
-    print(f"reply addr = {reply_addr.tup}") 
-    print(f"payload = {payload}")
+    #print(f"dest addr = {dest_addr.tup}")
+    #print(f"reply addr = {reply_addr.tup}") 
+    #print(f"payload = {payload}")
 
     # Do first NAT test.
     ret, _ = await stun_sub_test(
@@ -192,10 +192,7 @@ async def do_nat_test(dest_addr, reply_addr, payload, pipe, q, test_coro):
     if ret is not None and not isinstance(ret, tuple):
         if ret["resp"]:
             q.append(ret)
-            if test_coro is not None:
-                return await test_coro(ret, pipe)
-            else:
-                return ret
+            return await test_coro(ret, pipe)
 
     return None
 
@@ -369,16 +366,16 @@ async def fast_nat_test(pipe, test_servers):
 
     # Full cone NAT.
     async def test_three(ret, test_pipe):
+        print("test 3 triggered")
         if non_symmetric_check(q_list):
             q_list[4] = RESTRICT_PORT_NAT
         return None
 
     # Full cone NAT.
     async def test_four(ret, test_pipe):
-        if non_symmetric_check(q_list):
-            return RESTRICT_NAT
-
-        return None
+        print("test 4 triggered")
+        print(ret)
+        return RESTRICT_NAT
     
     # Get a list of workers for last two NAT tests.
     extra_workers = []
