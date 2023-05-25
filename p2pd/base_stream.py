@@ -105,6 +105,7 @@ class BaseStream(ACKUDP):
             q.put_nowait([client_tup, data])
 
         # Apply bool filters to message.
+        msg_added = False
         client_addr = b"%s:%d" % (to_b(client_tup[0]), client_tup[1])
         for sub, q, handler in self.subs.values():
             # Msg pattern, address pattern.
@@ -129,7 +130,11 @@ class BaseStream(ACKUDP):
                 continue
 
             # Add message to queue.
+            msg_added = True
             do_add(q)
+
+        if not msg_added:
+            print(f"Discarded {client_tup} = {data}")
 
     # Async wait for a message that matches a pattern in a queue.
     async def recv(self, sub=SUB_ALL, timeout=2, full=False):

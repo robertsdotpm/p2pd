@@ -2,19 +2,20 @@ import time
 from .interface import *
 from .stun_client import *
 
-NAT_TEST_NO = 5
+NAT_TEST_NO = 1
+NAT_TEST_TIMEOUT = 2
 
 stun_new = {
     IP4: [
         {
-            "host": "stunserver.stunprotocol.org",
-            "primary": {"ip": "3.132.228.249", "port": 3478},
-            "secondary": {"ip": "3.135.212.85", "port": 3479},
-        },
-        {
             "host": "stun.voipcheap.co.uk",
             "primary": {"ip": "77.72.169.211", "port": 3478},
             "secondary": {"ip": "77.72.169.210", "port": 3479},
+        },
+        {
+            "host": "stunserver.stunprotocol.org",
+            "primary": {"ip": "3.132.228.249", "port": 3478},
+            "secondary": {"ip": "3.135.212.85", "port": 3479},
         },
         {
             "host": "stun.usfamily.net",
@@ -122,26 +123,37 @@ stun_new = {
 
 # STUN payload to send, Send IP, send port, reply IP, reply port
 NAT_TEST_SCHEMA = [
-    [               "", "primary", "primary", "primary", "primary"],
-    [    changeRequest, "primary", "primary", "secondary", "secondary"],
-    [               "", "secondary", "primary", "secondary", "primary"],
+    [               "",   "primary", "primary",   "primary",   "primary"],
+    [    changeRequest,   "primary", "primary", "secondary", "secondary"],
+    [               "", "secondary", "primary", "secondary",   "primary"],
     [changePortRequest, "secondary", "primary", "secondary", "secondary"],
 ]
 
-# TODO: Different conf here?
 async def do_nat_test(dest_addr, reply_addr, payload, pipe, q, test_coro):
-    # Only accept messages from reply_addr.
     tran_info = tran_info_patterns(reply_addr.tup)
     pipe.subscribe(tran_info[0:2])
+
+    # Adding that fixed the bug but why?
+    # Maybe prevents one coro hogging the exec slot.
+    conf = dict_merge(STUN_CONF, {
+            "packet_retry": 6,
+            "retry_no": 6,
+            "recv_timeout": 2
+        }
+    )
+
+    print(f"dest addr = {dest_addr.tup}")
+    print(f"reply addr = {reply_addr.tup}") 
+    print(f"payload = {payload}")
 
     # Do first NAT test.
     ret, _ = await stun_sub_test(
         "running nat test",
         dest_addr,
         pipe.route.interface,
-        pipe.af,
+        pipe.route.af,
         UDP,
-        0,
+        pipe.sock.getsockname()[1],
         reply_addr,
         payload,
         pipe=pipe,
@@ -150,20 +162,21 @@ async def do_nat_test(dest_addr, reply_addr, payload, pipe, q, test_coro):
     )
 
     # Valid reply.
-    out = None
-    if ret is not None and isinstance(ret, tuple):
-        out = await test_coro(ret, pipe)
-        await q.put(out)
-    else:
-        await asyncio.sleep(60)
+    if ret is not None and not isinstance(ret, tuple):
+        if ret["resp"]:
+            q.append(ret)
+            if test_coro is not None:
+                return await test_coro(ret, pipe)
+            else:
+                return ret
 
-    return out
+    return None
 
-async def nat_test_workers(pipe, q_list, test_index, test_coro, test_servers):
-    servers = copy.deepcopy(test_servers[pipe.af])
-    servers = servers.shuffle()
-    for server_no in range(0, NAT_TEST_NO):
-        async def worker():
+async def nat_test_workers(pipe, q, test_index, test_coro, servers):
+    # Make list of coroutines to do this NAT tests.
+    workers = []
+    for server_no in range(0, min(NAT_TEST_NO, len(servers))):
+        async def worker(server_no):
             # Packets will go to this destination.
             # Send to, expect from.
             addrs = [] 
@@ -172,6 +185,10 @@ async def nat_test_workers(pipe, q_list, test_index, test_coro, test_servers):
                 schema = NAT_TEST_SCHEMA[test_index][(x * 2) + 1:(x * 2) + 3]
                 ip_type = schema[0]
                 port_type = schema[1]
+
+                print(f"test no = {test_index} schema = {schema} server no = {server_no} x = {x}")
+
+
 
                 # Resolve IP and port as an Address.
                 addrs.append(
@@ -182,11 +199,21 @@ async def nat_test_workers(pipe, q_list, test_index, test_coro, test_servers):
                     )
                 )
 
+                #print(f"{addrs[x].tup}")
+
+            print(f"{addrs[0].tup}")
+            print(f"{addrs[1].tup}")
+
+            await Address(servers[server_no]["host"], 3478, pipe.route)
+
             # Run the test and return the results.
             payload = NAT_TEST_SCHEMA[test_index][0]
+            print(payload)
+
             return await do_nat_test(
                 # Send to and expect from.
-                **addrs,
+                addrs[0],
+                addrs[1],
 
                 # Type of STUN request to send.
                 payload,
@@ -195,30 +222,69 @@ async def nat_test_workers(pipe, q_list, test_index, test_coro, test_servers):
                 pipe,
 
                 # Async queue to store the results.
-                q_list[test_index],
+                q,
 
                 # Test-specific code.
                 test_coro
             )
 
-        return worker()
+        workers.append(worker(server_no))
 
+    return workers
+
+"""
+If a NAT uses the same 'mapping' (external IP and port) given
+the same internal (IP and port) even when destinations are
+different then it's considered non-symmetric. The software
+proceeds to determine the exact conditions for which mappings
+can be reused when using the same bind tuples.
+"""
 def non_symmetric_check(q_list):
-    # TODO: cmp 1 and 3
-    pass
+    # Test 1 and 3.
+    q1 = q_list[0]
+    q3 = q_list[2]
 
-async def fast_nat_test(pipe, test_servers=stun_new):
+    # Not enough data to know.
+    if not len(q1) or not len(q3):
+        return False
+
+    # NAT reuses mappings given same internal (ip and port)
+    port_check = q1[0]['rport'] == q3[0]['rport']
+    ip_check = ip_f(q1[0]['rip']) == ip_f(q3[0]['rip'])
+    if port_check and ip_check:
+        return True
+
+    # Otherwise return False.
+    return False
+
+"""
+If there's no replies in any of the NAT test lists then
+assume that this means there's a firewall and return False.
+"""
+def no_stun_resp_check(q_list):
+    for i in range(0, 4):
+        if len(q_list[i]):
+            return False
+        
+    return True
+
+async def fast_nat_test(pipe, test_servers):
+    # Shuffle STUN servers.
+    servers = copy.deepcopy(test_servers[pipe.route.af])
+    #random.shuffle(servers)
+
     # Store STUN request results here.
     # n = index of test e.g. [0] = test 1.
-    q_list = [asyncio.Queue()] * 4
+    q_list = [[], [], [], []]
+    q_list.append(SYMMETRIC_NAT)
 
     # Open NAT type.
     async def test_one(ret, test_pipe):
         source_ip = test_pipe.route.bind_ip()
         if ip_f(ret['rip']) == ip_f(source_ip):
             return OPEN_INTERNET
-        else:
-            await asyncio.sleep(60)
+
+        return None
 
     # Full cone NAT.
     async def test_two(ret, test_pipe):
@@ -226,31 +292,63 @@ async def fast_nat_test(pipe, test_servers=stun_new):
     
     # Get a list of workers for first two NAT tests.
     main_workers = []
-    for test_info in [[0, test_one], [1, test_two]]:
-        test_index, test_coro = test_info
-        main_workers += await nat_test_workers(
+    for test_info in [[0, test_one, 0], [1, test_two, 0]]:
+        # Build list of coroutines to run these NAT tests.
+        test_index, test_coro, test_delay = test_info
+        workers = await nat_test_workers(
             pipe,
-            q_list,
+            q_list[test_index],
             test_index,
             test_coro,
-            test_servers, 
+            servers, 
         )
 
-    # Continue to extended tests.
+        # Delayed start.
+        if test_delay:
+            # Wrap the coroutine to delay it's main execution.
+            async def worker(delay, coro):
+                #await asyncio.sleep(delay)
+                return await coro
+            
+            # El8 compact list comprehension.
+            workers = [worker(test_delay, coro) for coro in workers]
+
+        # Add to list to run.
+        # print(workers)
+        main_workers += workers
+
+    print(main_workers)
+    return
+
+    x = await main_workers[0]
+    print(x)
+    print(q_list)
+    await asyncio.sleep(2)
+    y = await main_workers[1]
+    print(y)
+    print(q_list)
+    return
+
+    # Run NAT tests.
+    log("Main nat tests starting.")
     try:
         # iterate over awaitables with a timeout
-        for task in asyncio.as_completed(main_workers, timeout=2):
+        for task in asyncio.as_completed(main_workers, timeout=6):
             # get the next result
-            return await task
+            ret = await task
+            if ret is not None:
+                return ret
+            
     except asyncio.TimeoutError:
         log("Extended NAT tests starting.")
 
+    print(q_list)
+    return
+
     # Full cone NAT.
-    timeout_ret = SYMMETRIC_NAT
     async def test_three(ret, test_pipe):
         if non_symmetric_check(q_list):
-            if len(q_list) == 4:
-                q_list.append(RESTRICT_PORT_NAT)
+            q_list[3] = RESTRICT_PORT_NAT
 
         await asyncio.sleep(60)
 
@@ -267,10 +365,10 @@ async def fast_nat_test(pipe, test_servers=stun_new):
         test_index, test_coro = test_info
         extra_workers += await nat_test_workers(
             pipe,
-            q_list,
+            q_list[test_index],
             test_index,
             test_coro,
-            test_servers
+            servers
         )
 
     # Process results for extended tests.
@@ -281,14 +379,11 @@ async def fast_nat_test(pipe, test_servers=stun_new):
             return await task
     except asyncio.TimeoutError:
         log("Extended NAT test timeout.")
-
-        # TODO: no replies = blocked_nat
-
-        return timeout_ret 
-
-    
-    
-
+        if no_stun_resp_check(q_list):
+            return BLOCKED_NAT
+        else:
+            # Symmetric NAT or RESTRICT_PORT_NAT.
+            return q_list[-1] 
 
 async def main():
     # Load internal interface details.
@@ -354,9 +449,72 @@ async def main():
 
     # Use same pipe with multiplexing for reuse tests.
     af = IP4
-    route = await i.route(af).bind()
-    pipe = await pipe_open(UDP, route=route)
+    route = await i.route(af).bind(0)
+    conf = dict_merge(STUN_CONF, {"reuse_addr": True})
+    pipe = await pipe_open(UDP, route=route, conf=STUN_CONF)
+    assert(pipe is not None)
 
+    t1 = timestamp()
+
+    send_addr = await Address(
+        stun_new[af][0]["primary"]["ip"],
+        stun_new[af][0]["primary"]["port"],
+        route
+    )
+
+    out = await do_nat_test(
+        # Send to and expect from.
+        send_addr,
+        send_addr,
+
+        # Type of STUN request to send.
+        "",
+
+        # Pipe to reuse for UDP.
+        pipe,
+
+        # Async queue to store the results.
+        [],
+
+        # Test-specific code.
+        None
+    )
+    print(out)
+
+    t1 = timestamp()
+
+    change_addr = await Address(
+        stun_new[af][0]["secondary"]["ip"],
+        stun_new[af][0]["secondary"]["port"],
+        route
+    )
+
+    out = await do_nat_test(
+        # Send to and expect from.
+        send_addr,
+        change_addr,
+
+        # Type of STUN request to send.
+        changeRequest,
+
+        # Pipe to reuse for UDP.
+        pipe,
+
+        # Async queue to store the results.
+        [],
+
+        # Test-specific code.
+        None
+    )
+    print(out)
+
+
+    #nat_type = await fast_nat_test(pipe, stun_new)
+
+
+    t2 = timestamp() - t1
+    #print(f"nat time = {t2}")
+    await pipe.close()
 
 
     pass

@@ -493,6 +493,10 @@ def run_in_executor(f):
 
     return inner
 
+def cancel_tasks(tasks):
+    for task in tasks:
+        task.cancel()
+
 # Wait for tasks to finish up until a timeout.
 # Otherwise cancel them and wait for errors.
 async def gather_or_cancel(tasks, timeout):

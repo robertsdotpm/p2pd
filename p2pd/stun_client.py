@@ -312,6 +312,7 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
         # Port server will send change requests from.
         'cport': None
     }
+    print(ret)
 
     # Sanity checking.
     if pipe is None:
@@ -522,6 +523,9 @@ async def stun_sub_test(msg, dest, interface, af, proto, source_port, changed, e
     if tran_info is None:
         tran_info = tran_info_patterns(changed.tup)
 
+    print(tran_info)
+    print(pipe)
+
     # New con for every req if it's TCP.
     if proto == TCP:
         if pipe is not None:
@@ -532,6 +536,7 @@ async def stun_sub_test(msg, dest, interface, af, proto, source_port, changed, e
     if pipe is None:
         # Get new sock with a timeout.
         # The timeout is really only useful for TCP connect.
+        print("pipe is none")
         pipe = await init_pipe(
             dest,
             interface,
@@ -557,6 +562,27 @@ async def stun_sub_test(msg, dest, interface, af, proto, source_port, changed, e
             conf=conf
         )
     ), pipe
+
+"""
+Does multiple sub tests to determine NAT type.
+It will differ dest ips, reply ips and/or reply ports.
+Reply success or failure + external ports reported
+by servers are used to infer the type of NAT.
+Note: complete resolution of NAT type is only
+possible with proto = SOCK_DGRAM. This is because
+the router doesn't just allow inbound connects
+that either haven't been forwarded or
+contacted specifically.
+
+NOTE: my concurrent optimization here with tests 2 - 4
+seem in error since tests 3 and 4 white lists t2 change ip.
+Stupid mistake to miss. maybe I dont have any full cone nats?
+"""
+async def do_nat_test(stun_addr, interface, af=IP4, proto=UDP, group="change", do_close=1, conf=STUN_CONF):
+    # Important vars / init.
+    test = {} # test[test_no] = test result
+    source_port = 0
+    pipe_list = []
 
     # Log errors, cleanup and retry.
     async def handle_error(msg, pipe_list, do_close=1):
@@ -589,24 +615,6 @@ async def stun_sub_test(msg, dest, interface, af, proto, source_port, changed, e
         )
 
         return [test_name, ret, pipe]
-
-
-"""
-Does multiple sub tests to determine NAT type.
-It will differ dest ips, reply ips and/or reply ports.
-Reply success or failure + external ports reported
-by servers are used to infer the type of NAT.
-Note: complete resolution of NAT type is only
-possible with proto = SOCK_DGRAM. This is because
-the router doesn't just allow inbound connects
-that either haven't been forwarded or
-contacted specifically.
-"""
-async def do_nat_test(stun_addr, interface, af=IP4, proto=UDP, group="change", do_close=1, conf=STUN_CONF):
-    # Important vars / init.
-    test = {} # test[test_no] = test result
-    source_port = 0
-    pipe_list = []
 
     # Do first NAT test.
     _, test[1], pipe = await run_nat_test(None, [
@@ -645,14 +653,6 @@ async def do_nat_test(stun_addr, interface, af=IP4, proto=UDP, group="change", d
     # ID, log msg, dest addr, resp addr, extra req data.
     assert(stun_addr.tup[0] != test[1]['cip'])
     assert(stun_addr.tup[1] != test[1]['cport'])
-
-
-    pipe_list, _, _ = await handle_error(
-        "stun test success",
-        pipe_list,
-        do_close
-    )
-
     route = interface.route(af)
     nat_tests = [
         [
@@ -714,8 +714,14 @@ async def do_nat_test(stun_addr, interface, af=IP4, proto=UDP, group="change", d
         # Record the NAT test.
         tasks.append(run_nat_test(pipe, nat_test, tran_info, conf))
 
+    # Try serial.
+    results = []
+    for task in tasks:
+        result = await task
+        results.append(result)
+
     # Check results and index them.
-    results = await asyncio.gather(*tasks)
+    #results = await asyncio.gather(*tasks)
     for result in results:
         result_name, result_ret, _ = result
         if result_ret is None:
