@@ -2,8 +2,8 @@ import time
 from .interface import *
 from .stun_client import *
 
-NAT_TEST_NO = 1
-NAT_TEST_TIMEOUT = 2
+NAT_TEST_NO = 5
+NAT_TEST_TIMEOUT = 0.5
 
 stun_new = {
     IP4: [
@@ -41,11 +41,6 @@ stun_new = {
             "host": "stun.hot-chilli.net",
             "primary": {"ip": "49.12.125.53", "port": 3478},
             "secondary": {"ip": "49.12.125.24", "port": 3479},
-        },
-        {
-            "host": "stun.counterpath.com",
-            "primary": {"ip": "216.93.246.18", "port": 3478},
-            "secondary": {"ip": "216.93.246.15", "port": 3479},
         },
         {
             "host": "stun.cheapvoip.com",
@@ -122,6 +117,10 @@ stun_new = {
 }
 
 """
+Actually duplicate prevetion in the ips is important
+because if the same sites (with dif prim and secondary are visited) 
+then it triggers full cone artifically
+
 labnet = 4 ()
 nbn = 5 () (success with 5 test no)
 
@@ -292,10 +291,10 @@ def no_stun_resp_check(q_list):
         
     return True
 
-async def fast_nat_test(pipe, test_servers):
+async def fast_nat_test(pipe, test_servers, timeout=NAT_TEST_TIMEOUT):
     # Shuffle STUN servers.
     servers = copy.deepcopy(test_servers[pipe.route.af])
-    #random.shuffle(servers)
+    random.shuffle(servers)
 
     # Store STUN request results here.
     # n = index of test e.g. [0] = test 1.
@@ -355,7 +354,7 @@ async def fast_nat_test(pipe, test_servers):
     log("Main nat tests starting.")
     try:
         # iterate over awaitables with a timeout
-        for task in asyncio.as_completed(main_workers, timeout=2):
+        for task in asyncio.as_completed(main_workers, timeout=timeout):
             # get the next result
             ret = await task
             if ret is not None:
@@ -392,7 +391,7 @@ async def fast_nat_test(pipe, test_servers):
     # Process results for extended tests.
     try:
         # iterate over awaitables with a timeout
-        for task in asyncio.as_completed(extra_workers, timeout=2):
+        for task in asyncio.as_completed(extra_workers, timeout=timeout):
             # get the next result
             ret = await task
             if ret is not None:
@@ -540,6 +539,9 @@ async def main():
     t2 = timestamp() - t1
     print(f"nat time = {t2}")
     await pipe.close()
+
+
+    await asyncio.sleep(5)
 
 
     pass
