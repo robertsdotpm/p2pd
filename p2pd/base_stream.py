@@ -134,7 +134,7 @@ class BaseStream(ACKUDP):
             do_add(q)
 
         if not msg_added:
-            print(f"Discarded {client_tup} = {data}")
+            log(f"Discarded {client_tup} = {data}")
 
     # Async wait for a message that matches a pattern in a queue.
     async def recv(self, sub=SUB_ALL, timeout=2, full=False):

@@ -90,50 +90,6 @@ STUN_CONF = dict_child({
     "reuse_addr": True,
 }, NET_CONF)
 
-# Replace with servers from settings.
-# Remove distinction between 'map' and 'change' servers.
-# Just keep change servers to keep things simple.
-STUN_SERVERS_MAP_UDP_V6 = [STUND_SERVERS[IP6][0]] + shuffle(STUND_SERVERS[IP6][1:])
-STUN_SERVERS_CHANGE_UDP_V6 = [STUND_SERVERS[IP6][0]] + shuffle(STUND_SERVERS[IP6][1:])
-STUN_SERVERS_MAP_UDP_V4 = [STUND_SERVERS[IP4][0]] + shuffle(STUND_SERVERS[IP4][1:])
-STUN_SERVERS_CHANGE_UDP_V4 = [STUND_SERVERS[IP4][0]] + shuffle(STUND_SERVERS[IP4][1:])
-STUN_SERVERS_MAP_TCP_V6 = [STUNT_SERVERS[IP6][0]] + shuffle(STUNT_SERVERS[IP6][1:])
-STUN_SERVERS_CHANGE_TCP_V6 = [STUNT_SERVERS[IP6][0]] + shuffle(STUNT_SERVERS[IP6][1:])
-STUN_SERVERS_MAP_TCP_V4 = [STUNT_SERVERS[IP4][0]] + shuffle(STUNT_SERVERS[IP4][1:])
-STUN_SERVERS_CHANGE_TCP_V4 = [STUNT_SERVERS[IP4][0]] + shuffle(STUNT_SERVERS[IP4][1:])
-
-# Apply funcs easier to all server lists.
-STUN_SERVERS = [
-    STUN_SERVERS_MAP_UDP_V4, STUN_SERVERS_MAP_UDP_V6,
-    STUN_SERVERS_MAP_TCP_V4, STUN_SERVERS_MAP_TCP_V6,
-    STUN_SERVERS_CHANGE_UDP_V4, STUN_SERVERS_CHANGE_UDP_V6,
-    STUN_SERVERS_CHANGE_TCP_V4, STUN_SERVERS_CHANGE_TCP_V6,
-]
-
-# Return stun server list easily.
-STUN_SERVER_INDEX = {
-    "change": {
-        socket.SOCK_DGRAM: {
-            socket.AF_INET: STUN_SERVERS_CHANGE_UDP_V4,
-            socket.AF_INET6: STUN_SERVERS_CHANGE_UDP_V6
-        },
-        socket.SOCK_STREAM: {
-            socket.AF_INET: STUN_SERVERS_CHANGE_TCP_V4,
-            socket.AF_INET6: STUN_SERVERS_CHANGE_TCP_V6
-        }
-    },
-    "map": {
-        socket.SOCK_DGRAM: {
-            socket.AF_INET: STUN_SERVERS_MAP_UDP_V4,
-            socket.AF_INET6: STUN_SERVERS_MAP_UDP_V6
-        },
-        socket.SOCK_STREAM: {
-            socket.AF_INET: STUN_SERVERS_MAP_TCP_V4,
-            socket.AF_INET6: STUN_SERVERS_MAP_TCP_V6
-        }
-    }
-}
-
 # stun consts
 MappedAddress = '0001'
 SourceAddress = '0004'
@@ -153,17 +109,13 @@ changePortRequest = ''.join(
     [ChangeRequest, '0004', "00000002"]
 )
 
-# There are two groups of servers - change and map.
-# change means it supports nat testing.
-# map means it only supports standard bind requests.
-# Servers are further divided by protocol (dgram or stream)
-# and by IP type = ipv4 or ipv6.
-def get_stun_servers(af, proto=socket.SOCK_DGRAM, group="change", do_shuffle=0):
-    servers = STUN_SERVER_INDEX[group][proto][af][:]
-    if do_shuffle:
-        random.shuffle(servers)
+def get_stun_servers(af, proto):
+    if proto == UDP:
+        servers = STUND_SERVERS
+    else:
+        servers = STUNT_SERVERS
 
-    return servers
+    return servers[af]
 
 # Make a random transaction ID -- using in bind requests.
 # Kind of like a poor-mans sequence number for UDP packets.
@@ -533,7 +485,6 @@ async def stun_sub_test(msg, dest, interface, af, proto, source_port, changed, e
     if pipe is None:
         # Get new sock with a timeout.
         # The timeout is really only useful for TCP connect.
-        print("pipe is none")
         pipe = await init_pipe(
             dest,
             interface,
@@ -559,267 +510,6 @@ async def stun_sub_test(msg, dest, interface, af, proto, source_port, changed, e
             conf=conf
         )
     ), pipe
-
-"""
-Does multiple sub tests to determine NAT type.
-It will differ dest ips, reply ips and/or reply ports.
-Reply success or failure + external ports reported
-by servers are used to infer the type of NAT.
-Note: complete resolution of NAT type is only
-possible with proto = SOCK_DGRAM. This is because
-the router doesn't just allow inbound connects
-that either haven't been forwarded or
-contacted specifically.
-
-NOTE: my concurrent optimization here with tests 2 - 4
-seem in error since tests 3 and 4 white lists t2 change ip.
-Stupid mistake to miss. maybe I dont have any full cone nats?
-"""
-async def do_nat_test(stun_addr, interface, af=IP4, proto=UDP, group="change", do_close=1, conf=STUN_CONF):
-    # Important vars / init.
-    test = {} # test[test_no] = test result
-    source_port = 0
-    pipe_list = []
-
-    # Log errors, cleanup and retry.
-    async def handle_error(msg, pipe_list, do_close=1):
-        log("> STUN handle = %s" % (to_s(msg)))
-
-        # Cleanup socket.
-        if do_close:
-            for pipe in pipe_list:
-                if pipe is not None:
-                    await pipe.close()
-
-        # Error -- stun server failed.
-        return [], None, None
-
-    # Helper function to run a nat test.
-    async def run_nat_test(pipe, nat_test, tran_info, conf):
-        test_name, log_msg, dest_addr, test_addr, extra = nat_test
-        ret, pipe = await stun_sub_test(
-            log_msg,
-            dest_addr,
-            interface,
-            af,
-            proto,
-            source_port,
-            test_addr,
-            extra,
-            pipe=pipe,
-            tran_info=tran_info,
-            conf=conf
-        )
-
-        return [test_name, ret, pipe]
-
-    # Do first NAT test.
-    _, test[1], pipe = await run_nat_test(None, [
-            1,
-            "doing first nat test",
-            stun_addr,
-            stun_addr,
-            ""
-        ],
-        tran_info_patterns(stun_addr.tup),
-        conf
-    )
-    
-    return test[1]
-
-    # Check first reply.
-    error = stun_check_reply(stun_addr, test[1])
-    if error or pipe is None:
-        return await handle_error("invalid stun reply = %s" % (error), pipe_list)
-    else:
-        source_port = pipe.route.bind_port
-        pipe_list.append(pipe)
-
-    return test[1]
-
-    # Log changed port.
-    log(
-        "> STUN changed port = %d, stun port = %d" % (
-            test[1]['cport'],
-            stun_addr.port
-        )
-    )
-    log(
-        "> STUN t1 changed ip = %s" % (
-            test[1]['cip']
-        )
-    )
-
-    # List of nat tests to perform concurrently.
-    # ID, log msg, dest addr, resp addr, extra req data.
-    assert(stun_addr.tup[0] != test[1]['cip'])
-    assert(stun_addr.tup[1] != test[1]['cport'])
-    route = interface.route(af)
-    nat_tests = [
-        [
-            2,
-            "doing NAT test 2 - change req",
-            stun_addr,
-            await Address(
-                test[1]['cip'],
-                test[1]['cport'],
-                route,
-                proto
-            ).res(),
-            changeRequest
-        ],
-        [
-            3,
-            "doing NAT test 3 - to changed addr - reply expected",
-            await Address(
-                test[1]['cip'],
-                stun_addr.port,
-                route,
-                proto
-            ).res(),
-            await Address(
-                test[1]['cip'],
-                stun_addr.port,
-                route,
-                proto
-            ).res(),
-            ""
-        ],
-        [
-            4,
-            "nat test 4",
-            await Address(
-                test[1]['cip'],
-                stun_addr.port,
-                route,
-                proto
-            ).res(),
-            await Address(
-                test[1]['cip'],
-                test[1]['cport'],
-                route,
-                proto
-            ).res(),
-            changePortRequest
-        ]
-    ]
-
-    # Schedule nat tests to run concurrently.
-    tasks = []
-    results = []
-    for i, nat_test in enumerate(nat_tests):
-        # Subscribe to certain messages.
-        tran_info = tran_info_patterns(nat_test[3].tup)
-        pipe.subscribe(tran_info[0:2])
-
-        # Record the NAT test.
-        tasks.append(run_nat_test(pipe, nat_test, tran_info, conf))
-
-    # Try serial.
-    results = []
-    for task in tasks:
-        result = await task
-        results.append(result)
-
-    print(results)
-
-    # Check results and index them.
-    #results = await asyncio.gather(*tasks)
-    for result in results:
-        result_name, result_ret, _ = result
-        if result_ret is None:
-            return await handle_error("STUN %s failed" % (result_name), pipe_list)
-
-        test[result_name] = result_ret
-
-    # Used later on for nat test 3 code
-    # The fields may not be set if there was no response.
-    if test[1]['rip'] is None or test[3]['rip'] is None:
-        return await handle_error("STUN rip missing", pipe_list)
-    else:
-        ip_check = ip_f(test[1]['rip']) == ip_f(test[3]['rip'])
-        log("> STUN t1 rip = {} t3 rip = {}".format(
-            test[1]['rip'],
-            test[3]['rip']
-        ))
-    port_check = test[1]['rport'] == test[3]['rport']
-    test3_dest = nat_tests[1][2]
-    error = stun_check_reply(test3_dest, test[3])
-    log("> STUN t1 rport = {} t3 rport = {}".format(
-        test[1]['rport'],
-        test[3]['rport']
-    ))
-    log("> STUN t2 resp = {}".format(test[2]['resp']))
-
-
-    # Our local bind addr was equal to external address.
-    # Server is directly open to internet.
-    # TODO: this may be invalid?
-    source_ip = pipe.route.bind_ip()
-    log("> STUN source ip = {}".format(source_ip))
-    if ip_f(test[1]['rip']) == ip_f(source_ip):
-        if test[2]['resp']:
-            # Got a reply back = completely open.
-            log("> STUN open internet detected")
-            typ = OPEN_INTERNET
-        else:
-            # Something is filtering replies.
-            log("> STUN firewall detected")
-            test[1]["resp"] = False
-            typ = SYMMETRIC_UDP_FIREWALL
-    else:
-        # Got a reply from a different IP.
-        # NAT opens mapping for source ip and port
-        # Open to any remote host
-        if test[2]['resp']:
-            """
-            It should be noted that a NAT that preserves the source port
-            will also give a positive for this test though it may not
-            be a full code NAT in reality. Preserving type NATs are
-            accounted for in the mapping behaviour tests though.
-            """
-            log("> STUN full cone detected")
-            typ = FULL_CONE
-        else:
-            # We're sending to the servers
-            # advertised 'change address'
-            # or its second address.
-            # We should be able to get a reply.
-            if error:
-                # Exception -- replies should be possible to receive if we send.
-                return await handle_error("invalid stun reply = %s" % (error), pipe_list)
-            else:
-                # NAT reuses port mappings based on source ip and port.
-                # These conditions apply to test 3.
-                if ip_check and port_check:
-                    # Check results.
-                    if test[4]['resp']:
-                        # NAT reuses port mappings based on src ip and port
-                        # dest host most be white listed and can send from any port.
-                        log("> STUN restrict nat detected")
-                        typ = RESTRICT_NAT
-                    else:
-                        # NAT reuses mappings based on src ip and port
-                        # Dest host must be white listed and send from same port.
-                        log("> STUN restricted port detected")
-                        test[1]['resp'] = False
-                        typ = RESTRICT_PORT_NAT
-                else:
-                    # NAT maps different external ports based on outgoing host.
-                    log("> STUN symmetric nat detected")
-                    typ = SYMMETRIC_NAT
-
-    # Port mappings may still be predictable if NAT
-    # Uses an increasing delta value for successive cons
-    # Simultaneous open will test this.
-    # Note: SymmetricNAT, SymmetricUDPFirewall
-    pipe_list, _, _ = await handle_error(
-        "stun test success",
-        pipe_list,
-        do_close
-    )
-
-    return pipe_list, typ, test[1]
 
 # Basic interface to the most useful functions.
 class STUNClient():
@@ -850,7 +540,7 @@ class STUNClient():
     very useful for rapidly determining whether an interface
     is routable via a certain 'address type'.
     """
-    async def _get_field(self, name, af, proto, interface, source_port=0, group="map", alt_port=0, do_close=0, fast_fail=0, servers=None, local_addr=None, conf=STUN_CONF):
+    async def _get_field(self, name, af, proto, interface, source_port=0, group="map", do_close=0, fast_fail=0, servers=None, local_addr=None, conf=STUN_CONF):
         # Record start time and define fail result funv.
         random.seed()
         start_time = time.time()
@@ -858,24 +548,22 @@ class STUNClient():
         use_proto = TCP if fast_fail else proto
         lax = 0 if group == "change" else 1
 
+
         # Limit at 20 to avoid massive delays.
         # If 20 consecutive servers fail
         # something else is wrong.
-        servers = servers or get_stun_servers(af, proto, group)
+        servers = servers or get_stun_servers(af, proto)
         stun_addr = None
         for server in servers:
             for i in range(conf["retry_no"]):
                 # Get a valid STUN Address.
                 for j in range(conf["addr_retry"]):
-                    # Basic server address check.
-                    stun_port = 3479 if alt_port else server[1]
-
                     # Resolve address with a timeout.
                     try:
                         stun_addr = await asyncio.wait_for(
                             stun_check_addr_info(
-                                server[0],
-                                stun_port,
+                                server["primary"]["ip"],
+                                server["primary"]["port"],
                                 af,
                                 proto,
                                 interface,
@@ -948,87 +636,6 @@ class STUNClient():
         # Retry failed.
         return f_fail()
 
-    async def get_nat_type(self, af=None, servers=None):
-        if self.proto != UDP:
-            raise Exception("NAT type test requires udp proto.")
-
-        # Setup conf for NAT type.
-        conf = copy.deepcopy(STUN_CONF)
-        conf["packet_retry"] = 3
-        #conf["recv_timeout"] = 4
-        conf["addr_retry"] = 6
-        #conf["retry_no"] = 3
-        #conf["consensus"] = [3, 5]
-
-        # Main function defaults.
-        interface = self.interface
-        threshold_n = conf["consensus"][0] or self.n
-        threshold_t = conf["consensus"][1] or self.t
-        group = "change"
-        af = af or self.af
-        servers = servers or get_stun_servers(
-            af,
-            self.proto,
-            group,
-            0
-        )
-
-        # Do NAT test with retry.
-        async def nat_test_with_retry(servers, interface, conf):
-            # Try find a valid STUN server -- max 20 rand attempts.
-            random.seed()
-            stun_addr = None
-            for j in range(conf["retry_no"]):
-                for i in range(conf["addr_retry"]):
-                    server = random.choice(servers)
-                    try:
-                        stun_addr = await asyncio.wait_for(
-                            stun_check_addr_info(
-                                server[0],
-                                server[1],
-                                af,
-                                self.proto,
-                                interface
-                            ),
-                            conf["dns_timeout"]
-                        )
-                        break
-                    except asyncio.TimeoutError:
-                        stun_addr = None
-                        continue
-
-                # Check it was set or skip this test.
-                if stun_addr is None:
-                    continue
-
-                # Do the nat test.
-                ret = await do_nat_test(
-                    stun_addr,
-                    self.interface,
-                    af,
-                    self.proto,
-                    group,
-                    do_close=1,
-                    conf=conf
-                )
-
-                if ret[1] is not None:
-                    return ret
-
-        # Make list of tests for getting NAT type.
-        tasks = []
-        for i in range(threshold_n):
-            # Go ahead and use that STUN addr for the test.
-            tasks.append(
-                nat_test_with_retry(servers, interface, conf)
-            )
-
-        # Return threshold results.
-        f_filter = lambda r: [x[1] for x in r if isinstance(x[1], int)]
-        
-
-        return await threshold_gather(tasks, f_filter, threshold_t)
-
     async def get_wan_ip(self, af=None, interface=None, fast_fail=0, servers=None, local_addr=None, conf=STUN_CONF):
         # Defaults.
         af = af or self.af
@@ -1059,14 +666,14 @@ class STUNClient():
     get_mapping as it is expected for there to be differences in
     successive mappings as part of how NATs work.
     """
-    async def get_mapping(self, proto, af=None, source_port=0, group="map", alt_port=0, do_close=0, fast_fail=0, servers=None, conf=STUN_CONF):
+    async def get_mapping(self, proto, af=None, source_port=0, group="map", do_close=0, fast_fail=0, servers=None, conf=STUN_CONF):
         # Defaults.
         af = af or self.af
         log("> stun mapping for proto = %d; af = %d" % (proto, af))
 
         # Get port mapping from first working server.
         interface = self.interface
-        nat_info, s, run_time = await self._get_field("nat_info", af, proto, interface, source_port, group, alt_port, do_close, fast_fail, servers=servers, conf=conf)
+        nat_info, s, run_time = await self._get_field("nat_info", af, proto, interface, source_port, group, do_close, fast_fail, servers=servers, conf=conf)
         if nat_info is None:
             return [None, None, None, None, None, None]
 
@@ -1078,17 +685,6 @@ class STUNClient():
             mapped = int(mapped)
 
         return [interface, s, local, mapped, rip, run_time]
-
-    async def get_nat_info(self):
-        nat_type = await self.get_nat_type()
-
-        # Delta not applicable for some NAT types.
-        if nat_type == OPEN_INTERNET:
-            delta = delta_info(NA_DELTA, 0)
-        else:
-            delta = await delta_test(self)
-            
-        return nat_info(nat_type, delta)
     
 #######################################################################
 if __name__ == "__main__": # pragma: no cover
@@ -1211,10 +807,13 @@ if __name__ == "__main__": # pragma: no cover
 
         i = await Interface().start_local()
         s = STUNClient(interface=i, proto=UDP)
-        out = await s.get_nat_type()
-        print(out)
+        x = await s.get_wan_ip()
+        print(x)
+        return
+
         out = await s.get_mapping(proto=TCP)
         print(out)
+        return
 
         i = await Interface().start()
         print(i)

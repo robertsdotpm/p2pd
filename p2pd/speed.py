@@ -1,173 +1,26 @@
 import time
 from .interface import *
 from .stun_client import *
+from .ip_range import *
 
 NAT_TEST_NO = 5
 NAT_TEST_TIMEOUT = 0.5
 
-stun_new = {
-    IP4: [
-        {
-            "host": "stun.voipcheap.co.uk",
-            "primary": {"ip": "77.72.169.211", "port": 3478},
-            "secondary": {"ip": "77.72.169.210", "port": 3479},
-        },
-        {
-            "host": "stunserver.stunprotocol.org",
-            "primary": {"ip": "3.132.228.249", "port": 3478},
-            "secondary": {"ip": "3.135.212.85", "port": 3479},
-        },
-        {
-            "host": "stun.usfamily.net",
-            "primary": {"ip": "64.131.63.216", "port": 3478},
-            "secondary": {"ip": "64.131.63.240", "port": 3479},
-        },
-        {
-            "host": "stun.ozekiphone.com",
-            "primary": {"ip": "216.93.246.18", "port": 3478},
-            "secondary": {"ip": "216.93.246.15", "port": 3479},
-        },
-        {
-            "host": "stun.voipwise.com",
-            "primary": {"ip": "77.72.169.213", "port": 3478},
-            "secondary": {"ip": "77.72.169.212", "port": 3479},
-        },
-        {
-            "host": "stun.mit.de",
-            "primary": {"ip": "62.96.96.137", "port": 3478},
-            "secondary": {"ip": "62.96.96.138", "port": 3479},
-        },
-        {
-            "host": "stun.hot-chilli.net",
-            "primary": {"ip": "49.12.125.53", "port": 3478},
-            "secondary": {"ip": "49.12.125.24", "port": 3479},
-        },
-        {
-            "host": "stun.cheapvoip.com",
-            "primary": {"ip": "77.72.169.212", "port": 3478},
-            "secondary": {"ip": "77.72.169.213", "port": 3479},
-        },
-        {
-            "host": "webrtc.free-solutions.org",
-            "primary": {"ip": "94.103.99.223", "port": 3478},
-            "secondary": {"ip": "94.103.99.224", "port": 3479},
-        },
-        {
-            "host": "stun.t-online.de",
-            "primary": {"ip": "217.0.12.17", "port": 3478},
-            "secondary": {"ip": "217.0.12.18", "port": 3479},
-        },
-        {
-            "host": "stun.sipgate.net",
-            "primary": {"ip": "217.10.68.152", "port": 3478},
-            "secondary": {"ip": "217.116.122.136", "port": 3479},
-        },
-        {
-            "host": "stun.voip.aebc.com",
-            "primary": {"ip": "66.51.128.11", "port": 3478},
-            "secondary": {"ip": "66.51.128.12", "port": 3479},
-        },
-        {
-            "host": "stun.callwithus.com",
-            "primary": {"ip": "158.69.57.20", "port": 3478},
-            "secondary": {"ip": "149.56.23.84", "port": 3479},
-        },
-        {
-            "host": "stun.counterpath.net",
-            "primary": {"ip": "216.93.246.18", "port": 3478},
-            "secondary": {"ip": "216.93.246.15", "port": 3479},
-        },
-        {
-            "host": "stun.ekiga.net",
-            "primary": {"ip": "216.93.246.18", "port": 3478},
-            "secondary": {"ip": "216.93.246.15", "port": 3479},
-        },
-        {
-            "host": "stun.internetcalls.com",
-            "primary": {"ip": "77.72.169.212", "port": 3478},
-            "secondary": {"ip": "77.72.169.213", "port": 3479},
-        },
-        {
-            "host": "stun.voipbuster.com",
-            "primary": {"ip": "77.72.169.212", "port": 3478},
-            "secondary": {"ip": "77.72.169.213", "port": 3479},
-        },
-        {
-            "host": "stun.12voip.com",
-            "primary": {"ip": "77.72.169.212", "port": 3478},
-            "secondary": {"ip": "77.72.169.213", "port": 3479},
-        },
-        {
-            "host": "stun.freecall.com",
-            "primary": {"ip": "77.72.169.211", "port": 3478},
-            "secondary": {"ip": "77.72.169.210", "port": 3479},
-        },
-        {
-            "host": "stun.nexxtmobile.de",
-            "primary": {"ip": "5.9.87.18", "port": 3478},
-            "secondary": {"ip": "136.243.205.11", "port": 3479},
-        },
-        {
-            "host": "stun.siptrunk.com",
-            "primary": {"ip": "23.21.92.55", "port": 3478},
-            "secondary": {"ip": "34.205.214.84", "port": 3479},
-        },
-    ],
-    IP6: [
-        {
-            "host": "stunserver.stunprotocol.org",
-            "primary": {"ip": "2600:1f16:8c5:101:80b:b58b:828:8df4", "port": 3478},
-            "secondary": {"ip": "2600:1f16:08c5:0101:6388:1fb6:8b7e:00c2", "port": 3479},
-        },
-        {
-            "host": "stun.hot-chilli.net",
-            "primary": {"ip": "2a01:4f8:242:56ca::2", "port": 3478},
-            "secondary": {"ip": "2a01:04f8:0242:56ca:0000:0000:0000:0003", "port": 3479},
-        },
-        {
-            "host": "stun.simlar.org",
-            "primary": {"ip": "2a02:f98:0:50:2ff:23ff:fe42:1b23", "port": 3478},
-            "secondary": {"ip": "2a02:0f98:0000:0050:02ff:23ff:fe42:1b24", "port": 3479},
-        },
-    ]
-}
+"""
+Does multiple sub tests to determine NAT type.
+It will differ dest ips, reply ips and/or reply ports.
+Reply success or failure + external ports reported
+by servers are used to infer the type of NAT.
+Note: complete resolution of NAT type is only
+possible with proto = SOCK_DGRAM. This is because
+the router doesn't just allow inbound connects
+that either haven't been forwarded or
+contacted specifically.
 
-stunt_new = {
-    IP4: [
-        {
-            "host": "stunserver.stunprotocol.org",
-            "primary": {"ip": "3.132.228.249", "port": 3478},
-            "secondary": {"ip": "3.135.212.85", "port": 3479},
-        },
-        {
-            "host": "stun.hot-chilli.net",
-            "primary": {"ip": "49.12.125.53", "port": 3478},
-            "secondary": {"ip": None, "port": None},
-        },
-        {
-            "host": "stun.voip.blackberry.com",
-            "primary": {"ip": "20.15.169.8", "port": 3478},
-            "secondary": {"ip": None, "port": None},
-        },
-        {
-            "host": "webrtc.free-solutions.org",
-            "primary": {"ip": "94.103.99.223", "port": 3478},
-            "secondary": {"ip": None, "port": None},
-        },
-        {
-            "host": "stun.siptrunk.com",
-            "primary": {"ip": "23.21.92.55", "port": 3478},
-            "secondary": {"ip": None, "port": None},
-        },
-    ],
-    IP6: [
-        {
-            "host": "stunserver.stunprotocol.org",
-            "primary": {"ip": "2600:1f16:8c5:101:80b:b58b:828:8df4", "port": 3478},
-            "secondary": {"ip": "2600:1f16:08c5:0101:6388:1fb6:8b7e:00c2", "port": 3479},
-        }
-    ]
-}
+NOTE: my concurrent optimization here with tests 2 - 4
+seem in error since tests 3 and 4 white lists t2 change ip.
+Stupid mistake to miss. maybe I dont have any full cone nats?
+"""
 
 """
 Actually duplicate prevetion in the ips is important
@@ -207,6 +60,33 @@ NAT_TEST_SCHEMA = [
     # Detects: between restrict and port restrict.
     [changePortRequest, "secondary", "primary", "secondary", "secondary"],
 ]
+
+def filter_nat_servers(nat_servers):
+    out = []
+
+    def find_duplicates(hey, cmp_ipr=None):
+        ip_types = ["primary", "secondary"]
+        for entry in hey:
+            for ip_type in ip_types:
+                entry_ip = entry[ip_type]
+                if entry_ip is None:
+                    continue
+                else:
+                    entry_ipr = IPRange(entry_ip)
+
+                if cmp_ipr is not None:
+                    if entry_ipr == cmp_ipr:
+                        return True
+                else:
+                    if not find_duplicates(out, entry_ipr):
+                        out.append(entry)
+
+        return False
+            
+    find_duplicates(nat_servers)
+    return out
+
+
 
 async def nat_test_exec(dest_addr, reply_addr, payload, pipe, q, test_coro):
     tran_info = tran_info_patterns(reply_addr.tup)
@@ -345,10 +225,6 @@ def no_stun_resp_check(q_list):
     return True
 
 async def fast_nat_test(pipe, test_servers, timeout=NAT_TEST_TIMEOUT):
-    # Shuffle STUN servers.
-    servers = copy.deepcopy(test_servers[pipe.route.af])
-    random.shuffle(servers)
-
     # Store STUN request results here.
     # n = index of test e.g. [0] = test 1.
     q_list = [[], [], [], []]
@@ -359,99 +235,56 @@ async def fast_nat_test(pipe, test_servers, timeout=NAT_TEST_TIMEOUT):
         source_ip = test_pipe.route.bind_ip()
         if ip_f(ret['rip']) == ip_f(source_ip):
             return OPEN_INTERNET
-        return None
 
-    # Full cone NAT.
+    # Full cone NATl
     async def test_two(ret, test_pipe):
         return FULL_CONE
     
-    # Get a list of workers for first two NAT tests.
-    main_workers = []
-    for test_info in [[0, test_one, 0], [1, test_two, 0]]:
-        # Build list of coroutines to run these NAT tests.
-        test_index, test_coro, test_delay = test_info
-        workers = await nat_test_workers(
-            pipe,
-            q_list[test_index],
-            test_index,
-            test_coro,
-            servers, 
-        )
-
-        # Delayed start.
-        if test_delay:
-            # Wrap the coroutine to delay it's main execution.
-            async def worker(delay, coro):
-                #await asyncio.sleep(delay)
-                return await coro
-            
-            # El8 compact list comprehension.
-            workers = [worker(test_delay, coro) for coro in workers]
-
-        # Add to list to run.
-        # print(workers)
-        main_workers += workers
-
-    """
-    x = await main_workers[0]
-    print(x)
-    print(q_list)
-    await asyncio.sleep(2)
-    y = await main_workers[1]
-    print(y)
-    print(q_list)
-    return
-    """
-
-    # Run NAT tests.
-    log("Main nat tests starting.")
-    try:
-        # iterate over awaitables with a timeout
-        for task in asyncio.as_completed(main_workers, timeout=timeout):
-            # get the next result
-            ret = await task
-            if ret is not None:
-                return ret
-            
-    except asyncio.TimeoutError:
-        log("Extended NAT tests starting.")
-
-    # Full cone NAT.
+    # Whitelist of dest (IP and port).
     async def test_three(ret, test_pipe):
-        print("test 3 triggered")
         if non_symmetric_check(q_list):
             q_list[4] = RESTRICT_PORT_NAT
-        return None
 
-    # Full cone NAT.
+    # Whitelist of dest (IP).
     async def test_four(ret, test_pipe):
-        print("test 4 triggered")
-        print(ret)
         return RESTRICT_NAT
     
-    # Get a list of workers for last two NAT tests.
-    extra_workers = []
-    for test_info in [[2, test_three], [3, test_four]]:
-        test_index, test_coro = test_info
-        extra_workers += await nat_test_workers(
-            pipe,
-            q_list[test_index],
-            test_index,
-            test_coro,
-            servers
-        )
+    """
+    All tests in sub_test_a are tried then sub_tests_b.
+    Both sub test lists can't be run concurrently
+    due to how NATs function with white listing.
+    """
+    test_index = 0
+    sub_tests_a = [test_one, test_two]
+    sub_tests_b = [test_three, test_four]
+    for sub_test in [sub_tests_a, sub_tests_b]:
+        # Get a list of workers for first two NAT tests.
+        workers = []
+        for test_coro in sub_test:
+            # Build list of coroutines to run these NAT tests.
+            workers += await nat_test_workers(
+                pipe,
+                q_list[test_index],
+                test_index,
+                test_coro,
+                test_servers, 
+            )
 
-    # Process results for extended tests.
-    try:
-        # iterate over awaitables with a timeout
-        for task in asyncio.as_completed(extra_workers, timeout=timeout):
-            # get the next result
-            ret = await task
-            if ret is not None:
-                return ret
-    except asyncio.TimeoutError:
-        log("Extended NAT test timeout.")
+            # Keep track of test offset.
+            test_index += 1
 
+        # Run NAT sub tests.
+        try:
+            # First result in or timeout.
+            for task in asyncio.as_completed(workers, timeout=timeout):
+                ret = await task
+                if ret is not None:
+                    return ret
+        except asyncio.TimeoutError:
+            continue
+
+    # All tests timed out.
+    # Determine return value.
     if no_stun_resp_check(q_list):
         return BLOCKED_NAT
     else:

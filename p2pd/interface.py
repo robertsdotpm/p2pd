@@ -391,6 +391,17 @@ class Interface():
         nat = await stun_client.get_nat_info()
         self.set_nat(nat)
         return nat
+    
+    async def get_nat_info(self):
+        nat_type = await self.get_nat_type()
+
+        # Delta not applicable for some NAT types.
+        if nat_type == OPEN_INTERNET:
+            delta = delta_info(NA_DELTA, 0)
+        else:
+            delta = await delta_test(self)
+            
+        return nat_info(nat_type, delta)
 
     def get_scope_id(self):
         assert(self.resolved)

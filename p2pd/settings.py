@@ -46,59 +46,168 @@ STUNT servers support TCP.
 STUND servers support UDP.
 """
 STUNT_SERVERS = {
-    # Try to use the oldest servers around.
-    # Presumably these are the most reliable.
     IP4: [
-        # ['p2pd.net', 34780],
-        ['stunserver.stunprotocol.org', 3478], # 19 Sept 2005
+        {
+            "host": "stunserver.stunprotocol.org",
+            "primary": {"ip": "3.132.228.249", "port": 3478},
+            "secondary": {"ip": "3.135.212.85", "port": 3479},
+        },
+        {
+            "host": "stun.hot-chilli.net",
+            "primary": {"ip": "49.12.125.53", "port": 3478},
+            "secondary": {"ip": None, "port": None},
+        },
+        {
+            "host": "stun.voip.blackberry.com",
+            "primary": {"ip": "20.15.169.8", "port": 3478},
+            "secondary": {"ip": None, "port": None},
+        },
+        {
+            "host": "webrtc.free-solutions.org",
+            "primary": {"ip": "94.103.99.223", "port": 3478},
+            "secondary": {"ip": None, "port": None},
+        },
+        {
+            "host": "stun.siptrunk.com",
+            "primary": {"ip": "23.21.92.55", "port": 3478},
+            "secondary": {"ip": None, "port": None},
+        },
     ],
-
-    # There's basically none unfortunately.
     IP6: [
-        # ['p2pd.net', 34780],
-        ['stunserver.stunprotocol.org', 3478],
+        {
+            "host": "stunserver.stunprotocol.org",
+            "primary": {"ip": "2600:1f16:8c5:101:80b:b58b:828:8df4", "port": 3478},
+            "secondary": {"ip": "2600:1f16:08c5:0101:6388:1fb6:8b7e:00c2", "port": 3479},
+        }
     ]
 }
 
 
 
 STUND_SERVERS = {
-    # A few aged, OG stun servers/
     IP4: [
-        # ['p2pd.net', 34780],
-        ['stunserver.stunprotocol.org', 3478],
-        ['stun.voipcheap.co.uk', 3478], # 19 Sept 2005
-        ['stun.usfamily.net', 3478], # 19 Sept 2005
-        ['stun.ozekiphone.com', 3478], # 19 Sept 2005
-        ['stun.voipwise.com', 3478], # 19 Sept 2005
-        ['stun.mit.de', 3478], # 19 Sept 2005
-        ['stun.hot-chilli.net', 3478], # 14 Aug 2012
-        ['stun.counterpath.com', 3478], # 19 Sept 2005
-        ['stun.cheapvoip.com', 3478], # 19 Sept 2005
-        ['stun.voip.blackberry.com', 3478], # 19 Sept 2005
-        ['webrtc.free-solutions.org', 3478], # 17 Nov 2008
-        ['stun.t-online.de', 3478], # 12 Apr 2004
-        ['stun.sipgate.net', 3478], # 19 Sept 2005
-        ['stun.voip.aebc.com', 3478], # 19 Sept 2005
-        ['stun.callwithus.com', 3478], # 19 Sept 2005
-        ['stun.counterpath.net', 3478], # 19 Sept 2005
-        ['stun.ekiga.net', 3478], # 18 Sept 2005 
-        ['stun.internetcalls.com', 3478], # 19 Sept 2005
-        ['stun.voipbuster.com', 3478], # 19 Sept 2005
-        ['stun.12voip.com', 3478], # 19 Sept 2005
-        ['stun.freecall.com', 3478], # 19 Sept 2005
-        ['stun.nexxtmobile.de', 3478], # 13 June 2018
-        ['stun.siptrunk.com', 3478], # 1 May 2014 
+        {
+            "host": "stun.voipcheap.co.uk",
+            "primary": {"ip": "77.72.169.211", "port": 3478},
+            "secondary": {"ip": "77.72.169.210", "port": 3479},
+        },
+        {
+            "host": "stunserver.stunprotocol.org",
+            "primary": {"ip": "3.132.228.249", "port": 3478},
+            "secondary": {"ip": "3.135.212.85", "port": 3479},
+        },
+        {
+            "host": "stun.usfamily.net",
+            "primary": {"ip": "64.131.63.216", "port": 3478},
+            "secondary": {"ip": "64.131.63.240", "port": 3479},
+        },
+        {
+            "host": "stun.ozekiphone.com",
+            "primary": {"ip": "216.93.246.18", "port": 3478},
+            "secondary": {"ip": "216.93.246.15", "port": 3479},
+        },
+        {
+            "host": "stun.voipwise.com",
+            "primary": {"ip": "77.72.169.213", "port": 3478},
+            "secondary": {"ip": "77.72.169.212", "port": 3479},
+        },
+        {
+            "host": "stun.mit.de",
+            "primary": {"ip": "62.96.96.137", "port": 3478},
+            "secondary": {"ip": "62.96.96.138", "port": 3479},
+        },
+        {
+            "host": "stun.hot-chilli.net",
+            "primary": {"ip": "49.12.125.53", "port": 3478},
+            "secondary": {"ip": "49.12.125.24", "port": 3479},
+        },
+        {
+            "host": "stun.cheapvoip.com",
+            "primary": {"ip": "77.72.169.212", "port": 3478},
+            "secondary": {"ip": "77.72.169.213", "port": 3479},
+        },
+        {
+            "host": "webrtc.free-solutions.org",
+            "primary": {"ip": "94.103.99.223", "port": 3478},
+            "secondary": {"ip": "94.103.99.224", "port": 3479},
+        },
+        {
+            "host": "stun.t-online.de",
+            "primary": {"ip": "217.0.12.17", "port": 3478},
+            "secondary": {"ip": "217.0.12.18", "port": 3479},
+        },
+        {
+            "host": "stun.sipgate.net",
+            "primary": {"ip": "217.10.68.152", "port": 3478},
+            "secondary": {"ip": "217.116.122.136", "port": 3479},
+        },
+        {
+            "host": "stun.voip.aebc.com",
+            "primary": {"ip": "66.51.128.11", "port": 3478},
+            "secondary": {"ip": "66.51.128.12", "port": 3479},
+        },
+        {
+            "host": "stun.callwithus.com",
+            "primary": {"ip": "158.69.57.20", "port": 3478},
+            "secondary": {"ip": "149.56.23.84", "port": 3479},
+        },
+        {
+            "host": "stun.counterpath.net",
+            "primary": {"ip": "216.93.246.18", "port": 3478},
+            "secondary": {"ip": "216.93.246.15", "port": 3479},
+        },
+        {
+            "host": "stun.ekiga.net",
+            "primary": {"ip": "216.93.246.18", "port": 3478},
+            "secondary": {"ip": "216.93.246.15", "port": 3479},
+        },
+        {
+            "host": "stun.internetcalls.com",
+            "primary": {"ip": "77.72.169.212", "port": 3478},
+            "secondary": {"ip": "77.72.169.213", "port": 3479},
+        },
+        {
+            "host": "stun.voipbuster.com",
+            "primary": {"ip": "77.72.169.212", "port": 3478},
+            "secondary": {"ip": "77.72.169.213", "port": 3479},
+        },
+        {
+            "host": "stun.12voip.com",
+            "primary": {"ip": "77.72.169.212", "port": 3478},
+            "secondary": {"ip": "77.72.169.213", "port": 3479},
+        },
+        {
+            "host": "stun.freecall.com",
+            "primary": {"ip": "77.72.169.211", "port": 3478},
+            "secondary": {"ip": "77.72.169.210", "port": 3479},
+        },
+        {
+            "host": "stun.nexxtmobile.de",
+            "primary": {"ip": "5.9.87.18", "port": 3478},
+            "secondary": {"ip": "136.243.205.11", "port": 3479},
+        },
+        {
+            "host": "stun.siptrunk.com",
+            "primary": {"ip": "23.21.92.55", "port": 3478},
+            "secondary": {"ip": "34.205.214.84", "port": 3479},
+        },
     ],
-
-    # Still not many support IP6 with multiple IPs..
     IP6: [
-        # ['p2pd.net', 34780],
-        ['stunserver.stunprotocol.org', 3478], # 19 Sept 2005
-        ['stun.einfachcallback.de', 3478], # 21 Apr 2021
-        ['stun.hot-chilli.net', 3478], # 14 Aug 2012
-        ['stun.palava.tv', 3478], # 21 Apr 2021
-        ['stun.simlar.org', 3478], # 21 Apr 2021
+        {
+            "host": "stunserver.stunprotocol.org",
+            "primary": {"ip": "2600:1f16:8c5:101:80b:b58b:828:8df4", "port": 3478},
+            "secondary": {"ip": "2600:1f16:08c5:0101:6388:1fb6:8b7e:00c2", "port": 3479},
+        },
+        {
+            "host": "stun.hot-chilli.net",
+            "primary": {"ip": "2a01:4f8:242:56ca::2", "port": 3478},
+            "secondary": {"ip": "2a01:04f8:0242:56ca:0000:0000:0000:0003", "port": 3479},
+        },
+        {
+            "host": "stun.simlar.org",
+            "primary": {"ip": "2a02:f98:0:50:2ff:23ff:fe42:1b23", "port": 3478},
+            "secondary": {"ip": "2a02:0f98:0000:0050:02ff:23ff:fe42:1b24", "port": 3479},
+        },
     ]
 }
 
