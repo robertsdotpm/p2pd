@@ -625,6 +625,8 @@ async def do_nat_test(stun_addr, interface, af=IP4, proto=UDP, group="change", d
         conf
     )
     
+    return test[1]
+
     # Check first reply.
     error = stun_check_reply(stun_addr, test[1])
     if error or pipe is None:
@@ -632,6 +634,8 @@ async def do_nat_test(stun_addr, interface, af=IP4, proto=UDP, group="change", d
     else:
         source_port = pipe.route.bind_port
         pipe_list.append(pipe)
+
+    return test[1]
 
     # Log changed port.
     log(

@@ -113,7 +113,60 @@ stun_new = {
             "secondary": {"ip": "34.205.214.84", "port": 3479},
         },
     ],
-    IP6: []
+    IP6: [
+        {
+            "host": "stunserver.stunprotocol.org",
+            "primary": {"ip": "2600:1f16:8c5:101:80b:b58b:828:8df4", "port": 3478},
+            "secondary": {"ip": "2600:1f16:08c5:0101:6388:1fb6:8b7e:00c2", "port": 3479},
+        },
+        {
+            "host": "stun.hot-chilli.net",
+            "primary": {"ip": "2a01:4f8:242:56ca::2", "port": 3478},
+            "secondary": {"ip": "2a01:04f8:0242:56ca:0000:0000:0000:0003", "port": 3479},
+        },
+        {
+            "host": "stun.simlar.org",
+            "primary": {"ip": "2a02:f98:0:50:2ff:23ff:fe42:1b23", "port": 3478},
+            "secondary": {"ip": "2a02:0f98:0000:0050:02ff:23ff:fe42:1b24", "port": 3479},
+        },
+    ]
+}
+
+stunt_new = {
+    IP4: [
+        {
+            "host": "stunserver.stunprotocol.org",
+            "primary": {"ip": "3.132.228.249", "port": 3478},
+            "secondary": {"ip": "3.135.212.85", "port": 3479},
+        },
+        {
+            "host": "stun.hot-chilli.net",
+            "primary": {"ip": "49.12.125.53", "port": 3478},
+            "secondary": {"ip": None, "port": None},
+        },
+        {
+            "host": "stun.voip.blackberry.com",
+            "primary": {"ip": "20.15.169.8", "port": 3478},
+            "secondary": {"ip": None, "port": None},
+        },
+        {
+            "host": "webrtc.free-solutions.org",
+            "primary": {"ip": "94.103.99.223", "port": 3478},
+            "secondary": {"ip": None, "port": None},
+        },
+        {
+            "host": "stun.siptrunk.com",
+            "primary": {"ip": "23.21.92.55", "port": 3478},
+            "secondary": {"ip": None, "port": None},
+        },
+    ],
+    IP6: [
+        {
+            "host": "stunserver.stunprotocol.org",
+            "primary": {"ip": "2600:1f16:8c5:101:80b:b58b:828:8df4", "port": 3478},
+            "secondary": {"ip": "2600:1f16:08c5:0101:6388:1fb6:8b7e:00c2", "port": 3479},
+        }
+    ]
 }
 
 """
@@ -155,7 +208,7 @@ NAT_TEST_SCHEMA = [
     [changePortRequest, "secondary", "primary", "secondary", "secondary"],
 ]
 
-async def do_nat_test(dest_addr, reply_addr, payload, pipe, q, test_coro):
+async def nat_test_exec(dest_addr, reply_addr, payload, pipe, q, test_coro):
     tran_info = tran_info_patterns(reply_addr.tup)
     pipe.subscribe(tran_info[0:2])
 
@@ -233,7 +286,7 @@ async def nat_test_workers(pipe, q, test_index, test_coro, servers):
             payload = NAT_TEST_SCHEMA[test_index][0]
             print(payload)
 
-            return await do_nat_test(
+            return await nat_test_exec(
                 # Send to and expect from.
                 addrs[0],
                 addrs[1],
@@ -415,7 +468,7 @@ async def main():
 
     # Start interface time.
     t1 = timestamp(1)
-    i = await Interface("ens37", netifaces=netifaces) # ens37
+    i = await Interface("ens33", netifaces=netifaces) # ens37
     t2 = timestamp(1)
     duration = t2 - t1
     print(f"Interface().start() = {duration}")
@@ -443,8 +496,12 @@ async def main():
             out = await do_nat_test(
                 stun_addr=stun_addr,
                 interface=i,
-                af=af
+                af=af,
+                proto=TCP,
+                group="change"
             )
+
+            print(out)
 
             if out is None or isinstance(out, tuple):
                 continue
@@ -465,6 +522,9 @@ async def main():
 
 
         print(servers)
+
+    await new_stun_server_format(IP4)
+    return
 
 
     # Use same pipe with multiplexing for reuse tests.

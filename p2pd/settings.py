@@ -51,14 +51,6 @@ STUNT_SERVERS = {
     IP4: [
         # ['p2pd.net', 34780],
         ['stunserver.stunprotocol.org', 3478], # 19 Sept 2005
-        ['stun.sipnet.ru', 3478], # 19 Sept 2005
-        ['stun.1cbit.ru', 3478], # 30 Aug 2017
-        ['stun.acronis.com', 3478], # 30 Aug 2017
-        ['stun.bitburger.de', 3478], # 30 Aug 2017
-        ['stun.innovaphone.com', 3478], # 30 Aug 2017
-        ['stun.onthenet.com.au', 3478], # 30 Aug 2017
-        ['stun.zepter.ru', 3478], # 30 Aug 2017
-        ['stun.siedle.com', 3478], # 12 Apr 2018
     ],
 
     # There's basically none unfortunately.
@@ -110,11 +102,11 @@ STUND_SERVERS = {
     ]
 }
 
-
+"""
 stun_test = [["stunserver.stunprotocol.org", 3478]]
 STUNT_SERVERS = { IP4: stun_test, IP6: stun_test }
 STUND_SERVERS = STUNT_SERVERS
-
+"""
 
 # The main server used to exchange 'signaling' messages.
 # These are messages that help nodes create connections.
