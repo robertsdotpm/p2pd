@@ -831,5 +831,20 @@ def nat_check_for_low_ports(map_info):
                 log(error)
                 raise Exception(error)
 
+async def nat_predict_main():
+    from .stun_client import STUNClient
+    from .interface import Interface, init_p2pd
 
+    # Load default interface.
+    netifaces = await init_p2pd()
+    i = await Interface(netifaces=netifaces).start_local()
+    s = STUNClient(i)
+    
+    # Run delta test and profile it.
+    s1 = timestamp(1)
+    out = await delta_test(s)
+    print(f"delta test time = {timestamp(1) - s1}")
+    print(out)
 
+if __name__ == "__main__":
+    async_test(nat_predict_main)
