@@ -33,13 +33,9 @@ class TestSock(unittest.IsolatedAsyncioTestCase):
         netifaces = await init_p2pd()
         i = await Interface(netifaces=netifaces).start_local()
         af = i.supported()[0]
-        print(af)
         r = await i.route(af).bind(0)
-        d = await Address("google.com", 80, r)
-
+        d = await Address("8.8.8.8", 53, r)
         s = await socket_factory(route=r, dest_addr=d, sock_type=TCP, conf=NET_CONF)
-        print(s)
-        print(d.tup)
         con_task = asyncio.create_task(
             loop.sock_connect(
                 s, 
@@ -48,9 +44,6 @@ class TestSock(unittest.IsolatedAsyncioTestCase):
         )
 
         await asyncio.wait_for(con_task, 2)
-
-        print("yyy")
-
         if s is not None:
             s.close()
 
