@@ -227,10 +227,7 @@ async def fast_nat_test(pipe, test_servers, timeout=NAT_TEST_TIMEOUT):
     async def test_two(ret, test_pipe):
         # Test 2 may arrive before test 1.
         # In this case: test 1 takes priority over test 2.
-        if test_one(ret, test_pipe):
-            return OPEN_INTERNET
-        else:
-            return FULL_CONE
+        return test_one(ret, test_pipe) or FULL_CONE
     
     # Whitelist of dest (IP and port).
     async def test_three(ret, test_pipe):
