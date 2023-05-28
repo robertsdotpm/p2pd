@@ -9,12 +9,12 @@ async def example():
     i = await Interface(netifaces=netifaces).start()
     route = await i.route().bind()
     #
-    # Open a UDP pipe to p2pd.net's STUN server.
+    # Open a UDP pipe to stunprotocol.org.
     # Subscribe to all messages.
     pipe = (
         await pipe_open(
             UDP,
-            await Address("p2pd.net", 34780, route).res(),
+            await Address("stunserver.stunprotocol.org", 3478, route).res(),
             route
         )
     ).subscribe()

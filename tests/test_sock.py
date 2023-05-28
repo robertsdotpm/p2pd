@@ -29,17 +29,27 @@ class TestSock(unittest.IsolatedAsyncioTestCase):
         s2.close()
 
     async def test_socket_factory_connect(self):
-        await init_p2pd()
-        loop = asyncio.get_event_loop()
-        i = await Interface().start_local()
+        loop = asyncio.get_running_loop()
+        netifaces = await init_p2pd()
+        i = await Interface(netifaces=netifaces).start_local()
         af = i.supported()[0]
-        r = await i.route(af).bind()
-        d = await Address("google.com", 80, r, TCP).res()
-        s = await socket_factory(r, dest_addr=d, sock_type=TCP)
-        await loop.sock_connect(
-            s, 
-            d.tup
+        print(af)
+        r = await i.route(af).bind(0)
+        d = await Address("google.com", 80, r)
+
+        s = await socket_factory(route=r, dest_addr=d, sock_type=TCP, conf=NET_CONF)
+        print(s)
+        print(d.tup)
+        con_task = asyncio.create_task(
+            loop.sock_connect(
+                s, 
+                d.tup
+            )
         )
+
+        await asyncio.wait_for(con_task, 2)
+
+        print("yyy")
 
         if s is not None:
             s.close()

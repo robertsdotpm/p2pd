@@ -54,8 +54,8 @@ class TestStunClient(unittest.IsolatedAsyncioTestCase):
             route = await i.route(af).bind()
             stun_server = STUNT_SERVERS[af][0]
             dest = await Address(
-                stun_server[0],
-                stun_server[1],
+                stun_server["primary"]["ip"],
+                stun_server["primary"]["port"],
                 route,
                 UDP
             ).res()
