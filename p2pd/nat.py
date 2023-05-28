@@ -265,6 +265,15 @@ async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="ma
 
     # Create a list of tasks to get a mapping for a port range.
     def get_port_tests(start_port, port_dist=1):
+        # Single concurrent STUN req.
+        conf = dict_merge(NET_CONF, {
+            "packet_retry": 1,
+            "retry_no": 1,
+            "recv_timeout": 0.5,
+            "addr_retry": 1,
+            "dns_timeout": 0.5
+        })
+
         # Return task list for tests.
         tasks = []
         for i in range(0, test_no):
@@ -286,14 +295,22 @@ async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="ma
                     proto,
                     do_close=0,
                     source_port=src_port,
-                    group=group
+                    group=group,
+                    conf=conf
                 )
 
                 # Return mapping results.
                 return [local, mapped, s]
 
             # Allow for tests to be done concurrently.
-            tasks.append(result_wrapper(src_port))
+            tasks.append(
+                async_wrap_errors(
+                    asyncio.wait_for(
+                        result_wrapper(src_port),
+                        0.5
+                    )
+                )
+            )
 
         return tasks
 
@@ -845,6 +862,8 @@ async def nat_predict_main():
     out = await delta_test(s)
     print(f"delta test time = {timestamp(1) - s1}")
     print(out)
+
+    # 0.36
 
 if __name__ == "__main__":
     async_test(nat_predict_main)

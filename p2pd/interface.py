@@ -373,35 +373,42 @@ class Interface():
         self.nat = nat
 
     async def load_nat(self):
-        from .stun_client import STUNClient
+        # Try to avoid circular imports.
+        from .base_stream import pipe_open
+        from .stun_client import STUNClient, STUN_CONF
+        from .nat_test import fast_nat_test
         
-        # Prefer IP4 if available.
-        af = IP4
-        if af not in self.supported():
-            af = IP6
+        # IPv6 only has no NAT!
+        if IP4 not in self.supported():
+            nat = nat_info(OPEN_INTERNET, EQUAL_DELTA)
+        else:
+            # STUN is used to get the delta type.
+            af = IP4
+            stun_client = STUNClient(
+                self,
+                af
+            )
 
-        # STUN is used to test the NAT.
-        stun_client = STUNClient(
-            self,
-            af
-        )
+            # Get the NAT type.
+            route = await self.route(af).bind()
+            pipe = await pipe_open(UDP, route=route, conf=STUN_CONF)
+
+            # Run delta test.
+            nat_type, delta = await asyncio.wait_for(
+                asyncio.gather(*[
+                    fast_nat_test(pipe, STUND_SERVERS[af]),
+                    delta_test(stun_client)
+                ]),
+                timeout=2
+            )
+
+            nat = nat_info(nat_type, delta)
+            await pipe.close()
 
         # Load NAT type and delta info.
         # On a server should be open.
-        nat = await stun_client.get_nat_info()
         self.set_nat(nat)
         return nat
-    
-    async def get_nat_info(self):
-        nat_type = await self.get_nat_type()
-
-        # Delta not applicable for some NAT types.
-        if nat_type == OPEN_INTERNET:
-            delta = delta_info(NA_DELTA, 0)
-        else:
-            delta = await delta_test(self)
-            
-        return nat_info(nat_type, delta)
 
     def get_scope_id(self):
         assert(self.resolved)

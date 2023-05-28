@@ -1,7 +1,6 @@
 import time
 from .settings import *
 from .ip_range import *
-from .interface import *
 from .stun_client import *
 
 # Constants for a NAT test.
@@ -148,24 +147,22 @@ async def nat_test_workers(pipe, q, test_index, test_coro, servers):
 
             # Run the test and return the results.
             payload = NAT_TEST_SCHEMA[test_index][0]
-            return await async_wrap_errors(
-                nat_test_exec(
-                    # Send to and expect from.
-                    addrs[0],
-                    addrs[1],
+            return await nat_test_exec(
+                # Send to and expect from.
+                addrs[0],
+                addrs[1],
 
-                    # Type of STUN request to send.
-                    payload,
+                # Type of STUN request to send.
+                payload,
 
-                    # Pipe to reuse for UDP.
-                    pipe,
+                # Pipe to reuse for UDP.
+                pipe,
 
-                    # Async queue to store the results.
-                    q,
+                # Async queue to store the results.
+                q,
 
-                    # Test-specific code.
-                    test_coro
-                )
+                # Test-specific code.
+                test_coro
             )
 
         workers.append(worker(server_no))
@@ -280,6 +277,8 @@ async def fast_nat_test(pipe, test_servers, timeout=NAT_TEST_TIMEOUT):
         return q_list[-1] 
 
 async def nat_test_main():
+    from .interface import Interface, init_p2pd
+
     # Load internal interface details.
     t1 = timestamp(1)
     netifaces = await init_p2pd()
@@ -288,28 +287,35 @@ async def nat_test_main():
     print(f"init_p2pd() = {duration}")
 
     # Start interface time.
-    t1 = timestamp(1)
     i = await Interface("ens33", netifaces=netifaces) # ens37
+    t1 = timestamp(1)
+    nat = await i.load_nat()
+    print(nat)
     t2 = timestamp(1)
     duration = t2 - t1
-    print(f"Interface().start() = {duration}")
+    print(f"Interface() load_nat = {duration}")
+    await asyncio.sleep(NAT_TEST_NO)
+    return
+
 
     # Use same pipe with multiplexing for reuse tests.
+    #t1 = timestamp(1)
     af = IP4
     route = await i.route(af).bind(0)
     pipe = await pipe_open(UDP, route=route, conf=STUN_CONF)
     assert(pipe is not None)
 
     # Determine NAT type.
-    t1 = timestamp()
+    t1 = timestamp(1)
     servers = STUND_SERVERS[af]
     nat_type = await fast_nat_test(pipe, servers)
     print(nat_type)
 
     # How long the NAT type took.
-    t2 = timestamp() - t1
+    t2 = timestamp(1) - t1
     print(f"nat time = {t2}")
     await pipe.close()
+    # 0.8
 
     # Wait for all lagging tests to end.
     await asyncio.sleep(NAT_TEST_TIMEOUT)
