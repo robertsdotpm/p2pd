@@ -28,7 +28,6 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
         # Used to schedule and synchronize the punching.
         # Manager is used to push sockets between processes.
         log(">>> test_self_punch_no_networking")
-        netifaces = await init_p2pd()
         sys_clock = SysClock(Dec("0.01"))
         pe = await get_pp_executors()
         #pe2 = await get_pp_executors(workers=2)
@@ -42,7 +41,7 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
 
         # Load interfaces is slow AF on Windows.
         # Due to it using powershell + regex, lolz.
-        ifs = await load_interfaces(netifaces=netifaces)
+        ifs = await load_interfaces()
         interface = ifs[0]
         if IP4 in interface.supported():
             af = IP4

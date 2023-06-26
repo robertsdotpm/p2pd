@@ -13,11 +13,6 @@ async def example():
     # Open a connection to the echo server.
     pipe = await pipe_open(TCP, route, echo_dest)
     #
-    # Create a new queue for a related subscription.
-    # Subscription = [b"msg pattern regex", b"address pattern regex"]
-    # SUB_ALL = [b"", b""] meaning 'any message', 'from any address.'
-    pipe.subscribe(SUB_ALL)
-    #
     # Send data down the pipe.
     msg = b"do echo test"
     await pipe.send(msg + b"\r\n", echo_dest.tup)

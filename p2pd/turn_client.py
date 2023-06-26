@@ -331,6 +331,10 @@ class TURNClient(BaseProto):
 
         # Prevent garbage collection.
         if not already_accepted:
+            # Allow messages to be queued.
+            sub = self.tup_to_sub(peer_tup)
+            self.subscribe(sub)
+
             # White list the peer if needed.
             await async_retry(f, count=5, timeout=5)
 

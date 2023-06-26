@@ -9,7 +9,6 @@ from p2pd.stun_client import STUNClient
 if __name__ == "__main__":
     async def test_p2p_node():
         # Output the nodes p2p address.
-        netifaces = await init_p2pd()
         signal_offsets = [0, 3]
         node = await start_p2p_node(
             # Used for certain tests.
@@ -20,10 +19,6 @@ if __name__ == "__main__":
 
             # Fixed list of MQTT server offsets to use.
             signal_offsets=signal_offsets,
-
-            # Reference to interface details using netifaces.
-            # Awaitable as it is a wrapper on Windows.
-            netifaces=netifaces
         )
         print(node.addr_bytes)
 

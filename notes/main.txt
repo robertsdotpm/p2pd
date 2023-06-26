@@ -20,3 +20,5 @@ pipe_open(transport, route, dest=None)
         - accept () tup
 
 subscribe by default? maybe just with a small buffer size
+add netifaces to docs
+

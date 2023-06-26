@@ -78,6 +78,15 @@ class BaseStream(ACKUDP):
             del self.subs[offset]
 
         return self
+    
+    def tup_to_sub(self, dest_tup):
+        return [
+            b"", # Any message.
+            re.escape(b'%s:%d' % ( # Specific IP:port.
+                to_b(dest_tup[0]), 
+                dest_tup[1]
+            ))
+        ]
 
     # Adds a message to the first valid bucket.
     """
@@ -871,6 +880,9 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, conf=NET_CO
         if dest is not None:
             base_proto.stream.dest = dest
             base_proto.stream.set_dest_tup(dest.tup)
+
+            # Queue all messages for convenience.
+            base_proto.subscribe(SUB_ALL)
 
         # Register pipes, msg callbacks, and subscriptions.
         return base_proto

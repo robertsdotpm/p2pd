@@ -4,8 +4,7 @@ TURN_OFFSET = 0
 
 async def example():
     # Network interface details.
-    n = await init_p2pd()
-    i = await Interface(netifaces=n).start()
+    i = await Interface().start()
     r = await i.route().bind()
     #
     # Address of a TURN server.
@@ -33,7 +32,6 @@ async def example():
     await async_wrap_errors(
         client.start()
     )
-    client.subscribe(SUB_ALL)
     #
     # Give this to a client to send to ourselves.
     our_relay_tup = await client.relay_tup_future

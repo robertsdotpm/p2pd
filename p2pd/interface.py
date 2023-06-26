@@ -444,7 +444,7 @@ class Interface():
         if self.rp != {} and len(self.rp[af].routes):
             return self.route(af).nic()
 
-    def route(self, af=None):
+    def route(self, af=None, bind_port=0):
         # Sanity check.
         if self.resolved:
             af = af or self.supported()[0]
@@ -581,8 +581,12 @@ def get_ifs_by_af_intersect(if_list):
     return [largest, af_used]
 
 async def load_interfaces(netifaces=None, load_nat=True):
-    # Get list of good interfaces with ::/0 or 0.0.0.0 routes.
+    # Load if details.
     netifaces = netifaces or Interface.get_netifaces()
+    if netifaces is None:
+        netifaces = await init_p2pd()
+
+    # Get list of good interfaces with ::/0 or 0.0.0.0 routes.
     ifs = await filter_trash_interfaces(netifaces)
     ifs = to_unique(ifs)
     if ifs == []:

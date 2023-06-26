@@ -52,8 +52,7 @@ class TestSock(unittest.IsolatedAsyncioTestCase):
         conf["reuse_addr"] = True
 
         # Load default interface.
-        n = await init_p2pd()
-        i = await Interface(netifaces=n).start_local()
+        i = await Interface().start_local()
         r = i.route()
 
         # Make a new socket bound to a high order port.

@@ -8,8 +8,7 @@ class EchoServer(Daemon):
         await pipe.send(msg, client_tup)
 
 async def example():
-    netifaces = await init_p2pd()
-    i = await Interface(netifaces=netifaces).start()
+    i = await Interface().start()
     #
     # Daemon instance.
     server_port = 10126

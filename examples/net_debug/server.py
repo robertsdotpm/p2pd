@@ -131,8 +131,7 @@ class NetDebugServer(Daemon):
             )
 
 async def start_net_debug():
-    netifaces = await init_p2pd()
-    i = await Interface(netifaces=netifaces).start()
+    i = await Interface().start()
     net_debug_server = NetDebugServer()
     net_debug_server.set_rp(i.rp)
     await net_debug_server.listen_all(

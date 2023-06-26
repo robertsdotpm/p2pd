@@ -37,12 +37,10 @@ class NetInfoServer(Daemon):
             )
 
 async def example():
-    netifaces = await init_p2pd()
-    #
     # Default interface of your machine.
     # netifaces.interfaces() for names
     # or await load_interfaces() for a started list.
-    i = await Interface(netifaces=netifaces).start()
+    i = await Interface().start()
     #
     # Server object inherits from a standard Daemon.
     server = NetInfoServer()

@@ -17,7 +17,6 @@ async def example():
     # Use the IP of the route and unused port for the destination.
     dest = await Address(*server.sock.getsockname()[0:2], route).res()
     client = await pipe_open(TCP, route, dest)
-    client.subscribe()
     #
     # Send data to the server and check receipt.
     msg = b"test msg."

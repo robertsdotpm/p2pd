@@ -19,7 +19,6 @@ async def example():
     # Spawn a new pipe from a P2P con.
     # Connect to our own node server.
     pipe, success_type = await node.connect(node.addr_bytes)
-    pipe.subscribe(SUB_ALL)
     #
     # Test send / receive.
     msg = b"test send"

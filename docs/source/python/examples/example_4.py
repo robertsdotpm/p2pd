@@ -24,11 +24,6 @@ async def example():
     # Now open a TCP connection to that the destination.
     pipe = await pipe_open(TCP, route, dest)
     #
-    # Indicate that messages received should also be queued.
-    # This enables the pull / push API.
-    # You specify regex here. By default it will subscribe to everything.
-    pipe.subscribe()
-    #
     # Send it a malformed HTTP request.
     buf = b"Test\r\n\r\n"
     await pipe.send(buf)

@@ -7,9 +7,6 @@ from p2pd.http_client_lib import *
 
 class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
     async def test_p2pd_server(self):
-        # Init p2pd.
-        await init_p2pd()
-
         # Start the P2PD server.
         i = await Interface().start()
         r = await i.route().bind()
