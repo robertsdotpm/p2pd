@@ -4,7 +4,7 @@ How P2PD works
 Adressesses
 ------------
 
-In P2PD it all starts with the address. You may already be familar with IPv4
+In P2PD it all starts with the address. You may already be familiar with IPv4
 and IPv6 addresses. Such addresses allow for data to reach nodes on
 the packet-switched network we call the Internet. Practically we can say that
 these addresses are assigned to routers. They work quite well for regular
@@ -63,7 +63,7 @@ and includes this ID in its address information. Messages can then reach that
 peer via an MQTT broker server. Such an approach is scalable and already
 has a wide variety of public infrastructure.
 
-You may be more familar with Bitcoin and how it initially used IRC
+You may be more familiar with Bitcoin and how it initially used IRC
 to connect to its peer-to-peer network. What Bitcoin was doing was using
 IRC as a 'pub-sub' system. Specific channels were marked topics to subscribe to.
 Then the rooms were joined and channel members served as public entry points
@@ -80,7 +80,7 @@ P2PD uses 4 different strategies to try establish a connection between peers.
 
 **1. Direct Connect**
 
-If a peer has successfully port forwarded their main server then a regular TCP connection can be openned. There is nothing special about this.
+If a peer has successfully port forwarded their main server then a regular TCP connection can be opened. There is nothing special about this.
 
 **2. Reverse Connect**
 
@@ -93,8 +93,8 @@ connect has been able to port forward.
 **3. TCP Hole Punching**
 
 There is a little known feature of TCP that allows for a connection to
-be openned if two sides connect to each other at the same time. You may
-be familar with a process called the 'SYN three-way handshake.' What
+be opened if two sides connect to each other at the same time. You may
+be familiar with a process called the 'SYN three-way handshake.' What
 this involves is the exchange of small message flags in order to open
 a new TCP connection. It so happens that if two sides connect to each
 other at the same time it's possible for these flag packets to arrive

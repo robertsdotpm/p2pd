@@ -45,6 +45,9 @@ async def example():
     Example (after exchanging relay tups):
         await client_a.send(b'hello b', client_b_relay_tup)
         await client_b.send(b"hello a", client_a_relay_tup)
+
+    To receive a message you would do:
+        await client_a.recv(client_b_relay_tup)
     """
     # Cleanup.
     await client.close()

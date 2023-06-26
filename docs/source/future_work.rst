@@ -28,13 +28,13 @@ reason not to use something like P2PD for their peer-to-peer networking code
 e.g. they may have already written highly optimized networking code themselves.
 Well, it's possible to pass a socket from one process to another.
 What this could mean is that P2PD could specialize in the initial process of
-openning up connections with remote peers and then passing those bound sockets
+opening up connections with remote peers and then passing those bound sockets
 to other processes to use as they see fit.
 
 I think this could be a really cool option because it would allow engineers to
 reuse their existing networking code. Maybe they have a different event loop.
 Maybe they use a model based on threads and polling. They would be able to use
-the networking features they're already familar with for their respective
+the networking features they're already familiar with for their respective
 software stacks. I think it's an interesting idea.
 
 Error recovery code
@@ -49,7 +49,7 @@ runs shortly after the network is changed is likely to fail despite having
 'correct' addressing information.
 
 I think it would be worthwhile making a list of common failure scenarios and writing
-code to prevent it from occuring. Really only the most basic networking features
+code to prevent it from occurring. Really only the most basic networking features
 are provided in programming languages. There are many other ways sessions can fail
 and most developers manually handle the edge-cases themselves (like reconnect.)
 

@@ -8,12 +8,11 @@ It does this by using in memory queues which for now have no set limit.
 What hasn't been mentioned is that these queues are organized around
 subscriptions -- regex patterns that match messages and remote peers.
 
-These queues only exist when a subscription is made. By default P2PD
-does not subscribe to anything when used as a library. But the REST API
-subscribes to 'any message' from 'any peer.' This has the special format
-of a blank message pattern and a blank peer address pattern to match
-everything. The reason why this feature exists is because of the
-way UDP is designed.
+These queues only exist when a subscription is made. **By default P2PD
+subscribes to all messages when a destination is provided for a pipe and
+so does the REST API.** This has the special format of a blank message pattern
+and a blank peer address pattern to match everything. The reason why this
+feature exists is because of the way UDP is designed.
 
     **(Disclaimer: UDP really sucks.)**
 
@@ -130,6 +129,8 @@ message but if you subscribe to everything it will mean these messages
 are still duplicated there. So you may have to flush messages you've
 already processed should you want to use that queue.
 
+**Recall that by default P2PD will subscribe to SUB_ALL if a pipe has a destination
+set.** If you don't want to queue such messages you will have to call unsubscribe.
 The way to unsubscribe is to use the delete method.
 
 .. code-block:: shell

@@ -178,11 +178,11 @@ has the following basic form.
     Explanation:
         1.  The algorithm for building routes in IPv6 is slightly different to IPv4.
             All link-local addresses for a list and are copied to the NIC
-            section of the route. While every global addresss -- whether it's a
+            section of the route. While every global address -- whether it's a
             single IP or a block -- creates a new route.
         2.  P2PD uses the EXT portion of routes for IPv6 servers. While it uses
             the NIC portion for IPv4. It is assumed that all servers should be
-            publically reachable. Though this can be bypassed by specifying IPs
+            publicly reachable. Though this can be bypassed by specifying IPs
             directly for bind code which is indeed what the P2PD REST server does.
     
 The reason why routes are important is they are used in bind() code to instruct

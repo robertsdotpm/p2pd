@@ -11,8 +11,8 @@ EXAMPLES_DIR = "../docs/source/python/examples"
 
 class TestPyExamples(unittest.IsolatedAsyncioTestCase):
     async def test_py_examples(self):
-        netifaces = await init_p2pd()
         for no in range(1, 13 + 1):
+            print(no)
             with open(f"{EXAMPLES_DIR}/example_{no}.py") as fp:
                 py_code = fp.read()
 

@@ -15,14 +15,14 @@ But believe it or not: this is the assumption made in the TURN protocol. The TUR
 The TURN spec mentions that this could be combined with **TCP hole punching
 for clients**. But this is not feasible because no synchronization mechanism for making connections has been offered in the TURN protocol -- at least none that
 I've seen. It would have been unlikely to work given that punching needs to
-be synchronized down to the milisecond. All of this could have been avoided
+be synchronized down to the millisecond. All of this could have been avoided
 if TURN were designed around reverse connections. So that both parties
 behind NATs could simply connect to the server and setup channels. But TURN doesn't seem to offer this possibility.
 
 .. note::
 
     Fun fact: **TURN is the worst protocol I've ever had the displeasure of working
-    with**. It manages to make a simple proxy server look like a moonlanding mission.
+    with**. It manages to make a simple proxy server look like a moon-landing mission.
     I don't even know how they managed to over-engineer the protocol to such a
     high-level. I don't think I could manage to fuck something up that badly even
     if I was trolling. True story.

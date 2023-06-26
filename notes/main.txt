@@ -22,3 +22,5 @@ pipe_open(transport, route, dest=None)
 subscribe by default? maybe just with a small buffer size
 add netifaces to docs
 
+The delta test
+    get_port_tests code is overly brittle and not in line with the new nat_test code. revisit this and make it faster.

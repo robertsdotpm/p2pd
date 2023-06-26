@@ -289,14 +289,18 @@ async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="ma
                 # Make sure port isn't in the reserved range.
                 if src_port < 4000 and src_port != 0:
                     raise Exception("src less than 4k in mapping behavior.")
-
+                
+                # Avoid relying on any one server. 
+                server = stun_client.rand_server()
+                
                 # Get mapping using specific source port.
                 _, s, local, mapped, _, _ = await stun_client.get_mapping(
                     proto,
                     do_close=0,
                     source_port=src_port,
                     group=group,
-                    conf=conf
+                    conf=conf,
+                    servers=[server]
                 )
 
                 # Return mapping results.
@@ -307,7 +311,7 @@ async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="ma
                 async_wrap_errors(
                     asyncio.wait_for(
                         result_wrapper(src_port),
-                        0.5
+                        2
                     )
                 )
             )

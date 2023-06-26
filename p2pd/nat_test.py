@@ -1,3 +1,28 @@
+"""
+When using UDP in network programming its common to write
+code so that it has simple loops to retry sending packets if
+no response is received. The problem is: if any packets are lost
+the time spent waiting keeps accumulating to the cost of a round-trip.
+
+The problem is made worse when you consider slow-downs in DNS and
+the often unreliable nature of relying on community servers for
+STUN code. If one is not careful they quickly end up with an
+algorithm that is prohibitively slow in the best case and quite
+unreliable in the worst case.
+
+The original algorithm for doing STUN tests for RFC 3489 used
+incremental tests and was very brittle. However -- due to the
+nature of how these tests work -- it became clear to me that it was
+possible to paralyze the tests into two main phases if a STUN
+server's primary and secondary IP were known beforehand.
+
+Phase 1 tests for [open NAT and full cone] while phase 2 tests for
+[restrict ip and restrict port] behaviors. The algorithm here is designed to run across multiple public servers where it creates races among
+all servers to test a routes NAT. The result is you end up with
+the fastest possible determination of NAT behaviors while also
+building in safe-guards against packet-loss, inconsistent results, misconfigurations, and slow network conditions.
+"""
+
 import time
 from .settings import *
 from .ip_range import *
@@ -8,7 +33,7 @@ NAT_TEST_NO = 5
 NAT_TEST_TIMEOUT = 0.5
 
 # STUN payload to send, Send IP, send port, reply IP, reply port
-# Shows order of RFC 3869 NAT enumeration sets.
+# Shows order of RFC 3489 NAT enumeration sets.
 NAT_TEST_SCHEMA = [
     # Detects: open NAT.
     ["", "primary", "primary", "primary", "primary"],

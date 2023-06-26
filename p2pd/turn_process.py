@@ -198,7 +198,7 @@ async def process_replies(self):
                 if not self.blank_rudp_headers:
                     continue
                 else:
-                    self.handle_data(msg_data, peer_tup)
+                    self.handle_data(msg_data, peer_relay_tup)
                     continue
 
             """
@@ -208,7 +208,7 @@ async def process_replies(self):
             relay address is listed as the sender to make it
             easy to route replies transparently.
             """
-            self.handle_data(payload, peer_tup)
+            self.handle_data(payload, peer_relay_tup)
             continue
     
         """

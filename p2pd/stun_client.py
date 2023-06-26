@@ -522,6 +522,10 @@ class STUNClient():
         # Threshold / Number = agreement.
         self.t, self.n = consensus
 
+    def rand_server(self):
+        servers = get_stun_servers(self.af, self.proto)
+        return random.choice(servers)
+
     """
     Internal function - don't use directly.
     I liek the cat.
@@ -547,7 +551,6 @@ class STUNClient():
         f_fail = lambda: [None, None, time.time() - start_time]
         use_proto = TCP if fast_fail else proto
         lax = 0 if group == "change" else 1
-
 
         # Limit at 20 to avoid massive delays.
         # If 20 consecutive servers fail

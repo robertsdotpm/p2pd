@@ -10,7 +10,7 @@ Start the REST API server::
 Running this command will start the server on http://127.0.0.1:12333/
 The server has no password and will only allow requests from
 an 'origin' of 127.0.0.1 or null. The null origin occurs when
-a HTML document is openned locally. If a website you visit tries
+a HTML document is opened locally. If a website you visit tries
 to use the P2PD API your browser will include the domain name as
 an origin which the server will reject.
 
@@ -57,7 +57,7 @@ Now lets try connect to it
 
 Peer addresses will be passed to the 'open' resource. A number of strategies
 are used to try establish connections. The order of success will define
-how fast connections can be openned.
+how fast connections can be opened.
 
 .. code-block:: shell
 
@@ -240,7 +240,7 @@ Bidirectional relay pipes
 Theses simple send/receive calls are examples of push and pull APIs. In
 other words -- its up to you to check whether messages are available.
 Such an approach might be fine for simple scripts but it's a
-little inefficent having to constantly check or 'poll' for new
+little inefficient having to constantly check or 'poll' for new
 messages. Fortunately, P2PD has you covered. There is a special API
 method that converts a HTTP connection into a two-way relay.
 

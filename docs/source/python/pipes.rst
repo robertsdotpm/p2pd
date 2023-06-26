@@ -52,7 +52,7 @@ UDP you will use protocol classes.
 
 Only stream readers are 'asynchronous' e.g. you can await 'draining' a writer
 or await a reader - while there is no such equivalent for UDP. It's all very
-**inconvenient**. Wouldn't it be great if you could use asychnronous awaits
+**inconvenient**. Wouldn't it be great if you could use asynchronous awaits
 for UDP and TCP? Further: wouldn't it be great if you modelled interactions in
 such a way that the same code would work for both?
 
@@ -61,7 +61,7 @@ which is based on message queues. Since there is no delivery guarantees for UDP 
 possible this example throws a timeout error for you. Real-world code that deals
 with TCP usually has retransmissions built-in after a set duration. But no such
 logic here has been included. Note that the await for the recv is fully
-asychnronous. The event loop is free to run other tasks until a match occurs.
+asynchronous. The event loop is free to run other tasks until a match occurs.
 
 .. literalinclude:: examples/example_6.py
     :language: python3
@@ -78,8 +78,7 @@ def subscribe(self, sub=SUB_ALL, handler=None)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Install a new message queue indexed by the regex pair sub = [msg_regex, client_tup_regex]. Doing this enables the use of publish-subscribe e.g. 
-push / pull style awaits for a message. By default it will subscribe to all
-messages.
+push / pull style awaits for a message. **By default a pipe will subscribe to all messages (SUB_ALL) if a pipe has a destination given.**
 
 .. code-block:: python
 
@@ -101,7 +100,7 @@ copy messages that fit this subscription into this queue.
 async def recv(self, sub=SUB_ALL, timeout=2, full=False)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Given a queue identified by the subscription 'sub' -- wait for a message that suites it. Waiting is done asychnronously and other tasks may be done by the
+Given a queue identified by the subscription 'sub' -- wait for a message that suites it. Waiting is done asynchronously and other tasks may be done by the
 event loop until a message arrives. Timeout specifies the total duration
 to attempt to wait. After the duration an exception will be thrown. Set this
 to 0 to disable timeouts (not recommended.)
@@ -119,7 +118,7 @@ end up being [msg_bytes, client_tup].
 async def send(self, data, dest_tup=None)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Wait for data to be trasmitted down the pipe (non-blocking.) For TCP / UDP connections (with a fixed destination) the dest_tup does not need to be set.
+Wait for data to be transmitted down the pipe (non-blocking.) For TCP / UDP connections (with a fixed destination) the dest_tup does not need to be set.
 But it's a good practice to include it in servers because the same socket
 in UDP servers is used to receive messages from multiple clients and the
 pipe by itself won't be able to disambiguate what the destination should be.

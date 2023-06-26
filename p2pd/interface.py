@@ -416,7 +416,7 @@ class Interface():
                     fast_nat_test(pipe, STUND_SERVERS[af]),
                     delta_test(stun_client)
                 ]),
-                timeout=2
+                timeout=4
             )
 
             nat = nat_info(nat_type, delta)
@@ -581,7 +581,6 @@ def get_ifs_by_af_intersect(if_list):
     return [largest, af_used]
 
 async def load_interfaces(netifaces=None, load_nat=True):
-    # Load if details.
     netifaces = netifaces or Interface.get_netifaces()
     if netifaces is None:
         netifaces = await init_p2pd()
@@ -603,14 +602,22 @@ async def load_interfaces(netifaces=None, load_nat=True):
         async def worker(if_name):
             try:
                 interface = await Interface(if_name, netifaces=netifaces).start()
-                if load_nat:
-                    await interface.load_nat()
+                try:
+                    if load_nat:
+                        await interface.load_nat()
+                except Exception:
+                    log("Failed to load nat for interface.")
+                    # Just use the default NAT info.
+
                 if_list.append(interface)
             except Exception:
                 log_exception()
                 return
 
-        tasks.append(worker(if_name))
+        tasks.append(
+            # Assume timeout = non-routable.
+            worker(if_name)
+        )
 
     await asyncio.gather(*tasks)
 

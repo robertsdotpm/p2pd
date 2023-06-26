@@ -12,6 +12,9 @@ async def example():
     #
     # Open a connection to the echo server.
     pipe = await pipe_open(TCP, route, echo_dest)
+    # No need to call pipe.subscribe(SUB_ALL).
+    # This is done automatically if a destination is provided.
+    # Call pipe.unsubscribe(SUB_ALL) to turn this off.
     #
     # Send data down the pipe.
     msg = b"do echo test"

@@ -332,7 +332,7 @@ class TURNClient(BaseProto):
         # Prevent garbage collection.
         if not already_accepted:
             # Allow messages to be queued.
-            sub = self.tup_to_sub(peer_tup)
+            sub = self.tup_to_sub(peer_relay_tup)
             self.subscribe(sub)
 
             # White list the peer if needed.

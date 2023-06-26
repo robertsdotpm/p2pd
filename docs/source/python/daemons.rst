@@ -49,7 +49,7 @@ based on the other parameters used for listen_all.
     link-local addresses and global-scope addresses, respectively.
     
     I wanted the code to work the same with IPv6 so I start with the assumption that users want servers to be reachable internally and externally. Hence I don't just bind to a global-scope address. I also bind to a link-local address. That means that for IPv6 the final number of servers created
-    is multipled by 2. Maybe this is a bad idea but I think it simplifies
+    is multiplied by 2. Maybe this is a bad idea but I think it simplifies
     a lot of things.
 
 listen_specific

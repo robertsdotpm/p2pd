@@ -94,6 +94,9 @@ class FakeSTUNClient():
         self.wan_ip = None
         self.af = af
 
+    def rand_server(self):
+        return None
+
     def set_mappings(self, mappings):
         self.mappings = mappings
         self.p = 0

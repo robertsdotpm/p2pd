@@ -18,8 +18,8 @@ your server so that others can reach it. The trouble is that these features
 can be seen as a security risk and disabled by default.
 
 Peer-to-peer direct connectivity is hard to do because of the number of
-possible network configurations, software platforms, and obstactles that
-must be bypassed to do it reliabily. It's for this reason that the most successful
+possible network configurations, software platforms, and obstacles that
+must be bypassed to do it reliably. It's for this reason that the most successful
 P2P systems don't actually solve this problem. Take Bitcoin, for example.
 In Bitcoin what matters is that you can at least connect to someone to download
 blocks and broadcast transactions. Or what about torrents? A swarm of nodes can

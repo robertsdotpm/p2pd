@@ -5,7 +5,7 @@ Before we get started all Python examples assume:
 
     1. The 'selector' event loop is being used.
     2. The 'spawn' method is used as the multiprocessing start method.
-    3. You are familar with how to run asynchronous code.
+    3. You are familiar with how to run asynchronous code.
 
 This keeps the code consistent across platforms. The package sets
 these by default so if your application is using a different configuration
@@ -39,7 +39,7 @@ but with more control.
         - Different for IPv6 link local addresses
         - Different for IPv6 global addresses
     - Interface support (in general)
-    - External address suport
+    - External address support
     - Whether to use 'protocol' classes or 'streams'
         - Protocols = events; streams = async push and pull.
         -   Python doesn't have an async push and pull API for UDP at all
@@ -64,5 +64,6 @@ but with more control.
     daemons
     turn
     stun
+    netifaces
     examples
 
