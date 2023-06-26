@@ -78,8 +78,8 @@ async def check_pipe(pipe, dest_tup=None):
 # The server may limit new subs from the same IP.
 # But if all test nodes use the same IDs the there will be collisons.
 # Hence generate a unique IQ deterministically.
-def node_name(x):
-    i = Interface()
+def node_name(x, i):
+    assert(i.resolved)
     name_base = to_b(f"{i.mac} {socket.gethostname()}")
     node_name = hashlib.sha256(x + name_base).hexdigest()
     return to_b(node_name)[:10]

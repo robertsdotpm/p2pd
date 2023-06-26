@@ -3,8 +3,7 @@ from p2pd import *
 async def example():
     #
     # Load default interface.
-    netifaces = await init_p2pd()
-    i = await Interface(netifaces=netifaces).start()
+    i = await Interface().start()
     #
     # Get first supported address family.
     # E.g. if the NIC only supports IPv4 this will == [AF_INET].
@@ -23,7 +22,7 @@ async def example():
     dest = await Address("8.8.8.8", 53, route).res()
     #
     # Now open a TCP connection to that the destination.
-    pipe = await pipe_open(TCP, dest, route)
+    pipe = await pipe_open(TCP, route, dest)
     #
     # Indicate that messages received should also be queued.
     # This enables the pull / push API.

@@ -7,7 +7,6 @@ from p2pd.ack_udp import ACKUDP, BaseACKProto
 
 class TestRUDP(unittest.IsolatedAsyncioTestCase):
     async def test_rudp(self):
-        await init_p2pd()
         i = await Interface().start_local()
         af = i.supported()[0]
         port = 40000

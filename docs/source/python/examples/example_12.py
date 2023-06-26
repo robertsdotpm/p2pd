@@ -1,8 +1,7 @@
 from p2pd import *
 
 async def example():
-    n = await init_p2pd()
-    i = await Interface(netifaces=n).start()
+    i = await Interface().start()
     nat = await i.load_nat()
     #
     # Test echo server with AF.

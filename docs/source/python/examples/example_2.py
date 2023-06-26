@@ -1,11 +1,8 @@
 from p2pd import *
 
 async def example():
-    # Load interface private details.
-    netifaces = await init_p2pd()
-    #
     # Start the default interface.
-    i = await Interface(netifaces=netifaces).start()
+    i = await Interface().start()
     #
     # Load additional NAT details.
     # Restrict, random port NAT assumed by default.

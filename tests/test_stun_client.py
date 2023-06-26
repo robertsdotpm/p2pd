@@ -22,7 +22,6 @@ from p2pd.ip_range import IPRange
 env = os.environ.copy()
 class TestStunClient(unittest.IsolatedAsyncioTestCase):
     async def test_stun_client(self):
-        await init_p2pd()
         one_valid = False
         for af in VALID_AFS:
             try:
@@ -71,8 +70,8 @@ class TestStunClient(unittest.IsolatedAsyncioTestCase):
                     # Test change port request.
                     pipe = (await pipe_open(
                         UDP,
-                        dest,
-                        route
+                        route,
+                        dest
                     )).subscribe(SUB_ALL)
 
                     # Used for matching the TXID for the stun reply.

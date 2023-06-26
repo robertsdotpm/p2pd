@@ -42,7 +42,7 @@ class NetDebugServer(Daemon):
                 # Make pipe used to send hello message.
                 proto = PROTO_LOOKUP[p["proto"].upper()]
                 dest_addr = await Address(p["dest_addr"], dest_port, route).res()
-                hello_pipe = await pipe_open(proto, dest_addr, route)
+                hello_pipe = await pipe_open(proto, route, dest_addr)
                 hello_from = hello_pipe.sock.getsockname()
 
                 # Send hello and close the pipe.

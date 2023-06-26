@@ -153,6 +153,7 @@ class Interface():
         super().__init__()
         self.resolved = False
         self.nat = nat or nat_info()
+        self.name = name
         self.rp = {}
         self.v4_lan_ips = []
         self.guid = None
@@ -168,23 +169,25 @@ class Interface():
         self.stack = stack
         assert(self.stack in VALID_STACKS)
 
+    # Load mac, nic_no, and process name.
+    def load_if_info(self):
         # Assume its an AF.
-        if isinstance(name, int):
-            if name not in [IP4, IP6, AF_ANY]:
+        if isinstance(self.name, int):
+            if self.name not in [IP4, IP6, AF_ANY]:
                 raise InterfaceInvalidAF
 
-            name, _ = get_default_iface(self.netifaces, preference=name)
+            self.name, _ = get_default_iface(self.netifaces, preference=self.name)
 
         # No name specified.
         # Get name of default interface.
-        if name is None or name == "":
+        if self.name is None or self.name == "":
             # Windows -- default interface name is a GUID.
             # This is ugly AF.
             iface_name, iface_af = get_default_iface(self.netifaces)
             if iface_name is None:
                 raise InterfaceNotFound
             else:
-                name = iface_name
+                self.name = iface_name
 
             # Allow blank interface names to be used for testing.
             log("> default interface loaded")
@@ -196,7 +199,7 @@ class Interface():
         # Windows NIC descriptions are used for the name
         # if the interfaces are detected as all hex.
         # It's more user friendly.
-        self.name = to_s(name)
+        self.name = to_s(self.name)
 
         # Check ID exists.
         if self.netifaces is not None:
@@ -298,6 +301,13 @@ class Interface():
         self.__dict__ = o.__dict__
 
     async def start_local(self, rp=None, skip_resolve=False):
+        # Load internal interface details.
+        if Interface.get_netifaces() is None:
+            self.netifaces = await init_p2pd()
+
+        # Process interface name in right format.
+        self.load_if_info()
+
         # Get routes for AF.
         if rp == None:
             af_list = VALID_AFS
@@ -325,6 +335,13 @@ class Interface():
         return self
 
     async def start(self, rp=None, skip_resolve=False):
+        # Load internal interface details.
+        if Interface.get_netifaces() is None:
+            self.netifaces = await init_p2pd()
+
+        # Process interface name in right format.
+        self.load_if_info()
+
         # Get routes for AF.
         if rp == None:
             af_list = VALID_AFS

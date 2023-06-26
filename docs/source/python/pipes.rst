@@ -7,10 +7,10 @@ and message processing. A pipe supports UDP or TCP and IPv4 or IPv6.
 
 .. code-block:: python
 
-    async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, conf=NET_CONF):
+    async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, conf=NET_CONF):
         """
-        route = Route object that's been bound with await route.bind().
         proto = TCP or UDP.
+        route = Route object that's been bound with await route.bind().
         dest  = If it's a client pipe a destionation should be included.
                     await Address('host/ip', port, route).res()
                 A server includes no destination.
@@ -241,4 +241,4 @@ options look like this:
     }
 
     # Here's where to use these options.
-    pipe = pipe_open(TCP, dest, route, conf=NET_CONF)
+    pipe = pipe_open(TCP, route, dest, conf=NET_CONF)

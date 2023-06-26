@@ -22,7 +22,6 @@ that can be used to run async code.
     Type "help", "copyright", "credits" or "license" for more information.
     >>> import asyncio
     >>> from p2pd import *
-    >>> netifaces = await init_p2pd() # Loads netifaces.
 
 Now you can simply type `await some_function()` in the REPL to execute it.
 If you experience errors in the REPL you'll have to use a regular Python

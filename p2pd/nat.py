@@ -853,8 +853,7 @@ async def nat_predict_main():
     from .interface import Interface, init_p2pd
 
     # Load default interface.
-    netifaces = await init_p2pd()
-    i = await Interface(netifaces=netifaces).start_local()
+    i = await Interface().start_local()
     s = STUNClient(i)
     
     # Run delta test and profile it.

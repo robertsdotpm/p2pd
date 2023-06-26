@@ -39,7 +39,7 @@ async def test_setup(netifaces=None, ifs=None):
     # Main node used for testing p2p functionality.
     node_a_ifs = [ifs[0]] if ifs is not None else test_setup.ifs
     node_a = await start_p2p_node(
-        node_id=node_name(b"node_a"),
+        node_id=node_name(b"node_a", node_a_ifs[0]),
 
         # Get brand new unassigned listen port.
         # Avoid TIME_WAIT buggy sockets from port reuse.
@@ -53,7 +53,7 @@ async def test_setup(netifaces=None, ifs=None):
     # Test local punching algorithm.
     node_b_ifs = [ifs[1  % len(ifs)]] if ifs is not None else test_setup.ifs
     node_b = await start_p2p_node(
-        node_id=node_name(b"node_b"),
+        node_id=node_name(b"node_b", node_b_ifs[0]),
 
         # Get brand new unassigned listen port.
         # Avoid TIME_WAIT buggy sockets from port reuse.

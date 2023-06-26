@@ -294,7 +294,7 @@ class NTPClient:
         dest = await Address(host, port, route).res()
 
         # create the socket
-        pipe = await pipe_open(UDP, dest, route)
+        pipe = await pipe_open(UDP, route, dest)
         pipe.subscribe()
         try:
             # create the request packet - mode 3 is client

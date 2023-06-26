@@ -32,18 +32,15 @@ class TestRoute(unittest.IsolatedAsyncioTestCase):
         self.assertRaises(Exception, invalid_wan)
 
     async def test_bind_to_route(self):
-        await init_p2pd()
         i = await Interface().start_local()
         b = await Bind(i, i.supported()[0]).bind()
         r = await bind_to_route(b)
 
     async def test_if_to_rp(self):
-        await init_p2pd()
         i = await Interface().start_local()
         rp = interfaces_to_rp([i])
 
     async def test_netiface_addr_to_ipr(self):
-        await init_p2pd()
         loop = asyncio.get_event_loop()
         i = await Interface().start_local()
         af = i.supported()[0]

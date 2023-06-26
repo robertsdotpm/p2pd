@@ -11,7 +11,6 @@ servers = u
 
 
 async def main(servers):
-    netifaces = await init_p2pd()
     i = await Interface().start_local()
     loop = asyncio.get_event_loop()
 

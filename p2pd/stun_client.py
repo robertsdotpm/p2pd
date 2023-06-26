@@ -802,7 +802,6 @@ if __name__ == "__main__": # pragma: no cover
         # https://wiki.innovaphone.com/index.php?#title=Howto:Innovaphones_public_services#TURN
         server = ['stun.innovaphone.com', 3478]
 
-        netifaces = await init_p2pd()
 
 
         i = await Interface().start_local()

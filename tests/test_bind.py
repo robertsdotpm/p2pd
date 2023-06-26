@@ -5,13 +5,11 @@ from p2pd.net import NIC_BIND, EXT_BIND, TCP, socket_factory
 
 class TestBind(unittest.IsolatedAsyncioTestCase):
     async def test_bind(self):
-        await init_p2pd()
         i = await Interface().start_local()
         af = i.stack if i.stack != DUEL_STACK else IP4
         b = Bind(i, af)
 
     async def test_ip_val_v6_bind_types(self):
-        await init_p2pd()
         i = await Interface().start_local()
         try:
             # Test global tuples set.
@@ -36,7 +34,6 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
             return
 
     async def test_ip_val_v4_bind_types(self):
-        await init_p2pd()
         i = await Interface().start_local()
 
         # Test nic bind occurs.
@@ -48,7 +45,6 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(b.bind_tup(flag=NIC_BIND)[0], ip)
 
     async def test_route_v4_bind_types(self):
-        await init_p2pd()
         i = await Interface().start_local()
         r = i.route(IP4)
         b = await r.bind()
@@ -56,7 +52,6 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(tup[0])
 
     async def test_route_v6_bind_types(self):
-        await init_p2pd()
         i = await Interface().start_local()
 
         try:
@@ -78,7 +73,6 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
 
 
     async def test_bind_start_v4_all_addr(self):
-        await init_p2pd()
         af = IP4
         try:
             i = await Interface(af).start_local()
@@ -99,7 +93,6 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
             s.close()
 
     async def test_bind_start_v6_all_addr(self):
-        await init_p2pd()
         i = await Interface().start_local()
         try:
             af = IP6

@@ -9,7 +9,7 @@ class TestSignaling(unittest.IsolatedAsyncioTestCase):
             return
 
         # Channel that the test node subs to.
-        await init_p2pd()
+        i = await Interface().start_local()
         dest_id = "p2pd_test_node"
         msg = "msggg"
         f = asyncio.Future()
@@ -19,7 +19,7 @@ class TestSignaling(unittest.IsolatedAsyncioTestCase):
             f.set_result(to_s(msg))
 
         # Start the MQTT client.
-        node_id = node_name(b"node_c")
+        node_id = node_name(b"node_c", i)
         client = None
         for i in range(0, 3):
             client = SignalMock(node_id, proc_msg, mqtt_server=MQTT_SERVERS[i])

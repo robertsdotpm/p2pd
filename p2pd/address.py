@@ -197,7 +197,6 @@ class Address():
 
 async def test_address(): # pragma: no cover
     from p2pd.interface import init_p2pd, Interface
-    netifaces = await init_p2pd()
     i = await Interface()
     print(i)
     a = await Address("www.google.com", 80, i.route()).res()

@@ -19,9 +19,6 @@ asyncio.set_event_loop_policy(SelectorEventPolicy())
 
 class TestAFsWork(unittest.IsolatedAsyncioTestCase):
     async def test_afs(self):
-        # The BSD inetd seems broken for echo / udp / localhost bind.
-        await init_p2pd()
-
         # List of public echo servers.
         addr = {
             UDP: {
@@ -74,7 +71,7 @@ class TestAFsWork(unittest.IsolatedAsyncioTestCase):
                 ).res()
 
                 # Open pipe to echo server.
-                pipe = await pipe_open(proto, echo_dest, route)
+                pipe = await pipe_open(proto, route, echo_dest)
                 
                 # Interested in any message.
                 pipe.subscribe(SUB_ALL)

@@ -4,15 +4,14 @@ async def example():
     #
     # Start default interface.
     # Don't bother resolving external addresses.
-    netifaces = await init_p2pd()
-    i = await Interface(netifaces=netifaces).start()
+    i = await Interface().start()
     #
     # Echo server address.
     route = await i.route().bind()
     echo_dest = await Address("tcpbin.com", 4242, route).res()
     #
     # Open a connection to the echo server.
-    pipe = await pipe_open(TCP, echo_dest, route)
+    pipe = await pipe_open(TCP, route, echo_dest)
     #
     # Create a new queue for a related subscription.
     # Subscription = [b"msg pattern regex", b"address pattern regex"]

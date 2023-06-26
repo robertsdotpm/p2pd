@@ -748,7 +748,7 @@ It supports using IPv4 and IPv6 destination addresses.
 You can pull data from it based on a regex pattern.
 You can execute code on new messages or connection disconnects.
 """
-async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, conf=NET_CONF):
+async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, conf=NET_CONF):
     # If no route is set assume default interface route 0.
     if route is None:
         # Load internal addresses.

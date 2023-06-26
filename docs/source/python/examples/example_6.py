@@ -5,8 +5,7 @@ from p2pd import *
 async def example():
     # Open default interface.
     # Get a route for the first AF supported.
-    netifaces = await init_p2pd()
-    i = await Interface(netifaces=netifaces).start()
+    i = await Interface().start()
     route = await i.route().bind()
     #
     # Open a UDP pipe to stunprotocol.org.
@@ -14,8 +13,8 @@ async def example():
     pipe = (
         await pipe_open(
             UDP,
-            await Address("stunserver.stunprotocol.org", 3478, route).res(),
-            route
+            route,
+            await Address("stunserver.stunprotocol.org", 3478, route).res()
         )
     ).subscribe()
     #

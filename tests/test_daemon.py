@@ -11,7 +11,6 @@ from p2pd.daemon import Daemon
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestDaemon(unittest.IsolatedAsyncioTestCase):
     async def test_listen_all_interface_target(self):
-        await init_p2pd()
         i = await Interface().start_local()
         i.rp[IP6].routes = []
 
@@ -27,7 +26,6 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         await echod.close()
 
     async def test_bind_target(self):
-        await init_p2pd()
         d = Daemon()
         i = await Interface().start_local()
         i.rp[IP6].routes = []
@@ -43,7 +41,6 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         await d.close()
 
     async def test_listen_specific(self):
-        await init_p2pd()
         d = Daemon()
         i = await Interface().start_local()
         i.rp[IP6].routes = []
@@ -57,7 +54,6 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         await d.close()
 
     async def test_daemon(self):
-        await init_p2pd()
         server_port = 10123
         loopbacks = {
             IP4: "127.0.0.1",
@@ -105,8 +101,8 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                     # Spawn a pipe to the echo server.
                     pipe = await pipe_open(
                         proto,
-                        dest,
-                        route
+                        route,
+                        dest
                     )
                     self.assertTrue(pipe is not None)
 

@@ -165,7 +165,6 @@ class NameStore():
 
 if __name__ == '__main__':
     async def test_name_store():
-        await init_p2pd()
         i = await Interface().start_local()
         route = i.route()
         url = "http://net-debug.000webhostapp.com/name_store.php"

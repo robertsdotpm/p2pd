@@ -1,0 +1,22 @@
+init_p2pd
+    - no longer required -- worked into interface.start
+
+Interface().start
+    if not netiface...
+        init...
+
+Interface.route(af=None)
+    i.route(af=None, bind_port=0)
+    i[af, bind_port=opt]
+        AF_ANY -- same as None
+    search for .bind(
+    no more await .route.bind -- done in pipe_open
+
+pipe_open(transport, route, dest=None)
+    - order of route and dest changed
+    - resolve route if it needs it
+        - accept interface still -> default route
+    - resolve dest if it needs it
+        - accept () tup
+
+subscribe by default? maybe just with a small buffer size

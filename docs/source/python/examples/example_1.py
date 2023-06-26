@@ -8,14 +8,9 @@ async def msg_cb(msg, client_tup, pipe):
 
 # Warning: startup is slow - be patient.
 async def example():
-    # Initalize p2pd.
-    netifaces = await init_p2pd()
-    #
     # Start our main node server.
     # The node implements your protocol.
     node = await start_p2p_node(
-        netifaces=netifaces,
-        #
         # Set to true for port forwarding + pin holes.
         enable_upnp=False
     )

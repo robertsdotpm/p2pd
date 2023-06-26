@@ -7,17 +7,16 @@ async def example():
     #
     # Start default interface and get the first route.
     # No AF for route use i.supported()[0] 
-    netifaces = await init_p2pd()
-    i = await Interface(netifaces=netifaces).start()
+    i = await Interface().start()
     route = await i.route().bind() # Port 0 = any unused port.
     #
     # Start the server and use msg_cb to process messages.
-    server = await pipe_open(TCP, route=route, msg_cb=msg_cb)
+    server = await pipe_open(TCP, route, msg_cb=msg_cb)
     #
     # Connect to the server.
     # Use the IP of the route and unused port for the destination.
     dest = await Address(*server.sock.getsockname()[0:2], route).res()
-    client = await pipe_open(TCP, dest, route)
+    client = await pipe_open(TCP, route, dest)
     client.subscribe()
     #
     # Send data to the server and check receipt.

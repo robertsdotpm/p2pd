@@ -9,7 +9,6 @@ from decimal import Decimal as Dec
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
     async def test_map_info_to_their_maps(self):
-        await init_p2pd()
         map_info = {
             "remote": [5000],
             "reply": [0],

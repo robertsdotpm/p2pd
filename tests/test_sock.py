@@ -30,8 +30,7 @@ class TestSock(unittest.IsolatedAsyncioTestCase):
 
     async def test_socket_factory_connect(self):
         loop = asyncio.get_running_loop()
-        netifaces = await init_p2pd()
-        i = await Interface(netifaces=netifaces).start_local()
+        i = await Interface().start_local()
         af = i.supported()[0]
         r = await i.route(af).bind(0)
         d = await Address("8.8.8.8", 53, r)

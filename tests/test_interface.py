@@ -11,14 +11,13 @@ asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestInterface(unittest.IsolatedAsyncioTestCase):
     # Should find at least a valid iface on whatever OS.
     async def test_default_interface(self):
-        await init_p2pd()
-        i = Interface()
+        i = await Interface().start_local()
         self.assertTrue(i.name)
 
-        i = Interface("")
+        i = await Interface("").start_local()
         self.assertTrue(i.name)
 
-        i = Interface(AF_ANY)
+        i = await Interface(AF_ANY).start_local()
         self.assertTrue(i.name)
 
         i = await Interface().start_local()
@@ -26,20 +25,20 @@ class TestInterface(unittest.IsolatedAsyncioTestCase):
         if_list = dict_to_if_list(d_list)
 
     async def test_invalid_interface_name(self):
-        await init_p2pd()
-        def invalid_interface_name():
-            i = Interface("meow")
+        test_passes = False
+        try:
+            await Interface("meow").start_local()
+        except InterfaceNotFound:
+            test_passes = True
 
-        self.assertRaises(InterfaceNotFound, invalid_interface_name)
+        self.assertTrue(test_passes)
 
     async def test_nat_validation(self):
-        await init_p2pd()
         nat = nat_info()
         i = Interface(nat=nat)
         i.set_nat(nat)
 
     async def test_fake_ext_route(self):
-        await init_p2pd()
         one_valid = False
         for af in VALID_AFS:
             try:
@@ -58,7 +57,6 @@ class TestInterface(unittest.IsolatedAsyncioTestCase):
         pass
 
     async def test_interface_start(self):
-        await init_p2pd()
         start_worked = False
         for af in VALID_AFS:
             try:
@@ -71,8 +69,7 @@ class TestInterface(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(start_worked)
 
     async def test_load_interfaces(self):
-        netifaces = await init_p2pd()
-        ifs = await load_interfaces(netifaces=netifaces)
+        ifs = await load_interfaces()
         self.assertTrue(len(ifs))
 
         # Check nic IP fetch. 
