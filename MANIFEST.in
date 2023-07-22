@@ -4,3 +4,4 @@ include CREDITS.md
 include examples/
 include docs/
 include tests/
+include scripts/
