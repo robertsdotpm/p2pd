@@ -7,6 +7,7 @@ from .p2p_pipe import *
 from .daemon import *
 from .p2p_protocol import *
 from .signaling import *
+from .pdns import *
 
 NODE_CONF = dict_child({
     # Reusing address can hide errors for the socket state.
@@ -261,12 +262,27 @@ class P2PNode(Daemon, P2PUtils):
 
     # Connect to a remote P2P node using a number of techniques.
     async def connect(self, addr_bytes, strategies=P2P_STRATEGIES, timeout=60):
+        # Resolve a PDNS object of a peer to its address bytes.
+        # Throws an exception if the value is not found.
+        if isinstance(addr_bytes, PDNS):
+            addr_bytes = await addr_bytes.res(
+                self.if_list[0].route()
+            )
+
+        # Create a TCP connection to the peer using the strategies
+        # defined in the strategies list.
         p2p_pipe = P2PPipe(self)
         return await p2p_pipe.pipe(
             addr_bytes,
             strategies=strategies,
             timeout=timeout
         )
+    
+    async def register(self, name, value, registrar_id):
+        route = self.if_list[0].route()
+        pdns = PDNS(name, registrar_id)
+        await pdns.res(route)
+        await pdns.register(route, value)
 
     # Get our node server's address.
     def address(self):

@@ -1,10 +1,32 @@
 <?php
 
+/*
+This file creates an API for a simple key-value store.
+
+A key-value store simply lets you store data by a name. Just like variables
+in programming or 'dictionaries' / associative arrays / hash tables.
+For this key-value store 'ownership' of names is enforced by using
+ECDSA signatures. API calls must therefore be signed. Names DO eventually
+expire to prevent abuse.
+
+The purpose of this script is to provide the means to build a simple
+DNS-like service on top of it for which peers can use fixed names for
+connections without worrying about exchanging addresses via an 'out of band'
+channel. This is provided to simplify the use of the library for demos and
+such. Production software should eventually use their own services.
+
+Requirements:
+
+(1) The script uses SQLite for its DB and Libsodium to do crypto.
+(2) The corresponding client for this has been written in Python.
+*/
+
 // Config <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 $digest = "SHA512";
 $curve = "ed22519";
 $oid = "1.3.132.0.10";
 $prune_interval = 2592000; // A month in seconds.
+$db_path = "kvs.db";
 
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
@@ -58,7 +80,8 @@ class MyDB extends SQLite3
 {
     function __construct()
     {
-        $this->open('kvs.db');
+        global $db_path;
+        $this->open($db_path);
     }
 }
 

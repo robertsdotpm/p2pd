@@ -6,6 +6,10 @@ ENABLE_STUN = True
 ENABLE_UDP = True
 P2PD_TEST_INFRASTRUCTURE = False
 
+PDNS_REGISTRARS = {
+    "000webhost": "http://net-debug.000webhostapp.com/name_store.php"
+}
+
 """
 To keep things simple P2PD uses a number of services to
 help facilitate peer-to-peer connections. At the moment

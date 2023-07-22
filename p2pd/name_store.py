@@ -34,13 +34,27 @@ class NameStore():
         self.url = url
 
         # Keep local copy of names and their update keys.
+        self.db = None
         if KVS_MEM_DB:
             self.db = {}
             self.cur = None
-        else:
+        
+        # Open local sqlite db file.
+        if not KVS_MEM_DB and db_path is not None:
             self.db = sqlite3.connect(db_path)
             self.db.row_factory = sqlite_dict_factory
             self.cur = self.db.cursor()
+
+    def close(self):
+        if KVS_MEM_DB:
+            return
+        
+        if self.db is None:
+            return
+        
+        self.db.close()
+        self.db = None
+        self.cur = None
 
     # Resolve domain from URL and split URL into parts.
     async def start(self):
