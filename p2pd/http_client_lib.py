@@ -19,7 +19,9 @@ def http_req_buf(af, host, port, path=b"/", method=b"GET", payload=None, headers
         headers += HTTP_HEADERS
 
     # Raw http request.
-    buf  = b"%s %s HTTP/1.1\r\n" % (to_b(method), to_b(path))
+    # Very important: 1.0 is used to disable 'chunked encoding.'
+    # Chunked encoding overly complicates processing HTTP responses.
+    buf  = b"%s %s HTTP/1.0\r\n" % (to_b(method), to_b(path))
     if af == IP4:
         host = to_b(host)
     else:
@@ -61,6 +63,11 @@ class ParseHTTPResponse(HTTPResponse):
         super().__init__(self.sock)
         self.begin()
         http_parse_headers(self)
+
+        te = "Transfer-Encoding"
+        if te in self.hdrs:
+            if self.hdrs[te] == "chunked":
+                raise Exception("chunked encodign not supported!")
 
     def out(self):
         return self.read(self.resp_len)

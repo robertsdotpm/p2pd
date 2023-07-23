@@ -1,11 +1,13 @@
 
 import sys
+import os
 
 """
 This is a hack to avoid double-imports of a module when using
 the -m switch to run a module directly. Python modules are lolz.
 """
 if not '-m' in sys.argv:
+    os.environ["PYTHONIOENCODING"] = "utf-8"
     from .errors import *
     from .utils import log, what_exception, log_exception, async_test
     from .cmd_tools import *
@@ -30,3 +32,5 @@ if not '-m' in sys.argv:
     from .p2p_pipe import *
     from .p2p_node import P2PNode
     from .p2p_utils import get_pp_executors, start_p2p_node
+    from .pdns import PDNS
+    from .install import *

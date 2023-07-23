@@ -10,6 +10,13 @@ import subprocess
 from .utils import *
 
 """
+Windows doesn't always use UTF-8 for string encoding.
+Depending on which functions you're using.
+This completely screws encoding and decoding bytes / strs.
+"""
+os.environ["PYTHONIOENCODING"] = "utf-8"
+
+"""
 This requires the process to have been run as administrator
 or with a UAC prompt. However, by using the technique of
 writing self-contained Python files to disk that accomplish
@@ -89,32 +96,24 @@ printing them.
 def nix_arg_escape(arg):
     return shlex.quote(arg)
 
-# Surrounds with DOUBLE quotes.
 def win_arg_escape(arg, allow_vars=0):
-    # Symbol table for NT.
-    allowed_list = """&%!^ :'"/\\abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.(),;=><|\t"""
-    if allow_vars:
-        allowed_list += "~%$"
+    # Double all the backslashes before a double quote.
+    # Then ensure the double quote is escaped.
+    # Doubling up neutralizes double quotes that may be unbalanced.
+    # Since this is done you ensure quotes are all escaped properly.
+    arg = re.sub(r'(\\*)"', r'\1\1\\"', arg)
 
-    # Filter out anything that isn't a
-    # standard character.
-    buf = ""
-    for ch in arg:
-        # Check if white list is valid.
-        if ch in allowed_list:
-            buf += ch
+    # Double up continuous backslashes at the end of the string.
+    arg = re.sub(r'(\\*)$', r'\1\1', arg)
 
-        # Otherwise ignore character.
+    # Replace special characters.
+    arg = re.sub('([()%!^<>&|;,])', r'^\1', arg)
 
-    # Edge-case escaping with doubling-up.
-    buf = buf.replace('"', '""')
-    buf = buf.replace("\\", "\\\\")
-
-    # Souround entire arg with quotes.
+    # Surround entire arg with quotes.
     # This avoids spaces breaking a command.
-    buf = '"%s"' % (buf)
+    arg = '"%s"' % (arg)
 
-    return buf
+    return arg
 
 """
 There is an issue with create_subprocess_shell on Windows 10
@@ -141,7 +140,7 @@ async def cmd(value, io=None, timeout=10):
             value,
             stdin=in_val,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            # stderr=asyncio.subprocess.PIPE,
             cwd=this_dir,
             shell=True
         )

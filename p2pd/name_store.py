@@ -24,12 +24,15 @@ quickly. Hence it might be a good idea to throttle requests.
 
 KVS_MEM_DB = 0
 class NameStore():
-    def __init__(self, route, url, db_path=None, timeout=3, throttle=1):
+    def __init__(self, route, url, db_path=None, timeout=3, throttle=1, retry=2):
         # Enable throttling for API calls.
         self.throttle = throttle
 
         # DNS, TCP CON, and RECV timeout for slow free hosts.
         self.timeout = timeout
+
+        # Retry operations up to N times.
+        self.retry = retry
         self.route = route
         self.url = url
 

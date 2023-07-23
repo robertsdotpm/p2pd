@@ -281,8 +281,7 @@ class P2PNode(Daemon, P2PUtils):
     async def register(self, name, value, registrar_id):
         route = self.if_list[0].route()
         pdns = PDNS(name, registrar_id)
-        await pdns.res(route)
-        await pdns.register(route, value)
+        return await pdns.register(route, value)
 
     # Get our node server's address.
     def address(self):

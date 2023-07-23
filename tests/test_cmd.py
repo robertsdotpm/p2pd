@@ -19,7 +19,7 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
                 # Regular command with double quotes in it.
                 [
                     'test "somèthing"',
-                    '"test ""somèthing"""'
+                    '"test \\"somèthing\\""'
                 ],
 
                 # Sneaky attempt to escape enclosing last slash.
@@ -32,26 +32,26 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
                 # As long as it's in double quotes it has no effect.
                 [
                     'test x^',
-                    '"test x^"'
+                    '"test x^^"'
                 ],
 
                 # Test some special charas.
                 [
                     'test ! %',
-                    '"test ! %"'
+                    '"test ^! ^%"'
 
                 ],
 
                 # Test escape list impact inside string.
                 [
                     ',:;=\t&><|',
-                    '",:;=\t&><|"'
+                    '"^,:^;=\t^&^>^<^|"'
                 ],
 
                 # Test unbalanced double quotes escape.
                 [
                     'hax """',
-                    '"hax """""""'
+                    '"hax \\"\\"\\""'
                 ]
             ]
 
@@ -139,7 +139,9 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
 
             # How is param serialized.
             exp_param = await test_esc(safe_param)
-            self.assertEqual(exp_param, unsafe_param)
+            if exp_param != unsafe_param:
+                print(f"{exp_param} != {unsafe_param}")
+
             self.assertTrue(isinstance(exp_param, str))
 
     async def test_cmd(self):

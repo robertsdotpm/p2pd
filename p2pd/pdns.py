@@ -1,4 +1,3 @@
-
 from .name_store import *
 from .settings import *
 from .install import *
@@ -24,7 +23,8 @@ class PDNS():
         # Makes sure that the SQLITE3 db is available
         # for storing PDNS names.
         copy_p2pd_install_files_as_needed()
-        db_path = get_kvs_db_install_path()
+        install_root = get_p2pd_install_root()
+        db_path = get_kvs_db_install_path(install_root)
 
         # Resolve key value script domain.
         ns = NameStore(route, self.name_url, db_path)
@@ -32,38 +32,14 @@ class PDNS():
 
         # Store a value at name.
         # If it's a name we've previously used then update it.
-        await ns.store_val(self.name, value)
+        out = await ns.store_val(self.name, value)
 
         # Close DB writing changes to disk.
         ns.close()
+        return out
 
 if __name__ == '__main__':
     async def test_pdns():
         print("yes")
 
     async_test(test_pdns)
-
-"""
-
-0,1-[0,8.8.8.8,192.168.21.21,58959,3,2,0]-0-zmUGXPOFxUBuToh
-node.connect
-    PDNS("something", "registrar_id")
-
-node.register('name', 'value', 'registrar_id')
-    if already exists:
-        update
-    else:
-        register
-    PDNS
-
-    get_kvs_db_path()
-
-node start:
-    load names
-
-PDNS_REGISTRARS = {
-    "000webhost": "http://net-debug.000webhostapp.com/name_store.php"
-}
-
-
-"""
