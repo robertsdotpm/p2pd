@@ -265,8 +265,10 @@ class P2PNode(Daemon, P2PUtils):
         # Resolve a PDNS object of a peer to its address bytes.
         # Throws an exception if the value is not found.
         if isinstance(addr_bytes, PDNS):
-            addr_bytes = await addr_bytes.res(
-                self.if_list[0].route()
+            addr_bytes = to_b(
+                await addr_bytes.res(
+                    self.if_list[0].route()
+                )
             )
 
         # Create a TCP connection to the peer using the strategies
@@ -278,10 +280,11 @@ class P2PNode(Daemon, P2PUtils):
             timeout=timeout
         )
     
-    async def register(self, name, value, registrar_id):
+    async def register(self, name, registrar_id="000webhost", value=None):
         route = self.if_list[0].route()
         pdns = PDNS(name, registrar_id)
-        return await pdns.register(route, value)
+        value = value or self.address()
+        return await pdns.register(route, to_s(value))
 
     # Get our node server's address.
     def address(self):

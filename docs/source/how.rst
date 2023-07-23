@@ -1,8 +1,8 @@
 How P2PD works
 ===============
 
-Adressesses
-------------
+Addresses
+----------
 
 In P2PD it all starts with the address. You may already be familiar with IPv4
 and IPv6 addresses. Such addresses allow for data to reach nodes on
@@ -42,8 +42,31 @@ these addresses when writing software. For example: are you going to assume
 people will give each other their addresses over a chat program? The
 next section will give you a better idea.
 
+Naming
+--------
+
+In order to connect to a peer in P2PD you need the address described above.
+However because addresses are long, complex, and hard to remember it makes
+sense to be able to look peers up by a shorter name. Perhaps one that is
+easier to share and remember. You may recognize this as being similar to the
+design of domain names used in the DNS system.
+
+Instead of visiting websites by their IP addresses almost everyone visits
+them by a registered name. DNS has proven to be a robust system but one
+which is centralized and costs money to use. For convenience, P2PD provides a
+free to use API that implements a authenticated key-value store. The names
+registered by this API automatically expire after a month. But clients can
+easily migrate to new names before this happens.
+
+Currently this system is provided by a simple PHP script that reads and
+writes to a SQLite database. The reason for this design is normally
+providers of free computing resources don't provide static, public IPs.
+But this approach reuses existing IPs which allows it to run on many free web
+hosts (or almost free hosts) for next to no cost. A project that has no
+infrastructure costs is by definition my survivable than one that doesn't.
+
 Signaling
-----------
+-----------
 
 P2PD uses the MQTT protocol for signaling messages. Signaling messages
 refer to messages P2PD uses to coordinate connections between peers. Some
@@ -74,7 +97,7 @@ it's actually built for the purpose. Making it easier to use, more scalable,
 and far less hacky.
 
 Methodology
-------------
+-------------
 
 P2PD uses 4 different strategies to try establish a connection between peers.
 
@@ -144,7 +167,7 @@ such a way that it provides an identical API to the connections returned
 from following any of the above strategies.
 
 Next Steps
------------
+------------
 
 Now you have a good understanding how P2PD works. Choose a specialty:
 

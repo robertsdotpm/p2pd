@@ -1,25 +1,29 @@
 Using P2PD from Python
-=======================
+========================
 
 Before we get started all Python examples assume:
 
     1. The 'selector' event loop is being used.
     2. The 'spawn' method is used as the multiprocessing start method.
     3. You are familiar with how to run asynchronous code.
+    4. The string encoding is "UTF-8."
 
 This keeps the code consistent across platforms. The package sets
 these by default so if your application is using a different configuration
 it may not work properly with P2PD.
 
-| Let's start with how to open a P2P connection to a peer.
-| We'll connect to ourselves for this example.
+| **Let's start with how to connect to another peer.**
+
+The code has two functions that simulate what two different computers might
+run (**computer_a** and **computer_b**.) They both need to know each others 'names'
+and addressing information is shared over PDNS (a simple API provided by
+a PHP script that implements a key-value store.)
 
 .. literalinclude:: examples/example_1.py
     :language: python3
 
-You can use this library as a black box if you want. The code automatically
-handles loading network interfaces, enumerating routers, bypassing NATs,
-and establishing P2P connections. But you can do far more with P2PD.
+You can use this library as a black box if you want. The code handles loading network interfaces, enumerating routers, bypassing NATs,
+and establishing connections. But even more is possible.
 
 It can be used as a way to do network programming in general. Whether
 you want to write multi-protocol, multi-address clients or servers.

@@ -19,7 +19,7 @@ class TestPDNS(unittest.IsolatedAsyncioTestCase):
 
             # Check store / update works.
             node = P2PNode(if_list=[iface])
-            out = await node.register(test_name, test_value, registrar_id)
+            out = await node.register(name=test_name, value=test_value, registrar_id=registrar_id)
             assert(out)
 
             # Check loading value works.

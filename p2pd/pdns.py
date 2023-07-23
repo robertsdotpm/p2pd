@@ -3,7 +3,7 @@ from .settings import *
 from .install import *
 
 class PDNS():
-    def __init__(self, name, registrar_id):
+    def __init__(self, name, registrar_id="000webhost"):
         self.name = name
         self.registrar_id = registrar_id
         if self.registrar_id not in PDNS_REGISTRARS:
