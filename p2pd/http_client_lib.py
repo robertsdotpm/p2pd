@@ -137,8 +137,6 @@ async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, h
             headers=headers
         )
 
-        print(buf)
-        print(len(buf))
         await p.send(buf, dest.tup)
         out = await p.recv(SUB_ALL)
     except Exception:
