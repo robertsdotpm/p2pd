@@ -29,12 +29,26 @@ def http_req_buf(af, host, port, path=b"/", method=b"GET", payload=None, headers
     buf += b"Host: %s\r\n" % (host)
     for header in headers:
         n, v = header
+
+        # Don't add host header twice.
+        if n.lower() == b"host":
+            continue
+        
+        # Skip duplicate headers.
         if n not in hdrs:
             buf += b"%s: %s\r\n" % (n, v)
             hdrs[n] = 1
+
+    # Add content length for payload.
+    if payload is not None:
+        buf += to_b(f"Content-Length: {len(payload)}\r\n")
     
-    # Terminate request.
+    # Terminate headers.
+    buf = buf[:-2]
+    assert(buf[-1] not in [b'\r', b'\n'])
     buf += b"\r\n\r\n"
+
+    # Append payload (if any.)
     if payload is not None:
         buf += to_b(payload)
 
@@ -123,6 +137,8 @@ async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, h
             headers=headers
         )
 
+        print(buf)
+        print(len(buf))
         await p.send(buf, dest.tup)
         out = await p.recv(SUB_ALL)
     except Exception:
@@ -178,7 +194,7 @@ fetching a remote URL. The URL param may be pre-resolved using url_res,
 otherwise it can be a URL string to fetch. The function accepts optional
 GET params. The post method is not supported.
 """
-async def url_open(route, url, params={}, timeout=3, throttle=0, conf=NET_CONF):
+async def url_open(route, url, params={}, timeout=3, throttle=0, headers=[], conf=NET_CONF):
     # Other types for url are not supported.
     url_parts = Exception("url param type is not supported.")
 
@@ -217,13 +233,14 @@ async def url_open(route, url, params={}, timeout=3, throttle=0, conf=NET_CONF):
     # Make req.
     conf["con_timeout"] = timeout
     conf["recv_timeout"] = timeout
+    headers += [[b"Host", to_b(url_parts["host"])]]
     _, resp = await http_req(
         route,
         url_parts["dest"],
         path,
 
         # Specify the right sub/domain.
-        headers=[[b"Host", to_b(url_parts["host"])]],
+        headers=headers,
         conf=conf
     )
 
