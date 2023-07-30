@@ -1,0 +1,26 @@
+When software engineers test their code they often do so on a
+
+(1) Nix-based operating system
+(2) And high-end machine
+
+This has lead to the classic meme of 'well, it works on my computer...'
+in software quality assurance. Well, yes, it does. But if you don't test your
+code on the kind of systems your users run then you're in for a bad time. Your
+average user isn't going to have a Gigachad 9000 System so slow code is
+also going to be more of a pain point there.
+
+Network code has the same problems as software testing but with the additional
+problem that network state becomes something of the localized equivalent of
+'it works for me.' What I mean by this is if you write code that works during
+specific conditions and then ship that code -- your software and algorithms
+might not be able to handle realistic behaviors of real-world networks.
+
+A good example of that is high traffic DNS servers. Such servers may respond in
+less than 1000 ms. But under high load they may take seconds or even never reply
+before your programs timeout is reached. It's worth researching techniques to
+inject different behaviors into a network stack when running test code. For
+example: Netflix has a tool called 'chaos monkey' that randomly reboots services
+to test graceful recovery.
+
+The PDNS code needs to be similarly well-tested as it deals with services that
+provide free resources. Many of which are offered on an as-is basis.
