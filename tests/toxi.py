@@ -62,16 +62,98 @@ class ToxiToxic():
         j["toxicity"] = self.toxicity
         return j
     
+    # Add a delay to all data going through the proxy.
+    # The delay is equal to latency +/- jitter.
     def add_latency(self, ms, jitter=0):
-        json_body = {
+        self.body = self.api({
             "type": "latency",
             "attributes": {
                 "latency": ms,
                 "jitter": jitter
             }
-        }
+        })
 
-        self.body = self.api(json_body)
+        return self
+    
+    # Limit a connection to a maximum number of kilobytes per second.
+    def add_bandwidth_limit(self, KBs):
+        self.body = self.api({
+            "type": "rate",
+            "attributes": {
+                "rate": KBs,
+            }
+        })
+
+        return self
+    
+    # Delay the TCP socket from closing until delay has elapsed.
+    def add_slow_close(self, ms):
+        self.body = self.api({
+            "type": "slow_close",
+            "attributes": {
+                "delay": ms,
+            }
+        })
+
+        return self
+    
+    """
+    Stops all data from getting through, and closes the connection after timeout.
+    If timeout is 0, the connection won't close, and data will be delayed
+    until the toxic is removed.
+    """
+    def add_timeout(self, ms):
+        self.body = self.api({
+            "type": "timeout",
+            "attributes": {
+                "timeout": ms,
+            }
+        })
+
+        return self
+    
+    """
+    Simulate TCP RESET (Connection reset by peer) on the connections
+    by closing the stub Input immediately or after a timeout.
+    """
+    def add_reset_peer(self, ms):
+        self.body = self.api({
+            "type": "reset_peer",
+            "attributes": {
+                "timeout": ms,
+            }
+        })
+
+        return self
+    
+    # Closes connection when transmitted data exceeded limit.
+    def add_limit_data(self, n):
+        self.body = self.api({
+            "type": "limit_data",
+            "attributes": {
+                "bytes": n,
+            }
+        })
+
+        return self
+
+    # Slices TCP data up into small bits, optionally
+    # adding a delay between each sliced "packet".
+    def add_slicer(self, n, v, ug):
+        self.body = self.api({
+            "type": "slicer",
+            "attributes": {
+                #  size in bytes of an average packet
+                "average_size": n,
+
+                # variation in bytes of an average packet < n
+                "size_variation": v,
+
+                # time in microseconds to delay each packet by
+                "delay": ug
+            }
+        })
+
         return self
 
 class ToxiTunnel():
@@ -82,11 +164,14 @@ class ToxiTunnel():
 
     async def new_toxic(self, toxic):
         path = f"/proxies/{self.name}/toxics"
-        print(toxic.body)
         resp = await self.client.curl.vars(body=toxic.body).post(path)
         print(resp.out)
 
-    async def connect(self):
+    async def get_pipe(self):
+        pass
+
+    # Close the tunnel on the toxiproxy instance.
+    async def close(self):
         pass
 
 class ToxiClient():
