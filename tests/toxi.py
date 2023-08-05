@@ -166,20 +166,19 @@ class ToxiTunnel():
     async def new_toxic(self, toxic):
         path = f"/proxies/{self.name}/toxics"
         resp = await self.client.curl.vars(body=toxic.body).post(path)
-        print(resp.out)
+        assert(b"error" not in resp.out)
         self.toxics.append(toxic)
 
     async def remove_toxic(self, toxic):
         path = f"/proxies/{self.name}/toxics/{toxic.name}"
         resp = await self.client.curl.vars().delete(path)
-        print(self.client.curl.req_buf)
-        print(resp.out)
+        assert(resp.out == b'')
         self.toxics.remove(toxic)
 
     async def test_list(self):
         path = f"/proxies/{self.name}"
         resp = await self.client.curl.vars().get(path)
-        print(resp.out)
+        return resp.out
 
     async def get_pipe(self):
         # Build new route.
@@ -201,6 +200,7 @@ class ToxiTunnel():
         path = f"/proxies/{self.name}"
         resp = await self.client.curl.vars(body=json_body).post(path)
         self.client.tunnels.remove(self)
+        return resp.out
 
 class ToxiClient():
     def __init__(self, addr):
@@ -225,6 +225,7 @@ class ToxiClient():
         }
 
         resp = await self.curl.vars(body=json_body).post("/proxies")
+        assert(b"error" not in resp.out)
 
         # Listen porn for the tunnel server.
         port = re.findall("127[.]0[.]0[.]1[:]([0-9]+)", to_s(resp.out))[0]
@@ -238,60 +239,55 @@ class ToxiClient():
         return tunnel
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
-class TestToxi(unittest.IsolatedAsyncioTestCase):
-    async def test_toxi(self):
-        i = await Interface().start_local()
+async def test_setup(netifaces=None, client=None):
+    # Suppress socket unclosed warnings.
+    if not hasattr(test_setup, "netifaces"):
+        if netifaces is None:
+            test_setup.netifaces = await init_p2pd()
+        else:
+            test_setup.netifaces = netifaces
+        warnings.filterwarnings('ignore', message="unclosed", category=ResourceWarning)
+
+    if not hasattr(test_setup, "client"):
+        i = await Interface().start_local(skip_resolve=True)
         r = i.route()
-
         addr = await Address("localhost", 8474, r)
-
         client = ToxiClient(addr)
         await client.start()
 
-        dest = await Address("www.example.com", 80, r)
+    return client
+
+class TestToxi(unittest.IsolatedAsyncioTestCase):
+    async def test_toxi(self):
+        client = await test_setup()
+
+        # Create a new tunnel from toxiproxi to google.
+        dest = await Address("www.google.com", 80, client.addr.route)
         tunnel = await client.new_tunnel(dest)
+        assert(isinstance(tunnel, ToxiTunnel))
 
+        # From toxiproxy to google -- inject latency.
         toxic = ToxiToxic().downstream().add_latency(100)
-
         await tunnel.new_toxic(toxic)
+        assert(toxic in tunnel.toxics)
 
+        # Check that there's a toxic for that tunnel.
+        out = await tunnel.test_list()
+        out = json.loads(to_s(out))
+        assert(len(out["toxics"]))
+
+        # Remove the toxic from the tunnel.
         await tunnel.remove_toxic(toxic)
+        assert(toxic not in tunnel.toxics)
 
-        print("test list")
-        await tunnel.test_list()
+        # Check that there's no toxics for that tunnel.
+        out = await tunnel.test_list()
+        out = json.loads(to_s(out))
+        assert(not len(out["toxics"]))
 
+        # Will throw on error response.
         await tunnel.close()
 
-        return
-        hdrs = [[b"user-agent", b"toxiproxy-cli"]]
-        out = await url_open(
-            route=r,
-            url="http://localhost:8474/version",
-            headers=hdrs
-        )
-
-        print(out)
-
-        t = """{"name": "shopify_test_redis_master",
-"listen": "127.0.0.1:0",
-"upstream": "www.example.com:80",
-"enabled": true}"""
-        r = i.route()
-        d = await Address("localhost", 8474, r)
-        p, resp = await http_req(
-            route=r,
-            dest=d,
-            path=b"/proxies",
-            method=b"POST",
-            payload=t,
-            headers=[
-                [b"user-agent", b"toxiproxy-cli"],
-                [b"Content-Type", b"application/json"]
-            ]
-        )
-
-        print(resp.out())
-            
 
 if __name__ == '__main__':
     main()
