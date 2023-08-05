@@ -1,5 +1,6 @@
 import copy
 from http.client import HTTPResponse
+import json
 from .net import *
 from .base_stream import *
 from .address import *
@@ -10,7 +11,7 @@ HTTP_HEADERS = [
     [b"Accept", b"*/*"]
 ]
 
-def http_req_buf(af, host, port, path=b"/", method=b"GET", payload=None, headers=None):
+def http_req_buf(af, host, path=b"/", method=b"GET", payload=b"", headers=None):
     # Format headers.
     hdrs = {}
     if headers is None:
@@ -159,32 +160,32 @@ and resolve it's domain as an address for use with
 networking code that works to make the HTTP request.
 """
 async def url_res(route, url, timeout=3):
-        # Split URL into host and port.
-        port = 80
-        url_parts = urllib.parse.urlparse(url)
-        host = netloc = url_parts.netloc
-        path = url_parts.path
+    # Split URL into host and port.
+    port = 80
+    url_parts = urllib.parse.urlparse(url)
+    host = netloc = url_parts.netloc
+    path = url_parts.path
 
-        # Overwrite default port 80.
-        if ":" in netloc:
-            host, port = netloc.split(":")
-            port = int(port)
+    # Overwrite default port 80.
+    if ":" in netloc:
+        host, port = netloc.split(":")
+        port = int(port)
 
-        # Resolve domain of URL.
-        dest = await Address(
-            host,
-            port,
-            route,
-            timeout=timeout
-        )
+    # Resolve domain of URL.
+    dest = await Address(
+        host,
+        port,
+        route,
+        timeout=timeout
+    )
 
-        # Return URL parts.
-        return {
-            "host": host,
-            "port": port,
-            "path": path,
-            "dest": dest
-        }
+    # Return URL parts.
+    return {
+        "host": host,
+        "port": port,
+        "path": path,
+        "dest": dest
+    }
 
 """
 The purpose of this function is to provide something simple for
@@ -244,4 +245,161 @@ async def url_open(route, url, params={}, timeout=3, throttle=0, headers=[], con
 
     # Return API output as string.
     return to_s(resp.out())
+
+# Web payload decorators
+def Payload(f, url={}, body=b""):
+    async def wrapper(path, hdrs=[]):
+        return await f(path=path, hdrs=hdrs, url=url, body=body)
+
+    return wrapper
+
+# urllib.parse.urlencode(params)
+
+# Returns pipe, ParseHTTPResponse
+async def do_web_req(addr, http_buf, do_close, conf=NET_CONF):
+    log(f"{addr.route} {addr}")
+
+    # Open TCP connection to HTTP server.
+    route = copy.deepcopy(addr.route)
+    route = await route.bind()
+    try:
+        p = await pipe_open(
+            route=route,
+            proto=TCP,
+            dest=addr,
+            conf=conf
+        )
+    except Exception:
+        log_exception()
+
+    # Error return empty.
+    if p is None:
+        return None, None
+
+    # Send HTTP request.
+    try:
+        p.subscribe(SUB_ALL)
+        await p.send(http_buf, addr.tup)
+        out = await p.recv(SUB_ALL)
+    except Exception:
+        log_exception()
+        await p.close()
+        return None, None
+
+    # Some connections may be left open.
+    if do_close:
+        await p.close()
+        p = None
+
+    # Parse HTTP response.
+    if out is not None:
+        out = ParseHTTPResponse(out)
+        
+    return p, out
+
+"""
+i = await Interface()
+addr = await Address("www.example.com", 80, i.route())
+curl = WebCurl(addr, do_close=0)
+resp = await curl.vars(url_param, body_payload).get("/")
+resp.pipe # http con if open
+resp.out # http reply
+resp.info # parsed http reply
+"""
+
+class WebCurl():
+    def __init__(self, addr, throttle=0, do_close=1, hdrs=[]):
+        # Address addr.route
+        self.addr = addr
+        self.url_params = {}
+        self.hdrs = hdrs
+        self.body = b""
+        self.req_buf = self.out = None
+        self.path = self.info = None
+        self.throttle = throttle
+        self.do_close = do_close
+
+    # Figure out less brainlet way to do this.
+    def copy(self):
+        client = WebCurl(self.addr)
+        client.url_params = self.url_params
+        client.body = self.body
+        client.path = self.path
+        client.hdrs = self.hdrs
+        client.info = self.info
+        client.out = self.out
+        client.req_buf = self.req_buf
+        client.throttle = self.throttle
+        client.do_client = self.do_close
+        return client
+
+    def vars(self, url_params={}, body=b""):
+        # Avoid race conditions.
+        client = self.copy()
+
+        # Url encode url params if set.
+        if len(url_params):
+            client.url_params = {
+                "safe": urllib.parse.urlencode(url_params),
+                "unsafe": url_params
+            }
+
+        client.body_payload = body
+        return client
     
+    async def api(self, method, path, hdrs, conf):
+        # New instance to avoid race conditions.
+        client = self.copy()
+        client.path = path
+        client.hdrs = hdrs
+
+        # Append url encoded path if present.
+        if len(self.url_params):
+            path += f'?{self.url_params["safe"]}'
+
+        # If payload is a dict convert to json buf.
+        hdrs = hdrs or self.hdrs
+        if isinstance(self.body_payload, dict):
+            self.body_payload = json.dumps(self.body_payload)
+            hdrs.append([b"Content-Type", b"application/json"])
+
+        # Build a HTTP request to send to server.
+        req_buf = http_req_buf(
+            af=self.addr.af,
+            host=self.addr.host,
+            path=path,
+            method=method,
+            payload=self.body_payload,
+            headers=hdrs
+        )
+
+        # Save request for debugging.
+        if IS_DEBUG:
+            client.req_buf = req_buf
+
+        # Throttle request.
+        if self.throttle:
+            await asyncio.sleep(self.throttle)
+
+        # Make the HTTP request to the server.
+        pipe, info = await do_web_req(
+            addr=self.addr, 
+            http_buf=req_buf,
+            do_close=self.do_close,
+            conf=conf
+        )
+
+        # Save output.
+        client.pipe = pipe
+        client.out = info.out()
+        client.info = info
+        return client
+
+    async def get(self, path, hdrs=[], conf=NET_CONF):
+        return await self.api("GET", path, hdrs, conf)
+
+    async def post(self, path, hdrs=[], conf=NET_CONF):
+        return await self.api("POST", path, hdrs, conf)
+
+    async def delete(self, path, hdrs=[], conf=NET_CONF):
+        return await self.api("DELETE", path, hdrs, conf)
