@@ -4,32 +4,6 @@ import re
 from p2pd.test_init import *
 from p2pd import *
 
-"""
-Design doc:
-
-Client
-    - Factory that spawns Proxy objects.
-    - Knowns about a single toxiproxy instance.
-    - Stores a list of active proxies.
-
-Tunnel
-    - Represents a single end-point
-        - returns listen port so 0 can be used.
-    - Factory that handles spawning Toxics
-    - Can bulk delete them, list, and add.
-    - Can close itself and remove from client
-    - Future: load toxics
-
-Toxic
-    - Object that stores active toxic state.
-    - Can delete itself and remove from Proxy
-
-    
-it probably makes more sense to implement all the default toxics as
-interfaces in toxitoxic so you dont have to manually remember what you
-can do.
-"""
-
 # https://github.com/Shopify/toxiproxy/tree/main#toxics
 class ToxiToxic():
     def __init__(self, toxicity=1.0, name=None):
@@ -64,7 +38,7 @@ class ToxiToxic():
     
     # Add a delay to all data going through the proxy.
     # The delay is equal to latency +/- jitter.
-    def add_latency(self, ms, jitter=0):
+    def add_latency(self, ms=1000, jitter=0):
         self.body = self.api({
             "type": "latency",
             "attributes": {
@@ -76,7 +50,7 @@ class ToxiToxic():
         return self
     
     # Limit a connection to a maximum number of kilobytes per second.
-    def add_bandwidth_limit(self, KBs):
+    def add_bandwidth_limit(self, KBs=100):
         self.body = self.api({
             "type": "rate",
             "attributes": {
@@ -87,7 +61,7 @@ class ToxiToxic():
         return self
     
     # Delay the TCP socket from closing until delay has elapsed.
-    def add_slow_close(self, ms):
+    def add_slow_close(self, ms=2000):
         self.body = self.api({
             "type": "slow_close",
             "attributes": {
@@ -102,7 +76,7 @@ class ToxiToxic():
     If timeout is 0, the connection won't close, and data will be delayed
     until the toxic is removed.
     """
-    def add_timeout(self, ms):
+    def add_timeout(self, ms=2000):
         self.body = self.api({
             "type": "timeout",
             "attributes": {
@@ -116,7 +90,7 @@ class ToxiToxic():
     Simulate TCP RESET (Connection reset by peer) on the connections
     by closing the stub Input immediately or after a timeout.
     """
-    def add_reset_peer(self, ms):
+    def add_reset_peer(self, ms=2000):
         self.body = self.api({
             "type": "reset_peer",
             "attributes": {
@@ -127,7 +101,7 @@ class ToxiToxic():
         return self
     
     # Closes connection when transmitted data exceeded limit.
-    def add_limit_data(self, n):
+    def add_limit_data(self, n=100):
         self.body = self.api({
             "type": "limit_data",
             "attributes": {
@@ -139,7 +113,7 @@ class ToxiToxic():
 
     # Slices TCP data up into small bits, optionally
     # adding a delay between each sliced "packet".
-    def add_slicer(self, n, v, ug):
+    def add_slicer(self, n=1024, v=800, ug=20):
         self.body = self.api({
             "type": "slicer",
             "attributes": {
@@ -258,7 +232,7 @@ async def test_setup(netifaces=None, client=None):
     return client
 
 class TestToxi(unittest.IsolatedAsyncioTestCase):
-    async def test_toxi(self):
+    async def test_toxi_client_usage(self):
         client = await test_setup()
 
         # Create a new tunnel from toxiproxi to google.
@@ -266,28 +240,40 @@ class TestToxi(unittest.IsolatedAsyncioTestCase):
         tunnel = await client.new_tunnel(dest)
         assert(isinstance(tunnel, ToxiTunnel))
 
-        # From toxiproxy to google -- inject latency.
-        toxic = ToxiToxic().downstream().add_latency(100)
-        await tunnel.new_toxic(toxic)
-        assert(toxic in tunnel.toxics)
+        # Test that adding and removing all toxics works.
+        downstream = ToxiToxic().downstream()
+        toxics = [
+            downstream.add_latency(),
+            downstream.add_bandwidth_limit(),
+            downstream.add_slow_close(),
+            downstream.add_timeout(),
+            downstream.add_reset_peer(),
+            downstream.add_limit_data(),
+            downstream.add_slicer()
+        ]
 
-        # Check that there's a toxic for that tunnel.
-        out = await tunnel.test_list()
-        out = json.loads(to_s(out))
-        assert(len(out["toxics"]))
+        # Try each toxic one by one.
+        for toxic in toxics:
+            # Add the new toxic to the tunnel.
+            await tunnel.new_toxic(toxic)
+            assert(toxic in tunnel.toxics)
 
-        # Remove the toxic from the tunnel.
-        await tunnel.remove_toxic(toxic)
-        assert(toxic not in tunnel.toxics)
+            # Check that there's a toxic for that tunnel.
+            out = await tunnel.test_list()
+            out = json.loads(to_s(out))
+            assert(len(out["toxics"]))
 
-        # Check that there's no toxics for that tunnel.
-        out = await tunnel.test_list()
-        out = json.loads(to_s(out))
-        assert(not len(out["toxics"]))
+            # Remove the toxic from the tunnel.
+            await tunnel.remove_toxic(toxic)
+            assert(toxic not in tunnel.toxics)
+
+            # Check that there's no toxics for that tunnel.
+            out = await tunnel.test_list()
+            out = json.loads(to_s(out))
+            assert(not len(out["toxics"]))
 
         # Will throw on error response.
         await tunnel.close()
-
 
 if __name__ == '__main__':
     main()
