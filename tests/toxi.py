@@ -161,18 +161,46 @@ class ToxiTunnel():
         self.name = name
         self.port = port
         self.client = client
+        self.toxics = []
 
     async def new_toxic(self, toxic):
         path = f"/proxies/{self.name}/toxics"
         resp = await self.client.curl.vars(body=toxic.body).post(path)
         print(resp.out)
+        self.toxics.append(toxic)
+
+    async def remove_toxic(self, toxic):
+        path = f"/proxies/{self.name}/toxics/{toxic.name}"
+        resp = await self.client.curl.vars().delete(path)
+        print(self.client.curl.req_buf)
+        print(resp.out)
+        self.toxics.remove(toxic)
+
+    async def test_list(self):
+        path = f"/proxies/{self.name}"
+        resp = await self.client.curl.vars().get(path)
+        print(resp.out)
 
     async def get_pipe(self):
-        pass
+        # Build new route.
+        route = self.client.addr.route
+        route = copy.deepcopy(route)
+        await route.bind()
+
+        # Connect to the listen server for this tunnel.
+        dest = await Address("localhost", self.port, route)
+        pipe = await pipe_open(TCP, route, dest)
+        return pipe
 
     # Close the tunnel on the toxiproxy instance.
     async def close(self):
-        pass
+        json_body = {
+            "enabled": False
+        }
+
+        path = f"/proxies/{self.name}"
+        resp = await self.client.curl.vars(body=json_body).post(path)
+        self.client.tunnels.remove(self)
 
 class ToxiClient():
     def __init__(self, addr):
@@ -226,6 +254,13 @@ class TestToxi(unittest.IsolatedAsyncioTestCase):
         toxic = ToxiToxic().downstream().add_latency(100)
 
         await tunnel.new_toxic(toxic)
+
+        await tunnel.remove_toxic(toxic)
+
+        print("test list")
+        await tunnel.test_list()
+
+        await tunnel.close()
 
         return
         hdrs = [[b"user-agent", b"toxiproxy-cli"]]
