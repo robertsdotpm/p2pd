@@ -24,11 +24,55 @@ Toxic
     - Object that stores active toxic state.
     - Can delete itself and remove from Proxy
 
+    
+it probably makes more sense to implement all the default toxics as
+interfaces in toxitoxic so you dont have to manually remember what you
+can do.
 """
 
+# https://github.com/Shopify/toxiproxy/tree/main#toxics
 class ToxiToxic():
-    def __init__(self):
-        pass
+    def __init__(self, toxicity=1.0, name=None):
+        self.toxicity = toxicity
+        self.direction = None
+        self.name = name or to_s(rand_plain(10))
+        self.body = None
+
+    def copy(self):
+        toxic = ToxiToxic()
+        toxic.direction = self.direction
+        toxic.toxicity = self.toxicity
+        toxic.name = self.name
+        toxic.body = self.body
+        return toxic
+
+    def downstream(self):
+        toxic = self.copy()
+        toxic.direction = "downstream"
+        return toxic
+    
+    def upstream(self):
+        toxic = self.copy()
+        toxic.direction = "upstream"
+        return toxic
+    
+    def api(self, j):
+        j["name"] = self.name
+        j["stream"] = self.direction
+        j["toxicity"] = self.toxicity
+        return j
+    
+    def add_latency(self, ms, jitter=0):
+        json_body = {
+            "type": "latency",
+            "attributes": {
+                "latency": ms,
+                "jitter": jitter
+            }
+        }
+
+        self.body = self.api(json_body)
+        return self
 
 class ToxiTunnel():
     def __init__(self, name, port, client):
@@ -36,10 +80,14 @@ class ToxiTunnel():
         self.port = port
         self.client = client
 
+    async def new_toxic(self, toxic):
+        path = f"/proxies/{self.name}/toxics"
+        print(toxic.body)
+        resp = await self.client.curl.vars(body=toxic.body).post(path)
+        print(resp.out)
+
     async def connect(self):
         pass
-
-
 
 class ToxiClient():
     def __init__(self, addr):
@@ -54,8 +102,8 @@ class ToxiClient():
         resp = await self.curl.vars().get("/version")
         return resp.out
 
-    async def add_tunnel(self, addr, name=None):
-        name = name or rand_plain(10)
+    async def new_tunnel(self, addr, name=None):
+        name = name or to_s(rand_plain(10))
         json_body = {
             "name": name,
             "listen": "127.0.0.1:0",
@@ -76,12 +124,6 @@ class ToxiClient():
         # Return tunnel.
         return tunnel
 
-
-
-
-
-
-
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestToxi(unittest.IsolatedAsyncioTestCase):
     async def test_toxi(self):
@@ -94,7 +136,11 @@ class TestToxi(unittest.IsolatedAsyncioTestCase):
         await client.start()
 
         dest = await Address("www.example.com", 80, r)
-        await client.add_tunnel(dest)
+        tunnel = await client.new_tunnel(dest)
+
+        toxic = ToxiToxic().downstream().add_latency(100)
+
+        await tunnel.new_toxic(toxic)
 
         return
         hdrs = [[b"user-agent", b"toxiproxy-cli"]]
