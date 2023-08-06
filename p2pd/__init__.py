@@ -25,7 +25,7 @@ if not '-m' in sys.argv:
     from .daemon import Daemon
     from .http_client_lib import http_req, ParseHTTPResponse
     from .http_client_lib import http_req_buf
-    from .http_server_lib import rest_service, send_json, send_binary
+    from .http_server_lib import rest_service, send_json, send_binary, RESTD, api_route_closure
     from .http_server_lib import ParseHTTPRequest
     from .rest_api import P2PDServer, start_p2pd_server
     from .p2p_addr import *

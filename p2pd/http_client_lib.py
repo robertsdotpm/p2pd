@@ -391,8 +391,13 @@ class WebCurl():
 
         # Save output.
         client.pipe = pipe
-        client.out = info.out()
-        client.info = info
+        if info is None:
+            client.info = None
+            client.out = b""
+        else:
+            client.out = info.out()
+            client.info = info
+
         return client
 
     async def get(self, path, hdrs=[], conf=NET_CONF):

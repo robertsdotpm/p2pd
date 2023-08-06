@@ -5,6 +5,7 @@ from http.server import BaseHTTPRequestHandler
 from io import BytesIO
 from .utils import *
 from .http_client_lib import *
+from .daemon import Daemon
 
 P2PD_PORT = 12333
 P2PD_CORS = ['null', 'http://127.0.0.1']
@@ -148,7 +149,7 @@ async def send_binary(out, req, client_tup, pipe):
     await pipe.send(res, client_tup)
     await pipe.close()
 
-async def rest_service(msg, client_tup, pipe):
+async def rest_service(msg, client_tup, pipe, api_closure=api_closure):
     # Parse http request.
     try:
         req = ParseHTTPRequest(msg)
@@ -196,3 +197,113 @@ async def rest_service(msg, client_tup, pipe):
 
     req.api = api_closure(url_path)
     return req
+
+"""
+d[required or optional] = url
+"""
+def api_route_closure(url_path):
+    # Fields list names a p result and is in a fixed order.
+    # Get names matches named values and is in a variable order.
+    def api(schemes): 
+        # Break up the URL based on slashes.
+        out = re.findall("(?:/([^/]+))", url_path)
+        as_dict = {}
+        out = list(out)
+
+        # Supports named args, matching, defaults, and positional unnamed.
+        n = 0
+        cur_scheme = None
+        cur_match_p = None
+        for i in range(len(out)):
+            # If it doesn't match a scheme add it.
+            it_matches_scheme = False
+            for j in range(len(schemes)):
+                scheme = schemes[j]
+                if out[i] == scheme[0]:
+                    it_matches_scheme = True
+                    cur_scheme = scheme
+                    cur_match_p = i
+
+            # If prior scheme matched set value for name.
+            if cur_scheme is not None and i != cur_match_p:
+                # No regex portions.
+                if len(cur_scheme) == 1:
+                    as_dict[cur_scheme[0]] = out[i]
+
+                # Regex portions.
+                if len(cur_scheme) >= 2:
+                    # Simplified match all.
+                    if cur_scheme[1] == '*':
+                        as_dict[cur_scheme[0]] = out[i]
+                    else:
+                        m = re.findall(cur_scheme[1], out[i])
+                        if len(m):
+                            as_dict[cur_scheme[0]] = m[0]
+                        else:
+                            # Use default value.
+                            if len(cur_scheme) == 3:
+                                as_dict[cur_scheme[0]] = cur_scheme[2]
+                            else:
+                                as_dict[cur_scheme[0]] = None
+
+                # Reset defaults.
+                cur_match_p = cur_scheme = None
+            else:
+                # If it doesn't match a scheme add to unnamed positional.
+                if not it_matches_scheme:
+                    as_dict[n] = out[i]
+                    n += 1
+
+        return as_dict
+
+    return api
+
+class RESTD(Daemon):
+    def __init__(self, if_list):
+        super().__init__(if_list)
+
+        # Get a list of function methods for this class.
+        # This is needed because sub-classes dynamically add methods.
+        methods = [member for member in [getattr(self, attr) for attr in dir(self)] if inspect.ismethod(member)]
+
+        # Loop over class instance methods.
+        # Build a list of decorated methods that will form REST API.
+        self.apis = []
+        for f in methods:
+            if "REST__" in f.__name__[:7]:
+                self.apis.append(f)
+
+    @staticmethod
+    def GET(*args, **kw):
+        def decorate(f):
+            # Allow this method to be looked up.
+            f.__name__ = "REST__" + f.__name__
+
+            # Simulate default arguments.
+            fargs = [*args, {}, {}]
+            print(fargs)
+
+            # Allow paths after the base path to be matched.
+            #fargs[0] = re.escape(fargs[0]) + "([\/]([^\/]+))*"
+
+            # Store the args in the function.
+            f.args = fargs
+            print(fargs[0])
+
+            # Call original function.
+            return f
+
+        return decorate
+
+    async def msg_cb(self, msg, client_tup, pipe):
+        # Parse HTTP message and handle CORS.
+        req = await rest_service(msg, client_tup, pipe)
+
+        # Pass request to all matching API methods.
+        for api in self.apis:
+            p = req.api
+
+
+
+
+
