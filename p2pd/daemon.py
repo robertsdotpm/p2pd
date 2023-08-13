@@ -88,13 +88,16 @@ class Daemon():
                         # Record route.
                         routes.append(route)
 
+
         # Start server on every address.
         assert(len(routes))
         for route in routes:
-            await route.bind(port)
+            if not route.resolved:
+                await route.bind(port)
+
             log('starting server {}:{} p={}, af={}'.format(
                 route.bind_ip(),
-                port,
+                route.bind_port,
                 proto,
                 route.af
             ))
@@ -111,7 +114,6 @@ class Daemon():
                 raise Exception("Could not start server.")
 
             self.servers.append([ route, proto, base_proto, listen_task ])
-            return base_proto
     
     # [[Bound, proto], ...]
     # Allows for servers to be bound to specific addresses and transports.

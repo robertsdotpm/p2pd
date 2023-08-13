@@ -102,6 +102,9 @@ class ParseHTTPRequest(BaseHTTPRequestHandler):
 # Create a HTTP server response.
 # Supports JSON or binary.
 def http_res(payload, mime, req, client_tup=None):
+    print(payload)
+    print(mime)
+
     # Support JSON responses.
     if mime == "json":
         # Document content is a JSON string with good indenting.
@@ -112,6 +115,9 @@ def http_res(payload, mime, req, client_tup=None):
     # Support binary responses.
     if mime == "binary":
         content_type = b"application/octet-stream"
+
+    if mime == "text":
+        content_type = b"text/html"
 
     # CORS policy header line.
     allow_origin = b"Access-Control-Allow-Origin: %s" % (
@@ -145,7 +151,12 @@ async def send_json(a_dict, req, client_tup, pipe):
     await pipe.close()
 
 async def send_binary(out, req, client_tup, pipe):
-    res = http_res(out[1], "binary", req, client_tup=out[0])
+    res = http_res(out, "binary", req, client_tup)
+    await pipe.send(res, client_tup)
+    await pipe.close()
+
+async def send_text(out, req, client_tup, pipe):
+    res = http_res(out, "text", req, client_tup)
     await pipe.send(res, client_tup)
     await pipe.close()
 
@@ -208,59 +219,78 @@ def api_route_closure(url_path):
         # Break up the URL based on slashes.
         out = re.findall("(?:/([^/]+))", url_path)
         as_dict = {}
+        unnamed = {}
         out = list(out)
 
-        # Supports named args, matching, defaults, and positional unnamed.
-        n = 0
-        cur_scheme = None
-        cur_match_p = None
-        for i in range(len(out)):
-            # If it doesn't match a scheme add it.
-            it_matches_scheme = False
-            for j in range(len(schemes)):
-                scheme = schemes[j]
-                if out[i] == scheme[0]:
-                    it_matches_scheme = True
-                    cur_scheme = scheme
-                    cur_match_p = i
-
-            # If prior scheme matched set value for name.
-            if cur_scheme is not None and i != cur_match_p:
-                # No regex portions.
-                if len(cur_scheme) == 1:
-                    as_dict[cur_scheme[0]] = out[i]
-
-                # Regex portions.
-                if len(cur_scheme) >= 2:
-                    # Simplified match all.
-                    if cur_scheme[1] == '*':
-                        as_dict[cur_scheme[0]] = out[i]
+        # Generate a list of matches for schemes across out list.
+        def in_schemes(v):
+            for i in range(len(schemes)):
+                # Use regex to check value.
+                scheme = schemes[i]
+                if len(schemes) == 3:
+                    if scheme[2] == '*':
+                        return (i, v, True)
+                    
+                    if re.match(scheme[2], v) != None:
+                        return (i, v, True)
                     else:
-                        m = re.findall(cur_scheme[1], out[i])
-                        if len(m):
-                            as_dict[cur_scheme[0]] = m[0]
-                        else:
-                            # Use default value.
-                            if len(cur_scheme) == 3:
-                                as_dict[cur_scheme[0]] = cur_scheme[2]
-                            else:
-                                as_dict[cur_scheme[0]] = None
+                        return (i, scheme[1], True)
 
-                # Reset defaults.
-                cur_match_p = cur_scheme = None
+                # Compare value only.
+                if v == scheme[0]:
+                    return (i, v, True)
+                    
+            return (None, v, False)
+
+        # Supports routing via named params with regex and defaults.
+        # Unnamed positional params are returned in another dict.
+        i = 0
+        schemes_matches = [in_schemes(o) for o in out]
+        while len(schemes_matches):
+            # Get scheme for associated match.
+            scheme_p, val_match, cur_match = schemes_matches[0]
+            if scheme_p is not None:
+                cur_scheme = schemes[scheme_p]
             else:
-                # If it doesn't match a scheme add to unnamed positional.
-                if not it_matches_scheme:
-                    as_dict[n] = out[i]
-                    n += 1
+                cur_scheme = None
 
-        return as_dict
+            # Unnamed positional argument.
+            if not cur_match:
+                unnamed[i] = val_match
+                i += 1
+                schemes_matches.pop(0)
+                continue
+
+            # Don't compare next element.
+            if len(schemes_matches) >= 2:
+                # Allow checking next element.
+                scheme_p, next_val_match, next_match = schemes_matches[1]
+
+                # Next doesn't match so take as a value to this.
+                if scheme_p is None and not next_match:
+                    val_match = next_val_match
+                    if len(cur_scheme) > 1:
+                        cur_scheme[1] = next_val_match
+
+                    schemes_matches.pop(0)
+
+            # Substitute a default value.
+            if len(cur_scheme) > 1:
+                val = cur_scheme[1]
+            else:
+                val = val_match
+
+            # Set the match.
+            as_dict[cur_scheme[0]] = val
+            schemes_matches.pop(0)
+
+        return as_dict, unnamed
 
     return api
 
 class RESTD(Daemon):
-    def __init__(self, if_list):
-        super().__init__(if_list)
+    def __init__(self):
+        super().__init__()
 
         # Get a list of function methods for this class.
         # This is needed because sub-classes dynamically add methods.
@@ -268,42 +298,102 @@ class RESTD(Daemon):
 
         # Loop over class instance methods.
         # Build a list of decorated methods that will form REST API.
-        self.apis = []
+        self.apis = {"GET": [], "POST": [], "DELETE": []}
         for f in methods:
             if "REST__" in f.__name__[:7]:
-                self.apis.append(f)
+                self.apis[f.http_method].append(f)
+
+    @staticmethod
+    def rest_api_decorator(f, args):
+        # Allow this method to be looked up.
+        f.__name__ = "REST__" + f.__name__
+
+        # Simulate default arguments.
+        # Schemes passed in as f(scheme, ...)
+        # rather than f([scheme, ...]).
+        fargs = []
+        for scheme in args:
+            fargs.append(scheme)
+
+        #fargs = [*args, {}, {}]
+        print(fargs)
+
+        # Allow paths after the base path to be matched.
+        #fargs[0] = re.escape(fargs[0]) + "([\/]([^\/]+))*"
+
+        # Store the args in the function.
+        f.args = fargs
+
+        # Call original function.
+        return f
 
     @staticmethod
     def GET(*args, **kw):
         def decorate(f):
-            # Allow this method to be looked up.
-            f.__name__ = "REST__" + f.__name__
+            # Save HTTP method.
+            f.http_method = "GET"
+            return RESTD.rest_api_decorator(f, args)
 
-            # Simulate default arguments.
-            fargs = [*args, {}, {}]
-            print(fargs)
+        return decorate
+    
+    @staticmethod
+    def POST(*args, **kw):
+        def decorate(f):
+            # Save HTTP method.
+            f.http_method = "POST"
+            return RESTD.rest_api_decorator(f, args)
 
-            # Allow paths after the base path to be matched.
-            #fargs[0] = re.escape(fargs[0]) + "([\/]([^\/]+))*"
-
-            # Store the args in the function.
-            f.args = fargs
-            print(fargs[0])
-
-            # Call original function.
-            return f
+        return decorate
+    
+    @staticmethod
+    def DELETE(*args, **kw):
+        def decorate(f):
+            # Save HTTP method.
+            f.http_method = "DELETE"
+            return RESTD.rest_api_decorator(f, args)
 
         return decorate
 
+    # Todo: $_GET from ?...
     async def msg_cb(self, msg, client_tup, pipe):
         # Parse HTTP message and handle CORS.
-        req = await rest_service(msg, client_tup, pipe)
+        req = await rest_service(msg, client_tup, pipe, api_route_closure)
 
-        # Pass request to all matching API methods.
-        for api in self.apis:
-            p = req.api
+        # Receive any HTTP payload data.
+        body = b""
+        if "Content-Length" in req.hdrs:
+            # Content len must not exceed msg len.
+            payload_len = to_n(req.hdrs["Content-Length"])
+            if in_range(payload_len, [1, len(msg)]):
+                # Last content-len bytes == payload.
+                body = msg[-payload_len:]
 
+        # Convert body payload to json.
+        if "Content-Type" in req.hdrs:
+            if req.hdrs["Content-Type"] == "application/json":
+                body = json.loads(to_s(body))
 
+        # Call all matching API routes.
+        for api in self.apis[req.command]:
+            named, positional = req.api(api.args)
+            if named != {}:
+                out = {
+                    "req": req,
+                    "name": named,
+                    "pos": positional,
+                    "client": client_tup,
+                    "body": body
+                }
+
+                # Return a reply.
+                resp = await api(out, pipe) or b""
+                out_infos = [[dict, "json"], [bytes, "binary"], [str, "text"]]
+                for out_info in out_infos:
+                    if isinstance(resp, out_info[0]):
+                        buf = http_res(resp, out_info[1], req, client_tup)
+                        await pipe.send(buf, client_tup)
+                        break
+                
 
 
 

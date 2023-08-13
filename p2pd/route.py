@@ -177,6 +177,8 @@ class Route(Bind):
 
     async def rebind(self, port, ips=None):
         route = copy.deepcopy(self)
+        route.bind_port = 0
+        route.ips = None
         await route.bind(port=port, ips=ips)
         return route
 

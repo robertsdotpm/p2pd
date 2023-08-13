@@ -806,6 +806,9 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, conf=NET_CO
                 # Wait for connection, async style.
                 await asyncio.wait_for(con_task, conf["con_timeout"])
 
+        # Make sure bind port is set (and not zero.)
+        route.bind_port = sock.getsockname()[1]
+
         # Return the sock instead of base proto.
         if conf["sock_only"]:
             return sock

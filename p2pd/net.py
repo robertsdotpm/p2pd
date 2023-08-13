@@ -532,6 +532,7 @@ def bind_closure(self):
                 self._bind_tups[bind_type] = (bind_ip, port)
 
         #bind.addr = getattr(bind, 'addr', self._addr)
+        self.bind_port = port
         self.nic_bind, self.ext_bind = nic_bind, ext_bind
         self.resolved = True
         return self
