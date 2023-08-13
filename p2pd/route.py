@@ -175,10 +175,9 @@ class Route(Bind):
             proto=proto
         )
 
-    async def rebind(self, port, ips=None):
+    # TODO: document this? You probably don't want to use this.
+    async def rebind(self, port=0, ips=None):
         route = copy.deepcopy(self)
-        route.bind_port = 0
-        route.ips = None
         await route.bind(port=port, ips=ips)
         return route
 

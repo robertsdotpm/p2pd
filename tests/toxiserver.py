@@ -24,7 +24,13 @@ async def base(self, vars, client_tup, pipe):
 """
 
 class ToxiTunnelServer(RESTD):
-    pass
+    def __init__(self, name):
+        super().__init__()
+        self.name = name
+        self.upstreams = []
+
+    def add_upstream(self, pipe):
+        self.upstreams.append(pipe)
 
 class ToxiMainServer(RESTD):
     def __init__(self):
@@ -33,30 +39,56 @@ class ToxiMainServer(RESTD):
 
     @RESTD.POST(["proxies"])
     async def create_tunnel_server(self, v, pipe):
-        bind_pattern = "([\s\S]+):([0-9]+)$"
+        j = v["body"]
+        tup_pattern = "([\s\S]+):([0-9]+)$"
         bind_ip, bind_port = re.findall(
-            bind_pattern,
-            v["body"]["listen"]
+            tup_pattern,
+            j["listen"]
         )[0]
 
         # Build listen route.
-        route = await pipe.route.rebind(
+        route = await pipe.route.interface.route().bind(
             ips=bind_ip,
             port=int(bind_port)
         )
 
         # Start the tunnel server.
-        tunnel_serv = ToxiTunnelServer()
+        tunnel_serv = ToxiTunnelServer(name=j["name"])
         await tunnel_serv.listen_specific(
             [[route, TCP]]
         )
 
+        # Resolve upstream address.
+        up_route = await pipe.route.interface.route().bind()
+        dest_ip, dest_port = re.findall(
+            tup_pattern,
+            j["upstream"]
+        )[0]
+        dest_port = int(dest_port)
+        dest = await Address(dest_ip, dest_port, up_route)
+
+        # Connect to upstream.
+        upstream = await pipe_open(
+            TCP,
+            up_route,
+            dest
+        )
+
+        # Add upstream to tunnel server.
+        tunnel_serv.add_upstream(upstream)
 
         # If zero was passed convert to port no.
         bind_port = route.bind_port
-        print(bind_port)
-        
+        self.tunnel_servs.append(tunnel_serv)
 
+        # Return response
+        return {
+            "name": j["name"],
+            "listen": f"{bind_ip}:{bind_port}",
+            "upstream": j["upstream"],
+            "enabled": True,
+            "toxics": []
+        }
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 

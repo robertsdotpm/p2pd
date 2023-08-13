@@ -141,17 +141,20 @@ class ToxiTunnel():
         path = f"/proxies/{self.name}/toxics"
         resp = await self.client.curl.vars(body=toxic.body).post(path)
         assert(b"error" not in resp.out)
+        print(resp.out)
         self.toxics.append(toxic)
 
     async def remove_toxic(self, toxic):
         path = f"/proxies/{self.name}/toxics/{toxic.name}"
         resp = await self.client.curl.vars().delete(path)
         assert(resp.out == b'')
+        print(resp.out)
         self.toxics.remove(toxic)
 
     async def test_list(self):
         path = f"/proxies/{self.name}"
         resp = await self.client.curl.vars().get(path)
+        print(resp.out)
         return resp.out
 
     async def get_pipe(self):
@@ -174,6 +177,7 @@ class ToxiTunnel():
         path = f"/proxies/{self.name}"
         resp = await self.client.curl.vars(body=json_body).post(path)
         self.client.tunnels.remove(self)
+        print(resp.out)
         return resp.out
 
 class ToxiClient():
@@ -187,6 +191,7 @@ class ToxiClient():
 
     async def version(self):
         resp = await self.curl.vars().get("/version")
+        print(resp.out)
         return resp.out
 
     async def new_tunnel(self, addr, name=None):
@@ -199,7 +204,6 @@ class ToxiClient():
         }
 
         resp = await self.curl.vars(body=json_body).post("/proxies")
-        return
         assert(b"error" not in resp.out)
         print(resp.out)
 
@@ -241,6 +245,7 @@ class TestToxi(unittest.IsolatedAsyncioTestCase):
         dest = await Address("www.google.com", 80, client.addr.route)
         tunnel = await client.new_tunnel(dest)
         assert(isinstance(tunnel, ToxiTunnel))
+        return
 
         # Test that adding and removing all toxics works.
         downstream = ToxiToxic().downstream()

@@ -102,9 +102,6 @@ class ParseHTTPRequest(BaseHTTPRequestHandler):
 # Create a HTTP server response.
 # Supports JSON or binary.
 def http_res(payload, mime, req, client_tup=None):
-    print(payload)
-    print(mime)
-
     # Support JSON responses.
     if mime == "json":
         # Document content is a JSON string with good indenting.
@@ -377,7 +374,8 @@ class RESTD(Daemon):
         for api in self.apis[req.command]:
             named, positional = req.api(api.args)
             if named != {}:
-                out = {
+                # Variables field.
+                v = {
                     "req": req,
                     "name": named,
                     "pos": positional,
@@ -386,7 +384,7 @@ class RESTD(Daemon):
                 }
 
                 # Return a reply.
-                resp = await api(out, pipe) or b""
+                resp = await api(v, pipe) or b""
                 out_infos = [[dict, "json"], [bytes, "binary"], [str, "text"]]
                 for out_info in out_infos:
                     if isinstance(resp, out_info[0]):
