@@ -28,6 +28,7 @@ class ToxiTunnelServer(RESTD):
         super().__init__()
         self.name = name
         self.upstreams = []
+        self.toxics = []
 
     def add_upstream(self, pipe):
         self.upstreams.append(pipe)
@@ -35,7 +36,7 @@ class ToxiTunnelServer(RESTD):
 class ToxiMainServer(RESTD):
     def __init__(self):
         super().__init__()
-        self.tunnel_servs = []
+        self.tunnel_servs = {}
 
     @RESTD.POST(["proxies"])
     async def create_tunnel_server(self, v, pipe):
@@ -79,7 +80,7 @@ class ToxiMainServer(RESTD):
 
         # If zero was passed convert to port no.
         bind_port = route.bind_port
-        self.tunnel_servs.append(tunnel_serv)
+        self.tunnel_servs[j["name"]] = tunnel_serv
 
         # Return response
         return {
@@ -90,10 +91,27 @@ class ToxiMainServer(RESTD):
             "toxics": []
         }
 
+    @RESTD.POST(["proxies"], ["toxics"])
+    async def add_new_toxic(self, v, pipe):
+        print(v)
+
+    # Ensure all tunnel servers are also closed.
+    async def close(self):
+        for tunnel_serv in self.tunnel_servs.values():
+            await tunnel_serv.close()
+
+        await super().close()
+
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 
 class TestToxiServer(unittest.IsolatedAsyncioTestCase):
     async def test_toxi_server(self):
+
+        #ret = api_route_closure("/proxies/test") ([["proxies"], ["toxics"]])
+        #print(ret)
+        #return
+
+
         got_n, got_p = api_route_closure("/test")([])
         want_n = {}
         want_p = {0: "test"}
@@ -140,7 +158,11 @@ class TestToxiServer(unittest.IsolatedAsyncioTestCase):
         # Create a new tunnel from toxiproxi to google.
         dest = await Address("www.google.com", 80, client.addr.route)
         tunnel = await client.new_tunnel(dest)
-        #assert(isinstance(tunnel, ToxiTunnel))
+        assert(isinstance(tunnel, ToxiTunnel))
+
+        downstream = ToxiToxic().downstream()
+        toxic = downstream.add_latency()
+        await tunnel.new_toxic(toxic)
 
         await server.close()
 

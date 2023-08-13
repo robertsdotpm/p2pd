@@ -371,10 +371,22 @@ class RESTD(Daemon):
                 body = json.loads(to_s(body))
 
         # Call all matching API routes.
+        v = None
+        positional_no = 100
+        best_matching_api = None
         for api in self.apis[req.command]:
             named, positional = req.api(api.args)
-            if named != {}:
-                # Variables field.
+
+            # Not a matching API method.
+            if len(named) != len(api.args):
+                continue
+
+            # Find best matching API method.
+            if len(positional) < positional_no:
+                best_matching_api = api
+                positional_no = len(positional)
+
+                # HTTP request info for API methoiid.
                 v = {
                     "req": req,
                     "name": named,
@@ -383,14 +395,17 @@ class RESTD(Daemon):
                     "body": body
                 }
 
-                # Return a reply.
-                resp = await api(v, pipe) or b""
-                out_infos = [[dict, "json"], [bytes, "binary"], [str, "text"]]
-                for out_info in out_infos:
-                    if isinstance(resp, out_info[0]):
-                        buf = http_res(resp, out_info[1], req, client_tup)
-                        await pipe.send(buf, client_tup)
-                        break
+        # Call matching API method.
+        if best_matching_api is not None:
+            # Return a reply.
+            resp = await best_matching_api(v, pipe) or b""
+            print(resp)
+            out_infos = [[dict, "json"], [bytes, "binary"], [str, "text"]]
+            for out_info in out_infos:
+                if isinstance(resp, out_info[0]):
+                    buf = http_res(resp, out_info[1], req, client_tup)
+                    await pipe.send(buf, client_tup)
+                    break
                 
 
 
