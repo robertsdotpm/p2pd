@@ -19,6 +19,23 @@ async def base(self, vars, client_tup, pipe):
 0    1
 
 [["name", default, r"regex"]]
+
+toxic:
+    ...
+
+    return data if it hasnt modified it, pipe
+
+toxic_router(msg, src_pipe, dest_pipe, toxics):
+    for toxic in toxics:
+        msg, dest_pipe = await toxic(msg, dest_pipe)
+        if dest_pipe is None:
+            break
+    
+    await dest_pipe.send(msg)
+            
+whats the difference between slow_close, add_timeout, and reset_peer? they all seem to be the same?
+
+    prob shutdown but look it up
 //          optional optional
 
 """
@@ -28,7 +45,8 @@ class ToxiTunnelServer(RESTD):
         super().__init__()
         self.name = name
         self.upstreams = []
-        self.toxics = []
+        self.upstream_toxics = []
+        self.downstream_toxics = []
 
     def add_upstream(self, pipe):
         self.upstreams.append(pipe)

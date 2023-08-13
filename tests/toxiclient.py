@@ -59,8 +59,18 @@ class ToxiToxic():
         })
 
         return self
-    
-    # Delay the TCP socket from closing until delay has elapsed.
+
+    """ 
+    Delay associated dest_pipe from being closed until a timeout
+    eg if its downstream it will be similar to keep alive.
+    If its upstream then other toxics wont be able to close it
+    until that time frame.
+
+    EOL or graceful shutdowns are ignored (I think).
+
+    Time ------------------------------------>
+    close blocked                       close
+    """
     def add_slow_close(self, ms=2000):
         self.body = self.api({
             "type": "slow_close",
@@ -72,9 +82,12 @@ class ToxiToxic():
         return self
     
     """
-    Stops all data from getting through, and closes the connection after timeout.
+    Doesn't forward data, and closes the connection after timeout (close())
     If timeout is 0, the connection won't close, and data will be delayed
     until the toxic is removed.
+
+    Time ---------------------------->
+    data blocked       Optional close
     """
     def add_timeout(self, ms=2000):
         self.body = self.api({
@@ -89,6 +102,12 @@ class ToxiToxic():
     """
     Simulate TCP RESET (Connection reset by peer) on the connections
     by closing the stub Input immediately or after a timeout.
+
+    The behavior of Close is set to discard any unsent/unacknowledged data by setting SetLinger to 0, ~= sets TCP RST flag and resets the connection.
+    Drop data since it will initiate a graceful close with FIN/ACK. (io.EOF)
+
+    Time ----------------------->
+    data sent               close (DISCARD unset and unacked data!)
     """
     def add_reset_peer(self, ms=2000):
         self.body = self.api({
@@ -100,7 +119,12 @@ class ToxiToxic():
 
         return self
     
-    # Closes connection when transmitted data exceeded limit.
+    """
+    Closes connection when transmitted data exceeded limit.
+
+    Limit counter ---------------->
+    data                     close
+    """
     def add_limit_data(self, n=100):
         self.body = self.api({
             "type": "limit_data",
@@ -111,8 +135,23 @@ class ToxiToxic():
 
         return self
 
-    # Slices TCP data up into small bits, optionally
-    # adding a delay between each sliced "packet".
+    """
+    Slices TCP data up into small bits, optionally
+    adding a delay between each sliced "packet".
+
+    The SlicerToxic slices data into multiple smaller packets
+    to simulate real-world TCP behavior.
+
+    Note: the docs say that this slices them into 'bits'
+    but I think this is meant informally as in pieces
+    rather than a unit of measurement. The pieces it means
+    are really bytes (and cana only mean bytes.)
+
+    Slicer is designed so that receipt of data needs multiple
+    recv calls to get the full response. E.g. it splits up
+    responses into multiple packets and sends them individually.
+    This is useful for testing assumptions behind protocol clients.
+    """
     def add_slicer(self, n=1024, v=800, ug=20):
         self.body = self.api({
             "type": "slicer",
@@ -140,7 +179,7 @@ class ToxiTunnel():
     async def new_toxic(self, toxic):
         path = f"/proxies/{self.name}/toxics"
         resp = await self.client.curl.vars(body=toxic.body).post(path)
-        
+
         assert(b"error" not in resp.out)
         print(resp.out)
         self.toxics.append(toxic)
