@@ -96,8 +96,7 @@ class Daemon():
         # Start server on every address.
         assert(len(routes))
         for route in routes:
-            if not route.resolved:
-                await route.bind(port)
+            await route.bind(port)
 
             log('starting server {}:{} p={}, af={}'.format(
                 route.bind_ip(),
@@ -213,7 +212,7 @@ class Daemon():
                             try:
                                 route = copy.deepcopy(route)
                                 route = await route.bind(port=port, ips=route.nic())
-                                await self._listen(route, port, proto, msg_cb, up_cb)
+                                await self._listen(target=route, port=port, proto=proto, msg_cb=msg_cb, up_cb=up_cb)
                             except Exception:
                                 pass
                                 # May already be started -- ignore.

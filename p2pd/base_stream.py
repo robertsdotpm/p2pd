@@ -1,7 +1,6 @@
 import asyncio
 import re
 import pickle
-from concurrent.futures import ProcessPoolExecutor
 from .ack_udp import *
 from .net import *
 
@@ -448,7 +447,7 @@ class BaseProto(BaseACKProto):
             self.stream_ready.set()
 
         # Process messages using any registered handlers.
-        self.run_handlers(self.up_cbs)
+        #self.run_handlers(self.up_cbs)
 
     # Socket closed manually or shutdown by other side.
     def connection_lost(self, exc):
@@ -619,12 +618,11 @@ class BaseProto(BaseACKProto):
         """
 
         # Close any sockets.
-        """
+        
         if self.sock is not None:
             print("Closing sock")
-            self.sock.shutdown(0)
             self.sock.close()
-        """
+        
 
         # No longer running.
         self.transport = None
@@ -727,9 +725,7 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
     # So this code will have no effect.
     def connection_lost(self, exc):
         print("con lost in server")
-
-
-
+        super().connection_lost(exc)
 
         # Cleanup client futures entry.
         p_client_entry = self.client_proto.p_client_entry
@@ -763,7 +759,7 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
     def data_received(self, data):
         # This just adds data to reader which we are handling ourselves.
         #super().connection_lost(exc)
-        log(f"Hacked server recv = {data}")
+        print(f"Hacked server recv = {data}")
         if self.client_proto is None:
             log(f"CLIENT PROTO NONE")
             return
@@ -907,8 +903,8 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None,
         # Start processing messages for TCP.
         if proto == TCP:
             # Add new connection handler.
-            if up_cb is not None:
-                base_proto.add_up_cb(up_cb)
+            #if up_cb is not None:
+            #    base_proto.add_up_cb(up_cb)
 
             # Listen server.
             if dest is None:

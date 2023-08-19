@@ -10,6 +10,50 @@ from p2pd.daemon import Daemon
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestDaemon(unittest.IsolatedAsyncioTestCase):
+    async def test_connection_close(self):
+        reader = asyncio.StreamReader(limit=10000)
+        class MinReader(asyncio.StreamReaderProtocol):
+            def __init__(self, reader):
+                self.close_set = False
+                super().__init__(reader)
+
+            def connection_made(self, transport):
+                self.transport = transport
+                super().connection_made(transport)
+
+            def data_received(self, data):
+                print("Received:", data.decode())
+                super().data_received(data)
+
+            def connection_lost(self, exc):
+                # The socket has been closed
+                self.close_set = True
+
+        # Make server to test close handler works.
+        loop = asyncio.get_event_loop()
+        lsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        lsock.bind(('127.0.0.1', 0))
+        print(lsock)
+        mr = MinReader(reader)
+        server = await loop.create_server(
+            lambda: mr,
+            sock=lsock
+        )
+
+        # Connect to server and close pipe.
+        dest = ("127.0.0.1", lsock.getsockname()[1])
+        cs = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        cs.connect(dest)
+        print(cs)
+        cs.close()
+        await asyncio.sleep(3)
+        print(mr.close_set)
+        server.close()
+
+
+
+
+
     async def test_listen_all_interface_target(self):
         i = await Interface().start_local()
         i.rp[IP6].routes = []
