@@ -90,7 +90,18 @@ class ToxicLatency(ToxicBase):
             await asyncio.sleep(ms)
 
         return msg, dest_pipe
+    
+class ToxicBandwidthLimit(ToxicBase):
+    def set_params(self, rate):
+        self.rate = rate
+        self.total = 0
 
+    async def toxic(self, msg, dest_pipe):
+        msg_len = len(msg)
+        new_total = self.total + msg_len
+        flow = new_total / elapsed
+
+# You need a way to force new messages to wait for past.
 class ToxiTunnelServer(Daemon):
     def __init__(self, name):
         super().__init__()
@@ -100,19 +111,33 @@ class ToxiTunnelServer(Daemon):
         self.downstream_toxics = {}
         self.clients = []
 
+    # Ensure all clients are closed.
+    async def close(self):
+        for client in self.clients:
+            await client.close()
+
+        await super().close()
+
     # Record a list of tunnel clients to relay messages from upstream to.
     async def up_cb(self, msg, client_tup, con_pipe):
+        print("con received")
+        print(client_tup)
+
         # Make sure they are removed when the connection closes.
         async def end_cb(msg, client_tup, end_pipe):
-            if end_pipe in self.clients:
-                self.clients.remove(end_pipe)
+            print("firing end cb")
+            if con_pipe in self.clients:
+                self.clients.remove(con_pipe)
+            else:
+                print("pipe not found.")
 
         con_pipe.add_end_cb(end_cb)
         self.clients.append(con_pipe)
 
-    # Redirect messages from upstream to clients with downstream toxics.
+    # Redirect msgs from upstream to clients with toxics.
     def set_upstream(self, pipe):
         async def msg_cb(msg, client_tup, upstream_pipe):
+            #pipe.transport.pause_reading()
             tasks = []
             for client in self.clients:
                 tasks.append(
@@ -127,17 +152,21 @@ class ToxiTunnelServer(Daemon):
             if len(tasks):
                 await asyncio.gather(*tasks)
 
+            #pipe.transport.resume_reading()
+
         pipe.add_msg_cb = msg_cb
         self.upstream_pipe = pipe
 
-    # Redirect message from clients to upstream with upstream toxics.
+    # Redirect msg from clients to upstream with toxics.
     async def msg_cb(self, msg, client_tup, down_pipe):
+        #down_pipe.transport.pause_reading()
         await toxic_router(
             msg,
             down_pipe,
             self.upstream_pipe,
             d_vals(self.upstream_toxics)
         )
+        #down_pipe.transport.resume_reading()
 
 class ToxiMainServer(RESTD):
     def __init__(self, interfaces):
@@ -243,16 +272,48 @@ class ToxiMainServer(RESTD):
 
     # Ensure all tunnel servers are also closed.
     async def close(self):
-        for tunnel_serv in self.tunnel_servs.values():
+        print("tunnel servers = ")
+        print(d_vals(self.tunnel_servs))
+        for tunnel_serv in d_vals(self.tunnel_servs):
             await tunnel_serv.close()
 
         await super().close()
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 
-class TestToxiServer(unittest.IsolatedAsyncioTestCase):
-    async def test_toxi_server(self):
+# Stop the loop concurrently                                                  
+async def exit_safely():                                              
+    loop = asyncio.get_event_loop()                      
+    print("Stop")                                        
+    loop.stop()  
 
+def ask_exit():                          
+    for task in asyncio.Task.all_tasks():
+        task.cancel()                    
+    asyncio.ensure_future(exit_safely())    
+
+class TestToxiServer(unittest.IsolatedAsyncioTestCase):
+    async def test_d(self):
+        i = await Interface().start_local()
+        port = 33888
+        lip = "192.168.0.100"
+        server = Daemon()
+        await server.listen_specific(
+            [[
+                await i.route().bind(ips=lip, port=port),
+                TCP
+            ]]
+        )
+
+        route = await i.route().bind()
+        dest = await Address(lip, port, route)
+        pipe = await pipe_open(TCP, route, dest)
+        await pipe.close()
+        await asyncio.sleep(10)
+        
+
+    async def test_toxi_server(self):
+        return
         #ret = api_route_closure("/proxies/test") ([["proxies"], ["toxics"]])
         #print(ret)
         #return
@@ -315,12 +376,35 @@ class TestToxiServer(unittest.IsolatedAsyncioTestCase):
         s = d_vals(server.tunnel_servs)[0].servers[0]
         print(s)
         print(s[2].sock.getsockname())
-        client, client_tup = await tunnel.get_pipe()
-        print(client_tup)
-        await client.send(b"test", client_tup)
-        await client.close()
+        tun_pipe, tun_tup = await tunnel.get_pipe()
+        print(tun_tup)
+        await tun_pipe.send(b"test", tun_pipe)
 
-        await server.close()
+        tunnel_serv = d_vals(server.tunnel_servs)[0]
+        print(tunnel_serv.clients)
+        # assert(len(tunnel_serv.clients) == 0)
+        print("close tun pipe")
+        await tun_pipe.close()
+        await asyncio.sleep(3)
+        #await server.close()
+        print(tunnel_serv.clients)
+        await asyncio.sleep(1)
+        #print(s[2].tcp_server_task)
+        while 1:
+            await asyncio.sleep(10)
+
+
+        for tunnel_serv in d_vals(server.tunnel_servs):
+            for serv_info in tunnel_serv.servers:
+                await serv_info
+
+        
+        #print(s)
+
+        #
+        #ask_exit()
+
 
 if __name__ == '__main__':
     main()
+    #async_test(test_toxi_server)

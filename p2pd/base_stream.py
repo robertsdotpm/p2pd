@@ -1,6 +1,7 @@
 import asyncio
 import re
 import pickle
+from concurrent.futures import ProcessPoolExecutor
 from .ack_udp import *
 from .net import *
 
@@ -451,6 +452,7 @@ class BaseProto(BaseACKProto):
 
     # Socket closed manually or shutdown by other side.
     def connection_lost(self, exc):
+        print("client con lost")
         super().connection_lost(exc)
 
         # Remove self from any parent pipes.
@@ -534,6 +536,9 @@ class BaseProto(BaseACKProto):
         # Route message to stream.
         self.route_msg(data, client_tup)
 
+    def error_received(self, exp):
+        print(exp)
+
     # UDP packets.
     def datagram_received(self, data, client_tup):
         log(f"Base proto recv udp = {data}")
@@ -558,6 +563,7 @@ class BaseProto(BaseACKProto):
     async def close(self, do_sleep=True):
         # Already closed.
         if not self.is_running:
+            print("skipping close")
             return
 
         # Skip sleep for TCP clients.
@@ -572,6 +578,7 @@ class BaseProto(BaseACKProto):
 
         # Wait for sending tasks in ACK UDP.
         if self.stream is not None:
+            print("stream not none.")
             # Set ACKs for all sent messages.
             for seq_no in self.stream.seq.keys():
                 self.stream.seq[seq_no].set()
@@ -582,14 +589,17 @@ class BaseProto(BaseACKProto):
                 self.stream.ack_send_tasks = []
 
         # Wait for all current tasks to end.
-        self.tasks = rm_done_tasks(self.tasks)
+        #self.tasks = rm_done_tasks(self.tasks)
+        self.tasks = []
         if len(self.tasks):
+            print("wait for tasks to end")
             # Wait for tasks to finish.
             await gather_or_cancel(self.tasks, 4)
             self.tasks = []
 
         # Close spawned TCP clients for a TCP server.
         for client in self.tcp_clients:
+            print("close tcp client")
             # Client is already closed.
             if not client.is_running:
                 continue
@@ -600,12 +610,19 @@ class BaseProto(BaseACKProto):
         # Close the main server socket.
         # This does cleanup for any TCP servers.
         if self.transport is not None:
+            print("transport not none")
             self.transport.close()
 
         """
+        if self.tcp_server_task is not None:
+            self.tcp_server_task.cancel()
+        """
+
         # Close any sockets.
+        """
         if self.sock is not None:
             print("Closing sock")
+            self.sock.shutdown(0)
             self.sock.close()
         """
 
@@ -650,7 +667,7 @@ a client connection to a TCP server in a BaseProto object.
 class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
     def __init__(self, stream_reader, base_proto, loop, conf=NET_CONF):
         # Setup stream reader / writers.
-        super().__init__(stream_reader, lambda r, w: 1, loop)
+        super().__init__(stream_reader, lambda x, y: 1, loop=loop)
 
         # This is the server that spawns these client connections.
         self.proto = base_proto
@@ -705,11 +722,14 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
         )
 
 
+    
     # If close was called on a pipe on a server then clients will already be closed.
     # So this code will have no effect.
     def connection_lost(self, exc):
-        # Remove this as an object to close and manage in the server.
-        super().connection_lost(exc)
+        print("con lost in server")
+
+
+
 
         # Cleanup client futures entry.
         p_client_entry = self.client_proto.p_client_entry
@@ -733,6 +753,12 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
             self.transport = None
         except Exception:
             log_exception()
+
+        # Remove this as an object to close and manage in the server.
+        super().connection_lost(exc)
+
+    def error_received(self, exp):
+        print(exp)
 
     def data_received(self, data):
         # This just adds data to reader which we are handling ourselves.
@@ -768,6 +794,22 @@ async def base_start_server(sock, base_proto, *, loop=None, conf=NET_CONF, **kwd
     )
 
     return server
+
+# Started in a new process.
+def start_server_threaded(args):
+    # Create new event loop and run coroutine in it.
+    asyncio.set_event_loop_policy(SelectorEventPolicy())
+    loop = asyncio.new_event_loop()
+    #loop = asyncio.get_event_loop()
+    f = asyncio.ensure_future(
+        async_wrap_errors(
+            args[0].serve_forever()
+        ),
+        loop=loop
+    )
+
+    loop.run_until_complete(f)
+    loop.stop()
 
 """
 In the spirit of unix a 'pipe' is an protocol and destination
@@ -885,8 +927,21 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None,
                 # Saving the task is apparently needed
                 # or the garbage collector could close it.
                 if hasattr(server, "serve_forever"):
+                    print("Server forever")
+                    
                     server_task = asyncio.create_task(server.serve_forever())
                     base_proto.set_tcp_server_task(server_task)
+                    #asyncio.ensure_future(server_task)
+
+                    """
+                    threading.Thread(target=server_task.serve_forever).start()
+                    #await server_task
+                    
+                    loop.run_in_executor(
+                        None, start_server_threaded, (server,)
+                    )
+                    """
+
                 base_proto.set_endpoint_type(TYPE_TCP_SERVER)
 
             # Single connection.

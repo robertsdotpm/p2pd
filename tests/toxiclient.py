@@ -271,7 +271,7 @@ async def test_setup(netifaces=None, client=None):
             test_setup.netifaces = await init_p2pd()
         else:
             test_setup.netifaces = netifaces
-        warnings.filterwarnings('ignore', message="unclosed", category=ResourceWarning)
+        #warnings.filterwarnings('ignore', message="unclosed", category=ResourceWarning)
 
     if not hasattr(test_setup, "client"):
         i = await Interface().start_local(skip_resolve=True)
