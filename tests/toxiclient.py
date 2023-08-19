@@ -39,7 +39,8 @@ class ToxiToxic():
     # Add a delay to all data going through the proxy.
     # The delay is equal to latency +/- jitter.
     def add_latency(self, ms=1000, jitter=0):
-        self.body = self.api({
+        toxic = self.copy()
+        toxic.body = self.api({
             "type": "latency",
             "attributes": {
                 "latency": ms,
@@ -47,18 +48,19 @@ class ToxiToxic():
             }
         })
 
-        return self
+        return toxic
     
     # Limit a connection to a maximum number of kilobytes per second.
     def add_bandwidth_limit(self, KBs=100):
-        self.body = self.api({
-            "type": "rate",
+        toxic = self.copy()
+        toxic.body = self.api({
+            "type": "bandwidth",
             "attributes": {
                 "rate": KBs,
             }
         })
 
-        return self
+        return toxic
 
     """ 
     Delay associated dest_pipe from being closed until a timeout
@@ -72,14 +74,15 @@ class ToxiToxic():
     close blocked                       close
     """
     def add_slow_close(self, ms=2000):
-        self.body = self.api({
+        toxic = self.copy()
+        toxic.body = self.api({
             "type": "slow_close",
             "attributes": {
                 "delay": ms,
             }
         })
 
-        return self
+        return toxic
     
     """
     Doesn't forward data, and closes the connection after timeout (close())
@@ -90,14 +93,15 @@ class ToxiToxic():
     data blocked       Optional close
     """
     def add_timeout(self, ms=2000):
-        self.body = self.api({
+        toxic = self.copy()
+        toxic.body = self.api({
             "type": "timeout",
             "attributes": {
                 "timeout": ms,
             }
         })
 
-        return self
+        return toxic
     
     """
     Simulate TCP RESET (Connection reset by peer) on the connections
@@ -110,14 +114,15 @@ class ToxiToxic():
     data sent               close (DISCARD unset and unacked data!)
     """
     def add_reset_peer(self, ms=2000):
-        self.body = self.api({
-            "type": "reset_peer",
+        toxic = self.copy()
+        toxic.body = self.api({
+            "type": "reset",
             "attributes": {
                 "timeout": ms,
             }
         })
 
-        return self
+        return toxic
     
     """
     Closes connection when transmitted data exceeded limit.
@@ -126,14 +131,15 @@ class ToxiToxic():
     data                     close
     """
     def add_limit_data(self, n=100):
-        self.body = self.api({
+        toxic = self.copy()
+        toxic.body = self.api({
             "type": "limit_data",
             "attributes": {
                 "bytes": n,
             }
         })
 
-        return self
+        return toxic
 
     """
     Slices TCP data up into small bits, optionally
@@ -153,7 +159,8 @@ class ToxiToxic():
     This is useful for testing assumptions behind protocol clients.
     """
     def add_slicer(self, n=1024, v=800, ug=20):
-        self.body = self.api({
+        toxic = self.copy()
+        toxic.body = self.api({
             "type": "slicer",
             "attributes": {
                 #  size in bytes of an average packet
@@ -167,7 +174,7 @@ class ToxiToxic():
             }
         })
 
-        return self
+        return toxic
 
 class ToxiTunnel():
     def __init__(self, name, port, client):
@@ -179,9 +186,8 @@ class ToxiTunnel():
     async def new_toxic(self, toxic):
         path = f"/proxies/{self.name}/toxics"
         resp = await self.client.curl.vars(body=toxic.body).post(path)
-
-        assert(b"error" not in resp.out)
         print(resp.out)
+        assert(b"error" not in resp.out)
         self.toxics.append(toxic)
 
     async def remove_toxic(self, toxic):
@@ -199,14 +205,13 @@ class ToxiTunnel():
 
     async def get_pipe(self):
         # Build new route.
-        route = self.client.addr.route
-        route = copy.deepcopy(route)
+        route = self.client.addr.route.interface.route()
         await route.bind()
 
         # Connect to the listen server for this tunnel.
         dest = await Address("localhost", self.port, route)
         pipe = await pipe_open(TCP, route, dest)
-        return pipe
+        return pipe, dest.tup
 
     # Close the tunnel on the toxiproxy instance.
     async def close(self):
@@ -293,13 +298,17 @@ class TestToxi(unittest.IsolatedAsyncioTestCase):
             downstream.add_bandwidth_limit(),
             downstream.add_slow_close(),
             downstream.add_timeout(),
-            downstream.add_reset_peer(),
+
+            # Not in the windows binary -- newer toxic.
+            #downstream.add_reset_peer(),
             downstream.add_limit_data(),
             downstream.add_slicer()
         ]
 
         # Try each toxic one by one.
         for toxic in toxics:
+            print(f"adding {toxic.body['type']}")
+
             # Add the new toxic to the tunnel.
             await tunnel.new_toxic(toxic)
             assert(toxic in tunnel.toxics)

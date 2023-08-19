@@ -268,6 +268,10 @@ class BaseProto(BaseACKProto):
         # Ran when a connection ends.
         self.end_cbs = []
 
+        # Ran when a connection is made.
+        # For TCP this is a new connection.
+        self.up_cbs = []
+
         # List of tasks for send / recv / subscribe.
         """
         Coroutine references need to be saved or the garbage collector
@@ -309,7 +313,7 @@ class BaseProto(BaseACKProto):
 
     # Used for event-based programming.
     # Can execute code on new cons, dropped cons, and new msgs.
-    def run_handlers(self, handlers, client_tup, data=None):
+    def run_handlers(self, handlers, client_tup=None, data=None):
         # Run any registered call backs on msg.
         self.handler_tasks = rm_done_tasks(self.handler_tasks)
         for handler in handlers:
@@ -404,13 +408,23 @@ class BaseProto(BaseACKProto):
             self.msg_cbs.remove(msg_cb)
 
         return self
+    
+    def add_up_cb(self, up_cb):
+        self.up_cbs.append(up_cb)
+        return self
+
+    def del_up_cb_cb(self, up_cb):
+        if up_cb in self.up_cbs:
+            self.up_cbs.remove(up_cb)
+
+        return self
 
     def add_end_cb(self, end_cb):
         self.end_cbs.append(end_cb)
 
         # Make sure it runs if this is already closed.
         if not self.is_running:
-            self.run_handlers([end_cb])
+            self.run_handlers(end_cb)
 
         return self
 
@@ -431,6 +445,9 @@ class BaseProto(BaseACKProto):
             # Set stream object for doing I/O.
             self.stream = BaseStream(self, loop=self.loop)
             self.stream_ready.set()
+
+        # Process messages using any registered handlers.
+        self.run_handlers(self.up_cbs)
 
     # Socket closed manually or shutdown by other side.
     def connection_lost(self, exc):
@@ -669,6 +686,7 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
         self.client_proto.set_endpoint_type(TYPE_TCP_CLIENT)
         self.client_proto.msg_cbs = self.proto.msg_cbs
         self.client_proto.end_cbs = self.proto.end_cbs
+        self.client_proto.up_cbs = self.proto.up_cbs
         self.client_proto.connection_made(transport)
 
         # Record destination.
@@ -685,6 +703,7 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
             # Index writers by peer connection.
             self.remote_tup
         )
+
 
     # If close was called on a pipe on a server then clients will already be closed.
     # So this code will have no effect.
@@ -757,7 +776,7 @@ It supports using IPv4 and IPv6 destination addresses.
 You can pull data from it based on a regex pattern.
 You can execute code on new messages or connection disconnects.
 """
-async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, conf=NET_CONF):
+async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None, conf=NET_CONF):
     # If no route is set assume default interface route 0.
     if route is None:
         # Load internal addresses.
@@ -845,6 +864,10 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, conf=NET_CO
 
         # Start processing messages for TCP.
         if proto == TCP:
+            # Add new connection handler.
+            if up_cb is not None:
+                base_proto.add_up_cb(up_cb)
+
             # Listen server.
             if dest is None:
                 # Start router for TCP messages.

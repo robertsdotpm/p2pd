@@ -120,6 +120,7 @@ rm_whitespace = lambda x: re.sub(r"\s+", "", x, flags=re.UNICODE)
 urlencode = lambda x: to_b(urllib.parse.quote(x))
 urldecode = lambda x: to_b(urllib.parse.unquote(x))
 shuffle = lambda x: random.shuffle(x) or x
+d_vals = lambda x: list(x.values())
 
 def to_type(x, out_type):
     # String.

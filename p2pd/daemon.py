@@ -48,9 +48,13 @@ class Daemon():
         # Overwritten by inherited classes.
         print("This is a default proto msg_cb! Specify your own in a child class.")
         pass
+
+    def up_cb(self, msg, client_tup, pipe):
+        pass
     
-    async def _listen(self, target, port, proto, msg_cb=None):
+    async def _listen(self, target, port, proto, msg_cb=None, up_cb=None):
         msg_cb = msg_cb or self.msg_cb
+        up_cb = up_cb or self.up_cb
 
         # Protocol not supported.
         if self.restricted_proto is not None:
@@ -108,7 +112,7 @@ class Daemon():
                 route.link_route_pool(self.rp[route.af])
 
             # Save list of servers.
-            listen_task = pipe_open(proto, route=route, msg_cb=msg_cb, conf=self.conf)
+            listen_task = pipe_open(proto, route=route, msg_cb=msg_cb, up_cb=up_cb, conf=self.conf)
             base_proto = await listen_task
             if base_proto is None:
                 raise Exception("Could not start server.")
@@ -118,7 +122,8 @@ class Daemon():
     # [[Bound, proto], ...]
     # Allows for servers to be bound to specific addresses and transports.
     # The other start method is more general.
-    async def listen_specific(self, targets, msg_cb=None):
+    async def listen_specific(self, targets, msg_cb=None, up_cb=None):
+        up_cb = up_cb or self.up_cb
         msg_cb = msg_cb or self.msg_cb
         targets = [targets] if not isinstance(targets, list) else targets
         for listen_info in targets:
@@ -130,13 +135,15 @@ class Daemon():
                 target=bound,
                 proto=proto,
                 port=bound.bind_port,
-                msg_cb=msg_cb
+                msg_cb=msg_cb,
+                up_cb=up_cb
             )
 
     # Start all the servers listening.
     # All targets are started on the same list of ports and protocols.
     # A more general version of the above function.
-    async def listen_all(self, targets, ports, protos, af=AF_ANY, msg_cb=None, error_on_af=0):
+    async def listen_all(self, targets, ports, protos, af=AF_ANY, msg_cb=None, up_cb=None, error_on_af=0):
+        up_cb = up_cb or self.up_cb
         msg_cb = msg_cb or self.msg_cb
         targets = [targets] if not isinstance(targets, list) else targets
         routes = []
@@ -206,7 +213,7 @@ class Daemon():
                             try:
                                 route = copy.deepcopy(route)
                                 route = await route.bind(port=port, ips=route.nic())
-                                await self._listen(route, port, proto, msg_cb)
+                                await self._listen(route, port, proto, msg_cb, up_cb)
                             except Exception:
                                 pass
                                 # May already be started -- ignore.
