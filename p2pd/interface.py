@@ -20,7 +20,6 @@ async def init_p2pd():
     # Attempt to get monkey patched netifaces.
     netifaces = Interface.get_netifaces()
     if netifaces is None:
-        multiprocessing.set_start_method("spawn")
         if sys.platform == "win32":
             """
             loop = get_running_loop()
@@ -413,8 +412,12 @@ class Interface():
             # Run delta test.
             nat_type, delta = await asyncio.wait_for(
                 asyncio.gather(*[
-                    fast_nat_test(pipe, STUND_SERVERS[af]),
-                    delta_test(stun_client)
+                    async_wrap_errors(
+                        fast_nat_test(pipe, STUND_SERVERS[af])
+                    ),
+                    async_wrap_errors(
+                        delta_test(stun_client)
+                    )
                 ]),
                 timeout=4
             )

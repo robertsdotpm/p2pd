@@ -3,7 +3,6 @@ from p2pd.test_init import *
 from p2pd.p2p_node import *
 from p2pd.p2p_utils import *
 import multiprocessing
-from concurrent.futures import ProcessPoolExecutor
 from decimal import Decimal as Dec
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
