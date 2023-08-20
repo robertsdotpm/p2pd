@@ -281,39 +281,10 @@ class ToxiMainServer(RESTD):
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 
-# Stop the loop concurrently                                                  
-async def exit_safely():                                              
-    loop = asyncio.get_event_loop()                      
-    print("Stop")                                        
-    loop.stop()  
-
-def ask_exit():                          
-    for task in asyncio.Task.all_tasks():
-        task.cancel()                    
-    asyncio.ensure_future(exit_safely())    
 
 class TestToxiServer(unittest.IsolatedAsyncioTestCase):
-    async def test_d(self):
-        i = await Interface().start_local()
-        port = 33888
-        lip = "192.168.0.100"
-        server = Daemon()
-        await server.listen_specific(
-            [[
-                await i.route().bind(ips=lip, port=port),
-                TCP
-            ]]
-        )
-
-        route = await i.route().bind()
-        dest = await Address(lip, port, route)
-        pipe = await pipe_open(TCP, route, dest)
-        await pipe.close()
-        await asyncio.sleep(10)
-        
 
     async def test_toxi_server(self):
-        return
         #ret = api_route_closure("/proxies/test") ([["proxies"], ["toxics"]])
         #print(ret)
         #return
@@ -390,13 +361,6 @@ class TestToxiServer(unittest.IsolatedAsyncioTestCase):
         print(tunnel_serv.clients)
         await asyncio.sleep(1)
         #print(s[2].tcp_server_task)
-        while 1:
-            await asyncio.sleep(10)
-
-
-        for tunnel_serv in d_vals(server.tunnel_servs):
-            for serv_info in tunnel_serv.servers:
-                await serv_info
 
         
         #print(s)

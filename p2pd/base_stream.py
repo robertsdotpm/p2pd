@@ -682,6 +682,17 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
         self.remote_tup = None
         self.conf = conf
 
+    """
+    StreamReaderProtocol has a bug in this function and doesn't
+    properly return False. This is a patch.
+    """
+    def eof_received(self):
+        reader = self._stream_reader
+        if reader is not None:
+            reader.feed_eof()
+
+        return False
+
     def connection_made(self, transport):
         # Wrap this connection in a BaseProto object.
         self.transport = transport

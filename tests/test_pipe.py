@@ -12,7 +12,7 @@ asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestPipe(unittest.IsolatedAsyncioTestCase):
     async def test_connection_close(self):
         reader = asyncio.StreamReader(limit=10000)
-        class MinReader(PatchTranslate):
+        class MinReader(asyncio.StreamReaderProtocol):
             def __init__(self, reader):
                 self.close_set = False
                 super().__init__(reader)
@@ -22,9 +22,9 @@ class TestPipe(unittest.IsolatedAsyncioTestCase):
                 super().connection_made(transport)
 
             def data_received(self, data):
-                print("Received:", data.decode())
                 super().data_received(data)
 
+            # Patch for stream reader protocol bug.
             def eof_received(self):
                 reader = self._stream_reader
                 if reader is not None:
@@ -33,7 +33,6 @@ class TestPipe(unittest.IsolatedAsyncioTestCase):
                 return False
 
             def connection_lost(self, exc):
-                print("con lost")
                 # The socket has been closed
                 self.close_set = True
 
@@ -41,7 +40,6 @@ class TestPipe(unittest.IsolatedAsyncioTestCase):
         loop = asyncio.get_event_loop()
         lsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         lsock.bind(('127.0.0.1', 0))
-        print(lsock)
         mr = MinReader(reader)
         server = await loop.create_server(
             lambda: mr,
@@ -52,10 +50,10 @@ class TestPipe(unittest.IsolatedAsyncioTestCase):
         dest = ("127.0.0.1", lsock.getsockname()[1])
         cs = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         cs.connect(dest)
-        print(cs)
+        cs.send(b"test")
         cs.close()
         await asyncio.sleep(3)
-        print(mr.close_set)
+        assert(mr.close_set)
         server.close()
 
 
