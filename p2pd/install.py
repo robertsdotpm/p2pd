@@ -33,7 +33,6 @@ def get_kvs_db_copy_path(script_parent):
     return os.path.realpath(
         os.path.join(
             script_parent,
-            "..",
             "scripts",
             "kvs_schema.sqlite3"
         )

@@ -15,7 +15,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    version='2.7.2',
+    version='2.7.3',
     name='p2pd',
     description='Asynchronous P2P networking library and service',
     keywords=('NAT traversal, TCP hole punching, simultaneous open, UPnP, STUN, TURN, SIP, DHCP, add IP to interface, NATPMP, P2P, Peer-to-peer networking library, python'),
@@ -27,6 +27,8 @@ setup(
     license='public domain',
     package_dir={"": "."},
     packages=find_packages(exclude=('tests', 'docs')),
+    package_data={'p2pd': ['scripts/kvs_schema.sqlite3']},
+    include_package_data=True,
     install_requires=install_reqs,
     classifiers=[
         'Intended Audience :: Developers',
