@@ -131,7 +131,6 @@ async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, h
         buf = http_req_buf(
             route.af,
             host,
-            port,
             path,
             method=method,
             payload=payload,

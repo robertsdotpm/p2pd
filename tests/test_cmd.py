@@ -7,9 +7,9 @@ from p2pd.cmd_tools import *
 
 async def test_esc(arg):
     # So paths with spaces don't break the command.
-    py = os.path.basename(sys.executable)
+    py = sys.executable
     c = "import sys; print(sys.argv[1], end='')"
-    buf = rf"""{py} -c "{c}" {arg}"""
+    buf = rf""""{py}" -c "{c}" {arg}"""
     return await cmd(buf)
 
 class TestCmd(unittest.IsolatedAsyncioTestCase):
@@ -145,8 +145,8 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(isinstance(exp_param, str))
 
     async def test_cmd(self):
-        py = os.path.basename(sys.executable)
-        out = await cmd(f"""{py} -c "print('something')" """)
+        py = sys.executable
+        out = await cmd(f""""{py}" -c "print('something')" """)
         self.assertTrue("something" in out)
 
     async def test_is_root(self):

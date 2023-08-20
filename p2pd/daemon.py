@@ -96,7 +96,8 @@ class Daemon():
         # Start server on every address.
         assert(len(routes))
         for route in routes:
-            await route.bind(port)
+            if not route.resolved:
+                await route.bind(port)
 
             log('starting server {}:{} p={}, af={}'.format(
                 route.bind_ip(),

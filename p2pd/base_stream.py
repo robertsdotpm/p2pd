@@ -447,7 +447,7 @@ class BaseProto(BaseACKProto):
             self.stream_ready.set()
 
         # Process messages using any registered handlers.
-        #self.run_handlers(self.up_cbs)
+        self.run_handlers(self.up_cbs)
 
     # Socket closed manually or shutdown by other side.
     def connection_lost(self, exc):
@@ -914,8 +914,8 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None,
         # Start processing messages for TCP.
         if proto == TCP:
             # Add new connection handler.
-            #if up_cb is not None:
-            #    base_proto.add_up_cb(up_cb)
+            if up_cb is not None:
+                base_proto.add_up_cb(up_cb)
 
             # Listen server.
             if dest is None:

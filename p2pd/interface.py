@@ -20,7 +20,6 @@ async def init_p2pd():
     # Attempt to get monkey patched netifaces.
     netifaces = Interface.get_netifaces()
     if netifaces is None:
-        multiprocessing.set_start_method("spawn")
         if sys.platform == "win32":
             """
             loop = get_running_loop()
