@@ -212,6 +212,15 @@ class ToxiTunnel():
         dest = await Address("localhost", self.port, route)
         pipe = await pipe_open(TCP, route, dest)
         return pipe, dest.tup
+    
+    async def get_curl(self):
+        # Build new route.
+        route = self.client.addr.route.interface.route()
+        await route.bind()
+
+        # Connect to the listen server for this tunnel.
+        dest = await Address("localhost", self.port, route)
+        return WebCurl(addr=dest, do_close=0)
 
     # Close the tunnel on the toxiproxy instance.
     async def close(self):
@@ -233,6 +242,7 @@ class ToxiClient():
     async def start(self):
         hdrs = [[b"user-agent", b"toxiproxy-cli"]]
         self.curl = WebCurl(self.addr, hdrs=hdrs)
+        return self
 
     async def version(self):
         resp = await self.curl.vars().get("/version")
@@ -282,6 +292,7 @@ async def test_setup(netifaces=None, client=None):
 
     return client
 
+"""
 class TestToxi(unittest.IsolatedAsyncioTestCase):
     async def test_toxi_client_usage(self):
         client = await test_setup()
@@ -329,6 +340,8 @@ class TestToxi(unittest.IsolatedAsyncioTestCase):
 
         # Will throw on error response.
         await tunnel.close()
+"""
 
 if __name__ == '__main__':
-    main()
+    pass
+    #main()

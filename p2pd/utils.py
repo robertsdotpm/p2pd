@@ -134,10 +134,13 @@ def to_type(x, out_type):
 # Take a dict template called Y and a child dict called X.
 # Yield a new dict with Y's vals overwritten by X's.
 def dict_child(x, y):
+    if len(x) > len(y):
+        log("dict child x > y, are args in correct order?")
+
     out = copy.deepcopy(y)
     for key in x:
         out[key] = x[key]
-    #
+        
     return out
 
 def dict_merge(x, y):

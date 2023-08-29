@@ -172,6 +172,8 @@ class BaseStream(ACKUDP):
                 # Return only the data portion.
                 return ret[1]
         except Exception as e:
+            print(e)
+            print(timeout)
             return None
 
     # Async send for TCP and UDP cons.
@@ -451,7 +453,6 @@ class BaseProto(BaseACKProto):
 
     # Socket closed manually or shutdown by other side.
     def connection_lost(self, exc):
-        print("client con lost")
         super().connection_lost(exc)
 
         # Remove self from any parent pipes.
@@ -562,7 +563,6 @@ class BaseProto(BaseACKProto):
     async def close(self, do_sleep=True):
         # Already closed.
         if not self.is_running:
-            print("skipping close")
             return
 
         # Skip sleep for TCP clients.
@@ -577,7 +577,6 @@ class BaseProto(BaseACKProto):
 
         # Wait for sending tasks in ACK UDP.
         if self.stream is not None:
-            print("stream not none.")
             # Set ACKs for all sent messages.
             for seq_no in self.stream.seq.keys():
                 self.stream.seq[seq_no].set()
@@ -591,14 +590,12 @@ class BaseProto(BaseACKProto):
         #self.tasks = rm_done_tasks(self.tasks)
         self.tasks = []
         if len(self.tasks):
-            print("wait for tasks to end")
             # Wait for tasks to finish.
             await gather_or_cancel(self.tasks, 4)
             self.tasks = []
 
         # Close spawned TCP clients for a TCP server.
         for client in self.tcp_clients:
-            print("close tcp client")
             # Client is already closed.
             if not client.is_running:
                 continue
@@ -609,7 +606,6 @@ class BaseProto(BaseACKProto):
         # Close the main server socket.
         # This does cleanup for any TCP servers.
         if self.transport is not None:
-            print("transport not none")
             self.transport.close()
 
         """
@@ -618,12 +614,9 @@ class BaseProto(BaseACKProto):
         """
 
         # Close any sockets.
+        # if self.sock is not None:
+        #    self.sock.close()
         
-        if self.sock is not None:
-            print("Closing sock")
-            self.sock.close()
-        
-
         # No longer running.
         self.transport = None
         self.socket = None
@@ -735,7 +728,6 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
     # If close was called on a pipe on a server then clients will already be closed.
     # So this code will have no effect.
     def connection_lost(self, exc):
-        print("con lost in server")
         super().connection_lost(exc)
 
         # Cleanup client futures entry.
@@ -770,9 +762,7 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
     def data_received(self, data):
         # This just adds data to reader which we are handling ourselves.
         #super().connection_lost(exc)
-        print(f"Hacked server recv = {data}")
         if self.client_proto is None:
-            log(f"CLIENT PROTO NONE")
             return
 
         if not len(self.client_proto.msg_cbs):
@@ -934,8 +924,6 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None,
                 # Saving the task is apparently needed
                 # or the garbage collector could close it.
                 if hasattr(server, "serve_forever"):
-                    print("Server forever")
-                    
                     server_task = asyncio.create_task(server.serve_forever())
                     base_proto.set_tcp_server_task(server_task)
                     #asyncio.ensure_future(server_task)
