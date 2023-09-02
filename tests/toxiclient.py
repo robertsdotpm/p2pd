@@ -151,7 +151,7 @@ class ToxiToxic():
     Note: the docs say that this slices them into 'bits'
     but I think this is meant informally as in pieces
     rather than a unit of measurement. The pieces it means
-    are really bytes (and cana only mean bytes.)
+    are really bytes (and can only mean bytes.)
 
     Slicer is designed so that receipt of data needs multiple
     recv calls to get the full response. E.g. it splits up

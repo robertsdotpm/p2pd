@@ -60,6 +60,8 @@ class ToxicBase():
             return True
         else:
             return False
+    async def placeholder(self, msg, dest_pipe):
+        return msg, dest_pipe
         
 async def toxic_router(msg, src_pipe, dest_pipe, toxics):
     print(dest_pipe)
@@ -75,8 +77,14 @@ async def toxic_router(msg, src_pipe, dest_pipe, toxics):
 
         if toxic.should_run():
             msg, dest_pipe = await toxic.run(msg, dest_pipe)
+
+            # Dest pipe has been closed.
             if dest_pipe is None:
-                break
+                return
+            
+            # Message filtered.
+            if msg is None:
+                return
 
     print("here")
     print("sending to dest pipe")
@@ -108,6 +116,7 @@ class ToxicBandwidthLimit(ToxicBase):
         self.rate = rate # KBs
         self.tokens = 0.0
         self.last_check = time.time()
+        return self
 
     async def get_bandwidth(self, amount):
         # use bucket algorithm if rate wont loop
@@ -132,6 +141,114 @@ class ToxicBandwidthLimit(ToxicBase):
     async def run(self, msg, dest_pipe):
         await self.get_bandwidth(len(msg))
         return msg, dest_pipe
+
+class ToxicSlowClose(ToxicBase):
+    def set_params(self, ms):
+        self.ms = ms
+        return self
+
+    async def run(self, msg, dest_pipe):
+        # Close is already patched so undo.
+        # Allows for later slow closes to replace this.
+        if hasattr(dest_pipe, "regular_close"):
+            dest_pipe.close = dest_pipe.regular_close
+
+        # Save old close function.
+        dest_pipe.regular_close = dest_pipe.close
+
+        # New function to add slow close.
+        async def slow_close():
+            await asyncio.sleep(self.ms / 1000)
+            await dest_pipe.regular_close()
+
+        # Replace old close with slow close.
+        dest_pipe.close = slow_close
+
+        # Replace this class function instance
+        # so it only runs once.
+        self.run = self.placeholder
+
+class ToxicTimeout(ToxicBase):
+    def set_params(self, ms):
+        self.start_time = time.time()
+        self.ms = ms
+        if self.ms:
+            self.ms = ms / 1000.0
+
+        return self
+
+    async def run(self, msg, dest_pipe):
+        # Calculate duration of active toxic.
+        cur_time = time.time()
+        duration = cur_time - self.start_time
+
+        # Close if timeout reached.
+        if self.ms:
+            if duration >= self.ms:
+                await dest_pipe.close()
+                return None, None
+
+        # Block data transmission.
+        return None, dest_pipe
+    
+class ToxicResetPeer(ToxicBase):
+    def set_params(self, ms):
+        self.start_time = time.time()
+        self.ms = ms
+        if self.ms:
+            self.ms = ms / 1000.0
+        return self
+
+    async def run(self, msg, dest_pipe):
+        # Discard unacked data on close.
+        if not getattr(dest_pipe, "reset_peer_hook"):
+            dest_pipe.reset_peer_hook = 1
+            linger = struct.pack('ii', 1, 0)
+            dest_pipe.sock.setsockopt(
+                socket.SOL_SOCKET,
+                socket.SO_LINGER,
+                linger
+            )
+
+        # Calculate duration of active toxic.
+        cur_time = time.time()
+        duration = cur_time - self.start_time
+
+        # Close if timeout reached.
+        if self.ms:
+            if duration >= self.ms:
+                await dest_pipe.close()
+            else:
+                return msg, dest_pipe
+        else:
+            await dest_pipe.close()
+
+        # Block data transmission.
+        return None, None
+
+class ToxicLimitData(ToxicBase):
+    def set_params(self, n):
+        self.n = n
+        self.total = 0
+        return self
+
+    async def run(self, msg, dest_pipe):
+        self.total += len(msg)
+        if self.total >= self.n:
+            await dest_pipe.close()
+            return None, None
+        else:
+            return msg, dest_pipe
+        
+class ToxicSlicer(ToxicBase):
+    def set_params(self, n, v, ug):
+        self.n = n
+        self.v = v
+        self.ug = ug
+        return self
+
+    async def run(self, msg, dest_pipe):
+        pass
 
 # You need a way to force new messages to wait for past.
 class ToxiTunnelServer(Daemon):
@@ -292,11 +409,17 @@ class ToxiMainServer(RESTD):
 
         # Create toxic.
         toxic = base = ToxicBase(j["name"], j["stream"], j["toxicity"])
-        if j["type"] == "latency":
 
+    
+        if j["type"] == "latency":
             toxic = ToxicLatency().set_params(
                 latency=attrs["latency"],
                 jitter=attrs["jitter"]
+            ).setup(base)
+
+        if j["type"] == "timeout":
+            toxic = ToxicTimeout().set_params(
+                ms=attrs["ms"]
             ).setup(base)
 
         # Add toxic to tunnel server.
