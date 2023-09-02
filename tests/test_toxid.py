@@ -79,6 +79,8 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
             await tunnel.remove_toxic(toxic)
             await tunnel.close()
 
+    async def test_add_timeout
+
 
 
 if __name__ == '__main__':
