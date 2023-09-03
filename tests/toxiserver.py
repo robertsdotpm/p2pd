@@ -241,14 +241,45 @@ class ToxicLimitData(ToxicBase):
             return msg, dest_pipe
         
 class ToxicSlicer(ToxicBase):
-    def set_params(self, n, v, ug):
-        self.n = n
-        self.v = v
-        self.ug = ug
+    def set_params(self, avg_size, size_var, delay):
+        self.avg_size = avg_size
+        self.size_var = size_var
+        self.delay = delay
         return self
+    
+    def chunk(self, start, end):
+        """
+        Base case:
+        If the size is within the random variation,
+        or already less than the average size, just
+        return it. Otherwise split the chunk in about
+        two, and recurse.
+        """
+        if (end - start) - self.avg_size <= self.size_var:
+            return [start, end]
+
+        mid = int(start + (end - start) / 2)
+        if self.size_var > 0:
+            rand_l = rand_rang(0, (self.size_var * 2) + 1)
+            mid += rand_l - self.size_var
+
+        left = self.chunk(start, mid)
+        right = self.chunk(mid, end)
+
+        return left + right
 
     async def run(self, msg, dest_pipe):
-        pass
+        offsets = self.chunk(0, len(msg))
+        if self.delay:
+            await asyncio.sleep(self.delay / 1000)
+
+        chunks = []
+        for i in range(1, len(chunks), 2):
+            chunk = msg[offsets[i-1]:offsets[i]]
+            if self.delay:
+                await asyncio.sleep(self.delay / 1000)
+
+            await dest_pipe.send(chunk)
 
 # You need a way to force new messages to wait for past.
 class ToxiTunnelServer(Daemon):
