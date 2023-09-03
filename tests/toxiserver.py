@@ -252,30 +252,47 @@ class ToxicSlicer(ToxicBase):
         Base case:
         If the size is within the random variation,
         or already less than the average size, just
-        return it. Otherwise split the chunk in about
-        two, and recurse.
+        return it. Otherwise split the message into
+        chunks of average size +/- size variation.
         """
-        if (end - start) - self.avg_size <= self.size_var:
+        offsets = []
+        seg_len = end - start
+        if seg_len - self.avg_size <= self.size_var:
             return [start, end]
+        
+        # Build chunk offset list.
+        # End offset overlaps with start offset.
+        # This is not a mistake.
+        p_start = start
+        no = int(seg_len / self.avg_size)
+        for _ in range(no):
+            # Calculate a random variation.
+            # May be positive or negative.
+            rand_len = rand_rang(0, (self.size_var * 2) + 1)
+            change = rand_len - self.size_var
 
-        mid = int(start + (end - start) / 2)
-        if self.size_var > 0:
-            rand_l = rand_rang(0, (self.size_var * 2) + 1)
-            mid += rand_l - self.size_var
+            # Increase start pointer by random variation.
+            p_end = p_start + (self.avg_size + change)
 
-        left = self.chunk(start, mid)
-        right = self.chunk(mid, end)
+            # Record the chunk offsets.
+            offsets += [p_start, min(p_end, end)]
 
-        return left + right
+            # Reached the end of the message size.
+            if offsets[-1] == end:
+                return offsets
+
+            # Increase pointer for next segment.
+            p_start = offsets[-1]
+
+        return offsets
 
     async def run(self, msg, dest_pipe):
         offsets = self.chunk(0, len(msg))
         if self.delay:
             await asyncio.sleep(self.delay / 1000)
 
-        chunks = []
-        for i in range(1, len(chunks), 2):
-            chunk = msg[offsets[i-1]:offsets[i]]
+        for i in range(1, len(offsets), 2):
+            chunk = msg[offsets[i - 1]:offsets[i]]
             if self.delay:
                 await asyncio.sleep(self.delay / 1000)
 
