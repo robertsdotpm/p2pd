@@ -37,9 +37,6 @@ toxic_router(msg, src_pipe, dest_pipe, toxics):
 whats the difference between slow_close, add_timeout, and reset_peer? they all seem to be the same?
 
     prob shutdown but look it up
-
-todo:
-    list of toxic implementations and their socket behaviors
 //          optional optional
 """
 
@@ -113,34 +110,67 @@ class ToxicLatency(ToxicBase):
     
 class ToxicBandwidthLimit(ToxicBase):
     def set_params(self, rate):
-        self.rate = rate # KBs
-        self.tokens = 0.0
-        self.last_check = time.time()
+        self.rate = rate # KB/s
+
+        # Track amount of bw used across coroutines.
+        # This prevents exceeding the bw allocation.
+        self.used = 0
+
+        # Convert rate to bytes per 100 ms.
+        # If rate is 0 then there's no limit.
+        self.rate_ms = int((self.rate * 1024) / 10)
+
         return self
+    
+    async def get_bandwidth(self, n):
+        # Wait for some positive amount of bw to become available.
+        # Other coroutines may be using all the bw.
+        bw = 0
+        while bw <= 0 and self.rate_ms:
+            bw = self.rate_ms - self.used
 
-    async def get_bandwidth(self, amount):
-        # use bucket algorithm if rate wont loop
-        # otherwise use chunking over time
-        byte_limit = self.rate * 1024
-        if amount > byte_limit:
-            await asyncio.sleep(1)
-            self.tokens = 0
-            return
+            """
+            Allocations are recorded before doing a sleep since this
+            allows other coroutines to run which may then get their
+            own allocations and end up going over the limit. Doing
+            the change immediately after ensures the bandwidth limit
+            is respected between coroutines.
+            """
+            if bw > 0:
+                # Use only as much as needed.
+                bw = min(n, bw)
+                self.used += bw
 
-        # use bucket algorithm if rate wont loop
-        while amount > self.tokens:
-            now = time.time()
-            elapsed = now - self.last_check
-            self.tokens += byte_limit * elapsed
-            self.last_check = now
+            """
+            Give other coroutines a chance to use their bw.
+            Sleeping is always done to start with even if
+            there was initial bw available because otherwise
+            multiple coroutines could accidentally exceed the limit.
+            """
             await asyncio.sleep(0.1)
 
-        # Fractions of a byte aren't really possible to send.
-        self.tokens -= amount
+        # Return the allocated amount.
+        return bw
 
+    # Could be improved with memoryview.
     async def run(self, msg, dest_pipe):
-        await self.get_bandwidth(len(msg))
-        return msg, dest_pipe
+        unsent = len(msg)
+        while unsent:
+            # Block for an allocation of bandwidth.
+            # Checks every 100 ms.
+            bw = await self.get_bandwidth(unsent)
+
+            # Once an allocation is given use that amount.
+            await dest_pipe.send(msg[:bw])
+            msg = msg[bw:]
+
+            # Adjust counters after await operations.
+            # This is for safety to maintain integrity of self.used.
+            unsent -= bw
+            self.used -= bw
+
+        # Message sent so return.
+        return None, dest_pipe
 
 class ToxicSlowClose(ToxicBase):
     def set_params(self, ms):
@@ -297,6 +327,9 @@ class ToxicSlicer(ToxicBase):
                 await asyncio.sleep(self.delay / 1000)
 
             await dest_pipe.send(chunk)
+
+        # Messages are processed so return None.
+        return None, dest_pipe
 
 # You need a way to force new messages to wait for past.
 class ToxiTunnelServer(Daemon):
