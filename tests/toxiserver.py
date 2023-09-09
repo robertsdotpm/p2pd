@@ -63,6 +63,7 @@ class ToxicBase():
 async def toxic_router(msg, src_pipe, dest_pipe, toxics):
     print(dest_pipe)
     print(toxics)
+    print(f"router msg = {msg}")
 
 
     for toxic in toxics:
@@ -155,7 +156,7 @@ class ToxicBandwidthLimit(ToxicBase):
     # Could be improved with memoryview.
     async def run(self, msg, dest_pipe):
         unsent = len(msg)
-        while unsent:
+        while unsent > 0:
             # Block for an allocation of bandwidth.
             # Checks every 100 ms.
             bw = await self.get_bandwidth(unsent)
@@ -227,6 +228,7 @@ class ToxicResetPeer(ToxicBase):
         self.ms = ms
         if self.ms:
             self.ms = ms / 1000.0
+            
         return self
 
     async def run(self, msg, dest_pipe):
@@ -263,8 +265,10 @@ class ToxicLimitData(ToxicBase):
         return self
 
     async def run(self, msg, dest_pipe):
+        print("in limit data")
         self.total += len(msg)
         if self.total >= self.n:
+            print("closing dest pipe")
             await dest_pipe.close()
             return None, None
         else:
@@ -294,25 +298,27 @@ class ToxicSlicer(ToxicBase):
         # End offset overlaps with start offset.
         # This is not a mistake.
         p_start = start
-        no = int(seg_len / self.avg_size)
-        for _ in range(no):
+        while 1:
             # Calculate a random variation.
             # May be positive or negative.
             rand_len = rand_rang(0, (self.size_var * 2) + 1)
             change = rand_len - self.size_var
 
             # Increase start pointer by random variation.
-            p_end = p_start + (self.avg_size + change)
+            # Avoid underflows with max.
+            p_end = p_start + max((self.avg_size + change), 1)
 
             # Record the chunk offsets.
+            # Avoid overflows with min.
             offsets += [p_start, min(p_end, end)]
-
-            # Reached the end of the message size.
-            if offsets[-1] == end:
-                return offsets
 
             # Increase pointer for next segment.
             p_start = offsets[-1]
+
+            # Should never be greater than end
+            # but this will be used as the cutoff.
+            if offsets[-1] >= end:
+                break
 
         return offsets
 
@@ -341,11 +347,25 @@ class ToxiTunnelServer(Daemon):
         self.downstream_toxics = {}
         self.clients = []
 
-    # Ensure all clients are closed.
+    def get_toxic(self, name):
+        if name in self.upstream_toxics:
+            return self.upstream_toxics
+        
+        if name in self.downstream_toxics:
+            return self.downstream_toxics
+        
+        return None
+
     async def close(self):
+        # Ensure all clients are closed.
         for client in self.clients:
             await client.close()
 
+        # Close connection to upstream if it's set.
+        if self.upstream_pipe is not None:
+            await self.upstream_pipe.close()
+
+        # Close the listen server itself.
         await super().close()
 
     # Record a list of tunnel clients to relay messages from upstream to.
@@ -414,6 +434,26 @@ class ToxiMainServer(RESTD):
     @RESTD.POST(["proxies"])
     async def create_tunnel_server(self, v, pipe):
         j = v["body"]
+        print("in post proxies")
+        print(j)
+        print(v)
+
+        # This is a request to close a tunnel.
+        if j["enabled"] == False:
+            # Close server and delete record of tunnel.
+            tunnel_name = v["name"]["proxies"]
+            tunnel_serv = self.tunnel_servs[tunnel_name]
+            await tunnel_serv.close()
+            del self.tunnel_servs[tunnel_name]
+
+            # Indicate tunnel is closed.
+            return {
+                "name": tunnel_name,
+                "enabled": False,
+                "toxics": []
+            }
+
+        # Otherwise it's a new create call.
         tup_pattern = "([\s\S]+):([0-9]+)$"
         bind_ip, bind_port = re.findall(
             tup_pattern,
@@ -481,16 +521,37 @@ class ToxiMainServer(RESTD):
 
     @RESTD.POST(["proxies"], ["toxics"])
     async def add_new_toxic(self, v, pipe):
+        print("in add topic")
+        print(v["body"])
+
+
         j = v["body"]; attrs = j["attributes"]
         proxy_name = v["name"]["proxies"]
         if proxy_name not in self.tunnel_servs:
             return {
                 "error": "tunnel name not found"
             }
+        
+        # Make sure name doesn't exist.
+        serv = self.tunnel_servs[proxy_name]
+        if serv.get_toxic(j["name"]) is not None:
+            return {
+                "error": "toxic name already exists."
+            }
 
         # Create toxic.
         toxic = base = ToxicBase(j["name"], j["stream"], j["toxicity"])
 
+        # Clauses for all the toxics.
+        if j["type"] == "slow_close":
+            toxic = ToxicSlowClose().set_params(
+                ms=attrs["delay"]
+            ).setup(base)
+
+        if j["type"] == "bandwidth":
+            toxic = ToxicBandwidthLimit().set_params(
+                rate=attrs["rate"]
+            ).setup(base)
     
         if j["type"] == "latency":
             toxic = ToxicLatency().set_params(
@@ -503,8 +564,24 @@ class ToxiMainServer(RESTD):
                 ms=attrs["ms"]
             ).setup(base)
 
+        if j["type"] == "reset":
+            toxic = ToxicResetPeer().set_params(
+                ms=attrs["ms"]
+            ).setup(base)
+
+        if j["type"] == "limit_data":
+            toxic = ToxicLimitData().set_params(
+                n=attrs["bytes"]
+            ).setup(base)
+
+        if j["type"] == "slicer":
+            toxic = ToxicSlicer().set_params(
+                avg_size=attrs["average_size"],
+                size_var=attrs["size_variation"],
+                delay=attrs["delay"]
+            ).setup(base)
+
         # Add toxic to tunnel server.
-        serv = self.tunnel_servs[proxy_name]
         if j["stream"] == "upstream":
             toxics = serv.upstream_toxics
         else:
@@ -513,6 +590,21 @@ class ToxiMainServer(RESTD):
 
         # Response.
         return j
+
+    @RESTD.DELETE(["proxies"], ["toxics"])
+    async def del_new_toxic(self, v, pipe):
+        print("in del new topic")
+        print(v)
+        proxy_name = v["name"]["proxies"]
+        toxic_name = v["name"]["toxics"]
+        if proxy_name in self.tunnel_servs:
+            tunnel = self.tunnel_servs[proxy_name]
+            toxics = tunnel.get_toxic(toxic_name)
+            if toxics is not None:
+                del toxics[toxic_name]
+
+        return b""
+
 
     # Ensure all tunnel servers are also closed.
     async def close(self):

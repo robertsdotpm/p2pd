@@ -357,7 +357,7 @@ class RESTD(Daemon):
         req = await rest_service(msg, client_tup, pipe, api_route_closure)
 
         # Receive any HTTP payload data.
-        body = b""
+        body = b""; payload_len = 0
         if "Content-Length" in req.hdrs:
             # Content len must not exceed msg len.
             payload_len = to_n(req.hdrs["Content-Length"])
@@ -368,7 +368,8 @@ class RESTD(Daemon):
         # Convert body payload to json.
         if "Content-Type" in req.hdrs:
             if req.hdrs["Content-Type"] == "application/json":
-                body = json.loads(to_s(body))
+                if payload_len:
+                    body = json.loads(to_s(body))
 
         # Call all matching API routes.
         v = None

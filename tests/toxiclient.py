@@ -9,7 +9,7 @@ class ToxiToxic():
     def __init__(self, toxicity=1.0, name=None):
         self.toxicity = toxicity
         self.direction = None
-        self.name = name or to_s(rand_plain(10))
+        self.name = name or to_s(rand_plain(20))
         self.body = None
 
     def copy(self):
