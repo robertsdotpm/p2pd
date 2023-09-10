@@ -565,16 +565,23 @@ class ToxiMainServer(RESTD):
             toxic = ToxicBandwidthLimit().set_params(
                 rate=attrs["rate"]
             ).setup(base)
+
+        if j["type"] == "timeout":
+            toxic = ToxicTimeout().set_params(
+                ms=attrs["ms"]
+            ).setup(base)
+
+        if j["type"] == "slicer":
+            toxic = ToxicSlicer().set_params(
+                avg_size=attrs["average_size"],
+                size_var=attrs["size_variation"],
+                delay=attrs["delay"]
+            ).setup(base)
     
         if j["type"] == "latency":
             toxic = ToxicLatency().set_params(
                 latency=attrs["latency"],
                 jitter=attrs["jitter"]
-            ).setup(base)
-
-        if j["type"] == "timeout":
-            toxic = ToxicTimeout().set_params(
-                ms=attrs["ms"]
             ).setup(base)
 
         if j["type"] == "reset":
@@ -585,13 +592,6 @@ class ToxiMainServer(RESTD):
         if j["type"] == "limit_data":
             toxic = ToxicLimitData().set_params(
                 n=attrs["bytes"]
-            ).setup(base)
-
-        if j["type"] == "slicer":
-            toxic = ToxicSlicer().set_params(
-                avg_size=attrs["average_size"],
-                size_var=attrs["size_variation"],
-                delay=attrs["delay"]
             ).setup(base)
 
         # Add toxic to tunnel server.

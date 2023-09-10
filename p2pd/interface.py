@@ -52,6 +52,8 @@ async def init_p2pd():
         else:
             ... run custom error handler.
     """
+
+    """
     class PatchedSocket(socket.socket):
         def recv(self, n, flags=0):
             try:
@@ -63,6 +65,20 @@ async def init_p2pd():
                     'sock': self
                 })
     socket.socket = PatchedSocket
+
+    """
+
+    def fatal_error(self, exc, message='Fatal error on transport'):
+        # Should be called from exception handler only.
+        self._loop.call_exception_handler({
+            'message': message,
+            'exception': exc,
+            'transport': self,
+            'protocol': self._protocol,
+        })
+        self._force_close(exc)
+
+    asyncio.selector_events._SelectorTransport._fatal_error = fatal_error
 
     # Attempt to get monkey patched netifaces.
     netifaces = Interface.get_netifaces()
