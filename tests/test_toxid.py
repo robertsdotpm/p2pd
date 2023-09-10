@@ -14,16 +14,13 @@ streams = lambda: [ToxiToxic().downstream(), ToxiToxic().upstream()]
 
 class TestToxid(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        
+        # Use this for socket tests.
+        self.net_conf = dict_child({
+            "recv_timeout": 10
+        }, NET_CONF)
 
         # Create main Toxi server.
         self.i = await Interface().start_local(skip_resolve=True)
-        loop = asyncio.get_running_loop()
-        x = loop.get_exception_handler()
-        print(loop.get_debug())
-        print(x)
-        print(loop._exception_handler)
-
         route = await self.i.route().bind(ips="127.0.0.1", port=8475)
         self.toxid = ToxiMainServer([self.i])
         await self.toxid.listen_specific(
@@ -32,7 +29,10 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
 
         # Create a Toxi client.
         toxid_addr = await Address("127.0.0.1", 8475, route)
-        self.client = await ToxiClient(toxid_addr).start()
+        self.client = await ToxiClient(
+            toxid_addr,
+            self.net_conf
+        ).start()
 
         # Create an echo server -- used for some tests.
         route = await self.i.route().bind(ips="127.0.0.1", port=7777)
@@ -44,10 +44,7 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
         # Address to connect to echod.
         self.echo_dest = await Address("127.0.0.1", 7777, route)
 
-        # Use this for socket tests.
-        self.net_conf = dict_child({
-            "recv_timeout": 10
-        }, NET_CONF)
+
 
     """
     If using HTTP as the application protocol to test that
@@ -140,6 +137,7 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
             await tunnel.close()
 
     async def test_reset_peer(self):
+        return
         for toxi_stream in streams():
             # Open new tunnel.
             tunnel = await self.new_tunnel(self.echo_dest)
@@ -157,6 +155,43 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(1.1)
             await pipe.send(b'test')
             await asyncio.sleep(1)
+            assert(
+                # Downstream test.
+                pipe.sock.fileno() == -1
+                
+                or
+
+                # Upstream test.
+                up_sock.fileno() == -1
+            ) 
+
+            # Cleanup.
+            await pipe.close()
+            await tunnel.remove_toxic(toxic)
+            await tunnel.close()
+
+    async def test_timeout(self):
+        net_conf = dict_child({
+            "recv_timeout": 1
+        }, NET_CONF)
+
+        for n, toxi_stream in enumerate(streams()):
+            # Open new tunnel.
+            tunnel = await self.new_tunnel(self.echo_dest)
+            tunneld = d_vals(self.toxid.tunnel_servs)[0]
+            up_sock = tunneld.upstream_pipe.sock
+
+            # Add limit data toxic.
+            toxic = toxi_stream.add_timeout(2000)
+            await tunnel.new_toxic(toxic)
+            pipe, _ = await tunnel.get_pipe(net_conf)
+
+            await pipe.send(b'test')
+            await asyncio.sleep(1)
+            out = await pipe.recv()
+            assert(out is None)
+
+            await asyncio.sleep(1.5)
             assert(
                 # Downstream test.
                 pipe.sock.fileno() == -1

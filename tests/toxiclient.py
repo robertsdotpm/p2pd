@@ -203,14 +203,15 @@ class ToxiTunnel():
         print(resp.out)
         return resp.out
 
-    async def get_pipe(self):
+    async def get_pipe(self, conf=None):
         # Build new route.
+        conf = conf or self.client.conf
         route = self.client.addr.route.interface.route()
         await route.bind()
 
         # Connect to the listen server for this tunnel.
         dest = await Address("localhost", self.port, route)
-        pipe = await pipe_open(TCP, route, dest)
+        pipe = await pipe_open(TCP, route, dest, conf=conf)
         return pipe, dest.tup
     
     async def get_curl(self):
@@ -235,8 +236,9 @@ class ToxiTunnel():
         return resp.out
 
 class ToxiClient():
-    def __init__(self, addr):
+    def __init__(self, addr, conf=NET_CONF):
         self.addr = addr
+        self.conf = conf
         self.tunnels = []
 
     async def start(self):

@@ -79,9 +79,12 @@ async def toxic_router(msg, src_pipe, dest_pipe, toxics):
             )
 
             if ret is None:
+                print("ret was none")
                 continue
             else:
                 msg, dest_pipe = ret
+                print("ret = ")
+                print(ret)
 
             # Dest pipe has been closed.
             if dest_pipe is None:
@@ -225,9 +228,12 @@ class ToxicTimeout(ToxicBase):
 
         # Close if timeout reached.
         if self.ms:
-            if duration >= self.ms:
-                await dest_pipe.close()
-                return None, None
+            remaining = self.ms - min(self.ms, duration)
+            if remaining:
+                await asyncio.sleep(remaining)
+
+            await dest_pipe.close()
+            return None, None
 
         # Block data transmission.
         return None, dest_pipe
@@ -568,7 +574,7 @@ class ToxiMainServer(RESTD):
 
         if j["type"] == "timeout":
             toxic = ToxicTimeout().set_params(
-                ms=attrs["ms"]
+                ms=attrs["timeout"]
             ).setup(base)
 
         if j["type"] == "slicer":
