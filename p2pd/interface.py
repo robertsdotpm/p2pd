@@ -18,33 +18,40 @@ async def init_p2pd():
     global ENABLE_UDP
     global ENABLE_STUN
 
-    print("init p2pd.")
-    # _WindowsSelectorEventLoop running=False closed=False debug=True
-    # debug = 1 causes log to run and avoids custom exception handler.
-
-    """
-    asyncio.set_event_loop_policy(SelectorEventPolicy())
-    loop = asyncio.get_event_loop()
-    loop.set_debug(False)
-    loop.set_exception_handler(event_loop_exception_handler)
-
-    bel = asyncio.base_events.BaseEventLoop
-    deh = bel.default_exception_handler
-    
-
-    def patched_deh(self, context):
-        print("calling default exception handler")
-        deh(self, context)
-
-    bel.default_exception_handler = patched_deh
-    """
-
     # Setup event loop.
     loop = asyncio.get_event_loop()
     loop.set_debug(False)
     loop.set_exception_handler(SelectorEventPolicy.exception_handler)
     
-    # Patch recv to handle disconnect errors.
+    # Patch recv to handle read errors from forceful disconnects.
+    """
+    If a socket is closed down gracefully a recv on the socket will
+    return 0 and the event loop will run the appropriate handlers.
+    But if a socket is torn down by setting linger timeout to 0
+    a recv will raise an error.
+    
+    The current code path ways hardcode the execution of logging
+    OSErrors over executing a custom execution handler and certain
+    connection errors like ConnectionResetError are OSErrors on
+    Windows so the custom exception handler is never executed
+    (nor is any default exception handler.)
+
+    3.10/Lib/asyncio/windows_events.py#L472
+        except OSError as exc:
+            if exc.winerror in (_overlapped.ERROR_NETNAME_DELETED,
+                                _overlapped.ERROR_OPERATION_ABORTED):
+                raise ConnectionResetError(*exc.args)
+
+    3.10/Lib/asyncio/selector_events.py#L862
+        data = self._sock.recv(self.max_size)
+
+    3.10/Lib/asyncio/selector_events.py#L715
+        if isinstance(exc, OSError):
+            if self._loop.get_debug():
+                logger.debug("%r: %s", self, message, exc_info=True)
+        else:
+            ... run custom error handler.
+    """
     socket_class = socket.socket
     class PatchedSocket(socket_class):
         def recv(self, n, flags=0):
