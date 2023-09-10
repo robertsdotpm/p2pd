@@ -13,9 +13,50 @@ if sys.platform == "win32":
 else:
     import netifaces as netifaces
 
+
 async def init_p2pd():
     global ENABLE_UDP
     global ENABLE_STUN
+
+    print("init p2pd.")
+    # _WindowsSelectorEventLoop running=False closed=False debug=True
+    # debug = 1 causes log to run and avoids custom exception handler.
+
+    """
+    asyncio.set_event_loop_policy(SelectorEventPolicy())
+    loop = asyncio.get_event_loop()
+    loop.set_debug(False)
+    loop.set_exception_handler(event_loop_exception_handler)
+
+    bel = asyncio.base_events.BaseEventLoop
+    deh = bel.default_exception_handler
+    
+
+    def patched_deh(self, context):
+        print("calling default exception handler")
+        deh(self, context)
+
+    bel.default_exception_handler = patched_deh
+    """
+
+    # Setup event loop.
+    loop = asyncio.get_event_loop()
+    loop.set_debug(False)
+    loop.set_exception_handler(SelectorEventPolicy.exception_handler)
+    
+    # Patch recv to handle disconnect errors.
+    socket_class = socket.socket
+    class PatchedSocket(socket_class):
+        def recv(self, n, flags=0):
+            try:
+                return super().recv(n, flags)
+            except ConnectionResetError as e:
+                loop.call_exception_handler({
+                    'message': "connection reset on recv",
+                    'exception': e,
+                    'sock': self
+                })
+    socket.socket = PatchedSocket
 
     # Attempt to get monkey patched netifaces.
     netifaces = Interface.get_netifaces()

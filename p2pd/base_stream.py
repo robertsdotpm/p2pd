@@ -537,6 +537,7 @@ class BaseProto(BaseACKProto):
         self.route_msg(data, client_tup)
 
     def error_received(self, exp):
+        print("in error received server")
         print(exp)
 
     # UDP packets.
@@ -680,10 +681,11 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
     properly return False. This is a patch.
     """
     def eof_received(self):
+        #self.transport.pause_reading()
         reader = self._stream_reader
         if reader is not None:
             reader.feed_eof()
-
+            
         return False
 
     def connection_made(self, transport):
@@ -757,6 +759,7 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
         super().connection_lost(exc)
 
     def error_received(self, exp):
+        print("in error received client")
         print(exp)
 
     def data_received(self, data):
@@ -924,7 +927,12 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None,
                 # Saving the task is apparently needed
                 # or the garbage collector could close it.
                 if hasattr(server, "serve_forever"):
-                    server_task = asyncio.create_task(server.serve_forever())
+                    server_task = asyncio.create_task(
+                        async_wrap_errors(
+                            server.serve_forever()
+                        )
+                    )
+                    
                     base_proto.set_tcp_server_task(server_task)
                     #asyncio.ensure_future(server_task)
 

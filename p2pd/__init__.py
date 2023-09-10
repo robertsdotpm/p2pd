@@ -1,6 +1,7 @@
 
 import sys
 import os
+import asyncio
 
 """
 This is a hack to avoid double-imports of a module when using
@@ -9,7 +10,8 @@ the -m switch to run a module directly. Python modules are lolz.
 if not '-m' in sys.argv:
     os.environ["PYTHONIOENCODING"] = "utf-8"
     from .errors import *
-    from .utils import log, what_exception, log_exception, async_test
+    from .utils import log, what_exception, log_exception, async_test, SelectorEventPolicy
+    
     from .cmd_tools import *
     from .net import *
     from .address import Address

@@ -38,8 +38,22 @@ if vmin <= 4:
     raise Exception("Project needs >= 3.5")
 
 if not hasattr(unittest, "IsolatedAsyncioTestCase"):
+    print("patching isolated asyncio test case")
     import aiounittest
     unittest.IsolatedAsyncioTestCase = aiounittest.AsyncTestCase
+
+
+class PatchedAsyncTest(unittest.IsolatedAsyncioTestCase):
+    def _setupAsyncioLoop(self):
+        assert self._asyncioTestLoop is None
+        loop = asyncio.new_event_loop()
+
+        asyncio.set_event_loop(loop)
+        #loop.set_debug(True)
+        self._asyncioTestLoop = loop
+        fut = loop.create_future()
+        self._asyncioCallsTask = loop.create_task(self._asyncioLoopRunner(fut))
+        loop.run_until_complete(fut)
 
 # Basic echo client test.
 async def check_pipe(pipe, dest_tup=None):

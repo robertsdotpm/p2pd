@@ -10,10 +10,20 @@ from toxiserver import *
 
 streams = lambda: [ToxiToxic().downstream(), ToxiToxic().upstream()]
 
+
+
 class TestToxid(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        
+
         # Create main Toxi server.
         self.i = await Interface().start_local(skip_resolve=True)
+        loop = asyncio.get_running_loop()
+        x = loop.get_exception_handler()
+        print(loop.get_debug())
+        print(x)
+        print(loop._exception_handler)
+
         route = await self.i.route().bind(ips="127.0.0.1", port=8475)
         self.toxid = ToxiMainServer([self.i])
         await self.toxid.listen_specific(
@@ -129,11 +139,45 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
             await tunnel.remove_toxic(toxic)
             await tunnel.close()
 
-    
+    async def test_reset_peer(self):
+        for toxi_stream in streams():
+            # Open new tunnel.
+            tunnel = await self.new_tunnel(self.echo_dest)
+            tunneld = d_vals(self.toxid.tunnel_servs)[0]
+            up_sock = tunneld.upstream_pipe.sock
 
+            # Add limit data toxic.
+            toxic = toxi_stream.add_reset_peer(1000)
+            await tunnel.new_toxic(toxic)
+            pipe, _ = await tunnel.get_pipe()
 
+            # Should close after timeout.
+            assert(up_sock.fileno() != -1)
+            assert(pipe.sock.fileno() != -1)
+            await asyncio.sleep(1.1)
+            await pipe.send(b'test')
+            #await asyncio.sleep(1)
 
+            return
 
+            assert(
+                # Downstream test.
+                pipe.sock.fileno() == -1
+                
+                or
+
+                # Upstream test.
+                up_sock.fileno() == -1
+            ) 
+
+            return
+
+            # Cleanup.
+            await pipe.close()
+            await tunnel.remove_toxic(toxic)
+            await tunnel.close()
+            return
 
 if __name__ == '__main__':
+
     main()

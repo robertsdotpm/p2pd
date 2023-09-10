@@ -351,6 +351,7 @@ async def async_wrap_errors(coro, timeout=None):
             return (await asyncio.wait_for(coro, timeout))
     except Exception as e:
         # Log all errors.
+        log("async wrap errors called")
         log_exception()
 
 def sync_wrap_errors(f, args=[]):
@@ -525,9 +526,22 @@ async def gather_or_cancel(tasks, timeout):
         return []
 
 class SelectorEventPolicy(asyncio.DefaultEventLoopPolicy):
+    @staticmethod
+    def exception_handler(self, context):
+        print("exception handler")
+        print(context)
+
+    @staticmethod
+    def loop_setup(loop):
+        loop.set_debug(False)
+        loop.set_exception_handler(SelectorEventPolicy.exception_handler)
+        loop.default_exception_handler = SelectorEventPolicy.exception_handler
+
     def new_event_loop(self):
         selector = selectors.SelectSelector()
-        return asyncio.SelectorEventLoop(selector)
+        loop = asyncio.SelectorEventLoop(selector)
+        SelectorEventPolicy.loop_setup(loop)
+        return loop
 
 def selector_event_loop():
     selector = selectors.SelectSelector()

@@ -74,7 +74,14 @@ async def toxic_router(msg, src_pipe, dest_pipe, toxics):
 
 
         if toxic.should_run():
-            msg, dest_pipe = await toxic.run(msg, dest_pipe)
+            ret = await async_wrap_errors(
+                toxic.run(msg, dest_pipe)
+            )
+
+            if ret is None:
+                continue
+            else:
+                msg, dest_pipe = ret
 
             # Dest pipe has been closed.
             if dest_pipe is None:
@@ -87,7 +94,10 @@ async def toxic_router(msg, src_pipe, dest_pipe, toxics):
     print("here")
     print("sending to dest pipe")
     print(dest_pipe.stream.dest_tup)
-    await dest_pipe.send(msg)
+    log("sending to dest pipe")
+    await async_wrap_errors(
+        dest_pipe.send(msg)
+    )
 
 class ToxicLatency(ToxicBase):
     def __init__(self):
@@ -233,7 +243,7 @@ class ToxicResetPeer(ToxicBase):
 
     async def run(self, msg, dest_pipe):
         # Discard unacked data on close.
-        if not getattr(dest_pipe, "reset_peer_hook"):
+        if not hasattr(dest_pipe, "reset_peer_hook"):
             dest_pipe.reset_peer_hook = 1
             linger = struct.pack('ii', 1, 0)
             dest_pipe.sock.setsockopt(
@@ -249,10 +259,13 @@ class ToxicResetPeer(ToxicBase):
         # Close if timeout reached.
         if self.ms:
             if duration >= self.ms:
+                print("close 2 reset")
                 await dest_pipe.close()
             else:
+                print("success 1 reset")
                 return msg, dest_pipe
         else:
+            print("close 1 reset")
             await dest_pipe.close()
 
         # Block data transmission.
@@ -566,7 +579,7 @@ class ToxiMainServer(RESTD):
 
         if j["type"] == "reset":
             toxic = ToxicResetPeer().set_params(
-                ms=attrs["ms"]
+                ms=attrs["timeout"]
             ).setup(base)
 
         if j["type"] == "limit_data":
