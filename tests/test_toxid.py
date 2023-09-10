@@ -156,10 +156,7 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
             assert(pipe.sock.fileno() != -1)
             await asyncio.sleep(1.1)
             await pipe.send(b'test')
-            #await asyncio.sleep(1)
-
-            return
-
+            await asyncio.sleep(1)
             assert(
                 # Downstream test.
                 pipe.sock.fileno() == -1
@@ -170,13 +167,10 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
                 up_sock.fileno() == -1
             ) 
 
-            return
-
             # Cleanup.
             await pipe.close()
             await tunnel.remove_toxic(toxic)
             await tunnel.close()
-            return
 
 if __name__ == '__main__':
 

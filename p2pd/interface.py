@@ -52,8 +52,7 @@ async def init_p2pd():
         else:
             ... run custom error handler.
     """
-    socket_class = socket.socket
-    class PatchedSocket(socket_class):
+    class PatchedSocket(socket.socket):
         def recv(self, n, flags=0):
             try:
                 return super().recv(n, flags)
