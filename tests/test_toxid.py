@@ -4,13 +4,10 @@ from p2pd.utils import *
 from p2pd.net import VALID_AFS
 from p2pd.win_netifaces import *
 from p2pd.echo_server import *
-
-from toxiclient import *
-from toxiserver import *
+from p2pd.toxiclient import *
+from p2pd.toxiserver import *
 
 streams = lambda: [ToxiToxic().downstream(), ToxiToxic().upstream()]
-
-
 
 class TestToxid(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -44,8 +41,6 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
         # Address to connect to echod.
         self.echo_dest = await Address("127.0.0.1", 7777, route)
 
-
-
     """
     If using HTTP as the application protocol to test that
     toxics work as expected you definitely want a new tunnel each
@@ -56,7 +51,6 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
     async def new_tunnel(self, tunnel_dest):
         # Setup a tunnel to a host for testing.
         # The toxi tunnels upstream is Google.
-        route = self.i.route()
         tunnel = await self.client.new_tunnel(tunnel_dest)
         assert(isinstance(tunnel, ToxiTunnel))
         return tunnel
@@ -66,7 +60,6 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
         await self.echod.close()
 
     async def test_add_latency(self):
-        return
         # Test downstream and upstream.
         lag_amount = 2000
         tunnel_dest = await Address("www.google.com", 80, self.i.route())
@@ -100,7 +93,6 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
             await tunnel.close()
 
     async def test_limit_data(self):
-        return
         send_buf = b"1" * 90
         for toxi_stream in streams():
             # Open new tunnel.
@@ -137,7 +129,6 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
             await tunnel.close()
 
     async def test_reset_peer(self):
-        return
         for toxi_stream in streams():
             # Open new tunnel.
             tunnel = await self.new_tunnel(self.echo_dest)
@@ -206,6 +197,108 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
             await pipe.close()
             await tunnel.remove_toxic(toxic)
             await tunnel.close()
+
+    async def test_slicer(self):
+        send_buf = b"123456890" * 100
+        for toxi_stream in streams():
+            # Open new tunnel.
+            tunnel = await self.new_tunnel(self.echo_dest)
+
+            # Add slicer toxic.
+            toxic = toxi_stream.add_slicer()
+            await tunnel.new_toxic(toxic)
+            pipe, _ = await tunnel.get_pipe()
+            await pipe.send(send_buf)
+            await asyncio.sleep(1)
+
+            # Receive sliced packets.
+            recv_lens = []; recv_buf = b"" 
+            while len(recv_buf) != len(send_buf):
+                buf = await pipe.recv()
+                recv_buf += buf
+                recv_lens.append(len(buf))
+
+            # Assert packet no and recv buffers.
+            assert(recv_buf == send_buf)
+            avg_recv = sum(recv_lens) / len(recv_lens)
+            assert(avg_recv <= 150 and avg_recv >= 50)
+
+            # Cleanup.
+            await pipe.close()
+            await tunnel.remove_toxic(toxic)
+            await tunnel.close()
+
+    async def test_bandwidth_limit(self):
+        bw_limit = 1; kb_send = 3; test_no = 3
+        send_buf = b"1234567890" * 15000
+        send_buf = send_buf[:1024 * kb_send]
+        assert(len(send_buf) == 1024 * kb_send)
+        for toxi_stream in streams():
+            # Open new tunnel.
+            tunnel = await self.new_tunnel(self.echo_dest)
+
+            # Add bw data toxic.
+            toxic = toxi_stream.add_bandwidth_limit(bw_limit)
+            await tunnel.new_toxic(toxic)
+            pipe, _ = await tunnel.get_pipe()
+            readings = []
+            for _ in range(0, test_no):
+                start_time = time.time()
+                await pipe.send(send_buf)
+
+                recv_buf = b""
+                while len(recv_buf) != len(send_buf):
+                    recv_buf += await pipe.recv()
+
+                end_time = time.time()
+                duration = end_time - start_time
+                readings.append(duration)
+
+            # This is average to send 5 kbs.
+            # Reducing the average by 5 is the average for 1 kb.
+            # How closely does that match the bandwidth limit?
+            avg_duration = sum(readings) / len(readings)
+            avg_kb_rate = kb_send / avg_duration
+            assert(avg_kb_rate <= bw_limit)
+            assert(avg_kb_rate >= (bw_limit * 0.7))
+
+            # Cleanup.
+            await pipe.close()
+            await tunnel.remove_toxic(toxic)
+            await tunnel.close()
+            
+    async def test_slow_close(self):
+        test_time = 1500
+        for n, toxi_stream in enumerate(streams()):
+            # Open new tunnel.
+            tunnel = await self.new_tunnel(self.echo_dest)
+            tunneld = d_vals(self.toxid.tunnel_servs)[0]
+
+            # Add limit data toxic.
+            toxic = toxi_stream.add_slow_close(test_time)
+            await tunnel.new_toxic(toxic)
+            pipe, _ = await tunnel.get_pipe()
+
+            # Should close after timeout.
+            await pipe.send(b'test')
+            await asyncio.sleep(1)
+
+            start_time = time.time()
+            if n == 0:
+                client_pipe = tunneld.servers[0][2].tcp_clients[0]
+                await client_pipe.close()
+            else:        
+                await tunneld.upstream_pipe.close()
+
+            end_time = time.time()
+            duration = end_time - start_time
+            assert(duration * 1000 >= (test_time * 0.7))
+
+            # Cleanup.
+            await pipe.close()
+            await tunnel.remove_toxic(toxic)
+            await tunnel.close()
+
 
 if __name__ == '__main__':
 

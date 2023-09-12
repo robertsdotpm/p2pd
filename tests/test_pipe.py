@@ -89,6 +89,7 @@ class TestPipe(unittest.IsolatedAsyncioTestCase):
 
         # Cleanup.
         server.close()
+        await server.wait_closed()
 
     # Tests that server can handle RSTs.
     async def test_ungraceful_close(self):
@@ -118,6 +119,7 @@ class TestPipe(unittest.IsolatedAsyncioTestCase):
 
         # Cleanup.
         server.close()
+        await server.wait_closed()
 
 if __name__ == '__main__':
     main()

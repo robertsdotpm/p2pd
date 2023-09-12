@@ -269,7 +269,6 @@ async def do_web_req(addr, http_buf, do_close, conf=NET_CONF):
             conf=conf
         )
     except Exception:
-        print("pipe open error")
         log_exception()
 
     # Error return empty.
@@ -280,11 +279,8 @@ async def do_web_req(addr, http_buf, do_close, conf=NET_CONF):
     try:
         p.subscribe(SUB_ALL)
         await p.send(http_buf, addr.tup)
-        print(conf['recv_timeout'])
         out = await p.recv(SUB_ALL, timeout=conf['recv_timeout'])
     except Exception as e:
-        print("recv error")
-        print(e)
         log_exception()
         await p.close()
         return None, None

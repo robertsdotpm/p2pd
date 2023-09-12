@@ -6,7 +6,7 @@ from .net import *
 # TODO: address doesn't support domain resolution
 # from a specific interface. This may not matter though.
 class Address():
-    def __init__(self, host, port, route, sock_type=socket.SOCK_STREAM, timeout=2):
+    def __init__(self, host, port, route=None, sock_type=socket.SOCK_STREAM, timeout=2):
         self.timeout = timeout
         self.resolved = False
         self.sock_type = sock_type

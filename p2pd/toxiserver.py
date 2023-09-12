@@ -2,43 +2,9 @@ import asyncio
 import json
 import re
 import random
-from p2pd.test_init import *
-from p2pd import *
-from toxiclient import ToxiClient, ToxiTunnel, ToxiToxic
-
-"""
-new tunnel response:
-
-b'{"name":"gxU1jLqsno","listen":"127.0.0.1:54916","upstream":"142.250.70.196:80","enabled":true,"toxics":[]}'
-
-
-@GET("/base", {'required': 'default'}, optional={})
-async def base(self, vars, client_tup, pipe):
-    pass
-    
-/base/...
-0    1
-
-[["name", default, r"regex"]]
-
-toxic:
-    ...
-
-    return data if it hasnt modified it, pipe
-
-toxic_router(msg, src_pipe, dest_pipe, toxics):
-    for toxic in toxics:
-        msg, dest_pipe = await toxic(msg, dest_pipe)
-        if dest_pipe is None:
-            break
-    
-    await dest_pipe.send(msg)
-            
-whats the difference between slow_close, add_timeout, and reset_peer? they all seem to be the same?
-
-    prob shutdown but look it up
-//          optional optional
-"""
+from .test_init import *
+from .daemon import Daemon
+from .http_server_lib import RESTD
 
 class ToxicBase():
     def __init__(self, name=None, direction=None, toxicity=None):
@@ -61,30 +27,16 @@ class ToxicBase():
         return msg, dest_pipe
         
 async def toxic_router(msg, src_pipe, dest_pipe, toxics):
-    print(dest_pipe)
-    print(toxics)
-    print(f"router msg = {msg}")
-
-
     for toxic in toxics:
-        print(toxic.toxicity)
-        print(toxic.direction)
-        print(toxic.name)
-        print(toxic.should_run())
-
-
         if toxic.should_run():
             ret = await async_wrap_errors(
                 toxic.run(msg, dest_pipe)
             )
 
             if ret is None:
-                print("ret was none")
                 continue
             else:
                 msg, dest_pipe = ret
-                print("ret = ")
-                print(ret)
 
             # Dest pipe has been closed.
             if dest_pipe is None:
@@ -94,10 +46,6 @@ async def toxic_router(msg, src_pipe, dest_pipe, toxics):
             if msg is None:
                 return
 
-    print("here")
-    print("sending to dest pipe")
-    print(dest_pipe.stream.dest_tup)
-    log("sending to dest pipe")
     await async_wrap_errors(
         dest_pipe.send(msg)
     )
@@ -133,7 +81,6 @@ class ToxicBandwidthLimit(ToxicBase):
         # Convert rate to bytes per 100 ms.
         # If rate is 0 then there's no limit.
         self.rate_ms = int((self.rate * 1024) / 10)
-
         return self
     
     async def get_bandwidth(self, n):
@@ -265,13 +212,10 @@ class ToxicResetPeer(ToxicBase):
         # Close if timeout reached.
         if self.ms:
             if duration >= self.ms:
-                print("close 2 reset")
                 await dest_pipe.close()
             else:
-                print("success 1 reset")
                 return msg, dest_pipe
         else:
-            print("close 1 reset")
             await dest_pipe.close()
 
         # Block data transmission.
@@ -284,10 +228,8 @@ class ToxicLimitData(ToxicBase):
         return self
 
     async def run(self, msg, dest_pipe):
-        print("in limit data")
         self.total += len(msg)
         if self.total >= self.n:
-            print("closing dest pipe")
             await dest_pipe.close()
             return None, None
         else:
@@ -394,22 +336,13 @@ class ToxiTunnelServer(Daemon):
             if con_pipe in self.clients:
                 self.clients.remove(con_pipe)
 
-        print("client con")
-        print("in up cb")
-        print(client_tup)
-        print(con_pipe)
-        print(con_pipe.stream.dest_tup)
         con_pipe.add_end_cb(end_cb)
         self.clients.append(con_pipe)
 
     # Redirect msgs from upstream to clients with toxics.
     def set_upstream(self, pipe):
         async def msg_cb(msg, client_tup, upstream_pipe):
-            print(self.clients)
-            print("upstream msg recv")
-            print(self.clients[0].stream.dest_tup)
-
-            #pipe.transport.pause_reading()
+            pipe.transport.pause_reading()
             tasks = []
             for client in self.clients:
                 tasks.append(
@@ -421,28 +354,27 @@ class ToxiTunnelServer(Daemon):
                     )
                 )
 
-            print(tasks)
             if len(tasks):
                 await asyncio.gather(
                     *tasks,
                     return_exceptions=True
                 )
 
-            #pipe.transport.resume_reading()
+            pipe.transport.resume_reading()
 
         pipe.add_msg_cb(msg_cb)
         self.upstream_pipe = pipe
 
     # Redirect msg from clients to upstream with toxics.
     async def msg_cb(self, msg, client_tup, down_pipe):
-        #down_pipe.transport.pause_reading()
+        down_pipe.transport.pause_reading()
         await toxic_router(
             msg,
             down_pipe,
             self.upstream_pipe,
             d_vals(self.upstream_toxics)
         )
-        #down_pipe.transport.resume_reading()
+        down_pipe.transport.resume_reading()
 
 class ToxiMainServer(RESTD):
     def __init__(self, interfaces):
@@ -453,9 +385,6 @@ class ToxiMainServer(RESTD):
     @RESTD.POST(["proxies"])
     async def create_tunnel_server(self, v, pipe):
         j = v["body"]
-        print("in post proxies")
-        print(j)
-        print(v)
 
         # This is a request to close a tunnel.
         if j["enabled"] == False:
@@ -540,10 +469,6 @@ class ToxiMainServer(RESTD):
 
     @RESTD.POST(["proxies"], ["toxics"])
     async def add_new_toxic(self, v, pipe):
-        print("in add topic")
-        print(v["body"])
-
-
         j = v["body"]; attrs = j["attributes"]
         proxy_name = v["name"]["proxies"]
         if proxy_name not in self.tunnel_servs:
@@ -612,8 +537,6 @@ class ToxiMainServer(RESTD):
 
     @RESTD.DELETE(["proxies"], ["toxics"])
     async def del_new_toxic(self, v, pipe):
-        print("in del new topic")
-        print(v)
         proxy_name = v["name"]["proxies"]
         toxic_name = v["name"]["toxics"]
         if proxy_name in self.tunnel_servs:

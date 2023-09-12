@@ -172,8 +172,6 @@ class BaseStream(ACKUDP):
                 # Return only the data portion.
                 return ret[1]
         except Exception as e:
-            print(e)
-            print(timeout)
             return None
 
     # Async send for TCP and UDP cons.
@@ -205,14 +203,12 @@ class BaseStream(ACKUDP):
             # TCP send -- already bound to transport con.
             # TCP Transport instance.
             if isinstance(handle, STREAM_TYPES):
-                handle.write(data)
-
-                """
+                #handle.write(data)
                 await self.loop.sock_sendall(
                     self.proto.sock,
                     data
                 )
-                """
+                
 
                 return 1
 
@@ -537,8 +533,7 @@ class BaseProto(BaseACKProto):
         self.route_msg(data, client_tup)
 
     def error_received(self, exp):
-        print("in error received server")
-        print(exp)
+        pass
 
     # UDP packets.
     def datagram_received(self, data, client_tup):
@@ -759,8 +754,7 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
         super().connection_lost(exc)
 
     def error_received(self, exp):
-        print("in error received client")
-        print(exp)
+        pass
 
     def data_received(self, data):
         # This just adds data to reader which we are handling ourselves.
@@ -826,6 +820,12 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None,
 
         # Bind to route 0.
         route = await i.route()
+
+    # If dest has no route set use this route.
+    if dest is not None and dest.route is None:
+        if not dest.resolved:
+            dest.route = route
+            await dest
 
     # Build the base protocol object.
     base_proto = None

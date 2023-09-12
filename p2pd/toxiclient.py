@@ -1,8 +1,7 @@
 import asyncio
 import json
 import re
-from p2pd.test_init import *
-from p2pd import *
+from .test_init import *
 
 # https://github.com/Shopify/toxiproxy/tree/main#toxics
 class ToxiToxic():
@@ -158,7 +157,7 @@ class ToxiToxic():
     responses into multiple packets and sends them individually.
     This is useful for testing assumptions behind protocol clients.
     """
-    def add_slicer(self, n=1024, v=800, ug=20):
+    def add_slicer(self, n=100, v=50, ug=20):
         toxic = self.copy()
         toxic.body = self.api({
             "type": "slicer",
@@ -186,7 +185,6 @@ class ToxiTunnel():
     async def new_toxic(self, toxic):
         path = f"/proxies/{self.name}/toxics"
         resp = await self.client.curl.vars(body=toxic.body).post(path)
-        print(resp.out)
         assert(b"error" not in resp.out)
         self.toxics.append(toxic)
 
@@ -194,13 +192,11 @@ class ToxiTunnel():
         path = f"/proxies/{self.name}/toxics/{toxic.name}"
         resp = await self.client.curl.vars().delete(path)
         assert(resp.out == b'')
-        print(resp.out)
         self.toxics.remove(toxic)
 
     async def test_list(self):
         path = f"/proxies/{self.name}"
         resp = await self.client.curl.vars().get(path)
-        print(resp.out)
         return resp.out
 
     async def get_pipe(self, conf=None):
@@ -232,7 +228,6 @@ class ToxiTunnel():
         path = f"/proxies/{self.name}"
         resp = await self.client.curl.vars(body=json_body).post(path)
         self.client.tunnels.remove(self)
-        print(resp.out)
         return resp.out
 
 class ToxiClient():
@@ -248,7 +243,6 @@ class ToxiClient():
 
     async def version(self):
         resp = await self.curl.vars().get("/version")
-        print(resp.out)
         return resp.out
 
     async def new_tunnel(self, addr, name=None):
@@ -262,7 +256,6 @@ class ToxiClient():
 
         resp = await self.curl.vars(body=json_body).post("/proxies")
         assert(b"error" not in resp.out)
-        print(resp.out)
 
         # Listen porn for the tunnel server.
         port = re.findall("127[.]0[.]0[.]1[:]([0-9]+)", to_s(resp.out))[0]

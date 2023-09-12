@@ -312,12 +312,6 @@ class RESTD(Daemon):
         for scheme in args:
             fargs.append(scheme)
 
-        #fargs = [*args, {}, {}]
-        print(fargs)
-
-        # Allow paths after the base path to be matched.
-        #fargs[0] = re.escape(fargs[0]) + "([\/]([^\/]+))*"
-
         # Store the args in the function.
         f.args = fargs
 
@@ -400,7 +394,6 @@ class RESTD(Daemon):
         if best_matching_api is not None:
             # Return a reply.
             resp = await best_matching_api(v, pipe) or b""
-            print(resp)
             out_infos = [[dict, "json"], [bytes, "binary"], [str, "text"]]
             for out_info in out_infos:
                 if isinstance(resp, out_info[0]):

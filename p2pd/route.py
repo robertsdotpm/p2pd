@@ -68,6 +68,7 @@ from functools import total_ordering
 from .ip_range import *
 from .netiface_extra import *
 from .upnp import *
+from .address import *
 
 """
 As there's only one STUN server in the preview release the
@@ -157,6 +158,12 @@ class Route(Bind):
         # Maybe None for loopback interface.
         self.interface = interface
         self.route_pool = self.route_offset = self.host_offset = None
+
+    def __await__(self):
+        return self.bind().__await__()
+    
+    async def Address(self, dest, port):
+        return await Address(dest, port, self)
 
     async def forward(self, port=None, proto="TCP"):
         assert(self.resolved)
