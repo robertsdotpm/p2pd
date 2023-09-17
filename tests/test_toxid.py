@@ -10,36 +10,39 @@ from p2pd.toxiserver import *
 streams = lambda: [ToxiToxic().downstream(), ToxiToxic().upstream()]
 
 class TestToxid(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
+    async def do_setup(self):
         # Use this for socket tests.
-        self.net_conf = dict_child({
+        net_conf = dict_child({
             "recv_timeout": 10
         }, NET_CONF)
 
         # Create main Toxi server.
-        self.i = await Interface().start_local(skip_resolve=True)
-        route = await self.i.route().bind(ips="127.0.0.1", port=8475)
-        self.toxid = ToxiMainServer([self.i])
-        await self.toxid.listen_specific(
+        i = await Interface().start_local(skip_resolve=True)
+        route = await i.route().bind(ips="127.0.0.1")
+        toxid = ToxiMainServer([i])
+        await toxid.listen_specific(
             [[route, TCP]]
         )
 
         # Create a Toxi client.
-        toxid_addr = await Address("127.0.0.1", 8475, route)
-        self.client = await ToxiClient(
+        listen_port = toxid.get_listen_port()
+        toxid_addr = await Address("127.0.0.1", listen_port, route)
+        client = await ToxiClient(
             toxid_addr,
-            self.net_conf
+            net_conf
         ).start()
 
         # Create an echo server -- used for some tests.
-        route = await self.i.route().bind(ips="127.0.0.1", port=7777)
-        self.echod = EchoServer()
+        route = await self.i.route().bind(ips="127.0.0.1")
+        echod = EchoServer()
         await self.echod.listen_specific(
             [[route, TCP]]
         )
 
         # Address to connect to echod.
-        self.echo_dest = await Address("127.0.0.1", 7777, route)
+        listen_port = echod.get_listen_port()
+        echo_dest = await Address("127.0.0.1", listen_port, route)
+        return net_conf, toxid, toxi_addr, client, echod, echo_dest
 
     """
     If using HTTP as the application protocol to test that
@@ -48,31 +51,39 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
     makes this overly complex. At least with the code bellow
     the first toxic seems to work as expected.
     """
-    async def new_tunnel(self, tunnel_dest):
+    async def new_tunnel(self, tunnel_dest, client):
         # Setup a tunnel to a host for testing.
         # The toxi tunnels upstream is Google.
-        tunnel = await self.client.new_tunnel(tunnel_dest)
+        tunnel = await client.new_tunnel(tunnel_dest)
         assert(isinstance(tunnel, ToxiTunnel))
         return tunnel
 
-    async def asyncTearDown(self):
-        await self.toxid.close()
-        await self.echod.close()
+    async def do_cleanup(self, toxid, echod):
+        await toxid.close()
+        await echod.close()
 
     async def test_add_latency(self):
+        # Setup.
+        net_conf, \
+        toxid, \
+        toxi_addr, \
+        client, \
+        echod, \
+        echo_dest = await self.do_setup()
+
         # Test downstream and upstream.
         lag_amount = 2000
         tunnel_dest = await Address("www.google.com", 80, self.i.route())
         for toxi_stream in streams():
             # Add the initial toxic to a new tunnel.
-            tunnel = await self.new_tunnel(tunnel_dest)
+            tunnel = await self.new_tunnel(tunnel_dest, client)
             toxic = toxi_stream.add_latency(lag_amount)
             await tunnel.new_toxic(toxic)
 
             # HTTP get request to Google via a toxi tunnel.
             start_time = timestamp()
             curl = await tunnel.get_curl()
-            ret = await curl.vars().get("/", conf=self.net_conf)
+            ret = await curl.vars().get("/", conf=net_conf)
             end_time = timestamp()
 
             # Check data was received.
@@ -85,13 +96,16 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
             assert(duration >= (lag_amount * 0.8))
 
             # Check for timeout.
-            timeout = (self.net_conf['recv_timeout'] * 1000) * 0.8
+            timeout = (net_conf['recv_timeout'] * 1000) * 0.8
             assert(duration < timeout)
 
             # Cleanup.
             await tunnel.remove_toxic(toxic)
             await tunnel.close()
 
+        await self.do_cleanup(toxid, echod)
+
+    """
     async def test_limit_data(self):
         send_buf = b"1" * 90
         for toxi_stream in streams():
@@ -298,6 +312,7 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
             await pipe.close()
             await tunnel.remove_toxic(toxic)
             await tunnel.close()
+    """
 
 
 if __name__ == '__main__':

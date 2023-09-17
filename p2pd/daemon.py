@@ -21,6 +21,9 @@ called on new messages from a stream.
 process the message.
 f = lambda msg, stream: ...
 """
+def get_listen_port(server_info):
+    return server_info[2].sock.getsockname()[1]
+
 class Daemon():
     def __init__(self, interfaces=None, conf=DAEMON_CONF):
         self.conf = conf
@@ -31,6 +34,9 @@ class Daemon():
         for iface in self.interfaces:
             self.iface_lookup[iface.name] = iface
         self.rp = None
+
+    def get_listen_port(self):
+        return get_listen_port(self.servers[0])
 
     def set_rp(self, rp):
         self.rp = rp

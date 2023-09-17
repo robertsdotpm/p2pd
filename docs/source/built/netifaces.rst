@@ -1,5 +1,5 @@
-Netifaces
-===========
+More portable netifaces
+=========================
 
 In Python the PyPI module 'netifaces' is a popular project for receiving information on network cards cross-platform. However, on Windows it has a few problems:
 
