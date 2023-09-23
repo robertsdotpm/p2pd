@@ -3,6 +3,7 @@ import re
 import platform
 import multiprocessing
 import socket
+import pprint
 from .errors import *
 from .settings import *
 from .route import *
@@ -152,8 +153,9 @@ def get_interface_type(name):
 def get_interface_stack(rp):
     stacks = []
     for af in [IP4, IP6]:
-        if len(rp[af].routes):
-            stacks.append(af)
+        if af in rp:
+            if len(rp[af].routes):
+                stacks.append(af)
 
     if len(stacks) == 2:
         return DUEL_STACK
@@ -171,7 +173,7 @@ class Interface():
         self.resolved = False
         self.nat = nat or nat_info()
         self.name = name
-        self.rp = {}
+        self.rp = {IP4: RoutePool(), IP6: RoutePool()}
         self.v4_lan_ips = []
         self.guid = None
         self.netifaces = netifaces or Interface.get_netifaces()
@@ -211,7 +213,8 @@ class Interface():
 
             # May not be accurate.
             # Start() is the best way to set this.
-            self.stack = iface_af
+            if self.stack == DUEL_STACK:
+                self.stack = iface_af
 
         # Windows NIC descriptions are used for the name
         # if the interfaces are detected as all hex.
@@ -302,11 +305,11 @@ class Interface():
 
     # Make this interface printable because it's useful.
     def __str__(self):
-        return str(self.to_dict())
+        return pprint.pformat(self.to_dict())
 
     # Show a representation of this object.
     def __repr__(self):
-        return f"Interface.from_dict({self.to_dict()})"
+        return f"Interface.from_dict({str(self)})"
 
     # Pickle.
     def __getstate__(self):
@@ -327,7 +330,7 @@ class Interface():
 
         # Get routes for AF.
         if rp == None:
-            af_list = VALID_AFS
+            af_list = self.supported(skip_resolve=1)
             tasks = []
             for af in af_list:
                 async def helper(af):
@@ -361,7 +364,7 @@ class Interface():
 
         # Get routes for AF.
         if rp == None:
-            af_list = VALID_AFS
+            af_list = self.supported(skip_resolve=1)
             tasks = []
             for af in af_list:
                 async def helper(af):
@@ -379,7 +382,9 @@ class Interface():
                 
                 tasks.append(
                     asyncio.wait_for(
-                        helper(af),
+                        async_wrap_errors(
+                            helper(af)
+                        ),
                         15
                     )
                 )
@@ -507,8 +512,10 @@ class Interface():
             else:
                 return False
 
-    def supported(self):
-        assert(self.resolved)
+    def supported(self, skip_resolve=0):
+        if not skip_resolve:
+            assert(self.resolved)
+
         if self.stack == UNKNOWN_STACK:
             raise Exception("Unknown stack")
 

@@ -64,6 +64,8 @@ first using STUN and waiting for a long time out.
 import asyncio
 import copy
 import ipaddress
+import pprint
+import inspect
 from functools import total_ordering
 from .ip_range import *
 from .netiface_extra import *
@@ -159,6 +161,33 @@ class Route(Bind):
         self.interface = interface
         self.route_pool = self.route_offset = self.host_offset = None
 
+    """
+    async def bind(self, port=None, ips=None):
+        if self.af == IP4:
+            # Patch for non-routable public IPv6s.
+            print("aaa")
+            print(self.ext_ips[0])
+            old_ext = self.ext
+            if self.ext_ips[0] not in self.nic_ips:
+                print("bbb")
+                for nic_ipr in self.nic_ips:
+                    print(str(nic_ipr[0]))
+                    if "fe80" != str(nic_ipr[0])[:4]:
+                        self.ext = lambda: str(nic_ipr[0])
+                        break
+
+            self.ext = old_ext
+
+        await bind_closure(self)(port=port, ips=ips)
+
+    
+
+        print(self._bind_tups)
+        """
+
+
+
+
     def __await__(self):
         return self.bind().__await__()
     
@@ -208,6 +237,21 @@ class Route(Bind):
         return ipr_norm(self.nic_ips[0])
 
     def ext(self):
+        # Patch for unroutable IPv6 used as LAN IPs.
+        # This is only visable to the bind() caller.
+        if self.af == IP6:
+            print("here")
+            for stack_f in inspect.stack():
+                f_name = stack_f[3]
+                if f_name == "bind":
+                    if self.ext_ips[0] not in self.nic_ips:
+                        print("bbb")
+                        for nic_ipr in self.nic_ips:
+                            print("ccc")
+                            print(str(nic_ipr[0]))
+                            if "fe80" != ip_norm(nic_ipr[0])[:4]:
+                                return ip_norm(nic_ipr[0])
+
         return ipr_norm(self.ext_ips[0])
 
     # Test if a given IPRange is in the nic_ips list.
@@ -365,16 +409,10 @@ class Route(Bind):
             return len(self.ext_ips[0])
 
     def __repr__(self):
-        s = "[NICs = {}, WAN = {}, AF = {}]".format(
-            str(self.nic_ips),
-            str(self.ext_ips),
-            self.af
-        )
-
-        return s
+        return f"Route.from_dict({str(self)})"
 
     def __str__(self):
-        return self.__repr__()
+        return pprint.pformat(self.to_dict())
 
     def __eq__(self, other):
         other = Route._convert_other(other)
@@ -617,16 +655,19 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
     if_addresses = netifaces.ifaddresses(nic_id)
     if netifaces_af in if_addresses:
         bound_addresses = if_addresses[netifaces_af]
+        ext_iprs = []
         main_nics = []
         routes = []
         tasks = []
         for info in bound_addresses:
             nic_ipr = await netiface_addr_to_ipr(af, info, interface, loop, skip_bind_test)
+            log(f"Nic ipr in route = {nic_ipr}")
             if nic_ipr is None:
                 continue
 
             # All private IPs go to the same route.
             # The interface has one external WAN IP.
+            log(f"Nic ipr is private = {nic_ipr.is_private}")
             if nic_ipr.is_private:
                 main_nics.append(nic_ipr)
                 continue
@@ -659,6 +700,7 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                 async def ipr_is_public(nic_ipr, stun_client, main_nics):
                     # Use this IP for bind call.
                     src_ip = ip_norm(str(nic_ipr[0]))
+                    log(F"src_ip = {src_ip}")
                     local_addr = await Bind(
                         stun_client.interface,
                         af=stun_client.af,
@@ -672,27 +714,36 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                         conf=stun_conf
                     )
 
-                    # Check if address is actually public.
-                    if src_ip == wan_ip:
-                        nic_ipr.is_private = False
-                        nic_ipr.is_public = True
-                        return Route(
-                            af=af,
-                            nic_ips=[nic_ipr],
-                            ext_ips=[copy.deepcopy(nic_ipr)],
-                            interface=stun_client.interface
-                        )
-                    else:
-                        # In a 'public range' but used privately.
-                        # Yes, this is silly but possible.
-                        nic_ipr.is_private = True
-                        nic_ipr.is_public = False
-                        main_nics.append(nic_ipr)
-    
+                    # Record this wan_ip.
+                    ext_ipr = IPRange(wan_ip, cidr=CIDR_WAN)
+                    if ext_ipr not in ext_iprs:
+                        ext_iprs.append(ext_ipr)
+
+                    if len(ext_iprs) <= 1:
+                        if src_ip != wan_ip:
+                            # In a 'public range' but used privately.
+                            # Yes, this is silly but possible.
+                            nic_ipr.is_private = True
+                            nic_ipr.is_public = False
+                            main_nics.append(nic_ipr)
+                            return
+
+                    # Record as new route.
+                    nic_ipr.is_private = False
+                    nic_ipr.is_public = True
+                    return Route(
+                        af=af,
+                        nic_ips=[nic_ipr],
+                        ext_ips=[copy.deepcopy(ext_ipr)],
+                        interface=stun_client.interface
+                    )
+
                 if skip_resolve == False:
                     # Determine if this address is really public.
                     tasks.append(
-                        ipr_is_public(nic_ipr, stun_client, main_nics)
+                        async_wrap_errors(
+                            ipr_is_public(nic_ipr, stun_client, main_nics)
+                        )
                     )
                     continue
                 else:
@@ -719,6 +770,7 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
             [routes.append(route) for route in results]
 
         # Only bother to add a main route if it has NIC IPs assigned.
+        log(f"Len main nics = {len(main_nics)}")
         if len(main_nics):
             if af == IP4:
                 wan_ip = None
@@ -792,10 +844,20 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                 code is still simple to achieve.
                 """
                 assert(isinstance(main_nics, list))
-                for route in routes:
-                    # Add link local IPs as routes NIC IPs.
-                    # This will make the nic() code fast for IPv6.
-                    route.nic_ips = main_nics
+                if not len(routes):
+                    routes.append(
+                        Route(
+                            IP6,
+                            main_nics,
+                            [ext_iprs[0]],
+                            interface
+                        )
+                    )
+                else:
+                    for route in routes:
+                        # Add link local IPs as routes NIC IPs.
+                        # This will make the nic() code fast for IPv6.
+                        route.nic_ips = main_nics
 
         return routes
     else:
@@ -815,14 +877,11 @@ async def Routes(interface_list, af, netifaces, skip_resolve=False):
     # Copy route pool from Interface if it already exists.
     # Otherwise schedule task to get list of routes.
     for iface in interface_list:
-        if af in iface.rp:
-            results += sum(iface.rp[af].routes, [])
-        else:
-            tasks.append(
-                async_wrap_errors(
-                    get_routes(iface, af, skip_resolve, netifaces=netifaces)
-                )
+        tasks.append(
+            async_wrap_errors(
+                get_routes(iface, af, skip_resolve, netifaces=netifaces)
             )
+        )
 
     # Tasks that need to be run.
     # Cmbine with results -- if any.

@@ -525,7 +525,7 @@ def bind_closure(self):
                 # (Host, port, flow info, interface ID)
                 if not len(addr_infos):
                     raise Exception("Can't resolve IPv6 address for bind.")
-
+                
                 self._bind_tups[bind_type] = addr_infos[0][4]
             else:
                 # Otherwise this is all you need.
@@ -564,7 +564,8 @@ class Bind():
 
         # Will store a tuple that can be passed to bind.
         self._bind_tups = {NIC_BIND: None, EXT_BIND: None}
-        self.bind = bind_closure(self)
+        if not hasattr(self, "bind"):
+            self.bind = bind_closure(self)
 
     def __await__(self):
         return self.bind().__await__()

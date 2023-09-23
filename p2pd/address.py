@@ -1,6 +1,7 @@
 import asyncio
 import socket
 import ipaddress
+import pprint
 from .net import *
 
 # TODO: address doesn't support domain resolution
@@ -183,11 +184,11 @@ class Address():
 
     # Show a representation of this object.
     def __repr__(self):
-        return f"Address.from_dict({self.to_dict()})"
+        return f"Address.from_dict({str(self)})"
 
     # Make this interface printable because it's useful.
     def __str__(self):
-        return str(self.tup)
+        return pprint.pformat(self.tup)
 
     def __hash__(self):
         return hash(repr(self))

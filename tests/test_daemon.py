@@ -85,7 +85,8 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
             # Test connect to global IP6 that's ourself.
             if af == IP6:
-                addrs.append(route.ext())
+                if route.ext_ips[0] in route.nic_ips:
+                    addrs.append(route.ext())
 
             for addr in addrs:
                 msg = b"hello world ay lmaoo"

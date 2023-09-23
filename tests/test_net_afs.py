@@ -34,8 +34,8 @@ class TestAFsWork(unittest.IsolatedAsyncioTestCase):
                     "port": 4242
                 },
                 IP6: {
-                    "host": "tcpbin.com",
-                    "port": 4242
+                    "host": "p2pd.net",
+                    "port": 7
                 }
             }
         }
