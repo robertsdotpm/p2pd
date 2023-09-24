@@ -37,6 +37,9 @@ class TestIPv6(unittest.IsolatedAsyncioTestCase):
         i = Interface(stack=IP6)
         await i.start()
 
+        print(i)
+
+
 
         s = STUNClient(interface=i, proto=UDP, af=IP6)
         x = await s.get_wan_ip(servers=servers)

@@ -156,6 +156,7 @@ class Route(Bind):
         self.af = af
         self.nic_ips = nic_ips or []
         self.ext_ips = ext_ips or []
+        self.link_locals = []
 
         # Maybe None for loopback interface.
         self.interface = interface
@@ -185,11 +186,11 @@ class Route(Bind):
         print(self._bind_tups)
         """
 
-
-
-
     def __await__(self):
         return self.bind().__await__()
+    
+    def set_link_locals(self, link_locals):
+        self.link_locals = link_locals
     
     async def Address(self, dest, port):
         return await Address(dest, port, self)
@@ -227,16 +228,20 @@ class Route(Bind):
         such to work properly. Assuming that IPv6 support is
         enabled on a host. If not this will raise an Exception.
         """
+
+        """
         if self.af == IP6:
             for ipr in self.nic_ips:
                 if ipr.is_private:
                     return ipr_norm(ipr)
 
             raise Exception("> Route.nic() with af=6 found no link-locals.")
+        """
 
         return ipr_norm(self.nic_ips[0])
 
     def ext(self):
+        """
         # Patch for unroutable IPv6 used as LAN IPs.
         # This is only visable to the bind() caller.
         if self.af == IP6:
@@ -251,6 +256,7 @@ class Route(Bind):
                             print(str(nic_ipr[0]))
                             if "fe80" != ip_norm(nic_ipr[0])[:4]:
                                 return ip_norm(nic_ipr[0])
+        """
 
         return ipr_norm(self.ext_ips[0])
 
@@ -451,8 +457,9 @@ class Route(Bind):
         return route
 
 class RoutePool():
-    def __init__(self, routes=None):
+    def __init__(self, routes=None, link_locals=None):
         self.routes = routes or []
+        self.link_locals = link_locals or []
 
         # Avoid duplicates in routes.
         for route in self.routes:
@@ -648,6 +655,7 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
     stun_conf["retry_no"] = 2 # Slower but more fault-tolerant.
     stun_conf["consensus"] = ROUTE_CONSENSUS # N of M for a result.
     loop = asyncio.get_event_loop()
+    link_locals = []
 
     # Other important variables.
     stun_client = stun_client or STUNClient(interface, af=af)
@@ -663,6 +671,11 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
             nic_ipr = await netiface_addr_to_ipr(af, info, interface, loop, skip_bind_test)
             log(f"Nic ipr in route = {nic_ipr}")
             if nic_ipr is None:
+                continue
+
+            # Include link locals in their own set.
+            if ip_norm(nic_ipr[0])[:4] == "fe80":
+                link_locals.append(nic_ipr)
                 continue
 
             # All private IPs go to the same route.
@@ -859,9 +872,10 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                         # This will make the nic() code fast for IPv6.
                         route.nic_ips = main_nics
 
-        return routes
+        [r.set_link_locals(link_locals) for r in routes]
+        return [routes, link_locals]
     else:
-        return []
+        return [[], []]
 
 async def Routes(interface_list, af, netifaces, skip_resolve=False):
     # Optimization: check if an AF has a default gateway first.
@@ -878,20 +892,23 @@ async def Routes(interface_list, af, netifaces, skip_resolve=False):
     # Otherwise schedule task to get list of routes.
     for iface in interface_list:
         tasks.append(
-            async_wrap_errors(
-                get_routes(iface, af, skip_resolve, netifaces=netifaces)
-            )
+            get_routes(iface, af, skip_resolve, netifaces=netifaces)
         )
 
     # Tasks that need to be run.
     # Cmbine with results -- if any.
+    link_locals = []
     if len(tasks):
-        list_of_route_lists = await asyncio.gather(*tasks)
-        list_of_route_lists = strip_none(list_of_route_lists)
-        results += sum(list_of_route_lists, [])
+        ret_lists = await asyncio.gather(*tasks)
+        for ret_list in ret_lists:
+            if len(ret_list) != 2:
+                continue
+
+            results = results + ret_list[0]
+            link_locals = link_locals + ret_list[1]
 
     # Wrap all routes in a RoutePool and return the result.
-    return RoutePool(results)
+    return RoutePool(results, link_locals)
 
 # Combine all routes from interface into RoutePool.
 def interfaces_to_rp(interface_list):

@@ -729,7 +729,10 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
         # Get loopback working.
         if dest_addr.is_loopback:
             bind_flag = LOOPBACK_BIND
+
+    """
         else:
+
             # Use global address on IPv6 global scopes.
             # Otherwise use link local or private NIC addresses.
             if dest_addr.is_public and dest_addr.chosen == IP6:
@@ -738,6 +741,7 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
         # The assumption is they want their server to be reachable.
         if route.af == IP6:
             bind_flag = EXT_BIND
+    """
 
     try:
         sock.bind(bind_tup or route.bind_tup(flag=bind_flag))
