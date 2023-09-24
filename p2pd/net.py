@@ -531,6 +531,11 @@ def bind_closure(self):
                 # Otherwise this is all you need.
                 self._bind_tups[bind_type] = (bind_ip, port)
 
+            # Patch for IPv6 localhost.
+            if self._bind_tups[bind_type][0] == "::1":
+                new_bind_tup = self._bind_tups[bind_type][:-1] + (0,)
+                self._bind_tups[bind_type] = new_bind_tup
+
         #bind.addr = getattr(bind, 'addr', self._addr)
         self.bind_port = port
         self.nic_bind, self.ext_bind = nic_bind, ext_bind

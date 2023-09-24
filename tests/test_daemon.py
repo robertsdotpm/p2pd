@@ -83,10 +83,9 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
             route = await interface.route(af)
             addrs = [route.nic(), loopbacks[af]]
 
-            # Test connect to global IP6 that's ourself.
+            # Test connect to link local.
             if af == IP6:
-                if route.ext_ips[0] in route.nic_ips:
-                    addrs.append(route.ext())
+                addrs.append(route.link_local())
 
             for addr in addrs:
                 msg = b"hello world ay lmaoo"

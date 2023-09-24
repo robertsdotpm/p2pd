@@ -259,6 +259,9 @@ class Route(Bind):
         """
 
         return ipr_norm(self.ext_ips[0])
+    
+    def link_local(self):
+        return ipr_norm(self.link_locals[0])
 
     # Test if a given IPRange is in the nic_ips list.
     def has_nic_ip(self, ipr):
@@ -453,6 +456,7 @@ class Route(Bind):
         route.ext_bind = self.ext_bind
         route._bind_tups = copy.deepcopy(self._bind_tups)
         route.resolved = self.resolved
+        route.set_link_locals(copy.deepcopy(self.link_locals))
 
         return route
 
