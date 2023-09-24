@@ -38,6 +38,7 @@ class TestIPv6(unittest.IsolatedAsyncioTestCase):
         await i.start()
 
         print(i)
+        return
 
 
 
