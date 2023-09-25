@@ -233,6 +233,7 @@ class P2PNode(Daemon, P2PUtils):
                     log(f"Deterministic bind for node server failed.")
                     log(f"Port {self.port} was not available.")
                     self.port = 0
+                    log_exception()
         else:
             # Start handling messages for self.msg_cb.
             # Bind to all ifs provided to class on route[0].

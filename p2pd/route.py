@@ -751,6 +751,9 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
             # The interface has one external WAN IP.
             log(f"Nic ipr is private = {nic_ipr.is_private}")
             if nic_ipr.is_private:
+                # Ensure the external address is fetched at least once
+                # assuming there's only private addresses.
+                # All private NICs will point to this.
                 if first_private:
                     tasks.append(
                         async_wrap_errors(
@@ -787,8 +790,11 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
         if len(tasks):
             await asyncio.gather(*tasks)
 
+            # Choose a random ext address for the default.
+            if "default" not in route_infos:
+                route_infos["default"] = list(route_infos.keys())[0]
+
             # Add private NIC iprs to default route.
-            print(route_infos)
             default_route = route_infos["default"]
             default_nics = route_infos[default_route]
             for nic_ipr in nic_iprs:

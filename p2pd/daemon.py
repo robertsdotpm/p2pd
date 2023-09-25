@@ -212,15 +212,17 @@ class Daemon():
                     # Start the server on bind address, port, and proto.
                     for proto in protos:
                         route = copy.deepcopy(route)
+                        await route.bind(port=port, ips=route.ips)
                         await self._listen(route, port, proto, msg_cb)
 
                         # Bind to additional link-local for IPv6.
                         if route.af == IP6:
                             try:
                                 route = copy.deepcopy(route)
-                                route = await route.bind(port=port, ips=route.nic())
+                                route = await route.bind(port=port, ips=route.link_local())
                                 await self._listen(target=route, port=port, proto=proto, msg_cb=msg_cb, up_cb=up_cb)
                             except Exception:
+                                log_exception()
                                 pass
                                 # May already be started -- ignore.
 

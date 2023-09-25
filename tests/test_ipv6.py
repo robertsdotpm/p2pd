@@ -34,7 +34,7 @@ class TestIPv6(unittest.IsolatedAsyncioTestCase):
 
         ]
 
-        i = Interface(stack=IP6)
+        i = Interface()
         await i.start()
 
         print(i)
