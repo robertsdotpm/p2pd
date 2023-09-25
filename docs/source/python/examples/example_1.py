@@ -16,7 +16,10 @@ async def computer_a():
     # The node implements your protocol.
     node = await start_p2p_node(
         # Set to true for port forwarding + pin holes.
-        enable_upnp=False
+        enable_upnp=False,
+        #
+        # Make sure node server uses different port.
+        port=NODE_PORT + 50 + 1
     )
     node.add_msg_cb(msg_cb)
     #
@@ -32,10 +35,10 @@ async def computer_b():
     node = await start_p2p_node(
         # Set to true for port forwarding + pin holes.
         enable_upnp=False,
-
+        #
         # Make sure node server uses different port
         # to computer_a.
-        port=NODE_PORT + 1
+        port=NODE_PORT + 50 + 2
     )
     #
     # Location of computer a's p2p address.

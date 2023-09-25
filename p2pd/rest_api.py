@@ -367,7 +367,7 @@ async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=
     node = await start_p2p_node(
         # Attempt deterministic port allocation based on NICs.
         # If in use a random port will be used.
-        port=-1,
+        port=NODE_PORT + 60 + 1,
         ifs=ifs,
         enable_upnp=enable_upnp
     )
