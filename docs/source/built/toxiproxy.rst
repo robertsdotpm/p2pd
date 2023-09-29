@@ -55,6 +55,48 @@ you to set direction (is it upstream or downstream), probability of activation
 (also known as 'toxicity'), and much more. If you send a HTTP request down
 'pipe' you will now get a delayed response due to the latency toxic.
 
-I have added support for the toxics specified by Shopify.
+I have added support for the toxics specified by Shopify. The rest
+of these toxics assume calling ToxiToxic().upstream().toxic_name...
+or ToxiToxic().downstream().toxic_name.
 
+add_latency(ms, jitter)
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+Adds N ms of latency with +/- jitter (random inclusive.)
 
+add_bandwidth_limit(kb)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Adds a limit of kb kilobytes per second.
+
+add_slow_close(ms)
+^^^^^^^^^^^^^^^^^^^^^^
+Adds a delay to the connection being closed. So even if close is called on a pipe due in the code that coroutine will be delayed.
+
+add_timeout(ms)
+^^^^^^^^^^^^^^^^^^^
+Prevents data from being forwarded and closes the connection after timeout.
+If timeout is set to 0 then the connection won't close and no data will
+be delayed on this toxic is removed.
+
+add_reset_peer(ms)
+^^^^^^^^^^^^^^^^^^^^^^
+Normally when you call close() on a socket it 'gracefully' closes the connection. So that unsent data is sent and it indicates the sender is finished. This toxic instead tears down a connection immediately (ms=0) or after
+a timeout. Unset data will be discarded.
+
+add_limit_data(n)
+^^^^^^^^^^^^^^^^^^^^^
+Keeps a count of the number of bytes sent. When it reaches n the
+connection is closed.
+
+add_slicer(n, v, ug)
+^^^^^^^^^^^^^^^^^^^^^^^^
+When you call recv with BSD sockets and TCP you may receive some
+or all of your data. Some people assume that recv corresponds to
+each send but in reality TCP is a stream-oriented protocol. The
+slicer takes received data and splits them up into multiple sends.
+Where n is the average byte no of a packet, v is the variation in
+bytes of an average packet, and ug is the microseconds to sends by.
+
+There are tests that show usage for all of the above toxics.
+See tests/test_toxid.py for an example.
+
+See https://github.com/Shopify/toxiproxy for more information.
