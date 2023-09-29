@@ -716,7 +716,7 @@ class Interfaces():
         return self.by_af[af][0]
 
     # Load default interfaces.
-    async def _start(self, do_start=1): # pragma: no cover
+    async def start(self, do_start=1): # pragma: no cover
         tasks = []
 
         # Load default interfaces.

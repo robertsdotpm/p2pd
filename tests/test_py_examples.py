@@ -81,6 +81,12 @@ class TestPyExamples(unittest.IsolatedAsyncioTestCase):
 
     async def test_15(self):
         await self.do_py_example(15)
+
+    async def test_16(self):
+        await self.do_py_example(16)
+
+    async def test_17(self):
+        await self.do_py_example(17)
     
 
 if __name__ == '__main__':

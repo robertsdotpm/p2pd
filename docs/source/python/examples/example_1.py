@@ -20,6 +20,7 @@ async def computer_a():
         #
         # Make sure node server uses different port.
         port=NODE_PORT + 50 + 1
+        
     )
     node.add_msg_cb(msg_cb)
     #

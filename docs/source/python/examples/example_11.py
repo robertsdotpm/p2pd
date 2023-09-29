@@ -10,7 +10,7 @@ async def example():
         #
         # Make sure node server uses different port
         # to other examples.
-        port=NODE_PORT + 50 + 11
+        port=NODE_PORT + 50 + 12
     )
     #
     # Strategies used to make a P2P connection.

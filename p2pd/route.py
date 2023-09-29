@@ -758,7 +758,7 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                     tasks.append(
                         async_wrap_errors(
                             ipr_is_public(nic_ipr, stun_client, route_infos, stun_conf),
-                            timeout=3
+                            timeout=15
                         )
                     )
 
@@ -771,7 +771,7 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                     tasks.append(
                         async_wrap_errors(
                             ipr_is_public(nic_ipr, stun_client, route_infos, stun_conf),
-                            timeout=3
+                            timeout=15
                         )
                     )
                 else:
