@@ -757,7 +757,8 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                 if first_private:
                     tasks.append(
                         async_wrap_errors(
-                            ipr_is_public(nic_ipr, stun_client, route_infos, stun_conf)
+                            ipr_is_public(nic_ipr, stun_client, route_infos, stun_conf),
+                            timeout=3
                         )
                     )
 
@@ -769,7 +770,8 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                     # Determine if this address is really public.
                     tasks.append(
                         async_wrap_errors(
-                            ipr_is_public(nic_ipr, stun_client, route_infos, stun_conf)
+                            ipr_is_public(nic_ipr, stun_client, route_infos, stun_conf),
+                            timeout=3
                         )
                     )
                 else:

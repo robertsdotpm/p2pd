@@ -25,10 +25,7 @@ P2PD_NET_ADDR_BYTES = b'0,3-[0,149.56.128.148,149.56.128.148,10001,1,1,0]-[0,260
 
 # Only load the test interface on the right machine.
 # Otherwise the name (probably) won't exist.
-if socket.gethostname() == "p2pd.net":
-    P2PD_IFS = [Interface.from_dict({'name': 'enp1s0f0', 'nat': {'type': 1, 'delta': {'type': 1, 'value': 0}}, 'rp': {2: [{'af': 2, 'nic_ips': [{'ip': '139.99.209.63', 'cidr': 32, 'af': 2}], 'ext_ips': [{'ip': '139.99.209.63', 'cidr': 32, 'af': 2}]}, {'af': 2, 'nic_ips': [{'ip': '139.99.250.35', 'cidr': 32, 'af': 2}], 'ext_ips': [{'ip': '139.99.250.35', 'cidr': 32, 'af': 2}]}], 10: [{'af': 10, 'nic_ips': [{'ip': 'fe80:0000:0000:0000:ae1f:6bff:fe94:531a', 'cidr': 128, 'af': 10}], 'ext_ips': [{'ip': '2402:1f00:8101:083f:0000:0000:0000:0002', 'cidr': 128, 'af': 10}]}, {'af': 10, 'nic_ips': [{'ip': 'fe80:0000:0000:0000:ae1f:6bff:fe94:531a', 'cidr': 128, 'af': 10}], 'ext_ips': [{'ip': '2402:1f00:8101:083f:0000:0000:0000:0001', 'cidr': 128, 'af': 10}]}]}})]
-else:
-    P2PD_IFS = []
+P2PD_IFS = []
 
 vmaj, vmin, _ = platform.python_version_tuple()
 vmaj = int(vmaj); vmin = int(vmin)

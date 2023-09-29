@@ -111,9 +111,11 @@ def http_res(payload, mime, req, client_tup=None):
 
     # Support binary responses.
     if mime == "binary":
+        payload = to_b(payload)
         content_type = b"application/octet-stream"
 
     if mime == "text":
+        payload = to_b(payload)
         content_type = b"text/html"
 
     # CORS policy header line.
@@ -393,7 +395,7 @@ class RESTD(Daemon):
         # Call matching API method.
         if best_matching_api is not None:
             # Return a reply.
-            resp = await best_matching_api(v, pipe) or b""
+            resp = await async_wrap_errors(best_matching_api(v, pipe)) or b""
             out_infos = [[dict, "json"], [bytes, "binary"], [str, "text"]]
             for out_info in out_infos:
                 if isinstance(resp, out_info[0]):
