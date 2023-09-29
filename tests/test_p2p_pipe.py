@@ -39,7 +39,7 @@ async def test_setup(netifaces=None, ifs=None):
     # Main node used for testing p2p functionality.
     node_a_ifs = [ifs[0]] if ifs is not None else test_setup.ifs
     node_a = await start_p2p_node(
-        node_id=node_name(b"node_a", node_a_ifs[0]),
+        node_id=node_name(b"node_a_" + rand_plain(8), node_a_ifs[0]),
 
         # Get brand new unassigned listen port.
         # Avoid TIME_WAIT buggy sockets from port reuse.
@@ -53,7 +53,7 @@ async def test_setup(netifaces=None, ifs=None):
     # Test local punching algorithm.
     node_b_ifs = [ifs[1  % len(ifs)]] if ifs is not None else test_setup.ifs
     node_b = await start_p2p_node(
-        node_id=node_name(b"node_b", node_b_ifs[0]),
+        node_id=node_name(b"node_b_" + rand_plain(8), node_b_ifs[0]),
 
         # Get brand new unassigned listen port.
         # Avoid TIME_WAIT buggy sockets from port reuse.
@@ -68,7 +68,7 @@ async def test_setup(netifaces=None, ifs=None):
     print(f"Node b = {node_b.p2p_addr}")
     return node_a, node_b
 
-async def test_cleanup(node_a, node_b):
+async def do_node_cleanup(node_a, node_b):
     await node_a.close()
     await node_b.close()
 
@@ -88,7 +88,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         pipe_okay = await check_pipe(pipe, dest_tup=dest_tup)
         self.assertTrue(pipe_okay)
         await pipe.close()
-        await test_cleanup(node_a, node_b)
+        await do_node_cleanup(node_a, node_b)
 
     async def test_multiple_strats(self):
         # Test reverse connect.
@@ -118,7 +118,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         pipe_okay = await check_pipe(pipe)
         self.assertTrue(pipe_okay)
         await pipe.close()
-        await test_cleanup(node_a, node_b)
+        await do_node_cleanup(node_a, node_b)
 
     async def test_self_reverse_connect(self):
         # Test reverse connect.
@@ -134,7 +134,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         pipe_okay = await check_pipe(pipe)
         self.assertTrue(pipe_okay)
         await pipe.close()
-        await test_cleanup(node_a, node_b)
+        await do_node_cleanup(node_a, node_b)
 
     async def test_self_direct_connect(self):
         # Test reverse connect.
@@ -150,7 +150,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         pipe_okay = await check_pipe(pipe)
         self.assertTrue(pipe_okay)
         await pipe.close()
-        await test_cleanup(node_a, node_b)
+        await do_node_cleanup(node_a, node_b)
 
     async def test_remote_direct_connect(self):
         if not P2PD_TEST_INFRASTRUCTURE:
@@ -169,7 +169,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         pipe_okay = await check_pipe(pipe)
         self.assertTrue(pipe_okay)
         await pipe.close()
-        await test_cleanup(node_a, node_b)
+        await do_node_cleanup(node_a, node_b)
 
     async def test_self_punch(self):
         # Test p2p punch to self.
@@ -189,7 +189,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
 
         if pipe is not None:
             await pipe.close()
-        await test_cleanup(node_a, node_b)
+        await do_node_cleanup(node_a, node_b)
 
     async def test_remote_reverse_connect(self):
         if not P2PD_TEST_INFRASTRUCTURE:
@@ -218,7 +218,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
             print("> Skipping reverse connect test")
             print("> NAT type is not open.\r\n")
 
-        await test_cleanup(node_a, node_b)
+        await do_node_cleanup(node_a, node_b)
 
     async def test_remote_punch_duel_ifs(self):
         # Load interface list.
@@ -242,7 +242,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         # Cleanup        
         if pipe is not None:
             await pipe.close()
-        await test_cleanup(node_a, node_b)
+        await do_node_cleanup(node_a, node_b)
 
     async def test_remote_punch(self, netifaces=None, ifs=None, is_optional=False):
         if not P2PD_TEST_INFRASTRUCTURE and ifs is None:
@@ -269,7 +269,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         else:
             print("> p2pd net addr is us. Skipping remote punch test.")
 
-        await test_cleanup(node_a, node_b)
+        await do_node_cleanup(node_a, node_b)
 
     async def test_remote_turn_connect(self):
         if not P2PD_TEST_INFRASTRUCTURE:
@@ -293,7 +293,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         pipe_okay = await check_pipe(pipe, dest_tup=dest_tup)
         self.assertTrue(pipe_okay)
         await pipe.close()
-        await test_cleanup(node_a, node_b)
+        await do_node_cleanup(node_a, node_b)
 
 if __name__ == '__main__':
     main()

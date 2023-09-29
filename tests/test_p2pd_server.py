@@ -50,7 +50,11 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
         # Not the best unit test but over it.
         for url in urls:
             # Convert HTTP response to JSON.
-            _, resp = await http_req(r, dest, url, do_close=True)
+            r = i.route()
+            _, resp = await http_req(
+                route=r, dest=dest, path=url,
+                do_close=True
+            )
             out = resp.out()
             j = json.loads(out)
 
@@ -59,10 +63,12 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
 
         # Make a new con.
         c2 = "pipe_test"
+        r = i.route()
         await http_req(r, dest, "/p2p/open/" + c2 + "/self", do_close=True)
 
         # Request a new pipe to a named p2p con.
         # This is a cool feature.
+        r = i.route()
         p, out = await http_req(r, dest, "/p2p/pipe/" + c2, do_close=0)
         msg = b"this is a test"
         await p.send(b"ECHO " + msg)

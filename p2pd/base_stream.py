@@ -203,14 +203,12 @@ class BaseStream(ACKUDP):
             # TCP send -- already bound to transport con.
             # TCP Transport instance.
             if isinstance(handle, STREAM_TYPES):
-                handle.write(data)
-
-                """
+                #handle.write(data)
                 await self.loop.sock_sendall(
                     self.proto.sock,
                     data
                 )
-                """
+                
 
                 return 1
 
@@ -268,6 +266,10 @@ class BaseProto(BaseACKProto):
         # Ran when a connection ends.
         self.end_cbs = []
 
+        # Ran when a connection is made.
+        # For TCP this is a new connection.
+        self.up_cbs = []
+
         # List of tasks for send / recv / subscribe.
         """
         Coroutine references need to be saved or the garbage collector
@@ -309,7 +311,7 @@ class BaseProto(BaseACKProto):
 
     # Used for event-based programming.
     # Can execute code on new cons, dropped cons, and new msgs.
-    def run_handlers(self, handlers, client_tup, data=None):
+    def run_handlers(self, handlers, client_tup=None, data=None):
         # Run any registered call backs on msg.
         self.handler_tasks = rm_done_tasks(self.handler_tasks)
         for handler in handlers:
@@ -404,13 +406,23 @@ class BaseProto(BaseACKProto):
             self.msg_cbs.remove(msg_cb)
 
         return self
+    
+    def add_up_cb(self, up_cb):
+        self.up_cbs.append(up_cb)
+        return self
+
+    def del_up_cb_cb(self, up_cb):
+        if up_cb in self.up_cbs:
+            self.up_cbs.remove(up_cb)
+
+        return self
 
     def add_end_cb(self, end_cb):
         self.end_cbs.append(end_cb)
 
         # Make sure it runs if this is already closed.
         if not self.is_running:
-            self.run_handlers([end_cb])
+            self.run_handlers(end_cb)
 
         return self
 
@@ -431,6 +443,9 @@ class BaseProto(BaseACKProto):
             # Set stream object for doing I/O.
             self.stream = BaseStream(self, loop=self.loop)
             self.stream_ready.set()
+
+        # Process messages using any registered handlers.
+        self.run_handlers(self.up_cbs)
 
     # Socket closed manually or shutdown by other side.
     def connection_lost(self, exc):
@@ -517,6 +532,9 @@ class BaseProto(BaseACKProto):
         # Route message to stream.
         self.route_msg(data, client_tup)
 
+    def error_received(self, exp):
+        pass
+
     # UDP packets.
     def datagram_received(self, data, client_tup):
         log(f"Base proto recv udp = {data}")
@@ -565,7 +583,8 @@ class BaseProto(BaseACKProto):
                 self.stream.ack_send_tasks = []
 
         # Wait for all current tasks to end.
-        self.tasks = rm_done_tasks(self.tasks)
+        #self.tasks = rm_done_tasks(self.tasks)
+        self.tasks = []
         if len(self.tasks):
             # Wait for tasks to finish.
             await gather_or_cancel(self.tasks, 4)
@@ -586,12 +605,14 @@ class BaseProto(BaseACKProto):
             self.transport.close()
 
         """
-        # Close any sockets.
-        if self.sock is not None:
-            print("Closing sock")
-            self.sock.close()
+        if self.tcp_server_task is not None:
+            self.tcp_server_task.cancel()
         """
 
+        # Close any sockets.
+        # if self.sock is not None:
+        #    self.sock.close()
+        
         # No longer running.
         self.transport = None
         self.socket = None
@@ -633,7 +654,7 @@ a client connection to a TCP server in a BaseProto object.
 class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
     def __init__(self, stream_reader, base_proto, loop, conf=NET_CONF):
         # Setup stream reader / writers.
-        super().__init__(stream_reader, lambda r, w: 1, loop)
+        super().__init__(stream_reader, lambda x, y: 1, loop=loop)
 
         # This is the server that spawns these client connections.
         self.proto = base_proto
@@ -649,6 +670,18 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
         self.transport = None
         self.remote_tup = None
         self.conf = conf
+
+    """
+    StreamReaderProtocol has a bug in this function and doesn't
+    properly return False. This is a patch.
+    """
+    def eof_received(self):
+        #self.transport.pause_reading()
+        reader = self._stream_reader
+        if reader is not None:
+            reader.feed_eof()
+            
+        return False
 
     def connection_made(self, transport):
         # Wrap this connection in a BaseProto object.
@@ -669,6 +702,7 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
         self.client_proto.set_endpoint_type(TYPE_TCP_CLIENT)
         self.client_proto.msg_cbs = self.proto.msg_cbs
         self.client_proto.end_cbs = self.proto.end_cbs
+        self.client_proto.up_cbs = self.proto.up_cbs
         self.client_proto.connection_made(transport)
 
         # Record destination.
@@ -686,10 +720,11 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
             self.remote_tup
         )
 
+
+    
     # If close was called on a pipe on a server then clients will already be closed.
     # So this code will have no effect.
     def connection_lost(self, exc):
-        # Remove this as an object to close and manage in the server.
         super().connection_lost(exc)
 
         # Cleanup client futures entry.
@@ -715,12 +750,16 @@ class BaseStreamReaderProto(asyncio.StreamReaderProtocol):
         except Exception:
             log_exception()
 
+        # Remove this as an object to close and manage in the server.
+        super().connection_lost(exc)
+
+    def error_received(self, exp):
+        pass
+
     def data_received(self, data):
         # This just adds data to reader which we are handling ourselves.
         #super().connection_lost(exc)
-        log(f"Hacked server recv = {data}")
         if self.client_proto is None:
-            log(f"CLIENT PROTO NONE")
             return
 
         if not len(self.client_proto.msg_cbs):
@@ -750,6 +789,22 @@ async def base_start_server(sock, base_proto, *, loop=None, conf=NET_CONF, **kwd
 
     return server
 
+# Started in a new process.
+def start_server_threaded(args):
+    # Create new event loop and run coroutine in it.
+    asyncio.set_event_loop_policy(SelectorEventPolicy())
+    loop = asyncio.new_event_loop()
+    #loop = asyncio.get_event_loop()
+    f = asyncio.ensure_future(
+        async_wrap_errors(
+            args[0].serve_forever()
+        ),
+        loop=loop
+    )
+
+    loop.run_until_complete(f)
+    loop.stop()
+
 """
 In the spirit of unix a 'pipe' is an protocol and destination
 agnostic way to send data. It supports TCP & UDP: cons & servers.
@@ -757,7 +812,7 @@ It supports using IPv4 and IPv6 destination addresses.
 You can pull data from it based on a regex pattern.
 You can execute code on new messages or connection disconnects.
 """
-async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, conf=NET_CONF):
+async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None, conf=NET_CONF):
     # If no route is set assume default interface route 0.
     if route is None:
         # Load internal addresses.
@@ -765,6 +820,12 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, conf=NET_CO
 
         # Bind to route 0.
         route = await i.route()
+
+    # If dest has no route set use this route.
+    if dest is not None and dest.route is None:
+        if not dest.resolved:
+            dest.route = route
+            await dest
 
     # Build the base protocol object.
     base_proto = None
@@ -806,6 +867,9 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, conf=NET_CO
                 # Wait for connection, async style.
                 await asyncio.wait_for(con_task, conf["con_timeout"])
 
+        # Make sure bind port is set (and not zero.)
+        route.bind_port = sock.getsockname()[1]
+
         # Return the sock instead of base proto.
         if conf["sock_only"]:
             return sock
@@ -842,6 +906,10 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, conf=NET_CO
 
         # Start processing messages for TCP.
         if proto == TCP:
+            # Add new connection handler.
+            if up_cb is not None:
+                base_proto.add_up_cb(up_cb)
+
             # Listen server.
             if dest is None:
                 # Start router for TCP messages.
@@ -859,8 +927,24 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, conf=NET_CO
                 # Saving the task is apparently needed
                 # or the garbage collector could close it.
                 if hasattr(server, "serve_forever"):
-                    server_task = asyncio.create_task(server.serve_forever())
+                    server_task = asyncio.create_task(
+                        async_wrap_errors(
+                            server.serve_forever()
+                        )
+                    )
+                    
                     base_proto.set_tcp_server_task(server_task)
+                    #asyncio.ensure_future(server_task)
+
+                    """
+                    threading.Thread(target=server_task.serve_forever).start()
+                    #await server_task
+                    
+                    loop.run_in_executor(
+                        None, start_server_threaded, (server,)
+                    )
+                    """
+
                 base_proto.set_endpoint_type(TYPE_TCP_SERVER)
 
             # Single connection.

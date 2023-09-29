@@ -81,7 +81,7 @@ class TestRoute(unittest.IsolatedAsyncioTestCase):
             }
         )
         stun_client.set_wan_ip(ip_str)
-        routes = await get_routes(
+        ret = await get_routes(
             interface=interface,
             af=af,
             netifaces=net_ifaces,
@@ -90,6 +90,7 @@ class TestRoute(unittest.IsolatedAsyncioTestCase):
         )
 
         # Should return a route with the same external address as the nic.
+        routes, link_local = ret
         route = routes[0]
         expect_ext = IPRange(ip_str)
         self.assertEqual(route.ext_ips[0], expect_ext)
@@ -105,7 +106,7 @@ class TestRoute(unittest.IsolatedAsyncioTestCase):
         # Case: pub nic != wan ip
         ip_str = "7.7.7.7"
         stun_client.set_wan_ip(ip_str)
-        routes = await get_routes(
+        routes, link_local = await get_routes(
             interface=interface,
             af=af,
             netifaces=net_ifaces,
@@ -123,7 +124,7 @@ class TestRoute(unittest.IsolatedAsyncioTestCase):
 
         ###################################################################
         # Case: pub nic != wan ip; skip_resolve = True
-        routes = await get_routes(
+        routes, link_local = await get_routes(
             interface=interface,
             af=af,
             netifaces=net_ifaces,

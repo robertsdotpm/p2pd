@@ -78,14 +78,18 @@ async def start_p2p_node(port=NODE_PORT, node_id=None, ifs=None, clock_skew=Dec(
     log(f"> Start node. Clock skew = {sys_clock.clock_skew}")
 
     # Pass interface list to node.
-    node = await P2PNode(
-        if_list=ifs,
-        port=port,
-        node_id=node_id,
-        ip=ip,
-        signal_offsets=signal_offsets,
-        enable_upnp=enable_upnp
-    ).start()
+    node = await async_wrap_errors(
+        P2PNode(
+            if_list=ifs,
+            port=port,
+            node_id=node_id,
+            ip=ip,
+            signal_offsets=signal_offsets,
+            enable_upnp=enable_upnp
+        ).start()
+    )
+
+    log("node success apparently.")
 
     # Configure node for TCP punching.
     if pp_executors is not None:

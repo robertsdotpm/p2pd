@@ -525,13 +525,19 @@ def bind_closure(self):
                 # (Host, port, flow info, interface ID)
                 if not len(addr_infos):
                     raise Exception("Can't resolve IPv6 address for bind.")
-
+                
                 self._bind_tups[bind_type] = addr_infos[0][4]
             else:
                 # Otherwise this is all you need.
                 self._bind_tups[bind_type] = (bind_ip, port)
 
+            # Patch for IPv6 localhost.
+            if self._bind_tups[bind_type][0] == "::1":
+                new_bind_tup = self._bind_tups[bind_type][:-1] + (0,)
+                self._bind_tups[bind_type] = new_bind_tup
+
         #bind.addr = getattr(bind, 'addr', self._addr)
+        self.bind_port = port
         self.nic_bind, self.ext_bind = nic_bind, ext_bind
         self.resolved = True
         return self
@@ -563,7 +569,8 @@ class Bind():
 
         # Will store a tuple that can be passed to bind.
         self._bind_tups = {NIC_BIND: None, EXT_BIND: None}
-        self.bind = bind_closure(self)
+        if not hasattr(self, "bind"):
+            self.bind = bind_closure(self)
 
     def __await__(self):
         return self.bind().__await__()
@@ -727,7 +734,10 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
         # Get loopback working.
         if dest_addr.is_loopback:
             bind_flag = LOOPBACK_BIND
+
+    """
         else:
+
             # Use global address on IPv6 global scopes.
             # Otherwise use link local or private NIC addresses.
             if dest_addr.is_public and dest_addr.chosen == IP6:
@@ -736,6 +746,7 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
         # The assumption is they want their server to be reachable.
         if route.af == IP6:
             bind_flag = EXT_BIND
+    """
 
     try:
         sock.bind(bind_tup or route.bind_tup(flag=bind_flag))

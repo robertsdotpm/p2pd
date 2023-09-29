@@ -1,6 +1,7 @@
 
 import sys
 import os
+import asyncio
 
 """
 This is a hack to avoid double-imports of a module when using
@@ -9,7 +10,8 @@ the -m switch to run a module directly. Python modules are lolz.
 if not '-m' in sys.argv:
     os.environ["PYTHONIOENCODING"] = "utf-8"
     from .errors import *
-    from .utils import log, what_exception, log_exception, async_test
+    from .utils import log, what_exception, log_exception, async_test, SelectorEventPolicy
+    
     from .cmd_tools import *
     from .net import *
     from .address import Address
@@ -25,7 +27,7 @@ if not '-m' in sys.argv:
     from .daemon import Daemon
     from .http_client_lib import http_req, ParseHTTPResponse
     from .http_client_lib import http_req_buf
-    from .http_server_lib import rest_service, send_json, send_binary
+    from .http_server_lib import rest_service, send_json, send_binary, RESTD, api_route_closure
     from .http_server_lib import ParseHTTPRequest
     from .rest_api import P2PDServer, start_p2pd_server
     from .p2p_addr import *
@@ -34,6 +36,8 @@ if not '-m' in sys.argv:
     from .p2p_utils import get_pp_executors, start_p2p_node
     from .pdns import PDNS
     from .install import *
+    from .toxiclient import ToxiToxic, ToxiTunnel, ToxiClient
+    from .toxiserver import ToxiMainServer
 
-if __name__ == "main":
+if __name__ == "__main__":
     multiprocessing.set_start_method("spawn")

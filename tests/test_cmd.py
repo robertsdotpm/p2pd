@@ -5,14 +5,15 @@ import multiprocessing
 from p2pd.test_init import *
 from p2pd.cmd_tools import *
 
-async def test_esc(arg):
-    # So paths with spaces don't break the command.
-    py = sys.executable
-    c = "import sys; print(sys.argv[1], end='')"
-    buf = rf""""{py}" -c "{c}" {arg}"""
-    return await cmd(buf)
 
 class TestCmd(unittest.IsolatedAsyncioTestCase):
+    async def do_esc_test(self, s):
+        # So paths with spaces don't break the command.
+        py = sys.executable
+        c = "import sys; print(sys.argv[-1], end='')"
+        buf = f'{py}" -c "{c}" ' + s
+        return await cmd(buf)
+
     async def test_escape(self):
         if platform.system() in ["Windows"]:
             tests = [
@@ -138,7 +139,7 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(out_param, safe_param)
 
             # How is param serialized.
-            exp_param = await test_esc(safe_param)
+            exp_param = await self.do_esc_test(safe_param)
             if exp_param != unsafe_param:
                 print(f"{exp_param} != {unsafe_param}")
 

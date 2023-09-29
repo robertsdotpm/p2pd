@@ -6,7 +6,11 @@ async def example():
     # The node implements your protocol.
     node = await start_p2p_node(
         # Set to true for port forwarding + pin holes.
-        enable_upnp=False
+        enable_upnp=False,
+        #
+        # Make sure node server uses different port
+        # to other examples.
+        port=NODE_PORT + 50 + 12
     )
     #
     # Strategies used to make a P2P connection.

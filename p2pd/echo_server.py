@@ -5,7 +5,9 @@ class EchoServer(Daemon):
         super().__init__()
 
     async def msg_cb(self, msg, client_tup, pipe):
-        await pipe.send(msg, client_tup)
+        await async_wrap_errors(
+            pipe.send(msg, client_tup)
+        )
 
 if __name__ == "__main__": # pragma: no cover
     print("See tests/test_daemon.py for code that uses this.")

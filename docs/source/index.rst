@@ -9,5 +9,6 @@ Contents
    how
    rest_api
    python/index
+   built/index
    future_work
 

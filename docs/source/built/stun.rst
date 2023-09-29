@@ -1,5 +1,5 @@
-STUN client
-============
+STUN client for address lookups
+=================================
 
 STUN is a protocol that can be used to lookup a peer's external address. It also
 provides information on port mappings and some servers with multiple addresses
@@ -16,5 +16,5 @@ server with multiple IPv4/6s on TCP and UDP.
 
 Here is how to use the STUN client.
 
-.. literalinclude:: examples/example_12.py
+.. literalinclude:: ../python/examples/example_12.py
     :language: python3

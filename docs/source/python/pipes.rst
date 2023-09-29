@@ -204,11 +204,17 @@ options look like this:
 .. code-block:: python
 
     NET_CONF = {
+        # Protocol family used for the socket.socket function.
+        "sock_proto": 0,
+
+        # N seconds before a registering recv timeout.
+        "recv_timeout": 2,
+
         # Only applies to TCP.
         "con_timeout": 2,
 
         # No of messages to receive per subscription.
-        "max_qsize": 1000,
+        "max_qsize": 0,
 
         # Require unique messages or not.
         "enable_msg_ids": 0,
@@ -235,7 +241,7 @@ options look like this:
         # Non-none = linger value.
         "linger": None,
 
-        # Ref to an event loop builder.
+        # Ref to an event loop.
         "loop": None
     }
 

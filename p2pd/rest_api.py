@@ -367,13 +367,18 @@ async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=
     node = await start_p2p_node(
         # Attempt deterministic port allocation based on NICs.
         # If in use a random port will be used.
-        port=-1,
+        port=NODE_PORT + 60 + 1,
         ifs=ifs,
         enable_upnp=enable_upnp
     )
 
+    # Specify listen port details.
+    if route is not None and port is not None:
+        route = await route.bind(port=port)
+    else:
+        route = await ifs[0].route().bind(ips="127.0.0.1")
+
     # Start P2PD server.
-    route = route or await ifs[0].route().bind(ips="127.0.0.1")
     p2p_server = P2PDServer(ifs, node)
     await p2p_server.listen_all(
         [route],

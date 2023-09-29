@@ -64,10 +64,13 @@ first using STUN and waiting for a long time out.
 import asyncio
 import copy
 import ipaddress
+import pprint
+import inspect
 from functools import total_ordering
 from .ip_range import *
 from .netiface_extra import *
 from .upnp import *
+from .address import *
 
 """
 As there's only one STUN server in the preview release the
@@ -153,10 +156,44 @@ class Route(Bind):
         self.af = af
         self.nic_ips = nic_ips or []
         self.ext_ips = ext_ips or []
+        self.link_locals = []
 
         # Maybe None for loopback interface.
         self.interface = interface
         self.route_pool = self.route_offset = self.host_offset = None
+
+    """
+    async def bind(self, port=None, ips=None):
+        if self.af == IP4:
+            # Patch for non-routable public IPv6s.
+            print("aaa")
+            print(self.ext_ips[0])
+            old_ext = self.ext
+            if self.ext_ips[0] not in self.nic_ips:
+                print("bbb")
+                for nic_ipr in self.nic_ips:
+                    print(str(nic_ipr[0]))
+                    if "fe80" != str(nic_ipr[0])[:4]:
+                        self.ext = lambda: str(nic_ipr[0])
+                        break
+
+            self.ext = old_ext
+
+        await bind_closure(self)(port=port, ips=ips)
+
+    
+
+        print(self._bind_tups)
+        """
+
+    def __await__(self):
+        return self.bind().__await__()
+    
+    def set_link_locals(self, link_locals):
+        self.link_locals = link_locals
+    
+    async def Address(self, dest, port):
+        return await Address(dest, port, self)
 
     async def forward(self, port=None, proto="TCP"):
         assert(self.resolved)
@@ -175,7 +212,8 @@ class Route(Bind):
             proto=proto
         )
 
-    async def rebind(self, port, ips=None):
+    # TODO: document this? You probably don't want to use this.
+    async def rebind(self, port=0, ips=None):
         route = copy.deepcopy(self)
         await route.bind(port=port, ips=ips)
         return route
@@ -190,17 +228,40 @@ class Route(Bind):
         such to work properly. Assuming that IPv6 support is
         enabled on a host. If not this will raise an Exception.
         """
+
+        """
         if self.af == IP6:
             for ipr in self.nic_ips:
                 if ipr.is_private:
                     return ipr_norm(ipr)
 
             raise Exception("> Route.nic() with af=6 found no link-locals.")
+        """
 
         return ipr_norm(self.nic_ips[0])
 
     def ext(self):
+        """
+        # Patch for unroutable IPv6 used as LAN IPs.
+        # This is only visable to the bind() caller.
+        if self.af == IP6:
+            print("here")
+            for stack_f in inspect.stack():
+                f_name = stack_f[3]
+                if f_name == "bind":
+                    if self.ext_ips[0] not in self.nic_ips:
+                        print("bbb")
+                        for nic_ipr in self.nic_ips:
+                            print("ccc")
+                            print(str(nic_ipr[0]))
+                            if "fe80" != ip_norm(nic_ipr[0])[:4]:
+                                return ip_norm(nic_ipr[0])
+        """
+
         return ipr_norm(self.ext_ips[0])
+    
+    def link_local(self):
+        return ipr_norm(self.link_locals[0])
 
     # Test if a given IPRange is in the nic_ips list.
     def has_nic_ip(self, ipr):
@@ -357,16 +418,10 @@ class Route(Bind):
             return len(self.ext_ips[0])
 
     def __repr__(self):
-        s = "[NICs = {}, WAN = {}, AF = {}]".format(
-            str(self.nic_ips),
-            str(self.ext_ips),
-            self.af
-        )
-
-        return s
+        return f"Route.from_dict({str(self)})"
 
     def __str__(self):
-        return self.__repr__()
+        return pprint.pformat(self.to_dict())
 
     def __eq__(self, other):
         other = Route._convert_other(other)
@@ -401,12 +456,14 @@ class Route(Bind):
         route.ext_bind = self.ext_bind
         route._bind_tups = copy.deepcopy(self._bind_tups)
         route.resolved = self.resolved
+        route.set_link_locals(copy.deepcopy(self.link_locals))
 
         return route
 
 class RoutePool():
-    def __init__(self, routes=None):
+    def __init__(self, routes=None, link_locals=None):
         self.routes = routes or []
+        self.link_locals = link_locals or []
 
         # Avoid duplicates in routes.
         for route in self.routes:
@@ -587,6 +644,70 @@ def rp_from_fixed(fixed, interface, af): # pragma: no cover
 
     return RoutePool(routes)
 
+"""
+When it comes to IPs assigned to a NIC its possible
+to assign 'public' IPs to it directly. You often
+see this setup on servers. In this case you know
+that not only can you use the public addresses
+directly in bind() calls -- but you know that
+the server's corrosponding external IP will be
+what was used in the bind() call. Very useful.
+
+The trouble is that network interfaces happily
+accept 'external IPs' or IPs outside of the
+typical 'private IP' range for use on a NIC or
+LAN network. Obviously this is a very bad idea
+but in the software it has the result of
+potentially assuming that an IP would end up
+resulting in a particular external IP being used.
+
+The situation is not desirable when building
+a picture of a network's basic routing makeup.
+I've thought about the problem and I don't see
+a way to solve it other than to measure how a
+route's external address is perceived from the
+outside world. Such a solution is not ideal but
+at least it only has to be done once.
+"""
+async def ipr_is_public(nic_ipr, stun_client, route_infos, stun_conf, is_default=False):
+    # Use this IP for bind call.
+    src_ip = ip_norm(str(nic_ipr[0]))
+    log(F"src_ip = {src_ip}")
+    local_addr = await Bind(
+        stun_client.interface,
+        af=stun_client.af,
+        port=0,
+        ips=src_ip
+    ).res()
+
+    # Get external IP and compare to bind IP.
+    wan_ip = await stun_client.get_wan_ip(
+        local_addr=local_addr,
+        conf=stun_conf
+    )
+
+    # Record this wan_ip.
+    ext_ipr = IPRange(wan_ip, cidr=CIDR_WAN)
+    if ext_ipr not in route_infos:
+        route_infos[ext_ipr] = []
+
+    # Determine if public address is assigned to interface.
+    if src_ip != wan_ip:
+        # In a 'public range' but used privately.
+        # Yes, this is silly but possible.
+        nic_ipr.is_private = True
+        nic_ipr.is_public = False
+        if "default" not in route_infos:
+            route_infos["default"] = ext_ipr
+    else:
+        # Otherwise routable, public IP used as a NIC address.
+        # ext_ipr == nic_ipr.
+        nic_ipr.is_private = False
+        nic_ipr.is_public = True
+
+    # Save details for this route.
+    route_infos[ext_ipr].append(nic_ipr)
+
 async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, netifaces=None, stun_client=None):
     from .stun_client import STUNClient, STUN_CONF
 
@@ -602,6 +723,10 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
     stun_conf["retry_no"] = 2 # Slower but more fault-tolerant.
     stun_conf["consensus"] = ROUTE_CONSENSUS # N of M for a result.
     loop = asyncio.get_event_loop()
+    link_locals = []
+    route_infos = {}
+    nic_iprs = []
+    routes = []
 
     # Other important variables.
     stun_client = stun_client or STUNClient(interface, af=af)
@@ -609,84 +734,46 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
     if_addresses = netifaces.ifaddresses(nic_id)
     if netifaces_af in if_addresses:
         bound_addresses = if_addresses[netifaces_af]
-        main_nics = []
-        routes = []
         tasks = []
+        first_private = True
         for info in bound_addresses:
             nic_ipr = await netiface_addr_to_ipr(af, info, interface, loop, skip_bind_test)
+            log(f"Nic ipr in route = {nic_ipr}")
             if nic_ipr is None:
+                continue
+
+            # Include link locals in their own set.
+            if ip_norm(nic_ipr[0])[:4] == "fe80":
+                link_locals.append(nic_ipr)
                 continue
 
             # All private IPs go to the same route.
             # The interface has one external WAN IP.
+            log(f"Nic ipr is private = {nic_ipr.is_private}")
             if nic_ipr.is_private:
-                main_nics.append(nic_ipr)
-                continue
-            else:
-                """
-                When it comes to IPs assigned to a NIC its possible
-                to assign 'public' IPs to it directly. You often
-                see this setup on servers. In this case you know
-                that not only can you use the public addresses
-                directly in bind() calls -- but you know that
-                the server's corrosponding external IP will be
-                what was used in the bind() call. Very useful.
-
-                The trouble is that network interfaces happily
-                accept 'external IPs' or IPs outside of the
-                typical 'private IP' range for use on a NIC or
-                LAN network. Obviously this is a very bad idea
-                but in the software it has the result of
-                potentially assuming that an IP would end up
-                resulting in a particular external IP being used.
-
-                The situation is not desirable when building
-                a picture of a network's basic routing makeup.
-                I've thought about the problem and I don't see
-                a way to solve it other than to measure how a
-                route's external address is perceived from the
-                outside world. Such a solution is not ideal but
-                at least it only has to be done once.
-                """
-                async def ipr_is_public(nic_ipr, stun_client, main_nics):
-                    # Use this IP for bind call.
-                    src_ip = ip_norm(str(nic_ipr[0]))
-                    local_addr = await Bind(
-                        stun_client.interface,
-                        af=stun_client.af,
-                        port=0,
-                        ips=src_ip
-                    ).res()
-
-                    # Get external IP and compare to bind IP.
-                    wan_ip = await stun_client.get_wan_ip(
-                        local_addr=local_addr,
-                        conf=stun_conf
+                # Ensure the external address is fetched at least once
+                # assuming there's only private addresses.
+                # All private NICs will point to this.
+                if first_private:
+                    tasks.append(
+                        async_wrap_errors(
+                            ipr_is_public(nic_ipr, stun_client, route_infos, stun_conf),
+                            timeout=15
+                        )
                     )
 
-                    # Check if address is actually public.
-                    if src_ip == wan_ip:
-                        nic_ipr.is_private = False
-                        nic_ipr.is_public = True
-                        return Route(
-                            af=af,
-                            nic_ips=[nic_ipr],
-                            ext_ips=[copy.deepcopy(nic_ipr)],
-                            interface=stun_client.interface
-                        )
-                    else:
-                        # In a 'public range' but used privately.
-                        # Yes, this is silly but possible.
-                        nic_ipr.is_private = True
-                        nic_ipr.is_public = False
-                        main_nics.append(nic_ipr)
-    
+                    first_private = False
+                else:
+                    nic_iprs.append(nic_ipr)
+            else:
                 if skip_resolve == False:
                     # Determine if this address is really public.
                     tasks.append(
-                        ipr_is_public(nic_ipr, stun_client, main_nics)
+                        async_wrap_errors(
+                            ipr_is_public(nic_ipr, stun_client, route_infos, stun_conf),
+                            timeout=15
+                        )
                     )
-                    continue
                 else:
                     # Assume IP is public and routable.
                     # Useful for manually configured interfaces.
@@ -700,98 +787,41 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                     )
 
                     routes.append(route)
-                    continue
 
         # Process pending tasks.
         if len(tasks):
-            results = await asyncio.gather(*tasks)
-            results = strip_none(results)
+            await asyncio.gather(*tasks)
 
-            # Every discrete public IP or block is it's own route.
-            [routes.append(route) for route in results]
+            # Choose a random ext address for the default.
+            if "default" not in route_infos:
+                route_infos["default"] = list(route_infos.keys())[0]
 
-        # Only bother to add a main route if it has NIC IPs assigned.
-        if len(main_nics):
-            if af == IP4:
-                wan_ip = None
-                if skip_resolve == False:
-                    # Loop over main NICs.
-                    # Discard all broken until WAN IP works.
-                    # Then add all afterwards.
-                    valid_main_nics = []
-                    for n in range(0, len(main_nics)):
-                        # Only do it until one works.
-                        if wan_ip is None:
-                            # Use this IP for bind call.
-                            src_ip = ip_norm(str(main_nics[n][0]))
-                            local_addr = await Bind(
-                                stun_client.interface,
-                                af=stun_client.af,
-                                port=0,
-                                ips=src_ip
-                            ).res()
+            # Add private NIC iprs to default route.
+            default_route = route_infos["default"]
+            default_nics = route_infos[default_route]
+            for nic_ipr in nic_iprs:
+                default_nics.append(nic_ipr)
 
-                            # Get external address for main interface.
-                            ext_result = await stun_client.get_wan_ip(
-                                local_addr=local_addr,
-                                conf=stun_conf
-                            )
+            # Default route will be added first.
+            routes.append(Route(af, default_nics, [default_route], interface))
+            del route_infos["default"]
 
-                            # Save valid main NICs.
-                            if ext_result is not None:
-                                wan_ip = ext_result
-                                valid_main_nics.append(main_nics[n])
-                        else:
-                            # Otherwise all NICs afterwards are added.
-                            # Since route 1 will at least work.
-                            valid_main_nics.append(main_nics[n])
-
-                    # Trim main NICs based on what worked.
-                    main_nics = valid_main_nics
-                else:
-                    # Will error bellow if no public NIC found.
-                    wan_ip = str(main_nics[0][0])
-                    for ipr in main_nics:
-                        if ipr.is_public:
-                            wan_ip = str(ipr[0])
-                            break
-
-                # All routes need a valid external address.
-                # Check whether it was successful.
-                if wan_ip is not None:
-                    wan_ipr = IPRange(wan_ip, cidr=CIDR_WAN)
+            # Convert route infos to routes and save them.
+            for ext_ipr in route_infos:
+                if ext_ipr != default_route:
                     routes.append(
                         Route(
-                            af=af,
-                            nic_ips=main_nics,
-                            ext_ips=[wan_ipr],
-                            interface=interface
+                            af,
+                            route_infos[ext_ipr],
+                            [ext_ipr],
+                            interface
                         )
                     )
-            else:
-                # If it's v6 associate the link locals with
-                # the global addresses.
-                """
-                In IPv6 binding to link local means you can only access
-                other link local addresses. Same with global scope.
-                That means that associating a list of private NIC
-                addresses with the first available global scope IP
-                might not make much sense. The IPv6-specific
-                abstraction will associate the same list of link-local
-                addresses with every separate, global-scope address
-                so that the route pool code still works well to
-                manage external addresses but link local nic bind
-                code is still simple to achieve.
-                """
-                assert(isinstance(main_nics, list))
-                for route in routes:
-                    # Add link local IPs as routes NIC IPs.
-                    # This will make the nic() code fast for IPv6.
-                    route.nic_ips = main_nics
 
-        return routes
-    else:
-        return []
+        # Add link locals to routes.
+        [r.set_link_locals(link_locals) for r in routes]
+        
+    return [routes, link_locals]
 
 async def Routes(interface_list, af, netifaces, skip_resolve=False):
     # Optimization: check if an AF has a default gateway first.
@@ -807,24 +837,24 @@ async def Routes(interface_list, af, netifaces, skip_resolve=False):
     # Copy route pool from Interface if it already exists.
     # Otherwise schedule task to get list of routes.
     for iface in interface_list:
-        if af in iface.rp:
-            results += sum(iface.rp[af].routes, [])
-        else:
-            tasks.append(
-                async_wrap_errors(
-                    get_routes(iface, af, skip_resolve, netifaces=netifaces)
-                )
-            )
+        tasks.append(
+            get_routes(iface, af, skip_resolve, netifaces=netifaces)
+        )
 
     # Tasks that need to be run.
     # Cmbine with results -- if any.
+    link_locals = []
     if len(tasks):
-        list_of_route_lists = await asyncio.gather(*tasks)
-        list_of_route_lists = strip_none(list_of_route_lists)
-        results += sum(list_of_route_lists, [])
+        ret_lists = await asyncio.gather(*tasks)
+        for ret_list in ret_lists:
+            if len(ret_list) != 2:
+                continue
+
+            results = results + ret_list[0]
+            link_locals = link_locals + ret_list[1]
 
     # Wrap all routes in a RoutePool and return the result.
-    return RoutePool(results)
+    return RoutePool(results, link_locals)
 
 # Combine all routes from interface into RoutePool.
 def interfaces_to_rp(interface_list):

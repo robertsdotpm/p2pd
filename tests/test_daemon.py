@@ -80,17 +80,20 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
             (4) For IP6 this will bind to ::.
             (5) Will test IP4 NIC IPs, IP6 link locals / local host.
             """
-            route = await interface.route(af).bind(ips="*")
+            route = await interface.route(af)
             addrs = [route.nic(), loopbacks[af]]
 
-            # Test connect to global IP6 that's ourself.
+            # Test connect to link local.
             if af == IP6:
-                addrs.append(route.ext())
+                addrs.append(route.link_local())
 
             for addr in addrs:
-                dest = await Address(addr, server_port, route).res()
                 msg = b"hello world ay lmaoo"
                 for proto in [UDP, TCP]:
+                    # Fresh route per server.
+                    route = await interface.route(af).bind(ips=addr, port=server_port)
+                    dest = await Address(addr, server_port, route).res()
+
                     # Daemon instance.
                     echod = await EchoServer().listen_all(
                         [route],
@@ -99,9 +102,10 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                     )
 
                     # Spawn a pipe to the echo server.
+                    test_route = await interface.route(af).bind()
                     pipe = await pipe_open(
                         proto,
-                        route,
+                        test_route,
                         dest
                     )
                     self.assertTrue(pipe is not None)

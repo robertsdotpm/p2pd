@@ -120,6 +120,7 @@ rm_whitespace = lambda x: re.sub(r"\s+", "", x, flags=re.UNICODE)
 urlencode = lambda x: to_b(urllib.parse.quote(x))
 urldecode = lambda x: to_b(urllib.parse.unquote(x))
 shuffle = lambda x: random.shuffle(x) or x
+d_vals = lambda x: list(x.values())
 
 def to_type(x, out_type):
     # String.
@@ -133,10 +134,13 @@ def to_type(x, out_type):
 # Take a dict template called Y and a child dict called X.
 # Yield a new dict with Y's vals overwritten by X's.
 def dict_child(x, y):
+    if len(x) > len(y):
+        log("dict child x > y, are args in correct order?")
+
     out = copy.deepcopy(y)
     for key in x:
         out[key] = x[key]
-    #
+        
     return out
 
 def dict_merge(x, y):
@@ -347,6 +351,7 @@ async def async_wrap_errors(coro, timeout=None):
             return (await asyncio.wait_for(coro, timeout))
     except Exception as e:
         # Log all errors.
+        log("async wrap errors called")
         log_exception()
 
 def sync_wrap_errors(f, args=[]):
@@ -521,9 +526,22 @@ async def gather_or_cancel(tasks, timeout):
         return []
 
 class SelectorEventPolicy(asyncio.DefaultEventLoopPolicy):
+    @staticmethod
+    def exception_handler(self, context):
+        print("exception handler")
+        print(context)
+
+    @staticmethod
+    def loop_setup(loop):
+        loop.set_debug(False)
+        loop.set_exception_handler(SelectorEventPolicy.exception_handler)
+        loop.default_exception_handler = SelectorEventPolicy.exception_handler
+
     def new_event_loop(self):
         selector = selectors.SelectSelector()
-        return asyncio.SelectorEventLoop(selector)
+        loop = asyncio.SelectorEventLoop(selector)
+        SelectorEventPolicy.loop_setup(loop)
+        return loop
 
 def selector_event_loop():
     selector = selectors.SelectSelector()

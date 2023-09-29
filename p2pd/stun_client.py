@@ -690,8 +690,10 @@ class STUNClient():
         return [interface, s, local, mapped, rip, run_time]
     
 #######################################################################
+
 if __name__ == "__main__": # pragma: no cover
     """
+
     Some custom STUN servers don't include the rip attribute
     for change requests -- in this case we issue get_wan_ips
     to both test addresses and use the result for the tests.
@@ -798,8 +800,10 @@ if __name__ == "__main__": # pragma: no cover
     """
 
     async def test_stun_client():
+
         from .interface import Interface, load_interfaces, init_p2pd
 
+        return
 
         # Maybe has a turn server.
         # https://wiki.innovaphone.com/index.php?#title=Howto:Innovaphones_public_services#TURN
@@ -808,7 +812,7 @@ if __name__ == "__main__": # pragma: no cover
 
 
         i = await Interface().start_local()
-        s = STUNClient(interface=i, proto=UDP)
+        s = STUNClient(interface=i, proto=UDP, af=IP6)
         x = await s.get_wan_ip()
         print(x)
         return

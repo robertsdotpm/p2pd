@@ -316,6 +316,14 @@ NATs, unfortunately. So they've been removed from the server list for now.
 """
 TURN_SERVERS = [
     {
+        "host": b"94.130.10.214",
+        "port": 34780,
+        "afs": [IP4, IP6],
+        "user": None,
+        "pass": None,
+        "realm": b"p2pd.net"
+    },
+    {
         "host": b"us-0.turn.peerjs.com",
         "port": 3478,
         "afs": [IP4, IP6],

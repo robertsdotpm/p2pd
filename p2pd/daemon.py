@@ -21,6 +21,9 @@ called on new messages from a stream.
 process the message.
 f = lambda msg, stream: ...
 """
+def get_listen_port(server_info):
+    return server_info[2].sock.getsockname()[1]
+
 class Daemon():
     def __init__(self, interfaces=None, conf=DAEMON_CONF):
         self.conf = conf
@@ -31,6 +34,9 @@ class Daemon():
         for iface in self.interfaces:
             self.iface_lookup[iface.name] = iface
         self.rp = None
+
+    def get_listen_port(self):
+        return get_listen_port(self.servers[0])
 
     def set_rp(self, rp):
         self.rp = rp
@@ -48,9 +54,13 @@ class Daemon():
         # Overwritten by inherited classes.
         print("This is a default proto msg_cb! Specify your own in a child class.")
         pass
+
+    def up_cb(self, msg, client_tup, pipe):
+        pass
     
-    async def _listen(self, target, port, proto, msg_cb=None):
+    async def _listen(self, target, port, proto, msg_cb=None, up_cb=None):
         msg_cb = msg_cb or self.msg_cb
+        up_cb = up_cb or self.up_cb
 
         # Protocol not supported.
         if self.restricted_proto is not None:
@@ -88,13 +98,16 @@ class Daemon():
                         # Record route.
                         routes.append(route)
 
+
         # Start server on every address.
         assert(len(routes))
         for route in routes:
-            await route.bind(port)
+            if not route.resolved:
+                await route.bind(port)
+
             log('starting server {}:{} p={}, af={}'.format(
                 route.bind_ip(),
-                port,
+                route.bind_port,
                 proto,
                 route.af
             ))
@@ -105,18 +118,18 @@ class Daemon():
                 route.link_route_pool(self.rp[route.af])
 
             # Save list of servers.
-            listen_task = pipe_open(proto, route=route, msg_cb=msg_cb, conf=self.conf)
+            listen_task = pipe_open(proto, route=route, msg_cb=msg_cb, up_cb=up_cb, conf=self.conf)
             base_proto = await listen_task
             if base_proto is None:
                 raise Exception("Could not start server.")
 
             self.servers.append([ route, proto, base_proto, listen_task ])
-            return base_proto
     
     # [[Bound, proto], ...]
     # Allows for servers to be bound to specific addresses and transports.
     # The other start method is more general.
-    async def listen_specific(self, targets, msg_cb=None):
+    async def listen_specific(self, targets, msg_cb=None, up_cb=None):
+        up_cb = up_cb or self.up_cb
         msg_cb = msg_cb or self.msg_cb
         targets = [targets] if not isinstance(targets, list) else targets
         for listen_info in targets:
@@ -128,13 +141,15 @@ class Daemon():
                 target=bound,
                 proto=proto,
                 port=bound.bind_port,
-                msg_cb=msg_cb
+                msg_cb=msg_cb,
+                up_cb=up_cb
             )
 
     # Start all the servers listening.
     # All targets are started on the same list of ports and protocols.
     # A more general version of the above function.
-    async def listen_all(self, targets, ports, protos, af=AF_ANY, msg_cb=None, error_on_af=0):
+    async def listen_all(self, targets, ports, protos, af=AF_ANY, msg_cb=None, up_cb=None, error_on_af=0):
+        up_cb = up_cb or self.up_cb
         msg_cb = msg_cb or self.msg_cb
         targets = [targets] if not isinstance(targets, list) else targets
         routes = []
@@ -197,15 +212,17 @@ class Daemon():
                     # Start the server on bind address, port, and proto.
                     for proto in protos:
                         route = copy.deepcopy(route)
+                        await route.bind(port=port, ips=route.ips)
                         await self._listen(route, port, proto, msg_cb)
 
                         # Bind to additional link-local for IPv6.
                         if route.af == IP6:
                             try:
                                 route = copy.deepcopy(route)
-                                route = await route.bind(port=port, ips=route.nic())
-                                await self._listen(route, port, proto, msg_cb)
+                                route = await route.bind(port=port, ips=route.link_local())
+                                await self._listen(target=route, port=port, proto=proto, msg_cb=msg_cb, up_cb=up_cb)
                             except Exception:
+                                log_exception()
                                 pass
                                 # May already be started -- ignore.
 

@@ -66,8 +66,5 @@ but with more control.
     pipes
     queues
     daemons
-    turn
-    stun
-    netifaces
     examples
 
