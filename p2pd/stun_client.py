@@ -24,6 +24,14 @@ where ever possible to avoid delaying other, faster lookups.4
 
 Note 2: I've read the STUN RFC and it seems to indicate that many of the fields in the protocol format take place over byte boundaries. Yet the client code here works on all the servers I've tested it on and doesn't make these assumptions. It's possible the spec is wrong or maybe my code just won't work with particular features of the STUN protocol. No idea.
 
+Note 3: For UDP the code uses a single socket that it 'multiplexes' over to make
+multiple requests. That means that replies arrive out of order and there's a need
+to be able to match up replies to requests (random IDs are used and buckets per ID.)
+If the protocol wasn't STUN this wouldn't be necessary. But the point of using UDP
+with STUN is to do a sequence of requests reusing ports to assess end-point
+mapping behavior of NATs. You need to reuse local bind ports to do this. Yeah,
+the details are complex but I'm noting it here before I forget why I did this.
+
 TODO: sort the hosts by how fast they respond to a STUN request from domain resolution to reply time.
 TODO: It seems that this is a pattern that reoccurs in several functions.
 The general form might also make sense to add to the Net module.

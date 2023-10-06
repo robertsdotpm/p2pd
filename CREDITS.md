@@ -2,6 +2,7 @@
 
 The new version of p2pd features code from multiple sources that have been heavily modified. It's my intention to try document all these sources but if I've somehow missed some please don't assume this is intentional!
 
+- DNS: https://gist.github.com/mrpapercut/92422ecf06b5ab8e64e502da5e33b9f7 adapted to be async.
 - STUN: https://github.com/talkiq/pystun3 which is itself a fork from https://github.com/jtriley/pystun Numerous changes made to the code -- see file for more info.
 - clock_skew: taken from the original gtk-gnutella code and adapted to python by me https://github.com/gtk-gnutella/gtk-gnutella/
 blob/devel/src/core/clock.c 
@@ -10,6 +11,8 @@ blob/devel/src/core/clock.c
 - sip_client: https://github.com/SythilTech/Python-SIP/blob/master/scripts/sip.py adapted to be async.
 - turn_client: https://github.com/trichimtrich/turnproxy original code was for TCP proxying. I heavily modified it and changed it to use the UDP data channels feature of TURN.
 - All the amazing open source authors whose modules I have used! Their respective works are listed in the requirements.txt file where more information can be found on Pypy.
+- Chat-GPT. This thing writes solid Python code and can really mitigate some of
+the drudgery from coding simple scripts. Good bot / 10.
 
 Additionally, there were countless technical references I consulted throughout this project. It isn't possible to list all of them - but this project wouldn't exist without everyone who openly shared knowledge and source code.
 
