@@ -23,35 +23,41 @@ import binascii
 import copy
 import time
 import pprint
-import socket
-from collections import OrderedDict
 from .utils import *
 from .net import *
+from .ip_range import IPRange
 from .address import Address
 from .base_stream import pipe_open
 
 def dns_get_type(type):
-    types = [
-        "ERROR", # type 0 does not exist
-        "A",
-        "NS",
-        "MD",
-        "MF",
-        "CNAME",
-        "SOA",
-        "MB",
-        "MG",
-        "MR",
-        "NULL",
-        "WKS",
-        "PTS",
-        "HINFO",
-        "MINFO",
-        "MX",
-        "TXT"
-    ]
+    types = {
+        "A": 1,
+        "NS": 2,
+        "MD": 3,
+        "MF": 4,
+        "CNAME": 5,
+        "SOA": 6,
+        "MB": 7,
+        "MG": 8,
+        "MR": 9,
+        "NULL": 10,
+        "WKS": 11,
+        "PTS": 12,
+        "HINFO": 13,
+        "MINFO": 14,
+        "MX": 15,
+        "TXT": 16,
+        "AAAA": 28
+    }
 
-    return "{:04x}".format(types.index(type)) if isinstance(type, str) else types[type]
+    # Return ID as unsigned short in hex (0 padded if needed.)
+    if isinstance(type, str):
+        return "{:04x}".format(types[type])
+    else:
+        # Return record type.
+        for k in types:
+            if types[k] == type:
+                return k
 
 def dns_build_message(type="A", address=""):
     # Todo: rand ID for request here.
@@ -178,6 +184,9 @@ def dns_decode_message(message):
         if ATYPE == dns_get_type("A"):
             octets = [RDDATA[i:i+2] for i in range(0, len(RDDATA), 2)]
             RDDATA_decoded = ".".join(list(map(lambda x: str(int(x, 16)), octets)))
+        elif ATYPE == dns_get_type("AAAA"):  # IPv6 record
+            hextets = [RDDATA[i:i+4] for i in range(0, len(RDDATA), 4)]
+            RDDATA_decoded = ":".join(hextets)
         else:
             RDDATA_decoded = ".".join(map(lambda p: binascii.unhexlify(p).decode('iso8859-1'), dns_parse_parts(RDDATA, 0, [])))
 
@@ -196,13 +205,17 @@ def dns_decode_message(message):
     result_dict["answers"] = answers
     return result_dict
 
-def dns_to_list(msg, port):
+def dns_to_list(msg):
     # Extract the answers section.
     results = []
     answers = msg.get("answers", [])
     for answer in answers:
-        result = [answer["rddata_decoded"], port]
-        results.append(result)
+        # Only append result if it's an IP.
+        try:
+            IPRange(answer["rddata_decoded"])
+            results.append(answer["rddata_decoded"])
+        except:
+            continue
 
     return results
 
@@ -211,7 +224,7 @@ class DNSClient():
         self.route = route
 
     # TODO: doesnt handle packet drops
-    async def req(self, domain_name, port=80, record_type="A", ns="104.248.14.193"):
+    async def req(self, domain_name, record_type="A", ns="104.248.14.193"):
         # Bind a route to unused port.
         # Use route as a template.
         route = copy.deepcopy(self.route)
@@ -233,13 +246,14 @@ class DNSClient():
 
             # Get reply DNS reply.
             data = await pipe.recv()
+            print(data)
 
             # Parse reply to a dictionary.
             data = binascii.hexlify(data).decode("utf-8")
             data = dns_decode_message(data)
 
             # Return reply as a simple list of results.
-            return dns_to_list(data, port)
+            return dns_to_list(data)
         finally:
             if pipe is not None:
                 await pipe.close()
@@ -252,7 +266,11 @@ async def test_dns():
     client = DNSClient(route)
 
     a = time.time()
-    ret = await client.req("openai.com", ns="1.1.1.1")
+
+    # openai for multiple results ipv4
+    # reddit has multiple ipv4 results
+    # http://grep.geek/ for opennic
+    ret = await client.req("reddit.com", ns="104.248.14.193", record_type="AAAA")
     b = time.time() - a
     print(b)
     #print(pprint.pformat(ret))
