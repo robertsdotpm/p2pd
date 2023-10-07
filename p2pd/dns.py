@@ -22,7 +22,6 @@ See https://tools.ietf.org/html/rfc1035
 import binascii
 import copy
 import time
-import pprint
 from .utils import *
 from .net import *
 from .ip_range import IPRange
@@ -205,17 +204,20 @@ def dns_decode_message(message):
     result_dict["answers"] = answers
     return result_dict
 
-def dns_to_list(msg):
+def dns_to_list(msg, record_type):
     # Extract the answers section.
     results = []
     answers = msg.get("answers", [])
     for answer in answers:
         # Only append result if it's an IP.
-        try:
-            IPRange(answer["rddata_decoded"])
+        if record_type in ["A", "AAAA"]:
+            try:
+                IPRange(answer["rddata_decoded"])
+                results.append(answer["rddata_decoded"])
+            except:
+                continue
+        else:
             results.append(answer["rddata_decoded"])
-        except:
-            continue
 
     return results
 
@@ -246,14 +248,13 @@ class DNSClient():
 
             # Get reply DNS reply.
             data = await pipe.recv()
-            print(data)
 
             # Parse reply to a dictionary.
             data = binascii.hexlify(data).decode("utf-8")
             data = dns_decode_message(data)
 
             # Return reply as a simple list of results.
-            return dns_to_list(data)
+            return dns_to_list(data, record_type)
         finally:
             if pipe is not None:
                 await pipe.close()
@@ -270,7 +271,7 @@ async def test_dns():
     # openai for multiple results ipv4
     # reddit has multiple ipv4 results
     # http://grep.geek/ for opennic
-    ret = await client.req("reddit.com", ns="104.248.14.193", record_type="AAAA")
+    ret = await client.req("reddit.com", ns="104.248.14.193", record_type="TXT")
     b = time.time() - a
     print(b)
     #print(pprint.pformat(ret))
