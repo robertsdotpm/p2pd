@@ -22,6 +22,7 @@ See https://tools.ietf.org/html/rfc1035
 import binascii
 import copy
 import time
+from .settings import *
 from .utils import *
 from .net import *
 from .ip_range import IPRange
@@ -226,14 +227,21 @@ class DNSClient():
         self.route = route
 
     # TODO: doesnt handle packet drops
-    async def req(self, domain_name, record_type="A", ns="104.248.14.193"):
+    async def req(self, domain_name, record_type="A", ns=None):
+        # Choose a random name server.
+        if ns is None:
+            ns = random.choice(
+                NS_SERVERS[self.route.af]
+            )
+
         # Bind a route to unused port.
         # Use route as a template.
         route = copy.deepcopy(self.route)
         route = await route.bind()
 
         # Get address tuple for name server.
-        # Note: must be IP address.
+        # Will throw if ns is not an IP.
+        IPRange(ns)
         addr = await Address(ns, 53, route)
 
         # Create async UDP pipe to name server.
@@ -269,9 +277,9 @@ async def test_dns():
     a = time.time()
 
     # openai for multiple results ipv4
-    # reddit has multiple ipv4 results
+    # reddit has multiple ipv6 results and TXT records
     # http://grep.geek/ for opennic
-    ret = await client.req("reddit.com", ns="104.248.14.193", record_type="TXT")
+    ret = await client.req("reddit.com", record_type="AAAA")
     b = time.time() - a
     print(b)
     #print(pprint.pformat(ret))
