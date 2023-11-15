@@ -5,6 +5,7 @@ import struct
 import ipaddress
 import random
 import copy
+import ssl
 from io import BytesIO
 from .errors import *
 from .cmd_tools import *
@@ -127,6 +128,9 @@ NOT_WINDOWS = platform.system() != "Windows"
 
 # Fine tune various network settings.
 NET_CONF = {
+    # Wrap socket with SSL.
+    "use_ssl": 0,
+
     # Protocol family used for the socket.socket function.
     "sock_proto": 0,
 
@@ -725,6 +729,7 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
         if sock is not None:
             sock.close()
         return None 
+
 
     # Default = use any IPv4 NIC.
     # For IPv4 -- bind address depends on destination type.
