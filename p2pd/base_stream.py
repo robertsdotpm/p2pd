@@ -203,11 +203,14 @@ class BaseStream(ACKUDP):
             # TCP send -- already bound to transport con.
             # TCP Transport instance.
             if isinstance(handle, STREAM_TYPES):
-                #handle.write(data)
+                # This also works for SSL wrapped sockets.
+                handle.write(data)
+                """
                 await self.loop.sock_sendall(
                     self.proto.sock,
                     data
                 )
+                """
                 
 
                 return 1
