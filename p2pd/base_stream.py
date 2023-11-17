@@ -205,6 +205,7 @@ class BaseStream(ACKUDP):
             if isinstance(handle, STREAM_TYPES):
                 # This also works for SSL wrapped sockets.
                 handle.write(data)
+                await handle.drain()
                 """
                 await self.loop.sock_sendall(
                     self.proto.sock,
