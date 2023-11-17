@@ -205,7 +205,6 @@ class BaseStream(ACKUDP):
             if isinstance(handle, STREAM_TYPES):
                 # This also works for SSL wrapped sockets.
                 handle.write(data)
-                await handle.drain()
                 """
                 await self.loop.sock_sendall(
                     self.proto.sock,
@@ -881,7 +880,7 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None,
 
                     # Wrap socket won't support non-blocking sockets.
                     # Temporarily make it blocking.
-                    sock.settimeout(1)
+                    sock.settimeout(conf["ssl_handshake"])
 
                     # The socket is wrapped in an SSL context after all
                     # socket options are set.

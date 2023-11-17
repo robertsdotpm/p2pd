@@ -131,6 +131,9 @@ NET_CONF = {
     # Wrap socket with SSL.
     "use_ssl": 0,
 
+    # Timeout for SSL handshake.
+    "ssl_handshake": 4,
+
     # Protocol family used for the socket.socket function.
     "sock_proto": 0,
 

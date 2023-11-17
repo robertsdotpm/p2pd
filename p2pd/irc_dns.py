@@ -9,7 +9,8 @@ IRC_AF = IP6
 IRC_HOST = "irc.darkmyst.org"
 IRC_PORT = 6697
 IRC_CONF = dict_child({
-    "use_ssl": 1
+    "use_ssl": 1,
+    "ssl_handshake": 4,
 }, NET_CONF)
 
 IRC_NICK = "client_dev_nick1"
@@ -90,6 +91,7 @@ class IRCDNS():
             conf=IRC_CONF
         )
         print(self.con)
+        print(self.con.sock)
 
         nick_msg = IRCMsg(cmd="NICK", param=IRC_NICK)
         user_msg = IRCMsg(
@@ -101,13 +103,24 @@ class IRCDNS():
         motd = None
         for i in range(0, 3):
             # Send data and allow for time to receive them.
-            await self.con.send(nick_msg.pack())
-            await self.con.send(user_msg.pack())
+            nick_buf = nick_msg.pack()
+            print(nick_buf)
+
+
+
+            print(await self.con.send(nick_buf))
+
+            user_buf = user_msg.pack()
+            print(user_buf)
+
+            print(await self.con.send(user_buf))
+            print("sent ident.")
+            await asyncio.sleep(0)
 
             # Wait for message of the day.
             try:
                 motd = await asyncio.wait_for(
-                    self.get_motd, 1
+                    self.get_motd, 3
                 )
             except:
                 continue
@@ -115,6 +128,8 @@ class IRCDNS():
         if motd is not None:
             print(motd.param)
             print(motd.suffix)
+
+        await self.con.close()
         return self
 
     async def msg_cb(self, msg, client_tup, pipe):
@@ -159,7 +174,7 @@ if __name__ == '__main__':
 
         print("If start")
         print(i)
-        ircdns = await IRCDNS().start(i)
+        ircdns = await async_wrap_errors(IRCDNS().start(i))
         pass
 
     async_test(test_irc_dns)
