@@ -1,3 +1,13 @@
+"""
+- Firewalls for IRC servers silently drop packets if you
+make successive connections too closely.
+
+['2', 'MODE', 'client_dev_nick1', '+i']
+b':CTCPServ!services@services.oftc.net PRIVMSG client_dev_nick1 :\x01VERSION\x01\r\n'
+['CTCPServ!services@services.oftc.net', 'PRIVMSG', 'client_dev_nick1', '\x01VERSION\x01']
+
+"""
+
 import asyncio
 import re
 from .utils import *
@@ -6,7 +16,7 @@ from .interface import *
 from .base_stream import *
 
 IRC_AF = IP6
-IRC_HOST = "irc.darkmyst.org"
+IRC_HOST = "irc.oftc.net" # irc.darekmeyst.org
 IRC_PORT = 6697
 IRC_CONF = dict_child({
     "use_ssl": 1,
@@ -81,8 +91,15 @@ class IRCDNS():
         self.get_motd = asyncio.Future()
 
     async def start(self, i):
+        dest = await Address(IRC_HOST, IRC_PORT, i.route(IRC_AF))
+        nick_msg = IRCMsg(cmd="NICK", param=IRC_NICK)
+        user_msg = IRCMsg(
+            cmd="USER",
+            param=f"{IRC_USERNAME} testhosname *",
+            suffix=f"{IRC_REALNAME}"
+        )
+
         route = await i.route(IRC_AF).bind()
-        dest = await Address(IRC_HOST, IRC_PORT, route)
         self.con = await pipe_open(
             TCP,
             route,
@@ -93,42 +110,30 @@ class IRCDNS():
         print(self.con)
         print(self.con.sock)
 
-        nick_msg = IRCMsg(cmd="NICK", param=IRC_NICK)
-        user_msg = IRCMsg(
-            cmd="USER",
-            param=f"{IRC_USERNAME} testhosname *",
-            suffix=f"{IRC_REALNAME}"
+
+        # Send data and allow for time to receive them.
+        nick_buf = nick_msg.pack()
+        print(nick_buf)
+
+
+
+        print(await self.con.send(nick_buf))
+
+        user_buf = user_msg.pack()
+        print(user_buf)
+
+        print(await self.con.send(user_buf))
+        print("sent ident.")
+        await asyncio.sleep(0)
+
+        # Wait for message of the day.
+        await asyncio.wait_for(
+            self.get_motd, 5
         )
+            
 
-        motd = None
-        for i in range(0, 3):
-            # Send data and allow for time to receive them.
-            nick_buf = nick_msg.pack()
-            print(nick_buf)
-
-
-
-            print(await self.con.send(nick_buf))
-
-            user_buf = user_msg.pack()
-            print(user_buf)
-
-            print(await self.con.send(user_buf))
-            print("sent ident.")
-            await asyncio.sleep(0)
-
-            # Wait for message of the day.
-            try:
-                motd = await asyncio.wait_for(
-                    self.get_motd, 3
-                )
-            except:
-                continue
-
-        if motd is not None:
-            print(motd.param)
-            print(motd.suffix)
-
+        await asyncio.sleep(10)
+        await self.con.send(IRCMsg(cmd="QUIT").pack())
         await self.con.close()
         return self
 
@@ -144,13 +149,18 @@ class IRCDNS():
             # Loop over the IRC protocol messages.
             # Process the minimal functions we understand.
             for msg in msgs:
-                # Set message of the day.
-                if msg.cmd == "001" and not self.get_motd.done():
-                    self.get_motd.set_result(msg)
+                # End of motd.
+                if msg.cmd in ["376", "411"]:
+                    self.get_motd.set_result(True)
 
                 # Process ping.
                 if msg.cmd == "PING":
-                    pong = IRCMsg(cmd="PONG", suffix=msg.suffix)
+                    print("got ping")
+                    pong = IRCMsg(
+                        cmd="PONG",
+                        suffix=msg.suffix,
+                    )
+                    print(pong.pack())
                     await self.con.send(pong.pack())
         except:
             log_exception()
