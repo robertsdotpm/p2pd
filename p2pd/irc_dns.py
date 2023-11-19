@@ -29,11 +29,12 @@ IRC_CONF = dict_child({
     "ssl_handshake": 4,
 }, NET_CONF)
 
-IRC_NICK = "client_dev_nick1"
+IRC_NICK = "client_dev_nick1" + to_s(rand_plain(6))
 IRC_USERNAME = "client_dev_user1"
 IRC_REALNAME = "matthew"
 IRC_EMAIL = "test_irc@p2pd.net"
 IRC_PASS = to_s(file_get_contents("p2pd/irc_pass.txt"))
+IRC_CHAN = f"#{to_s(rand_plain(8))}"
 
 class IRCMsg():
     def __init__(self, prefix=None, cmd=None, param=None, suffix=None):
@@ -150,6 +151,25 @@ class IRCDNS():
             ).pack()
         )
         print("sent register")
+        await asyncio.sleep(2)
+
+
+        # Join channel.
+        await self.con.send(
+            IRCMsg(
+                cmd="JOIN",
+                param=f"{IRC_CHAN}",
+            ).pack()
+        )
+
+        # register channel.
+        await self.con.send(
+            IRCMsg(
+                cmd="PRIVMSG",
+                param="ChanServ",
+                suffix=f"REGISTER {IRC_CHAN}"
+            ).pack()
+        )
 
         await asyncio.sleep(10)
         await self.con.send(IRCMsg(cmd="QUIT").pack())
