@@ -871,12 +871,15 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None,
                 await asyncio.wait_for(con_task, conf["con_timeout"])
 
                 # Enable SSL on this socket.
+                """
                 if conf["use_ssl"]:
+                    
                     # Some security options are disabled for simplicity.
                     # TODO: explore this more.
                     ssl_context = ssl.create_default_context()
                     ssl_context.check_hostname = False 
                     ssl_context.verify_mode = ssl.CERT_NONE
+                    
 
                     # Wrap socket won't support non-blocking sockets.
                     # Temporarily make it blocking.
@@ -894,6 +897,7 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None,
 
                     # Then the socket is made non-blocking again.
                     sock.settimeout(0)
+                """
                     
         # Make sure bind port is set (and not zero.)
         route.bind_port = sock.getsockname()[1]
@@ -977,10 +981,24 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None,
 
             # Single connection.
             if dest is not None:
+                # Enable SSL on this socket.
+                if conf["use_ssl"]:
+                    # Some security options are disabled for simplicity.
+                    # TODO: explore this more.
+                    ssl_context = ssl.create_default_context()
+                    ssl_context.check_hostname = False 
+                    ssl_context.verify_mode = ssl.CERT_NONE
+                    server_hostname = ""
+                else:
+                    ssl_context = False
+                    server_hostname = None
+
                 # base_proto.set_handle(writer, sock.getpeername())
                 await loop.create_connection(
                     protocol_factory=lambda: base_proto,
-                    sock=sock
+                    sock=sock,
+                    ssl=ssl_context,
+                    server_hostname=server_hostname
                 )
 
                 # Set transport handle.

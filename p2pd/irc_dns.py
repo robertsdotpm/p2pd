@@ -9,6 +9,9 @@ b':CTCPServ!services@services.oftc.net PRIVMSG client_dev_nick1 :\x01VERSION\x01
 I dont think I can test the code on my p2pd server as it
 actually is running proxies.
 
+not quite sure how to determine a success response for a nick?
+maybe the right approach is to then try a operation that needs those perms?
+
 """
 
 import asyncio
