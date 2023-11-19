@@ -122,6 +122,10 @@ urldecode = lambda x: to_b(urllib.parse.unquote(x))
 shuffle = lambda x: random.shuffle(x) or x
 d_vals = lambda x: list(x.values())
 
+def file_get_contents(path):
+    with open(path, mode='rb') as f:
+        return f.read()
+
 def to_type(x, out_type):
     # String.
     if isinstance(out_type, str):

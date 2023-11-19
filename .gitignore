@@ -138,6 +138,9 @@ p2pd/*.log
 tests/*.log
 build/
 
+# Config
+irc_pass.txt
+
 # Profiling
 output.png
 output.pstats
@@ -150,3 +153,4 @@ tests/.coverage
 .pytest_cache
 .coverage*
 cov.xml
+

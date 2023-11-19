@@ -6,6 +6,9 @@ make successive connections too closely.
 b':CTCPServ!services@services.oftc.net PRIVMSG client_dev_nick1 :\x01VERSION\x01\r\n'
 ['CTCPServ!services@services.oftc.net', 'PRIVMSG', 'client_dev_nick1', '\x01VERSION\x01']
 
+I dont think I can test the code on my p2pd server as it
+actually is running proxies.
+
 """
 
 import asyncio
@@ -16,7 +19,7 @@ from .interface import *
 from .base_stream import *
 
 IRC_AF = IP6
-IRC_HOST = "irc.oftc.net" # irc.darekmeyst.org
+IRC_HOST = "irc.darkmyst.org" # irc.darkmyst.org
 IRC_PORT = 6697
 IRC_CONF = dict_child({
     "use_ssl": 1,
@@ -26,6 +29,8 @@ IRC_CONF = dict_child({
 IRC_NICK = "client_dev_nick1"
 IRC_USERNAME = "client_dev_user1"
 IRC_REALNAME = "matthew"
+IRC_EMAIL = "test_irc@p2pd.net"
+IRC_PASS = to_s(file_get_contents("p2pd/irc_pass.txt"))
 
 class IRCMsg():
     def __init__(self, prefix=None, cmd=None, param=None, suffix=None):
@@ -89,6 +94,7 @@ class IRCDNS():
         self.con = None
         self.recv_buf = ""
         self.get_motd = asyncio.Future()
+        self.register_status = asyncio.Future()
 
     async def start(self, i):
         dest = await Address(IRC_HOST, IRC_PORT, i.route(IRC_AF))
@@ -128,9 +134,19 @@ class IRCDNS():
 
         # Wait for message of the day.
         await asyncio.wait_for(
-            self.get_motd, 5
+            self.get_motd, 60
         )
-            
+
+        # Attempt to register the nick at the server.
+        # See if the server requires confirmation.
+        await self.con.send(
+            IRCMsg(
+                cmd="PRIVMSG",
+                param="NickServ",
+                suffix=f"REGISTER {IRC_PASS} {IRC_EMAIL}"
+            ).pack()
+        )
+        print("sent register")
 
         await asyncio.sleep(10)
         await self.con.send(IRCMsg(cmd="QUIT").pack())
