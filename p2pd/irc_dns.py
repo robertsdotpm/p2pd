@@ -15,10 +15,12 @@ maybe the right approach is to then try a operation that needs those perms?
 "irc.darkmyst.org"
 'irc.oftc.net',
 'irc.euirc.net', 'irc.xxxchatters.com', 'irc.swiftirc.net']
-['irc.ouch.chat', 'irc.spotchat.org', 'irc.scoutlink.net']
+###['irc.ouch.chat', 'irc.spotchat.org', 'irc.scoutlink.net']
 
-these results are now more than what i calculated. so maybe its not too bad.
-note: some false positives
+filtered:
+['irc.oftc.net', 'irc.euirc.net', 'irc.xxxchatters.com', 'irc.swiftirc.net', 'irc.darkmyst.org']
+
+these results are about what i calculated. so maybe its not too bad.
 
 a more advanced scanner that can account for the 30 min wait time for nick and chan
 registration is likely to have more results
@@ -40,12 +42,13 @@ IRC_CONF = dict_child({
     "con_timeout": 4,
 }, NET_CONF)
 
-IRC_NICK = "client_dev_nick1" + to_s(rand_plain(6))
-IRC_USERNAME = "client_dev_user1"
-IRC_REALNAME = "matthew"
+IRC_NICK = "client_dev_nick1" + to_s(rand_plain(8))
+IRC_USERNAME = "client_dev_user1" + to_s(rand_plain(8))
+IRC_REALNAME = "matthew" + to_s(rand_plain(8))
 IRC_EMAIL = "test_irc" + to_s(rand_plain(8)) + "@p2pd.net"
 IRC_PASS = to_s(file_get_contents("p2pd/irc_pass.txt"))
 IRC_CHAN = f"#{to_s(rand_plain(8))}"
+IRC_HOSTNAME = to_s(rand_plain(8))
 
 class IRCMsg():
     def __init__(self, prefix=None, cmd=None, param=None, suffix=None):
@@ -116,7 +119,7 @@ class IRCDNS():
         nick_msg = IRCMsg(cmd="NICK", param=IRC_NICK)
         user_msg = IRCMsg(
             cmd="USER",
-            param=f"{IRC_USERNAME} testhosname *",
+            param=f"{IRC_USERNAME} {IRC_HOSTNAME} *",
             suffix=f"{IRC_REALNAME}"
         )
 
@@ -199,10 +202,17 @@ class IRCDNS():
         return self.irc_server
 
     async def msg_cb(self, msg, client_tup, pipe):
-        chan_msgs = [
+        pos_chan_msgs = [
             "registered under",
             "is now registered",
             "successfully registered",
+        ]
+
+        neg_chan_msgs = [
+            "not complete registration",
+            "following link",
+            "link expires",
+            "address is not confirmed"
         ]
 
         try:
@@ -211,6 +221,15 @@ class IRCDNS():
             self.recv_buf += to_s(msg)
             msgs, new_buf = extract_irc_msgs(self.recv_buf)
             self.recv_buf = new_buf
+
+            # Disable chan success in some cases.
+            skip_register = False
+            for msg in msgs:
+                if isinstance(msg.suffix, str):
+                    for chan_fail in neg_chan_msgs:
+                        if chan_fail in msg.suffix:
+                            skip_register = True
+                            break
 
             # Loop over the IRC protocol messages.
             # Process the minimal functions we understand.
@@ -230,9 +249,10 @@ class IRCDNS():
 
                 # Channel registered successfully.
                 if isinstance(msg.suffix, str):
-                    for chan_success in chan_msgs:
-                        if chan_success in msg.suffix:
-                            self.register_status.set_result(True)
+                    if skip_register == False:
+                        for chan_success in pos_chan_msgs:
+                            if chan_success in msg.suffix:
+                                self.register_status.set_result(True)
         except:
             log_exception()
 
@@ -315,12 +335,7 @@ if __name__ == '__main__':
         "irc2.acc.umu.se",
         "irc.mibbit.net",
         "irc.pirc.pl",
-        "irc.atrum.org"
-    ]
-
-    #IRC_SERVERS1 = ["irc.darkmyst.org"]
-
-    IRC_SERVERS1 = [
+        "irc.atrum.org",
         "irc.chatlounge.net",
         "irc.librairc.net",
         "irc.lunarirc.net",
@@ -340,7 +355,12 @@ if __name__ == '__main__':
         "irc.luatic.net",
         "irc.roircop.info",
         "irc.forumcerdas.net",
+        "irc.darkmyst.org"
     ]
+
+    #IRC_SERVERS1 = ["irc.darkmyst.org"]
+
+
 
     async def test_irc_dns():
         """
@@ -359,7 +379,7 @@ if __name__ == '__main__':
         print("If start")
         print(i)
 
-        
+        """
         tasks = []
         for server in IRC_SERVERS1:
             task = async_wrap_errors(IRCDNS(server).start(i))
@@ -370,7 +390,7 @@ if __name__ == '__main__':
         out = strip_none(out)
         print(out)
         return
-        
+        """
 
         
         for server in IRC_SERVERS1:
