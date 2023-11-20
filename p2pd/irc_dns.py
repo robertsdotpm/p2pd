@@ -15,8 +15,10 @@ maybe the right approach is to then try a operation that needs those perms?
 "irc.darkmyst.org"
 'irc.oftc.net',
 'irc.euirc.net', 'irc.xxxchatters.com', 'irc.swiftirc.net']
+['irc.ouch.chat', 'irc.spotchat.org', 'irc.scoutlink.net']
 
 these results are now more than what i calculated. so maybe its not too bad.
+note: some false positives
 
 a more advanced scanner that can account for the 30 min wait time for nick and chan
 registration is likely to have more results
@@ -317,6 +319,28 @@ if __name__ == '__main__':
     ]
 
     #IRC_SERVERS1 = ["irc.darkmyst.org"]
+
+    IRC_SERVERS1 = [
+        "irc.chatlounge.net",
+        "irc.librairc.net",
+        "irc.lunarirc.net",
+        "irc.bigua.org",
+        "irc.smurfnet.ch",
+        "irc.ouch.chat",
+        "irc.lewdchat.com",
+        "irc.deutscher-chat.de",
+        "irc.scuttled.net",
+        "irc.chat.com.tr",
+        "irc.spotchat.org",
+        "irc.gigairc.net",
+        "irc.darkworld.network",
+        "irc.zenet.org",
+        "irc.scoutlink.net",
+        "irc.do-dear.com",
+        "irc.luatic.net",
+        "irc.roircop.info",
+        "irc.forumcerdas.net",
+    ]
 
     async def test_irc_dns():
         """
