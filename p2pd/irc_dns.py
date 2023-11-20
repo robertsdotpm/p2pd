@@ -79,7 +79,6 @@ def extract_irc_msgs(buf):
             break
 
         # Extract matched message.
-        print(list(match.groups()))
         msg = IRCMsg(*list(match.groups()))
         msgs.append(msg)
 
@@ -117,28 +116,18 @@ class IRCDNS():
             msg_cb=self.msg_cb,
             conf=IRC_CONF
         )
-        print(self.con)
-        print(self.con.sock)
-
 
         # Send data and allow for time to receive them.
         nick_buf = nick_msg.pack()
-        print(nick_buf)
-
-
-
-        print(await self.con.send(nick_buf))
+        await self.con.send(nick_buf)   
 
         user_buf = user_msg.pack()
-        print(user_buf)
-
-        print(await self.con.send(user_buf))
-        print("sent ident.")
+        await self.con.send(user_buf)
         await asyncio.sleep(0)
 
         # Wait for message of the day.
         await asyncio.wait_for(
-            self.get_motd, 60
+            self.get_motd, 5
         )
 
         # Attempt to register the nick at the server.
@@ -150,7 +139,6 @@ class IRCDNS():
                 suffix=f"REGISTER {IRC_PASS} {IRC_EMAIL}"
             ).pack()
         )
-        print("sent register")
         await asyncio.sleep(2)
 
 
@@ -171,7 +159,11 @@ class IRCDNS():
             ).pack()
         )
 
-        await asyncio.sleep(10)
+        # Wait for message of the day.
+        await asyncio.wait_for(
+            self.register_status, 3
+        )
+
         await self.con.send(IRCMsg(cmd="QUIT").pack())
         await self.con.close()
         return self
@@ -180,7 +172,6 @@ class IRCDNS():
         try:
             # Keep a buffer of potential protocol messages.
             # These may be partial in the case of TCP.
-            print(msg)
             self.recv_buf += to_s(msg)
             msgs, new_buf = extract_irc_msgs(self.recv_buf)
             self.recv_buf = new_buf
@@ -194,13 +185,16 @@ class IRCDNS():
 
                 # Process ping.
                 if msg.cmd == "PING":
-                    print("got ping")
                     pong = IRCMsg(
                         cmd="PONG",
                         suffix=msg.suffix,
                     )
-                    print(pong.pack())
+
                     await self.con.send(pong.pack())
+
+                # Channel registered successfully.
+                if "is now registered" in msg.suffix:
+                    self.register_status.set_result(True)
         except:
             log_exception()
 
@@ -224,6 +218,6 @@ if __name__ == '__main__':
         print("If start")
         print(i)
         ircdns = await async_wrap_errors(IRCDNS().start(i))
-        pass
+        print(ircdns)
 
     async_test(test_irc_dns)
