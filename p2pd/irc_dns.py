@@ -20,6 +20,8 @@ maybe the right approach is to then try a operation that needs those perms?
 filtered:
 ['irc.oftc.net', 'irc.euirc.net', 'irc.xxxchatters.com', 'irc.swiftirc.net', 'irc.darkmyst.org']
 
+['irc.chatjunkies.org', 'irc.dosers.net', 'irc.entropynet.net',  'irc.liberta.casa']
+
 these results are about what i calculated. so maybe its not too bad.
 
 a more advanced scanner that can account for the 30 min wait time for nick and chan
@@ -360,7 +362,108 @@ if __name__ == '__main__':
 
     #IRC_SERVERS1 = ["irc.darkmyst.org"]
 
-
+    # Taken from hexchat
+    # Lets see what happens.
+    IRC_SERVERS1 = [
+        "pirc.pl",
+        "newserver",
+        "irc.2600.net",
+        "global.acn.gr",
+        "irc.afternet.org",
+        "irc.data.lt",
+        "irc.omicron.lt",
+        "irc.vub.lt",
+        "irc.anthrochat.net",
+        "arcnet-irc.org",
+        "irc.austnet.org",
+        "irc.azzurra.org",
+        "irc.canternet.org",
+        "irc.chat4all.org",
+        "irc.chatjunkies.org",
+        "irc.unibg.net",
+        "irc.chatpat.bg",
+        "irc.chatspike.net",
+        "irc.dairc.net",
+        "us.dal.net",
+        "irc.darkmyst.org",
+        "irc.darkscience.net",
+        "irc.drk.sc",
+        "irc.darkscience.ws",
+        "irc.d-t-net.de",
+        "irc.digitalirc.org",
+        "irc.dosers.net",
+        "irc.choopa.net",
+        "efnet.port80.se",
+        "irc.underworld.no",
+        "efnet.deic.eu",
+        "irc.enterthegame.com",
+        "irc.entropynet.net",
+        "irc.esper.net",
+        "irc.euirc.net",
+        "irc.europnet.org",
+        "irc.fdfnet.net",
+        "irc.gamesurge.net",
+        "irc.geekshed.net",
+        "irc.german-elite.net",
+        "irc.gimp.org",
+        "irc.gnome.org",
+        "irc.globalgamers.net",
+        "irc.hackint.org",
+        "irc.eu.hackint.org",
+        "irc.hashmark.net",
+        "irc.icq-chat.com",
+        "irc.interlinked.me",
+        "irc.irc4fun.net",
+        "irc.irchighway.net",
+        "open.ircnet.net",
+        "irc.irctoo.net",
+        "irc.kbfail.net",
+        "irc.libera.chat",
+        "irc.liberta.casa",
+        "irc.librairc.net",
+        "irc.link-net.org",
+        "irc.mindforge.org",
+        "irc.mixxnet.net",
+        "irc.oceanius.com",
+        "irc.oftc.net",
+        "irc.othernet.org",
+        "irc.oz.org",
+        "irc.krstarica.com",
+        "irc.pirc.pl",
+        "irc.ptnet.org",
+        "uevora.ptnet.org",
+        "claranet.ptnet.org",
+        "sonaquela.ptnet.org",
+        "uc.ptnet.org",
+        "ipg.ptnet.org",
+        "irc.quakenet.org",
+        "irc.rizon.net",
+        "irc.tomsk.net",
+        "irc.run.net",
+        "irc.ru",
+        "irc.lucky.net",
+        "irc.serenity-irc.net",
+        "irc.simosnap.com",
+        "irc.slashnet.org",
+        "irc.snoonet.org",
+        "irc.sohbet.net",
+        "irc.sorcery.net",
+        "irc.spotchat.org",
+        "irc.station51.net",
+        "irc.stormbit.net",
+        "irc.swiftirc.net",
+        "irc.synirc.net",
+        "irc.techtronix.net",
+        "irc.tilde.chat",
+        "irc.servx.org",
+        "i.valware.uk",
+        "irc.tripsit.me",
+        "newirc.tripsit.me",
+        "coconut.tripsit.me",
+        "innsbruck.tripsit.me",
+        "us.undernet.org",
+        "irc.xertion.org"
+    ]
 
     async def test_irc_dns():
         """
@@ -379,7 +482,7 @@ if __name__ == '__main__':
         print("If start")
         print(i)
 
-        """
+        
         tasks = []
         for server in IRC_SERVERS1:
             task = async_wrap_errors(IRCDNS(server).start(i))
@@ -390,7 +493,7 @@ if __name__ == '__main__':
         out = strip_none(out)
         print(out)
         return
-        """
+        
 
         
         for server in IRC_SERVERS1:
