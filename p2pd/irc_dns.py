@@ -24,6 +24,70 @@ filtered:
 
 'irc.financialchat.com', 'irc.irc2.hu', 'irc.phat-net.de', 'irc.slacknet.org', 'irc.tweakers.net'
 
+IP6:
+
+['irc.oftc.net', 'irc.euirc.net', 'irc.swiftirc.net', 'irc.darkmyst.org', 'irc.entropynet.net', 'irc.liberta.casa', 'irc.phat-net.de', 'irc.slacknet.org', 'irc.tweakers.net']
+
+
+SERVERS = [
+    {
+        'domain': 'irc.oftc.net'
+        'afs': [IP4, IP6]
+    },
+    {
+        'domain': 'irc.euirc.net',
+        'afs': [IP4, IP6]
+    },
+    {
+        'domain': 'irc.xxxchatters.com',
+        'afs': [IP4]
+    },
+    {
+        'domain': 'irc.swiftirc.net',
+        'afs': [IP4, IP6]
+    },
+    {
+        'domain': 'irc.darkmyst.org',
+        'afs': [IP4, IP6]
+    },
+    {
+        'domain': 'irc.chatjunkies.org',
+        'afs': [IP4]
+    },
+    {
+        'domain': 'irc.dosers.net',
+        'afs': [IP4]
+    },
+    {
+        'domain': 'irc.entropynet.net',
+        'afs': [IP4, IP6]
+    },
+    {
+        'domain': 'irc.liberta.casa',
+        'afs': [IP4, IP6]
+    },
+        {
+        'domain': 'irc.financialchat.com',
+        'afs': [IP4]
+    },
+    {
+        'domain': 'irc.irc2.hu',
+        'afs': [IP4]
+    },
+    {
+        'domain': 'irc.phat-net.de',
+        'afs': [IP4, IP6]
+    },
+    {
+        'domain': 'irc.slacknet.org',
+        'afs': [IP4, IP6]
+    },
+        {
+        'domain': 'irc.tweakers.net',
+        'afs': [IP4, IP6]
+    },
+]
+
 14 servers to start with. not bad. this should work.
 
 these results are about what i calculated. so maybe its not too bad.
@@ -39,7 +103,7 @@ from .address import *
 from .interface import *
 from .base_stream import *
 
-IRC_AF = IP4
+IRC_AF = IP6
 IRC_HOST = "irc.darkmyst.org" # irc.darkmyst.org
 IRC_PORT = 6697
 IRC_CONF = dict_child({
@@ -471,6 +535,9 @@ if __name__ == '__main__':
 
     # These servers are taken from mirc.
     IRC_SERVERS1 = ['irc.dal.net', 'irc.efnet.org', 'open.ircnet.net', 'irc.libera.chat', 'irc.quakenet.org', 'irc.rizon.net', 'irc.snoonet.org', 'irc.swiftirc.net', 'irc.undernet.org', 'irc.scuttled.net', 'irc.abjects.net', 'irc.afternet.org', 'irc.data.lt', 'irc.allnetwork.org', 'irc.alphachat.net', 'irc.atrum.org', 'irc.austnet.org', 'irc.axon.pw', 'irc.ayochat.or.id', 'irc.azzurra.org', 'irc.beyondirc.net', 'irc.bolchat.com', 'ssl.bongster.de', 'irc.brasirc.com.br', 'irc.canternet.org', 'irc.chat4all.org', 'irc.chatspike.net', 'irc.chatzona.org', 'irc.cncirc.net', 'irc.coolsmile.net', 'irc.darenet.org', 'irc.d-t-net.de', 'irc.darkfasel.net', 'irc.darkmyst.org', 'irc.darkscience.net', 'irc.darkworld.network', 'irc.dejatoons.net', 'irc.desirenet.org', 'irc.ecnet.org', 'irc.epiknet.org', 'irc.esper.net', 'irc.euirc.net', 'irc.europnet.org', 'irc.evolu.net', 'irc.explosionirc.net', 'irc.fdfnet.net', 'irc.fef.net', 'irc.financialchat.com', 'irc.forestnet.org', 'irc.FreeUniBG.eu', 'irc.gamesurge.net', 'irc.geeknode.org', 'irc.geekshed.net', 'irc.german-elite.net', 'irc.gigairc.net', 'irc.gimp.org', 'irc.globalgamers.net', 'irc.goodchatting.com', 'irc.hackint.org', 'irc.hybridirc.com', 'irc.icq-chat.com', 'irc.immortal-anime.net', 'irc.indymedia.org', 'irc.irc-hispano.org', 'irc.irc2.hu', 'irc.irc4fun.net', 'irc.ircgate.it', 'irc.irchighway.net', 'irc.ircsource.net', 'irc.irctoo.net', 'irc.ircube.org', 'irc.ircworld.org', 'irc.irdsi.net', 'irc.kampungchat.org', 'irc.knightirc.net', 'irc.krey.net', 'irc.krono.net', 'irc.librairc.net', 'irc.lichtsnel.nl', 'irc.link-net.be', 'irc.luatic.net', 'irc.maddshark.net', 'irc.magicstar.net', 'irc.perl.org', 'irc.mibbit.net', 'irc.mindforge.org', 'irc.nationchat.org', 'irc.nightstar.net', 'irc.nullirc.net', 'irc.oftc.net', 'irc.oltreirc.net', 'irc.openjoke.org', 'irc.lt-tech.org', 'irc.orixon.org', 'irc.oz.org', 'irc.p2p-network.net', 'irc.phat-net.de', 'irc.krstarica.com', 'irc.pirc.pl', 'irc.ptnet.org', 'irc.recycled-irc.net', 'irc.retroit.org', 'irc.rezosup.org', 'irc.rusnet.org.ru', 'irc.scarynet.org', 'irc.serenity-irc.net', 'irc.shadowfire.org', 'irc.shadowworld.net', 'irc.simosnap.com', 'irc.SkyChatz.org', 'irc.skyrock.net', 'irc.slacknet.org', 'irc.slashnet.org', 'irc.smurfnet.ch', 'irc.sorcery.net', 'irc.spotchat.org', 'irc.st-city.net', 'irc.starlink-irc.org', 'irc.starlink.org', 'irc.staynet.org', 'irc.stormbit.net', 'irc.synirc.net', 'irc.technet.chat', 'irc.tilde.chat', 'irc.tweakers.net', 'irc.undermind.net', 'irc.wenet.ru', 'irc.whatnet.org', 'irc.wixchat.org', 'irc.worldirc.org', 'irc.xertion.org', 'irc.xevion.net']
+
+
+    IRC_SERVERS1 = ['irc.oftc.net', 'irc.euirc.net', 'irc.xxxchatters.com', 'irc.swiftirc.net', 'irc.darkmyst.org', 'irc.chatjunkies.org', 'irc.dosers.net', 'irc.entropynet.net',  'irc.liberta.casa', 'irc.financialchat.com', 'irc.irc2.hu', 'irc.phat-net.de', 'irc.slacknet.org', 'irc.tweakers.net']
 
     async def test_irc_dns():
         """
