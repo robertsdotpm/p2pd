@@ -17,6 +17,7 @@ import urllib.parse
 import platform
 import selectors
 import copy
+import hashlib
 
 # Yoloswaggins.
 if not hasattr(asyncio, 'create_task'):
@@ -121,6 +122,7 @@ urlencode = lambda x: to_b(urllib.parse.quote(x))
 urldecode = lambda x: to_b(urllib.parse.unquote(x))
 shuffle = lambda x: random.shuffle(x) or x
 d_vals = lambda x: list(x.values())
+sha256 = lambda x: to_s(hashlib.sha256(to_b(x)).hexdigest())
 
 def file_get_contents(path):
     with open(path, mode='rb') as f:
