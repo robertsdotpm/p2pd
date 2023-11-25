@@ -29,22 +29,17 @@ IP6:
 ['irc.oftc.net', 'irc.euirc.net', 'irc.swiftirc.net', 'irc.darkmyst.org', 'irc.entropynet.net', 'irc.liberta.casa', 'irc.phat-net.de', 'irc.slacknet.org', 'irc.tweakers.net']
 
 
-SERVERS = [
-    {
-        'domain': 'irc.oftc.net'
-        'afs': [IP4, IP6],
+make different lists for v4 and v6
+sort by age
 
-        # 20 jul 2002
-        "creation": 1027087200
-    },
-    {
-        'domain': 'irc.euirc.net',
-        'afs': [IP4, IP6],
+how will the algorithm work?
 
+make a few tlds
+    distribute a portion of the old servers between them (so that they are the majority) with the newer as a minority
+    repeat until no servers remain 
 
-        # 19 sep 2000
-        "creation": 969282000
-    },
+UNUSED_IRC = [
+
     {
         'domain': 'irc.xxxchatters.com',
         'afs': [IP4],
@@ -52,20 +47,8 @@ SERVERS = [
         # 9 march 2007
         'creation': 1173358800
     },
-    {
-        'domain': 'irc.swiftirc.net',
-        'afs': [IP4, IP6],
 
-        # 10 march 2007
-        'creation': 1173445200
-    },
-    {
-        'domain': 'irc.darkmyst.org',
-        'afs': [IP4, IP6],
-
-        # 26 nov 2002
-        'creation': 1038229200
-    },
+    
     {
         'domain': 'irc.chatjunkies.org',
         'afs': [IP4],
@@ -81,19 +64,6 @@ SERVERS = [
         'creation': 1590501600
     },
     {
-        'domain': 'irc.entropynet.net',
-        'afs': [IP4, IP6],
-
-        # 11 sep 2011
-        'creation': 1312984800
-    },
-    {
-        'domain': 'irc.liberta.casa',
-        'afs': [IP4, IP6],
-
-        # 7 feb 2020
-        'creation': 1580994000
-    },
         'domain': 'irc.financialchat.com',
         'afs': [IP4],
 
@@ -108,26 +78,18 @@ SERVERS = [
         'creation': 1073134800
     },
     {
-        'domain': 'irc.phat-net.de',
+        'domain': 'irc.liberta.casa',
         'afs': [IP4, IP6],
 
-        # 6 nov 2000
-        'creation': 975848400
+        # 7 feb 2020
+        'creation': 1580994000
     },
-    {
-        'domain': 'irc.slacknet.org',
-        'afs': [IP4, IP6],
+]
 
-        # 20 aug 2000
-        'creation': 966434400
-    },
-    {
-        'domain': 'irc.tweakers.net',
-        'afs': [IP4, IP6],
 
-        # 30 apr 2002
-        'creation': 1020088800
-    },
+
+
+SERVERS = [
 ]
 
 14 servers to start with. not bad. this should work.
@@ -136,6 +98,18 @@ these results are about what i calculated. so maybe its not too bad.
 
 a more advanced scanner that can account for the 30 min wait time for nick and chan
 registration is likely to have more results
+
+lookup:
+1. fetch domain from all channels
+2. use majority hash pub key found in records and discard others
+3. use most recent update record
+
+registration:
+1. ensure name is unavailable on at least m servers
+2. register the channels
+
+user_password = sh256(server + pw)
+chan_password = sha256(name + server + pw)
 """
 
 import asyncio
@@ -144,6 +118,93 @@ from .utils import *
 from .address import *
 from .interface import *
 from .base_stream import *
+
+IRC_DNS_G1 = [
+    {
+        'domain': 'irc.slacknet.org',
+        'afs': [IP4, IP6],
+
+        # 20 aug 2000
+        'creation': 966434400
+    },
+    {
+        'domain': 'irc.phat-net.de',
+        'afs': [IP4, IP6],
+
+        # 6 nov 2000
+        'creation': 975848400
+    },
+    {
+        'domain': 'irc.tweakers.net',
+        'afs': [IP4, IP6],
+
+        # 30 apr 2002
+        'creation': 1020088800
+    },
+    {
+        'domain': 'irc.swiftirc.net',
+        'afs': [IP4, IP6],
+
+        # 10 march 2007
+        'creation': 1173445200
+    },
+    {
+        'domain': 'irc.liberta.casa',
+        'afs': [IP4, IP6],
+
+        # 7 feb 2020
+        'creation': 1580994000
+    },
+]
+
+IRC_DNS_G2 = [
+    {
+        'domain': 'irc.slacknet.org',
+        'afs': [IP4, IP6],
+
+        # 20 aug 2000
+        'creation': 966434400
+    },
+    {
+        'domain': 'irc.euirc.net',
+        'afs': [IP4, IP6],
+
+
+        # 19 sep 2000
+        "creation": 969282000
+    },
+    {
+        'domain': 'irc.oftc.net',
+        'afs': [IP4, IP6],
+
+        # 20 jul 2002
+        "creation": 1027087200
+    },
+    {
+        'domain': 'irc.darkmyst.org',
+        'afs': [IP4, IP6],
+
+        # 26 nov 2002
+        'creation': 1038229200
+    },
+    {
+        'domain': 'irc.entropynet.net',
+        'afs': [IP4, IP6],
+
+        # 11 sep 2011
+        'creation': 1312984800
+    },
+]
+
+IRC_DNS = {
+    "p2pd": IRC_DNS_G1,
+    "peer": IRC_DNS_G1,
+    "ddns": IRC_DNS_G2,
+    "node": IRC_DNS_G2,
+}
+
+# 3 of 5 servers must be working for registration to succeed.
+IRC_REG_M = 3
 
 IRC_AF = IP6
 IRC_HOST = "irc.darkmyst.org" # irc.darkmyst.org
@@ -154,12 +215,19 @@ IRC_CONF = dict_child({
     "con_timeout": 4,
 }, NET_CONF)
 
+# Changeable, not fixed.
 IRC_NICK = "client_dev_nick1" + to_s(rand_plain(8))
+
+# Fixed, account for ident.
 IRC_USERNAME = "client_dev_user1" + to_s(rand_plain(8))
 IRC_REALNAME = "matthew" + to_s(rand_plain(8))
+
+
 IRC_EMAIL = "test_irc" + to_s(rand_plain(8)) + "@p2pd.net"
 IRC_PASS = to_s(file_get_contents("p2pd/irc_pass.txt"))
 IRC_CHAN = f"#{to_s(rand_plain(8))}"
+
+# ?
 IRC_HOSTNAME = to_s(rand_plain(8))
 
 class IRCMsg():
