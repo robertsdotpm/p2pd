@@ -115,6 +115,10 @@ user_password = sh256(domain + pw)
 chan_password = sha256(domain + name + pw)
 
 handle ident requests
+
+b':NickServ!NickServ@services.slacknet.org NOTICE n619b848 :This nickname is registered. Please choose a different nickname, or identify via \x02/msg NickServ identify <password>\x02.\r\n'
+b':NickServ!NickServ@services.slacknet.org NOTICE n619b848 :\x02n619b848\x02 is already registered.\r\n'
+
 """
 
 import asyncio
@@ -213,7 +217,6 @@ IRC_REG_M = 3
 
 IRC_AF = IP6
 IRC_HOST = "irc.darkmyst.org" # irc.darkmyst.org
-IRC_PORT = 6697
 IRC_CONF = dict_child({
     "use_ssl": 1,
     "ssl_handshake": 8,
@@ -228,7 +231,6 @@ IRC_USERNAME = "client_dev_user1" + to_s(rand_plain(8))
 
 
 IRC_EMAIL = "test_irc" + to_s(rand_plain(8)) + "@p2pd.net"
-IRC_PASS = to_s(file_get_contents("p2pd/irc_pass.txt"))
 IRC_CHAN = f"#{to_s(rand_plain(8))}"
 
 
@@ -289,7 +291,7 @@ def extract_irc_msgs(buf):
 
     return msgs, buf
 
-class IRCDNS():
+class IRCSession():
     def __init__(self, server_info, seed):
         self.con = None
         self.recv_buf = ""
@@ -299,24 +301,28 @@ class IRCDNS():
         self.seed = seed
 
         # Derive details for IRC server.
-        domain = self.server_info["domain"]
-        self.username = "p2pd_" + sha256(domain + "user" + seed)[:25]
-        self.user_pass = sha256(domain + "pass" + seed)
+        self.irc_server = self.server_info["domain"]
+        self.username = "u" + sha256(self.irc_server + "user" + seed)[:7]
+        self.user_pass = sha256(self.irc_server + "pass" + seed)
+        self.nick = "n" + sha256(self.irc_server + "nick" + seed)[:7]
+        self.email = "p2pd_" + sha256(self.irc_server + "email" + seed)[:12]
+        self.email += "@p2pd.net"
 
         #self.chan_name = 
         #self.chan_pass = sha256(domain + chan_name + seed)
 
 
     async def start(self, i):
-        dest = await Address(self.irc_server, IRC_PORT, i.route(IRC_AF))
-        nick_msg = IRCMsg(cmd="NICK", param=IRC_NICK)
-        user_msg = IRCMsg(
-            cmd="USER",
-            param=f"{IRC_USERNAME} * {IRC_HOSTNAME}",
-            suffix="*"
+        # Destination of IRC server to connect to.
+        # For simplicity all IRC servers support v4 and v6.
+        dest = await Address(
+            self.irc_server,
+            6697,
+            i.route()
         )
 
-        route = await i.route(IRC_AF).bind()
+        # Connect to IRC server.
+        route = await i.route().bind()
         self.con = await pipe_open(
             TCP,
             route,
@@ -325,13 +331,17 @@ class IRCDNS():
             conf=IRC_CONF
         )
 
-        # Send data and allow for time to receive them.
-        nick_buf = nick_msg.pack()
-        await self.con.send(nick_buf)   
-
-        user_buf = user_msg.pack()
-        await self.con.send(user_buf)
-        await asyncio.sleep(0)
+        # Tell server user for the session.
+        await self.con.send(
+            IRCMsg(
+                cmd="USER",
+                param=f"{self.username} * {self.irc_server}",
+                suffix="*"
+            ).pack()
+        )
+        await self.con.send(
+            IRCMsg(cmd="NICK", param=self.nick).pack()
+        )
 
         # Wait for message of the day.
         await asyncio.wait_for(
@@ -344,11 +354,10 @@ class IRCDNS():
             IRCMsg(
                 cmd="PRIVMSG",
                 param="NickServ",
-                suffix=f"REGISTER {IRC_PASS} {IRC_EMAIL}"
+                suffix=f"REGISTER {self.user_pass} {self.email}"
             ).pack()
         )
-        await asyncio.sleep(2)
-
+        return
 
         # Join channel.
         await self.con.send(
@@ -395,6 +404,8 @@ class IRCDNS():
         return self.irc_server
 
     async def msg_cb(self, msg, client_tup, pipe):
+        print(msg)
+
         pos_chan_msgs = [
             "registered under",
             "is now registered",
@@ -440,13 +451,24 @@ class IRCDNS():
 
                     await self.con.send(pong.pack())
 
-                # Channel registered successfully.
+                # Process status message.
                 if isinstance(msg.suffix, str):
+                    # Login if account already exists.
+                    if "nickname is registered" in msg.suffix:
+                        await self.con.send(
+                            IRCMsg(
+                                cmd="PRIVMSG",
+                                param="NickServ",
+                                suffix=f"IDENTIFY {self.user_pass}"
+                            ).pack()
+                        )
+                        
+                    # Indicate channel was registered.
                     if skip_register == False:
                         for chan_success in pos_chan_msgs:
                             if chan_success in msg.suffix:
                                 self.register_status.set_result(True)
-        except:
+        except Exception:
             log_exception()
 
         
@@ -465,11 +487,22 @@ if __name__ == '__main__':
         return
         """
 
-
+        seed = "test_seed"
         i = await Interface().start()
 
         print("If start")
         print(i)
+
+        irc_dns = IRCSession(IRC_DNS_G1[0], seed)
+        await irc_dns.start(i)
+
+        while 1:
+            await asyncio.sleep(1)
+
+
+        return
+
+
 
         
         tasks = []
