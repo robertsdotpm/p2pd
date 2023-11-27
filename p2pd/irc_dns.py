@@ -134,13 +134,6 @@ from .base_stream import *
 
 IRC_DNS_G1 = [
     {
-        'domain': 'irc.slacknet.org',
-        'afs': [IP4, IP6],
-
-        # 20 aug 2000
-        'creation': 966434400
-    },
-    {
         'domain': 'irc.phat-net.de',
         'afs': [IP4, IP6],
 
@@ -171,13 +164,6 @@ IRC_DNS_G1 = [
 ]
 
 IRC_DNS_G2 = [
-    {
-        'domain': 'irc.slacknet.org',
-        'afs': [IP4, IP6],
-
-        # 20 aug 2000
-        'creation': 966434400
-    },
     {
         'domain': 'irc.euirc.net',
         'afs': [IP4, IP6],
@@ -406,6 +392,7 @@ class IRCSession():
             ).pack()
         )
 
+        """
         # register channel.
         await self.con.send(
             IRCMsg(
@@ -414,6 +401,7 @@ class IRCSession():
                 suffix=f"REGISTER {chan_name}"
             ).pack()
         )
+        """
 
         # register channel.
         await self.con.send(
@@ -424,6 +412,7 @@ class IRCSession():
             ).pack()
         )
 
+        """
         # register channel.
         await self.con.send(
             IRCMsg(
@@ -432,9 +421,34 @@ class IRCSession():
                 suffix=f"REGISTER {chan_name} {chan_pass} {chan_desc}"
             ).pack()
         )
+        """
+
+        return await self.is_chan_registered(chan_name)
+    
+    async def load_owned_chans(self):
+        await self.con.send(
+            IRCMsg(
+                cmd="WHOIS",
+                param=f"{self.nick}",
+            ).pack()
+        )
+
+        return
+        await self.con.send(
+            IRCMsg(
+                cmd="PRIVMSG",
+                param="ChanServ",
+                suffix=f"LIST {self.nick}!{self.username}@*"
+            ).pack()
+        )
 
     async def msg_cb(self, msg, client_tup, pipe):
         print(msg)
+
+        pos_login_msgs = [
+            "now identified for",
+            "with the password"
+        ]
 
         pos_chan_msgs = [
             "registered under",
@@ -487,6 +501,11 @@ class IRCSession():
 
                 # Process status message.
                 if isinstance(msg.suffix, str):
+                    # Login ident success or account register.
+                    for success_msg in pos_login_msgs:
+                        if success_msg in msg.suffix:
+                            self.login_status.set_result(True)
+
                     # Login if account already exists.
                     if "nickname is registered" in msg.suffix:
                         await self.con.send(
@@ -509,6 +528,7 @@ class IRCSession():
                         if len(re.findall(p, msg.suffix)):
                             self.chan_infos[chan_name].set_result(True)
 
+                    """
                     # Channel registered.
                     for chan_name in self.chan_registered:
                         if chan_name not in self.suffix:
@@ -519,6 +539,7 @@ class IRCSession():
                                 continue
 
                             self.chan_registered[chan_name].set_result(True)
+                    """
         except Exception:
             log_exception()
 
@@ -544,12 +565,15 @@ if __name__ == '__main__':
         print("If start")
         print(i)
 
-        irc_dns = IRCSession(IRC_DNS_G1[0], seed)
+        irc_dns = IRCSession(IRC_DNS_G2[2], seed)
         await irc_dns.start(i)
 
-        chan_name = "#help"
-        out = await irc_dns.is_chan_registered(chan_name)
-        print(out)
+
+        print(await irc_dns.register_channel("#test_chan_name123"))
+        await asyncio.sleep(2)
+        print(await irc_dns.register_channel("#test_chan_name222"))
+
+        await irc_dns.load_owned_chans()
 
         while 1:
             await asyncio.sleep(1)
