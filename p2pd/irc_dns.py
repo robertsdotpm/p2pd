@@ -119,6 +119,10 @@ handle ident requests
 b':NickServ!NickServ@services.slacknet.org NOTICE n619b848 :This nickname is registered. Please choose a different nickname, or identify via \x02/msg NickServ identify <password>\x02.\r\n'
 b':NickServ!NickServ@services.slacknet.org NOTICE n619b848 :\x02n619b848\x02 is already registered.\r\n'
 
+get channels made by user
+    could mean not having to manage a bunch of bs in a db
+check if a channel exists on a server [done]
+
 """
 
 import asyncio
@@ -296,7 +300,9 @@ class IRCSession():
         self.con = None
         self.recv_buf = ""
         self.get_motd = asyncio.Future()
-        self.register_status = asyncio.Future()
+        self.login_status = asyncio.Future()
+        self.chan_registered = {}
+        self.chan_infos = {}
         self.server_info = server_info
         self.seed = seed
 
@@ -307,10 +313,6 @@ class IRCSession():
         self.nick = "n" + sha256(self.irc_server + "nick" + seed)[:7]
         self.email = "p2pd_" + sha256(self.irc_server + "email" + seed)[:12]
         self.email += "@p2pd.net"
-
-        #self.chan_name = 
-        #self.chan_pass = sha256(domain + chan_name + seed)
-
 
     async def start(self, i):
         # Destination of IRC server to connect to.
@@ -348,6 +350,21 @@ class IRCSession():
             self.get_motd, 30
         )
 
+        # Trigger register if needed.
+        await self.register_user()
+
+        # Wait for login success.
+        await asyncio.wait_for(
+            self.login_status, 5
+        )
+
+        return self
+    
+    async def close(self):
+        await self.con.send(IRCMsg(cmd="QUIT").pack())
+        await self.con.close()
+    
+    async def register_user(self):
         # Attempt to register the nick at the server.
         # See if the server requires confirmation.
         await self.con.send(
@@ -357,13 +374,35 @@ class IRCSession():
                 suffix=f"REGISTER {self.user_pass} {self.email}"
             ).pack()
         )
-        return
+
+    async def is_chan_registered(self, chan_name):
+        if chan_name in self.chan_infos:
+            return await self.chan_infos[chan_name]
+        else:
+            self.chan_infos[chan_name] = asyncio.Future()
+            await self.con.send(
+                IRCMsg(
+                    cmd="PRIVMSG",
+                    param="ChanServ",
+                    suffix=f"INFO {chan_name}"
+                ).pack()
+            )
+
+            return await self.chan_infos[chan_name]
+        
+    async def register_channel(self, chan_name, chan_desc="desc"):
+        if chan_name in self.chan_registered:
+            return True
+    
+        # Used to indicate success.
+        self.chan_registered[chan_name] = asyncio.Future()
+        chan_pass = sha256(self.irc_server + chan_name + self.seed)
 
         # Join channel.
         await self.con.send(
             IRCMsg(
                 cmd="JOIN",
-                param=f"{IRC_CHAN}",
+                param=f"{chan_name}",
             ).pack()
         )
 
@@ -372,7 +411,7 @@ class IRCSession():
             IRCMsg(
                 cmd="PRIVMSG",
                 param="ChanServ",
-                suffix=f"REGISTER {IRC_CHAN}"
+                suffix=f"REGISTER {chan_name}"
             ).pack()
         )
 
@@ -381,7 +420,7 @@ class IRCSession():
             IRCMsg(
                 cmd="PRIVMSG",
                 param="ChanServ",
-                suffix=f"REGISTER {IRC_CHAN} sdv234iwsk13g8q__wlsdf"
+                suffix=f"REGISTER {chan_name} {chan_pass}"
             ).pack()
         )
 
@@ -390,18 +429,9 @@ class IRCSession():
             IRCMsg(
                 cmd="PRIVMSG",
                 param="ChanServ",
-                suffix=f"REGISTER {IRC_CHAN} sdv234iwsk13g8q__wlsdf desc"
+                suffix=f"REGISTER {chan_name} {chan_pass} {chan_desc}"
             ).pack()
         )
-
-        # Wait for message of the day.
-        await asyncio.wait_for(
-            self.register_status, 10
-        )
-
-        await self.con.send(IRCMsg(cmd="QUIT").pack())
-        await self.con.close()
-        return self.irc_server
 
     async def msg_cb(self, msg, client_tup, pipe):
         print(msg)
@@ -442,6 +472,10 @@ class IRCSession():
                 if msg.cmd in ["376", "411"]:
                     self.get_motd.set_result(True)
 
+                # Login success.
+                if msg.cmd == "900":
+                    self.login_status.set_result(True)
+
                 # Process ping.
                 if msg.cmd == "PING":
                     pong = IRCMsg(
@@ -462,12 +496,29 @@ class IRCSession():
                                 suffix=f"IDENTIFY {self.user_pass}"
                             ).pack()
                         )
-                        
-                    # Indicate channel was registered.
-                    if skip_register == False:
+
+                    # Response for a channel INFO request.
+                    for chan_name in self.chan_infos:
+                        # Channel is not registered.
+                        p = "annel \S*" + re.escape(chan_name) + "\S* is not"
+                        if len(re.findall(p, msg.suffix)):
+                            self.chan_infos[chan_name].set_result(False)
+
+                        # Channel is registered.
+                        p = "mation on \S*" + re.escape(chan_name)
+                        if len(re.findall(p, msg.suffix)):
+                            self.chan_infos[chan_name].set_result(True)
+
+                    # Channel registered.
+                    for chan_name in self.chan_registered:
+                        if chan_name not in self.suffix:
+                            continue
+
                         for chan_success in pos_chan_msgs:
-                            if chan_success in msg.suffix:
-                                self.register_status.set_result(True)
+                            if chan_success not in msg.suffix:
+                                continue
+
+                            self.chan_registered[chan_name].set_result(True)
         except Exception:
             log_exception()
 
@@ -495,6 +546,10 @@ if __name__ == '__main__':
 
         irc_dns = IRCSession(IRC_DNS_G1[0], seed)
         await irc_dns.start(i)
+
+        chan_name = "#help"
+        out = await irc_dns.is_chan_registered(chan_name)
+        print(out)
 
         while 1:
             await asyncio.sleep(1)
