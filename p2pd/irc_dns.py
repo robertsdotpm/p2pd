@@ -131,6 +131,11 @@ chan get topic title
 
 keep joined topics or session active after disconnect so whois works?
 is this possible?
+
+cross server load_chans = 
+1. Keep a bot in the channel
+2. Get list to view all channels
+3. Grep for username in channel list
 """
 
 import asyncio
@@ -342,7 +347,7 @@ class IRCChan:
 
         await self.set_topic_done
         self.set_topic_done = asyncio.Future()
-        
+
 
 class IRCSession():
     def __init__(self, server_info, seed):
@@ -686,6 +691,17 @@ if __name__ == '__main__':
 
         irc_dns = IRCSession(IRC_DNS_G2[2], seed)
         await irc_dns.start(i)
+
+        await irc_dns.con.send(
+            IRCMsg(
+                cmd="LIST",
+                param="*"
+            ).pack()
+
+        )
+
+        while 1:
+            await asyncio.sleep(1)
 
 
         #print(await irc_dns.register_channel("#test_chan_name123"))
