@@ -133,9 +133,14 @@ keep joined topics or session active after disconnect so whois works?
 is this possible?
 
 cross server load_chans = 
+approach 1
 1. Keep a bot in the channel
 2. Get list to view all channels
 3. Grep for username in channel list
+
+could you add a 'mark' to yourself that lists chans
+could you use a 'memo' service to store offline messages?
+    memoserv is fascinating. it gives registered users a message box.
 """
 
 import asyncio
