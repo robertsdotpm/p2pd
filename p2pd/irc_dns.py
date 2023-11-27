@@ -119,9 +119,14 @@ handle ident requests
 b':NickServ!NickServ@services.slacknet.org NOTICE n619b848 :This nickname is registered. Please choose a different nickname, or identify via \x02/msg NickServ identify <password>\x02.\r\n'
 b':NickServ!NickServ@services.slacknet.org NOTICE n619b848 :\x02n619b848\x02 is already registered.\r\n'
 
-get channels made by user
+get channels made by user [done]
     could mean not having to manage a bunch of bs in a db
 check if a channel exists on a server [done]
+
+
+chan ident as operator
+chan set topic
+chan get topic title
 
 """
 
@@ -204,46 +209,11 @@ IRC_DNS = {
 
 # 3 of 5 servers must be working for registration to succeed.
 IRC_REG_M = 3
-
-IRC_AF = IP6
-IRC_HOST = "irc.darkmyst.org" # irc.darkmyst.org
 IRC_CONF = dict_child({
     "use_ssl": 1,
     "ssl_handshake": 8,
     "con_timeout": 4,
 }, NET_CONF)
-
-# Changeable, not fixed.
-IRC_NICK = "client_dev_nick1" + to_s(rand_plain(8))
-
-# Fixed, account for ident.
-IRC_USERNAME = "client_dev_user1" + to_s(rand_plain(8))
-
-
-IRC_EMAIL = "test_irc" + to_s(rand_plain(8)) + "@p2pd.net"
-IRC_CHAN = f"#{to_s(rand_plain(8))}"
-
-
-
-class IRCMsg():
-    def __init__(self, prefix=None, cmd=None, param=None, suffix=None):
-        self.prefix = prefix
-        self.cmd = cmd
-        self.param = param
-        self.suffix = suffix
-
-    def pack(self):
-        param = prefix = suffix = ""
-        if self.prefix:
-            prefix = f":{self.prefix} "
-        
-        if self.suffix:
-            suffix = f" :{self.suffix}"
-
-        if self.param:
-            param = self.param
-
-        return to_b(f"{prefix}{self.cmd} {param}{suffix}\r\n")
 
 """
 TCP is stream-oriented and portions of IRC protocol messages
@@ -281,16 +251,50 @@ def extract_irc_msgs(buf):
 
     return msgs, buf
 
+class IRCMsg():
+    def __init__(self, prefix=None, cmd=None, param=None, suffix=None):
+        self.prefix = prefix
+        self.cmd = cmd
+        self.param = param
+        self.suffix = suffix
+
+    def pack(self):
+        param = prefix = suffix = ""
+        if self.prefix:
+            prefix = f":{self.prefix} "
+        
+        if self.suffix:
+            suffix = f" :{self.suffix}"
+
+        if self.param:
+            param = self.param
+
+        return to_b(f"{prefix}{self.cmd} {param}{suffix}\r\n")
+
+class IRCChan:
+    def __init__(self, chan_name, session):
+        self.session = session
+        self.chan_name = chan_name
+        self.chan_pass = sha256(
+            session.irc_server + 
+            chan_name + 
+            session.seed
+        )
+
 class IRCSession():
     def __init__(self, server_info, seed):
         self.con = None
         self.recv_buf = ""
         self.get_motd = asyncio.Future()
         self.login_status = asyncio.Future()
+        self.chans_loaded = asyncio.Future()
         self.chan_registered = {}
         self.chan_infos = {}
         self.server_info = server_info
         self.seed = seed
+
+        # All IRC channels registered to this username.
+        self.chans = {}
 
         # Derive details for IRC server.
         self.irc_server = self.server_info["domain"]
@@ -423,7 +427,12 @@ class IRCSession():
         )
         """
 
-        return await self.is_chan_registered(chan_name)
+        ret = await self.is_chan_registered(chan_name)
+        if ret:
+            self.chans[chan_name] = IRCChan(chan_name, self)
+            return True
+        else:
+            return False
     
     async def load_owned_chans(self):
         await self.con.send(
@@ -432,6 +441,8 @@ class IRCSession():
                 param=f"{self.nick}",
             ).pack()
         )
+
+        return await self.chans_loaded
 
         return
         await self.con.send(
@@ -501,6 +512,18 @@ class IRCSession():
 
                 # Process status message.
                 if isinstance(msg.suffix, str):
+                    # Channels loaded.
+                    if "End of /WHOIS list" in msg.suffix:
+                        self.chans_loaded.set_result(True)
+
+                    # Load channel info.
+                    if msg.cmd == "319":
+                        chans = msg.suffix.replace("@", "")
+                        chans = chans.split()
+                        for chan in chans:
+                            irc_chan = IRCChan(chan, self)
+                            self.chans[chan] = irc_chan
+
                     # Login ident success or account register.
                     for success_msg in pos_login_msgs:
                         if success_msg in msg.suffix:
