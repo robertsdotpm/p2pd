@@ -126,8 +126,11 @@ check if a channel exists on a server [done]
 
 chan ident as operator [done]
 chan set topic
+    TOPIC #test_chan_name123 :test topic to set.
 chan get topic title
 
+keep joined topics or session active after disconnect so whois works?
+is this possible?
 """
 
 import asyncio
@@ -281,7 +284,10 @@ class IRCChan:
             session.seed
         )
 
-    async def get_chan_ops(self):
+        self.set_topic_done = asyncio.Future()
+        self.pending_topic = ""
+        
+    async def get_ops(self):
         session = self.session
         if self.chan_name in session.chan_ident:
             return True
@@ -323,7 +329,8 @@ class IRCChan:
 
             return await session.chan_ident[self.chan_name]
         
-    async def set_chan_topic(self, topic):
+    async def set_topic(self, topic):
+        self.pending_topic = topic
         session = self.session
         await session.con.send(
             IRCMsg(
@@ -332,6 +339,10 @@ class IRCChan:
                 suffix=f"TOPIC {self.chan_name} {topic}"
             ).pack()
         )
+
+        await self.set_topic_done
+        self.set_topic_done = asyncio.Future()
+        
 
 class IRCSession():
     def __init__(self, server_info, seed):
@@ -578,13 +589,21 @@ class IRCSession():
 
                     await self.con.send(pong.pack())
 
-                # Process chan oper success.
+                # Handle outstanding channel operations.
                 if isinstance(msg.param, str):
-                    if msg.cmd == "MODE":
-                        for chan in self.chans:
-                            if f"{chan} +o {self.nick}" in msg.param:
+                    for chan in self.chans:
+                        # Process chan oper success.
+                        if msg.cmd == "MODE":
+                            op_success = f"{chan} +o {self.nick}".lower()
+                            if op_success in msg.param.lower():
                                 if chan in self.chan_ident:
                                     self.chan_ident[chan].set_result(True)
+
+                        # Indicate topic set successfully.
+                        if msg.cmd == "TOPIC":
+                            pending_topic = self.chans[chan].pending_topic
+                            if chan in msg.param:
+                                self.chans[chan].set_topic_done.set_result(msg.suffix or True)
 
                 # Process status message.
                 if isinstance(msg.suffix, str):
@@ -678,10 +697,12 @@ if __name__ == '__main__':
         irc_dns.chans[chan_name] = irc_chan
 
         print(irc_dns.chans)
-        await irc_dns.chans[chan_name].get_chan_ops()
+        await irc_dns.chans[chan_name].get_ops()
+        print("got ops")
 
-        await irc_dns.chans[chan_name].set_topic("test topic to set.")
-        
+        o = await irc_dns.chans[chan_name].set_topic("test topic to set.")
+        print(o)
+        print("topic set")
 
         while 1:
             await asyncio.sleep(1)
