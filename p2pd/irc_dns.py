@@ -125,9 +125,14 @@ check if a channel exists on a server [done]
 
 
 chan ident as operator [done]
-chan set topic
+chan set topic [done]
     TOPIC #test_chan_name123 :test topic to set.
-chan get topic title
+chan get topic title [done]
+need to write tests to check that the software works for all servers
+
+make channel open to join
+
+
 
 keep joined topics or session active after disconnect so whois works?
 is this possible?
@@ -138,6 +143,7 @@ approach 1
 2. Get list to view all channels
 3. Grep for username in channel list
 
+approach 2
 could you add a 'mark' to yourself that lists chans
 could you use a 'memo' service to store offline messages?
     memoserv is fascinating. it gives registered users a message box.
@@ -145,6 +151,11 @@ could you use a 'memo' service to store offline messages?
 todo: there was a false positive for slacknet.org. when you register a chan
 it says that the staff reviews all chan reg requests. so that would need
 to be added to the scanner
+
+it would probably make sense to run all major ircds on p2pd.net
+and write unit tests against it. ensure the software works for them.
+
+
 """
 
 import asyncio
@@ -528,6 +539,50 @@ class IRCSession():
                 suffix=f"REGISTER {chan_name} {irc_chan.chan_pass}"
             ).pack()
         )
+        
+        # Wait for channel to exist.
+        await asyncio.sleep(0.1)
+        if not await self.is_chan_registered(chan_name):
+            return False
+
+        # Attempt to enable topic retention.
+        # So the channel topic remains after the last user leaves.
+        self.chans[chan_name] = irc_chan
+        await self.con.send(
+            IRCMsg(
+                cmd="PRIVMSG",
+                param="ChanServ",
+                suffix=f"SET {chan_name} KEEPTOPIC ON"
+            ).pack()
+        )
+
+        # Mute conversation in the channel.
+        await asyncio.sleep(0.1)
+        await self.con.send(
+            IRCMsg(
+                cmd="MODE",
+                param=f"{chan_name} +q $~a",
+            ).pack()
+        )
+
+        # -k remove password
+        # -i no invite only
+        # -l no join number limit
+        # -b allow banned users
+        for mode in "kilb":
+            # Avoid flooding the server.
+            await asyncio.sleep(0.1)
+
+            # IRC applies modes all or nothing.
+            # Try to get the 'most open' channel.
+            await self.con.send(
+                IRCMsg(
+                    cmd="MODE",
+                    param=f"{chan_name} -{mode}",
+                ).pack()
+            )
+
+        return True
 
         """
         # register channel.
@@ -539,23 +594,6 @@ class IRCSession():
             ).pack()
         )
         """
-
-        if await self.is_chan_registered(chan_name):
-            self.chans[chan_name] = irc_chan
-
-            # Attempt to enable topic retention.
-            # So the channel topic remains after the last user leaves.
-            await self.con.send(
-                IRCMsg(
-                    cmd="PRIVMSG",
-                    param="ChanServ",
-                    suffix=f"SET {chan_name} KEEPTOPIC ON"
-                ).pack()
-            )
-
-            return True
-        else:
-            return False
     
     async def load_owned_chans(self):
         await self.con.send(
@@ -643,8 +681,6 @@ class IRCSession():
                     # Process chan oper success.
                     if msg.cmd == "MODE":
                         op_success = f"{chan} +o {self.nick}".lower()
-                        print(op_success)
-                        print(msg.param.lower())
                         if op_success in msg.param.lower():
                             if chan in self.chan_ident:
                                 self.chan_ident[chan].set_result(True)
@@ -724,14 +760,65 @@ if __name__ == '__main__':
         return
         """
 
+        chan_topic = "this_is_test_chan_topic"
+        chan_name = "#test_chan_name123"
+        server_list = IRC_DNS_G1 + IRC_DNS_G2
+
         seed = "test_seed"
         i = await Interface().start()
+
+
 
         print("If start")
         print(i)
 
-        irc_dns = IRCSession(IRC_DNS_G2[2], seed)
-        await irc_dns.start(i)
+        for s in server_list:
+            print(f"testing {s}")
+
+            irc_dns = IRCSession(s, seed)
+
+            try:
+                await irc_dns.start(i)
+            except:
+                print(f"start failed for {s}")
+                what_exception()
+
+            # Test chan create.
+            ret = await irc_dns.is_chan_registered(chan_name)
+            if ret:
+                print("{chan_name} registered, not registering")
+
+                # 'load' chan instead.
+                irc_chan = IRCChan(chan_name, irc_dns)
+                irc_dns.chans[chan_name] = irc_chan
+            else:
+                print("{chan_name} not registered, attempting to...")
+                ret = await irc_dns.register_channel(chan_name)
+                if ret:
+                    print("success")
+                else:
+                    print("failure")
+                    exit()
+
+            # Test set topic.
+            chan_topic = rand_plain(8)
+            await irc_dns.chans[chan_name].set_topic(chan_topic)
+            out = await irc_dns.get_chan_topic(chan_name)
+            if out != chan_topic:
+                print(f"got {out} for chan topic and not {chan_topic}")
+                exit()
+            else:
+                print("success")
+
+            # Cleanup.
+            await irc_dns.close()
+            input("Press enter to test next server.")
+
+            
+
+
+        return
+
 
         """
         await irc_dns.con.send(
