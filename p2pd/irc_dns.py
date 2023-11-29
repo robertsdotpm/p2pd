@@ -162,15 +162,20 @@ so if you pass the chan password there its bad
 probably now need a feature like:
     get reg syntax
 
+todo: get op is broken as not all do +o some do other flags
+-- seems like an unnecesary check as nickserv ident is what u need?
+
 """
 
 import asyncio
 import re
-from .base91 import encode as b91encode
+from .base62 import encodebytes as b62encode
 from .utils import *
 from .address import *
 from .interface import *
 from .base_stream import *
+
+IRC_PREFIX = "3"
 
 IRC_DNS_G1 = [
     {
@@ -252,7 +257,14 @@ IRC_CONF = dict_child({
 
 # SHA256 digest in ascii truncated to a str limit.
 # Used for deterministic passwords with good complexity.
-f_irc_pass = lambda x: b91encode(hashlib.sha256(to_b(x)).digest())[:30]
+def f_irc_pass(x):
+    return to_s(
+        b62encode(
+            hashlib.sha256(
+                to_b(x)
+            ).digest()
+        )
+    )[:30]
 
 """
 TCP is stream-oriented and portions of IRC protocol messages
@@ -316,6 +328,7 @@ class IRCChan:
         self.chan_name = chan_name
         self.chan_pass = f_irc_pass(
             session.irc_server + 
+            IRC_PREFIX +
             chan_name + 
             session.seed
         )
@@ -407,10 +420,10 @@ class IRCSession():
 
         # Derive details for IRC server.
         self.irc_server = self.server_info["domain"]
-        self.username = "u" + sha256(self.irc_server + "user" + seed)[:7]
-        self.user_pass = f_irc_pass(self.irc_server + "pass" + seed)
-        self.nick = "n" + sha256(self.irc_server + "nick" + seed)[:7]
-        self.email = "p2pd_" + sha256(self.irc_server + "email" + seed)[:12]
+        self.username = "u" + sha256(self.irc_server + IRC_PREFIX + "user" + seed)[:7]
+        self.user_pass = f_irc_pass(self.irc_server + IRC_PREFIX + "pass" + seed)
+        self.nick = "n" + sha256(self.irc_server + IRC_PREFIX + "nick" + seed)[:7]
+        self.email = "p2pd_" + sha256(self.irc_server + IRC_PREFIX + "email" + seed)[:12]
         self.email += "@p2pd.net"
 
     async def start(self, i):
@@ -469,6 +482,15 @@ class IRCSession():
     async def close(self):
         await self.con.send(IRCMsg(cmd="QUIT").pack())
         await self.con.close()
+
+    async def get_chan_reg_syntax(self):
+        await self.con.send(
+            IRCMsg(
+                cmd="PRIVMSG",
+                param="ChanServ",
+                suffix=f"REGISTER"
+            ).pack()
+        )
 
     async def get_chan_topic(self, chan_name):
         # Return cached result.
@@ -632,7 +654,8 @@ class IRCSession():
         pos_login_msgs = [
             "now identified for",
             "with the password",
-            "you are now recognized"
+            "you are now recognized",
+            "Nickname [^\s]* registered"
         ]
 
         pos_chan_msgs = [
@@ -724,9 +747,10 @@ class IRCSession():
 
                 # Login ident success or account register.
                 for success_msg in pos_login_msgs:
-                    if success_msg in msg.suffix:
+                    if len(re.findall(success_msg, msg.suffix)):
                         print("login success")
                         self.login_status.set_result(True)
+                
 
                 # Login if account already exists.
                 for nick_success in nick_pos:
@@ -783,7 +807,7 @@ if __name__ == '__main__':
         """
 
         chan_topic = "this_is_test_chan_topic"
-        chan_name = "#test_chan_name123"
+        chan_name = "#test_chan_name123" + IRC_PREFIX
         server_list = IRC_DNS_G1 + IRC_DNS_G2
 
         seed = "test_seed"
@@ -806,6 +830,10 @@ if __name__ == '__main__':
                 print(f"start failed for {s}")
                 what_exception()
 
+            #await irc_dns.get_chan_reg_syntax()
+            #await asyncio.sleep(10)
+            #exit()
+
             # Test chan create.
             print("trying to check if chan is registered.")
             ret = await irc_dns.is_chan_registered(chan_name)
@@ -815,6 +843,7 @@ if __name__ == '__main__':
                 # 'load' chan instead.
                 irc_chan = IRCChan(chan_name, irc_dns)
                 irc_dns.chans[chan_name] = irc_chan
+                print(irc_chan.chan_pass) # S:1f(.9i{e@3$Fkxq^f{JW,>sVQi?Q\
             else:
                 print(f"{chan_name} not registered, attempting to...")
                 await irc_dns.register_channel(chan_name)
@@ -826,9 +855,11 @@ if __name__ == '__main__':
                     exit()
 
             # Test set topic.
-            chan_topic = rand_plain(8)
-            await irc_dns.chans[chan_name].get_ops()
+            chan_topic = to_s(rand_plain(8))
+            #await irc_dns.chans[chan_name].get_ops()
+            #print("get ops done")
             await irc_dns.chans[chan_name].set_topic(chan_topic)
+            print("set topic done")
             out = await irc_dns.get_chan_topic(chan_name)
             if out != chan_topic:
                 print(f"got {out} for chan topic and not {chan_topic}")
