@@ -121,6 +121,7 @@ rm_whitespace = lambda x: re.sub(r"\s+", "", x, flags=re.UNICODE)
 urlencode = lambda x: to_b(urllib.parse.quote(x))
 urldecode = lambda x: to_b(urllib.parse.unquote(x))
 shuffle = lambda x: random.shuffle(x) or x
+d_keys = lambda x: list(x.keys())
 d_vals = lambda x: list(x.values())
 sha256 = lambda x: to_s(hashlib.sha256(to_b(x)).hexdigest())
 

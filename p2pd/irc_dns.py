@@ -141,6 +141,10 @@ approach 1
 could you add a 'mark' to yourself that lists chans
 could you use a 'memo' service to store offline messages?
     memoserv is fascinating. it gives registered users a message box.
+
+todo: there was a false positive for slacknet.org. when you register a chan
+it says that the staff reviews all chan reg requests. so that would need
+to be added to the scanner
 """
 
 import asyncio
@@ -265,21 +269,21 @@ def extract_irc_msgs(buf):
     return msgs, buf
 
 class IRCMsg():
-    def __init__(self, prefix=None, cmd=None, param=None, suffix=None):
-        self.prefix = prefix
-        self.cmd = cmd
-        self.param = param
-        self.suffix = suffix
+    def __init__(self, prefix="", cmd="", param="", suffix=""):
+        self.prefix = prefix or ""
+        self.cmd = cmd or ""
+        self.param = param or ""
+        self.suffix = suffix or ""
 
     def pack(self):
         param = prefix = suffix = ""
-        if self.prefix:
+        if len(self.prefix):
             prefix = f":{self.prefix} "
         
-        if self.suffix:
+        if len(self.suffix):
             suffix = f" :{self.suffix}"
 
-        if self.param:
+        if len(self.param):
             param = self.param
 
         return to_b(f"{prefix}{self.cmd} {param}{suffix}\r\n")
@@ -352,6 +356,7 @@ class IRCChan:
 
         await self.set_topic_done
         self.set_topic_done = asyncio.Future()
+        return self
 
 
 class IRCSession():
@@ -361,6 +366,7 @@ class IRCSession():
         self.get_motd = asyncio.Future()
         self.login_status = asyncio.Future()
         self.chans_loaded = asyncio.Future()
+        self.chan_topics = {}
         self.chan_ident = {}
         self.chan_set_topic = {}
         self.chan_get_topic = {}
@@ -432,6 +438,33 @@ class IRCSession():
     async def close(self):
         await self.con.send(IRCMsg(cmd="QUIT").pack())
         await self.con.close()
+
+    async def get_chan_topic(self, chan_name):
+        # Return cached result.
+        if chan_name in self.chan_topics:
+            return await self.chan_topics[chan_name]
+        
+        # Setup topic future.
+        self.chan_topics[chan_name] = asyncio.Future()
+
+        # First join the channel.
+        await self.con.send(
+            IRCMsg(
+                cmd="JOIN",
+                param=f"{chan_name}",
+            ).pack()
+        )
+
+        # Request the channels topic.
+        await self.con.send(
+            IRCMsg(
+                cmd="TOPIC",
+                param=f"{chan_name}",
+            ).pack()
+        )
+
+        # Wait for channel topic.
+        return await self.chan_topics[chan_name]
     
     async def register_user(self):
         # Attempt to register the nick at the server.
@@ -443,6 +476,7 @@ class IRCSession():
                 suffix=f"REGISTER {self.user_pass} {self.email}"
             ).pack()
         )
+        return self
 
     async def is_chan_registered(self, chan_name):
         if chan_name in self.chan_infos:
@@ -573,11 +607,10 @@ class IRCSession():
             # Disable chan success in some cases.
             skip_register = False
             for msg in msgs:
-                if isinstance(msg.suffix, str):
-                    for chan_fail in neg_chan_msgs:
-                        if chan_fail in msg.suffix:
-                            skip_register = True
-                            break
+                for chan_fail in neg_chan_msgs:
+                    if chan_fail in msg.suffix:
+                        skip_register = True
+                        break
 
             # Loop over the IRC protocol messages.
             # Process the minimal functions we understand.
@@ -590,6 +623,12 @@ class IRCSession():
                 if msg.cmd == "900":
                     self.login_status.set_result(True)
 
+                # Got a channels topic.
+                if msg.cmd == "332":
+                    _, chan_part = msg.param.split()
+                    if chan_part in self.chan_topics:
+                        self.chan_topics[chan_part].set_result(msg.suffix)
+
                 # Process ping.
                 if msg.cmd == "PING":
                     pong = IRCMsg(
@@ -600,62 +639,59 @@ class IRCSession():
                     await self.con.send(pong.pack())
 
                 # Handle outstanding channel operations.
-                if isinstance(msg.param, str):
-                    for chan in self.chans:
-                        # Process chan oper success.
-                        if msg.cmd == "MODE":
-                            op_success = f"{chan} +o {self.nick}".lower()
-                            if op_success in msg.param.lower():
-                                if chan in self.chan_ident:
-                                    self.chan_ident[chan].set_result(True)
+                for chan in d_keys(self.chans):
+                    # Process chan oper success.
+                    if msg.cmd == "MODE":
+                        op_success = f"{chan} +o {self.nick}".lower()
+                        print(op_success)
+                        print(msg.param.lower())
+                        if op_success in msg.param.lower():
+                            if chan in self.chan_ident:
+                                self.chan_ident[chan].set_result(True)
 
-                        # Indicate topic set successfully.
-                        if msg.cmd == "TOPIC":
-                            pending_topic = self.chans[chan].pending_topic
-                            if chan in msg.param:
-                                self.chans[chan].set_topic_done.set_result(msg.suffix or True)
+                    # Indicate topic set successfully.
+                    if msg.cmd == "TOPIC":
+                        if chan in msg.param:
+                            self.chans[chan].set_topic_done.set_result(msg.suffix or True)
 
-                # Process status message.
-                if isinstance(msg.suffix, str):
-                    # Channels loaded.
-                    if "End of /WHOIS list" in msg.suffix:
-                        self.chans_loaded.set_result(True)
+                # Channels loaded.
+                if "End of /WHOIS list" in msg.suffix:
+                    self.chans_loaded.set_result(True)
 
-                    # Load channel info.
-                    if msg.cmd == "319":
-                        chans = msg.suffix.replace("@", "")
-                        chans = chans.split()
-                        print(chans)
-                        for chan in chans:
-                            irc_chan = IRCChan(chan, self)
-                            self.chans[chan] = irc_chan
+                # Load channel info.
+                if msg.cmd == "319":
+                    chans = msg.suffix.replace("@", "")
+                    chans = chans.split()
+                    for chan in chans:
+                        irc_chan = IRCChan(chan, self)
+                        self.chans[chan] = irc_chan
 
-                    # Login ident success or account register.
-                    for success_msg in pos_login_msgs:
-                        if success_msg in msg.suffix:
-                            self.login_status.set_result(True)
+                # Login ident success or account register.
+                for success_msg in pos_login_msgs:
+                    if success_msg in msg.suffix:
+                        self.login_status.set_result(True)
 
-                    # Login if account already exists.
-                    if "nickname is registered" in msg.suffix:
-                        await self.con.send(
-                            IRCMsg(
-                                cmd="PRIVMSG",
-                                param="NickServ",
-                                suffix=f"IDENTIFY {self.user_pass}"
-                            ).pack()
-                        )
+                # Login if account already exists.
+                if "nickname is registered" in msg.suffix:
+                    await self.con.send(
+                        IRCMsg(
+                            cmd="PRIVMSG",
+                            param="NickServ",
+                            suffix=f"IDENTIFY {self.user_pass}"
+                        ).pack()
+                    )
 
-                    # Response for a channel INFO request.
-                    for chan_name in self.chan_infos:
-                        # Channel is not registered.
-                        p = "annel \S*" + re.escape(chan_name) + "\S* is not"
-                        if len(re.findall(p, msg.suffix)):
-                            self.chan_infos[chan_name].set_result(False)
+                # Response for a channel INFO request.
+                for chan_name in d_keys(self.chan_infos):
+                    # Channel is not registered.
+                    p = "annel \S*" + re.escape(chan_name) + "\S* is not"
+                    if len(re.findall(p, msg.suffix)):
+                        self.chan_infos[chan_name].set_result(False)
 
-                        # Channel is registered.
-                        p = "mation on \S*" + re.escape(chan_name)
-                        if len(re.findall(p, msg.suffix)):
-                            self.chan_infos[chan_name].set_result(True)
+                    # Channel is registered.
+                    p = "mation on \S*" + re.escape(chan_name)
+                    if len(re.findall(p, msg.suffix)):
+                        self.chan_infos[chan_name].set_result(True)
 
                     """
                     # Channel registered.
@@ -697,6 +733,7 @@ if __name__ == '__main__':
         irc_dns = IRCSession(IRC_DNS_G2[2], seed)
         await irc_dns.start(i)
 
+        """
         await irc_dns.con.send(
             IRCMsg(
                 cmd="LIST",
@@ -707,6 +744,7 @@ if __name__ == '__main__':
 
         while 1:
             await asyncio.sleep(1)
+        """
 
 
         #print(await irc_dns.register_channel("#test_chan_name123"))
@@ -724,6 +762,13 @@ if __name__ == '__main__':
         o = await irc_dns.chans[chan_name].set_topic("test topic to set.")
         print(o)
         print("topic set")
+
+        chan_topic = await irc_dns.get_chan_topic(chan_name)
+        print("got chan topic = ")
+        print(chan_topic)
+
+        await irc_dns.close()
+        return
 
         while 1:
             await asyncio.sleep(1)
