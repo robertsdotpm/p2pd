@@ -182,9 +182,15 @@ some servers require users to register to join chans. this makes sense.
     - see if you can unset +r on the channel
 
 seems you need to use SET mlock for ki flags?
+    - some servers use SET for topic too
+    
 
 last server has no topic command?
 join messages instead?
+ping - pong is incorrectly implemented (maybe?)
+
+support set topic.
+    - 3 servers remain for testing.
 """
 
 import asyncio
@@ -217,7 +223,7 @@ IRC_DNS_G1 = [
         # 30 apr 2002
         'creation': 1020088800,
 
-        'syntax': ["password", "description"],
+        'chan_serv': ["password", "description"],
         'nick_serv': ["password", "email"]
     },
     # works.
@@ -231,6 +237,7 @@ IRC_DNS_G1 = [
 ]
 
 IRC_DNS_G2 = [
+    # Done.
     {
         'domain': 'irc.euirc.net',
         'afs': [IP4, IP6],
@@ -238,8 +245,11 @@ IRC_DNS_G2 = [
 
         # 19 sep 2000
         "creation": 969282000,
-        'nick_serv': ["password", "email"]
+        'chan_serv': ["password", "description"],
+        'nick_serv': ["password", "email"],
+        'set_topic': "set"
     },
+
     {
         'domain': 'irc.oftc.net',
         'afs': [IP4, IP6],
@@ -413,13 +423,23 @@ class IRCChan:
             ).pack()
         )
 
-        await session.con.send(
-            IRCMsg(
-                cmd="PRIVMSG",
-                param="ChanServ",
-                suffix=f"TOPIC {self.chan_name} {topic}"
-            ).pack()
-        )
+        if 'set_topic' in session.server_info:
+            if session.server_info['set_topic'] == 'set':
+                await session.con.send(
+                    IRCMsg(
+                        cmd="PRIVMSG",
+                        param="ChanServ",
+                        suffix=f"SET {self.chan_name} TOPIC {topic}"
+                    ).pack()
+                )
+        else:
+            await session.con.send(
+                IRCMsg(
+                    cmd="PRIVMSG",
+                    param="ChanServ",
+                    suffix=f"TOPIC {self.chan_name} {topic}"
+                ).pack()
+            )
 
         await self.set_topic_done
         self.set_topic_done = asyncio.Future()
@@ -649,8 +669,8 @@ class IRCSession():
 
         # Build register command syntax.
         suffix = f"REGISTER {chan_name}"
-        if "syntax" in self.server_info:
-            for param in self.server_info["syntax"]:
+        if "chan_serv" in self.server_info:
+            for param in self.server_info["chan_serv"]:
                 if param == "password":
                     suffix += f" {irc_chan.chan_pass}"
                 if param == "description":
@@ -764,6 +784,7 @@ class IRCSession():
         ]
 
         nick_pos = [
+            "remember this for later",
             "nickname is registered",
             "ickname \S* is already",
             #"is reserved by a different account"
