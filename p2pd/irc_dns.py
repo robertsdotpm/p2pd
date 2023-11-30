@@ -242,36 +242,19 @@ IRC_DNS_G2 = [
         'domain': 'irc.euirc.net',
         'afs': [IP4, IP6],
 
-
         # 19 sep 2000
         "creation": 969282000,
         'chan_serv': ["password", "description"],
         'nick_serv': ["password", "email"],
         'set_topic': "set"
     },
-
-    {
-        'domain': 'irc.oftc.net',
-        'afs': [IP4, IP6],
-
-        # 20 jul 2002
-        "creation": 1027087200,
-        'nick_serv': ["password", "email"]
-    },
+    # Works
     {
         'domain': 'irc.darkmyst.org',
         'afs': [IP4, IP6],
 
         # 26 nov 2002
         'creation': 1038229200,
-        'nick_serv': ["password", "email"]
-    },
-    {
-        'domain': 'irc.entropynet.net',
-        'afs': [IP4, IP6],
-
-        # 11 sep 2011
-        'creation': 1312984800,
         'nick_serv': ["password", "email"]
     },
 ]
@@ -947,7 +930,7 @@ if __name__ == '__main__':
         print("If start")
         print(i)
 
-        for offset, s in enumerate(server_list[3:]):
+        for offset, s in enumerate(server_list[5:]):
             print(f"testing {s} : {offset}")
 
             irc_dns = IRCSession(s, seed)
