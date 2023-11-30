@@ -89,8 +89,8 @@ STATUS_FAILURE = 3
 MAX_PORT = 65535
 
 re.unescape = lambda x: re.sub(r'\\(.)', r'\1', x)
-to_b = lambda x: x if type(x) == bytes else x.encode("ascii")
-to_s = lambda x: x if type(x) == str else x.decode("utf-8")
+to_b = lambda x: x if type(x) == bytes else x.encode("ascii", errors='ignore')
+to_s = lambda x: x if type(x) == str else x.decode("utf-8", errors='ignore')
 to_hs = lambda x: to_s(binascii.hexlify(to_b(x)))
 to_h = lambda x: to_hs(x) if len(x) else "00"
 to_i = lambda x: x if isinstance(x, int) else int(x, 16)

@@ -20,9 +20,17 @@ maybe the right approach is to then try a operation that needs those perms?
 filtered:
 ['irc.oftc.net', 'irc.euirc.net', 'irc.xxxchatters.com', 'irc.swiftirc.net', 'irc.darkmyst.org']
 
-['irc.chatjunkies.org', 'irc.dosers.net', 'irc.entropynet.net',  'irc.liberta.casa']
+['irc.chatjunkies.org', 'irc.dosers.net', 'irc.entropynet.net',  
 
-'irc.financialchat.com', 'irc.irc2.hu', 'irc.phat-net.de', 'irc.slacknet.org', 'irc.tweakers.net'
+
+'irc.liberta.casa']
+    - no channel cmd
+
+'irc.financialchat.com', 'irc.irc2.hu', 'irc.phat-net.de', 
+    'irc.slacknet.org',
+        - manual chan creation
+    
+    'irc.tweakers.net'
 
 IP6:
 
@@ -174,6 +182,9 @@ some servers require users to register to join chans. this makes sense.
     - see if you can unset +r on the channel
 
 seems you need to use SET mlock for ki flags?
+
+last server has no topic command?
+join messages instead?
 """
 
 import asyncio
@@ -184,7 +195,7 @@ from .address import *
 from .interface import *
 from .base_stream import *
 
-IRC_PREFIX = "5"
+IRC_PREFIX = "18"
 
 IRC_DNS_G1 = [
     # Works.
@@ -193,9 +204,10 @@ IRC_DNS_G1 = [
         'afs': [IP4, IP6],
 
         # 6 nov 2000
-        'creation': 975848400
+        'creation': 975848400,
 
         # register (optional: desc)
+        'nick_serv': ["password", "email"]
     },
     # Works.
     {
@@ -205,21 +217,16 @@ IRC_DNS_G1 = [
         # 30 apr 2002
         'creation': 1020088800,
 
-        'syntax': ["password", "description"]
+        'syntax': ["password", "description"],
+        'nick_serv': ["password", "email"]
     },
+    # works.
     {
         'domain': 'irc.swiftirc.net',
         'afs': [IP4, IP6],
 
         # 10 march 2007
         'creation': 1173445200
-    },
-    {
-        'domain': 'irc.liberta.casa',
-        'afs': [IP4, IP6],
-
-        # 7 feb 2020
-        'creation': 1580994000
     },
 ]
 
@@ -230,28 +237,32 @@ IRC_DNS_G2 = [
 
 
         # 19 sep 2000
-        "creation": 969282000
+        "creation": 969282000,
+        'nick_serv': ["password", "email"]
     },
     {
         'domain': 'irc.oftc.net',
         'afs': [IP4, IP6],
 
         # 20 jul 2002
-        "creation": 1027087200
+        "creation": 1027087200,
+        'nick_serv': ["password", "email"]
     },
     {
         'domain': 'irc.darkmyst.org',
         'afs': [IP4, IP6],
 
         # 26 nov 2002
-        'creation': 1038229200
+        'creation': 1038229200,
+        'nick_serv': ["password", "email"]
     },
     {
         'domain': 'irc.entropynet.net',
         'afs': [IP4, IP6],
 
         # 11 sep 2011
-        'creation': 1312984800
+        'creation': 1312984800,
+        'nick_serv': ["password", "email"]
     },
 ]
 
@@ -461,16 +472,37 @@ class IRCSession():
         )
 
         # Tell server user for the session.
-        await self.con.send(
-            IRCMsg(
-                cmd="USER",
-                param=f"{self.username} * {self.irc_server}",
-                suffix="*"
-            ).pack()
-        )
+        """
         await self.con.send(
             IRCMsg(cmd="NICK", param=self.nick).pack()
         )
+
+        return
+        """
+        if "accounmmt" in self.server_info:
+            await self.con.send(
+                IRCMsg(
+                    cmd="USER",
+                    param=f"{self.nick} * {self.irc_server}",
+                    suffix="*"
+                ).pack()
+            )
+            await self.con.send(
+                IRCMsg(cmd="NICK", param=self.nick).pack()
+            )
+        else:
+            await self.con.send(
+                IRCMsg(
+                    cmd="USER",
+                    param=f"{self.username} * {self.irc_server}",
+                    suffix="*"
+                ).pack()
+            )
+
+            await self.con.send(
+                IRCMsg(cmd="NICK", param=self.nick).pack()
+            )
+
 
         # Wait for message of the day.
         await asyncio.wait_for(
@@ -488,6 +520,28 @@ class IRCSession():
             self.login_status, 15
         )
         print("get login status done.")
+
+        await self.con.send(
+            IRCMsg(
+                cmd="HELP",
+            ).pack()
+        )
+
+        await self.con.send(
+            IRCMsg(
+                cmd="PRIVMSG",
+                param="ChanServ",
+                suffix=f"set"
+            ).pack()
+        )
+
+        await self.con.send(
+            IRCMsg(
+                cmd="PRIVMSG",
+                param="ChanServ",
+                suffix=f"help set"
+            ).pack()
+        )
 
         # Load pre-existing owned channels.
         #await self.load_owned_chans()
@@ -535,13 +589,21 @@ class IRCSession():
         return await self.chan_topics[chan_name]
     
     async def register_user(self):
+        # Build register command.
+        suffix = f"REGISTER"
+        for param in self.server_info["nick_serv"]:
+            if param == "password":
+                suffix += f" {self.user_pass}"
+            if param == "email":
+                suffix += f" {self.email}"
+
         # Attempt to register the nick at the server.
         # See if the server requires confirmation.
         await self.con.send(
             IRCMsg(
                 cmd="PRIVMSG",
                 param="NickServ",
-                suffix=f"REGISTER {self.user_pass} {self.email}"
+                suffix=suffix
             ).pack()
         )
         return self
@@ -681,6 +743,7 @@ class IRCSession():
         print(msg)
 
         pos_login_msgs = [
+            "now logged in as",
             "now identified for",
             "with the password",
             "you are now recognized",
@@ -702,7 +765,8 @@ class IRCSession():
 
         nick_pos = [
             "nickname is registered",
-            "ickname \S* is already"
+            "ickname \S* is already",
+            #"is reserved by a different account"
         ]
 
         try:
@@ -725,6 +789,16 @@ class IRCSession():
             for msg in msgs:
                 print(f"Got {msg.pack()}")
 
+                # Nickname already reserved so login.
+                if msg.cmd == "433":
+                    await self.con.send(
+                        IRCMsg(
+                            cmd="PRIVMSG",
+                            param="NickServ",
+                            suffix=f"IDENTIFY {self.user_pass}"
+                        ).pack()
+                    )
+
                 # End of motd.
                 if msg.cmd in ["376", "411"]:
                     self.get_motd.set_result(True)
@@ -743,6 +817,7 @@ class IRCSession():
                 if msg.cmd == "PING":
                     pong = IRCMsg(
                         cmd="PONG",
+                        param=msg.param,
                         suffix=msg.suffix,
                     )
 
@@ -784,6 +859,7 @@ class IRCSession():
                 # Login if account already exists.
                 for nick_success in nick_pos:
                     if len(re.findall(nick_success, msg.suffix)):
+                        print("sending identify. 2")
                         await self.con.send(
                             IRCMsg(
                                 cmd="PRIVMSG",
@@ -801,6 +877,9 @@ class IRCSession():
 
                     # Channel is registered.
                     p = "mation ((for)|(on)) [^#]*" + re.escape(chan_name)
+                    if len(re.findall(p, msg.suffix)):
+                        self.chan_infos[chan_name].set_result(True)
+                    p = "annel \S*" + re.escape(chan_name) + "\S* is reg"
                     if len(re.findall(p, msg.suffix)):
                         self.chan_infos[chan_name].set_result(True)
 
@@ -847,7 +926,7 @@ if __name__ == '__main__':
         print("If start")
         print(i)
 
-        for offset, s in enumerate(server_list[1:]):
+        for offset, s in enumerate(server_list[3:]):
             print(f"testing {s} : {offset}")
 
             irc_dns = IRCSession(s, seed)
