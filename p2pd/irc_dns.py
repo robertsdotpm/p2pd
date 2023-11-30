@@ -140,6 +140,7 @@ is this possible?
 cross server load_chans = 
 approach 1
 1. Keep a bot in the channel
+    - botserv?
 2. Get list to view all channels
 3. Grep for username in channel list
 
@@ -165,6 +166,14 @@ probably now need a feature like:
 todo: get op is broken as not all do +o some do other flags
 -- seems like an unnecesary check as nickserv ident is what u need?
 
+chan setting those modes doesnt seem to work
+    -- check if that portion is being done properly or if
+    -- the first just doesnt support it
+
+some servers require users to register to join chans. this makes sense.
+    - see if you can unset +r on the channel
+
+seems you need to use SET mlock for ki flags?
 """
 
 import asyncio
@@ -175,22 +184,28 @@ from .address import *
 from .interface import *
 from .base_stream import *
 
-IRC_PREFIX = "3"
+IRC_PREFIX = "5"
 
 IRC_DNS_G1 = [
+    # Works.
     {
         'domain': 'irc.phat-net.de',
         'afs': [IP4, IP6],
 
         # 6 nov 2000
         'creation': 975848400
+
+        # register (optional: desc)
     },
+    # Works.
     {
         'domain': 'irc.tweakers.net',
         'afs': [IP4, IP6],
 
         # 30 apr 2002
-        'creation': 1020088800
+        'creation': 1020088800,
+
+        'syntax': ["password", "description"]
     },
     {
         'domain': 'irc.swiftirc.net',
@@ -570,12 +585,21 @@ class IRCSession():
         )
         """
 
+        # Build register command syntax.
+        suffix = f"REGISTER {chan_name}"
+        if "syntax" in self.server_info:
+            for param in self.server_info["syntax"]:
+                if param == "password":
+                    suffix += f" {irc_chan.chan_pass}"
+                if param == "description":
+                    suffix += f" {chan_desc}"
+
         # register channel.
         await self.con.send(
             IRCMsg(
                 cmd="PRIVMSG",
                 param="ChanServ",
-                suffix=f"REGISTER {chan_name}"
+                suffix=suffix
             ).pack()
         )
 
@@ -590,20 +614,25 @@ class IRCSession():
             ).pack()
         )
 
+        """
+        Todo: The servers do tell you what nodes they support in
+        the join message so you could subtract what modes they
+        will error on and send it all as one message. But that's
+        a lot of work for such an optimization.
+        """
         # Mute conversation in the channel.
         await asyncio.sleep(0.1)
         await self.con.send(
             IRCMsg(
                 cmd="MODE",
-                param=f"{chan_name} +q $~a",
+                param=f"{chan_name} +m",
             ).pack()
         )
 
         # -k remove password
         # -i no invite only
-        # -l no join number limit
-        # -b allow banned users
-        for mode in "kilb":
+        # -r allow unregistered
+        for mode in "kir":
             # Avoid flooding the server.
             await asyncio.sleep(0.1)
 
@@ -807,7 +836,7 @@ if __name__ == '__main__':
         """
 
         chan_topic = "this_is_test_chan_topic"
-        chan_name = "#test_chan_name123" + IRC_PREFIX
+        chan_name = "#test_chan_name223" + IRC_PREFIX
         server_list = IRC_DNS_G1 + IRC_DNS_G2
 
         seed = "test_seed"
@@ -818,7 +847,7 @@ if __name__ == '__main__':
         print("If start")
         print(i)
 
-        for offset, s in enumerate(server_list):
+        for offset, s in enumerate(server_list[1:]):
             print(f"testing {s} : {offset}")
 
             irc_dns = IRCSession(s, seed)
