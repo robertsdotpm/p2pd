@@ -205,6 +205,13 @@ need to also check that get topic for a channel is possible for a
 different user (a non op) for the servers chosen.
 
 add IPs for all the servers to bypass dns
+
+reg > X available for it to work
+
+# 3 of 5 servers must be working for registration to succeed.
+IRC_REG_M = 3
+load from len(servers) ...
+
 """
 
 import asyncio
@@ -217,8 +224,7 @@ from .base_stream import *
 
 IRC_PREFIX = "18"
 
-IRC_DNS_G1 = [
-    # Works.
+IRC_SERVERS = [
     {
         'domain': 'irc.phat-net.de',
         'afs': [IP4, IP6],
@@ -226,7 +232,6 @@ IRC_DNS_G1 = [
         # 6 nov 2000
         'creation': 975848400,
 
-        # register (optional: desc)
         'nick_serv': ["password", "email"],
 
         "ip": {
@@ -234,7 +239,6 @@ IRC_DNS_G1 = [
             IP6: "2a01:4f8:c2c:628::1"
         }
     },
-    # Works.
     {
         'domain': 'irc.tweakers.net',
         'afs': [IP4, IP6],
@@ -250,7 +254,6 @@ IRC_DNS_G1 = [
             IP6: "2001:9a8:0:e:1337::6667" # Top kek.
         }
     },
-    # works.
     {
         'domain': 'irc.swiftirc.net',
         'afs': [IP4, IP6],
@@ -263,10 +266,6 @@ IRC_DNS_G1 = [
             IP6: "2001:9a8:0:e:1337::6667" # Top kek.
         }
     },
-]
-
-IRC_DNS_G2 = [
-    # Done.
     {
         'domain': 'irc.euirc.net',
         'afs': [IP4, IP6],
@@ -279,10 +278,9 @@ IRC_DNS_G2 = [
 
         "ip": {
             IP4: "159.65.55.232",
-            IP6: "2604:a880:4:1d0::75:0" # Top kek.
+            IP6: "2604:a880:4:1d0::75:0"
         }
     },
-    # Works
     {
         'domain': 'irc.darkmyst.org',
         'afs': [IP4, IP6],
@@ -293,20 +291,11 @@ IRC_DNS_G2 = [
 
         "ip": {
             IP4: "167.172.166.129",
-            IP6: "2604:a880:cad:d0::1d:e001" # Top kek.
+            IP6: "2604:a880:cad:d0::1d:e001"
         }
     },
 ]
 
-IRC_DNS = {
-    "p2pd": IRC_DNS_G1,
-    "peer": IRC_DNS_G1,
-    "ddns": IRC_DNS_G2,
-    "node": IRC_DNS_G2,
-}
-
-# 3 of 5 servers must be working for registration to succeed.
-IRC_REG_M = 3
 IRC_CONF = dict_child({
     "use_ssl": 1,
     "ssl_handshake": 8,
@@ -397,23 +386,6 @@ class IRCChan:
     async def get_ops(self):
         session = self.session
         session.chan_ident[self.chan_name] = asyncio.Future()
-        """
-        await session.con.send(
-            IRCMsg(
-                cmd="PRIVMSG",
-                param="ChanServ",
-                suffix=f"IDENTIFY {self.chan_name} {self.chan_pass}"
-            ).pack()
-        )
-
-        await session.con.send(
-            IRCMsg(
-                cmd="PRIVMSG",
-                param="ChanServ",
-                suffix=f"IDENTIFY {self.chan_name}"
-            ).pack()
-        )
-        """
 
         # Join channel.
         await session.con.send(
@@ -495,12 +467,15 @@ class IRCSession():
         self.email += "@p2pd.net"
 
     async def start(self, i):
+        # Choose a supported AF.
+        af = i.supported()[0]
+
         # Destination of IRC server to connect to.
         # For simplicity all IRC servers support v4 and v6.
         dest = await Address(
-            self.irc_server,
+            self.irc_server["ip"][af],
             6697,
-            i.route()
+            i.route(af)
         )
 
         # Connect to IRC server.
@@ -514,36 +489,17 @@ class IRCSession():
         )
 
         # Tell server user for the session.
-        """
+        await self.con.send(
+            IRCMsg(
+                cmd="USER",
+                param=f"{self.username} * {self.irc_server}",
+                suffix="*"
+            ).pack()
+        )
+
         await self.con.send(
             IRCMsg(cmd="NICK", param=self.nick).pack()
         )
-
-        return
-        """
-        if "accounmmt" in self.server_info:
-            await self.con.send(
-                IRCMsg(
-                    cmd="USER",
-                    param=f"{self.nick} * {self.irc_server}",
-                    suffix="*"
-                ).pack()
-            )
-            await self.con.send(
-                IRCMsg(cmd="NICK", param=self.nick).pack()
-            )
-        else:
-            await self.con.send(
-                IRCMsg(
-                    cmd="USER",
-                    param=f"{self.username} * {self.irc_server}",
-                    suffix="*"
-                ).pack()
-            )
-
-            await self.con.send(
-                IRCMsg(cmd="NICK", param=self.nick).pack()
-            )
 
 
         # Wait for message of the day.
@@ -935,8 +891,8 @@ if __name__ == '__main__':
         """
 
         chan_topic = "this_is_test_chan_topic"
-        chan_name = "#test_chan_name223" + IRC_PREFIX
-        server_list = IRC_DNS_G1 + IRC_DNS_G2
+        chan_name = "#test_chan_name323" + IRC_PREFIX
+        server_list = IRC_SERVERS
 
         seed = "test_seed"
         i = await Interface().start()
@@ -946,7 +902,7 @@ if __name__ == '__main__':
         print("If start")
         print(i)
 
-        for offset, s in enumerate(server_list[5:]):
+        for offset, s in enumerate(server_list[0:]):
             print(f"testing {s} : {offset}")
 
             irc_dns = IRCSession(s, seed)
