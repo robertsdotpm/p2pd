@@ -4,4 +4,3 @@ gmqtt == 0.6.11 # MQTT is used for signaling messages.
 ntplib == 0.4.0 # Used for synchronization in TCP hole punching.
 aiounittest == 1.4.2 # Needed for unit tests on some Python versions.
 xmltodict # Needed for UPnP SOAP protocol stuff.
-pynacl # ECDSA ed22519
