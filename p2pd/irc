@@ -1,0 +1,44 @@
+# To the people who run this IRC server
+
+You may have noticed some strange activity coming from users that reference
+p2pd.net in their version information or from new channels in your server.
+I wanted to let you know what this was about and that it wasn't being
+used by botnets or any malicious software.
+
+As you may know: the Internet relies crucially on the DNS system which
+is a paid service that allows numerical routing addresses to be given
+human-readable names. DNS works fine for most users but there are instances
+where it makes sense to be able to register names for free without
+the use of a UI (there is no standard way to register domains via API.)
+
+I am the author of a networking library called 'P2PD' that allows people
+to connect directly to each other. My software needs to use very long addresses
+and has much the same issues as IPs do -- in that users need a way
+to reference addresses. However, due to limitations in the domain name system
+(and a desire to rely on public infrastructure) - there was only one alternative.
+
+That's where IRC comes in. IRC can be conceived of as a simple key-value store
+where each channel is the key and the topic is the value. Since topics are
+protected by registered accounts -- it makes it possible to 'own' an entry.
+Exactly the same way that one may own a domain. So I've built a simple
+system on top of IRC that can be used in place of DNS for DDNS purposes.
+
+## But what about spam?
+
+One way I've tried to mitigate the potential for abuse is by setting the
+moderator mode on channels. So at least the channels can't be used by botnets.
+This is also a very good way to ensure that channels are automatically
+deleted if they're not used. As chanservs are often optimized to delete channels
+with no new messages in them after X days. The channel founder is
+always free to periodically "refresh" the channel. Should they still require it.
+
+Users of the system shouldn't need to use much bandwidth or resources
+from the IRC server. This is true for channel owners, too. Perhaps there are
+more measures to minimize abuse, but for now I think this is a good solution.
+There aren't many users of my software at the moment so scalability isn't an issue.
+This may not even end up being used. We shall see.
+
+## Contact
+
+Please get in contact with me if you have any more concerns.
+matthew@roberts.pm

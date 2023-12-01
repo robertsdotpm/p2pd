@@ -215,6 +215,12 @@ load from len(servers) ...
 
 add proper version details that tells operators more about the project and
 that its not a botnet.
+
+perhaps unit tests for basic protocol messages
+extracted from the extract function?
+
+how to limit abuse for ops?
+    seems like if no one can join the channel is pruned?
 """
 
 import asyncio
