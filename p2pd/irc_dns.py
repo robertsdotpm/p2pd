@@ -20,7 +20,9 @@ maybe the right approach is to then try a operation that needs those perms?
 filtered:
 ['irc.oftc.net', 'irc.euirc.net', 'irc.xxxchatters.com', 'irc.swiftirc.net', 'irc.darkmyst.org']
 
-['irc.chatjunkies.org', 'irc.dosers.net', 'irc.entropynet.net',  
+['irc.chatjunkies.org', 'irc.dosers.net', 
+    'irc.entropynet.net',  
+        - email required for chan
 
 
 'irc.liberta.casa']
@@ -124,8 +126,7 @@ chan_password = sha256(domain + name + pw)
 
 handle ident requests
 
-b':NickServ!NickServ@services.slacknet.org NOTICE n619b848 :This nickname is registered. Please choose a different nickname, or identify via \x02/msg NickServ identify <password>\x02.\r\n'
-b':NickServ!NickServ@services.slacknet.org NOTICE n619b848 :\x02n619b848\x02 is already registered.\r\n'
+
 
 get channels made by user [done]
     could mean not having to manage a bunch of bs in a db
@@ -138,7 +139,7 @@ chan set topic [done]
 chan get topic title [done]
 need to write tests to check that the software works for all servers [done]
 
-make channel open to join
+make channel open to join [server only]
 
 
 
@@ -147,15 +148,18 @@ is this possible?
 
 cross server load_chans = 
 approach 1
-1. Keep a bot in the channel
-    - botserv?
-2. Get list to view all channels
-3. Grep for username in channel list
+    1. Keep a bot in the channel
+        - botserv?
+    2. Get list to view all channels
+    3. Grep for username in channel list
 
 approach 2
-could you add a 'mark' to yourself that lists chans
-could you use a 'memo' service to store offline messages?
-    memoserv is fascinating. it gives registered users a message box.
+    could you add a 'mark' to yourself that lists chans
+    could you use a 'memo' service to store offline messages?
+        memoserv is fascinating. it gives registered users a message box.
+
+approach 3:
+    user profile portion?
 
 todo: there was a false positive for slacknet.org. when you register a chan
 it says that the staff reviews all chan reg requests. so that would need
@@ -165,16 +169,16 @@ it would probably make sense to run all major ircds on p2pd.net
 and write unit tests against it. ensure the software works for them.
 
 
-some servers have syntax like register chan desc
-so if you pass the chan password there its bad
+some servers have syntax like register chan desc [done]
+    so if you pass the chan password there its bad
 
-probably now need a feature like:
+probably now need a feature like: [done]
     get reg syntax
 
-todo: get op is broken as not all do +o some do other flags
+todo: get op is broken as not all do +o some do other flags [removed]
 -- seems like an unnecesary check as nickserv ident is what u need?
 
-chan setting those modes doesnt seem to work
+chan setting those modes doesnt seem to work [done]
     -- check if that portion is being done properly or if
     -- the first just doesnt support it
 
@@ -185,12 +189,22 @@ seems you need to use SET mlock for ki flags?
     - some servers use SET for topic too
     
 
-last server has no topic command?
-join messages instead?
+last server has no topic command? [false positive]
+join messages instead? [no]
+
 ping - pong is incorrectly implemented (maybe?)
 
-support set topic.
+support set topic. [done]
     - 3 servers remain for testing.
+
+which servers support memo and botservices
+    - supporting mechanisms for loading owned chans seems
+    well worth it.
+
+need to also check that get topic for a channel is possible for a 
+different user (a non op) for the servers chosen.
+
+add IPs for all the servers to bypass dns
 """
 
 import asyncio
@@ -213,7 +227,12 @@ IRC_DNS_G1 = [
         'creation': 975848400,
 
         # register (optional: desc)
-        'nick_serv': ["password", "email"]
+        'nick_serv': ["password", "email"],
+
+        "ip": {
+            IP4: "116.203.29.246",
+            IP6: "2a01:4f8:c2c:628::1"
+        }
     },
     # Works.
     {
@@ -224,7 +243,12 @@ IRC_DNS_G1 = [
         'creation': 1020088800,
 
         'chan_serv': ["password", "description"],
-        'nick_serv': ["password", "email"]
+        'nick_serv': ["password", "email"],
+
+        "ip": {
+            IP4: "213.239.154.35",
+            IP6: "2001:9a8:0:e:1337::6667" # Top kek.
+        }
     },
     # works.
     {
@@ -232,7 +256,12 @@ IRC_DNS_G1 = [
         'afs': [IP4, IP6],
 
         # 10 march 2007
-        'creation': 1173445200
+        'creation': 1173445200,
+
+        "ip": {
+            IP4: "213.239.154.35",
+            IP6: "2001:9a8:0:e:1337::6667" # Top kek.
+        }
     },
 ]
 
@@ -246,7 +275,12 @@ IRC_DNS_G2 = [
         "creation": 969282000,
         'chan_serv': ["password", "description"],
         'nick_serv': ["password", "email"],
-        'set_topic': "set"
+        'set_topic': "set",
+
+        "ip": {
+            IP4: "159.65.55.232",
+            IP6: "2604:a880:4:1d0::75:0" # Top kek.
+        }
     },
     # Works
     {
@@ -255,7 +289,12 @@ IRC_DNS_G2 = [
 
         # 26 nov 2002
         'creation': 1038229200,
-        'nick_serv': ["password", "email"]
+        'nick_serv': ["password", "email"],
+
+        "ip": {
+            IP4: "167.172.166.129",
+            IP6: "2604:a880:cad:d0::1d:e001" # Top kek.
+        }
     },
 ]
 
@@ -639,17 +678,6 @@ class IRCSession():
             ).pack()
         )
 
-        """
-        # register channel.
-        await self.con.send(
-            IRCMsg(
-                cmd="PRIVMSG",
-                param="ChanServ",
-                suffix=f"REGISTER {chan_name}"
-            ).pack()
-        )
-        """
-
         # Build register command syntax.
         suffix = f"REGISTER {chan_name}"
         if "chan_serv" in self.server_info:
@@ -696,8 +724,7 @@ class IRCSession():
 
         # -k remove password
         # -i no invite only
-        # -r allow unregistered
-        for mode in "kir":
+        for mode in "ki":
             # Avoid flooding the server.
             await asyncio.sleep(0.1)
 
@@ -711,17 +738,6 @@ class IRCSession():
             )
 
         return True
-
-        """
-        # register channel.
-        await self.con.send(
-            IRCMsg(
-                cmd="PRIVMSG",
-                param="ChanServ",
-                suffix=f"REGISTER {chan_name} {chan_pass} {chan_desc}"
-            ).pack()
-        )
-        """
     
     async def load_owned_chans(self):
         await self.con.send(
