@@ -212,6 +212,9 @@ reg > X available for it to work
 IRC_REG_M = 3
 load from len(servers) ...
 
+
+add proper version details that tells operators more about the project and
+that its not a botnet.
 """
 
 import asyncio
@@ -222,9 +225,10 @@ from .address import *
 from .interface import *
 from .base_stream import *
 
-IRC_PREFIX = "18"
+IRC_PREFIX = "19"
 
 IRC_SERVERS = [
+    # Works.
     {
         'domain': 'irc.phat-net.de',
         'afs': [IP4, IP6],
@@ -239,6 +243,7 @@ IRC_SERVERS = [
             IP6: "2a01:4f8:c2c:628::1"
         }
     },
+    # Works.
     {
         'domain': 'irc.tweakers.net',
         'afs': [IP4, IP6],
@@ -261,9 +266,12 @@ IRC_SERVERS = [
         # 10 march 2007
         'creation': 1173445200,
 
+        'nick_serv': ["password", "email"],
+        #'set_topic': "set",
+
         "ip": {
-            IP4: "213.239.154.35",
-            IP6: "2001:9a8:0:e:1337::6667" # Top kek.
+            IP4: "159.65.55.232",
+            IP6: "2604:a880:4:1d0::75:0" # Top kek.
         }
     },
     {
@@ -277,8 +285,8 @@ IRC_SERVERS = [
         'set_topic': "set",
 
         "ip": {
-            IP4: "159.65.55.232",
-            IP6: "2604:a880:4:1d0::75:0"
+            IP4: "83.137.40.10",
+            IP6: "2001:41d0:701:1000::9b"
         }
     },
     {
@@ -290,7 +298,7 @@ IRC_SERVERS = [
         'nick_serv': ["password", "email"],
 
         "ip": {
-            IP4: "167.172.166.129",
+            IP4: "23.239.26.75",
             IP6: "2604:a880:cad:d0::1d:e001"
         }
     },
@@ -473,7 +481,7 @@ class IRCSession():
         # Destination of IRC server to connect to.
         # For simplicity all IRC servers support v4 and v6.
         dest = await Address(
-            self.irc_server["ip"][af],
+            self.server_info["ip"][af],
             6697,
             i.route(af)
         )
@@ -902,7 +910,7 @@ if __name__ == '__main__':
         print("If start")
         print(i)
 
-        for offset, s in enumerate(server_list[0:]):
+        for offset, s in enumerate(server_list[1:]):
             print(f"testing {s} : {offset}")
 
             irc_dns = IRCSession(s, seed)
@@ -944,14 +952,29 @@ if __name__ == '__main__':
             #print("get ops done")
             await irc_dns.chans[chan_name].set_topic(chan_topic)
             print("set topic done")
-            out = await irc_dns.get_chan_topic(chan_name)
+
+            # Potential race condition between getting new chan.
+            await asyncio.sleep(4)
+
+            outside_user = IRCSession(s, seed + "2")
+            try:
+                await outside_user.start(i)
+                print("start success")
+            except:
+                print(f"start failed for outside user")
+                what_exception()
+
+            out = await outside_user.get_chan_topic(chan_name)
             if out != chan_topic:
                 print(f"got {out} for chan topic and not {chan_topic}")
                 exit()
             else:
                 print("success")
 
+            
+
             # Cleanup.
+            await outside_user.close()
             await irc_dns.close()
             input("Press enter to test next server.")
             input()
