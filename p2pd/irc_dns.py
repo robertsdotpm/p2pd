@@ -231,6 +231,7 @@ from .address import *
 from .interface import *
 from .base_stream import *
 
+
 IRC_PREFIX = "19"
 
 IRC_SERVERS = [
@@ -310,6 +311,8 @@ IRC_SERVERS = [
     },
 ]
 
+IRC_VERSION = "Friendly P2PD user - see p2pd.net/irc"
+
 IRC_CONF = dict_child({
     "use_ssl": 1,
     "ssl_handshake": 8,
@@ -362,6 +365,19 @@ def extract_irc_msgs(buf):
             buf = ""
 
     return msgs, buf
+
+def irc_extract_sender(sender):
+    p = "([^!@]+)(?:!([^@]+))?(?:@([\s\S]+))?"
+    parts = re.findall(p, sender)
+    if len(parts):
+        parts = parts[0]
+        return {
+            "nick": parts[0],
+            "user": parts[1],
+            "host": parts[2]
+        }
+    
+    raise Exception("Sender portion invalid.")
 
 class IRCMsg():
     def __init__(self, prefix="", cmd="", param="", suffix=""):
@@ -778,6 +794,17 @@ class IRCSession():
             # Process the minimal functions we understand.
             for msg in msgs:
                 print(f"Got {msg.pack()}")
+
+                # Respond to CTCP version requests.
+                if msg.suffix == "\x01VERSION\x01":
+                    sender = irc_extract_sender(msg.prefix)
+                    await self.con.send(
+                        IRCMsg(
+                            cmd="PRIVMSG",
+                            param=sender["nick"],
+                            suffix=f"\x01VERSION {IRC_VERSION}\x01"
+                        ).pack()
+                    )
 
                 # Nickname already reserved so login.
                 if msg.cmd == "433":
