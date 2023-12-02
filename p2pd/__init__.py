@@ -34,7 +34,6 @@ if not '-m' in sys.argv:
     from .p2p_pipe import *
     from .p2p_node import P2PNode
     from .p2p_utils import get_pp_executors, start_p2p_node
-    from .pdns import PDNS
     from .install import *
     from .toxiclient import ToxiToxic, ToxiTunnel, ToxiClient
     from .toxiserver import ToxiMainServer
