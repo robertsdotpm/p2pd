@@ -25,7 +25,7 @@ cmd.exe are now being phased out in favor of the tools
 available in powershell. Powershell is now widely supported
 even on older Windows OS.
 
-The downside to using powershell to obtain relevent NIC
+The downside to using powershell to obtain relevant NIC
 information is it's slow. A process needs to be spawned
 for each new command. In order to prevent errors on certain
 Windows versions concurrency also has to be disabled. This
@@ -41,15 +41,27 @@ from a single powershell script. The program will attempt
 to use this script if powershell is unrestricted. If it
 fails to load interfaces with regular commands it will
 try relaunch with a UAC prompt, unrestrict powershell,
-then attempt to run the script in powershell. 
+then attempt to run the script in powershell.
+
+Registry:
+
+Don't attempt to write a new version of this using the
+Windows registry. The registry does not make available
+simple access to the interface numbers and a special
+(undocumented) algorithm needs to be used to rank the
+interfaces and derive the number. Doing this is unsupported
+outside of using heavy Windows SDK dependencies.
 
 Notes:
     - These commands don't seem to require special permissions.
     - They need to use double quotes or the command won't run.
     - Tested as working with execution policy = restricted.
+    - Is there a way to convert the PS1 script to a single line
+    command and have it passed to powershell without execution perms?
 """
 
 import re
+import base64
 from .ip_range import *
 from .cmd_tools import *
 
@@ -95,7 +107,7 @@ Foreach($iface in $ifs){
         $ips += $addr.IPAddress
     }
 
-    # Save them as new property calues.
+    # Save them as new property values.
     $iface | Add-Member -NotePropertyName v4GW -NotePropertyValue $v4gw
     $iface | Add-Member -NotePropertyName v6GW -NotePropertyValue $v6gw
 
@@ -108,7 +120,7 @@ Foreach($iface in $ifs){
 
 async def load_ifs_from_ps1():
     # Get all interface details as one big script.
-    out = await nt_pshell(IFS_PS1)
+    out = await ps1_exec_trick(IFS_PS1)
 
     # Load default interface by if_index.
     default_ifs = {IP4: None, IP6: None}
@@ -442,34 +454,11 @@ class Netifaces():
         pass
 
     async def start(self):
-        # Can run powershell scripts or not.
-        is_restricted = await is_pshell_restricted()
-
-        # Use multiple commands to load interface details.
-        if is_restricted:
-            ifs_str = await get_ifaces()
-            if_results = extract_if_fields(ifs_str)
-            self.by_guid_index = await win_load_interface_state(if_results)
-
-            # Fallback to load_ifs_from_ps1.
-            # Will need to try disable restricted.
-            if self.by_guid_index == {}:
-                try:
-                    if not is_root():
-                        win_uac()
-                    else:
-                        await nt_set_pshell_unrestricted()
-                        is_restricted = await is_pshell_restricted()
-                except Exception:
-                    log_exception()
-        
-        # Load netifaces using a PS1 script.
-        if not is_restricted:
-            # Use a single script to load all info at once.
-            if_infos = await load_ifs_from_ps1()
-            self.by_guid_index = {}
-            for if_info in if_infos:
-                self.by_guid_index[if_info["guid"]] = if_info
+        # Use a single script to load all info at once.
+        if_infos = await load_ifs_from_ps1()
+        self.by_guid_index = {}
+        for if_info in if_infos:
+            self.by_guid_index[if_info["guid"]] = if_info
 
         # Sanity check.
         if self.by_guid_index == {}:

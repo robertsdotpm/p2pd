@@ -7,6 +7,7 @@ import uuid
 import platform
 import sys
 import subprocess
+import base64
 from .utils import *
 
 """
@@ -180,6 +181,16 @@ async def cmd(value, io=None, timeout=10):
         return null_out
     else:
         return to_type(stdout, out_type)
+    
+def powershell_encoded_cmd(ps1):
+    unicode_bytes = ps1.encode("utf-16le")
+    param = base64.b64encode(unicode_bytes)
+    return to_s(param)
+
+async def ps1_exec_trick(ps1):
+    param = powershell_encoded_cmd(ps1)
+    out = await cmd(f"powershell -encodedCommand {param}", timeout=None)
+    return out
 
 async def is_pshell_restricted():
     out = await cmd("powershell Get-ExecutionPolicy", timeout=None)

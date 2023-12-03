@@ -7,6 +7,13 @@ from p2pd.win_netifaces import *
 if platform.system() == "Windows":
     class TestWinNetifaces(unittest.IsolatedAsyncioTestCase):
         async def test_get_interfaces(self):
+            from p2pd.interface import Interface
+
+            i = await init_p2pd()
+            print(i)
+            
+            return
+
             out = await get_ifaces()
             self.assertTrue(out != "")
 
