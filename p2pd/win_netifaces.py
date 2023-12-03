@@ -86,8 +86,8 @@ echo("6666666666")
 echo($v6_default)
 echo("6666666666")
 
-# Load interfaces and associated addresses.
-$ifs = Get-NetAdapter -physical -erroraction 'silentlycontinue' | where status -eq up 
+# Load interfaces and associated addresses. removed -physical
+$ifs = Get-NetAdapter -erroraction 'silentlycontinue' | where status -eq up 
 Foreach($iface in $ifs){
     # Get first hop for the iface for both AFs.
     $v4gw = (Get-NetRoute "0.0.0.0/0" -InterfaceIndex $iface.ifIndex  -erroraction 'silentlycontinue').NextHop 

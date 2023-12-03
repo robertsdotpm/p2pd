@@ -196,11 +196,12 @@ async def is_pshell_restricted():
     out = await cmd("powershell Get-ExecutionPolicy", timeout=None)
     return not "Unrestricted" in out
 
-async def nt_pshell(value, timeout=10):
+async def nt_pshell(value, timeout=10, is_unrestricted=None):
     # Allow powershell scripts to be run
     # by modifying registry if needed.
-    if(await is_pshell_restricted()):
-        await nt_set_pshell_unrestricted()
+    if is_unrestricted is None:
+        if(await is_pshell_restricted()):
+            await nt_set_pshell_unrestricted()
 
     # Write a temp file into the temp dir
     # with the script to execute.

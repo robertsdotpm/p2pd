@@ -1,23 +1,78 @@
-import platform
-from p2pd.test_init import *
-from p2pd.utils import *
-from p2pd.net import VALID_AFS
-from p2pd.win_netifaces import *
-
-if platform.system() == "Windows":
-    class TestWinNetifaces(unittest.IsolatedAsyncioTestCase):
-        async def test_get_interfaces(self):
+"""
             from p2pd.interface import Interface
+
+            # 1.7 if real time is disabled and talking to a shell.
+
+            loader = 'Invoke-Expression (Get-Content "~/net_info.ps1" -Raw)'
+
+
+            # "Invoke-Expression (Read-Host)"
+            p = subprocess.Popen(["powershell_ise.exe"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True                     
+            )
+            time.sleep(4)
+
+            s1 = time.time()
+            # 1 second just to start powershell with a loaded script.
+            #await cmd("powershell echo test")
+            #out = subprocess.run(["powershell.exe", "echo test"], stdout=asyncio.subprocess.PIPE)
+
+            loader = 'Invoke-Expression (Get-Content "~/net_info.ps1" -Raw)'
+            #loader = 'echo test'
+            out, errs = p.communicate(input=loader)
+            #p.stdin.write(f"{loader}\r\n")
+            #out = p.stdout.read()
+            param = powershell_encoded_cmd(loader)
+            #out = subprocess.run(["powershell.exe", "-encodedCommand", param], stdout=asyncio.subprocess.PIPE)
+            #out = subprocess.run(["powershell", loader], stdout=asyncio.subprocess.PIPE)
+
+            "
+            real time protect = 1 sec
+            process start = 1 sec
+
+            a power shell server would shave 2 secs off
+            you could also make it cache results
+            script = 1 sec
+            "
+
+            #out = subprocess.run(["powershell.exe", "-encodedCommand", powershell_encoded_cmd(IFS_PS1)], stdout=asyncio.subprocess.PIPE)
+            #i = await init_p2pd()
+
+            "
+            out = await (
+                "powershell.exe",
+                ("echo test")
+            )
+            "
+
+            s2 = time.time()
+            t = s2 - s1
+            print(t)
+            print(out)
+            #print(errs)
+            return
 
             i = await init_p2pd()
             print(i)
             
             return
+"""
 
+import platform
+import subprocess
+from p2pd.test_init import *
+from p2pd.utils import *
+from p2pd.net import VALID_AFS
+from p2pd.win_netifaces import *
+
+
+if platform.system() == "Windows":
+    class TestWinNetifaces(unittest.IsolatedAsyncioTestCase):
+        async def test_get_interfaces(self):
             out = await get_ifaces()
             self.assertTrue(out != "")
 
-        """
         async def test_get_default_interface_by_if(self):
             found_one = False
             for af in VALID_AFS:
@@ -92,7 +147,6 @@ if platform.system() == "Windows":
             # Test guid.
             guid = n.guid(if_name)
             self.assertTrue(len(guid))
-            """
 
     if __name__ == '__main__':
         main()
