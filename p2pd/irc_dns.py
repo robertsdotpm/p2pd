@@ -248,7 +248,11 @@ IRC_SERVERS = [
         "ip": {
             IP4: "116.203.29.246",
             IP6: "2a01:4f8:c2c:628::1"
-        }
+        },
+
+        'chan_len': 50,
+        'chan_no': 60,
+        'topic_len': 300
     },
     # Works.
     {
@@ -264,7 +268,11 @@ IRC_SERVERS = [
         "ip": {
             IP4: "213.239.154.35",
             IP6: "2001:9a8:0:e:1337::6667" # Top kek.
-        }
+        },
+
+        'chan_no': 25,
+        'chan_len': 32,
+        'topic_len': 307
     },
     {
         'domain': 'irc.swiftirc.net',
@@ -279,7 +287,11 @@ IRC_SERVERS = [
         "ip": {
             IP4: "159.65.55.232",
             IP6: "2604:a880:4:1d0::75:0" # Top kek.
-        }
+        },
+
+        'chan_no': 50,
+        'chan_len': 32,
+        'topic_len': 360
     },
     {
         'domain': 'irc.euirc.net',
@@ -294,7 +306,11 @@ IRC_SERVERS = [
         "ip": {
             IP4: "83.137.40.10",
             IP6: "2001:41d0:701:1000::9b"
-        }
+        },
+
+        'chan_no': 30,
+        'chan_len': 32,
+        'topic_len': 307,
     },
     {
         'domain': 'irc.darkmyst.org',
@@ -307,7 +323,11 @@ IRC_SERVERS = [
         "ip": {
             IP4: "23.239.26.75",
             IP6: "2604:a880:cad:d0::1d:e001"
-        }
+        },
+
+        'chan_no': 30,
+        'chan_len': 50,
+        'topic_len': 390,
     },
 ]
 
@@ -471,6 +491,7 @@ class IRCChan:
 
 class IRCSession():
     def __init__(self, server_info, seed):
+        self.started = asyncio.Future()
         self.con = None
         self.recv_buf = ""
         self.get_motd = asyncio.Future()
@@ -496,89 +517,97 @@ class IRCSession():
         self.email = "p2pd_" + sha256(self.irc_server + IRC_PREFIX + "email" + seed)[:12]
         self.email += "@p2pd.net"
 
-    async def start(self, i):
-        # Choose a supported AF.
-        af = i.supported()[0]
+    async def start(self, i, timeout=60):
+        async def do_start():
+            # Choose a supported AF.
+            af = i.supported()[0]
 
-        # Destination of IRC server to connect to.
-        # For simplicity all IRC servers support v4 and v6.
-        dest = await Address(
-            self.server_info["ip"][af],
-            6697,
-            i.route(af)
+            # Destination of IRC server to connect to.
+            # For simplicity all IRC servers support v4 and v6.
+            dest = await Address(
+                self.server_info["ip"][af],
+                6697,
+                i.route(af)
+            )
+
+            # Connect to IRC server.
+            route = await i.route().bind()
+            self.con = await pipe_open(
+                TCP,
+                route,
+                dest,
+                msg_cb=self.msg_cb,
+                conf=IRC_CONF
+            )
+
+            # Tell server user for the session.
+            await self.con.send(
+                IRCMsg(
+                    cmd="USER",
+                    param=f"{self.username} * {self.irc_server}",
+                    suffix="*"
+                ).pack()
+            )
+
+            await self.con.send(
+                IRCMsg(cmd="NICK", param=self.nick).pack()
+            )
+
+
+            # Wait for message of the day.
+            await asyncio.wait_for(
+                self.get_motd, 30
+            )
+            print("get motd done")
+
+            # Trigger register if needed.
+            await self.register_user()
+            print("register user done")
+
+            # Wait for login success.
+            # Some servers scan for open proxies for a while.
+            await asyncio.wait_for(
+                self.login_status, 15
+            )
+            print("get login status done.")
+
+            await self.con.send(
+                IRCMsg(
+                    cmd="HELP",
+                ).pack()
+            )
+
+            await self.con.send(
+                IRCMsg(
+                    cmd="PRIVMSG",
+                    param="ChanServ",
+                    suffix=f"set"
+                ).pack()
+            )
+
+            await self.con.send(
+                IRCMsg(
+                    cmd="PRIVMSG",
+                    param="ChanServ",
+                    suffix=f"help set"
+                ).pack()
+            )
+
+            # Load pre-existing owned channels.
+            #await self.load_owned_chans()
+
+            self.started.set_result(True)
+            return self
+        
+        return await asyncio.wait_for(
+            do_start(),
+            timeout=timeout
         )
-
-        # Connect to IRC server.
-        route = await i.route().bind()
-        self.con = await pipe_open(
-            TCP,
-            route,
-            dest,
-            msg_cb=self.msg_cb,
-            conf=IRC_CONF
-        )
-
-        # Tell server user for the session.
-        await self.con.send(
-            IRCMsg(
-                cmd="USER",
-                param=f"{self.username} * {self.irc_server}",
-                suffix="*"
-            ).pack()
-        )
-
-        await self.con.send(
-            IRCMsg(cmd="NICK", param=self.nick).pack()
-        )
-
-
-        # Wait for message of the day.
-        await asyncio.wait_for(
-            self.get_motd, 30
-        )
-        print("get motd done")
-
-        # Trigger register if needed.
-        await self.register_user()
-        print("register user done")
-
-        # Wait for login success.
-        # Some servers scan for open proxies for a while.
-        await asyncio.wait_for(
-            self.login_status, 15
-        )
-        print("get login status done.")
-
-        await self.con.send(
-            IRCMsg(
-                cmd="HELP",
-            ).pack()
-        )
-
-        await self.con.send(
-            IRCMsg(
-                cmd="PRIVMSG",
-                param="ChanServ",
-                suffix=f"set"
-            ).pack()
-        )
-
-        await self.con.send(
-            IRCMsg(
-                cmd="PRIVMSG",
-                param="ChanServ",
-                suffix=f"help set"
-            ).pack()
-        )
-
-        # Load pre-existing owned channels.
-        #await self.load_owned_chans()
-
-        return self
     
     async def close(self):
-        await self.con.send(IRCMsg(cmd="QUIT").pack())
-        await self.con.close()
+        if self.con is not None:
+            await self.con.send(IRCMsg(cmd="QUIT").pack())
+            await self.con.close()
 
     async def get_chan_reg_syntax(self):
         await self.con.send(
@@ -915,7 +944,102 @@ class IRCSession():
         except Exception:
             log_exception()
 
+class IRCDNS():
+    def __init__(self, i, seed):
+        self.i = i
+        self.seed = seed
+        self.sessions = {}
+        self.p_sessions_next = 0
+
+    def get_failure_max(self):
+        return int(0.4 * len(IRC_SERVERS))
+    
+    def get_threshold_m(self):
+        return len(IRC_SERVERS) - self.get_failure_max()
+
+    async def start(self):
+        # Connect to servers.
+        tasks = [s.start(self.i) for s in self.sessions]
+        await asyncio.gather(*tasks)
+
+        # Determine how many failed to start.
+        fail_no = 0
+        for s in self.sessions:
+            if not s.started.done():
+                fail_no += 1
+
+        # Too many server failures.
+        if fail_no > self.get_threshold_n():
+            raise Exception("IRCDNS, too many sessions failed.")
+
+    async def close(self):
+        tasks = []
+        for i in range(0, self.p_sessions_next):
+            task = self.sessions[i].close()
+            tasks.append(task)
+
+        await asyncio.gather(*tasks)
+
+    async def register(self, name):
+        # Create all servers continuing from any already started.
+        tasks = []; p = self.p_sessions_next
+        for n in range(p, len(IRC_SERVERS)):
+            self.sessions[n] = IRCSession(
+                IRC_SERVERS[n],
+                self.seed
+            )
+            tasks.append(self.sessions[n].start())
+            self.p_sessions_next += 1
+
+        # Start them all at once if needed.
+        if len(tasks):
+            await asyncio.gather(*tasks)
+
+        # Determine sessions that worked.
+        success_no = 0
+        for n in range(0, self.p_sessions_next):
+            if self.sessions[n].started.done():
+                success_no += 1
+
+        # If too many are down then throw an error.
+        fail_no = len(IRC_SERVERS) - success_no
+        if fail_no > self.get_failure_max():
+            raise Exception("Too many servers down.")
         
+        # Check if name available on servers.
+        tasks = []
+        for n in range(0, self.p_sessions_next):
+            task = self.sessions[n].is_chan_registered(name)
+            tasks.append(task)
+        results = await asyncio.gather(tasks)
+        
+        # Check if there's enough names available.
+        available_count = 0
+        for result in results:
+            if result:
+                available_count += 1
+        if available_count < self.get_threshold_m():
+            raise Exception("Name not available on enough servers.")
+        
+        """
+        format of a registered name be?
+
+        chan len limit - up to 32, 50, 200
+        case insensitive
+        should a name be human-readable? [a-z][A-Z][0-9]_
+            cant use base62 as it uses uppercase
+        what chars can be used for a name?
+        """
+
+
+"""
+    get:
+        2 cons...
+        if both agree then use that
+        if dispute then continue with 3rd con
+        ... continue until consensus 
+
+"""
 
 if __name__ == '__main__':
 

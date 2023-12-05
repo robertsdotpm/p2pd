@@ -57,6 +57,13 @@
             print(i)
             
             return
+
+caching + look to see if anything changed in the guid reg keys to trigger new load
+is prob the way to go
+
+todo: dont use the commandencoded trick
+    -- write the script to user profile
+    -- and use the loader function
 """
 
 import platform
@@ -66,9 +73,9 @@ from p2pd.utils import *
 from p2pd.net import VALID_AFS
 from p2pd.win_netifaces import *
 
-
 if platform.system() == "Windows":
     class TestWinNetifaces(unittest.IsolatedAsyncioTestCase):
+        
         async def test_get_interfaces(self):
             out = await get_ifaces()
             self.assertTrue(out != "")
