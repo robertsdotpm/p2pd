@@ -124,6 +124,9 @@ shuffle = lambda x: random.shuffle(x) or x
 d_keys = lambda x: list(x.keys())
 d_vals = lambda x: list(x.values())
 sha256 = lambda x: to_s(hashlib.sha256(to_b(x)).hexdigest())
+hash160 = lambda x: hashlib.new('ripemd160', to_b(x)).digest()
+
+
 
 def file_get_contents(path):
     with open(path, mode='rb') as f:

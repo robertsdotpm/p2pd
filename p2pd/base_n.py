@@ -1,27 +1,24 @@
 # -*- coding: utf-8 -*-
 """
-base62
-~~~~~~
-
+basen
 Originated from http://blog.suminb.com/archives/558
 """
 
-__title__ = "base62"
+
 __author__ = "Sumin Byeon"
 __email__ = "suminb@gmail.com"
 __version__ = "1.0.0"
 
-BASE = 62
-CHARSET_DEFAULT = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-CHARSET_INVERTED = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+B64_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+B36_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-def encode(n, charset=CHARSET_DEFAULT):
+def encode(n, charset=B64_CHARSET):
     """Encodes a given integer ``n``."""
 
     chs = []
     while n > 0:
-        n, r = divmod(n, BASE)
+        n, r = divmod(n, len(charset))
         chs.insert(0, charset[r])
 
     if not chs:
@@ -30,7 +27,7 @@ def encode(n, charset=CHARSET_DEFAULT):
     return "".join(chs)
 
 
-def encodebytes(barray, charset=CHARSET_DEFAULT):
+def encodebytes(barray, charset=B64_CHARSET):
     """Encodes a bytestring into a base62 string.
 
     :param barray: A byte array
@@ -62,7 +59,7 @@ def encodebytes(barray, charset=CHARSET_DEFAULT):
     return zero_padding + value
 
 
-def decode(encoded, charset=CHARSET_DEFAULT):
+def decode(encoded, charset=B64_CHARSET):
     """Decodes a base62 encoded value ``encoded``.
 
     :type encoded: str
@@ -70,15 +67,16 @@ def decode(encoded, charset=CHARSET_DEFAULT):
     """
     _check_type(encoded, str)
 
+    base = len(charset)
     l, i, v = len(encoded), 0, 0
     for x in encoded:
-        v += _value(x, charset=charset) * (BASE ** (l - (i + 1)))
+        v += _value(x, charset=charset) * (base ** (l - (i + 1)))
         i += 1
 
     return v
 
 
-def decodebytes(encoded, charset=CHARSET_DEFAULT):
+def decodebytes(encoded, charset=B64_CHARSET):
     """Decodes a string of base62 data into a bytes object.
 
     :param encoded: A string to be decoded in base62
@@ -102,12 +100,12 @@ def decodebytes(encoded, charset=CHARSET_DEFAULT):
 
 
 def _value(ch, charset):
-    """Decodes an individual digit of a base62 encoded string."""
+    """Decodes an individual digit of a base encoded string."""
 
     try:
         return charset.index(ch)
     except ValueError:
-        raise ValueError("base62: Invalid character (%s)" % ch)
+        raise ValueError(f"base{len(charset)}: Invalid character (%s)" % ch)
 
 
 def _check_type(value, expected_type):

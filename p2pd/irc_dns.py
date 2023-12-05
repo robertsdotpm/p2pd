@@ -221,11 +221,14 @@ extracted from the extract function?
 
 how to limit abuse for ops?
     seems like if no one can join the channel is pruned?
+
+encode in a-z0-9
+name = '#' + encode(hash160("p2pd" + irc_prefix)) - 20 chars ascii
 """
 
 import asyncio
 import re
-from .base62 import encodebytes as b62encode
+from .base_n import encodebytes, B36_CHARSET, B64_CHARSET
 from .utils import *
 from .address import *
 from .interface import *
@@ -291,7 +294,10 @@ IRC_SERVERS = [
 
         'chan_no': 50,
         'chan_len': 32,
-        'topic_len': 360
+        'topic_len': 360,
+
+        # Certain characters like ,. still not allowed.
+        'chan_name': 'azAZ!@#$unicode-_'
     },
     {
         'domain': 'irc.euirc.net',
@@ -343,12 +349,40 @@ IRC_CONF = dict_child({
 # Used for deterministic passwords with good complexity.
 def f_irc_pass(x):
     return to_s(
-        b62encode(
+        encodebytes(
             hashlib.sha256(
                 to_b(x)
-            ).digest()
+            ).digest(),
+            charset=B64_CHARSET
         )
     )[:30]
+
+"""
+Name -> 20 byte hash160
+(2 ** 160) - 1 yields 
+1461501637330902918203684832716283019655932542975
+
+IRC chan limit: 31 bytes (1 remaining for #)
+where only a-z0-9 are guaranteed
+that leaves
+((26 + 10) ** 31) possibilities or
+1759452407304813269615619081855885739163790606335
+
+so all hash160 values can be stored with this encoding.
+It also allows names to have special characters and be
+longer than 20 bytes (albeit at the cost of collisions.)
+"""
+
+def f_irc_chan(x):
+    return to_s(
+        encodebytes(
+            hash160(
+                b"P2PD://" +
+                to_b(x)
+            ),
+            charset=B36_CHARSET
+        )
+    )[:31].lower()
 
 """
 TCP is stream-oriented and portions of IRC protocol messages
@@ -1024,7 +1058,7 @@ class IRCDNS():
         """
         format of a registered name be?
 
-        chan len limit - up to 32, 50, 200
+        chan len limit - up to 32 (min)
         case insensitive
         should a name be human-readable? [a-z][A-Z][0-9]_
             cant use base62 as it uses uppercase
