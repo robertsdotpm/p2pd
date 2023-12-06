@@ -226,14 +226,85 @@ encode in a-z0-9
 name = '#' + encode(hash160("p2pd" + irc_prefix)) - 20 chars ascii
 """
 
+import gzip
+import bz2
+import zlib
 import asyncio
 import re
+from ecdsa import SigningKey
 from .base_n import encodebytes, B36_CHARSET, B64_CHARSET
 from .utils import *
 from .address import *
 from .interface import *
 from .base_stream import *
 
+# NIST192p (192 bit)
+
+# Uses 24 bytes of entropy.
+sk = SigningKey.from_string(
+    string=b"012345678901234567891234",
+    hashfunc=hashlib.sha256
+)
+
+# 25 bytes.
+vk = sk.verifying_key
+vk_b = vk.to_string("compressed")
+print(vk_b)
+print(len(vk_b))
+
+out = encodebytes(vk_b, charset=B64_CHARSET)
+print(len(out))
+
+sig = sk.sign_deterministic(b"test")
+out = encodebytes(sig, charset=B64_CHARSET)
+print("sig")
+print(len(out))
+
+x = b"1701830383 0,1-[0,8.8.8.8,192.168.21.21,58959,3,2,0]-0-zmUGXPOFxUBuToh0,1-[0,2a01:4f9:3081:50d9::2,192.2a01:4f9:3081:50d9::2,58959,3,2,0]-0-zmUGXPOFxUB"
+out = zlib.compress(x)
+print(len(out))
+
+out = gzip.compress(x)
+print(len(out))
+
+out = zlib.compress(x)
+print(len(out))
+
+
+
+out = encodebytes(out)
+
+"""
+my encoding choices to use b36 here might be bad. since
+it seems the topic supports special chars which would allow for
+significantly more compact storage.
+
+all of the compressors make the size larger... lol
+"""
+
+exit()
+
+"""
+                 bin           bin        
+p2pd.net/irc ?(vk.compressed) ?(sig) ?(timestamp contents)
+   12             25             33     10          65 - 150  
+
+not sure on the encoding to use yet
+
+
+
+"""
+
+
+print(vk)
+
+out = sk.to_string()
+print(out)
+print(len(out))
+
+print(sk)
+
+exit()
 
 IRC_PREFIX = "19"
 
@@ -372,7 +443,6 @@ so all hash160 values can be stored with this encoding.
 It also allows names to have special characters and be
 longer than 20 bytes (albeit at the cost of collisions.)
 """
-
 def f_irc_chan(x):
     return to_s(
         encodebytes(
@@ -525,6 +595,7 @@ class IRCChan:
 
 class IRCSession():
     def __init__(self, server_info, seed):
+        assert(len(seed) >= 24)
         self.started = asyncio.Future()
         self.con = None
         self.recv_buf = ""
@@ -1068,8 +1139,9 @@ class IRCDNS():
 
 """
     get:
-        2 cons...
-        if both agree then use that
+        cons = failure_max + 1 ...
+        if they all agree then use that
+        otherwise ... continue until consensus or end
         if dispute then continue with 3rd con
         ... continue until consensus 
 
@@ -1093,7 +1165,7 @@ if __name__ == '__main__':
         chan_name = "#test_chan_name323" + IRC_PREFIX
         server_list = IRC_SERVERS
 
-        seed = "test_seed"
+        seed = "test_seed" * 20
         i = await Interface().start()
 
 
