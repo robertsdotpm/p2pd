@@ -13,6 +13,8 @@ __version__ = "1.0.0"
 B64_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 B36_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+B92_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz~!@#$%^&*()_+{}:\"<>?`-=[];',./"
+
 def encode(n, charset=B64_CHARSET):
     """Encodes a given integer ``n``."""
 

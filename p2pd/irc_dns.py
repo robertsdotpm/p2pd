@@ -226,13 +226,10 @@ encode in a-z0-9
 name = '#' + encode(hash160("p2pd" + irc_prefix)) - 20 chars ascii
 """
 
-import gzip
-import bz2
-import zlib
 import asyncio
 import re
 from ecdsa import SigningKey
-from .base_n import encodebytes, B36_CHARSET, B64_CHARSET
+from .base_n import encodebytes, B36_CHARSET, B64_CHARSET, B92_CHARSET
 from .utils import *
 from .address import *
 from .interface import *
@@ -249,30 +246,23 @@ sk = SigningKey.from_string(
 # 25 bytes.
 vk = sk.verifying_key
 vk_b = vk.to_string("compressed")
-print(vk_b)
-print(len(vk_b))
 
-out = encodebytes(vk_b, charset=B64_CHARSET)
+
+out = encodebytes(vk_b, charset=B92_CHARSET)
 print(len(out))
 
 sig = sk.sign_deterministic(b"test")
-out = encodebytes(sig, charset=B64_CHARSET)
+out = encodebytes(sig, charset=B92_CHARSET)
 print("sig")
 print(len(out))
 
 x = b"1701830383 0,1-[0,8.8.8.8,192.168.21.21,58959,3,2,0]-0-zmUGXPOFxUBuToh0,1-[0,2a01:4f9:3081:50d9::2,192.2a01:4f9:3081:50d9::2,58959,3,2,0]-0-zmUGXPOFxUB"
-out = zlib.compress(x)
-print(len(out))
+print(len(x))
 
-out = gzip.compress(x)
-print(len(out))
-
-out = zlib.compress(x)
+out = encodebytes(x, charset=B92_CHARSET)
 print(len(out))
 
 
-
-out = encodebytes(out)
 
 """
 my encoding choices to use b36 here might be bad. since
@@ -288,11 +278,41 @@ exit()
                  bin           bin        
 p2pd.net/irc ?(vk.compressed) ?(sig) ?(timestamp contents)
    12             25             33     10          65 - 150  
+                                65
+                  30            59
 
+                                         110      
 not sure on the encoding to use yet
 
+address format using packed:
 
+uint64      uchar[8]    uint8            uint8
+ timestamp   node_id signal_offset     var ifaces
 
+ struct:
+     uint8
+      iface no
+    uint8
+    address type (v4/v6)
+    [uint32 ipv4 or uint8[16]]
+    [uint32 ipv4 or uint8[16]]
+    uint16
+       listen port
+    uint8
+       nat type
+    uint 8
+       delta type
+    uint 8
+       delta offset
+    
+conservative: 20 ipv4
+duel-stack: 44
+multi-nics: ...
+
+okay, its like 3 or 4 times smaller which matters when theres
+little space. so its worth creating a packed version of the address
+format and using that here. this means that even many ifaces should
+fit in the topic message.
 """
 
 
@@ -326,7 +346,8 @@ IRC_SERVERS = [
 
         'chan_len': 50,
         'chan_no': 60,
-        'topic_len': 300
+        'topic_len': 300,
+        'chan_topics': 'a-zA-Z0-9all specials unicode (smilies tested)'
     },
     # Works.
     {
@@ -346,7 +367,8 @@ IRC_SERVERS = [
 
         'chan_no': 25,
         'chan_len': 32,
-        'topic_len': 307
+        'topic_len': 307,
+        'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)'
     },
     {
         'domain': 'irc.swiftirc.net',
@@ -368,7 +390,9 @@ IRC_SERVERS = [
         'topic_len': 360,
 
         # Certain characters like ,. still not allowed.
-        'chan_name': 'azAZ!@#$unicode-_'
+        'chan_name': 'azAZ!@#$unicode-_',
+
+        'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)'
     },
     {
         'domain': 'irc.euirc.net',
@@ -388,6 +412,7 @@ IRC_SERVERS = [
         'chan_no': 30,
         'chan_len': 32,
         'topic_len': 307,
+        'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)'
     },
     {
         'domain': 'irc.darkmyst.org',
@@ -405,6 +430,7 @@ IRC_SERVERS = [
         'chan_no': 30,
         'chan_len': 50,
         'topic_len': 390,
+        'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)'
     },
 ]
 

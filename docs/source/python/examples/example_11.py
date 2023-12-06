@@ -12,8 +12,6 @@ async def example():
         # to other examples.
         port=NODE_PORT + 50 + 12
     )
-    print(node.addr_bytes)
-    exit()
     #
     # Strategies used to make a P2P connection.
     # Note that P2P_RELAY enables TURN.
