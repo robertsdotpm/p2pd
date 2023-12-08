@@ -228,12 +228,24 @@ name = '#' + encode(hash160("p2pd" + irc_prefix)) - 20 chars ascii
 
 import asyncio
 import re
-from ecdsa import SigningKey
-from .base_n import encodebytes, B36_CHARSET, B64_CHARSET, B92_CHARSET
+import random
+from ecdsa import SigningKey, VerifyingKey
+from .base_n import encodebytes, decodebytes
+from .base_n import B36_CHARSET, B64_CHARSET, B92_CHARSET
 from .utils import *
 from .address import *
 from .interface import *
 from .base_stream import *
+
+
+
+
+"""
+my encoding choices to use b36 here might be bad. since
+it seems the topic supports special chars which would allow for
+significantly more compact storage.
+
+all of the compressors make the size larger... lol
 
 # NIST192p (192 bit)
 
@@ -261,18 +273,9 @@ print(len(x))
 
 out = encodebytes(x, charset=B92_CHARSET)
 print(len(out))
-
-
-
-"""
-my encoding choices to use b36 here might be bad. since
-it seems the topic supports special chars which would allow for
-significantly more compact storage.
-
-all of the compressors make the size larger... lol
 """
 
-exit()
+
 
 """
                  bin           bin        
@@ -313,8 +316,6 @@ okay, its like 3 or 4 times smaller which matters when theres
 little space. so its worth creating a packed version of the address
 format and using that here. this means that even many ifaces should
 fit in the topic message.
-"""
-
 
 print(vk)
 
@@ -325,6 +326,10 @@ print(len(out))
 print(sk)
 
 exit()
+"""
+
+
+
 
 IRC_PREFIX = "19"
 
@@ -469,8 +474,8 @@ so all hash160 values can be stored with this encoding.
 It also allows names to have special characters and be
 longer than 20 bytes (albeit at the cost of collisions.)
 """
-def f_irc_chan(x):
-    return to_s(
+def f_irc_chan_name(x):
+    return "#" + to_s(
         encodebytes(
             hash160(
                 b"P2PD://" +
@@ -808,7 +813,7 @@ class IRCSession():
 
         return await self.chan_infos[chan_name]
         
-    async def register_channel(self, chan_name, chan_desc="desc"):
+    async def register_chan(self, chan_name, chan_desc="desc"):
         if chan_name in self.chan_registered:
             return True
     
@@ -1081,12 +1086,26 @@ class IRCDNS():
         self.seed = seed
         self.sessions = {}
         self.p_sessions_next = 0
+        self.servers = random.shuffle(IRC_SERVERS[:])
 
     def get_failure_max(self):
-        return int(0.4 * len(IRC_SERVERS))
+        return int(0.4 * len(self.servers))
     
-    def get_threshold_m(self):
-        return len(IRC_SERVERS) - self.get_failure_max()
+    def get_success_max(self):
+        return len(self.servers) - self.get_failure_max()
+    
+    def get_success_min(self):
+        return self.get_failure_max() + 1
+    
+    def needed_sessions(self):
+        # 0 1 2    3
+        #     p    sm
+        #
+        dif = self.p_sessions_next - self.get_success_min()
+        if dif >= 0:
+            return 0
+        else:
+            return -dif
 
     async def start(self):
         # Connect to servers.
@@ -1111,15 +1130,19 @@ class IRCDNS():
 
         await asyncio.gather(*tasks)
 
-    async def register(self, name):
-        # Create all servers continuing from any already started.
+    async def start_n(self, n):
+        # Are there enough unstarted servers to try?
         tasks = []; p = self.p_sessions_next
-        for n in range(p, len(IRC_SERVERS)):
-            self.sessions[n] = IRCSession(
-                IRC_SERVERS[n],
+        if (p + n) > len(self.servers):
+            raise Exception("No IRC servers left to try.")
+
+        # Create sessions from any already started.
+        for j in range(p, p + n):
+            self.sessions[j] = IRCSession(
+                self.servers[j],
                 self.seed
             )
-            tasks.append(self.sessions[n].start())
+            tasks.append(self.sessions[j].start())
             self.p_sessions_next += 1
 
         # Start them all at once if needed.
@@ -1128,19 +1151,45 @@ class IRCDNS():
 
         # Determine sessions that worked.
         success_no = 0
-        for n in range(0, self.p_sessions_next):
-            if self.sessions[n].started.done():
+        for j in range(0, self.p_sessions_next):
+            if self.sessions[j].started.done():
                 success_no += 1
 
+    async def n_name_lookups(self, n, start_p, name):
+        tasks = []; p = start_p
+        while len(tasks) < n:
+            if p >= len(self.servers):
+                raise Exception("Exceeded irc sessions.")
+
+            if not self.sessions[p].started.done():
+                p += 1
+                continue
+
+            # Get name or throw an error.
+            tasks.append(
+                async_wrap_errors(
+                    self.sessions[p].get_chan_topic(name),
+                    5
+                )
+            )
+
+            p += 1
+
+        return await asyncio.gather(*tasks), p
+
+    async def register(self, name):
+        # The encoded name using base 36.
+        chan_name = f_irc_chan_name(name)
+
         # If too many are down then throw an error.
-        fail_no = len(IRC_SERVERS) - success_no
+        fail_no = len(self.servers) - success_no
         if fail_no > self.get_failure_max():
             raise Exception("Too many servers down.")
         
         # Check if name available on servers.
         tasks = []
         for n in range(0, self.p_sessions_next):
-            task = self.sessions[n].is_chan_registered(name)
+            task = self.sessions[n].is_chan_registered(chan_name)
             tasks.append(task)
         results = await asyncio.gather(tasks)
         
@@ -1149,19 +1198,101 @@ class IRCDNS():
         for result in results:
             if result:
                 available_count += 1
-        if available_count < self.get_threshold_m():
+        if available_count < self.get_success_max():
             raise Exception("Name not available on enough servers.")
         
-        """
-        format of a registered name be?
+        # Register name.
+        tasks = []
+        for n in range(0, self.p_sessions_next):
+            task = self.sessions[n].register_chan(chan_name)
+            tasks.append(task)
+        await asyncio.gather(tasks)
 
-        chan len limit - up to 32 (min)
-        case insensitive
-        should a name be human-readable? [a-z][A-Z][0-9]_
-            cant use base62 as it uses uppercase
-        what chars can be used for a name?
-        """
+    def unpack_topic_value(self, value):
+        if value is None:
+            return None
+        
+        parts = value.split()
+        if len(parts) != 3:
+            return None
 
+        try:
+            # NIST192p ECDSA public key part.
+            vk_b = decodebytes(parts[0], charset=B92_CHARSET)
+            vk = VerifyingKey.from_string(
+                string=vk_b,
+                hashfunc=hashlib.sha256
+            )
+
+            # Signature part.
+            sig_b = decodebytes(parts[1], charset=B92_CHARSET)
+
+            # Message part.
+            msg_b = decodebytes(parts[2], charset=B92_CHARSET)
+
+            vk.verify_digest(
+                sig_b,
+                msg_b
+            )
+
+            return {
+                "id": vk_b,
+                "vk": vk,
+                "msg": msg_b
+            }
+        except:
+            return None
+
+    def get_consensus_min(self, results):
+        if not len(results):
+            return self.get_success_min()
+        
+        table = {}
+        for result in results:
+            r = self.unpack_topic_value(result)
+            if r is None:
+                continue
+
+            if r["id"] in table:
+                table[r["id"]].append(r)
+            else:
+                table[r["id"]] = [r]
+
+        highest = []
+        for r_id in table:
+            if len(highest) < len(table[r_id]):
+                highest = table[r_id]
+
+        if len(highest) >= self.get_success_min():
+            return 0
+        else:
+            return self.get_success_min() - len(highest)
+        
+    async def name_lookup(self, name):
+        # The encoded name in base 36.
+        chan_name = f_irc_chan_name(name)
+
+        # Open the bare minimum number of sessions
+        # for a successful consensus result.
+        open_sessions = self.p_sessions_next
+        if open_sessions < self.get_success_min():
+            sessions_required = self.get_success_min() - open_sessions
+            while sessions_required:
+                success_no = await self.start_n(sessions_required)
+                sessions_required -= success_no
+
+        # Get minimum number of chan topics.
+        past_results = []; start_p = 0
+        names_required = self.get_consensus_min(past_results)
+        while names_required:
+            results, start_p = await self.n_name_lookups(
+                names_required,
+                start_p,
+                chan_name
+            )
+
+            past_results += results
+            
 
 """
     get:
