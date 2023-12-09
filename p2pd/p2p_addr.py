@@ -82,6 +82,10 @@ topics for records is quite scarce. There's room here for improvement
 if you wanted to make each bit count. But I haven't gone overboard here.
 """
 def pack_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=None, nat=None, if_index=None):
+    # Pad node id to 8.
+    node_id += bytes([0]) * 8
+    node_id = node_id[:8]
+
     """
     Indicates variable length sections (list of signal offsets
     and number of interfaces.) Encodes 1 byte integers as byte
@@ -90,16 +94,16 @@ def pack_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=N
     args = [
         # Node ID(8), lport(2), signal offsets(1), if no(1)
         # signal offsets[] ...
-        ">8BHBB" + ("B" * len(signal_offsets)),
-        node_id,
+        "HBB" + ("B" * len(signal_offsets)),
         port,
-        bytes([len(signal_offsets)]),
-        bytes([len(interface_list)])
+        len(signal_offsets),
+        len(interface_list)
     ]
     for offset in signal_offsets:
-        args.append(bytes([offset]))
+        args.append(offset)
     
-    buf = struct.pack(*args)
+    buf = node_id
+    buf += struct.pack(*args)
 
     # if_no, ip4, null or ..., ip6, null or ...
     for i, interface in enumerate(interface_list):
@@ -137,37 +141,25 @@ def pack_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=N
             # delta type 1 - 7
             # delta value +/- port
             buf += struct.pack(
-                "BBL",
-                bytes([nat_type]),
-                bytes([delta_type]),
+                "BBl",
+                nat_type,
+                delta_type,
                 delta_value
             )
 
             # Convert IPs to bytes.
-            b_nic_ip = bytes(IPRange(ip or to_b(r.nic())))
-            b_ext_ip = bytes(IPRange(ip or to_b(r.ext())))
-            if af == IP4:
-                ip_field_size = "4B"
-            if af == IP6:
-                ip_field_size = "16B"
-
-            # Append IP details.
-            buf += struct.pack(
-                ip_field_size * 2,
-                b_nic_ip,
-                b_ext_ip
-            )
+            buf += bytes(IPRange(ip or r.nic()))
+            buf += bytes(IPRange(ip or r.ext()))
 
     return buf
 
 def unpack_peer_addr(addr):
     # Unpack header portion.
-    hdr = addr[:12]
-    node_id, port, signal_no, if_no = struct.unpack(">8BHBB", hdr)
+    node_id = addr[:8]; p = 8;
+    port, signal_no, if_no = struct.unpack("HBB", addr[p:p + 4]); p += 4;
 
     # Unpack signal offsets (variable length.)
-    b_offsets = struct.unpack("B" * signal_no, addr[12:])
-    signal_offsets = [ord(x) for x in b_offsets]
+    signal_offsets = struct.unpack("B" * signal_no, addr[p:p + signal_no])
     out = {
         IP4: [],
         IP6: [],
@@ -176,33 +168,33 @@ def unpack_peer_addr(addr):
     }
 
     # Unpack if list.
-    p = 12 + signal_no;
+    p += signal_no;
     for _ in range(0, if_no):
-        if_index = ord(addr[p]); p += 1;
+        if_index = addr[p]; p += 1;
         for _ in range(0, 2):
             # Get AF at pointer.
-            af = ord(addr[p]); p += 1
+            af = addr[p]; p += 1
 
             # Address type for IF unsupported.
-            if addr[p] == bytes([0]):
+            if addr[p] == 0:
                 p += 1
                 continue
 
             # Unpack interface details.
-            parts = struct.unpack("BBL", addr[p:]); p += 6;
-            nat_type = ord(parts[0])
-            delta_type = ord(parts[1])
+            parts = struct.unpack("BBl", addr[p:p + 8]); p += 8;
+            nat_type = parts[0]
+            delta_type = parts[1]
             delta_value = parts[2]
 
             # Determine IP field sizes based on AF.
             if af == IP4:
-                ip_size = "4B"; p_size = 4
+                ip_size = 4
             if af == IP6:
-                ip_size = "16B"; p_size = 16
+                ip_size = 16
 
             # Exact IP portions.
-            b_nic_ip, b_ext_ip = struct.unpack(ip_size * 2, addr[p:])
-            p += (p_size * 2)
+            b_nic_ip = addr[p:p + ip_size]; p += ip_size;
+            b_ext_ip = addr[p:p + ip_size]; p += ip_size;
 
             # Build dictionary of results.
             delta = delta_info(delta_type, delta_value)

@@ -1,7 +1,6 @@
 from p2pd.test_init import *
 
-from p2pd import IP6, IP4
-from p2pd.p2p_addr import parse_peer_addr
+from p2pd import *
 
 class TestP2PAddr(unittest.IsolatedAsyncioTestCase):
     async def test_p2p_addr(self):
@@ -9,6 +8,22 @@ class TestP2PAddr(unittest.IsolatedAsyncioTestCase):
         out = parse_peer_addr(x)
         print(out)
         self.assertTrue(len(out[IP4]))
+
+    async def test_packing(self):
+        node_id = b"123"
+        signal_offsets = [1, 2, 3]
+        if_list = await load_interfaces()
+
+        print(if_list)
+
+        addr_buf = pack_peer_addr(
+            node_id,
+            if_list,
+            signal_offsets
+        )
+
+        out = unpack_peer_addr(addr_buf)
+        print(out)
 
 if __name__ == '__main__':
     main()
