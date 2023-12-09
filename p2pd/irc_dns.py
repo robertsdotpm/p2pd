@@ -229,6 +229,8 @@ name = '#' + encode(hash160("p2pd" + irc_prefix)) - 20 chars ascii
 import asyncio
 import re
 import random
+import time
+import struct
 from ecdsa import SigningKey, VerifyingKey
 from .base_n import encodebytes, decodebytes
 from .base_n import B36_CHARSET, B64_CHARSET, B92_CHARSET
@@ -1155,6 +1157,14 @@ class IRCDNS():
             if self.sessions[j].started.done():
                 success_no += 1
 
+    async def acquire_at_least(self, target):
+        open_sessions = self.p_sessions_next
+        if open_sessions < target:
+            sessions_required = target - open_sessions
+            while sessions_required:
+                success_no = await self.start_n(sessions_required)
+                sessions_required -= success_no
+
     async def n_name_lookups(self, n, start_p, name):
         tasks = []; p = start_p
         while len(tasks) < n:
@@ -1181,10 +1191,13 @@ class IRCDNS():
         # The encoded name using base 36.
         chan_name = f_irc_chan_name(name)
 
-        # If too many are down then throw an error.
-        fail_no = len(self.servers) - success_no
-        if fail_no > self.get_failure_max():
-            raise Exception("Too many servers down.")
+        # Open the bare minimum number of sessions
+        # for a successful consensus result.
+        success_no = await self.start_n(
+            len(self.servers) - self.p_sessions_next
+        )
+        if success_no < self.get_success_max():
+            raise Exception("Insufficient sessions.")
         
         # Check if name available on servers.
         tasks = []
@@ -1199,7 +1212,7 @@ class IRCDNS():
             if result:
                 available_count += 1
         if available_count < self.get_success_max():
-            raise Exception("Name not available on enough servers.")
+            return False
         
         # Register name.
         tasks = []
@@ -1207,6 +1220,7 @@ class IRCDNS():
             task = self.sessions[n].register_chan(chan_name)
             tasks.append(task)
         await asyncio.gather(tasks)
+        return True
 
     def unpack_topic_value(self, value):
         if value is None:
@@ -1229,21 +1243,23 @@ class IRCDNS():
 
             # Message part.
             msg_b = decodebytes(parts[2], charset=B92_CHARSET)
-
             vk.verify_digest(
                 sig_b,
                 msg_b
             )
 
+            timestamp = struct.unpack("Q", msg_b[:8])
             return {
                 "id": vk_b,
                 "vk": vk,
-                "msg": msg_b
+                "msg": msg_b[:8],
+                "sig": sig_b,
+                "time": timestamp,
             }
         except:
             return None
 
-    def get_consensus_min(self, results):
+    def n_more_or_best(self, results):
         if not len(results):
             return self.get_success_min()
         
@@ -1264,7 +1280,12 @@ class IRCDNS():
                 highest = table[r_id]
 
         if len(highest) >= self.get_success_min():
-            return highest
+            freshest = highest[0]
+            for result in highest:
+                if result["time"] > freshest["time"]:
+                    freshest = result
+
+            return freshest
         else:
             return self.get_success_min() - len(highest)
         
@@ -1274,35 +1295,27 @@ class IRCDNS():
 
         # Open the bare minimum number of sessions
         # for a successful consensus result.
-        open_sessions = self.p_sessions_next
-        if open_sessions < self.get_success_min():
-            sessions_required = self.get_success_min() - open_sessions
-            while sessions_required:
-                success_no = await self.start_n(sessions_required)
-                sessions_required -= success_no
+        await self.acquire_at_least(
+            self.get_success_min()
+        )
 
         # Get minimum number of chan topics.
-        past_results = []; start_p = 0
-        names_required = self.get_consensus_min(past_results)
-        while names_required:
-            results, start_p = await self.n_name_lookups(
+        results = []; start_p = 0
+        names_required = self.n_more_or_best(results)
+        while isinstance(names_required, int):
+            more, start_p = await self.n_name_lookups(
                 names_required,
                 start_p,
                 chan_name
             )
 
-            past_results += results
-            
+            results += more
+            names_required = self.n_more_or_best(results)
 
-"""
-    get:
-        cons = failure_max + 1 ...
-        if they all agree then use that
-        otherwise ... continue until consensus or end
-        if dispute then continue with 3rd con
-        ... continue until consensus 
-
-"""
+        # Return freshest result.
+        if isinstance(names_required, dict):
+            freshest = names_required
+            return freshest
 
 if __name__ == '__main__':
 
