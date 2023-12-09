@@ -4,11 +4,11 @@ from .nat import *
 from .ip_range import *
 
 
-# No more than 4 interfaces per address family in peer addr.
+# No more than n interfaces per address family in peer addr.
 PEER_ADDR_MAX_INTERFACES = 4
 
-# No more than 2 signal pipes to send signals to nodes.
-SIGNAL_PIPE_NO = 2
+# No more than n signal pipes to send signals to nodes.
+SIGNAL_PIPE_NO = 3
 
 """
         can be up to N interfaces
@@ -82,8 +82,7 @@ topics for records is quite scarce. There's room here for improvement
 if you wanted to make each bit count. But I haven't gone overboard here.
 """
 def pack_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=None, nat=None, if_index=None):
-    # Pad node id to 8.
-    node_id += bytes([0]) * 8
+    # Truncate node id to 8.
     node_id = node_id[:8]
 
     """
@@ -102,6 +101,7 @@ def pack_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=N
     for offset in signal_offsets:
         args.append(offset)
     
+    # Pack header portion.
     buf = node_id
     buf += struct.pack(*args)
 
@@ -152,6 +152,44 @@ def pack_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=N
             buf += bytes(IPRange(ip or r.ext()))
 
     return buf
+
+def validate_peer_addr(addr):
+    # Check signal server offsets.
+    for offset in addr["signal"]:
+        if not in_range(offset, [0, len(MQTT_SERVERS) - 1]):
+            log("p2p addr signal offset outside server range.")
+            return None
+        
+    # Too many signal pipe offsets.
+    if len(addr["signal"]) > SIGNAL_PIPE_NO:
+        log("p2p addr invalid signal no for p2p addr")
+        return None
+    
+    for af in VALID_AFS:
+        for if_info in addr[af]:
+            # Is listen port right?
+            if not in_range(if_info["port"], [1, MAX_PORT]):
+                log("p2p addr: listen port invalid")
+                return None
+            
+            # Check NAT type is valid.
+            if not in_range(if_info["nat"]["type"], [OPEN_INTERNET, BLOCKED_NAT]):
+                log("p2p addr: nat type invalid")
+                return None
+
+            # Check delta type is valid.
+            if not in_range(if_info["nat"]["delta"]["type"], [NA_DELTA, RANDOM_DELTA]):
+                log("p2p addr: delta type invalid")
+                return None
+
+            # Check delta value is valid.
+            delta = if_info["nat"]["delta"]["value"]
+            delta = -delta if delta < 0 else delta
+            if not in_range(delta, [0, MAX_PORT]):
+                log("p2p addr: Delta value invalid")
+                return None
+            
+    return addr
 
 def unpack_peer_addr(addr):
     # Unpack header portion.
@@ -210,7 +248,7 @@ def unpack_peer_addr(addr):
             # Save results.
             out[af].append(as_dict)
 
-    return out
+    return validate_peer_addr(out)
 
 def parse_peer_addr(addr):
     af_parts = addr.split(b'-')
@@ -221,9 +259,6 @@ def parse_peer_addr(addr):
     # Parse signal server offsets.
     p = af_parts.pop(0).split(b",")
     signal = [int(n) for n in p if in_range(int(n), [0, len(MQTT_SERVERS) - 1])]
-    if len(signal) > SIGNAL_PIPE_NO:
-        log("p2p addr invalid signal no for p2p addr")
-        return None
 
     # Parsed dict.
     schema = [is_no, is_b, is_b, is_no,  is_no, is_no, is_no]
@@ -273,26 +308,6 @@ def parse_peer_addr(addr):
             except Exception:
                 log("p2p addr: ip invalid.")
                 continue
-
-            # Is listen port right?
-            if not in_range(parts[3], [1, MAX_PORT]):
-                log("p2p addr: listen port invalid")
-                continue
-
-            # Check NAT type is valid.
-            if not in_range(parts[4], [OPEN_INTERNET, BLOCKED_NAT]):
-                log("p2p addr: nat type invalid")
-                continue
-
-            # Check delta type is valid.
-            if not in_range(parts[5], [NA_DELTA, RANDOM_DELTA]):
-                log("p2p addr: delta type invalid")
-                continue
-
-            # Check delta value is valid.
-            if not in_range(parts[6], [0, MAX_PORT]):
-                log("p2p addr: Delta value invalid")
-                continue
                     
             # Build dictionary of results.
             delta = delta_info(parts[5], parts[6])
@@ -309,7 +324,7 @@ def parse_peer_addr(addr):
             af = VALID_AFS[af_index]
             out[af].append(as_dict)
 
-    return out
+    return validate_peer_addr(out)
 
 def peer_addr_extract_exts(p2p_addr):
     exts = []

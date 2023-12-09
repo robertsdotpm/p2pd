@@ -10,7 +10,7 @@ class TestP2PAddr(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(len(out[IP4]))
 
     async def test_packing(self):
-        node_id = b"123"
+        node_id = b"123" * 10
         signal_offsets = [1, 2, 3]
         if_list = await load_interfaces()
 
