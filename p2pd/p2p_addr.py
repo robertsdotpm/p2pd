@@ -1,3 +1,4 @@
+import struct
 from .settings import *
 from .nat import *
 from .ip_range import *
@@ -73,6 +74,151 @@ def make_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=N
     
     bufs.append(node_id)
     return b'-'.join(bufs)
+
+"""
+New packed binary format for addresses. 
+Doing this was necessary for the IRC DNS module as space in
+topics for records is quite scarce. There's room here for improvement
+if you wanted to make each bit count. But I haven't gone overboard here.
+"""
+def pack_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=None, nat=None, if_index=None):
+    """
+    Indicates variable length sections (list of signal offsets
+    and number of interfaces.) Encodes 1 byte integers as byte
+    characters so they can be stored in an unsigned char.
+    """
+    args = [
+        # Node ID(8), lport(2), signal offsets(1), if no(1)
+        # signal offsets[] ...
+        ">8BHBB" + ("B" * len(signal_offsets)),
+        node_id,
+        port,
+        bytes([len(signal_offsets)]),
+        bytes([len(interface_list)])
+    ]
+    for offset in signal_offsets:
+        args.append(bytes([offset]))
+    
+    buf = struct.pack(*args)
+
+    # if_no, ip4, null or ..., ip6, null or ...
+    for i, interface in enumerate(interface_list):
+        # Append interface no.
+        buf += bytes([if_index or i])
+
+        # Loop over AFs.
+        for af in [IP4, IP6]:
+            # Append AF type.
+            buf += bytes([af])
+
+            # AF type is not supported.
+            if not len(interface.rp[af].routes):
+                buf += bytes([0])
+                continue
+
+            # AF type not supported.
+            r = interface.route(af)
+            if r is None:
+                buf += bytes([0])
+                continue
+
+            # Main details for this interface.
+            if nat:
+                nat_type = nat["type"]
+                delta_type = nat["delta"]["type"]
+                delta_value = nat["delta"]["value"]
+            else:
+                nat_type = interface.nat["type"]
+                delta_type = interface.nat["delta"]["type"]
+                delta_value = interface.nat["delta"]["value"]
+
+            # Pack interface details.
+            # nat type 1 - 7
+            # delta type 1 - 7
+            # delta value +/- port
+            buf += struct.pack(
+                "BBL",
+                bytes([nat_type]),
+                bytes([delta_type]),
+                delta_value
+            )
+
+            # Convert IPs to bytes.
+            b_nic_ip = bytes(IPRange(ip or to_b(r.nic())))
+            b_ext_ip = bytes(IPRange(ip or to_b(r.ext())))
+            if af == IP4:
+                ip_field_size = "4B"
+            if af == IP6:
+                ip_field_size = "16B"
+
+            # Append IP details.
+            buf += struct.pack(
+                ip_field_size * 2,
+                b_nic_ip,
+                b_ext_ip
+            )
+
+    return buf
+
+def unpack_peer_addr(addr):
+    # Unpack header portion.
+    hdr = addr[:12]
+    node_id, port, signal_no, if_no = struct.unpack(">8BHBB", hdr)
+
+    # Unpack signal offsets (variable length.)
+    b_offsets = struct.unpack("B" * signal_no, addr[12:])
+    signal_offsets = [ord(x) for x in b_offsets]
+    out = {
+        IP4: [],
+        IP6: [],
+        "node_id": node_id,
+        "signal": signal_offsets
+    }
+
+    # Unpack if list.
+    p = 12 + signal_no;
+    for _ in range(0, if_no):
+        if_index = ord(addr[p]); p += 1;
+        for _ in range(0, 2):
+            # Get AF at pointer.
+            af = ord(addr[p]); p += 1
+
+            # Address type for IF unsupported.
+            if addr[p] == bytes([0]):
+                p += 1
+                continue
+
+            # Unpack interface details.
+            parts = struct.unpack("BBL", addr[p:]); p += 6;
+            nat_type = ord(parts[0])
+            delta_type = ord(parts[1])
+            delta_value = parts[2]
+
+            # Determine IP field sizes based on AF.
+            if af == IP4:
+                ip_size = "4B"; p_size = 4
+            if af == IP6:
+                ip_size = "16B"; p_size = 16
+
+            # Exact IP portions.
+            b_nic_ip, b_ext_ip = struct.unpack(ip_size * 2, addr[p:])
+            p += (p_size * 2)
+
+            # Build dictionary of results.
+            delta = delta_info(delta_type, delta_value)
+            nat = nat_info(nat_type, delta)
+            as_dict = {
+                "if_index": if_index,
+                "ext": IPRange(b_to_i(b_ext_ip)),
+                "nic": IPRange(b_to_i(b_nic_ip)),
+                "nat": nat,
+                "port": port
+            }
+
+            # Save results.
+            out[af].append(as_dict)
+
+    return out
 
 def parse_peer_addr(addr):
     af_parts = addr.split(b'-')

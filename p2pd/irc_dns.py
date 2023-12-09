@@ -1264,7 +1264,7 @@ class IRCDNS():
                 highest = table[r_id]
 
         if len(highest) >= self.get_success_min():
-            return 0
+            return highest
         else:
             return self.get_success_min() - len(highest)
         
