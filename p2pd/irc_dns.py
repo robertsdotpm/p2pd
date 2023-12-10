@@ -2,147 +2,6 @@
 - Firewalls for IRC servers silently drop packets if you
 make successive connections too closely.
 
-
-
-I dont think I can test the code on my p2pd server as it
-actually is running proxies.
-
-not quite sure how to determine a success response for a nick?
-maybe the right approach is to then try a operation that needs those perms?
-
-
-['irc.libera.chat', 'irc.esper.net']
-"irc.darkmyst.org"
-'irc.oftc.net',
-'irc.euirc.net', 'irc.xxxchatters.com', 'irc.swiftirc.net']
-###['irc.ouch.chat', 'irc.spotchat.org', 'irc.scoutlink.net']
-
-filtered:
-['irc.oftc.net', 'irc.euirc.net', 'irc.xxxchatters.com', 'irc.swiftirc.net', 'irc.darkmyst.org']
-
-['irc.chatjunkies.org', 'irc.dosers.net', 
-    'irc.entropynet.net',  
-        - email required for chan
-
-
-'irc.liberta.casa']
-    - no channel cmd
-
-'irc.financialchat.com', 'irc.irc2.hu', 'irc.phat-net.de', 
-    'irc.slacknet.org',
-        - manual chan creation
-    
-    'irc.tweakers.net'
-
-IP6:
-
-['irc.oftc.net', 'irc.euirc.net', 'irc.swiftirc.net', 'irc.darkmyst.org', 'irc.entropynet.net', 'irc.liberta.casa', 'irc.phat-net.de', 'irc.slacknet.org', 'irc.tweakers.net']
-
-
-make different lists for v4 and v6
-sort by age
-
-how will the algorithm work?
-
-make a few tlds
-    distribute a portion of the old servers between them (so that they are the majority) with the newer as a minority
-    repeat until no servers remain 
-
-UNUSED_IRC = [
-
-    {
-        'domain': 'irc.xxxchatters.com',
-        'afs': [IP4],
-
-        # 9 march 2007
-        'creation': 1173358800
-    },
-
-    
-    {
-        'domain': 'irc.chatjunkies.org',
-        'afs': [IP4],
-
-        # 28 june 2002
-        'creation': 1025186400
-    },
-    {
-        'domain': 'irc.dosers.net',
-        'afs': [IP4],
-
-        # 20 may 2020
-        'creation': 1590501600
-    },
-    {
-        'domain': 'irc.financialchat.com',
-        'afs': [IP4],
-
-        # 1 aug 2002
-        'creation': 1028210400
-    },
-    {
-        'domain': 'irc.irc2.hu',
-        'afs': [IP4],
-
-        # 4 jan 2004
-        'creation': 1073134800
-    },
-    {
-        'domain': 'irc.liberta.casa',
-        'afs': [IP4, IP6],
-
-        # 7 feb 2020
-        'creation': 1580994000
-    },
-]
-
-
-
-
-SERVERS = [
-]
-
-14 servers to start with. not bad. this should work.
-
-these results are about what i calculated. so maybe its not too bad.
-
-a more advanced scanner that can account for the 30 min wait time for nick and chan
-registration is likely to have more results
-
-lookup:
-1. fetch domain from all channels 2 of 3
-2. use majority hash pub key found in records and discard others
-3. use most recent update record
-
-registration:
-1. ensure name is unavailable on at least m servers 3 of 5
-2. register the channels
-
-username = p2pd + sha256(domain + usern + pw)[:12]
-nick = p2pd + (domain + nick + pw)[:12]
-email = p2pd_ + (domain + 'email' + pw)[:12] @p2pd.net
-user_password = sh256(domain + pw)
-chan_password = sha256(domain + name + pw)
-
-handle ident requests
-
-
-
-get channels made by user [done]
-    could mean not having to manage a bunch of bs in a db
-check if a channel exists on a server [done]
-
-
-chan ident as operator [done]
-chan set topic [done]
-    TOPIC #test_chan_name123 :test topic to set.
-chan get topic title [done]
-need to write tests to check that the software works for all servers [done]
-
-make channel open to join [server only]
-
-
-
 keep joined topics or session active after disconnect so whois works?
 is this possible?
 
@@ -168,62 +27,12 @@ to be added to the scanner
 it would probably make sense to run all major ircds on p2pd.net
 and write unit tests against it. ensure the software works for them.
 
-
-some servers have syntax like register chan desc [done]
-    so if you pass the chan password there its bad
-
-probably now need a feature like: [done]
-    get reg syntax
-
-todo: get op is broken as not all do +o some do other flags [removed]
--- seems like an unnecesary check as nickserv ident is what u need?
-
-chan setting those modes doesnt seem to work [done]
-    -- check if that portion is being done properly or if
-    -- the first just doesnt support it
-
-some servers require users to register to join chans. this makes sense.
-    - see if you can unset +r on the channel
-
-seems you need to use SET mlock for ki flags?
-    - some servers use SET for topic too
-    
-
-last server has no topic command? [false positive]
-join messages instead? [no]
-
-ping - pong is incorrectly implemented (maybe?)
-
-support set topic. [done]
-    - 3 servers remain for testing.
-
 which servers support memo and botservices
     - supporting mechanisms for loading owned chans seems
     well worth it.
 
-need to also check that get topic for a channel is possible for a 
-different user (a non op) for the servers chosen.
-
-add IPs for all the servers to bypass dns
-
-reg > X available for it to work
-
-# 3 of 5 servers must be working for registration to succeed.
-IRC_REG_M = 3
-load from len(servers) ...
-
-
-add proper version details that tells operators more about the project and
-that its not a botnet.
-
 perhaps unit tests for basic protocol messages
 extracted from the extract function?
-
-how to limit abuse for ops?
-    seems like if no one can join the channel is pruned?
-
-encode in a-z0-9
-name = '#' + encode(hash160("p2pd" + irc_prefix)) - 20 chars ascii
 """
 
 import asyncio
@@ -231,106 +40,13 @@ import re
 import random
 import time
 import struct
-from ecdsa import SigningKey, VerifyingKey
+from ecdsa import SigningKey, VerifyingKey, NIST192p
 from .base_n import encodebytes, decodebytes
 from .base_n import B36_CHARSET, B64_CHARSET, B92_CHARSET
 from .utils import *
 from .address import *
 from .interface import *
 from .base_stream import *
-
-
-
-
-"""
-my encoding choices to use b36 here might be bad. since
-it seems the topic supports special chars which would allow for
-significantly more compact storage.
-
-all of the compressors make the size larger... lol
-
-# NIST192p (192 bit)
-
-# Uses 24 bytes of entropy.
-sk = SigningKey.from_string(
-    string=b"012345678901234567891234",
-    hashfunc=hashlib.sha256
-)
-
-# 25 bytes.
-vk = sk.verifying_key
-vk_b = vk.to_string("compressed")
-
-
-out = encodebytes(vk_b, charset=B92_CHARSET)
-print(len(out))
-
-sig = sk.sign_deterministic(b"test")
-out = encodebytes(sig, charset=B92_CHARSET)
-print("sig")
-print(len(out))
-
-x = b"1701830383 0,1-[0,8.8.8.8,192.168.21.21,58959,3,2,0]-0-zmUGXPOFxUBuToh0,1-[0,2a01:4f9:3081:50d9::2,192.2a01:4f9:3081:50d9::2,58959,3,2,0]-0-zmUGXPOFxUB"
-print(len(x))
-
-out = encodebytes(x, charset=B92_CHARSET)
-print(len(out))
-"""
-
-
-
-"""
-                 bin           bin        
-p2pd.net/irc ?(vk.compressed) ?(sig) ?(timestamp contents)
-   12             25             33     10          65 - 150  
-                                65
-                  30            59
-
-                                         110      
-not sure on the encoding to use yet
-
-address format using packed:
-
-uint64      uchar[8]    uint8            uint8
- timestamp   node_id signal_offset     var ifaces
-
- struct:
-     uint8
-      iface no
-    uint8
-    address type (v4/v6)
-    [uint32 ipv4 or uint8[16]]
-    [uint32 ipv4 or uint8[16]]
-    uint16
-       listen port
-    uint8
-       nat type
-    uint 8
-       delta type
-    uint 8
-       delta offset
-    
-conservative: 20 ipv4
-duel-stack: 44
-multi-nics: ...
-
-okay, its like 3 or 4 times smaller which matters when theres
-little space. so its worth creating a packed version of the address
-format and using that here. this means that even many ifaces should
-fit in the topic message.
-
-print(vk)
-
-out = sk.to_string()
-print(out)
-print(len(out))
-
-print(sk)
-
-exit()
-"""
-
-
 
 
 IRC_PREFIX = "19"
@@ -1100,9 +816,6 @@ class IRCDNS():
         return self.get_failure_max() + 1
     
     def needed_sessions(self):
-        # 0 1 2    3
-        #     p    sm
-        #
         dif = self.p_sessions_next - self.get_success_min()
         if dif >= 0:
             return 0
@@ -1186,8 +899,65 @@ class IRCDNS():
             p += 1
 
         return await asyncio.gather(*tasks), p
+    
+    # sha256(chan_name + seed)
+    async def store_value(self, name, value):
+        # The encoded name using base 36.
+        chan_name = f_irc_chan_name(name)
 
-    async def register(self, name):
+        # ECDSA secret key.
+        sk = SigningKey.from_string(
+            string=to_b(f"{chan_name}{self.seed}"),
+            hashfunc=hashlib.sha256,
+            curve=NIST192p
+        )
+
+        # ECDSA pub key (compressed.)
+        vk = sk.verifying_key
+        vk_buf = vk.to_string("compressed")
+
+        # Serialized data portion with timestamp prepend.
+        val_buf = struct.pack("Q", int(time.time()))
+        val_buf += to_b(value)
+
+        # Signed val_buf with vk.
+        sig_buf = sk.sign_deterministic(val_buf)
+
+        # Topic message to store (topic-safe encoding.)
+        topic = "%s %s %s %s".format(
+            "p2pd.net/irc"
+            to_s(encodebytes(vk_buf, charset=B92_CHARSET)),
+            to_s(encodebytes(sig_buf, charset=B92_CHARSET)),
+            to_s(encodebytes(val_buf, charset=B92_CHARSET)),
+        )
+
+        # Open as many sessions as possible.
+        await self.start_n(
+            len(self.servers) - self.p_sessions_next
+        )
+
+        # Build tasks to set chan topics.
+        tasks = []
+        for n in range(0, len(self.servers)):
+            # Select session to use.
+            session = self.sessions[n]
+            if not session.started.done():
+                continue
+
+            # Load channel manager.
+            if chan_name not in session.chans:
+                chan = IRCChan(chan_name, session)
+            else:
+                chan = session.chans[chan_name]
+
+            # Reference function to set topic.
+            task = chan.set_topic(topic)
+            tasks.append(task)
+
+        # Execute tasks to update topics.
+        await asyncio.gather(*tasks)
+
+    async def name_register(self, name):
         # The encoded name using base 36.
         chan_name = f_irc_chan_name(name)
 
@@ -1227,22 +997,23 @@ class IRCDNS():
             return None
         
         parts = value.split()
-        if len(parts) != 3:
+        if len(parts) != 4:
             return None
 
         try:
             # NIST192p ECDSA public key part.
-            vk_b = decodebytes(parts[0], charset=B92_CHARSET)
+            vk_b = decodebytes(parts[1], charset=B92_CHARSET)
             vk = VerifyingKey.from_string(
                 string=vk_b,
-                hashfunc=hashlib.sha256
+                hashfunc=hashlib.sha256,
+                curve=NIST192p
             )
 
             # Signature part.
-            sig_b = decodebytes(parts[1], charset=B92_CHARSET)
+            sig_b = decodebytes(parts[2], charset=B92_CHARSET)
 
             # Message part.
-            msg_b = decodebytes(parts[2], charset=B92_CHARSET)
+            msg_b = decodebytes(parts[3], charset=B92_CHARSET)
             vk.verify_digest(
                 sig_b,
                 msg_b
@@ -1252,7 +1023,7 @@ class IRCDNS():
             return {
                 "id": vk_b,
                 "vk": vk,
-                "msg": msg_b[:8],
+                "msg": msg_b[8:],
                 "sig": sig_b,
                 "time": timestamp,
             }
@@ -1318,170 +1089,4 @@ class IRCDNS():
             return freshest
 
 if __name__ == '__main__':
-
-
-    async def test_irc_dns():
-        """
-        msg = ":ChanServ!services@services.xxxchatters.com NOTICE client_dev_nick1sZU8um :Channel \x02#qfATvV8F\x02 registered under your account: client_dev_nick1sZU8um\r\n:ChanServ!services@services.xxxchatters.com MODE #qfATvV8F +rq client_dev_nick1sZU8um\r\n"
-        out = extract_irc_msgs(msg)
-        print(out)
-        print(out[0][0].suffix)
-
-        
-        return
-        """
-
-        chan_topic = "this_is_test_chan_topic"
-        chan_name = "#test_chan_name323" + IRC_PREFIX
-        server_list = IRC_SERVERS
-
-        seed = "test_seed" * 20
-        i = await Interface().start()
-
-
-
-        print("If start")
-        print(i)
-
-        for offset, s in enumerate(server_list[1:]):
-            print(f"testing {s} : {offset}")
-
-            irc_dns = IRCSession(s, seed)
-
-            try:
-                await irc_dns.start(i)
-                print("start success")
-            except:
-                print(f"start failed for {s}")
-                what_exception()
-
-            #await irc_dns.get_chan_reg_syntax()
-            #await asyncio.sleep(10)
-            #exit()
-
-            # Test chan create.
-            print("trying to check if chan is registered.")
-            ret = await irc_dns.is_chan_registered(chan_name)
-            if ret:
-                print(f"{chan_name} registered, not registering")
-
-                # 'load' chan instead.
-                irc_chan = IRCChan(chan_name, irc_dns)
-                irc_dns.chans[chan_name] = irc_chan
-                print(irc_chan.chan_pass) # S:1f(.9i{e@3$Fkxq^f{JW,>sVQi?Q\
-            else:
-                print(f"{chan_name} not registered, attempting to...")
-                await irc_dns.register_channel(chan_name)
-                ret = await irc_dns.is_chan_registered(chan_name)
-                if ret:
-                    print("success")
-                else:
-                    print("failure")
-                    exit()
-
-            # Test set topic.
-            chan_topic = to_s(rand_plain(8))
-            #await irc_dns.chans[chan_name].get_ops()
-            #print("get ops done")
-            await irc_dns.chans[chan_name].set_topic(chan_topic)
-            print("set topic done")
-
-            # Potential race condition between getting new chan.
-            await asyncio.sleep(4)
-
-            outside_user = IRCSession(s, seed + "2")
-            try:
-                await outside_user.start(i)
-                print("start success")
-            except:
-                print(f"start failed for outside user")
-                what_exception()
-
-            out = await outside_user.get_chan_topic(chan_name)
-            if out != chan_topic:
-                print(f"got {out} for chan topic and not {chan_topic}")
-                exit()
-            else:
-                print("success")
-
-            
-
-            # Cleanup.
-            await outside_user.close()
-            await irc_dns.close()
-            input("Press enter to test next server.")
-            input()
-            
-
-
-        return
-
-
-        """
-        await irc_dns.con.send(
-            IRCMsg(
-                cmd="LIST",
-                param="*"
-            ).pack()
-
-        )
-
-        while 1:
-            await asyncio.sleep(1)
-        """
-
-
-        #print(await irc_dns.register_channel("#test_chan_name123"))
-        #await asyncio.sleep(2)
-        #print(await irc_dns.register_channel("#test_chan_name222"))
-
-        chan_name = "#test_chan_name123"
-        irc_chan = IRCChan(chan_name, irc_dns)
-        irc_dns.chans[chan_name] = irc_chan
-
-        print(irc_dns.chans)
-        await irc_dns.chans[chan_name].get_ops()
-        print("got ops")
-
-        o = await irc_dns.chans[chan_name].set_topic("test topic to set.")
-        print(o)
-        print("topic set")
-
-        chan_topic = await irc_dns.get_chan_topic(chan_name)
-        print("got chan topic = ")
-        print(chan_topic)
-
-        await irc_dns.close()
-        return
-
-        while 1:
-            await asyncio.sleep(1)
-
-
-        return
-
-
-
-        
-        tasks = []
-        for server in IRC_SERVERS1:
-            task = async_wrap_errors(IRCDNS(server).start(i))
-            tasks.append(task)
-
-        out = await asyncio.gather(*tasks)
-        print(out)
-        out = strip_none(out)
-        print(out)
-        return
-        
-
-        
-        for server in IRC_SERVERS1:
-            out = await async_wrap_errors(
-                IRCDNS(server).start(i),
-                timeout=20
-            )
-            print(out)
-
-
-    async_test(test_irc_dns)
+    pass

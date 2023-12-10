@@ -1,0 +1,84 @@
+['irc.libera.chat', 'irc.esper.net']
+"irc.darkmyst.org"
+'irc.oftc.net',
+'irc.euirc.net', 'irc.xxxchatters.com', 'irc.swiftirc.net']
+###['irc.ouch.chat', 'irc.spotchat.org', 'irc.scoutlink.net']
+
+filtered:
+['irc.oftc.net', 'irc.euirc.net', 'irc.xxxchatters.com', 'irc.swiftirc.net', 'irc.darkmyst.org']
+
+['irc.chatjunkies.org', 'irc.dosers.net', 
+    'irc.entropynet.net',  
+        - email required for chan
+
+
+'irc.liberta.casa']
+    - no channel cmd
+
+'irc.financialchat.com', 'irc.irc2.hu', 'irc.phat-net.de', 
+    'irc.slacknet.org',
+        - manual chan creation
+    
+    'irc.tweakers.net'
+
+IP6:
+
+['irc.oftc.net', 'irc.euirc.net', 'irc.swiftirc.net', 'irc.darkmyst.org', 'irc.entropynet.net', 'irc.liberta.casa', 'irc.phat-net.de', 'irc.slacknet.org', 'irc.tweakers.net']
+
+
+make different lists for v4 and v6
+sort by age
+
+how will the algorithm work?
+
+make a few tlds
+    distribute a portion of the old servers between them (so that they are the majority) with the newer as a minority
+    repeat until no servers remain 
+
+UNUSED_IRC = [
+
+    {
+        'domain': 'irc.xxxchatters.com',
+        'afs': [IP4],
+
+        # 9 march 2007
+        'creation': 1173358800
+    },
+
+    
+    {
+        'domain': 'irc.chatjunkies.org',
+        'afs': [IP4],
+
+        # 28 june 2002
+        'creation': 1025186400
+    },
+    {
+        'domain': 'irc.dosers.net',
+        'afs': [IP4],
+
+        # 20 may 2020
+        'creation': 1590501600
+    },
+    {
+        'domain': 'irc.financialchat.com',
+        'afs': [IP4],
+
+        # 1 aug 2002
+        'creation': 1028210400
+    },
+    {
+        'domain': 'irc.irc2.hu',
+        'afs': [IP4],
+
+        # 4 jan 2004
+        'creation': 1073134800
+    },
+    {
+        'domain': 'irc.liberta.casa',
+        'afs': [IP4, IP6],
+
+        # 7 feb 2020
+        'creation': 1580994000
+    },
+]

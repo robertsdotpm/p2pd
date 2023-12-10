@@ -126,6 +126,9 @@ def pack_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=N
                 buf += bytes([0])
                 continue
 
+            # Indicate segment is filled.
+            buf += bytes([1])
+
             # Main details for this interface.
             if nat:
                 nat_type = nat["type"]
@@ -215,8 +218,13 @@ def unpack_peer_addr(addr):
 
             # Address type for IF unsupported.
             if addr[p] == 0:
+                # Next byte is another AF or if_index.
                 p += 1
                 continue
+            else:
+                # Segment is supported (and filled.)
+                # Next byte starts the segment.
+                p += 1
 
             # Unpack interface details.
             parts = struct.unpack("BBl", addr[p:p + 8]); p += 8;
