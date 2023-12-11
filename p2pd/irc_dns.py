@@ -33,6 +33,17 @@ which servers support memo and botservices
 
 perhaps unit tests for basic protocol messages
 extracted from the extract function?
+
+race conditions with chan registration
+    hide chan from list until specified?
+                    |'''''''''''''''|
+    chan name = serv_name + name + tld + salt
+        different in every server
+        they would have to brute force the name portion
+        key stretching function
+        this should fix the problem for race conditions
+
+when servers are down temporarily how to re-queue operations? 
 """
 
 import asyncio
