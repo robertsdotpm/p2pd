@@ -242,7 +242,6 @@ def irc_extract_msgs(buf):
 
 # Example user!ident@hostname
 def irc_extract_sender(sender):
-    print(sender)
     p = "([^!@]+)(?:!([^@]+))?(?:@([\s\S]+))?"
     parts = re.findall(p, sender)
     if len(parts):
@@ -282,6 +281,9 @@ class IRCMsg():
     
     def __bytes__(self):
         return self.pack()
+    
+    def __eq__(self, other):
+        return str(self) == str(other)
 
 class IRCChan:
     def __init__(self, chan_name, session):

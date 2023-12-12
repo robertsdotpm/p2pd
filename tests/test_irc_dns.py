@@ -211,6 +211,94 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         expected = to_b(f"PRIVMSG user :\x01VERSION {IRC_VERSION}\x01\r\n")
         assert(resp.pack() == expected)
 
+    async def test_irc_extract_msg(self):
+        vectors = [
+            [
+                "CMD value\r\n",
+                IRCMsg(cmd="CMD", param="value")
+            ],
+            [
+                ":test CMD v\r\n",
+                IRCMsg(
+                    prefix="test",
+                    cmd="CMD",
+                    param="v"
+                )
+            ],
+            [
+                "CMD v :suffix\r\n",
+                IRCMsg(
+                    suffix="suffix",
+                    cmd="CMD",
+                    param="v"
+                )
+            ],
+            [
+                ":prefix-part CMD v long param :suffix part\r\n",
+                IRCMsg(
+                    prefix="prefix-part",
+                    cmd="CMD",
+                    param="v long param",
+                    suffix="suffix part"
+                )
+            ],
+            [
+                ":prefix-part   CMD  v long param :suffix part\r\n",
+                IRCMsg(
+                    prefix="prefix-part",
+                    cmd="CMD",
+                    param="v long param",
+                    suffix="suffix part"
+                )
+            ],
+        ]
+
+        for vector in vectors:
+            buf, expected = vector
+            got, _ = irc_extract_msgs(buf)
+            got = got[0]
+            assert(got == expected)
+
+    async def test_irc_extract_sender(self):
+        vectors = [
+            [
+                "nickaAWE234 asd",
+                {
+                    "nick": "nickaAWE234 asd",
+                    "user": "",
+                    "host": ""
+                }
+            ],
+            [
+                "nickaAWE234 asd@hostwe12 S",
+                {
+                    "nick": "nickaAWE234 asd",
+                    "user": "",
+                    "host": "hostwe12 S"
+                }
+            ],
+            [
+                "nickaAWE234 asd!user sF S",
+                {
+                    "nick": "nickaAWE234 asd",
+                    "user": "user sF S",
+                    "host": ""
+                }
+            ],
+            [
+                "nickaAWE234 asd!user sF S@HoST N",
+                {
+                    "nick": "nickaAWE234 asd",
+                    "user": "user sF S",
+                    "host": "HoST N"
+                }
+            ]
+        ]
+
+        for vector in vectors:
+            buf, expected = vector
+            got = irc_extract_sender(buf)
+            assert(got == expected)
 
 
 if __name__ == '__main__':
