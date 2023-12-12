@@ -203,9 +203,13 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
     async def test_proto_ctcp_version(self):
         msg = IRCMsg(
             cmd="PRIVMSG",
-            param="target",
+            prefix="user!ident@host",
             suffix="\x01VERSION\x01"
         )
+
+        resp = IRC_S.proto(msg)
+        expected = to_b(f"PRIVMSG user :\x01VERSION {IRC_VERSION}\x01\r\n")
+        assert(resp.pack() == expected)
 
 
 
