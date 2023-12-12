@@ -604,14 +604,20 @@ class IRCSession():
         will error on and send it all as one message. But that's
         a lot of work for such an optimization.
         """
-        # Mute conversation in the channel.
-        await asyncio.sleep(0.1)
-        await self.con.send(
-            IRCMsg(
-                cmd="MODE",
-                param=f"{chan_name} +m",
-            ).pack()
-        )
+        # +m mute conversation in the channel.
+        # +s make channel secret so it doesn't show in list
+        # We don't want to spam list with a bunch of non-chat channels.
+        for mode in "ms":
+            # Avoid flooding server.
+            await asyncio.sleep(0.1)
+
+            # Set the mode.
+            await self.con.send(
+                IRCMsg(
+                    cmd="MODE",
+                    param=f"{chan_name} +{mode}",
+                ).pack()
+            )
 
         # -k remove password
         # -i no invite only
