@@ -339,3 +339,9 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == '__main__':
     main()
+
+"""
+    todo: simulate store with the main manager and get
+    try to test register / login -- see if infinite loop is possible
+    
+"""

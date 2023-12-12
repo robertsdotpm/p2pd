@@ -438,6 +438,7 @@ class IRCSession():
             )
             print("get login status done.")
 
+            """
             await self.con.send(
                 IRCMsg(
                     cmd="HELP",
@@ -459,6 +460,7 @@ class IRCSession():
                     suffix=f"help set"
                 ).pack()
             )
+            """
 
             # Load pre-existing owned channels.
             #await self.load_owned_chans()
@@ -641,6 +643,9 @@ class IRCSession():
             ).pack()
         )
 
+        # Maybe allow the chan to expire (set this manually.
+
+
         """
         Todo: The servers do tell you what nodes they support in
         the join message so you could subtract what modes they
@@ -701,6 +706,49 @@ class IRCSession():
     def proto(self, msg):
         print(f"Got {msg.pack()}")
 
+        # Process ping.
+        if msg.cmd == "PING":
+            return IRCMsg(
+                cmd="PONG",
+                param=msg.param,
+                suffix=msg.suffix,
+            )
+        
+        # End of motd.
+        if msg.cmd in ["376", "411"]:
+            self.get_motd.set_result(True)
+            return
+
+        # Nickname already reserved so login.
+        if msg.cmd == "433":
+            return IRCMsg(
+                cmd="PRIVMSG",
+                param="NickServ",
+                suffix=f"IDENTIFY {self.user_pass}"
+            )
+        
+        # Login if account already exists.
+        for nick_success in IRC_NICK_POS:
+            if len(re.findall(nick_success, msg.suffix)):
+                print("sending identify. 2")
+                return IRCMsg(
+                    cmd="PRIVMSG",
+                    param="NickServ",
+                    suffix=f"IDENTIFY {self.user_pass}"
+                )
+
+        # Login success.
+        if msg.cmd == "900":
+            self.login_status.set_result(True)
+            return
+
+        # Login ident success or account register.
+        for success_msg in IRC_POS_LOGIN_MSGS:
+            if len(re.findall(success_msg, msg.suffix)):
+                print("login success")
+                self.login_status.set_result(True)
+                return
+
         # Respond to CTCP version requests.
         if msg.suffix == "\x01VERSION\x01":
             sender = irc_extract_sender(msg.prefix)
@@ -710,35 +758,11 @@ class IRCSession():
                 suffix=f"\x01VERSION {IRC_VERSION}\x01"
             )
 
-        # Nickname already reserved so login.
-        if msg.cmd == "433":
-            return IRCMsg(
-                cmd="PRIVMSG",
-                param="NickServ",
-                suffix=f"IDENTIFY {self.user_pass}"
-            )
-
-        # End of motd.
-        if msg.cmd in ["376", "411"]:
-            self.get_motd.set_result(True)
-
-        # Login success.
-        if msg.cmd == "900":
-            self.login_status.set_result(True)
-
         # Got a channels topic.
         if msg.cmd == "332":
             _, chan_part = msg.param.split()
             if chan_part in self.chan_topics:
                 self.chan_topics[chan_part].set_result(msg.suffix)
-
-        # Process ping.
-        if msg.cmd == "PING":
-            return IRCMsg(
-                cmd="PONG",
-                param=msg.param,
-                suffix=msg.suffix,
-            )
 
         # Handle outstanding channel operations.
         for chan in d_keys(self.chans):
@@ -756,36 +780,6 @@ class IRCSession():
                         msg.suffix or True
                     )
 
-        # Channels loaded.
-        if "End of /WHOIS list" in msg.suffix:
-            self.chans_loaded.set_result(True)
-
-        # Response from a WHOIS request.
-        if msg.cmd == "319":
-            return
-            chans = msg.suffix.replace("@", "")
-            chans = chans.split()
-            for chan in chans:
-                irc_chan = IRCChan(chan, self)
-                self.chans[chan] = irc_chan
-
-        # Login ident success or account register.
-        for success_msg in IRC_POS_LOGIN_MSGS:
-            if len(re.findall(success_msg, msg.suffix)):
-                print("login success")
-                self.login_status.set_result(True)
-        
-
-        # Login if account already exists.
-        for nick_success in IRC_NICK_POS:
-            if len(re.findall(nick_success, msg.suffix)):
-                print("sending identify. 2")
-                return IRCMsg(
-                    cmd="PRIVMSG",
-                    param="NickServ",
-                    suffix=f"IDENTIFY {self.user_pass}"
-                )
-
         # Support checking if a channel is registered.
         # Response for a channel INFO request.
         for chan_name in d_keys(self.chan_infos):
@@ -801,6 +795,19 @@ class IRCSession():
             p = "annel \S*" + re.escape(chan_name) + "\S* is reg"
             if len(re.findall(p, msg.suffix)):
                 self.chan_infos[chan_name].set_result(True)
+
+        # Channels loaded.
+        if "End of /WHOIS list" in msg.suffix:
+            self.chans_loaded.set_result(True)
+
+        # Response from a WHOIS request.
+        if msg.cmd == "319":
+            return
+            chans = msg.suffix.replace("@", "")
+            chans = chans.split()
+            for chan in chans:
+                irc_chan = IRCChan(chan, self)
+                self.chans[chan] = irc_chan
 
     async def msg_cb(self, msg, client_tup, pipe):
         print(msg)
