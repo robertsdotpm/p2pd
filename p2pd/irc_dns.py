@@ -47,6 +47,14 @@ from .base_stream import *
 
 IRC_PREFIX = "19"
 
+IRC_VERSION = "Friendly P2PD user - see p2pd.net/irc"
+
+IRC_CONF = dict_child({
+    "use_ssl": 1,
+    "ssl_handshake": 8,
+    "con_timeout": 4,
+}, NET_CONF)
+
 IRC_SERVERS = [
     # Works.
     {
@@ -153,13 +161,35 @@ IRC_SERVERS = [
     },
 ]
 
-IRC_VERSION = "Friendly P2PD user - see p2pd.net/irc"
+###################################################################
+# These are really IRC-server specific response strings.
+IRC_POS_LOGIN_MSGS = [
+    "now logged in as",
+    "now identified for",
+    "with the password",
+    "you are now recognized",
+    "Nickname [^\s]* registered"
+]
 
-IRC_CONF = dict_child({
-    "use_ssl": 1,
-    "ssl_handshake": 8,
-    "con_timeout": 4,
-}, NET_CONF)
+IRC_POS_CHAN_MSGS = [
+    "registered under",
+    "is now registered",
+    "successfully registered",
+]
+
+IRC_NEG_CHAN_MSGS = [
+    "not complete registration",
+    "following link",
+    "link expires",
+    "address is not confirmed"
+]
+
+IRC_NICK_POS = [
+    "remember this for later",
+    "nickname is registered",
+    "ickname \S* is already",
+    #"is reserved by a different account"
+]
 
 # SHA256 digest in ascii truncated to a str limit.
 # Used for deterministic passwords with good complexity.
@@ -181,7 +211,8 @@ truncating the recv buffer once extracted.
 def irc_extract_msgs(buf):
     #     optional                                       optional
     #     :prefix            CMD           param...      :suffix 
-    p = "(?:[:]([^ :]+?) )?([A-Z0-9]+) (?:([^\r\:]+?) ?)?(?:[:]([^\r]+))?\r\n"
+    # Changed so that multiple spaces can sep portions.
+    p = "(?:[:]([^ :]+?) +)?([A-Z0-9]+) +(?:([^\r\:]+?) *)?(?:[:]([^\r]+))?\r\n"
     p = re.compile(p)
 
     # Loop over all protocol messages in buf.
@@ -230,17 +261,25 @@ class IRCMsg():
         self.suffix = suffix or ""
 
     def pack(self):
-        param = prefix = suffix = ""
+        out = ""
         if len(self.prefix):
-            prefix = f":{self.prefix} "
+            out += f":{self.prefix} "
+
+        out += self.cmd
+        if len(self.param):
+            out += f" {self.param}"
         
         if len(self.suffix):
-            suffix = f" :{self.suffix}"
+            out += f" :{self.suffix}"
 
-        if len(self.param):
-            param = self.param
-
-        return to_b(f"{prefix}{self.cmd} {param}{suffix}\r\n")
+        out += "\r\n"
+        return to_b(out)
+    
+    def __str__(self):
+        return self.pack()
+    
+    def __bytes__(self):
+        return to_b(str(self))
 
 class IRCChan:
     def __init__(self, chan_name, session):
@@ -453,7 +492,7 @@ class IRCSession():
             msg,
 
             # Unique salt for rainbow resistance.
-            b'Ana main, chicken tikka masala, Wolf Alice',
+            b'Ana main, chicken tikka masala, Blush - Wolf Alice',
             
             # Iterations.
             time_cost=2, # 700
@@ -655,36 +694,110 @@ class IRCSession():
             ).pack()
         )
 
+    def proto(self, msg):
+        print(f"Got {msg.pack()}")
+
+        # Respond to CTCP version requests.
+        if msg.suffix == "\x01VERSION\x01":
+            sender = irc_extract_sender(msg.prefix)
+            return IRCMsg(
+                cmd="PRIVMSG",
+                param=sender["nick"],
+                suffix=f"\x01VERSION {IRC_VERSION}\x01"
+            )
+
+        # Nickname already reserved so login.
+        if msg.cmd == "433":
+            return IRCMsg(
+                cmd="PRIVMSG",
+                param="NickServ",
+                suffix=f"IDENTIFY {self.user_pass}"
+            )
+
+        # End of motd.
+        if msg.cmd in ["376", "411"]:
+            self.get_motd.set_result(True)
+
+        # Login success.
+        if msg.cmd == "900":
+            self.login_status.set_result(True)
+
+        # Got a channels topic.
+        if msg.cmd == "332":
+            _, chan_part = msg.param.split()
+            if chan_part in self.chan_topics:
+                self.chan_topics[chan_part].set_result(msg.suffix)
+
+        # Process ping.
+        if msg.cmd == "PING":
+            return IRCMsg(
+                cmd="PONG",
+                param=msg.param,
+                suffix=msg.suffix,
+            )
+
+        # Handle outstanding channel operations.
+        for chan in d_keys(self.chans):
+            # Process chan oper success.
+            if msg.cmd == "MODE":
+                op_success = f"{chan} +o {self.nick}".lower()
+                if op_success in msg.param.lower():
+                    if chan in self.chan_ident:
+                        self.chan_ident[chan].set_result(True)
+
+            # Indicate topic set successfully.
+            if msg.cmd == "TOPIC":
+                if chan in msg.param:
+                    self.chans[chan].set_topic_done.set_result(
+                        msg.suffix or True
+                    )
+
+        # Channels loaded.
+        if "End of /WHOIS list" in msg.suffix:
+            self.chans_loaded.set_result(True)
+
+        # Load channel info.
+        if msg.cmd == "319":
+            chans = msg.suffix.replace("@", "")
+            chans = chans.split()
+            for chan in chans:
+                irc_chan = IRCChan(chan, self)
+                self.chans[chan] = irc_chan
+
+        # Login ident success or account register.
+        for success_msg in IRC_POS_LOGIN_MSGS:
+            if len(re.findall(success_msg, msg.suffix)):
+                print("login success")
+                self.login_status.set_result(True)
+        
+
+        # Login if account already exists.
+        for nick_success in IRC_NICK_POS:
+            if len(re.findall(nick_success, msg.suffix)):
+                print("sending identify. 2")
+                return IRCMsg(
+                    cmd="PRIVMSG",
+                    param="NickServ",
+                    suffix=f"IDENTIFY {self.user_pass}"
+                )
+
+        # Response for a channel INFO request.
+        for chan_name in d_keys(self.chan_infos):
+            # Channel is not registered.
+            p = "annel \S*" + re.escape(chan_name) + "\S* ((isn)|(is not))"
+            if len(re.findall(p, msg.suffix)):
+                self.chan_infos[chan_name].set_result(False)
+
+            # Channel is registered.
+            p = "mation ((for)|(on)) [^#]*" + re.escape(chan_name)
+            if len(re.findall(p, msg.suffix)):
+                self.chan_infos[chan_name].set_result(True)
+            p = "annel \S*" + re.escape(chan_name) + "\S* is reg"
+            if len(re.findall(p, msg.suffix)):
+                self.chan_infos[chan_name].set_result(True)
+
     async def msg_cb(self, msg, client_tup, pipe):
         print(msg)
-
-        pos_login_msgs = [
-            "now logged in as",
-            "now identified for",
-            "with the password",
-            "you are now recognized",
-            "Nickname [^\s]* registered"
-        ]
-
-        pos_chan_msgs = [
-            "registered under",
-            "is now registered",
-            "successfully registered",
-        ]
-
-        neg_chan_msgs = [
-            "not complete registration",
-            "following link",
-            "link expires",
-            "address is not confirmed"
-        ]
-
-        nick_pos = [
-            "remember this for later",
-            "nickname is registered",
-            "ickname \S* is already",
-            #"is reserved by a different account"
-        ]
 
         try:
             # Keep a buffer of potential protocol messages.
@@ -696,7 +809,7 @@ class IRCSession():
             # Disable chan success in some cases.
             skip_register = False
             for msg in msgs:
-                for chan_fail in neg_chan_msgs:
+                for chan_fail in IRC_NEG_CHAN_MSGS:
                     if chan_fail in msg.suffix:
                         skip_register = True
                         break
@@ -704,125 +817,10 @@ class IRCSession():
             # Loop over the IRC protocol messages.
             # Process the minimal functions we understand.
             for msg in msgs:
-                print(f"Got {msg.pack()}")
-
-                # Respond to CTCP version requests.
-                if msg.suffix == "\x01VERSION\x01":
-                    sender = irc_extract_sender(msg.prefix)
-                    await self.con.send(
-                        IRCMsg(
-                            cmd="PRIVMSG",
-                            param=sender["nick"],
-                            suffix=f"\x01VERSION {IRC_VERSION}\x01"
-                        ).pack()
-                    )
-
-                # Nickname already reserved so login.
-                if msg.cmd == "433":
-                    await self.con.send(
-                        IRCMsg(
-                            cmd="PRIVMSG",
-                            param="NickServ",
-                            suffix=f"IDENTIFY {self.user_pass}"
-                        ).pack()
-                    )
-
-                # End of motd.
-                if msg.cmd in ["376", "411"]:
-                    self.get_motd.set_result(True)
-
-                # Login success.
-                if msg.cmd == "900":
-                    self.login_status.set_result(True)
-
-                # Got a channels topic.
-                if msg.cmd == "332":
-                    _, chan_part = msg.param.split()
-                    if chan_part in self.chan_topics:
-                        self.chan_topics[chan_part].set_result(msg.suffix)
-
-                # Process ping.
-                if msg.cmd == "PING":
-                    pong = IRCMsg(
-                        cmd="PONG",
-                        param=msg.param,
-                        suffix=msg.suffix,
-                    )
-
-                    await self.con.send(pong.pack())
-
-                # Handle outstanding channel operations.
-                for chan in d_keys(self.chans):
-                    # Process chan oper success.
-                    if msg.cmd == "MODE":
-                        op_success = f"{chan} +o {self.nick}".lower()
-                        if op_success in msg.param.lower():
-                            if chan in self.chan_ident:
-                                self.chan_ident[chan].set_result(True)
-
-                    # Indicate topic set successfully.
-                    if msg.cmd == "TOPIC":
-                        if chan in msg.param:
-                            self.chans[chan].set_topic_done.set_result(msg.suffix or True)
-
-                # Channels loaded.
-                if "End of /WHOIS list" in msg.suffix:
-                    self.chans_loaded.set_result(True)
-
-                # Load channel info.
-                if msg.cmd == "319":
-                    chans = msg.suffix.replace("@", "")
-                    chans = chans.split()
-                    for chan in chans:
-                        irc_chan = IRCChan(chan, self)
-                        self.chans[chan] = irc_chan
-
-                # Login ident success or account register.
-                for success_msg in pos_login_msgs:
-                    if len(re.findall(success_msg, msg.suffix)):
-                        print("login success")
-                        self.login_status.set_result(True)
-                
-
-                # Login if account already exists.
-                for nick_success in nick_pos:
-                    if len(re.findall(nick_success, msg.suffix)):
-                        print("sending identify. 2")
-                        await self.con.send(
-                            IRCMsg(
-                                cmd="PRIVMSG",
-                                param="NickServ",
-                                suffix=f"IDENTIFY {self.user_pass}"
-                            ).pack()
-                        )
-
-                # Response for a channel INFO request.
-                for chan_name in d_keys(self.chan_infos):
-                    # Channel is not registered.
-                    p = "annel \S*" + re.escape(chan_name) + "\S* ((isn)|(is not))"
-                    if len(re.findall(p, msg.suffix)):
-                        self.chan_infos[chan_name].set_result(False)
-
-                    # Channel is registered.
-                    p = "mation ((for)|(on)) [^#]*" + re.escape(chan_name)
-                    if len(re.findall(p, msg.suffix)):
-                        self.chan_infos[chan_name].set_result(True)
-                    p = "annel \S*" + re.escape(chan_name) + "\S* is reg"
-                    if len(re.findall(p, msg.suffix)):
-                        self.chan_infos[chan_name].set_result(True)
-
-                    """
-                    # Channel registered.
-                    for chan_name in self.chan_registered:
-                        if chan_name not in self.suffix:
-                            continue
-
-                        for chan_success in pos_chan_msgs:
-                            if chan_success not in msg.suffix:
-                                continue
-
-                            self.chan_registered[chan_name].set_result(True)
-                    """
+                resp = self.proto(msg)
+                if resp is not None:
+                    await pipe.send(resp.pack())
+    
         except Exception:
             log_exception()
 

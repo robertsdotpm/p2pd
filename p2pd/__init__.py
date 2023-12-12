@@ -37,6 +37,7 @@ if not '-m' in sys.argv:
     from .install import *
     from .toxiclient import ToxiToxic, ToxiTunnel, ToxiClient
     from .toxiserver import ToxiMainServer
+    from .irc_dns import *
 
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn")

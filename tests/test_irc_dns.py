@@ -1,6 +1,6 @@
 """
     async def test_irc_dns():
-        """
+        
         msg = ":ChanServ!services@services.xxxchatters.com NOTICE client_dev_nick1sZU8um :Channel \x02#qfATvV8F\x02 registered under your account: client_dev_nick1sZU8um\r\n:ChanServ!services@services.xxxchatters.com MODE #qfATvV8F +rq client_dev_nick1sZU8um\r\n"
         out = extract_irc_msgs(msg)
         print(out)
@@ -8,7 +8,7 @@
 
         
         return
-        """
+    
 
         chan_topic = "this_is_test_chan_topic"
         chan_name = "#test_chan_name323" + IRC_PREFIX
@@ -96,7 +96,7 @@
         return
 
 
-        """
+    
         await irc_dns.con.send(
             IRCMsg(
                 cmd="LIST",
@@ -107,7 +107,7 @@
 
         while 1:
             await asyncio.sleep(1)
-        """
+        
 
 
         #print(await irc_dns.register_channel("#test_chan_name123"))
@@ -162,3 +162,52 @@
             )
             print(out)
 """
+
+from p2pd.test_init import *
+from p2pd import *
+
+IRC_SEED = "123" * 30
+IRC_SERV_INFO = {
+    'domain': 'example.com',
+    'afs': [IP4, IP6],
+
+    # 6 nov 2000
+    'creation': 975848400,
+
+    'nick_serv': ["password", "email"],
+
+    "ip": {
+        IP4: "93.184.216.34",
+        IP6: "2606:2800:220:1:248:1893:25c8:1946]"
+    },
+
+    'chan_len': 50,
+    'chan_no': 60,
+    'topic_len': 300,
+    'chan_topics': 'a-zA-Z0-9all specials unicode (smilies tested)'
+}
+
+IRC_S = IRCSession(IRC_SERV_INFO, IRC_SEED)
+
+
+class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
+    async def test_proto_ping(self):
+        msg = IRCMsg(cmd="PING", param="31337")
+        resp = IRC_S.proto(msg)
+        assert(resp.pack() == b"PONG 31337\r\n")
+
+        msg = IRCMsg(cmd="PING", suffix="31337")
+        resp = IRC_S.proto(msg)
+        assert(resp.pack() == b"PONG :31337\r\n")
+
+    async def test_proto_ctcp_version(self):
+        msg = IRCMsg(
+            cmd="PRIVMSG",
+            param="target",
+            suffix="\x01VERSION\x01"
+        )
+
+
+
+if __name__ == '__main__':
+    main()
