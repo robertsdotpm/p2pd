@@ -786,6 +786,7 @@ class IRCSession():
                     suffix=f"IDENTIFY {self.user_pass}"
                 )
 
+        # Support checking if a channel is registered.
         # Response for a channel INFO request.
         for chan_name in d_keys(self.chan_infos):
             # Channel is not registered.

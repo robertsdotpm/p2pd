@@ -9,11 +9,15 @@ __author__ = "Sumin Byeon"
 __email__ = "suminb@gmail.com"
 __version__ = "1.0.0"
 
-
+# Used for IRC ident passwords.
 B64_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+# Used for chan names.
 B36_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-B92_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz~!@#$%^&*()_+{}:\"<>?`-=[];',./"
+# Used for chan topics.
+# Modified to remove : which is used for prefix and suffix in IRC.
+B92_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz~!@#$%^&*()_+{}\"<>?`-=[];',./|"
 
 def encode(n, charset=B64_CHARSET):
     """Encodes a given integer ``n``."""
