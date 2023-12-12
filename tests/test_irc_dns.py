@@ -211,6 +211,29 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         expected = to_b(f"PRIVMSG user :\x01VERSION {IRC_VERSION}\x01\r\n")
         assert(resp.pack() == expected)
 
+    async def test_proto_info_req(self):
+        chan_name = "#test"
+        vectors = [
+            [f"channel {chan_name} isn't", False],
+            [f"channel {chan_name} is not", False],
+            [f"information for {chan_name}", True],
+            [f"information on {chan_name}", True],
+            [f"channel {chan_name} is registered", True]
+        ]
+
+        for vector in vectors:
+            IRC_S.chan_infos[chan_name] = asyncio.Future()
+
+            status, expected = vector
+            msg = IRCMsg(
+                cmd="NOTICE",
+                param="your_nick",
+                suffix=status
+            )
+
+            IRC_S.proto(msg)
+            assert(IRC_S.chan_infos[chan_name].result() == expected)
+
     async def test_irc_extract_msg(self):
         vectors = [
             [

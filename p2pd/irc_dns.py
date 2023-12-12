@@ -760,8 +760,9 @@ class IRCSession():
         if "End of /WHOIS list" in msg.suffix:
             self.chans_loaded.set_result(True)
 
-        # Load channel info.
+        # Response from a WHOIS request.
         if msg.cmd == "319":
+            return
             chans = msg.suffix.replace("@", "")
             chans = chans.split()
             for chan in chans:
