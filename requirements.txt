@@ -5,3 +5,4 @@ ntplib == 0.4.0 # Used for synchronization in TCP hole punching.
 aiounittest == 1.4.2 # Needed for unit tests on some Python versions.
 xmltodict # Needed for UPnP SOAP protocol stuff.
 ecdsa # Used for identifying IRCDNS names.
+argon2pure # Used for PoWs in IRCDNS.

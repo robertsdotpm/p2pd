@@ -82,3 +82,40 @@ UNUSED_IRC = [
         'creation': 1580994000
     },
 ]
+
+keep joined topics or session active after disconnect so whois works?
+is this possible?
+
+cross server load_chans = 
+approach 1
+    1. Keep a bot in the channel
+        - botserv?
+    2. Get list to view all channels
+    3. Grep for username in channel list
+
+approach 2
+    could you add a 'mark' to yourself that lists chans
+    could you use a 'memo' service to store offline messages?
+        memoserv is fascinating. it gives registered users a message box.
+
+approach 3:
+    user profile portion?
+
+todo: there was a false positive for slacknet.org. when you register a chan
+it says that the staff reviews all chan reg requests. so that would need
+to be added to the scanner
+
+it would probably make sense to run all major ircds on p2pd.net
+and write unit tests against it. ensure the software works for them.
+
+which servers support memo and botservices
+    - supporting mechanisms for loading owned chans seems
+    well worth it.
+
+perhaps unit tests for basic protocol messages
+extracted from the extract function?
+
+
+
+when servers are down temporarily how to re-queue operations? 
+    future work probably

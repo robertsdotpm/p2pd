@@ -1,49 +1,33 @@
 """
 - Firewalls for IRC servers silently drop packets if you
 make successive connections too closely.
+- When registration of channel names is done a user must first join
+the channel. The problem is: the number someone joins a channel the name
+of the channel becomes public. That means that an attacker can watch the
+channel list for channels and register channel names on others servers
+in order to hijack the control of names before registering parties.
 
-keep joined topics or session active after disconnect so whois works?
-is this possible?
+The solution I came up to this is multi-faceted:
+    (1) Each name is now server-specific. By hashing the server-name as
+    part of the name it will be harder to guess what name is being
+    registered to register channels at other servers.
+    (2) The names contain a small proof-of-work that acts as a delay
+    function. The registering party 'saves up' these proofs for all
+    servers in bulk and then registers everything in parallel. Naturally,
+    this becomes part of the hashed name.
 
-cross server load_chans = 
-approach 1
-    1. Keep a bot in the channel
-        - botserv?
-    2. Get list to view all channels
-    3. Grep for username in channel list
+But what about rainbow tables?
+    (1) Names may be registered on arbitrary TLDs. Each TLD acts as
+    a small salt. Thus, attackers have to guess what TLDs to
+    pre-compute which may be completely off. If TLD suggestions are
+    randomly generated from dictionary nouns, then rainbow tables
+    would be near impossible to create.
+    (2) Names may contain an optional password portion. This has the
+    downside of requiring the password to access the name but offers
+    more protection against squatters.
 
-approach 2
-    could you add a 'mark' to yourself that lists chans
-    could you use a 'memo' service to store offline messages?
-        memoserv is fascinating. it gives registered users a message box.
-
-approach 3:
-    user profile portion?
-
-todo: there was a false positive for slacknet.org. when you register a chan
-it says that the staff reviews all chan reg requests. so that would need
-to be added to the scanner
-
-it would probably make sense to run all major ircds on p2pd.net
-and write unit tests against it. ensure the software works for them.
-
-which servers support memo and botservices
-    - supporting mechanisms for loading owned chans seems
-    well worth it.
-
-perhaps unit tests for basic protocol messages
-extracted from the extract function?
-
-race conditions with chan registration
-    hide chan from list until specified?
-                    |'''''''''''''''|
-    chan name = serv_name + name + tld + salt
-        different in every server
-        they would have to brute force the name portion
-        key stretching function
-        this should fix the problem for race conditions
-
-when servers are down temporarily how to re-queue operations? 
+These measures make race conditions and rainbow tables either
+impossible or impractical depending on usage.
 """
 
 import asyncio
@@ -51,6 +35,7 @@ import re
 import random
 import time
 import struct
+import argon2pure
 from ecdsa import SigningKey, VerifyingKey, NIST192p
 from .base_n import encodebytes, decodebytes
 from .base_n import B36_CHARSET, B64_CHARSET, B92_CHARSET
@@ -189,37 +174,11 @@ def f_irc_pass(x):
     )[:30]
 
 """
-Name -> 20 byte hash160
-(2 ** 160) - 1 yields 
-1461501637330902918203684832716283019655932542975
-
-IRC chan limit: 31 bytes (1 remaining for #)
-where only a-z0-9 are guaranteed
-that leaves
-((26 + 10) ** 31) possibilities or
-1759452407304813269615619081855885739163790606335
-
-so all hash160 values can be stored with this encoding.
-It also allows names to have special characters and be
-longer than 20 bytes (albeit at the cost of collisions.)
-"""
-def f_irc_chan_name(x):
-    return "#" + to_s(
-        encodebytes(
-            hash160(
-                b"P2PD://" +
-                to_b(x)
-            ),
-            charset=B36_CHARSET
-        )
-    )[:31].lower()
-
-"""
 TCP is stream-oriented and portions of IRC protocol messages
 may be received. This code handles finding valid IRC messages and
 truncating the recv buffer once extracted.
 """
-def extract_irc_msgs(buf):
+def irc_extract_msgs(buf):
     #     optional                                       optional
     #     :prefix            CMD           param...      :suffix 
     p = "(?:[:]([^ :]+?) )?([A-Z0-9]+) (?:([^\r\:]+?) ?)?(?:[:]([^\r]+))?\r\n"
@@ -469,6 +428,58 @@ class IRCSession():
             timeout=timeout
         )
     
+    """
+    Name -> 20 byte hash160
+    (2 ** 160) - 1 yields 
+    1461501637330902918203684832716283019655932542975
+
+    IRC chan limit: 31 bytes (1 remaining for #)
+    where only a-z0-9 are guaranteed
+    that leaves
+    ((26 + 10) ** 31) possibilities or
+    1759452407304813269615619081855885739163790606335
+
+    so all hash160 values can be stored with this encoding.
+    It also allows names to have special characters and be
+    longer than 20 bytes (albeit at the cost of collisions.)
+    """
+    async def get_irc_chan_name(self, name, tld, pw=""):
+        # Domain names are unique per server.
+        msg = to_b(f"{self.irc_server} {pw} {name} {tld}")
+
+        # Time locks help prevent registration front-running.
+        time_lock = argon2pure.argon2(
+            # Msg portion.
+            msg,
+
+            # Unique salt for rainbow resistance.
+            b'Ana main, chicken tikka masala, Wolf Alice',
+            
+            # Iterations.
+            time_cost=2, # 700
+            
+            # KB needed.
+            memory_cost=1024 * 2,
+            
+            # Threads needed.
+            parallelism=1
+        )
+
+        # Channel names begin with a #.
+        return "#" + to_s(
+            # The result is encoded using A-Z0-9 for chan names.
+            encodebytes(
+                # Multiple hash functions make collisions harder to find.
+                # As a value will need to work for both functions.
+                hash160(
+                    hashlib.sha256(
+                        msg + time_lock
+                    ).digest()
+                ),
+                charset=B36_CHARSET
+            )
+        )[:31].lower()
+    
     async def close(self):
         if self.con is not None:
             await self.con.send(IRCMsg(cmd="QUIT").pack())
@@ -673,7 +684,7 @@ class IRCSession():
             # Keep a buffer of potential protocol messages.
             # These may be partial in the case of TCP.
             self.recv_buf += to_s(msg)
-            msgs, new_buf = extract_irc_msgs(self.recv_buf)
+            msgs, new_buf = irc_extract_msgs(self.recv_buf)
             self.recv_buf = new_buf
 
             # Disable chan success in some cases.
@@ -889,7 +900,7 @@ class IRCDNS():
                 success_no = await self.start_n(sessions_required)
                 sessions_required -= success_no
 
-    async def n_name_lookups(self, n, start_p, name):
+    async def n_name_lookups(self, n, start_p, name, tld, pw=""):
         tasks = []; p = start_p
         while len(tasks) < n:
             if p >= len(self.servers):
@@ -899,10 +910,17 @@ class IRCDNS():
                 p += 1
                 continue
 
+            # Get chan name.
+            chan_name = await self.sessions[p].get_irc_chan_name(
+                name,
+                tld,
+                pw
+            )
+
             # Get name or throw an error.
             tasks.append(
                 async_wrap_errors(
-                    self.sessions[p].get_chan_topic(name),
+                    self.sessions[p].get_chan_topic(chan_name),
                     5
                 )
             )
@@ -912,13 +930,10 @@ class IRCDNS():
         return await asyncio.gather(*tasks), p
     
     # sha256(chan_name + seed)
-    async def store_value(self, name, value):
-        # The encoded name using base 36.
-        chan_name = f_irc_chan_name(name)
-
+    async def store_value(self, value, name, tld, pw=""):
         # ECDSA secret key.
         sk = SigningKey.from_string(
-            string=to_b(f"{chan_name}{self.seed}"),
+            string=to_b(f"{pw}{name}{tld}{self.seed}"),
             hashfunc=hashlib.sha256,
             curve=NIST192p
         )
@@ -936,7 +951,7 @@ class IRCDNS():
 
         # Topic message to store (topic-safe encoding.)
         topic = "%s %s %s %s".format(
-            "p2pd.net/irc"
+            "p2pd.net/irc",
             to_s(encodebytes(vk_buf, charset=B92_CHARSET)),
             to_s(encodebytes(sig_buf, charset=B92_CHARSET)),
             to_s(encodebytes(val_buf, charset=B92_CHARSET)),
@@ -955,6 +970,13 @@ class IRCDNS():
             if not session.started.done():
                 continue
 
+            # Generate channel name.
+            chan_name = await session.get_irc_chan_name(
+                name,
+                tld,
+                pw
+            )
+
             # Load channel manager.
             if chan_name not in session.chans:
                 chan = IRCChan(chan_name, session)
@@ -968,10 +990,7 @@ class IRCDNS():
         # Execute tasks to update topics.
         await asyncio.gather(*tasks)
 
-    async def name_register(self, name):
-        # The encoded name using base 36.
-        chan_name = f_irc_chan_name(name)
-
+    async def name_register(self, name, tld, pw=""):
         # Open the bare minimum number of sessions
         # for a successful consensus result.
         success_no = await self.start_n(
@@ -983,6 +1002,12 @@ class IRCDNS():
         # Check if name available on servers.
         tasks = []
         for n in range(0, self.p_sessions_next):
+            chan_name = await self.sessions[n].get_irc_chan_name(
+                name,
+                tld,
+                pw
+            )
+
             task = self.sessions[n].is_chan_registered(chan_name)
             tasks.append(task)
         results = await asyncio.gather(tasks)
@@ -998,6 +1023,12 @@ class IRCDNS():
         # Register name.
         tasks = []
         for n in range(0, self.p_sessions_next):
+            chan_name = await self.sessions[n].get_irc_chan_name(
+                name,
+                tld,
+                pw
+            )
+
             task = self.sessions[n].register_chan(chan_name)
             tasks.append(task)
         await asyncio.gather(tasks)
@@ -1071,10 +1102,7 @@ class IRCDNS():
         else:
             return self.get_success_min() - len(highest)
         
-    async def name_lookup(self, name):
-        # The encoded name in base 36.
-        chan_name = f_irc_chan_name(name)
-
+    async def name_lookup(self, name, tld, pw=""):
         # Open the bare minimum number of sessions
         # for a successful consensus result.
         await self.acquire_at_least(
@@ -1088,7 +1116,9 @@ class IRCDNS():
             more, start_p = await self.n_name_lookups(
                 names_required,
                 start_p,
-                chan_name
+                name,
+                tld,
+                pw
             )
 
             results += more
