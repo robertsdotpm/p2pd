@@ -36,7 +36,7 @@ import random
 import time
 import struct
 import argon2pure
-from ecdsa import SigningKey, VerifyingKey, NIST192p
+from ecdsa import SigningKey, VerifyingKey, NIST192p, SECP256k1
 from .base_n import encodebytes, decodebytes
 from .base_n import B36_CHARSET, B64_CHARSET, B92_CHARSET
 from .utils import *
@@ -374,6 +374,7 @@ class IRCSession():
         self.chan_get_topic = {}
         self.chan_registered = {}
         self.chan_infos = {}
+        self.chan_name_hashes = {}
         self.server_info = server_info
         self.seed = seed
 
@@ -495,6 +496,9 @@ class IRCSession():
     async def get_irc_chan_name(self, name, tld, pw=""):
         # Domain names are unique per server.
         msg = to_b(f"{self.irc_server} {pw} {name} {tld}")
+        if msg in self.chan_name_hashes:
+            return self.chan_name_hashes[msg]
+        
 
         # Time locks help prevent registration front-running.
         time_lock = argon2pure.argon2(
@@ -515,7 +519,7 @@ class IRCSession():
         )
 
         # Channel names begin with a #.
-        return "#" + to_s(
+        h = "#" + to_s(
             # The result is encoded using A-Z0-9 for chan names.
             encodebytes(
                 # Multiple hash functions make collisions harder to find.
@@ -528,6 +532,10 @@ class IRCSession():
                 charset=B36_CHARSET
             )
         )[:31].lower()
+
+        # Cache.
+        self.chan_name_hashes[msg] = h
+        return h
     
     async def close(self):
         if self.con is not None:
@@ -842,7 +850,7 @@ class IRCSession():
             log_exception()
 
 class IRCDNS():
-    def __init__(self, i, seed, servers, clsChan=IRCChan, clsSess=IRCSession):
+    def __init__(self, i, seed, servers, clsChan=IRCChan, clsSess=IRCSession, do_shuffle=True):
         self.i = i
         self.seed = seed
         self.sessions = {}
@@ -850,7 +858,9 @@ class IRCDNS():
         self.clsChan = clsChan
         self.clsSess = clsSess
 
-        random.shuffle(servers)
+        if do_shuffle:
+            random.shuffle(servers)
+
         self.servers = servers
 
     def get_failure_max(self):
@@ -878,6 +888,8 @@ class IRCDNS():
         await asyncio.gather(*tasks)
 
     async def start_n(self, n):
+        assert(self.p_sessions_next <= len(self.servers))
+
         # Are there enough unstarted servers to try?
         tasks = []; p = self.p_sessions_next
         if (p + n) > len(self.servers):
@@ -885,10 +897,12 @@ class IRCDNS():
 
         # Create sessions from any already started.
         for j in range(p, p + n):
+            assert(j not in self.sessions)
             self.sessions[j] = self.clsSess(
                 self.servers[j],
                 self.seed
             )
+
             tasks.append(self.sessions[j].start())
             self.p_sessions_next += 1
 
@@ -942,11 +956,18 @@ class IRCDNS():
     
     # sha256(chan_name + seed)
     async def store_value(self, value, name, tld, pw=""):
+        # Bytes used to make ECDSA priv key.
+        priv = hashlib.sha256(
+            to_b(
+                f"{pw}{name}{tld}{self.seed}"
+            )
+        ).digest()
+
         # ECDSA secret key.
         sk = SigningKey.from_string(
-            string=to_b(f"{pw}{name}{tld}{self.seed}"),
+            string=priv,
             hashfunc=hashlib.sha256,
-            curve=NIST192p
+            curve=SECP256k1
         )
 
         # ECDSA pub key (compressed.)
@@ -961,7 +982,7 @@ class IRCDNS():
         sig_buf = sk.sign_deterministic(val_buf)
 
         # Topic message to store (topic-safe encoding.)
-        topic = "%s %s %s %s".format(
+        topic = "%s %s %s %s" % (
             "p2pd.net/irc",
             to_s(encodebytes(vk_buf, charset=B92_CHARSET)),
             to_s(encodebytes(sig_buf, charset=B92_CHARSET)),
@@ -979,6 +1000,7 @@ class IRCDNS():
             # Select session to use.
             session = self.sessions[n]
             if not session.started.done():
+                print("skipping")
                 continue
 
             # Generate channel name.
@@ -991,8 +1013,11 @@ class IRCDNS():
             # Load channel manager.
             if chan_name not in session.chans:
                 chan = self.clsChan(chan_name, session)
+                session.chans[chan_name] = chan
+                print("no")
             else:
                 chan = session.chans[chan_name]
+                print("Yes")
 
             # Reference function to set topic.
             task = chan.set_topic(topic)
@@ -1002,10 +1027,15 @@ class IRCDNS():
         await asyncio.gather(*tasks)
 
     async def name_register(self, name, tld, pw=""):
+        assert(self.p_sessions_next <= len(self.servers))
+
         # Open the bare minimum number of sessions
         # for a successful consensus result.
         success_no = await self.start_n(
-            len(self.servers) - self.p_sessions_next
+            len(self.servers) - min(
+                self.p_sessions_next,
+                len(self.servers)
+            )
         )
         if success_no < self.get_success_max():
             raise Exception("Insufficient sessions.")
