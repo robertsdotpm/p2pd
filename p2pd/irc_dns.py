@@ -203,6 +203,10 @@ def f_irc_pass(x):
         )
     )[:30]
 
+def irc_is_valid_chan_name(chan_name):
+    p = "^[#&+!][a-zA-Z0-9_-]+$"
+    return re.match(p, chan_name) != None
+
 """
 TCP is stream-oriented and portions of IRC protocol messages
 may be received. This code handles finding valid IRC messages and
@@ -838,12 +842,16 @@ class IRCSession():
             log_exception()
 
 class IRCDNS():
-    def __init__(self, i, seed):
+    def __init__(self, i, seed, servers, clsChan=IRCChan, clsSess=IRCSession):
         self.i = i
         self.seed = seed
         self.sessions = {}
         self.p_sessions_next = 0
-        self.servers = random.shuffle(IRC_SERVERS[:])
+        self.clsChan = clsChan
+        self.clsSess = clsSess
+
+        random.shuffle(servers)
+        self.servers = servers
 
     def get_failure_max(self):
         return int(0.4 * len(self.servers))
@@ -861,21 +869,6 @@ class IRCDNS():
         else:
             return -dif
 
-    async def start(self):
-        # Connect to servers.
-        tasks = [s.start(self.i) for s in self.sessions]
-        await asyncio.gather(*tasks)
-
-        # Determine how many failed to start.
-        fail_no = 0
-        for s in self.sessions:
-            if not s.started.done():
-                fail_no += 1
-
-        # Too many server failures.
-        if fail_no > self.get_threshold_n():
-            raise Exception("IRCDNS, too many sessions failed.")
-
     async def close(self):
         tasks = []
         for i in range(0, self.p_sessions_next):
@@ -892,7 +885,7 @@ class IRCDNS():
 
         # Create sessions from any already started.
         for j in range(p, p + n):
-            self.sessions[j] = IRCSession(
+            self.sessions[j] = self.clsSess(
                 self.servers[j],
                 self.seed
             )
@@ -908,6 +901,7 @@ class IRCDNS():
         for j in range(0, self.p_sessions_next):
             if self.sessions[j].started.done():
                 success_no += 1
+        return success_no
 
     async def acquire_at_least(self, target):
         open_sessions = self.p_sessions_next
@@ -996,7 +990,7 @@ class IRCDNS():
 
             # Load channel manager.
             if chan_name not in session.chans:
-                chan = IRCChan(chan_name, session)
+                chan = self.clsChan(chan_name, session)
             else:
                 chan = session.chans[chan_name]
 
@@ -1027,12 +1021,12 @@ class IRCDNS():
 
             task = self.sessions[n].is_chan_registered(chan_name)
             tasks.append(task)
-        results = await asyncio.gather(tasks)
+        results = await asyncio.gather(*tasks)
         
         # Check if there's enough names available.
         available_count = 0
-        for result in results:
-            if result:
+        for is_chan_registered in results:
+            if not is_chan_registered:
                 available_count += 1
         if available_count < self.get_success_max():
             return False
@@ -1048,7 +1042,7 @@ class IRCDNS():
 
             task = self.sessions[n].register_chan(chan_name)
             tasks.append(task)
-        await asyncio.gather(tasks)
+        await asyncio.gather(*tasks)
         return True
 
     def unpack_topic_value(self, value):

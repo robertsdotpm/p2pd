@@ -336,6 +336,72 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             got = irc_extract_sender(buf)
             assert(got == expected)
 
+    async def test_start_n(self):
+        print("In test start_n")
+
+        class MockIRCSession(IRCSession):
+            """
+            def __init__(self, server_info, seed):
+                super().__init__(server_info, seed)
+            """
+
+            async def start(self):
+                self.started.set_result(True)
+
+            async def is_chan_registered(self, chan_name):
+                return chan_name in self.chan_registered
+            
+            async def register_chan(self, chan_name):
+                self.chan_registered[chan_name] = True
+
+        servers = [
+            {"domain": "a"},
+            {"domain": "b"},
+            {"domain": "c"},
+        ]
+
+
+        interface = None
+        ircdns = IRCDNS(
+            i=interface,
+            seed=IRC_SEED,
+            clsSess=MockIRCSession,
+            servers=servers
+        )
+
+        # Should continue.
+        await ircdns.start_n(len(servers) - 1)
+        assert(ircdns.p_sessions_next == 2)
+
+        await ircdns.start_n(1)
+        assert(ircdns.p_sessions_next == 3)
+
+        exception_thrown = 1
+        try:
+            await ircdns.start_n(1)
+        except:
+            exception_thrown = 1
+
+        assert(exception_thrown)
+
+        # Test making irc chan name
+        chan_name = await ircdns.sessions[0].get_irc_chan_name(
+            name="p2pd",
+            tld="net"
+        )
+
+        "#gexchgrc88g0anj90zlwe9icmccw462"
+
+        assert(irc_is_valid_chan_name(chan_name))
+        assert(len(chan_name) <= 32)
+
+        # Register, store, then get.
+        # 3 57
+
+        print(ircdns.get_success_max())
+        ret = await ircdns.name_register("p2pd", "net")
+        print(ret)
+        print(ircdns.sessions[0].chan_registered)
 
 if __name__ == '__main__':
     main()
@@ -343,5 +409,5 @@ if __name__ == '__main__':
 """
     todo: simulate store with the main manager and get
     try to test register / login -- see if infinite loop is possible
-    
+    Maybe allow the chan to expire (set this manually.
 """
