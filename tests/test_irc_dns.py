@@ -358,6 +358,9 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             async def register_chan(self, chan_name):
                 self.chan_registered[chan_name] = True
 
+            async def get_chan_topic(self, chan_name):
+                return self.chans[chan_name].pending_topic
+
             async def get_irc_chan_name(self, name, tld, pw=""):
                 # Domain names are unique per server.
                 msg = to_b(f"{self.irc_server} {pw} {name} {tld}")
@@ -451,9 +454,24 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             assert(test_hash in ircdns.sessions[i].chans)
 
         topic_val = ircdns.sessions[0].chans[dns_hash].pending_topic
-
         out = ircdns.unpack_topic_value(topic_val)
-        print(out)
+
+        # Get results list.
+        results, _ = await ircdns.n_name_lookups(
+            ircdns.get_success_min(),
+            0,
+            dns_name,
+            dns_tld
+        )
+        best = ircdns.n_more_or_best(results)
+        
+        # Check that best value is correct.
+        highest = results[0]["time"]
+        for r in results:
+            if r["time"] > highest:
+                highest = r["time"]
+
+        assert(highest == best["time"])
 
         # unpack
 
@@ -467,4 +485,5 @@ if __name__ == '__main__':
     try to test register / login -- see if infinite loop is possible
     Maybe allow the chan to expire (set this manually.
     p_session_next doesnt seem thread-safe
+    get chan topic in session may not work appropriately
 """

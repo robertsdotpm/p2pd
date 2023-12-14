@@ -965,7 +965,6 @@ class IRCDNS():
         await asyncio.gather(*tasks)
         return True
 
-    # sha256(chan_name + seed)
     async def store_value(self, value, name, tld, pw=""):
         # Bytes used to make ECDSA priv key.
         priv = hashlib.sha256(
@@ -1036,21 +1035,15 @@ class IRCDNS():
 
     def unpack_topic_value(self, value):
         if value is None:
-            print("Val is none")
             return None
         
         parts = value.split()
         if len(parts) != 4:
-            print("not 4")
             return None
-        
-        print(parts)
 
         try:
             # NIST192p ECDSA public key part.
             vk_b = decodebytes(parts[1], charset=B92_CHARSET)
-            print(vk_b)
-
             vk = VerifyingKey.from_string(
                 string=vk_b,
                 hashfunc=hashlib.sha256,
@@ -1059,12 +1052,9 @@ class IRCDNS():
 
             # Signature part.
             sig_b = decodebytes(parts[2], charset=B92_CHARSET)
-            print(sig_b)
 
             # Message part.
             msg_b = decodebytes(parts[3], charset=B92_CHARSET)
-            print(msg_b)
-
             vk.verify(
                 sig_b,
                 msg_b
@@ -1095,11 +1085,7 @@ class IRCDNS():
             return self.get_success_min()
         
         table = {}
-        for result in results:
-            r = self.unpack_topic_value(result)
-            if r is None:
-                continue
-
+        for r in results:
             if r["id"] in table:
                 table[r["id"]].append(r)
             else:
@@ -1121,6 +1107,10 @@ class IRCDNS():
             return self.get_success_min() - len(highest)
         
     async def n_name_lookups(self, n, start_p, name, tld, pw=""):
+        async def helper(self, x, y):
+            chan_topic = await self.sessions[x].get_chan_topic(y)
+            return self.unpack_topic_value(chan_topic)
+
         tasks = []; p = start_p
         while len(tasks) < n:
             if p >= len(self.servers):
@@ -1140,7 +1130,7 @@ class IRCDNS():
             # Get name or throw an error.
             tasks.append(
                 async_wrap_errors(
-                    self.sessions[p].get_chan_topic(chan_name),
+                    helper(self, p, chan_name),
                     5
                 )
             )
