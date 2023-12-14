@@ -426,26 +426,38 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         # Test making irc chan name
         dns_name = "p2pd_test"
         dns_tld = "test_tld"
+        dns_val = "test val"
         dns_hash = "#s92qa9y82imq8du1u6sfmsh9v4zekx8"
         chan_name = await ircdns.sessions[0].get_irc_chan_name(
             name=dns_name,
             tld=dns_tld
         )
-        print(chan_name)
-
-        # because of the shuffle for servers hash 0 is non-deterministic.
-
+        assert(chan_name == dns_hash)
         assert(irc_is_valid_chan_name(chan_name))
         assert(len(chan_name) <= 32)
 
-
         # Register, store, then get.
-        ret = await ircdns.name_register("p2pd", "net")
+        ret = await ircdns.name_register(dns_name, dns_tld)
         assert(ret)
 
         # Test store.
-        await ircdns.store_value("test val", dns_name, dns_tld)
-        print(ircdns.sessions[0].chans[dns_hash].pending_topic)
+        await ircdns.store_value(dns_val, dns_name, dns_tld)
+        for i in range(0, len(servers)):
+            test_hash = await ircdns.sessions[i].get_irc_chan_name(
+                name=dns_name,
+                tld=dns_tld
+            )
+
+            assert(test_hash in ircdns.sessions[i].chans)
+
+        topic_val = ircdns.sessions[0].chans[dns_hash].pending_topic
+
+        out = ircdns.unpack_topic_value(topic_val)
+        print(out)
+
+        # unpack
+
+        #assert(ircdns.sessions[0].chans[dns_hash].pending_topic == dns_val)
 
 if __name__ == '__main__':
     main()
@@ -454,4 +466,5 @@ if __name__ == '__main__':
     todo: simulate store with the main manager and get
     try to test register / login -- see if infinite loop is possible
     Maybe allow the chan to expire (set this manually.
+    p_session_next doesnt seem thread-safe
 """

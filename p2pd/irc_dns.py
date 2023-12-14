@@ -498,7 +498,6 @@ class IRCSession():
         msg = to_b(f"{self.irc_server} {pw} {name} {tld}")
         if msg in self.chan_name_hashes:
             return self.chan_name_hashes[msg]
-        
 
         # Time locks help prevent registration front-running.
         time_lock = argon2pure.argon2(
@@ -916,116 +915,7 @@ class IRCDNS():
             if self.sessions[j].started.done():
                 success_no += 1
         return success_no
-
-    async def acquire_at_least(self, target):
-        open_sessions = self.p_sessions_next
-        if open_sessions < target:
-            sessions_required = target - open_sessions
-            while sessions_required:
-                success_no = await self.start_n(sessions_required)
-                sessions_required -= success_no
-
-    async def n_name_lookups(self, n, start_p, name, tld, pw=""):
-        tasks = []; p = start_p
-        while len(tasks) < n:
-            if p >= len(self.servers):
-                raise Exception("Exceeded irc sessions.")
-
-            if not self.sessions[p].started.done():
-                p += 1
-                continue
-
-            # Get chan name.
-            chan_name = await self.sessions[p].get_irc_chan_name(
-                name,
-                tld,
-                pw
-            )
-
-            # Get name or throw an error.
-            tasks.append(
-                async_wrap_errors(
-                    self.sessions[p].get_chan_topic(chan_name),
-                    5
-                )
-            )
-
-            p += 1
-
-        return await asyncio.gather(*tasks), p
     
-    # sha256(chan_name + seed)
-    async def store_value(self, value, name, tld, pw=""):
-        # Bytes used to make ECDSA priv key.
-        priv = hashlib.sha256(
-            to_b(
-                f"{pw}{name}{tld}{self.seed}"
-            )
-        ).digest()
-
-        # ECDSA secret key.
-        sk = SigningKey.from_string(
-            string=priv,
-            hashfunc=hashlib.sha256,
-            curve=SECP256k1
-        )
-
-        # ECDSA pub key (compressed.)
-        vk = sk.verifying_key
-        vk_buf = vk.to_string("compressed")
-
-        # Serialized data portion with timestamp prepend.
-        val_buf = struct.pack("Q", int(time.time()))
-        val_buf += to_b(value)
-
-        # Signed val_buf with vk.
-        sig_buf = sk.sign_deterministic(val_buf)
-
-        # Topic message to store (topic-safe encoding.)
-        topic = "%s %s %s %s" % (
-            "p2pd.net/irc",
-            to_s(encodebytes(vk_buf, charset=B92_CHARSET)),
-            to_s(encodebytes(sig_buf, charset=B92_CHARSET)),
-            to_s(encodebytes(val_buf, charset=B92_CHARSET)),
-        )
-
-        # Open as many sessions as possible.
-        await self.start_n(
-            len(self.servers) - self.p_sessions_next
-        )
-
-        # Build tasks to set chan topics.
-        tasks = []
-        for n in range(0, len(self.servers)):
-            # Select session to use.
-            session = self.sessions[n]
-            if not session.started.done():
-                print("skipping")
-                continue
-
-            # Generate channel name.
-            chan_name = await session.get_irc_chan_name(
-                name,
-                tld,
-                pw
-            )
-
-            # Load channel manager.
-            if chan_name not in session.chans:
-                chan = self.clsChan(chan_name, session)
-                session.chans[chan_name] = chan
-                print("no")
-            else:
-                chan = session.chans[chan_name]
-                print("Yes")
-
-            # Reference function to set topic.
-            task = chan.set_topic(topic)
-            tasks.append(task)
-
-        # Execute tasks to update topics.
-        await asyncio.gather(*tasks)
-
     async def name_register(self, name, tld, pw=""):
         assert(self.p_sessions_next <= len(self.servers))
 
@@ -1075,34 +965,112 @@ class IRCDNS():
         await asyncio.gather(*tasks)
         return True
 
+    # sha256(chan_name + seed)
+    async def store_value(self, value, name, tld, pw=""):
+        # Bytes used to make ECDSA priv key.
+        priv = hashlib.sha256(
+            to_b(
+                f"{pw}{name}{tld}{self.seed}"
+            )
+        ).digest()
+
+        # ECDSA secret key.
+        sk = SigningKey.from_string(
+            string=priv,
+            hashfunc=hashlib.sha256,
+            curve=SECP256k1
+        )
+
+        # ECDSA pub key (compressed.)
+        vk = sk.verifying_key
+        vk_buf = vk.to_string("compressed")
+
+        # Serialized data portion with timestamp prepend.
+        val_buf = struct.pack("Q", int(time.time()))
+        val_buf += to_b(value)
+
+        # Signed val_buf with vk.
+        sig_buf = sk.sign(val_buf)
+
+        # Topic message to store (topic-safe encoding.)
+        topic = "%s %s %s %s" % (
+            "p2pd.net/irc",
+            to_s(encodebytes(vk_buf, charset=B92_CHARSET)),
+            to_s(encodebytes(sig_buf, charset=B92_CHARSET)),
+            to_s(encodebytes(val_buf, charset=B92_CHARSET)),
+        )
+
+        # Open as many sessions as possible.
+        await self.start_n(
+            len(self.servers) - self.p_sessions_next
+        )
+
+        # Build tasks to set chan topics.
+        tasks = []
+        for n in range(0, len(self.servers)):
+            # Select session to use.
+            session = self.sessions[n]
+            if not session.started.done():
+                continue
+
+            # Generate channel name.
+            chan_name = await session.get_irc_chan_name(
+                name,
+                tld,
+                pw
+            )
+
+            # Load channel manager.
+            if chan_name not in session.chans:
+                chan = self.clsChan(chan_name, session)
+                session.chans[chan_name] = chan
+            else:
+                chan = session.chans[chan_name]
+
+            # Reference function to set topic.
+            task = chan.set_topic(topic)
+            tasks.append(task)
+
+        # Execute tasks to update topics.
+        await asyncio.gather(*tasks)
+
     def unpack_topic_value(self, value):
         if value is None:
+            print("Val is none")
             return None
         
         parts = value.split()
         if len(parts) != 4:
+            print("not 4")
             return None
+        
+        print(parts)
 
         try:
             # NIST192p ECDSA public key part.
             vk_b = decodebytes(parts[1], charset=B92_CHARSET)
+            print(vk_b)
+
             vk = VerifyingKey.from_string(
                 string=vk_b,
                 hashfunc=hashlib.sha256,
-                curve=NIST192p
+                curve=SECP256k1
             )
 
             # Signature part.
             sig_b = decodebytes(parts[2], charset=B92_CHARSET)
+            print(sig_b)
 
             # Message part.
             msg_b = decodebytes(parts[3], charset=B92_CHARSET)
-            vk.verify_digest(
+            print(msg_b)
+
+            vk.verify(
                 sig_b,
                 msg_b
             )
 
-            timestamp = struct.unpack("Q", msg_b[:8])
+            timestamp = struct.unpack("Q", msg_b[:8])[0]
             return {
                 "id": vk_b,
                 "vk": vk,
@@ -1111,7 +1079,16 @@ class IRCDNS():
                 "time": timestamp,
             }
         except:
+            what_exception()
             return None
+
+    async def acquire_at_least(self, target):
+        open_sessions = self.p_sessions_next
+        if open_sessions < target:
+            sessions_required = target - open_sessions
+            while sessions_required:
+                success_no = await self.start_n(sessions_required)
+                sessions_required -= success_no
 
     def n_more_or_best(self, results):
         if not len(results):
@@ -1142,6 +1119,35 @@ class IRCDNS():
             return freshest
         else:
             return self.get_success_min() - len(highest)
+        
+    async def n_name_lookups(self, n, start_p, name, tld, pw=""):
+        tasks = []; p = start_p
+        while len(tasks) < n:
+            if p >= len(self.servers):
+                raise Exception("Exceeded irc sessions.")
+
+            if not self.sessions[p].started.done():
+                p += 1
+                continue
+
+            # Get chan name.
+            chan_name = await self.sessions[p].get_irc_chan_name(
+                name,
+                tld,
+                pw
+            )
+
+            # Get name or throw an error.
+            tasks.append(
+                async_wrap_errors(
+                    self.sessions[p].get_chan_topic(chan_name),
+                    5
+                )
+            )
+
+            p += 1
+
+        return await asyncio.gather(*tasks), p
         
     async def name_lookup(self, name, tld, pw=""):
         # Open the bare minimum number of sessions
