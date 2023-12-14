@@ -352,6 +352,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             async def get_chan_topic(self, chan_name):
                 return self.chans[chan_name].pending_topic
 
+            """
             async def get_irc_chan_name(self, name, tld, pw=""):
                 # Domain names are unique per server.
                 msg = to_b(f"{self.irc_server} {pw} {name} {tld}")
@@ -368,8 +369,9 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
                         charset=B36_CHARSET
                     )
                 )[:31].lower()
+            """
 
-
+        executor = ProcessPoolExecutor(max_workers=8)
         servers = [
             {"domain": "a"},
             {"domain": "b"},
@@ -386,6 +388,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             clsSess=MockIRCSession,
             clsChan=MockIRCChan,
             servers=servers,
+            executor=executor,
             do_shuffle=False
         )
 
@@ -411,6 +414,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             clsSess=MockIRCSession,
             clsChan=MockIRCChan,
             servers=servers,
+            executor=executor,
             do_shuffle=False
         )
 
@@ -421,11 +425,13 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         dns_name = "p2pd_test"
         dns_tld = "test_tld"
         dns_val = "test val"
-        dns_hash = "#s92qa9y82imq8du1u6sfmsh9v4zekx8"
+        dns_hash = "#d5nrm24nwq13vcagbie3ef61muxq9ow"
         chan_name = await ircdns.sessions[0].get_irc_chan_name(
             name=dns_name,
-            tld=dns_tld
+            tld=dns_tld,
+            executor=executor
         )
+
         assert(chan_name == dns_hash)
         assert(irc_is_valid_chan_name(chan_name))
         assert(len(chan_name) <= 32)

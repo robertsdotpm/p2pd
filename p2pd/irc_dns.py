@@ -35,14 +35,19 @@ impossible or impractical depending on usage.
     Maybe allow the chan to expire (set this manually.
 
     get chan topic in session may not work appropriately
-    - need to optimize with process pools
     - update test code to use some funcs from ircdns (chan names and topics)
     - code to refresh topics periodically?
     - set expire flag on topic
     - update IRC message with all measures
+    - what about registering names for servers that come back online?
+    - rot values in chan topic using H(x) -> chan_name, x as a one-time pad so that you must know the chan details to use the record.
 
     whats the best way to make this module work as long as possible?
-    
+        programmatically adjust max and min success metric somehow
+            - each server has fields to indicate when connectivity
+            was last made and when its over a certain amount its removed from the server set.
+
+
 """
 
 import asyncio
@@ -52,6 +57,7 @@ import time
 import struct
 import argon2pure
 from ecdsa import SigningKey, VerifyingKey, SECP256k1
+from concurrent.futures import ProcessPoolExecutor
 from .utils import *
 from .address import *
 from .interface import *
@@ -216,6 +222,43 @@ def f_irc_pass(x):
             charset=B64_CHARSET
         )
     )[:30]
+
+def f_chan_pow(msg):
+    # Time locks help prevent registration front-running.
+    time_lock = argon2pure.argon2(
+        # Msg portion.
+        msg,
+
+        # Unique salt for rainbow resistance.
+        b'Ana main, chicken tikka masala, Blush - Wolf Alice',
+        
+        # Iterations.
+        time_cost=2, # 700
+        
+        # KB needed.
+        memory_cost=1024 * 2,
+        
+        # Threads needed.
+        parallelism=1
+    )
+
+    # Channel names begin with a #.
+    h = "#" + to_s(
+        # The result is encoded using A-Z0-9 for chan names.
+        encodebytes(
+            # Multiple hash functions make collisions harder to find.
+            # As a value will need to work for both functions.
+            hash160(
+                hashlib.sha256(
+                    msg + time_lock
+                ).digest()
+            ),
+            charset=B36_CHARSET
+        )
+    )[:31].lower()
+
+    # Cache.
+    return h
 
 def irc_is_valid_chan_name(chan_name):
     p = "^[#&+!][a-zA-Z0-9_-]+$"
@@ -507,46 +550,24 @@ class IRCSession():
     It also allows names to have special characters and be
     longer than 20 bytes (albeit at the cost of collisions.)
     """
-    async def get_irc_chan_name(self, name, tld, pw=""):
+    async def get_irc_chan_name(self, name, tld, pw="", executor=None):
         # Domain names are unique per server.
         msg = to_b(f"{self.irc_server} {pw} {name} {tld}")
         if msg in self.chan_name_hashes:
             return self.chan_name_hashes[msg]
-
-        # Time locks help prevent registration front-running.
-        time_lock = argon2pure.argon2(
-            # Msg portion.
-            msg,
-
-            # Unique salt for rainbow resistance.
-            b'Ana main, chicken tikka masala, Blush - Wolf Alice',
-            
-            # Iterations.
-            time_cost=2, # 700
-            
-            # KB needed.
-            memory_cost=1024 * 2,
-            
-            # Threads needed.
-            parallelism=1
-        )
-
-        # Channel names begin with a #.
-        h = "#" + to_s(
-            # The result is encoded using A-Z0-9 for chan names.
-            encodebytes(
-                # Multiple hash functions make collisions harder to find.
-                # As a value will need to work for both functions.
-                hash160(
-                    hashlib.sha256(
-                        msg + time_lock
-                    ).digest()
-                ),
-                charset=B36_CHARSET
+        
+        if executor is None:
+            h = f_chan_pow(msg)
+            print("single.")
+        else:
+            loop = asyncio.get_event_loop()
+            h = await loop.run_in_executor(
+                executor,
+                f_chan_pow,
+                (msg)
             )
-        )[:31].lower()
+            print(h)
 
-        # Cache.
         self.chan_name_hashes[msg] = h
         return h
     
@@ -863,13 +884,14 @@ class IRCSession():
             log_exception()
 
 class IRCDNS():
-    def __init__(self, i, seed, servers, clsChan=IRCChan, clsSess=IRCSession, do_shuffle=True):
+    def __init__(self, i, seed, servers, executor=None, clsChan=IRCChan, clsSess=IRCSession, do_shuffle=True):
         self.i = i
         self.seed = seed
         self.sessions = {}
         self.p_sessions_next = 0
         self.clsChan = clsChan
         self.clsSess = clsSess
+        self.executor = executor
 
         if do_shuffle:
             random.shuffle(servers)
@@ -934,6 +956,21 @@ class IRCDNS():
             return success_no
         finally:
             self.start_lock.release()
+
+    async def pre_cache(self, name, tld, pw):
+        tasks = []
+        for n in range(0, self.p_sessions_next):
+            task = self.sessions[n].get_irc_chan_name(
+                name,
+                tld,
+                pw,
+                self.executor
+            )
+
+            tasks.append(task)
+
+        if len(tasks):
+            await asyncio.gather(*tasks)
     
     async def name_register(self, name, tld, pw=""):
         assert(self.p_sessions_next <= len(self.servers))
@@ -949,13 +986,17 @@ class IRCDNS():
         if success_no < self.get_success_max():
             raise Exception("Insufficient sessions.")
         
+        # Pre-cache chan name hashes.
+        await self.pre_cache(name, tld, pw)
+        
         # Check if name available on servers.
         tasks = []
         for n in range(0, self.p_sessions_next):
             chan_name = await self.sessions[n].get_irc_chan_name(
                 name,
                 tld,
-                pw
+                pw,
+                self.executor
             )
 
             task = self.sessions[n].is_chan_registered(chan_name)
@@ -976,7 +1017,8 @@ class IRCDNS():
             chan_name = await self.sessions[n].get_irc_chan_name(
                 name,
                 tld,
-                pw
+                pw,
+                self.executor
             )
 
             task = self.sessions[n].register_chan(chan_name)
@@ -1023,6 +1065,9 @@ class IRCDNS():
             len(self.servers) - self.p_sessions_next
         )
 
+        # Pre-cache name hashes.
+        await self.pre_cache(name, tld, pw)
+
         # Build tasks to set chan topics.
         tasks = []
         for n in range(0, len(self.servers)):
@@ -1035,7 +1080,8 @@ class IRCDNS():
             chan_name = await session.get_irc_chan_name(
                 name,
                 tld,
-                pw
+                pw,
+                self.executor
             )
 
             # Load channel manager.
@@ -1143,7 +1189,8 @@ class IRCDNS():
             chan_name = await self.sessions[p].get_irc_chan_name(
                 name,
                 tld,
-                pw
+                pw,
+                self.executor
             )
 
             # Get name or throw an error.
@@ -1162,6 +1209,9 @@ class IRCDNS():
             return [], p
         
     async def name_lookup(self, name, tld, pw=""):
+        # Pre-cache name hashes.
+        await self.pre_cache(name, tld, pw)
+
         # Open the bare minimum number of sessions
         # for a successful consensus result.
         await self.acquire_at_least(

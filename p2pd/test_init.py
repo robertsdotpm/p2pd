@@ -35,7 +35,7 @@ if vmin <= 4:
     raise Exception("Project needs >= 3.5")
 
 if not hasattr(unittest, "IsolatedAsyncioTestCase"):
-    print("patching isolated asyncio test case")
+    log("patching isolated asyncio test case")
     import aiounittest
     unittest.IsolatedAsyncioTestCase = aiounittest.AsyncTestCase
 
