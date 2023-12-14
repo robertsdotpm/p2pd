@@ -65,7 +65,7 @@ from .base_stream import *
 from .base_n import encodebytes, decodebytes
 from .base_n import B36_CHARSET, B64_CHARSET, B92_CHARSET
 
-IRC_PREFIX = "19"
+IRC_PREFIX = "20"
 
 IRC_VERSION = "Friendly P2PD user - see p2pd.net/irc"
 
@@ -250,7 +250,7 @@ def f_chan_pow(msg):
             # As a value will need to work for both functions.
             hash160(
                 hashlib.sha256(
-                    msg + time_lock
+                    time_lock + msg
                 ).digest()
             ),
             charset=B36_CHARSET
@@ -558,7 +558,6 @@ class IRCSession():
         
         if executor is None:
             h = f_chan_pow(msg)
-            print("single.")
         else:
             loop = asyncio.get_event_loop()
             h = await loop.run_in_executor(
@@ -566,7 +565,6 @@ class IRCSession():
                 f_chan_pow,
                 (msg)
             )
-            print(h)
 
         self.chan_name_hashes[msg] = h
         return h
@@ -957,7 +955,7 @@ class IRCDNS():
         finally:
             self.start_lock.release()
 
-    async def pre_cache(self, name, tld, pw):
+    async def pre_cache(self, name, tld, pw=""):
         tasks = []
         for n in range(0, self.p_sessions_next):
             task = self.sessions[n].get_irc_chan_name(

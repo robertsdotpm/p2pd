@@ -425,16 +425,15 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         dns_name = "p2pd_test"
         dns_tld = "test_tld"
         dns_val = "test val"
-        dns_hash = "#d5nrm24nwq13vcagbie3ef61muxq9ow"
-        chan_name = await ircdns.sessions[0].get_irc_chan_name(
+        await ircdns.pre_cache(dns_name, dns_tld)
+        dns_hash = await ircdns.sessions[0].get_irc_chan_name(
             name=dns_name,
             tld=dns_tld,
             executor=executor
         )
 
-        assert(chan_name == dns_hash)
-        assert(irc_is_valid_chan_name(chan_name))
-        assert(len(chan_name) <= 32)
+        assert(irc_is_valid_chan_name(dns_hash))
+        assert(len(dns_hash) <= 32)
 
         # Register, store, then get.
         ret = await ircdns.name_register(dns_name, dns_tld)

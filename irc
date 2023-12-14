@@ -25,18 +25,20 @@ system on top of IRC that can be used in place of DNS for DDNS purposes.
 
 ## But what about spam?
 
-One way I've tried to mitigate the potential for abuse is by setting the
-moderator mode on channels. So at least the channels can't be used by botnets.
-This is also a very good way to ensure that channels are automatically
-deleted if they're not used. As chanservs are often optimized to delete channels
-with no new messages in them after X days. The channel founder is
-always free to periodically "refresh" the channel. Should they still require it.
+I've implemented many ways to mitigate the potential for disruption.
 
-Users of the system shouldn't need to use much bandwidth or resources
-from the IRC server. This is true for channel owners, too. Perhaps there are
-more measures to minimize abuse, but for now I think this is a good solution.
-There aren't many users of my software at the moment so scalability isn't an issue.
-This may not even end up being used. We shall see.
+1. Moderator mode is set so channels can't be used to host botnets.
+
+2. The channels are set to private to avoid flooding the channel listing.
+
+3. Channel names are uniquely determined by an algorithm that requires CPU
+work to be done from clients to map names to values. This sets an upper bound on
+how many channels can be created and the resolutions they serve per second.
+
+4. Flags are set to ensure the channel expires naturally when disused.
+
+Probably the biggest optimization is that my software doesn't currently have
+many users so scalability in the short term shouldn't be a concern.
 
 ## Contact
 
