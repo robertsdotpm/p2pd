@@ -1,14 +1,7 @@
 """
     async def test_irc_dns():
         
-        msg = ":ChanServ!services@services.xxxchatters.com NOTICE client_dev_nick1sZU8um :Channel \x02#qfATvV8F\x02 registered under your account: client_dev_nick1sZU8um\r\n:ChanServ!services@services.xxxchatters.com MODE #qfATvV8F +rq client_dev_nick1sZU8um\r\n"
-        out = extract_irc_msgs(msg)
-        print(out)
-        print(out[0][0].suffix)
 
-        
-        return
-    
 
         chan_topic = "this_is_test_chan_topic"
         chan_name = "#test_chan_name323" + IRC_PREFIX
@@ -337,8 +330,6 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             assert(got == expected)
 
     async def test_start_n(self):
-        print("In test start_n")
-
         class MockIRCChan(IRCChan):
             async def set_topic(self, topic):
                 self.pending_topic = topic
@@ -422,7 +413,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             servers=servers,
             do_shuffle=False
         )
-        print(ircdns.p_sessions_next)
+
         await ircdns.start_n(2)
         assert(ircdns.p_sessions_next == 2)
 
@@ -488,9 +479,5 @@ if __name__ == '__main__':
     main()
 
 """
-    todo: simulate store with the main manager and get
-    try to test register / login -- see if infinite loop is possible
-    Maybe allow the chan to expire (set this manually.
-    p_session_next doesnt seem thread-safe
-    get chan topic in session may not work appropriately
+
 """

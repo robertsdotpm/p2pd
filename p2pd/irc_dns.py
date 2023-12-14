@@ -28,6 +28,21 @@ But what about rainbow tables?
 
 These measures make race conditions and rainbow tables either
 impossible or impractical depending on usage.
+
+---
+
+    try to test register / login -- see if infinite loop is possible
+    Maybe allow the chan to expire (set this manually.
+
+    get chan topic in session may not work appropriately
+    - need to optimize with process pools
+    - update test code to use some funcs from ircdns (chan names and topics)
+    - code to refresh topics periodically?
+    - set expire flag on topic
+    - update IRC message with all measures
+
+    whats the best way to make this module work as long as possible?
+    
 """
 
 import asyncio
@@ -36,14 +51,13 @@ import random
 import time
 import struct
 import argon2pure
-from ecdsa import SigningKey, VerifyingKey, NIST192p, SECP256k1
-from .base_n import encodebytes, decodebytes
-from .base_n import B36_CHARSET, B64_CHARSET, B92_CHARSET
+from ecdsa import SigningKey, VerifyingKey, SECP256k1
 from .utils import *
 from .address import *
 from .interface import *
 from .base_stream import *
-
+from .base_n import encodebytes, decodebytes
+from .base_n import B36_CHARSET, B64_CHARSET, B92_CHARSET
 
 IRC_PREFIX = "19"
 
@@ -861,6 +875,7 @@ class IRCDNS():
             random.shuffle(servers)
 
         self.servers = servers
+        self.start_lock = asyncio.Lock()
 
     def get_failure_max(self):
         return int(0.4 * len(self.servers))
@@ -887,34 +902,38 @@ class IRCDNS():
         await asyncio.gather(*tasks)
 
     async def start_n(self, n):
-        assert(self.p_sessions_next <= len(self.servers))
+        await self.start_lock.acquire()
+        try:
+            assert(self.p_sessions_next <= len(self.servers))
 
-        # Are there enough unstarted servers to try?
-        tasks = []; p = self.p_sessions_next
-        if (p + n) > len(self.servers):
-            raise Exception("No IRC servers left to try.")
+            # Are there enough unstarted servers to try?
+            tasks = []; p = self.p_sessions_next
+            if (p + n) > len(self.servers):
+                raise Exception("No IRC servers left to try.")
 
-        # Create sessions from any already started.
-        for j in range(p, p + n):
-            assert(j not in self.sessions)
-            self.sessions[j] = self.clsSess(
-                self.servers[j],
-                self.seed
-            )
+            # Create sessions from any already started.
+            for j in range(p, p + n):
+                assert(j not in self.sessions)
+                self.sessions[j] = self.clsSess(
+                    self.servers[j],
+                    self.seed
+                )
 
-            tasks.append(self.sessions[j].start())
-            self.p_sessions_next += 1
+                tasks.append(self.sessions[j].start())
+                self.p_sessions_next += 1
 
-        # Start them all at once if needed.
-        if len(tasks):
-            await asyncio.gather(*tasks)
+            # Start them all at once if needed.
+            if len(tasks):
+                await asyncio.gather(*tasks)
 
-        # Determine sessions that worked.
-        success_no = 0
-        for j in range(0, self.p_sessions_next):
-            if self.sessions[j].started.done():
-                success_no += 1
-        return success_no
+            # Determine sessions that worked.
+            success_no = 0
+            for j in range(0, self.p_sessions_next):
+                if self.sessions[j].started.done():
+                    success_no += 1
+            return success_no
+        finally:
+            self.start_lock.release()
     
     async def name_register(self, name, tld, pw=""):
         assert(self.p_sessions_next <= len(self.servers))
@@ -1069,7 +1088,7 @@ class IRCDNS():
                 "time": timestamp,
             }
         except:
-            what_exception()
+            log_exception()
             return None
 
     async def acquire_at_least(self, target):
@@ -1137,7 +1156,10 @@ class IRCDNS():
 
             p += 1
 
-        return await asyncio.gather(*tasks), p
+        if len(tasks):
+            return await asyncio.gather(*tasks), p
+        else:
+            return [], p
         
     async def name_lookup(self, name, tld, pw=""):
         # Open the bare minimum number of sessions
