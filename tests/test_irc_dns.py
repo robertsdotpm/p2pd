@@ -473,6 +473,13 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         assert(highest == best["time"])
 
+        freshest = await ircdns.name_lookup(
+            name=dns_name,
+            tld=dns_tld
+        )
+
+        assert(best == freshest)
+
         # unpack
 
         #assert(ircdns.sessions[0].chans[dns_hash].pending_topic == dns_val)
