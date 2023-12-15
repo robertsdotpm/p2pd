@@ -392,6 +392,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             do_shuffle=False
         )
 
+        # Sanity checks on length.
+
         # Should continue.
         await ircdns.start_n(len(servers) - 1)
         assert(ircdns.p_sessions_next == len(servers) - 1)
@@ -479,6 +481,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         # unpack
 
         #assert(ircdns.sessions[0].chans[dns_hash].pending_topic == dns_val)
+
+        # assert len of user pass nick email ... etc
 
 if __name__ == '__main__':
     main()

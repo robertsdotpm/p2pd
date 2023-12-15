@@ -37,7 +37,6 @@ impossible or impractical depending on usage.
     get chan topic in session may not work appropriately
     - update test code to use some funcs from ircdns (chan names and topics)
     - code to refresh topics periodically?
-    - set expire flag on topic
     - update IRC message with all measures
     - what about registering names for servers that come back online?
     - rot values in chan topic using H(x) -> chan_name, x as a one-time pad so that you must know the chan details to use the record.
@@ -211,12 +210,12 @@ IRC_NICK_POS = [
     #"is reserved by a different account"
 ]
 
-# SHA256 digest in ascii truncated to a str limit.
+# SHA3 digest in ascii truncated to a str limit.
 # Used for deterministic passwords with good complexity.
 def f_irc_pass(x):
     return to_s(
         encodebytes(
-            hashlib.sha256(
+            hashlib.sha3_256(
                 to_b(x)
             ).digest(),
             charset=B64_CHARSET
@@ -249,8 +248,8 @@ def f_chan_pow(msg):
             # Multiple hash functions make collisions harder to find.
             # As a value will need to work for both functions.
             hash160(
-                hashlib.sha256(
-                    time_lock + msg
+                hashlib.sha3_256(
+                    msg + time_lock
                 ).digest()
             ),
             charset=B36_CHARSET
@@ -440,11 +439,17 @@ class IRCSession():
 
         # Derive details for IRC server.
         self.irc_server = self.server_info["domain"]
-        self.username = "u" + sha256(self.irc_server + IRC_PREFIX + "user" + seed)[:7]
+        self.username = "u" + sha3_256(self.irc_server + IRC_PREFIX + "user" + seed)[:7]
         self.user_pass = f_irc_pass(self.irc_server + IRC_PREFIX + "pass" + seed)
-        self.nick = "n" + sha256(self.irc_server + IRC_PREFIX + "nick" + seed)[:7]
-        self.email = "p2pd_" + sha256(self.irc_server + IRC_PREFIX + "email" + seed)[:12]
+        self.nick = "n" + sha3_256(self.irc_server + IRC_PREFIX + "nick" + seed)[:7]
+        self.email = "p2pd_" + sha3_256(self.irc_server + IRC_PREFIX + "email" + seed)[:12]
         self.email += "@p2pd.net"
+
+        # Sanity checks.
+        assert(len(self.username) <= 8)
+        assert(len(self.user_pass) <= 30)
+        assert(len(self.nick) <= 8)
+        assert(len(self.email) <= 26)
 
     async def start(self, i, timeout=60):
         async def do_start():
@@ -500,30 +505,6 @@ class IRCSession():
             )
             print("get login status done.")
 
-            """
-            await self.con.send(
-                IRCMsg(
-                    cmd="HELP",
-                ).pack()
-            )
-
-            await self.con.send(
-                IRCMsg(
-                    cmd="PRIVMSG",
-                    param="ChanServ",
-                    suffix=f"set"
-                ).pack()
-            )
-
-            await self.con.send(
-                IRCMsg(
-                    cmd="PRIVMSG",
-                    param="ChanServ",
-                    suffix=f"help set"
-                ).pack()
-            )
-            """
-
             # Load pre-existing owned channels.
             #await self.load_owned_chans()
 
@@ -552,7 +533,7 @@ class IRCSession():
     """
     async def get_irc_chan_name(self, name, tld, pw="", executor=None):
         # Domain names are unique per server.
-        msg = to_b(f"{self.irc_server} {pw} {name} {tld}")
+        msg = to_b(f"{name} {tld} {pw} {self.irc_server}")
         if msg in self.chan_name_hashes:
             return self.chan_name_hashes[msg]
         
@@ -1026,16 +1007,16 @@ class IRCDNS():
 
     async def store_value(self, value, name, tld, pw=""):
         # Bytes used to make ECDSA priv key.
-        priv = hashlib.sha256(
+        priv = hashlib.sha3_256(
             to_b(
-                f"{pw}{name}{tld}{self.seed}"
+                f"{name}{tld}{pw}{self.seed}"
             )
         ).digest()
 
         # ECDSA secret key.
         sk = SigningKey.from_string(
             string=priv,
-            hashfunc=hashlib.sha256,
+            hashfunc=hashlib.sha3_256,
             curve=SECP256k1
         )
 
@@ -1110,7 +1091,7 @@ class IRCDNS():
             signature=sig_b,
             data=msg_b,
             curve=SECP256k1,
-            hashfunc=hashlib.sha256
+            hashfunc=hashlib.sha3_256
         )
 
         # Anything that validates is the right public key.
