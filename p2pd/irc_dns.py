@@ -1039,10 +1039,6 @@ class IRCDNS():
             curve=SECP256k1
         )
 
-        # ECDSA pub key (compressed.)
-        vk = sk.verifying_key
-        vk_buf = vk.to_string("compressed")
-
         # Serialized data portion with timestamp prepend.
         val_buf = struct.pack("Q", int(time.time()))
         val_buf += to_b(value)
@@ -1051,9 +1047,8 @@ class IRCDNS():
         sig_buf = sk.sign(val_buf)
 
         # Topic message to store (topic-safe encoding.)
-        topic = "%s %s %s %s" % (
+        topic = "%s %s %s" % (
             "p2pd.net/irc",
-            to_s(encodebytes(vk_buf, charset=B92_CHARSET)),
             to_s(encodebytes(sig_buf, charset=B92_CHARSET)),
             to_s(encodebytes(val_buf, charset=B92_CHARSET)),
         )
@@ -1101,39 +1096,43 @@ class IRCDNS():
             return None
         
         parts = value.split()
-        if len(parts) != 4:
+        if len(parts) != 3:
             return None
 
-        try:
-            # NIST192p ECDSA public key part.
-            vk_b = decodebytes(parts[1], charset=B92_CHARSET)
-            vk = VerifyingKey.from_string(
-                string=vk_b,
-                hashfunc=hashlib.sha256,
-                curve=SECP256k1
-            )
+        # Signature part.
+        sig_b = decodebytes(parts[1], charset=B92_CHARSET)
 
-            # Signature part.
-            sig_b = decodebytes(parts[2], charset=B92_CHARSET)
+        # Message part.
+        msg_b = decodebytes(parts[2], charset=B92_CHARSET)
 
-            # Message part.
-            msg_b = decodebytes(parts[3], charset=B92_CHARSET)
-            vk.verify(
-                sig_b,
-                msg_b
-            )
+        # List of possible public keys recovered from sig.
+        vk_list = VerifyingKey.from_public_key_recovery(
+            signature=sig_b,
+            data=msg_b,
+            curve=SECP256k1,
+            hashfunc=hashlib.sha256
+        )
 
-            timestamp = struct.unpack("Q", msg_b[:8])[0]
-            return {
-                "id": vk_b,
-                "vk": vk,
-                "msg": msg_b[8:],
-                "sig": sig_b,
-                "time": timestamp,
-            }
-        except:
-            log_exception()
-            return None
+        # Anything that validates is the right public key.
+        for vk in vk_list:
+            try:
+                vk.verify(
+                    sig_b,
+                    msg_b
+                )
+
+                timestamp = struct.unpack("Q", msg_b[:8])[0]
+                return {
+                    "id": vk.to_string("compressed"),
+                    "vk": vk,
+                    "msg": msg_b[8:],
+                    "sig": sig_b,
+                    "time": timestamp,
+                }
+            except:
+                log_exception()
+
+        return None
 
     async def acquire_at_least(self, target):
         open_sessions = self.p_sessions_next
