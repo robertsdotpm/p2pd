@@ -31,21 +31,26 @@ impossible or impractical depending on usage.
 
 ---
 
-    try to test register / login -- see if infinite loop is possible
-    Maybe allow the chan to expire (set this manually.
 
-    get chan topic in session may not work appropriately
-    - update test code to use some funcs from ircdns (chan names and topics)
-    - code to refresh topics periodically?
-    - update IRC message with all measures
-    - what about registering names for servers that come back online?
+
     - rot values in chan topic using H(x) -> chan_name, x as a one-time pad so that you must know the chan details to use the record.
+
+
+    - update test code to use some funcs from ircdns (chan names and topics)
+        -     get chan topic in session may not work appropriately
+
+----------------------------
+    - code to refresh topics periodically?
+
+    - what about registering names for servers that come back online?
 
     whats the best way to make this module work as long as possible?
         programmatically adjust max and min success metric somehow
             - each server has fields to indicate when connectivity
             was last made and when its over a certain amount its removed from the server set.
 
+    if account gets deleted from inactivity (for client)
+    try next prefix along?
 
 """
 
@@ -55,8 +60,8 @@ import random
 import time
 import struct
 import argon2pure
+import binascii
 from ecdsa import SigningKey, VerifyingKey, SECP256k1
-from concurrent.futures import ProcessPoolExecutor
 from .utils import *
 from .address import *
 from .interface import *
@@ -209,6 +214,21 @@ IRC_NICK_POS = [
     "ickname \S* is already",
     #"is reserved by a different account"
 ]
+
+def f_sha3_to_ecdsa_priv(msg):
+    max_hex = "FFFFFFFF00000000FFFFFFFFFFFFFFFF"
+    max_hex += "BCE6FAADA7179E84F3B9CAC2FC632551"
+    max_int = int(max_hex, 16)
+
+    # Continue until hash hex is <= max_int.
+    while 1:
+        h_b = hashlib.sha3_256(to_b(msg)).digest()
+        h_hex = binascii.hexlify(h_b)
+        h_int = int(h_hex, 16)
+        if h_int <= max_int:
+            return h_b
+        else:
+            msg = h_b
 
 # SHA3 digest in ascii truncated to a str limit.
 # Used for deterministic passwords with good complexity.
@@ -1007,11 +1027,11 @@ class IRCDNS():
 
     async def store_value(self, value, name, tld, pw=""):
         # Bytes used to make ECDSA priv key.
-        priv = hashlib.sha3_256(
+        priv = f_sha3_to_ecdsa_priv(
             to_b(
                 f"{name}{tld}{pw}{self.seed}"
             )
-        ).digest()
+        )
 
         # ECDSA secret key.
         sk = SigningKey.from_string(
