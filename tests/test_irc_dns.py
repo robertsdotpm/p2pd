@@ -452,7 +452,11 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             assert(test_hash in ircdns.sessions[i].chans)
 
         topic_val = ircdns.sessions[0].chans[dns_hash].pending_topic
-        out = ircdns.unpack_topic_value(topic_val)
+        out = ircdns.unpack_topic_value(
+            dns_hash,
+            topic_val,
+            ircdns.sessions[0]
+        )
 
         # Get results list.
         results, _ = await ircdns.n_name_lookups(
@@ -461,8 +465,10 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             dns_name,
             dns_tld
         )
+
+
         best = ircdns.n_more_or_best(results)
-        
+
         # Check that best value is correct.
         highest = results[0]["time"]
         for r in results:
@@ -477,6 +483,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         )
 
         assert(best == freshest)
+
+        print(freshest)
 
         # unpack
 

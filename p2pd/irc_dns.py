@@ -215,6 +215,21 @@ IRC_NICK_POS = [
     #"is reserved by a different account"
 ]
 
+# Not meant to provide bullet-proof security.
+def f_otp(msg, otp):
+    # Make otp long enough.
+    while len(otp) < len(msg):
+        otp += hashlib.sha1(otp).digest()
+
+    # Xor MSG with OTP.
+    buf = b""
+    for i in range(0, len(msg)):
+        buf += bytes([
+            msg[i] ^ otp[i]
+        ])
+
+    return buf
+
 def f_sha3_to_ecdsa_priv(msg):
     max_hex = "FFFFFFFF00000000FFFFFFFFFFFFFFFF"
     max_hex += "BCE6FAADA7179E84F3B9CAC2FC632551"
@@ -277,7 +292,7 @@ def f_chan_pow(msg):
     )[:31].lower()
 
     # Cache.
-    return h
+    return h, time_lock
 
 def irc_is_valid_chan_name(chan_name):
     p = "^[#&+!][a-zA-Z0-9_-]+$"
@@ -370,9 +385,9 @@ class IRCChan:
         self.session = session
         self.chan_name = chan_name
         self.chan_pass = f_irc_pass(
-            session.irc_server + 
             IRC_PREFIX +
             chan_name + 
+            session.irc_server + 
             session.seed
         )
 
@@ -451,6 +466,7 @@ class IRCSession():
         self.chan_registered = {}
         self.chan_infos = {}
         self.chan_name_hashes = {}
+        self.chan_time_locks = {}
         self.server_info = server_info
         self.seed = seed
 
@@ -459,10 +475,10 @@ class IRCSession():
 
         # Derive details for IRC server.
         self.irc_server = self.server_info["domain"]
-        self.username = "u" + sha3_256(self.irc_server + IRC_PREFIX + "user" + seed)[:7]
-        self.user_pass = f_irc_pass(self.irc_server + IRC_PREFIX + "pass" + seed)
-        self.nick = "n" + sha3_256(self.irc_server + IRC_PREFIX + "nick" + seed)[:7]
-        self.email = "p2pd_" + sha3_256(self.irc_server + IRC_PREFIX + "email" + seed)[:12]
+        self.username = "u" + sha3_256(IRC_PREFIX + "user" + self.irc_server + seed)[:7]
+        self.user_pass = f_irc_pass(IRC_PREFIX + "pass" + self.irc_server + seed)
+        self.nick = "n" + sha3_256(IRC_PREFIX + "nick" + self.irc_server + seed)[:7]
+        self.email = "p2pd_" + sha3_256(IRC_PREFIX + "email" + self.irc_server + seed)[:12]
         self.email += "@p2pd.net"
 
         # Sanity checks.
@@ -558,16 +574,17 @@ class IRCSession():
             return self.chan_name_hashes[msg]
         
         if executor is None:
-            h = f_chan_pow(msg)
+            h, time_lock = f_chan_pow(msg)
         else:
             loop = asyncio.get_event_loop()
-            h = await loop.run_in_executor(
+            h, time_lock = await loop.run_in_executor(
                 executor,
                 f_chan_pow,
                 (msg)
             )
 
         self.chan_name_hashes[msg] = h
+        self.chan_time_locks[h] = time_lock
         return h
     
     async def close(self):
@@ -1040,35 +1057,11 @@ class IRCDNS():
             curve=SECP256k1
         )
 
-        # Serialized data portion with timestamp prepend.
-        val_buf = struct.pack("Q", int(time.time()))
-        val_buf += to_b(value)
-
-        # Signed val_buf with vk.
-        sig_buf = sk.sign(val_buf)
-
-        # Topic message to store (topic-safe encoding.)
-        topic = "%s %s %s" % (
-            "p2pd.net/irc",
-            to_s(encodebytes(sig_buf, charset=B92_CHARSET)),
-            to_s(encodebytes(val_buf, charset=B92_CHARSET)),
-        )
-
-        # Open as many sessions as possible.
-        await self.start_n(
-            len(self.servers) - self.p_sessions_next
-        )
-
-        # Pre-cache name hashes.
-        await self.pre_cache(name, tld, pw)
-
-        # Build tasks to set chan topics.
-        tasks = []
-        for n in range(0, len(self.servers)):
+        async def helper(n):
             # Select session to use.
             session = self.sessions[n]
             if not session.started.done():
-                continue
+                return
 
             # Generate channel name.
             chan_name = await session.get_irc_chan_name(
@@ -1085,18 +1078,50 @@ class IRCDNS():
             else:
                 chan = session.chans[chan_name]
 
+            # Time lock value used for OTP.
+            time_lock = session.chan_time_locks[chan_name]
+
+            # Serialized data portion with timestamp prepend.
+            val_buf = struct.pack("Q", int(time.time()))
+            val_buf += to_b(value)
+
+            # Weakly encrypted topic value.
+            val_buf = f_otp(val_buf, time_lock)
+
+            # Signed val_buf with vk.
+            sig_buf = sk.sign(val_buf)
+
+            # Topic message to store (topic-safe encoding.)
+            topic = "%s %s %s" % (
+                "p2pd.net/irc",
+                to_s(encodebytes(sig_buf, charset=B92_CHARSET)),
+                to_s(encodebytes(val_buf, charset=B92_CHARSET)),
+            )
+
             # Reference function to set topic.
-            task = chan.set_topic(topic)
-            tasks.append(task)
+            await chan.set_topic(topic)
+
+        # Open as many sessions as possible.
+        await self.start_n(
+            len(self.servers) - self.p_sessions_next
+        )
+
+        # Pre-cache name hashes.
+        await self.pre_cache(name, tld, pw)
+
+        # Build tasks to set chan topics.
+        tasks = []
+        for n in range(0, len(self.servers)):
+            tasks.append(helper(n))
 
         # Execute tasks to update topics.
         await asyncio.gather(*tasks)
 
-    def unpack_topic_value(self, value):
-        if value is None:
+    def unpack_topic_value(self, chan_name, topic, session):
+        if topic is None:
             return None
         
-        parts = value.split()
+        parts = topic.split()
         if len(parts) != 3:
             return None
 
@@ -1106,6 +1131,9 @@ class IRCDNS():
         # Message part.
         msg_b = decodebytes(parts[2], charset=B92_CHARSET)
 
+        # Time lock value used for OTP.
+        time_lock = session.chan_time_locks[chan_name]
+
         # List of possible public keys recovered from sig.
         vk_list = VerifyingKey.from_public_key_recovery(
             signature=sig_b,
@@ -1113,6 +1141,14 @@ class IRCDNS():
             curve=SECP256k1,
             hashfunc=hashlib.sha3_256
         )
+        print(vk_list)
+
+
+        vk_ids = []
+        for vk in vk_list:
+            vk_ids.append(
+                vk.to_string("compressed")
+            )
 
         # Anything that validates is the right public key.
         for vk in vk_list:
@@ -1122,18 +1158,20 @@ class IRCDNS():
                     msg_b
                 )
 
+                msg_b = f_otp(msg_b, time_lock)
                 timestamp = struct.unpack("Q", msg_b[:8])[0]
                 return {
-                    "id": vk.to_string("compressed"),
+                    "ids": vk_ids,
                     "vk": vk,
                     "msg": msg_b[8:],
+                    "otp": f_otp(msg_b, time_lock),
                     "sig": sig_b,
                     "time": timestamp,
                 }
             except:
                 log_exception()
 
-        return None
+        return []
 
     async def acquire_at_least(self, target):
         open_sessions = self.p_sessions_next
@@ -1149,10 +1187,11 @@ class IRCDNS():
         
         table = {}
         for r in results:
-            if r["id"] in table:
-                table[r["id"]].append(r)
-            else:
-                table[r["id"]] = [r]
+            for r_id in r["ids"]:
+                if r_id not in table:
+                    table[r_id] = [r]
+                else:
+                    table[r_id].append(r)
 
         highest = []
         for r_id in table:
@@ -1170,9 +1209,14 @@ class IRCDNS():
             return self.get_success_min() - len(highest)
         
     async def n_name_lookups(self, n, start_p, name, tld, pw=""):
-        async def helper(self, x, y):
-            chan_topic = await self.sessions[x].get_chan_topic(y)
-            return self.unpack_topic_value(chan_topic)
+        async def helper(self, session_offset, chan_name):
+            session = self.sessions[session_offset]
+            topic = await session.get_chan_topic(chan_name)
+            return self.unpack_topic_value(
+                chan_name,
+                topic,
+                session
+            )
 
         tasks = []; p = start_p
         while len(tasks) < n:
