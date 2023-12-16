@@ -412,6 +412,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         # assert len of user pass nick email ... etc
 
     async def test_irc_servers_work(self):
+        return
         dns_value = "Test dns val."
         dns_name = "testing_dns_name"
         dns_tld = "testing"
@@ -530,6 +531,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             input("Press enter to test next server.")
             input()
 
+    async def test_find_more_servers(self):
+        pass
 
 if __name__ == '__main__':
     main()

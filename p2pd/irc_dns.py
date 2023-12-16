@@ -50,6 +50,12 @@ impossible or impractical depending on usage.
     whats the slowdown after set topic?
 
     - servers that are online but disable reg?
+
+    - store account expiry and chan expiry details in server list
+
+    - see if you can find any more servers to add to the list.
+
+    lightweight db like cookies for state
 """
 
 import asyncio
