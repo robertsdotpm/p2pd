@@ -435,7 +435,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         print("If start")
         print(i)
 
-        for offset, s in enumerate(server_list[1:]):
+        for offset, s in enumerate(server_list[0:]):
             print(f"testing {s} : {offset}")
 
             ses = IRCSession(s, seed)

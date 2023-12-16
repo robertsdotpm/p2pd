@@ -30,9 +30,8 @@ These measures make race conditions and rainbow tables either
 impossible or impractical depending on usage.
 
 ---
-    - update test code to use some funcs from ircdns (chan names and topics)
-        -     get chan topic in session may not work appropriately
-    detect if we own a channel
+    - should use chan encoding for derived account details. currently it uses hex from a digest which decreases entropy
+    - detect if we own a channel
         register needs to be smarter with success if the user already owns the chan
 ----------------------------
 
@@ -48,6 +47,9 @@ impossible or impractical depending on usage.
     if account gets deleted from inactivity (for client)
     try next prefix along?
 
+    whats the slowdown after set topic?
+
+    - servers that are online but disable reg?
 """
 
 import asyncio
