@@ -30,24 +30,20 @@ These measures make race conditions and rainbow tables either
 impossible or impractical depending on usage.
 
 ---
-
-
-
-    - rot values in chan topic using H(x) -> chan_name, x as a one-time pad so that you must know the chan details to use the record.
-
-
     - update test code to use some funcs from ircdns (chan names and topics)
         -     get chan topic in session may not work appropriately
-
+    detect if we own a channel
+        register needs to be smarter with success if the user already owns the chan
 ----------------------------
-    - code to refresh topics periodically?
-
-    - what about registering names for servers that come back online?
 
     whats the best way to make this module work as long as possible?
         programmatically adjust max and min success metric somehow
             - each server has fields to indicate when connectivity
             was last made and when its over a certain amount its removed from the server set.
+
+    - code to refresh topics periodically?
+
+    - what about registering names for servers that come back online?
 
     if account gets deleted from inactivity (for client)
     try next prefix along?
@@ -293,6 +289,56 @@ def f_chan_pow(msg):
 
     # Cache.
     return h, time_lock
+
+async def f_encode_topic(value, name, tld, pw, ses, clsChan, executor=None):
+    # Bytes used to make ECDSA priv key.
+    priv = f_sha3_to_ecdsa_priv(
+        to_b(
+            f"{name}{tld}{pw}{ses.seed}"
+        )
+    )
+
+    # ECDSA secret key.
+    sk = SigningKey.from_string(
+        string=priv,
+        hashfunc=hashlib.sha3_256,
+        curve=SECP256k1
+    )
+
+    # Generate channel name.
+    chan_name = await ses.get_irc_chan_name(
+        name,
+        tld,
+        pw,
+        executor
+    )
+
+    # Load channel manager.
+    if chan_name not in ses.chans:
+        chan = clsChan(chan_name, ses)
+        ses.chans[chan_name] = chan
+    else:
+        chan = ses.chans[chan_name]
+
+    # Time lock value used for OTP.
+    time_lock = ses.chan_time_locks[chan_name]
+
+    # Serialized data portion with timestamp prepend.
+    val_buf = struct.pack("Q", int(time.time()))
+    val_buf += to_b(value)
+
+    # Weakly encrypted topic value.
+    val_buf = f_otp(val_buf, time_lock)
+
+    # Signed val_buf with vk.
+    sig_buf = sk.sign(val_buf)
+
+    # Topic message to store (topic-safe encoding.)
+    return "%s %s %s" % (
+        "p2pd.net/irc",
+        to_s(encodebytes(sig_buf, charset=B92_CHARSET)),
+        to_s(encodebytes(val_buf, charset=B92_CHARSET)),
+    ), chan
 
 def irc_is_valid_chan_name(chan_name):
     p = "^[#&+!][a-zA-Z0-9_-]+$"
@@ -957,7 +1003,9 @@ class IRCDNS():
                     self.seed
                 )
 
-                tasks.append(self.sessions[j].start())
+                tasks.append(
+                    self.sessions[j].start(self.i)
+                )
                 self.p_sessions_next += 1
 
             # Start them all at once if needed.
@@ -1008,15 +1056,17 @@ class IRCDNS():
         # Check if name available on servers.
         tasks = []
         for n in range(0, self.p_sessions_next):
-            chan_name = await self.sessions[n].get_irc_chan_name(
-                name,
-                tld,
-                pw,
-                self.executor
-            )
+            async def is_name_available(n):
+                chan_name = await self.sessions[n].get_irc_chan_name(
+                    name,
+                    tld,
+                    pw,
+                    self.executor
+                )
 
-            task = self.sessions[n].is_chan_registered(chan_name)
-            tasks.append(task)
+                return await self.sessions[n].is_chan_registered(chan_name)
+            
+            tasks.append(is_name_available(n))
         results = await asyncio.gather(*tasks)
         
         # Check if there's enough names available.
@@ -1030,72 +1080,36 @@ class IRCDNS():
         # Register name.
         tasks = []
         for n in range(0, self.p_sessions_next):
-            chan_name = await self.sessions[n].get_irc_chan_name(
-                name,
-                tld,
-                pw,
-                self.executor
-            )
+            async def do_register(n):
+                chan_name = await self.sessions[n].get_irc_chan_name(
+                    name,
+                    tld,
+                    pw,
+                    self.executor
+                )
 
-            task = self.sessions[n].register_chan(chan_name)
-            tasks.append(task)
+                return await self.sessions[n].register_chan(chan_name)
+            
+            tasks.append(do_register(n))
+
         await asyncio.gather(*tasks)
         return True
-
+    
     async def store_value(self, value, name, tld, pw=""):
-        # Bytes used to make ECDSA priv key.
-        priv = f_sha3_to_ecdsa_priv(
-            to_b(
-                f"{name}{tld}{pw}{self.seed}"
-            )
-        )
-
-        # ECDSA secret key.
-        sk = SigningKey.from_string(
-            string=priv,
-            hashfunc=hashlib.sha3_256,
-            curve=SECP256k1
-        )
-
         async def helper(n):
             # Select session to use.
             session = self.sessions[n]
             if not session.started.done():
                 return
 
-            # Generate channel name.
-            chan_name = await session.get_irc_chan_name(
+            topic, chan = await f_encode_topic(
+                value,
                 name,
                 tld,
                 pw,
+                session,
+                self.clsChan,
                 self.executor
-            )
-
-            # Load channel manager.
-            if chan_name not in session.chans:
-                chan = self.clsChan(chan_name, session)
-                session.chans[chan_name] = chan
-            else:
-                chan = session.chans[chan_name]
-
-            # Time lock value used for OTP.
-            time_lock = session.chan_time_locks[chan_name]
-
-            # Serialized data portion with timestamp prepend.
-            val_buf = struct.pack("Q", int(time.time()))
-            val_buf += to_b(value)
-
-            # Weakly encrypted topic value.
-            val_buf = f_otp(val_buf, time_lock)
-
-            # Signed val_buf with vk.
-            sig_buf = sk.sign(val_buf)
-
-            # Topic message to store (topic-safe encoding.)
-            topic = "%s %s %s" % (
-                "p2pd.net/irc",
-                to_s(encodebytes(sig_buf, charset=B92_CHARSET)),
-                to_s(encodebytes(val_buf, charset=B92_CHARSET)),
             )
 
             # Reference function to set topic.
@@ -1112,7 +1126,9 @@ class IRCDNS():
         # Build tasks to set chan topics.
         tasks = []
         for n in range(0, len(self.servers)):
-            tasks.append(helper(n))
+            tasks.append(
+                helper(n)
+            )
 
         # Execute tasks to update topics.
         await asyncio.gather(*tasks)
@@ -1141,8 +1157,6 @@ class IRCDNS():
             curve=SECP256k1,
             hashfunc=hashlib.sha3_256
         )
-        print(vk_list)
-
 
         vk_ids = []
         for vk in vk_list:
@@ -1170,8 +1184,6 @@ class IRCDNS():
                 }
             except:
                 log_exception()
-
-        return []
 
     async def acquire_at_least(self, target):
         open_sessions = self.p_sessions_next

@@ -3,86 +3,7 @@
         
 
 
-        chan_topic = "this_is_test_chan_topic"
-        chan_name = "#test_chan_name323" + IRC_PREFIX
-        server_list = IRC_SERVERS
 
-        seed = "test_seed" * 20
-        i = await Interface().start()
-
-
-
-        print("If start")
-        print(i)
-
-        for offset, s in enumerate(server_list[1:]):
-            print(f"testing {s} : {offset}")
-
-            irc_dns = IRCSession(s, seed)
-
-            try:
-                await irc_dns.start(i)
-                print("start success")
-            except:
-                print(f"start failed for {s}")
-                what_exception()
-
-            #await irc_dns.get_chan_reg_syntax()
-            #await asyncio.sleep(10)
-            #exit()
-
-            # Test chan create.
-            print("trying to check if chan is registered.")
-            ret = await irc_dns.is_chan_registered(chan_name)
-            if ret:
-                print(f"{chan_name} registered, not registering")
-
-                # 'load' chan instead.
-                irc_chan = IRCChan(chan_name, irc_dns)
-                irc_dns.chans[chan_name] = irc_chan
-                print(irc_chan.chan_pass) # S:1f(.9i{e@3$Fkxq^f{JW,>sVQi?Q\
-            else:
-                print(f"{chan_name} not registered, attempting to...")
-                await irc_dns.register_channel(chan_name)
-                ret = await irc_dns.is_chan_registered(chan_name)
-                if ret:
-                    print("success")
-                else:
-                    print("failure")
-                    exit()
-
-            # Test set topic.
-            chan_topic = to_s(rand_plain(8))
-            #await irc_dns.chans[chan_name].get_ops()
-            #print("get ops done")
-            await irc_dns.chans[chan_name].set_topic(chan_topic)
-            print("set topic done")
-
-            # Potential race condition between getting new chan.
-            await asyncio.sleep(4)
-
-            outside_user = IRCSession(s, seed + "2")
-            try:
-                await outside_user.start(i)
-                print("start success")
-            except:
-                print(f"start failed for outside user")
-                what_exception()
-
-            out = await outside_user.get_chan_topic(chan_name)
-            if out != chan_topic:
-                print(f"got {out} for chan topic and not {chan_topic}")
-                exit()
-            else:
-                print("success")
-
-            
-
-            # Cleanup.
-            await outside_user.close()
-            await irc_dns.close()
-            input("Press enter to test next server.")
-            input()
             
 
 
@@ -340,7 +261,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
                 super().__init__(server_info, seed)
             """
 
-            async def start(self):
+            async def start(self, i):
                 self.started.set_result(True)
 
             async def is_chan_registered(self, chan_name):
@@ -371,7 +292,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
                 )[:31].lower()
             """
 
-        executor = ProcessPoolExecutor(max_workers=8)
+        executor = ProcessPoolExecutor()
         servers = [
             {"domain": "a"},
             {"domain": "b"},
@@ -484,13 +405,131 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         assert(best == freshest)
 
-        print(freshest)
-
         # unpack
 
         #assert(ircdns.sessions[0].chans[dns_hash].pending_topic == dns_val)
 
         # assert len of user pass nick email ... etc
+
+    async def test_irc_servers_work(self):
+        dns_value = "Test dns val."
+        dns_name = "testing_dns_name"
+        dns_tld = "testing"
+        dns_pw = ""
+        executor = ProcessPoolExecutor()
+        server_list = IRC_SERVERS
+
+        seed = "test_seed2" * 20
+        i = await Interface().start()
+        ircdns = IRCDNS(
+            i,
+            seed,
+            server_list,
+            executor,
+            do_shuffle=False
+        )
+
+        
+
+
+        print("If start")
+        print(i)
+
+        for offset, s in enumerate(server_list[1:]):
+            print(f"testing {s} : {offset}")
+
+            ses = IRCSession(s, seed)
+
+            try:
+                await ses.start(i)
+                print("start success")
+            except:
+                print(f"start failed for {s}")
+                what_exception()
+
+
+            chan_name = await ses.get_irc_chan_name(
+                name=dns_name,
+                tld=dns_tld,
+                pw=dns_pw,
+                executor=executor
+            )
+
+            # Test chan create.
+            print("trying to check if chan is registered.")
+            ret = await ses.is_chan_registered(chan_name)
+            if ret:
+                print(f"{chan_name} registered, not registering")
+
+                # 'load' chan instead.
+                irc_chan = IRCChan(chan_name, ses)
+                ses.chans[chan_name] = irc_chan
+                print(irc_chan.chan_pass)
+            else:
+                print(f"{chan_name} not registered, attempting to...")
+                await ses.register_chan(chan_name)
+                ret = await ses.is_chan_registered(chan_name)
+                if ret:
+                    print("success")
+                else:
+                    print("failure")
+                    exit()
+
+            # Test set topic.
+            chan_topic = to_s(rand_plain(8))
+            chan_topic, _ = await f_encode_topic(
+                value=dns_value,
+                name=dns_name,
+                tld=dns_tld,
+                pw=dns_pw,
+                ses=ses,
+                clsChan=IRCChan,
+                executor=executor
+            )
+
+            print(f"trying to store {chan_topic}")
+
+            #await irc_dns.chans[chan_name].get_ops()
+            #print("get ops done")
+            await ses.chans[chan_name].set_topic(chan_topic)
+            print("set topic done")
+
+            # Potential race condition between getting new chan.
+            await asyncio.sleep(4)
+
+            outside_user = IRCSession(s, seed + "2")
+            try:
+                await outside_user.start(i)
+                print("start success")
+            except:
+                print(f"start failed for outside user")
+                what_exception()
+
+            out = await outside_user.get_chan_topic(chan_name)
+            if out != chan_topic:
+                print(f"got {out} for chan topic and not {chan_topic}")
+                exit()
+            else:
+                print("success")
+
+            # Test decode of encoded chan topic.
+            unpack_topic = ircdns.unpack_topic_value(
+                chan_name,
+                chan_topic,
+                ses
+            )
+
+            print(unpack_topic)
+
+            print("unpacked topic = ")
+            assert(to_b(unpack_topic["msg"]) == to_b(dns_value))
+
+            # Cleanup.
+            await outside_user.close()
+            await ses.close()
+            input("Press enter to test next server.")
+            input()
+
 
 if __name__ == '__main__':
     main()
