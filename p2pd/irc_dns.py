@@ -31,6 +31,11 @@ impossible or impractical depending on usage.
 
 ---
 
+    high priority:
+
+    - what about registering names for servers that come back online?
+
+    - code to refresh topics periodically?
 
 ----------------------------
 
@@ -41,17 +46,12 @@ impossible or impractical depending on usage.
             - each server has fields to indicate when connectivity
             was last made and when its over a certain amount its removed from the server set.
 
-    - code to refresh topics periodically?
-
-    - what about registering names for servers that come back online?
-
-    if account gets deleted from inactivity (for client)
-    try next prefix along?
-
-
     - servers that are online but disable reg?
 
-    - store account expiry and chan expiry details in server list
+    - if account gets deleted for inactivity (for client)
+    try next prefix along?
+
+    - any way to add details about the version in account profile?
 
     - see if you can find any more servers to add to the list.
 
@@ -897,19 +897,15 @@ class IRCSession():
             ).pack()
         )
 
-        # Maybe allow the chan to expire (set this manually.
-
-
         """
         Todo: The servers do tell you what nodes they support in
         the join message so you could subtract what modes they
         will error on and send it all as one message. But that's
         a lot of work for such an optimization.
         """
-        # +m mute conversation in the channel.
         # +s make channel secret so it doesn't show in list
         # We don't want to spam list with a bunch of non-chat channels.
-        for mode in "ms":
+        for mode in "s":
             # Avoid flooding server.
             await asyncio.sleep(0.1)
 

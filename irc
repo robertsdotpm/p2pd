@@ -27,18 +27,18 @@ system on top of IRC that can be used in place of DNS for DDNS purposes.
 
 I've implemented many ways to mitigate the potential for disruption.
 
-1. Moderator mode is set so channels can't be used to host botnets.
+1. The channels are set to private to avoid flooding the channel listing.
 
-2. The channels are set to private to avoid flooding the channel listing.
-
-3. Channel names are uniquely determined by an algorithm that requires CPU
+2. Channel names are uniquely determined by an algorithm that requires CPU
 work to be done from clients to map names to values. This sets an upper bound on
 how many channels can be created and the resolutions they serve per second.
 
-4. Flags are set to ensure the channel expires naturally when disused.
+3. Channels will expire naturally due to chanserv optimizations and the software doesn't aggressively attempt to refresh channels.
 
-Probably the biggest optimization is that my software doesn't currently have
-many users so scalability in the short term shouldn't be a concern.
+Lastly: it remains to be seen if my software will ever have any real users. So
+the idea of 'spam' and 'degrading service' for IRC servers (while a priority for
+me) remains a theoretical concern. But I'm open to improvements to my design
+that may reduce server load and/or possible disruptions.
 
 ## Contact
 
