@@ -273,6 +273,9 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             """
 
             async def start(self, i):
+                if self.db is not None:
+                    self.db[self.last_started] = time.time()
+
                 self.started.set_result(True)
 
             async def is_chan_registered(self, chan_name):
@@ -340,6 +343,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             exception_thrown = 1
 
         assert(exception_thrown)
+
+        await ircdns.close()
 
         # Test partial start-continue
         ircdns = IRCDNS(
@@ -415,6 +420,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         )
 
         assert(best == freshest)
+
+        await ircdns.close()
 
         # unpack
 

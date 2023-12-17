@@ -40,16 +40,9 @@ impossible or impractical depending on usage.
 
     - what about registering names for servers that come back online?
 
-    - code to refresh topics periodically?
-
 ----------------------------
 
-    follow-up:
-
-    whats the best way to make this module work as long as possible?
-        programmatically adjust max and min success metric somehow
-            - each server has fields to indicate when connectivity
-            was last made and when its over a certain amount its removed from the server set.
+    to think about:
 
     - servers that are online but disable reg?
 
@@ -58,19 +51,23 @@ impossible or impractical depending on usage.
 
     - any way to add details about the version in account profile?
 
-    - see if you can find any more servers to add to the list.
+    - code to refresh topics periodically?
+        - easily outsourced to bots
+        - may need something more complex to refresh nicks
 
-    lightweight db like cookies for state
+    - see if you can find any more servers to add to the list.
 
 """
 
 import asyncio
+import os
 import re
 import random
 import time
 import struct
 import argon2pure
 import binascii
+import shelve
 from ecdsa import SigningKey, VerifyingKey, SECP256k1
 from .utils import *
 from .address import *
@@ -78,6 +75,7 @@ from .interface import *
 from .base_stream import *
 from .base_n import encodebytes, decodebytes
 from .base_n import B36_CHARSET, B64_CHARSET, B92_CHARSET
+from .install import *
 
 IRC_PREFIX = "20"
 
@@ -88,6 +86,8 @@ IRC_CONF = dict_child({
     "ssl_handshake": 8,
     "con_timeout": 4,
 }, NET_CONF)
+
+IRC_FRESHNESS = 172800
 
 IRC_SERVERS = [
     # Works.
@@ -698,7 +698,7 @@ def irc_proto(self, msg):
             self.chans[chan] = irc_chan
 
 class IRCSession():
-    def __init__(self, server_info, seed):
+    def __init__(self, server_info, seed, db=None):
         assert(len(seed) >= 24)
         self.started = asyncio.Future()
         self.con = None
@@ -717,6 +717,7 @@ class IRCSession():
         self.chan_time_locks = {}
         self.server_info = server_info
         self.seed = seed
+        self.db = db
 
         # All IRC channels registered to this username.
         self.chans = {}
@@ -728,6 +729,7 @@ class IRCSession():
         self.nick = "n" + f_sha3_b36(IRC_PREFIX + "nick" + self.irc_server + seed)[:7]
         self.email = "p2pd_" + f_sha3_b36(IRC_PREFIX + "email" + self.irc_server + seed)[:12]
         self.email += "@p2pd.net"
+        self.last_started = f"{self.irc_server}_last_started"
 
         # Sanity checks.
         assert(len(self.username) <= 8)
@@ -777,6 +779,10 @@ class IRCSession():
                 self.get_motd, 30
             )
             print("get motd done")
+
+            # Set last started time.
+            if self.db is not None:
+                self.db[self.last_started] = time.time()
 
             # Trigger register if needed.
             await self.register_user()
@@ -1052,12 +1058,39 @@ class IRCDNS():
 
         self.servers = servers
         self.start_lock = asyncio.Lock()
+        self.db = shelve.open(
+            os.path.join(
+                os.path.expanduser("~"),
+                "irc_dns.db"
+            )
+        )
+
+    # Don't include servers older than 48 hours.
+    def get_server_len(self):
+        # No sessions to base exclusion on.
+        if not len(self.sessions):
+            return len(self.servers)
+        
+        # Exclude servers that have been offline a long time.
+        count = 0
+        for n in range(0, len(self.sessions)):
+            last_started = self.sessions[n].last_started
+            start = time.time()
+            duration = start - self.db.get(
+                last_started,
+                start
+            )
+
+            if duration < IRC_FRESHNESS:
+                count += 1
+
+        return count
 
     def get_failure_max(self):
-        return int(0.4 * len(self.servers))
+        return int(0.4 * self.get_server_len())
     
     def get_success_max(self):
-        return len(self.servers) - self.get_failure_max()
+        return self.get_server_len() - self.get_failure_max()
     
     def get_success_min(self):
         return self.get_failure_max() + 1
@@ -1070,6 +1103,7 @@ class IRCDNS():
             return -dif
 
     async def close(self):
+        self.db.close()
         tasks = []
         for i in range(0, self.p_sessions_next):
             task = self.sessions[i].close()
@@ -1092,7 +1126,8 @@ class IRCDNS():
                 assert(j not in self.sessions)
                 self.sessions[j] = self.clsSess(
                     self.servers[j],
-                    self.seed
+                    self.seed,
+                    self.db
                 )
 
                 tasks.append(
