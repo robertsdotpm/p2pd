@@ -30,9 +30,11 @@ These measures make race conditions and rainbow tables either
 impossible or impractical depending on usage.
 
 ---
-    - should use chan encoding for derived account details. currently it uses hex from a digest which decreases entropy
+
 
 ----------------------------
+
+    follow-up:
 
     whats the best way to make this module work as long as possible?
         programmatically adjust max and min success metric somehow
@@ -257,6 +259,15 @@ def f_sha3_to_ecdsa_priv(msg):
             return h_b
         else:
             msg = h_b
+
+def f_sha3_b36(msg):
+    h_b = hashlib.sha3_256(to_b(msg)).digest()
+    return to_s(
+        encodebytes(
+            h_b,
+            charset=B36_CHARSET
+        )
+    )
 
 # SHA3 digest in ascii truncated to a str limit.
 # Used for deterministic passwords with good complexity.
@@ -656,10 +667,10 @@ class IRCSession():
 
         # Derive details for IRC server.
         self.irc_server = self.server_info["domain"]
-        self.username = "u" + sha3_256(IRC_PREFIX + "user" + self.irc_server + seed)[:7]
+        self.username = "u" + f_sha3_b36(IRC_PREFIX + "user" + self.irc_server + seed)[:7]
         self.user_pass = f_irc_pass(IRC_PREFIX + "pass" + self.irc_server + seed)
-        self.nick = "n" + sha3_256(IRC_PREFIX + "nick" + self.irc_server + seed)[:7]
-        self.email = "p2pd_" + sha3_256(IRC_PREFIX + "email" + self.irc_server + seed)[:12]
+        self.nick = "n" + f_sha3_b36(IRC_PREFIX + "nick" + self.irc_server + seed)[:7]
+        self.email = "p2pd_" + f_sha3_b36(IRC_PREFIX + "email" + self.irc_server + seed)[:12]
         self.email += "@p2pd.net"
 
         # Sanity checks.
