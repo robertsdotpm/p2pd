@@ -33,12 +33,24 @@ impossible or impractical depending on usage.
 
     high priority:
 
+    - refresher
+        - need to store meta data about what chan were registered on what server
+        - when a chan was last refreshed
+        - list of chans for a user on a server
+        - when a nick on a server was last refreshed
+
+    - loader would make refresher run each boot
+        - install_loader(refresher)
+        
+
     - add basic assert tests for stored values in the list like:
         - timestamps are different
         - different topics
         - and so on
 
     - what about registering names for servers that come back online?
+
+    - write more comments for what you've written hastily
 
 ----------------------------
 
@@ -576,7 +588,11 @@ class IRCChan:
                 ).pack()
             )
 
-        await self.set_topic_done
+        await asyncio.wait_for(
+            self.set_topic_done,
+            10
+        )
+
         self.set_topic_done = asyncio.Future()
         return self
     
@@ -912,7 +928,10 @@ class IRCSession():
             ).pack()
         )
 
-        return await self.chan_infos[chan_name]
+        return await asyncio.wait_for(
+            self.chan_infos[chan_name],
+            10
+        )
     
     async def register_chan(self, chan_name, chan_desc="desc"):
         if chan_name in self.chan_registered:
@@ -1310,7 +1329,11 @@ class IRCDNS():
     async def n_name_lookups(self, n, start_p, name, tld, pw=""):
         async def helper(self, session_offset, chan_name):
             session = self.sessions[session_offset]
-            topic = await session.get_chan_topic(chan_name)
+            topic = await asyncio.wait_for(
+                session.get_chan_topic(chan_name),
+                10
+            )
+            
             return f_unpack_topic(
                 chan_name,
                 topic,
