@@ -31,11 +31,7 @@ impossible or impractical depending on usage.
 
 ---
     - should use chan encoding for derived account details. currently it uses hex from a digest which decreases entropy
-    - detect if we own a channel
-        register needs to be smarter with success if the user already owns the chan
-        /msg chanserv info #chan
-            ...
-            founder: name
+
 ----------------------------
 
     whats the best way to make this module work as long as possible?
@@ -50,7 +46,6 @@ impossible or impractical depending on usage.
     if account gets deleted from inactivity (for client)
     try next prefix along?
 
-    whats the slowdown after set topic?
 
     - servers that are online but disable reg?
 
@@ -60,36 +55,7 @@ impossible or impractical depending on usage.
 
     lightweight db like cookies for state
 
-darkmyst:
-    
-  30d nick 
-  60d chan
 
------------------------------------------------
-irc.phat-net.de
- 
- 21d nick
- 14d chan
- 
- ----------------------------------------------------------------------
- 
- irc.tweakers.net
- 210d nick
- 21d chan
- -----------------------
-
-irc.swiftirc.net
-
-90d nick
-14d chan
-
----------------------------
-
-
-irc.euirc.net
-
-120d nick
-60d chan 
 """
 
 import asyncio
@@ -136,7 +102,9 @@ IRC_SERVERS = [
         'chan_len': 50,
         'chan_no': 60,
         'topic_len': 300,
-        'chan_topics': 'a-zA-Z0-9all specials unicode (smilies tested)'
+        'chan_topics': 'a-zA-Z0-9all specials unicode (smilies tested)',
+        'nick_expiry': 21,
+        'chan_expiry': 14,
     },
     # Works.
     {
@@ -157,7 +125,9 @@ IRC_SERVERS = [
         'chan_no': 25,
         'chan_len': 32,
         'topic_len': 307,
-        'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)'
+        'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)',
+        'nick_expiry': 210,
+        'chan_expiry': 21,
     },
     {
         'domain': 'irc.swiftirc.net',
@@ -180,8 +150,9 @@ IRC_SERVERS = [
 
         # Certain characters like ,. still not allowed.
         'chan_name': 'azAZ!@#$unicode-_',
-
-        'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)'
+        'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)',
+        'nick_expiry': 90,
+        'chan_expiry': 14,
     },
     {
         'domain': 'irc.euirc.net',
@@ -201,7 +172,9 @@ IRC_SERVERS = [
         'chan_no': 30,
         'chan_len': 32,
         'topic_len': 307,
-        'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)'
+        'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)',
+        'nick_expiry': 120,
+        'chan_expiry': 60,
     },
     {
         'domain': 'irc.darkmyst.org',
@@ -219,7 +192,9 @@ IRC_SERVERS = [
         'chan_no': 30,
         'chan_len': 50,
         'topic_len': 390,
-        'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)'
+        'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)',
+        'nick_expiry': 30,
+        'chan_expiry': 60,
     },
 ]
 
@@ -1118,7 +1093,19 @@ class IRCDNS():
                     self.executor
                 )
 
-                return await self.sessions[n].is_chan_registered(chan_name)
+                ret = await self.sessions[n].is_chan_registered(chan_name)
+
+                """
+                Return that a name is available if we already own it.
+                This will trick the algorithm into succeeding without
+                special modifications and makes it 'smarter.'
+                Success on register isn't checked for anyway. It's
+                just assumed that it will work if names are available.
+                """
+                if ret == self.sessions[n].nick:
+                    return True
+                
+                return ret
             
             tasks.append(is_name_available(n))
         results = await asyncio.gather(*tasks)
