@@ -107,11 +107,11 @@ IRC_S = IRCSession(IRC_SERV_INFO, IRC_SEED)
 class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
     async def test_proto_ping(self):
         msg = IRCMsg(cmd="PING", param="31337")
-        resp = IRC_S.proto(msg)
+        resp = irc_proto(None, msg)
         assert(resp.pack() == b"PONG 31337\r\n")
 
         msg = IRCMsg(cmd="PING", suffix="31337")
-        resp = IRC_S.proto(msg)
+        resp = irc_proto(None, msg)
         assert(resp.pack() == b"PONG :31337\r\n")
 
     async def test_proto_ctcp_version(self):
@@ -121,18 +121,19 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             suffix="\x01VERSION\x01"
         )
 
-        resp = IRC_S.proto(msg)
+        resp = irc_proto(None, msg)
         expected = to_b(f"PRIVMSG user :\x01VERSION {IRC_VERSION}\x01\r\n")
         assert(resp.pack() == expected)
 
     async def test_proto_is_chan_reg(self):
+        chan_founder = "chan_founder"
         chan_name = "#test-wrwerEWER342"
         vectors = [
             [f"channel {chan_name} isn't", False],
             [f"channel {chan_name} is not", False],
-            [f"information for {chan_name}", True],
-            [f"information on {chan_name}", True],
-            [f"channel {chan_name} is registered", True]
+            [f"information for {chan_name}", chan_founder],
+            [f"information on {chan_name}", chan_founder],
+            [f"channel {chan_name} is registered", chan_founder]
         ]
 
         for vector in vectors:
@@ -145,7 +146,17 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
                 suffix=status
             )
 
-            IRC_S.proto(msg)
+            irc_proto(IRC_S, msg)
+
+            if expected:
+                msg = IRCMsg(
+                    cmd="NOTICE",
+                    param="your_nick",
+                    suffix=f"Founder : {chan_founder}"
+                )
+
+                irc_proto(IRC_S, msg)
+
             assert(IRC_S.chan_infos[chan_name].result() == expected)
 
     async def test_proto_get_topic(self):
@@ -158,7 +169,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         )
 
         IRC_S.chan_topics[chan_name] = asyncio.Future()
-        IRC_S.proto(msg)
+        irc_proto(IRC_S, msg)
         assert(IRC_S.chan_topics[chan_name].result() == chan_topic)
 
     async def test_irc_extract_msg(self):
@@ -412,7 +423,6 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         # assert len of user pass nick email ... etc
 
     async def test_irc_servers_work(self):
-        return
         dns_value = "Test dns val."
         dns_name = "testing_dns_name"
         dns_tld = "testing"
@@ -436,7 +446,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         print("If start")
         print(i)
 
-        for offset, s in enumerate(server_list[0:]):
+        for offset, s in enumerate(server_list[3:]):
             print(f"testing {s} : {offset}")
 
             ses = IRCSession(s, seed)
@@ -461,6 +471,9 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             ret = await ses.is_chan_registered(chan_name)
             if ret:
                 print(f"{chan_name} registered, not registering")
+
+                # Check channel owner returned is correct.
+                assert(ret == ses.nick)
 
                 # 'load' chan instead.
                 irc_chan = IRCChan(chan_name, ses)
