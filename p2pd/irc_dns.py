@@ -33,6 +33,11 @@ impossible or impractical depending on usage.
 
     high priority:
 
+    - add basic assert tests for stored values in the list like:
+        - timestamps are different
+        - different topics
+        - and so on
+
     - what about registering names for servers that come back online?
 
     - code to refresh topics periodically?
@@ -56,7 +61,6 @@ impossible or impractical depending on usage.
     - see if you can find any more servers to add to the list.
 
     lightweight db like cookies for state
-
 
 """
 
@@ -230,20 +234,26 @@ IRC_NICK_POS = [
     #"is reserved by a different account"
 ]
 
-# Not meant to provide bullet-proof security.
-def f_otp(msg, otp):
-    # Make otp long enough.
-    while len(otp) < len(msg):
-        otp += hashlib.sha1(otp).digest()
+# SHA3 digest in ascii truncated to a str limit.
+# Used for deterministic passwords with good complexity.
+def f_irc_pass(x):
+    return to_s(
+        encodebytes(
+            hashlib.sha3_256(
+                to_b(x)
+            ).digest(),
+            charset=B64_CHARSET
+        )
+    )[:30]
 
-    # Xor MSG with OTP.
-    buf = b""
-    for i in range(0, len(msg)):
-        buf += bytes([
-            msg[i] ^ otp[i]
-        ])
-
-    return buf
+def f_sha3_b36(msg):
+    h_b = hashlib.sha3_256(to_b(msg)).digest()
+    return to_s(
+        encodebytes(
+            h_b,
+            charset=B36_CHARSET
+        )
+    )
 
 def f_sha3_to_ecdsa_priv(msg):
     max_hex = "FFFFFFFF00000000FFFFFFFFFFFFFFFF"
@@ -259,27 +269,6 @@ def f_sha3_to_ecdsa_priv(msg):
             return h_b
         else:
             msg = h_b
-
-def f_sha3_b36(msg):
-    h_b = hashlib.sha3_256(to_b(msg)).digest()
-    return to_s(
-        encodebytes(
-            h_b,
-            charset=B36_CHARSET
-        )
-    )
-
-# SHA3 digest in ascii truncated to a str limit.
-# Used for deterministic passwords with good complexity.
-def f_irc_pass(x):
-    return to_s(
-        encodebytes(
-            hashlib.sha3_256(
-                to_b(x)
-            ).digest(),
-            charset=B64_CHARSET
-        )
-    )[:30]
 
 def f_chan_pow(msg):
     # Time locks help prevent registration front-running.
@@ -318,7 +307,22 @@ def f_chan_pow(msg):
     # Cache.
     return h, time_lock
 
-async def f_encode_topic(value, name, tld, pw, ses, clsChan, executor=None):
+# Not meant to provide bullet-proof security.
+def f_otp(msg, otp):
+    # Make otp long enough.
+    while len(otp) < len(msg):
+        otp += hashlib.sha1(otp).digest()
+
+    # Xor MSG with OTP.
+    buf = b""
+    for i in range(0, len(msg)):
+        buf += bytes([
+            msg[i] ^ otp[i]
+        ])
+
+    return buf
+
+async def f_pack_topic(value, name, tld, pw, ses, clsChan, executor=None):
     # Bytes used to make ECDSA priv key.
     priv = f_sha3_to_ecdsa_priv(
         to_b(
@@ -367,6 +371,58 @@ async def f_encode_topic(value, name, tld, pw, ses, clsChan, executor=None):
         to_s(encodebytes(sig_buf, charset=B92_CHARSET)),
         to_s(encodebytes(val_buf, charset=B92_CHARSET)),
     ), chan
+
+def f_unpack_topic(chan_name, topic, session):
+    if topic is None:
+        return None
+    
+    parts = topic.split()
+    if len(parts) != 3:
+        return None
+
+    # Signature part.
+    sig_b = decodebytes(parts[1], charset=B92_CHARSET)
+
+    # Message part.
+    msg_b = decodebytes(parts[2], charset=B92_CHARSET)
+
+    # Time lock value used for OTP.
+    time_lock = session.chan_time_locks[chan_name]
+
+    # List of possible public keys recovered from sig.
+    vk_list = VerifyingKey.from_public_key_recovery(
+        signature=sig_b,
+        data=msg_b,
+        curve=SECP256k1,
+        hashfunc=hashlib.sha3_256
+    )
+
+    vk_ids = []
+    for vk in vk_list:
+        vk_ids.append(
+            vk.to_string("compressed")
+        )
+
+    # Anything that validates is the right public key.
+    for vk in vk_list:
+        try:
+            vk.verify(
+                sig_b,
+                msg_b
+            )
+
+            msg_b = f_otp(msg_b, time_lock)
+            timestamp = struct.unpack("Q", msg_b[:8])[0]
+            return {
+                "ids": vk_ids,
+                "vk": vk,
+                "msg": msg_b[8:],
+                "otp": f_otp(msg_b, time_lock),
+                "sig": sig_b,
+                "time": timestamp,
+            }
+        except:
+            log_exception()
 
 def irc_is_valid_chan_name(chan_name):
     p = "^[#&+!][a-zA-Z0-9_-]+$"
@@ -1150,7 +1206,7 @@ class IRCDNS():
             if not session.started.done():
                 return
 
-            topic, chan = await f_encode_topic(
+            topic, chan = await f_pack_topic(
                 value,
                 name,
                 tld,
@@ -1180,58 +1236,6 @@ class IRCDNS():
 
         # Execute tasks to update topics.
         await asyncio.gather(*tasks)
-
-    def unpack_topic_value(self, chan_name, topic, session):
-        if topic is None:
-            return None
-        
-        parts = topic.split()
-        if len(parts) != 3:
-            return None
-
-        # Signature part.
-        sig_b = decodebytes(parts[1], charset=B92_CHARSET)
-
-        # Message part.
-        msg_b = decodebytes(parts[2], charset=B92_CHARSET)
-
-        # Time lock value used for OTP.
-        time_lock = session.chan_time_locks[chan_name]
-
-        # List of possible public keys recovered from sig.
-        vk_list = VerifyingKey.from_public_key_recovery(
-            signature=sig_b,
-            data=msg_b,
-            curve=SECP256k1,
-            hashfunc=hashlib.sha3_256
-        )
-
-        vk_ids = []
-        for vk in vk_list:
-            vk_ids.append(
-                vk.to_string("compressed")
-            )
-
-        # Anything that validates is the right public key.
-        for vk in vk_list:
-            try:
-                vk.verify(
-                    sig_b,
-                    msg_b
-                )
-
-                msg_b = f_otp(msg_b, time_lock)
-                timestamp = struct.unpack("Q", msg_b[:8])[0]
-                return {
-                    "ids": vk_ids,
-                    "vk": vk,
-                    "msg": msg_b[8:],
-                    "otp": f_otp(msg_b, time_lock),
-                    "sig": sig_b,
-                    "time": timestamp,
-                }
-            except:
-                log_exception()
 
     async def acquire_at_least(self, target):
         open_sessions = self.p_sessions_next
@@ -1272,7 +1276,7 @@ class IRCDNS():
         async def helper(self, session_offset, chan_name):
             session = self.sessions[session_offset]
             topic = await session.get_chan_topic(chan_name)
-            return self.unpack_topic_value(
+            return f_unpack_topic(
                 chan_name,
                 topic,
                 session

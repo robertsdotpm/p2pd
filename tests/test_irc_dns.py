@@ -384,7 +384,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             assert(test_hash in ircdns.sessions[i].chans)
 
         topic_val = ircdns.sessions[0].chans[dns_hash].pending_topic
-        out = ircdns.unpack_topic_value(
+        out = f_unpack_topic(
             dns_hash,
             topic_val,
             ircdns.sessions[0]
@@ -492,7 +492,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
             # Test set topic.
             chan_topic = to_s(rand_plain(8))
-            chan_topic, _ = await f_encode_topic(
+            chan_topic, _ = await f_pack_topic(
                 value=dns_value,
                 name=dns_name,
                 tld=dns_tld,
@@ -528,7 +528,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
                 print("success")
 
             # Test decode of encoded chan topic.
-            unpack_topic = ircdns.unpack_topic_value(
+            unpack_topic = f_unpack_topic(
                 chan_name,
                 chan_topic,
                 ses
