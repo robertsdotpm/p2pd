@@ -929,6 +929,16 @@ class IRCSession():
                 suffix=suffix
             ).pack()
         )
+
+        # Save user details if needed.
+        if self.db is not None:
+            nick_key = self.db_key("nick")
+            nick_info = self.db.get(nick_key, None)
+            if nick_info is None:
+                self.db[nick_key] = {
+                    "last_refresh": time.time()
+                }
+
         return self
 
     async def is_chan_registered(self, chan_name):
@@ -1025,6 +1035,20 @@ class IRCSession():
                     param=f"{chan_name} -{mode}",
                 ).pack()
             )
+
+        # Record list of channels that belongs to this session.
+        if self.db is not None:
+            # Chan list update.
+            chans_key = self.db_key("chan_list")
+            chan_list = self.db.get(chans_key, [])
+            chan_list.append(chan_name)
+            self.db[chans_key] = chan_list
+
+            # Chan meta data.
+            chan_key = self.db_key(f"chan/{chan_name}")
+            self.db[chan_key] = {
+                "last_refresh": time.time()
+            }
 
         return True
     
@@ -1433,6 +1457,8 @@ for sessions:
             need to figure out what actually counts as activity here
                 lets use a test chan
 
+store names registered in the irc manager and tie that into
+pending register code
 """
         
 class IRCRefresher():
@@ -1443,6 +1469,10 @@ class IRCRefresher():
         return
 
     async def refresh_chan(self, chan_name, session):
+        # Session not started.
+        if not session.started.done():
+            await session.start(self.manager.i)
+
         # Join channel.
         await session.con.send(
             IRCMsg(
@@ -1461,6 +1491,10 @@ class IRCRefresher():
         )
 
     async def refresh_nick(self, session):
+        # Session not started.
+        if not session.started.done():
+            await session.start(self.manager.i)
+
         # Join testing channel.
         chan_name = f'{session.server_info["test_chan"]}'
         await session.con.send(
@@ -1500,7 +1534,8 @@ class IRCRefresher():
 
             # Refresh five days before expiry.
             expiry_secs -= 5 * day_secs
-            duration = time.time() - info["last_refresh"]
+            assert(expiry_secs > 0)
+            duration = max(time.time() - info["last_refresh"], 0)
             if duration >= expiry_secs:
                 # Update refresh timer.
                 info["last_refresh"] = time.time()
@@ -1516,9 +1551,7 @@ class IRCRefresher():
         for n in range(0, self.manager.p_sessions_next):
             # Select valid session.
             session = self.manager.sessions[n]
-            if not session.started.done():
-                continue
-
+            
             # Loop over all channels registered to session.
             chans_key = session.db_key("chan_list")
             chans_list = db.get(chans_key, [])
