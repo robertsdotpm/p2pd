@@ -93,6 +93,10 @@ IRC_PREFIX = "20"
 
 IRC_VERSION = "Friendly P2PD user - see p2pd.net/irc"
 
+IRC_CHAN_REFRESH = "Refreshing chan as we're still using this! See p2pd.net/irc for more information."
+
+IRC_NICK_REFRESH = "Refreshing nick as we're still using this!"
+
 IRC_CONF = dict_child({
     "use_ssl": 1,
     "ssl_handshake": 8,
@@ -123,6 +127,7 @@ IRC_SERVERS = [
         'chan_topics': 'a-zA-Z0-9all specials unicode (smilies tested)',
         'nick_expiry': 21,
         'chan_expiry': 14,
+        'test_chan': '#test'
     },
     # Works.
     {
@@ -146,6 +151,7 @@ IRC_SERVERS = [
         'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)',
         'nick_expiry': 210,
         'chan_expiry': 21,
+        'test_chan': '#test'
     },
     {
         'domain': 'irc.swiftirc.net',
@@ -171,6 +177,7 @@ IRC_SERVERS = [
         'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)',
         'nick_expiry': 90,
         'chan_expiry': 14,
+        'test_chan': '#mSL.test'
     },
     {
         'domain': 'irc.euirc.net',
@@ -193,6 +200,7 @@ IRC_SERVERS = [
         'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)',
         'nick_expiry': 120,
         'chan_expiry': 60,
+        'test_chan': '#test'
     },
     {
         'domain': 'irc.darkmyst.org',
@@ -213,6 +221,7 @@ IRC_SERVERS = [
         'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)',
         'nick_expiry': 30,
         'chan_expiry': 60,
+        'test_chan': '#test'
     },
 ]
 
@@ -753,6 +762,9 @@ class IRCSession():
         assert(len(self.nick) <= 8)
         assert(len(self.email) <= 26)
 
+    def db_key(self, sub_key):
+        return f"{self.irc_server}/{sub_key}"
+    
     async def start(self, i, timeout=60):
         async def do_start():
             # Choose a supported AF.
@@ -821,6 +833,7 @@ class IRCSession():
             do_start(),
             timeout=timeout
         )
+
     
     """
     Name -> 20 byte hash160
@@ -1401,6 +1414,136 @@ class IRCDNS():
         if isinstance(names_required, dict):
             freshest = names_required
             return freshest
+        
+"""
+need to store meta data for chans and nick at creation.
+
+
+for sessions:
+    for pending_register:
+        register
+        check if success:
+            remove from pending
+
+    for chans:
+        refresh if needed
+
+    if nick:
+        refresh if needed
+            need to figure out what actually counts as activity here
+                lets use a test chan
+
+"""
+        
+class IRCRefresher():
+    async def __init__(self, manager):
+        self.manager = manager
+
+    async def placeholder(self):
+        return
+
+    async def refresh_chan(self, chan_name, session):
+        # Join channel.
+        await session.con.send(
+            IRCMsg(
+                cmd="JOIN",
+                param=f"{chan_name}",
+            ).pack()
+        )
+
+        # Send a basic refresh message.
+        await session.con.send(
+            IRCMsg(
+                cmd="PRIVMSG",
+                param=f"{chan_name}",
+                suffix=IRC_CHAN_REFRESH
+            ).pack()
+        )
+
+    async def refresh_nick(self, session):
+        # Join testing channel.
+        chan_name = f'{session.server_info["test_chan"]}'
+        await session.con.send(
+            IRCMsg(
+                cmd="JOIN",
+                param=chan_name,
+            ).pack()
+        )
+
+        # Send a basic refresh message.
+        await session.con.send(
+            IRCMsg(
+                cmd="PRIVMSG",
+                param=chan_name,
+                suffix=IRC_NICK_REFRESH
+            ).pack()
+        )
+
+    async def refresher(self):
+        tasks = []
+        db = self.manager.db
+
+        # Return coroutine that does nothing if no refresh needed.
+        # Otherwise returns the coroutine that does the refresh.
+        def check_last_refresh(sub_key, expiry_days, expiry_func):
+            # Extract meta data.
+            key_name = session.db_key(sub_key)
+            info = db.get(key_name, None)
+            if info is None:
+                return self.placeholder()
+            if "last_refresh" not in info:
+                return self.placeholder()
+
+            # Calculate the expiry time in seconds.
+            day_secs = 24 * 60 * 60
+            expiry_secs = expiry_days * day_secs
+
+            # Refresh five days before expiry.
+            expiry_secs -= 5 * day_secs
+            duration = time.time() - info["last_refresh"]
+            if duration >= expiry_secs:
+                # Update refresh timer.
+                info["last_refresh"] = time.time()
+                db[key_name] = info
+
+                # Factory that returns coroutine to await on.
+                return expiry_func()
+            
+            # So results can be passed to gather.
+            return self.placeholder()
+
+        # Loop over sessions for anything that needs refreshing.
+        for n in range(0, self.manager.p_sessions_next):
+            # Select valid session.
+            session = self.manager.sessions[n]
+            if not session.started.done():
+                continue
+
+            # Loop over all channels registered to session.
+            chans_key = session.db_key("chan_list")
+            chans_list = db.get(chans_key, [])
+            for chan_name in chans_list:
+                expiry_days = session.server_info["chan_expiry"]
+                tasks.append(
+                    check_last_refresh(
+                        f"chan/{chan_name}",
+                        expiry_days,
+                        lambda: self.refresh_chan(chan_name, session)
+                    )
+                )
+
+            # See if nick needs to be refreshed.
+            tasks.append(
+                check_last_refresh(
+                    "nick",
+                    session.server_info["nick_expiry"],
+                    lambda: self.refresh_nick(session)
+                )
+            )
+
+        # Execute refresh tasks concurrently.
+        if len(tasks):
+            await asyncio.gather(*tasks)
 
 if __name__ == '__main__':
     pass
