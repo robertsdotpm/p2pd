@@ -47,6 +47,8 @@ impossible or impractical depending on usage.
         - timestamps are different
         - different topics
         - and so on
+        - where one session doesnt connect to test threshold logic
+            - test to_register info
 
     - what about registering names for servers that come back online?
 
@@ -69,6 +71,35 @@ impossible or impractical depending on usage.
 
     - see if you can find any more servers to add to the list.
 
+--------------------------------------
+
+need to store meta data for chans and nick at creation.
+
+
+for sessions:
+    for pending_register:
+        register
+        check if success:
+            remove from pending
+
+    for chans:
+        refresh if needed
+
+    if nick:
+        refresh if needed
+            need to figure out what actually counts as activity here
+                lets use a test chan
+
+store names registered in the irc manager and tie that into
+pending register code
+    retry down servers with exponential back-off
+    detect if an account or chan is disabled by a sys op
+
+use chan successor as my own account to help prevent expiry
+and allow chans to be recovered in a worse case scenario
+maybe how a way to export state in json to see what chans exist, need to be made, and so on
+
+join chans without a registered account? what servers support this.
 """
 
 import asyncio
@@ -752,7 +783,7 @@ class IRCSession():
         self.username = "u" + f_sha3_b36(IRC_PREFIX + "user" + self.irc_server + seed)[:7]
         self.user_pass = f_irc_pass(IRC_PREFIX + "pass" + self.irc_server + seed)
         self.nick = "n" + f_sha3_b36(IRC_PREFIX + "nick" + self.irc_server + seed)[:7]
-        self.email = "p2pd_" + f_sha3_b36(IRC_PREFIX + "email" + self.irc_server + seed)[:12]
+        self.email = "e" + f_sha3_b36(IRC_PREFIX + "email" + self.irc_server + seed)[:15]
         self.email += "@p2pd.net"
         self.last_started = f"{self.irc_server}_last_started"
 
@@ -1197,10 +1228,13 @@ class IRCDNS():
 
             # Determine sessions that worked.
             success_no = 0
+            failure_offsets = []
             for j in range(0, self.p_sessions_next):
                 if self.sessions[j].started.done():
                     success_no += 1
-            return success_no
+                else:
+                    failure_offsets.append(j)
+            return success_no, failure_offsets
         finally:
             self.start_lock.release()
 
@@ -1220,11 +1254,30 @@ class IRCDNS():
             await asyncio.gather(*tasks)
     
     async def name_register(self, name, tld, pw=""):
+        # Ensure the session pointer hasn't overflowed.
         assert(self.p_sessions_next <= len(self.servers))
+
+        # Helper function to register a name for a session.
+        async def do_register(n):
+            # Attempt to start session if not started.
+            # Useful for the register_factory code.
+            if not self.sessions[n].started.done():
+                await self.sessions[n].start(self.i)
+
+            # Convert name to server-specific hash.
+            chan_name = await self.sessions[n].get_irc_chan_name(
+                name,
+                tld,
+                pw,
+                self.executor
+            )
+
+            # Register name on that server.
+            return await self.sessions[n].register_chan(chan_name)
 
         # Open the bare minimum number of sessions
         # for a successful consensus result.
-        success_no = await self.start_n(
+        success_no, failure_offsets = await self.start_n(
             len(self.servers) - min(
                 self.p_sessions_next,
                 len(self.servers)
@@ -1233,6 +1286,16 @@ class IRCDNS():
         if success_no < self.get_success_max():
             raise Exception("Insufficient sessions.")
         
+        # If there's failures these can be used to retry.
+        to_register = []
+        for n in failure_offsets:
+            to_register.append({
+                "domain": self.sessions[n].irc_server,
+                "name": name,
+                "tld": tld,
+                "pw": pw
+            })
+        
         # Pre-cache chan name hashes.
         await self.pre_cache(name, tld, pw)
         
@@ -1240,6 +1303,7 @@ class IRCDNS():
         tasks = []
         for n in range(0, self.p_sessions_next):
             async def is_name_available(n):
+                # Convert name to server-specific hash.
                 chan_name = await self.sessions[n].get_irc_chan_name(
                     name,
                     tld,
@@ -1247,6 +1311,7 @@ class IRCDNS():
                     self.executor
                 )
 
+                # Check if resulting channel is registered.
                 ret = await self.sessions[n].is_chan_registered(chan_name)
 
                 """
@@ -1259,9 +1324,14 @@ class IRCDNS():
                 if ret == self.sessions[n].nick:
                     return True
                 
+                # Otherwise return registration status.
                 return ret
             
-            tasks.append(is_name_available(n))
+            # Skip sessions that aren't connected.
+            if self.sessions[n].started.done():
+                tasks.append(is_name_available(n))
+
+        # Run availability checks concurrently.
         results = await asyncio.gather(*tasks)
         
         # Check if there's enough names available.
@@ -1270,25 +1340,16 @@ class IRCDNS():
             if not is_chan_registered:
                 available_count += 1
         if available_count < self.get_success_max():
-            return False
+            return False, to_register
         
         # Register name.
         tasks = []
         for n in range(0, self.p_sessions_next):
-            async def do_register(n):
-                chan_name = await self.sessions[n].get_irc_chan_name(
-                    name,
-                    tld,
-                    pw,
-                    self.executor
-                )
-
-                return await self.sessions[n].register_chan(chan_name)
-            
             tasks.append(do_register(n))
 
+        # Do registration tasks concurrently.
         await asyncio.gather(*tasks)
-        return True
+        return True, to_register
     
     async def store_value(self, value, name, tld, pw=""):
         async def helper(n):
@@ -1333,7 +1394,7 @@ class IRCDNS():
         if open_sessions < target:
             sessions_required = target - open_sessions
             while sessions_required:
-                success_no = await self.start_n(sessions_required)
+                success_no, _ = await self.start_n(sessions_required)
                 sessions_required -= success_no
 
     def n_more_or_best(self, results):
@@ -1438,28 +1499,6 @@ class IRCDNS():
         if isinstance(names_required, dict):
             freshest = names_required
             return freshest
-        
-"""
-need to store meta data for chans and nick at creation.
-
-
-for sessions:
-    for pending_register:
-        register
-        check if success:
-            remove from pending
-
-    for chans:
-        refresh if needed
-
-    if nick:
-        refresh if needed
-            need to figure out what actually counts as activity here
-                lets use a test chan
-
-store names registered in the irc manager and tie that into
-pending register code
-"""
         
 class IRCRefresher():
     async def __init__(self, manager):

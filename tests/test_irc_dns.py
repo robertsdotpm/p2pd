@@ -375,7 +375,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         assert(len(dns_hash) <= 32)
 
         # Register, store, then get.
-        ret = await ircdns.name_register(dns_name, dns_tld)
+        ret, to_register = await ircdns.name_register(dns_name, dns_tld)
         assert(ret)
 
         # Test store.
