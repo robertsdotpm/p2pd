@@ -476,7 +476,7 @@ def f_unpack_topic(chan_name, topic, session):
             return {
                 "ids": vk_ids,
                 "vk": vk,
-                "msg": msg_b[8:],
+                "msg": to_s(msg_b[8:]),
                 "otp": f_otp(msg_b, time_lock),
                 "sig": sig_b,
                 "time": timestamp,
@@ -804,6 +804,25 @@ class IRCSession():
 
     def db_key(self, sub_key):
         return f"{self.irc_server}/{sub_key}"
+    
+    def is_name_registered(self, name, tld, pw=""):
+        dns = {
+            "name": name,
+            "tld": tld,
+            "pw": pw
+        }
+
+        if self.db is not None:
+            key_name = self.db_key("chan_list")
+            chan_list = self.db.get(key_name, [])
+            for chan_meta in chan_list:
+                if "dns" not in chan_meta:
+                    continue
+
+                if dns == chan_meta["dns"]:
+                    return True
+
+        return False
     
     async def start(self, i, timeout=60):
         async def do_start():
@@ -1269,6 +1288,13 @@ class IRCDNS():
 
         # Helper function to register a name for a session.
         async def do_register(n):
+            # Name already registered so skip.
+            if self.sessions[n].is_name_registered(name, tld, pw):
+                return [
+                    n,
+                    self.sessions[n].nick
+                ]
+
             # Attempt to start session if not started.
             # Useful for the register_factory code.
             if not self.sessions[n].started.done():
@@ -1310,6 +1336,11 @@ class IRCDNS():
         tasks = []
         for n in range(0, self.p_sessions_next):
             async def is_name_available(n):
+                # Simulate name being available if we already own it.
+                # This will allow the code to pass and be reused.
+                if self.sessions[n].is_name_registered(name, tld, pw):
+                    return True
+
                 # Convert name to server-specific hash.
                 chan_name = await self.sessions[n].get_irc_chan_name(
                     name,
@@ -1331,8 +1362,11 @@ class IRCDNS():
                 if ret == self.sessions[n].nick:
                     return True
                 
-                # Otherwise return registration status.
-                return ret
+                # Channel registered to someone else.
+                if ret != False:
+                    return False
+                else:
+                    return True
             
             # Skip sessions that aren't connected.
             if self.sessions[n].started.done():
@@ -1343,8 +1377,8 @@ class IRCDNS():
         
         # Check if there's enough names available.
         available_count = 0
-        for is_chan_registered in results:
-            if not is_chan_registered:
+        for is_chan_available in results:
+            if is_chan_available:
                 available_count += 1
         if available_count < self.get_success_min():
             raise Exception("Not enough names available.")
@@ -1377,6 +1411,7 @@ class IRCDNS():
                     break
 
             # Get the chan name.
+            # Calling this here also ensures time_lock exists.
             chan_name = await self.sessions[n].get_irc_chan_name(
                 name,
                 tld,
@@ -1465,7 +1500,7 @@ class IRCDNS():
         for r in results:
             if r is None:
                 continue
-            
+
             for r_id in r["ids"]:
                 if r_id not in table:
                     table[r_id] = [r]
@@ -1533,7 +1568,7 @@ class IRCDNS():
         else:
             return [], p
         
-    async def name_lookup(self, name, tld, pw=""):
+    async def name_lookup(self, name, tld, pw=""):  
         # Pre-cache name hashes.
         await self.pre_cache(name, tld, pw)
 

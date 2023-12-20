@@ -384,6 +384,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         # Test store.
         await ircdns.store_value(dns_val, dns_name, dns_tld)
+        otps = []
+        sigs = []
         for i in range(0, len(servers)):
             test_hash = await ircdns.sessions[i].get_irc_chan_name(
                 name=dns_name,
@@ -392,12 +394,22 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
             assert(test_hash in ircdns.sessions[i].chans)
 
-        topic_val = ircdns.sessions[0].chans[dns_hash].pending_topic
-        out = f_unpack_topic(
-            dns_hash,
-            topic_val,
-            ircdns.sessions[0]
-        )
+            # Msg integrity is uniquely tied to channel integrity.
+            topic_val = ircdns.sessions[i].chans[test_hash].pending_topic
+            out = f_unpack_topic(
+                test_hash,
+                topic_val,
+                ircdns.sessions[i]
+            )
+
+            # As a basic assumption these should all be different.
+            # Time discards non-seconds so it may occur in the same 'tick'
+            assert(out["time"] > 315360000)
+            assert(dns_val in out["msg"])
+            assert(out["otp"] not in otps)
+            assert(out["sig"] not in sigs)
+            otps.append(out["otp"])
+            sigs.append(out["sig"])
 
         # Get results list.
         results, _ = await ircdns.n_name_lookups(
@@ -477,8 +489,14 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         await ircdns.store_value(dns_val, dns_name, dns_tld)
 
         ret = await ircdns.name_lookup(dns_name, dns_tld)
+        # TODO: check values are expected here.
         print(ret)
 
+    async def test_register_partial_to_simulate_session_restart(self):
+        pass
+
+    # check partial availability of names (some are already taken)
+    
 
     async def test_irc_servers_work(self):
         return
