@@ -102,6 +102,9 @@ maybe how a way to export state in json to see what chans exist, need to be made
 join chans without a registered account? what servers support this.
 
 when i register a name it should save metadata for all the sessions in the db
+
+still need to test regular dnsmanager usage. as all current code has used mocks
+still need tests for refresh logic.
 """
 
 import asyncio
@@ -805,25 +808,32 @@ class IRCSession():
     def db_key(self, sub_key):
         return f"{self.irc_server}/{sub_key}"
     
-    def is_name_registered(self, name, tld, pw=""):
+    def db_load_chan_list(self):
+        chan_list = []
+        if self.db is not None:
+            key_name = self.db_key("chan_list")
+            chan_list = self.db.get(key_name, [])
+
+        return chan_list
+    
+    def db_is_name_registered(self, name, tld, pw=""):
         dns = {
             "name": name,
             "tld": tld,
             "pw": pw
         }
 
-        if self.db is not None:
-            key_name = self.db_key("chan_list")
-            chan_list = self.db.get(key_name, [])
-            for chan_meta in chan_list:
-                if "dns" not in chan_meta:
-                    continue
+        
+        chan_list = self.db_load_chan_list()
+        for chan_meta in chan_list:
+            if "dns" not in chan_meta:
+                continue
 
-                if dns != chan_meta["dns"]:
-                    continue
+            if dns != chan_meta["dns"]:
+                continue
 
-                if chan_meta["status"] == IRC_REGISTER_SUCCESS:
-                    return True
+            if chan_meta["status"] == IRC_REGISTER_SUCCESS:
+                return True
 
         return False
     
@@ -1291,44 +1301,6 @@ class IRCDNS():
         # Ensure the session pointer hasn't overflowed.
         assert(self.p_sessions_next <= len(self.servers))
 
-        # Helper function to register a name for a session.
-        async def do_register(n):
-            # Attempt to start session if not started.
-            # Useful for the register_factory code.
-            if not self.sessions[n].started.done():
-                try:
-                    await self.sessions[n].start(self.i)
-                except:
-                    return [
-                        n,
-                        False
-                    ]
-
-            # Name already registered so skip.
-            if self.sessions[n].is_name_registered(name, tld, pw):
-                return [
-                    n,
-                    self.sessions[n].nick
-                ]
-
-            # Convert name to server-specific hash.
-            chan_name = await self.sessions[n].get_irc_chan_name(
-                name,
-                tld,
-                pw,
-                self.executor
-            )
-
-            # Register name on that server.
-            await self.sessions[n].register_chan(chan_name)
-            await asyncio.sleep(0.1)
-
-            # Return owner of channel.
-            return [
-                n,
-                await self.sessions[n].is_chan_registered(chan_name)
-            ]
-
         # Open the bare minimum number of sessions
         # for a successful consensus result.
         success_no, failure_offsets = await self.start_n(
@@ -1349,7 +1321,7 @@ class IRCDNS():
             async def is_name_available(n):
                 # Simulate name being available if we already own it.
                 # This will allow the code to pass and be reused.
-                if self.sessions[n].is_name_registered(name, tld, pw):
+                if self.sessions[n].db_is_name_registered(name, tld, pw):
                     return True
 
                 # Convert name to server-specific hash.
@@ -1397,6 +1369,44 @@ class IRCDNS():
         # Register name.
         tasks = []
         for n in range(0, self.p_sessions_next):
+            # Helper function to register a name for a session.
+            async def do_register(n):
+                # Attempt to start session if not started.
+                # Useful for the register_factory code.
+                if not self.sessions[n].started.done():
+                    try:
+                        await self.sessions[n].start(self.i)
+                    except:
+                        return [
+                            n,
+                            False
+                        ]
+
+                # Name already registered so skip.
+                if self.sessions[n].db_is_name_registered(name, tld, pw):
+                    return [
+                        n,
+                        self.sessions[n].nick
+                    ]
+
+                # Convert name to server-specific hash.
+                chan_name = await self.sessions[n].get_irc_chan_name(
+                    name,
+                    tld,
+                    pw,
+                    self.executor
+                )
+
+                # Register name on that server.
+                await self.sessions[n].register_chan(chan_name)
+                await asyncio.sleep(0.1)
+
+                # Return owner of channel.
+                return [
+                    n,
+                    await self.sessions[n].is_chan_registered(chan_name)
+                ]
+
             tasks.append(do_register(n))
 
         # Do registration tasks concurrently.
