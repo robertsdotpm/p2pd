@@ -819,7 +819,10 @@ class IRCSession():
                 if "dns" not in chan_meta:
                     continue
 
-                if dns == chan_meta["dns"]:
+                if dns != chan_meta["dns"]:
+                    continue
+
+                if chan_meta["status"] == IRC_REGISTER_SUCCESS:
                     return True
 
         return False
@@ -1247,7 +1250,9 @@ class IRCDNS():
                 )
 
                 tasks.append(
-                    self.sessions[j].start(self.i)
+                    async_wrap_errors(
+                        self.sessions[j].start(self.i)
+                    )
                 )
                 self.p_sessions_next += 1
 
@@ -1288,17 +1293,23 @@ class IRCDNS():
 
         # Helper function to register a name for a session.
         async def do_register(n):
+            # Attempt to start session if not started.
+            # Useful for the register_factory code.
+            if not self.sessions[n].started.done():
+                try:
+                    await self.sessions[n].start(self.i)
+                except:
+                    return [
+                        n,
+                        False
+                    ]
+
             # Name already registered so skip.
             if self.sessions[n].is_name_registered(name, tld, pw):
                 return [
                     n,
                     self.sessions[n].nick
                 ]
-
-            # Attempt to start session if not started.
-            # Useful for the register_factory code.
-            if not self.sessions[n].started.done():
-                await self.sessions[n].start(self.i)
 
             # Convert name to server-specific hash.
             chan_name = await self.sessions[n].get_irc_chan_name(
@@ -1395,19 +1406,20 @@ class IRCDNS():
         # Get owners for channels to see success.
         records = []
         for n in range(0, self.p_sessions_next):
-            # Default to success otherwise fail.
-            reg_status = IRC_REGISTER_SUCCESS
+            # Default to failure.
+            reg_status = IRC_REGISTER_FAILURE
 
             # The server couldn't be connected.
             if n in failure_offsets:
                 reg_status = IRC_START_FAILURE
 
             # Check channel owner after registration.
+            # Results need to exist for success to be possible.
             for r in results:
                 # If the session offset is this and
                 # the session nick matches the channel nick.
-                if n == r[0] and r[1] != self.sessions[n].nick:
-                    reg_status = IRC_REGISTER_FAILURE
+                if n == r[0] and r[1] == self.sessions[n].nick:
+                    reg_status = IRC_REGISTER_SUCCESS
                     break
 
             # Get the chan name.
@@ -1422,26 +1434,36 @@ class IRCDNS():
             # Get the time-lock field.
             time_lock = self.sessions[n].chan_time_locks[chan_name]
 
+            # Name portion to store in record.
+            dns_meta = {
+                "name": name,
+                "tld": tld,
+                "pw": pw
+            }
+
             # Record to store about name in session.
             record = {
                 "domain": self.sessions[n].irc_server,
-                "dns": {
-                    "name": name,
-                    "tld": tld,
-                    "pw": pw
-                },
+                "dns": dns_meta,
                 "chan_name": chan_name,
                 "time_lock": time_lock,
                 "status": reg_status
             }
 
-            # Create modified channel listing.
+            # CGet list of channels for this server.
             key_name = self.sessions[n].db_key("chan_list")
             chan_list = self.db.get(key_name, [])
-            chan_list.append(record)
+
+            # Ensure existing copy of this chan is overwritten.
+            # Otherwise repeat calls could grow the list forever.
+            updated_list = []
+            for chan in chan_list:
+                if chan["dns"] != dns_meta:
+                    updated_list.append(chan)
+            updated_list.append(record)
 
             # Record the changes.
-            self.db[key_name] = chan_list
+            self.db[key_name] = updated_list
             records.append(record)
 
         return records

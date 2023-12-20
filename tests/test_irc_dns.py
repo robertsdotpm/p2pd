@@ -379,7 +379,6 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         # Register, store, then get.
         ret = await ircdns.name_register(dns_name, dns_tld)
-        pprint.pprint(ret)
         assert(len(ret))
 
         # Test store.
@@ -463,6 +462,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
                 if self.offset not in [1, 5]:
                     self.started.set_result(True)
+                else:
+                    raise Exception("Cannot start!")
 
         interface = None
         ircdns = IRCDNS(
@@ -475,28 +476,72 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             do_shuffle=False
         )
 
-        # Available = 5.
-        print(len(servers))
-        print(ircdns.get_server_len())
-        print(ircdns.get_success_min())
 
+        assert(ircdns.get_server_len() == 7)
+        assert(ircdns.get_success_min() == 5)
         dns_name = "p2pd_test2"
         dns_tld = "test_tld2"
         dns_val = "test val2"
         ret = await ircdns.name_register(dns_name, dns_tld)
-        print(ret)
-
         await ircdns.store_value(dns_val, dns_name, dns_tld)
 
         ret = await ircdns.name_lookup(dns_name, dns_tld)
-        # TODO: check values are expected here.
-        print(ret)
+        assert(dns_val in ret["msg"])
 
     async def test_register_partial_to_simulate_session_restart(self):
         pass
 
     # check partial availability of names (some are already taken)
-    
+    async def test_partial_availability_of_names(self):
+        servers = [
+            {"domain": "a"},
+            {"domain": "b"},
+            {"domain": "c"},
+            {"domain": "d"},
+            {"domain": "e"},
+            {"domain": "f"},
+            {"domain": "g"},
+        ]
+
+        class MockIRCSession3(MockIRCSession):
+            async def start(self, i):
+                if self.db is not None:
+                    self.db[self.last_started] = time.time()
+
+                # Simulate one server down.
+                if self.offset not in [5]:
+                    self.started.set_result(True)
+                else:
+                    raise Exception("Start failure!")
+
+            # ... and simulate one server having a name conflict.
+            async def is_chan_registered(self, chan_name):
+                if self.offset in [2]:
+                    return "someone_else"
+                else:
+                    return await super().is_chan_registered(chan_name)
+
+        interface = None
+        ircdns = IRCDNS(
+            i=interface,
+            seed=IRC_SEED,
+            clsSess=MockIRCSession3,
+            clsChan=MockIRCChan,
+            servers=servers,
+            executor=executor,
+            do_shuffle=False
+        )
+
+        dns_name = "p2pd_test3"
+        dns_tld = "test_tld3"
+        dns_val = "test val3"
+        ret = await ircdns.name_register(dns_name, dns_tld)
+        await ircdns.store_value(dns_val, dns_name, dns_tld)
+        ret = await ircdns.name_lookup(dns_name, dns_tld)
+        assert(dns_val in ret["msg"])
+
+    async def test_to_check_db_integrity_multi_chan_reg(self):
+        pass
 
     async def test_irc_servers_work(self):
         return
