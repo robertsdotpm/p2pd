@@ -100,6 +100,8 @@ and allow chans to be recovered in a worse case scenario
 maybe how a way to export state in json to see what chans exist, need to be made, and so on
 
 join chans without a registered account? what servers support this.
+
+when i register a name it should save metadata for all the sessions in the db
 """
 
 import asyncio
@@ -127,14 +129,6 @@ IRC_VERSION = "Friendly P2PD user - see p2pd.net/irc"
 IRC_CHAN_REFRESH = "Refreshing chan as we're still using this! See p2pd.net/irc for more information."
 
 IRC_NICK_REFRESH = "Refreshing nick as we're still using this!"
-
-IRC_CONF = dict_child({
-    "use_ssl": 1,
-    "ssl_handshake": 8,
-    "con_timeout": 4,
-}, NET_CONF)
-
-IRC_FRESHNESS = 172800
 
 IRC_SERVERS = [
     # Works.
@@ -285,6 +279,20 @@ IRC_NICK_POS = [
     "ickname \S* is already",
     #"is reserved by a different account"
 ]
+
+IRC_REGISTER_SUCCESS = 0
+IRC_START_FAILURE = 1
+IRC_REGISTER_FAILURE = 2
+
+IRC_CONF = dict_child({
+    "use_ssl": 1,
+    "ssl_handshake": 8,
+    "con_timeout": 4,
+}, NET_CONF)
+
+IRC_FRESHNESS = 172800
+
+####################################################################################
 
 # SHA3 digest in ascii truncated to a str limit.
 # Used for deterministic passwords with good complexity.
@@ -754,7 +762,7 @@ def irc_proto(self, msg):
             self.chans[chan] = irc_chan
 
 class IRCSession():
-    def __init__(self, server_info, seed, db=None):
+    def __init__(self, server_info, seed, db=None, offset=None):
         assert(len(seed) >= 24)
         self.started = asyncio.Future()
         self.con = None
@@ -774,6 +782,7 @@ class IRCSession():
         self.server_info = server_info
         self.seed = seed
         self.db = db
+        self.offset = offset
 
         # All IRC channels registered to this username.
         self.chans = {}
@@ -1176,11 +1185,11 @@ class IRCDNS():
     def get_failure_max(self):
         return int(0.4 * self.get_server_len())
     
-    def get_success_max(self):
+    def get_success_min(self):
         return self.get_server_len() - self.get_failure_max()
     
-    def get_success_min(self):
-        return self.get_failure_max() + 1
+    def get_success_max(self):
+        return self.get_server_len()
     
     def needed_sessions(self):
         dif = self.p_sessions_next - self.get_success_min()
@@ -1213,8 +1222,9 @@ class IRCDNS():
                 assert(j not in self.sessions)
                 self.sessions[j] = self.clsSess(
                     self.servers[j],
-                    self.seed,
-                    self.db
+                    seed=self.seed,
+                    db=self.db,
+                    offset=j,
                 )
 
                 tasks.append(
@@ -1273,7 +1283,14 @@ class IRCDNS():
             )
 
             # Register name on that server.
-            return await self.sessions[n].register_chan(chan_name)
+            await self.sessions[n].register_chan(chan_name)
+            await asyncio.sleep(0.1)
+
+            # Return owner of channel.
+            return [
+                n,
+                await self.sessions[n].is_chan_registered(chan_name)
+            ]
 
         # Open the bare minimum number of sessions
         # for a successful consensus result.
@@ -1283,18 +1300,8 @@ class IRCDNS():
                 len(self.servers)
             )
         )
-        if success_no < self.get_success_max():
+        if success_no < self.get_success_min():
             raise Exception("Insufficient sessions.")
-        
-        # If there's failures these can be used to retry.
-        to_register = []
-        for n in failure_offsets:
-            to_register.append({
-                "domain": self.sessions[n].irc_server,
-                "name": name,
-                "tld": tld,
-                "pw": pw
-            })
         
         # Pre-cache chan name hashes.
         await self.pre_cache(name, tld, pw)
@@ -1339,8 +1346,8 @@ class IRCDNS():
         for is_chan_registered in results:
             if not is_chan_registered:
                 available_count += 1
-        if available_count < self.get_success_max():
-            return False, to_register
+        if available_count < self.get_success_min():
+            raise Exception("Not enough names available.")
         
         # Register name.
         tasks = []
@@ -1348,8 +1355,61 @@ class IRCDNS():
             tasks.append(do_register(n))
 
         # Do registration tasks concurrently.
-        await asyncio.gather(*tasks)
-        return True, to_register
+        results = await asyncio.gather(*tasks)
+        await asyncio.sleep(0.1)
+
+        # Get owners for channels to see success.
+        records = []
+        for n in range(0, self.p_sessions_next):
+            # Default to success otherwise fail.
+            reg_status = IRC_REGISTER_SUCCESS
+
+            # The server couldn't be connected.
+            if n in failure_offsets:
+                reg_status = IRC_START_FAILURE
+
+            # Check channel owner after registration.
+            for r in results:
+                # If the session offset is this and
+                # the session nick matches the channel nick.
+                if n == r[0] and r[1] != self.sessions[n].nick:
+                    reg_status = IRC_REGISTER_FAILURE
+                    break
+
+            # Get the chan name.
+            chan_name = await self.sessions[n].get_irc_chan_name(
+                name,
+                tld,
+                pw,
+                self.executor
+            )
+
+            # Get the time-lock field.
+            time_lock = self.sessions[n].chan_time_locks[chan_name]
+
+            # Record to store about name in session.
+            record = {
+                "domain": self.sessions[n].irc_server,
+                "dns": {
+                    "name": name,
+                    "tld": tld,
+                    "pw": pw
+                },
+                "chan_name": chan_name,
+                "time_lock": time_lock,
+                "status": reg_status
+            }
+
+            # Create modified channel listing.
+            key_name = self.sessions[n].db_key("chan_list")
+            chan_list = self.db.get(key_name, [])
+            chan_list.append(record)
+
+            # Record the changes.
+            self.db[key_name] = chan_list
+            records.append(record)
+
+        return records
     
     async def store_value(self, value, name, tld, pw=""):
         async def helper(n):
@@ -1403,6 +1463,9 @@ class IRCDNS():
         
         table = {}
         for r in results:
+            if r is None:
+                continue
+            
             for r_id in r["ids"]:
                 if r_id not in table:
                     table[r_id] = [r]

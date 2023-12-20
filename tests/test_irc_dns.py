@@ -77,6 +77,7 @@
             print(out)
 """
 
+import pprint
 from p2pd.test_init import *
 from p2pd import *
 
@@ -103,6 +104,54 @@ IRC_SERV_INFO = {
 
 IRC_S = IRCSession(IRC_SERV_INFO, IRC_SEED)
 
+class MockIRCChan(IRCChan):
+    async def set_topic(self, topic):
+        self.pending_topic = topic
+
+class MockIRCSession(IRCSession):
+    """
+    def __init__(self, server_info, seed):
+        super().__init__(server_info, seed)
+    """
+
+    async def start(self, i):
+        if self.db is not None:
+            self.db[self.last_started] = time.time()
+
+        self.started.set_result(True)
+
+    async def is_chan_registered(self, chan_name):
+        if chan_name not in self.chan_registered:
+            return False
+        else:
+            return self.nick
+    
+    async def register_chan(self, chan_name):
+        self.chan_registered[chan_name] = True
+
+    async def get_chan_topic(self, chan_name):
+        return self.chans[chan_name].pending_topic
+    
+        """
+        async def get_irc_chan_name(self, name, tld, pw=""):
+            # Domain names are unique per server.
+            msg = to_b(f"{self.irc_server} {pw} {name} {tld}")
+            return "#" + to_s(
+                # The result is encoded using A-Z0-9 for chan names.
+                encodebytes(
+                    # Multiple hash functions make collisions harder to find.
+                    # As a value will need to work for both functions.
+                    hash160(
+                        hashlib.sha256(
+                            msg
+                        ).digest()
+                    ),
+                    charset=B36_CHARSET
+                )
+            )[:31].lower()
+        """
+
+executor = ProcessPoolExecutor()
 
 class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
     async def test_proto_ping(self):
@@ -262,51 +311,6 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             assert(got == expected)
 
     async def test_start_n(self):
-        class MockIRCChan(IRCChan):
-            async def set_topic(self, topic):
-                self.pending_topic = topic
-
-        class MockIRCSession(IRCSession):
-            """
-            def __init__(self, server_info, seed):
-                super().__init__(server_info, seed)
-            """
-
-            async def start(self, i):
-                if self.db is not None:
-                    self.db[self.last_started] = time.time()
-
-                self.started.set_result(True)
-
-            async def is_chan_registered(self, chan_name):
-                return chan_name in self.chan_registered
-            
-            async def register_chan(self, chan_name):
-                self.chan_registered[chan_name] = True
-
-            async def get_chan_topic(self, chan_name):
-                return self.chans[chan_name].pending_topic
-
-            """
-            async def get_irc_chan_name(self, name, tld, pw=""):
-                # Domain names are unique per server.
-                msg = to_b(f"{self.irc_server} {pw} {name} {tld}")
-                return "#" + to_s(
-                    # The result is encoded using A-Z0-9 for chan names.
-                    encodebytes(
-                        # Multiple hash functions make collisions harder to find.
-                        # As a value will need to work for both functions.
-                        hash160(
-                            hashlib.sha256(
-                                msg
-                            ).digest()
-                        ),
-                        charset=B36_CHARSET
-                    )
-                )[:31].lower()
-            """
-
-        executor = ProcessPoolExecutor()
         servers = [
             {"domain": "a"},
             {"domain": "b"},
@@ -314,7 +318,6 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             {"domain": "d"},
             {"domain": "e"},
         ]
-
 
         interface = None
         ircdns = IRCDNS(
@@ -375,8 +378,9 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         assert(len(dns_hash) <= 32)
 
         # Register, store, then get.
-        ret, to_register = await ircdns.name_register(dns_name, dns_tld)
-        assert(ret)
+        ret = await ircdns.name_register(dns_name, dns_tld)
+        pprint.pprint(ret)
+        assert(len(ret))
 
         # Test store.
         await ircdns.store_value(dns_val, dns_name, dns_tld)
@@ -428,6 +432,53 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         #assert(ircdns.sessions[0].chans[dns_hash].pending_topic == dns_val)
 
         # assert len of user pass nick email ... etc
+
+    async def test_with_some_failed_sessions(self):
+        servers = [
+            {"domain": "a"},
+            {"domain": "b"},
+            {"domain": "c"},
+            {"domain": "d"},
+            {"domain": "e"},
+            {"domain": "f"},
+            {"domain": "g"},
+        ]
+
+        class MockIRCSession2(MockIRCSession):
+            async def start(self, i):
+                if self.db is not None:
+                    self.db[self.last_started] = time.time()
+
+                if self.offset not in [1, 5]:
+                    self.started.set_result(True)
+
+        interface = None
+        ircdns = IRCDNS(
+            i=interface,
+            seed=IRC_SEED,
+            clsSess=MockIRCSession2,
+            clsChan=MockIRCChan,
+            servers=servers,
+            executor=executor,
+            do_shuffle=False
+        )
+
+        # Available = 5.
+        print(len(servers))
+        print(ircdns.get_server_len())
+        print(ircdns.get_success_min())
+
+        dns_name = "p2pd_test2"
+        dns_tld = "test_tld2"
+        dns_val = "test val2"
+        ret = await ircdns.name_register(dns_name, dns_tld)
+        print(ret)
+
+        await ircdns.store_value(dns_val, dns_name, dns_tld)
+
+        ret = await ircdns.name_lookup(dns_name, dns_tld)
+        print(ret)
+
 
     async def test_irc_servers_work(self):
         return
