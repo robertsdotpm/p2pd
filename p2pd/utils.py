@@ -136,8 +136,16 @@ def list_exclude_dict(key_name, exclusion, entry_list):
 
         if entry[key_name] != exclusion:
             sub_list.append(entry)
-            
+
     return sub_list
+
+def list_get_dict(key_name, criteria, entry_list):
+    for entry in entry_list:
+        if key_name not in entry:
+            continue
+
+        if entry[key_name] == criteria:
+            return entry
 
 def file_get_contents(path):
     with open(path, mode='rb') as f:

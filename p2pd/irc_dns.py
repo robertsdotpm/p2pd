@@ -33,14 +33,17 @@ impossible or impractical depending on usage.
 
     high priority:
 
-    - refresher
-        - need to store meta data about what chan were registered on what server
-        - when a chan was last refreshed
-        - list of chans for a user on a server
-        - when a nick on a server was last refreshed
+    - use chan successor as my own account to help prevent expiry
+and allow chans to be recovered in a worse case scenario
+
+    maybe how a way to export state in json to see what chans exist, need to be made, and so on
 
     - loader would make refresher run each boot
         - install_loader(refresher)
+
+    - join chans without a registered account? what servers support this.
+
+    - still need to test regular dnsmanager usage. as all current code has used mocks
         
     - write more comments for what you've written hastily
 
@@ -55,51 +58,12 @@ impossible or impractical depending on usage.
 
     - any way to add details about the version in account profile?
 
-    - code to refresh topics periodically?
-        - easily outsourced to bots
-        - may need something more complex to refresh nicks
-
     - see if you can find any more servers to add to the list.
 
 --------------------------------------
 
-need to store meta data for chans and nick at creation.
-
-
-for sessions:
-    for pending_register:
-        register
-        check if success:
-            remove from pending
-
-    for chans:
-        refresh if needed
-
-    if nick:
-        refresh if needed
-            need to figure out what actually counts as activity here
-                lets use a test chan
-
-store names registered in the irc manager and tie that into
-pending register code
-    retry down servers with exponential back-off
-    detect if an account or chan is disabled by a sys op
-
-use chan successor as my own account to help prevent expiry
-and allow chans to be recovered in a worse case scenario
-maybe how a way to export state in json to see what chans exist, need to be made, and so on
-
-join chans without a registered account? what servers support this.
-
-when i register a name it should save metadata for all the sessions in the db
-
-still need to test regular dnsmanager usage. as all current code has used mocks
-still need tests for refresh logic.
-
 saboteurs to throw errors in some of the funcs and try to crash the
-code. make it more resilient if one server doesnt work
-
-write test for refresher to call register again on a start failure name
+code. make it more resilient if one server doesnt worke
 
 """
 
@@ -1452,6 +1416,19 @@ class IRCDNS():
                 "pw": pw
             }
 
+            # CGet list of channels for this server.
+            key_name = self.sessions[n].db_key("chan_list")
+            chan_list = self.db.get(key_name, [])
+
+            # Get failure count for registration.
+            failure_count = 0
+            old_record = list_get_dict("chan_name", chan_name, chan_list)
+            if old_record is not None:
+                if "failure_count" in old_record:
+                    failure_count = old_record["failure_count"]
+            if reg_status != IRC_REGISTER_SUCCESS:
+                failure_count += 1
+
             # Record to store about name in session.
             record = {
                 "domain": self.sessions[n].irc_server,
@@ -1459,12 +1436,9 @@ class IRCDNS():
                 "chan_name": chan_name,
                 "time_lock": time_lock,
                 "status": reg_status,
+                "failure_count": failure_count,
                 "last_refresh": time.time()
             }
-
-            # CGet list of channels for this server.
-            key_name = self.sessions[n].db_key("chan_list")
-            chan_list = self.db.get(key_name, [])
 
             # Ensure existing copy of this chan is overwritten.
             # Otherwise repeat calls could grow the list forever.
@@ -1737,9 +1711,15 @@ class IRCRefresher():
                 )
 
                 # Sanity checks for the next part.
+                # Only attempt to re-register up to 3 times.
+                # Don't want to DoS server.
                 if "status" not in chan_info:
                     continue 
                 if "dns" not in chan_info:
+                    continue
+                if "failure_count" not in chan_info:
+                    chan_info["failure_count"] = 0
+                if chan_info["failure_count"] >= 3:
                     continue
 
                 # If the chan info status was start failure
