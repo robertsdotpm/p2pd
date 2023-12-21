@@ -42,13 +42,13 @@ IRC_SERV_INFO = {
 IRC_S = IRCSession(IRC_SERV_INFO, IRC_SEED)
 
 IRC_TEST_SERVERS_SEVEN = [
-    {"domain": "a"},
-    {"domain": "b"},
-    {"domain": "c"},
-    {"domain": "d"},
-    {"domain": "e"},
-    {"domain": "f"},
-    {"domain": "g"},
+    {"domain": "a", "chan_expiry": 14},
+    {"domain": "b", "chan_expiry": 14},
+    {"domain": "c", "chan_expiry": 14},
+    {"domain": "d", "chan_expiry": 14},
+    {"domain": "e", "chan_expiry": 14},
+    {"domain": "f", "chan_expiry": 14},
+    {"domain": "g", "chan_expiry": 14},
 ]
 
 class MockIRCChan(IRCChan):
@@ -604,7 +604,55 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         await ircdns.close()
 
-        # Code to read chan list back from db.
+    async def test_irc_refresher(self):
+        """
+        We'll artificially set a particular chan to have a refresh time far in
+        the past to force the refresh code to fire. The code that is fired to
+        achieve refreshes will be monkey-patched to avoid network errors.
+        Fixed structures will be stored in the DB to make the testing simpler.
+        """
+
+        ircdns = IRCDNS(
+            i=None,
+            seed=IRC_SEED,
+            clsSess=MockIRCSession,
+            clsChan=MockIRCChan,
+            servers=IRC_TEST_SERVERS_SEVEN,
+            executor=executor,
+            do_shuffle=False
+        )
+        await ircdns.start_n(len(IRC_TEST_SERVERS_SEVEN))
+
+        chan_name = "expired_chan"
+        chan_info = {
+            "chan_name": chan_name,
+            "last_refresh": time.time() - (365 * 24 * 60 * 60)
+        }
+        db = ircdns.db
+
+        # Store the above expired chan info in the db.
+        for n in range(0, ircdns.p_sessions_next):
+            s = ircdns.sessions[n]
+            chan_list = s.db_load_chan_list()
+            sub_list = list_exclude_dict("chan_name", chan_name, chan_list)
+            sub_list.append(chan_info)
+            
+            key_name = s.db_key("chan_list")
+            db[key_name] = sub_list
+            key_name = s.db_key(f"chan/{chan_name}")
+            db[key_name] = chan_info
+
+
+        async def refresh_chan(chan_name, session):
+            print(f"In refresh {chan_name}")
+
+        refresher = IRCRefresher(ircdns)
+        refresher.refresh_chan = refresh_chan
+        await refresher.refresher()
+
+
+        await ircdns.close()
+    
 
     async def test_irc_servers_work(self):
         return

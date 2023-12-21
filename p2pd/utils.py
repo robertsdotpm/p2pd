@@ -127,6 +127,12 @@ sha256 = lambda x: to_s(hashlib.sha256(to_b(x)).hexdigest())
 hash160 = lambda x: hashlib.new('ripemd160', to_b(x)).digest()
 sha3_256 = lambda x: to_s(hashlib.sha3_256(to_b(x)).hexdigest())
 
+def list_exclude_dict(key_name, exclusion, entry_list):
+    sub_list = []
+    for entry in entry_list:
+        if entry[key_name] != exclusion:
+            sub_list.append(entry)
+    return sub_list
 
 def file_get_contents(path):
     with open(path, mode='rb') as f:

@@ -42,16 +42,6 @@ impossible or impractical depending on usage.
     - loader would make refresher run each boot
         - install_loader(refresher)
         
-
-    - add basic assert tests for stored values in the list like:
-        - timestamps are different
-        - different topics
-        - and so on
-        - where one session doesnt connect to test threshold logic
-            - test to_register info
-
-    - what about registering names for servers that come back online?
-
     - write more comments for what you've written hastily
 
 ----------------------------
@@ -105,6 +95,9 @@ when i register a name it should save metadata for all the sessions in the db
 
 still need to test regular dnsmanager usage. as all current code has used mocks
 still need tests for refresh logic.
+
+saboteurs to throw errors in some of the funcs and try to crash the
+code. make it more resilient if one server doesnt work
 """
 
 import asyncio
@@ -1457,7 +1450,8 @@ class IRCDNS():
                 "dns": dns_meta,
                 "chan_name": chan_name,
                 "time_lock": time_lock,
-                "status": reg_status
+                "status": reg_status,
+                "last_refresh": time.time()
             }
 
             # CGet list of channels for this server.
@@ -1466,14 +1460,12 @@ class IRCDNS():
 
             # Ensure existing copy of this chan is overwritten.
             # Otherwise repeat calls could grow the list forever.
-            updated_list = []
-            for chan in chan_list:
-                if chan["dns"] != dns_meta:
-                    updated_list.append(chan)
-            updated_list.append(record)
+            sub_list = list_exclude_dict("chan_name", chan_name, chan_list)
+            sub_list.append(record)
 
             # Record the changes.
-            self.db[key_name] = updated_list
+            self.db[key_name] = sub_list
+            self.db[f"chan/{chan_name}"] = record
             records.append(record)
 
         return records
@@ -1631,7 +1623,7 @@ class IRCDNS():
             return freshest
         
 class IRCRefresher():
-    async def __init__(self, manager):
+    def __init__(self, manager):
         self.manager = manager
 
     async def placeholder(self):
@@ -1706,6 +1698,8 @@ class IRCRefresher():
             assert(expiry_secs > 0)
             duration = max(time.time() - info["last_refresh"], 0)
             if duration >= expiry_secs:
+                print(f"{sub_key} expired!")
+
                 # Update refresh timer.
                 info["last_refresh"] = time.time()
                 db[key_name] = info
@@ -1722,9 +1716,9 @@ class IRCRefresher():
             session = self.manager.sessions[n]
             
             # Loop over all channels registered to session.
-            chans_key = session.db_key("chan_list")
-            chans_list = db.get(chans_key, [])
-            for chan_name in chans_list:
+            chan_list = session.db_load_chan_list()
+            for chan_info in chan_list:
+                chan_name = chan_info["chan_name"]
                 expiry_days = session.server_info["chan_expiry"]
                 tasks.append(
                     check_last_refresh(
@@ -1734,6 +1728,7 @@ class IRCRefresher():
                     )
                 )
 
+            """
             # See if nick needs to be refreshed.
             tasks.append(
                 check_last_refresh(
@@ -1742,6 +1737,8 @@ class IRCRefresher():
                     lambda: self.refresh_nick(session)
                 )
             )
+            """
+            
 
         # Execute refresh tasks concurrently.
         if len(tasks):
