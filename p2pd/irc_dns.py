@@ -98,6 +98,9 @@ still need tests for refresh logic.
 
 saboteurs to throw errors in some of the funcs and try to crash the
 code. make it more resilient if one server doesnt work
+
+write test for refresher to call register again on a start failure name
+
 """
 
 import asyncio
@@ -1714,6 +1717,7 @@ class IRCRefresher():
             return self.placeholder()
 
         # Loop over sessions for anything that needs refreshing.
+        register_list = []
         for n in range(0, self.manager.p_sessions_next):
             # Select valid session.
             session = self.manager.sessions[n]
@@ -1721,6 +1725,7 @@ class IRCRefresher():
             # Loop over all channels registered to session.
             chan_list = session.db_load_chan_list()
             for chan_info in chan_list:
+                # Check the channel info for expiry.
                 chan_name = chan_info["chan_name"]
                 expiry_days = session.server_info["chan_expiry"]
                 tasks.append(
@@ -1730,6 +1735,20 @@ class IRCRefresher():
                         lambda: self.refresh_chan(chan_name, session)
                     )
                 )
+
+                # If the chan info status was start failure
+                # try to call register on the name again.
+                if chan_info["status"] == IRC_START_FAILURE:
+                    # Register handles retry for all servers.
+                    if chan_info["dns"] not in register_list:
+                        tasks.append(
+                            self.manager.name_register(
+                                name=chan_info["dns"]["name"],
+                                tld=chan_info["dns"]["tld"],
+                                pw=chan_info["dns"]["pw"]
+                            )
+                        )
+                        register_list.append(chan_info["dns"])
 
             # See if nick needs to be refreshed.
             tasks.append(

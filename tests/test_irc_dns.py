@@ -611,9 +611,6 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         achieve refreshes will be monkey-patched to avoid network errors.
         Fixed structures will be stored in the DB to make the testing simpler.
         The refresh code is fairly straight forwards so easier to test.
-
-        TODO: refresher should also try to call register on names with
-        in chan list that were previously not started.
         """
 
         ircdns = IRCDNS(
