@@ -42,13 +42,13 @@ IRC_SERV_INFO = {
 IRC_S = IRCSession(IRC_SERV_INFO, IRC_SEED)
 
 IRC_TEST_SERVERS_SEVEN = [
-    {"domain": "a", "chan_expiry": 14},
-    {"domain": "b", "chan_expiry": 14},
-    {"domain": "c", "chan_expiry": 14},
-    {"domain": "d", "chan_expiry": 14},
-    {"domain": "e", "chan_expiry": 14},
-    {"domain": "f", "chan_expiry": 14},
-    {"domain": "g", "chan_expiry": 14},
+    {"domain": "a", "chan_expiry": 14, "nick_expiry": 14},
+    {"domain": "b", "chan_expiry": 14, "nick_expiry": 14},
+    {"domain": "c", "chan_expiry": 14, "nick_expiry": 14},
+    {"domain": "d", "chan_expiry": 14, "nick_expiry": 14},
+    {"domain": "e", "chan_expiry": 14, "nick_expiry": 14},
+    {"domain": "f", "chan_expiry": 14, "nick_expiry": 14},
+    {"domain": "g", "chan_expiry": 14, "nick_expiry": 14},
 ]
 
 class MockIRCChan(IRCChan):
@@ -610,6 +610,10 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         the past to force the refresh code to fire. The code that is fired to
         achieve refreshes will be monkey-patched to avoid network errors.
         Fixed structures will be stored in the DB to make the testing simpler.
+        The refresh code is fairly straight forwards so easier to test.
+
+        TODO: refresher should also try to call register on names with
+        in chan list that were previously not started.
         """
 
         ircdns = IRCDNS(
@@ -628,28 +632,66 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             "chan_name": chan_name,
             "last_refresh": time.time() - (365 * 24 * 60 * 60)
         }
+
+        nick = "expired_nick"
+        nick_info = {
+            "nick": nick,
+            "last_refresh": time.time() - (365 * 24 * 60 * 60)
+        }
+
         db = ircdns.db
 
         # Store the above expired chan info in the db.
         for n in range(0, ircdns.p_sessions_next):
             s = ircdns.sessions[n]
+            s.refresh_chan_fired = None
+            s.refresh_nick_fired = None
             chan_list = s.db_load_chan_list()
             sub_list = list_exclude_dict("chan_name", chan_name, chan_list)
             sub_list.append(chan_info)
             
+            # Simulate expired channel.
             key_name = s.db_key("chan_list")
             db[key_name] = sub_list
             key_name = s.db_key(f"chan/{chan_name}")
             db[key_name] = chan_info
 
+            # Simulate expired nick.
+            key_name = s.db_key("nick")
+            db[key_name] = nick_info
 
+        # Skeleton functions just to know if they were triggered.
         async def refresh_chan(chan_name, session):
-            print(f"In refresh {chan_name}")
+            session.refresh_chan_fired = chan_name
+        async def refresh_nick(session):
+            session.refresh_nick_fired = "1"
 
+        # Patch refresher obj with skeletons above.
         refresher = IRCRefresher(ircdns)
         refresher.refresh_chan = refresh_chan
+        refresher.refresh_nick = refresh_nick
+
+        # Call refresher for first time.
+        # It should run the skeleton refresh funcs.
         await refresher.refresher()
 
+        # Check that refresh functions fired.
+        for n in range(0, ircdns.p_sessions_next):
+            s = ircdns.sessions[n]
+            assert(s.refresh_chan_fired == chan_name)
+            assert(s.refresh_nick_fired == "1")
+            s.refresh_chan_fired = None
+            s.refresh_nick_fired = None
+
+        # Run refresh again.
+        # It should do nothing this time.
+        await refresher.refresher()
+
+        # Now check refresh function WASNT fired.
+        for n in range(0, ircdns.p_sessions_next):
+            s = ircdns.sessions[n]
+            assert(s.refresh_chan_fired == None)
+            assert(s.refresh_nick_fired == None)
 
         await ircdns.close()
     

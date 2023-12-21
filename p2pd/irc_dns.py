@@ -1001,6 +1001,11 @@ class IRCSession():
             nick_info = self.db.get(nick_key, None)
             if nick_info is None:
                 self.db[nick_key] = {
+                    "domain": self.irc_server,
+                    "nick": self.nick,
+                    "username": self.username,
+                    "user_pass": self.user_pass,
+                    "email": self.email,
                     "last_refresh": time.time()
                 }
 
@@ -1698,8 +1703,6 @@ class IRCRefresher():
             assert(expiry_secs > 0)
             duration = max(time.time() - info["last_refresh"], 0)
             if duration >= expiry_secs:
-                print(f"{sub_key} expired!")
-
                 # Update refresh timer.
                 info["last_refresh"] = time.time()
                 db[key_name] = info
@@ -1728,7 +1731,6 @@ class IRCRefresher():
                     )
                 )
 
-            """
             # See if nick needs to be refreshed.
             tasks.append(
                 check_last_refresh(
@@ -1737,9 +1739,7 @@ class IRCRefresher():
                     lambda: self.refresh_nick(session)
                 )
             )
-            """
             
-
         # Execute refresh tasks concurrently.
         if len(tasks):
             await asyncio.gather(*tasks)
