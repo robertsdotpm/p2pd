@@ -403,7 +403,118 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         await ircdns.close()
 
     async def test_register_partial_to_simulate_session_restart(self):
-        pass
+        """
+        It should initially start enough sessions to pass the
+        get_success_min check (p_session_next will point to len)
+        but later when it calls start again it
+        should return success that time indicating that servers have
+        come back online. The results should show success for those previously
+        down servers.
+        """
+        class MockIRCSession4(MockIRCSession):
+            offset_count = {}
+            async def start(self, i):
+                if self.db is not None:
+                    self.db[self.last_started] = time.time()
+
+                if self.offset not in self.offset_count:
+                    self.offset_count[self.offset] = 0
+                self.offset_count[self.offset] += 1
+                
+
+                # Simulate one server down.
+                if self.offset not in [0, 1]:
+                    self.started.set_result(True)
+                else:
+                    if self.offset_count[self.offset] > 1:
+                        self.started.set_result(True)
+                    else:
+                        raise Exception("Start failure!")
+
+            # Disable DB caching for this test.
+            def db_is_name_registered(self, name, tld, pw=""):
+                return False
+
+        interface = None
+        ircdns = IRCDNS(
+            i=interface,
+            seed=IRC_SEED,
+            clsSess=MockIRCSession4,
+            clsChan=MockIRCChan,
+            servers=IRC_TEST_SERVERS_SEVEN,
+            executor=executor,
+            do_shuffle=False
+        )
+
+        await ircdns.start_n(len(IRC_TEST_SERVERS_SEVEN))
+        assert(ircdns.p_sessions_next == len(IRC_TEST_SERVERS_SEVEN))
+        ret = await ircdns.name_register("test_name6", "test_tld6")
+        for chan_info in ret:
+            assert(chan_info["status"] == IRC_REGISTER_SUCCESS)
+
+        await ircdns.close()
+
+    async def test_successive_register(self):
+        """
+        The first register should not succeed on all servers (some will be down)
+        while the second register should succeed to simulate the servers
+        returning. One of the names will be unavailable just to mix things up.
+        """
+        class MockIRCSession5(MockIRCSession):
+            offset_count = {}
+            async def start(self, i):
+                if self.db is not None:
+                    self.db[self.last_started] = time.time()
+
+                if self.offset not in self.offset_count:
+                    self.offset_count[self.offset] = 0
+                self.offset_count[self.offset] += 1
+                
+
+                # Simulate one server down.
+                if self.offset not in [0]:
+                    self.started.set_result(True)
+                else:
+                    # Fail on start_n and start in do_register.
+                    # Next register will succeed.
+                    if self.offset_count[self.offset] > 2:
+                        self.started.set_result(True)
+                    else:
+                        raise Exception("Start failure!")
+                    
+            # ... and simulate one server having a name conflict.
+            async def is_chan_registered(self, chan_name):
+                if self.offset in [1]:
+                    return "someone_else"
+                else:
+                    return await super().is_chan_registered(chan_name)
+                
+            # Disable DB caching for this test.
+            def db_is_name_registered(self, name, tld, pw=""):
+                return False
+                
+        interface = None
+        ircdns = IRCDNS(
+            i=interface,
+            seed=IRC_SEED,
+            clsSess=MockIRCSession5,
+            clsChan=MockIRCChan,
+            servers=IRC_TEST_SERVERS_SEVEN,
+            executor=executor,
+            do_shuffle=False
+        )
+
+        dns_name = "dns_name8"; dns_tld = "dns_tld8"
+        ret = await ircdns.name_register(dns_name, dns_tld)
+        assert(ret[0]["status"] == IRC_START_FAILURE)
+        assert(ret[1]["status"] == IRC_REGISTER_FAILURE)
+        assert(ret[2]["status"] == IRC_REGISTER_SUCCESS)
+
+        ret = await ircdns.name_register(dns_name, dns_tld)
+        assert(ret[0]["status"] == IRC_REGISTER_SUCCESS)
+        assert(ret[1]["status"] == IRC_REGISTER_FAILURE)
+        assert(ret[2]["status"] == IRC_REGISTER_SUCCESS)
+        await ircdns.close()
 
     # check partial availability of names (some are already taken)
     async def test_partial_availability_of_names(self):
@@ -424,6 +535,10 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
                     return "someone_else"
                 else:
                     return await super().is_chan_registered(chan_name)
+                
+            # Disable DB caching for this test.
+            def db_is_name_registered(self, name, tld, pw=""):
+                return False
 
         interface = None
         ircdns = IRCDNS(
@@ -440,6 +555,9 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         dns_tld = "test_tld3"
         dns_val = "test val3"
         ret = await ircdns.name_register(dns_name, dns_tld)
+        assert(ret[2]["status"] == IRC_REGISTER_FAILURE)
+        assert(ret[5]["status"] == IRC_START_FAILURE)
+        assert(ret[0]["status"] == IRC_REGISTER_SUCCESS)
         await ircdns.store_value("initial val", dns_name, dns_tld)
         await ircdns.store_value(dns_val, dns_name, dns_tld)
         ret = await ircdns.name_lookup(dns_name, dns_tld)
