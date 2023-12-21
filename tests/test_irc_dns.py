@@ -692,6 +692,67 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         await ircdns.close()
     
+    async def test_irc_refresher_does_register(self):
+        class MockIRCSession6(MockIRCSession):
+            offset_count = {}
+            async def start(self, i):
+                if self.db is not None:
+                    self.db[self.last_started] = time.time()
+
+                if self.offset not in self.offset_count:
+                    self.offset_count[self.offset] = 0
+                self.offset_count[self.offset] += 1
+                
+
+                # Simulate one server down.
+                if self.offset not in [0]:
+                    self.started.set_result(True)
+                else:
+                    # Fail on start_n and start in do_register.
+                    # Next register will succeed.
+                    if self.offset_count[self.offset] > 2:
+                        self.started.set_result(True)
+                    else:
+                        raise Exception("Start failure!")
+                
+            # Disable DB caching for this test.
+            def db_is_name_registered(self, name, tld, pw=""):
+                return False
+            
+        ircdns = IRCDNS(
+            i=None,
+            seed=IRC_SEED,
+            clsSess=MockIRCSession6,
+            clsChan=MockIRCChan,
+            servers=IRC_TEST_SERVERS_SEVEN,
+            executor=executor,
+            do_shuffle=False
+        )
+
+        dns_name = "dns_name9"; dns_tld = "dns_tld9"
+        ret = await ircdns.name_register(dns_name, dns_tld)
+        assert(ret[0]["status"] == IRC_START_FAILURE)
+        assert(ret[1]["status"] == IRC_REGISTER_SUCCESS)
+        dns = ret[0]["dns"]
+
+        refresher = IRCRefresher(ircdns)
+        refresher.register_chan = lambda x: None
+        await refresher.refresher()
+
+        # Check that register was ran for the channel in refresh.
+        register_success = False
+        chan_list = ircdns.sessions[0].db_load_chan_list()
+        for chan_info in chan_list:
+            if "dns" not in chan_info:
+                continue
+
+            if chan_info["dns"] == dns:
+                if chan_info["status"] == IRC_REGISTER_SUCCESS:
+                    register_success = True
+        assert(register_success)
+
+        await ircdns.close()
+
 
     async def test_irc_servers_work(self):
         return

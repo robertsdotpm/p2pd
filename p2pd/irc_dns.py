@@ -1736,6 +1736,12 @@ class IRCRefresher():
                     )
                 )
 
+                # Sanity checks for the next part.
+                if "status" not in chan_info:
+                    continue 
+                if "dns" not in chan_info:
+                    continue
+
                 # If the chan info status was start failure
                 # try to call register on the name again.
                 if chan_info["status"] == IRC_START_FAILURE:

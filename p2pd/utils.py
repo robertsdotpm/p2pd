@@ -130,8 +130,13 @@ sha3_256 = lambda x: to_s(hashlib.sha3_256(to_b(x)).hexdigest())
 def list_exclude_dict(key_name, exclusion, entry_list):
     sub_list = []
     for entry in entry_list:
+        if key_name not in entry:
+            sub_list.append(entry)
+            continue
+
         if entry[key_name] != exclusion:
             sub_list.append(entry)
+            
     return sub_list
 
 def file_get_contents(path):
