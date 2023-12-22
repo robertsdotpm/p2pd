@@ -33,15 +33,30 @@ impossible or impractical depending on usage.
 
     high priority:
 
-    - use chan successor as my own account to help prevent expiry
-and allow chans to be recovered in a worse case scenario
+    - also use the otp to encrypt the sig otherwise attackers can determine which names are grouped via pub key recovery
 
     maybe how a way to export state in json to see what chans exist, need to be made, and so on
 
+    - dns database by prefix and seed so multiple managers dont conflict
+
+    - changes to the data structure for chan_list (use a dict)
+
+    - store overall dns structure in a general key []
+
+    - database is currently easy to corrupt if it isnt closed. it might make more sense to try see if i can use SQLLite.
+
+    - register name should return overall status indicating
+full success, full failure, partial success]
+
+    --------
+
+    final tasks:
+
+    - saboteurs to throw errors in some of the funcs and try to crash the
+code. make it more resilient if one server doesnt worke
+
     - loader would make refresher run each boot
         - install_loader(refresher)
-
-    - join chans without a registered account? what servers support this.
 
     - still need to test regular dnsmanager usage. as all current code has used mocks
         
@@ -49,27 +64,19 @@ and allow chans to be recovered in a worse case scenario
 
 ----------------------------
 
-    to think about:
+    background questions about:
 
     - servers that are online but disable reg?
 
-    - if account gets deleted for inactivity (for client)
-    try next prefix along?
+    - if account gets deleted for inactivity?
 
     - any way to add details about the version in account profile?
 
     - see if you can find any more servers to add to the list.
 
+    - if someone sends you private messages what can they do via the protocol?
+
 --------------------------------------
-
-saboteurs to throw errors in some of the funcs and try to crash the
-code. make it more resilient if one server doesnt worke
-
-register name should return overall status indicating
-full success, full failure, partial success]
-
-n_name_lookups -- not actually getting minimum amount!
-
 """
 
 import asyncio
@@ -121,7 +128,8 @@ IRC_SERVERS = [
         'nick_expiry': 21,
         'chan_expiry': 14,
         'test_chan': '#test',
-        "successor": ""
+        "successor": "p2pd_matthew",
+        'unregistered_join': True,
     },
     # Works.
     {
@@ -145,7 +153,9 @@ IRC_SERVERS = [
         'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)',
         'nick_expiry': 210,
         'chan_expiry': 21,
-        'test_chan': '#test'
+        'test_chan': '#test',
+        "successor": "p2pd_matthew",
+        'unregistered_join': True,
     },
     {
         'domain': 'irc.swiftirc.net',
@@ -171,7 +181,9 @@ IRC_SERVERS = [
         'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)',
         'nick_expiry': 90,
         'chan_expiry': 14,
-        'test_chan': '#mSL.test'
+        'test_chan': '#mSL.test',
+        "successor": "p2pd_matthew",
+        'unregistered_join': True,
     },
     {
         'domain': 'irc.euirc.net',
@@ -194,7 +206,9 @@ IRC_SERVERS = [
         'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)',
         'nick_expiry': 120,
         'chan_expiry': 60,
-        'test_chan': '#test'
+        'test_chan': '#test',
+        'unregistered_join': True,
+        "successor": "p2pd_matthew"
     },
     {
         'domain': 'irc.darkmyst.org',
@@ -215,7 +229,9 @@ IRC_SERVERS = [
         'chan_topics': 'a-zA-Z0-9all specials unicode (smilies)',
         'nick_expiry': 30,
         'chan_expiry': 60,
-        'test_chan': '#test'
+        'test_chan': '#test',
+        'unregistered_join': True,
+        "successor": "p2pd_matthew"
     },
 ]
 
@@ -1033,8 +1049,21 @@ class IRCSession():
             ).pack()
         )
 
+        # If the users nickname expires their channels will be dropped.
+        # Allow such channels to be recovered.
+        await asyncio.sleep(0.1)
+        successor = self.server_info["successor"]
+        await self.con.send(
+            IRCMsg(
+                cmd="PRIVMSG",
+                param="ChanServ",
+                suffix=f"SET {chan_name} SUCCESSOR {successor}"
+            ).pack()
+        )
+
         # Attempt to enable topic retention.
         # So the channel topic remains after the last user leaves.
+        await asyncio.sleep(0.1)
         self.chans[chan_name] = irc_chan
         await self.con.send(
             IRCMsg(
