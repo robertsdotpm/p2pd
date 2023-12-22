@@ -286,11 +286,14 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         await ircdns.start_n(2)
         assert(ircdns.p_sessions_next == 2)
 
+
+
         # Test making irc chan name
         dns_name = "p2pd_test"
         dns_tld = "test_tld"
         dns_val = "test val"
         await ircdns.pre_cache(dns_name, dns_tld)
+
         dns_hash = await ircdns.sessions[0].get_irc_chan_name(
             name=dns_name,
             tld=dns_tld,
@@ -303,6 +306,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         # Register, store, then get.
         ret = await ircdns.name_register(dns_name, dns_tld)
         assert(len(ret))
+
 
         # Test store.
         await ircdns.store_value(dns_val, dns_name, dns_tld)
@@ -335,7 +339,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         # Get results list.
         results, _ = await ircdns.n_name_lookups(
-            ircdns.get_success_min(),
+            ircdns.get_lookup_success_min(),
             0,
             dns_name,
             dns_tld
@@ -391,7 +395,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
 
         assert(ircdns.get_server_len() == 7)
-        assert(ircdns.get_success_min() == 5)
+        assert(ircdns.get_register_success_min() == 5)
         dns_name = "p2pd_test2"
         dns_tld = "test_tld2"
         dns_val = "test val2"
@@ -596,6 +600,9 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
             found = False
             for chan_info in chan_list:
+                if "dns" not in chan_info:
+                    continue
+                
                 if chan_info["dns"] == dns:
                     found = True
                     break

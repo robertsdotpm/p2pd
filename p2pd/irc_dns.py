@@ -2,7 +2,7 @@
 - Firewalls for IRC servers silently drop packets if you
 make successive connections too closely.
 - When registration of channel names is done a user must first join
-the channel. The problem is: the number someone joins a channel the name
+the channel. The problem is: the moment someone joins a channel the name
 of the channel becomes public. That means that an attacker can watch the
 channel list for channels and register channel names on others servers
 in order to hijack the control of names before registering parties.
@@ -65,6 +65,11 @@ and allow chans to be recovered in a worse case scenario
 saboteurs to throw errors in some of the funcs and try to crash the
 code. make it more resilient if one server doesnt worke
 
+register name should return overall status indicating
+full success, full failure, partial success]
+
+n_name_lookups -- not actually getting minimum amount!
+
 """
 
 import asyncio
@@ -115,7 +120,8 @@ IRC_SERVERS = [
         'chan_topics': 'a-zA-Z0-9all specials unicode (smilies tested)',
         'nick_expiry': 21,
         'chan_expiry': 14,
-        'test_chan': '#test'
+        'test_chan': '#test',
+        "successor": ""
     },
     # Works.
     {
@@ -752,10 +758,10 @@ class IRCSession():
 
         # Derive details for IRC server.
         self.irc_server = self.server_info["domain"]
-        self.username = "u" + f_sha3_b36(IRC_PREFIX + "user" + self.irc_server + seed)[:7]
-        self.user_pass = f_irc_pass(IRC_PREFIX + "pass" + self.irc_server + seed)
-        self.nick = "n" + f_sha3_b36(IRC_PREFIX + "nick" + self.irc_server + seed)[:7]
-        self.email = "e" + f_sha3_b36(IRC_PREFIX + "email" + self.irc_server + seed)[:15]
+        self.username = "u" + f_sha3_b36(IRC_PREFIX + ":user:" + self.irc_server + seed)[:7]
+        self.user_pass = f_irc_pass(IRC_PREFIX + ":pass:" + self.irc_server + seed)
+        self.nick = "n" + f_sha3_b36(IRC_PREFIX + ":nick:" + self.irc_server + seed)[:7]
+        self.email = "e" + f_sha3_b36(IRC_PREFIX + ":email:" + self.irc_server + seed)[:15]
         self.email += "@p2pd.net"
         self.last_started = f"{self.irc_server}_last_started"
 
@@ -1179,21 +1185,26 @@ class IRCDNS():
 
         return count
 
-    def get_failure_max(self):
+    def get_register_failure_max(self):
         return int(0.4 * self.get_server_len())
     
-    def get_success_min(self):
-        return self.get_server_len() - self.get_failure_max()
+    def get_register_success_min(self):
+        return self.get_server_len() - self.get_register_failure_max()
     
-    def get_success_max(self):
+    def get_register_success_max(self):
         return self.get_server_len()
     
-    def needed_sessions(self):
-        dif = self.p_sessions_next - self.get_success_min()
-        if dif >= 0:
-            return 0
-        else:
-            return -dif
+    def get_lookup_success_min(self):
+        return self.get_register_failure_max() + 1
+    
+    def count_started_sessions(self):
+        # Count existing 
+        success_no = 0
+        for n in range(0, self.p_sessions_next):
+            if self.sessions[n].started.done():
+                success_no += 1
+
+        return success_no
 
     async def close(self):
         self.db.close()
@@ -1274,7 +1285,7 @@ class IRCDNS():
                 len(self.servers)
             )
         )
-        if success_no < self.get_success_min():
+        if success_no < self.get_register_success_min():
             raise Exception("Insufficient sessions.")
         
         # Pre-cache chan name hashes.
@@ -1328,7 +1339,7 @@ class IRCDNS():
         for is_chan_available in results:
             if is_chan_available:
                 available_count += 1
-        if available_count < self.get_success_min():
+        if available_count < self.get_register_success_min():
             raise Exception("Not enough names available.")
         
         # Register name.
@@ -1491,16 +1502,23 @@ class IRCDNS():
         await asyncio.gather(*tasks)
 
     async def acquire_at_least(self, target):
-        open_sessions = self.p_sessions_next
-        if open_sessions < target:
-            sessions_required = target - open_sessions
-            while sessions_required:
-                success_no, _ = await self.start_n(sessions_required)
-                sessions_required -= success_no
+        # Count existing 
+        success_no = self.count_started_sessions()
+
+        # Not enough sessions open to satisfy target.
+        # Open needed sessions.
+        if success_no < target:
+            still_needed = target - success_no
+
+            # Progress through server list until target is met
+            # otherwise the end is encountered and an exception is thrown.
+            while still_needed:
+                success_no, _ = await self.start_n(still_needed)
+                still_needed -= success_no
 
     def n_more_or_best(self, results):
         if not len(results):
-            return self.get_success_min()
+            return self.get_lookup_success_min()
         
         table = {}
         for r in results:
@@ -1518,7 +1536,7 @@ class IRCDNS():
             if len(highest) < len(table[r_id]):
                 highest = table[r_id]
 
-        if len(highest) >= self.get_success_min():
+        if len(highest) >= self.get_lookup_success_min():
             freshest = highest[0]
             for result in highest:
                 if result["time"] > freshest["time"]:
@@ -1526,7 +1544,7 @@ class IRCDNS():
 
             return freshest
         else:
-            return self.get_success_min() - len(highest)
+            return self.get_lookup_success_min() - len(highest)
         
     async def n_name_lookups(self, n, start_p, name, tld, pw=""):
         async def helper(self, session_offset, chan_name):
@@ -1581,7 +1599,7 @@ class IRCDNS():
         # Open the bare minimum number of sessions
         # for a successful consensus result.
         await self.acquire_at_least(
-            self.get_success_min()
+            self.get_lookup_success_min()
         )
 
         # Get minimum number of chan topics.
@@ -1600,6 +1618,7 @@ class IRCDNS():
             names_required = self.n_more_or_best(results)
 
         # Return freshest result.
+        assert(len(results) >= self.get_lookup_success_min())
         if isinstance(names_required, dict):
             freshest = names_required
             return freshest
