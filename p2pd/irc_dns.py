@@ -30,40 +30,18 @@ These measures make race conditions and rainbow tables either
 impossible or impractical depending on usage.
 
 ---
-
     high priority:
-
-    - also use the otp to encrypt the sig otherwise attackers can determine which names are grouped via pub key recovery
-
-    maybe how a way to export state in json to see what chans exist, need to be made, and so on
-
-    - dns database by prefix and seed so multiple managers dont conflict
-
-    - changes to the data structure for chan_list (use a dict)
-
-    - store overall dns structure in a general key []
-
-    - database is currently easy to corrupt if it isnt closed. it might make more sense to try see if i can use SQLLite.
-
-    - register name should return overall status indicating
-full success, full failure, partial success]
-
+    - todo write test that simulates nick save db code.
     --------
 
     final tasks:
-
     - saboteurs to throw errors in some of the funcs and try to crash the
 code. make it more resilient if one server doesnt worke
-
-    - loader would make refresher run each boot
-        - install_loader(refresher)
 
     - still need to test regular dnsmanager usage. as all current code has used mocks
         
     - write more comments for what you've written hastily
-
 ----------------------------
-
     background questions about:
 
     - servers that are online but disable reg?
@@ -72,18 +50,9 @@ code. make it more resilient if one server doesnt worke
     - if account gets deleted for inactivity?
         - refresh to prevent that
         - channel successor
-        - 
-
-    - see if you can find any more servers to add to the list.
+        - if an operator is interfering then could disable that server frm the list automatically (and the account should stil be active)
 
     - if someone sends you private messages what can they do via the protocol?
-
-    - shelve probably isnt async safe
-        - https://github.com/sabrysm/aiosqlitedict
-
-    pip install git+https://github.com/bobuk/ubase.git
-
-
 --------------------------------------
 """
 
@@ -276,6 +245,7 @@ IRC_NICK_POS = [
 IRC_REGISTER_SUCCESS = 0
 IRC_START_FAILURE = 1
 IRC_REGISTER_FAILURE = 2
+IRC_REGISTER_PARTIAL = 3
 
 IRC_CONF = dict_child({
     "use_ssl": 1,
@@ -364,7 +334,7 @@ def f_chan_pow(msg):
 def f_otp(msg, otp):
     # Make otp long enough.
     while len(otp) < len(msg):
-        otp += hashlib.sha1(otp).digest()
+        otp += b_sha3_256(otp)
 
     # Xor MSG with OTP.
     buf = b""
@@ -413,10 +383,17 @@ async def f_pack_topic(value, name, tld, pw, ses, clsChan, executor=None):
     val_buf += to_b(value)
 
     # Weakly encrypted topic value.
-    val_buf = f_otp(val_buf, time_lock)
+    val_buf = f_otp(
+        val_buf,
+        b_sha3_256(b"msg " + time_lock)
+    )
 
     # Signed val_buf with vk.
     sig_buf = sk.sign(val_buf)
+    sig_buf = f_otp(
+        sig_buf,
+        b_sha3_256(b"sig " + time_lock)
+    )
 
     # Topic message to store (topic-safe encoding.)
     return "%s %s %s" % (
@@ -432,15 +409,19 @@ def f_unpack_topic(chan_name, topic, session):
     parts = topic.split()
     if len(parts) != 3:
         return None
+    
+    # Time lock value used for OTP.
+    time_lock = session.chan_time_locks[chan_name]
 
     # Signature part.
     sig_b = decodebytes(parts[1], charset=B92_CHARSET)
+    sig_b = f_otp(
+        sig_b,
+        b_sha3_256(b"sig " + time_lock)
+    )
 
     # Message part.
     msg_b = decodebytes(parts[2], charset=B92_CHARSET)
-
-    # Time lock value used for OTP.
-    time_lock = session.chan_time_locks[chan_name]
 
     # List of possible public keys recovered from sig.
     vk_list = VerifyingKey.from_public_key_recovery(
@@ -464,13 +445,13 @@ def f_unpack_topic(chan_name, topic, session):
                 msg_b
             )
 
-            msg_b = f_otp(msg_b, time_lock)
+            msg_b = f_otp(msg_b, b_sha3_256(b"msg " + time_lock))
             timestamp = struct.unpack("Q", msg_b[:8])[0]
             return {
                 "ids": vk_ids,
                 "vk": vk,
                 "msg": to_s(msg_b[8:]),
-                "otp": f_otp(msg_b, time_lock),
+                "otp": f_otp(msg_b, b_sha3_256(b"msg " + time_lock)),
                 "sig": sig_b,
                 "time": timestamp,
             }
@@ -1429,8 +1410,15 @@ class IRCDNS():
         results = await asyncio.gather(*tasks)
         await asyncio.sleep(0.1)
 
+        # Name portion to store in record.
+        dns_meta = {
+            "name": name,
+            "tld": tld,
+            "pw": pw
+        }
+
         # Get owners for channels to see success.
-        records = []
+        records = [], error_no = IRC_REGISTER_SUCCESS
         for n in range(0, self.p_sessions_next):
             # Default to failure.
             reg_status = IRC_REGISTER_FAILURE
@@ -1448,6 +1436,10 @@ class IRCDNS():
                     reg_status = IRC_REGISTER_SUCCESS
                     break
 
+            # Set overall status.
+            if reg_status != IRC_REGISTER_SUCCESS:
+                error_no = IRC_REGISTER_PARTIAL
+
             # Get the chan name.
             # Calling this here also ensures time_lock exists.
             chan_name = await self.sessions[n].get_irc_chan_name(
@@ -1460,13 +1452,6 @@ class IRCDNS():
 
             # Get the time-lock field.
             time_lock = self.sessions[n].chan_time_locks[chan_name]
-
-            # Name portion to store in record.
-            dns_meta = {
-                "name": name,
-                "tld": tld,
-                "pw": pw
-            }
 
             # Get list of channels for this server.
             chan_list_key = self.sessions[n].db_key("chan_list")
@@ -1497,7 +1482,13 @@ class IRCDNS():
             await self.db.put(chan_info_key, record)
             records.append(record)
 
-        return records
+        # Store name in DB.
+        if self.db is not None:
+            dns_names = await self.db.get("names", set())
+            dns_names.add(f"{name}//{tld}//{pw}")
+            await self.db.put("names", dns_names)
+
+        return records, error_no
     
     async def store_value(self, value, name, tld, pw=""):
         async def helper(n):
