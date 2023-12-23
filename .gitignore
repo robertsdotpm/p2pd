@@ -137,6 +137,7 @@ program.log
 p2pd/*.log
 tests/*.log
 build/
+test_sqlite_db.sqlite
 
 # Config
 irc_pass.txt

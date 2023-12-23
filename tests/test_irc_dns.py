@@ -76,6 +76,7 @@ class MockIRCSession(IRCSession):
 
 executor = ProcessPoolExecutor()
 
+# python -m unittest test_irc_dns.TestIRCDNS.
 class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
     async def test_proto_ping(self):
         msg = IRCMsg(cmd="PING", param="31337")
@@ -602,7 +603,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             for chan_info in chan_list:
                 if "dns" not in chan_info:
                     continue
-                
+
                 if chan_info["dns"] == dns:
                     found = True
                     break
@@ -886,6 +887,14 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
     async def test_find_more_servers(self):
         pass
+
+    async def test_async_db(self):
+        db = await ubase.init_db("irc_dns.test.sqlite")
+        await db.put("some_key", 1)
+        ret = await db.get("some_key")
+        print(ret)
+        await db.close()
+        print(db)
 
 if __name__ == '__main__':
     main()

@@ -67,14 +67,22 @@ code. make it more resilient if one server doesnt worke
     background questions about:
 
     - servers that are online but disable reg?
+        - could parse the special flags at the start of the IRC server header and dynamically disable servers without the right flags
 
     - if account gets deleted for inactivity?
-
-    - any way to add details about the version in account profile?
+        - refresh to prevent that
+        - channel successor
+        - 
 
     - see if you can find any more servers to add to the list.
 
     - if someone sends you private messages what can they do via the protocol?
+
+    - shelve probably isnt async safe
+        - https://github.com/sabrysm/aiosqlitedict
+
+    pip install git+https://github.com/bobuk/ubase.git
+
 
 --------------------------------------
 """
@@ -96,6 +104,7 @@ from .base_stream import *
 from .base_n import encodebytes, decodebytes
 from .base_n import B36_CHARSET, B64_CHARSET, B92_CHARSET
 from .install import *
+from .sqlite_kvs import *
 
 IRC_PREFIX = "20"
 
