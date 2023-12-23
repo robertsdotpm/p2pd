@@ -95,7 +95,6 @@ import time
 import struct
 import argon2pure
 import binascii
-import shelve
 from ecdsa import SigningKey, VerifyingKey, SECP256k1
 from .utils import *
 from .address import *
@@ -788,7 +787,6 @@ class IRCSession():
         self.nick = "n" + f_sha3_b36(IRC_PREFIX + ":nick:" + self.irc_server + seed)[:7]
         self.email = "e" + f_sha3_b36(IRC_PREFIX + ":email:" + self.irc_server + seed)[:15]
         self.email += "@p2pd.net"
-        self.last_started = f"{self.irc_server}_last_started"
 
         # Sanity checks.
         assert(len(self.username) <= 8)
@@ -799,15 +797,15 @@ class IRCSession():
     def db_key(self, sub_key):
         return f"{self.irc_server}/{sub_key}"
     
-    def db_load_chan_list(self):
+    async def db_load_chan_list(self):
         chan_list = []
         if self.db is not None:
             key_name = self.db_key("chan_list")
-            chan_list = self.db.get(key_name, [])
+            chan_list = await self.db.get(key_name, [])
 
         return chan_list
     
-    def db_is_name_registered(self, name, tld, pw=""):
+    async def db_is_name_registered(self, name, tld, pw=""):
         dns = {
             "name": name,
             "tld": tld,
@@ -815,8 +813,10 @@ class IRCSession():
         }
 
         
-        chan_list = self.db_load_chan_list()
-        for chan_meta in chan_list:
+        chan_list = await self.db_load_chan_list()
+        for chan_name in chan_list:
+            key_name = self.db_key(f"chan/{chan_name}")
+            chan_meta = await self.db.get(key_name, {})
             if "dns" not in chan_meta:
                 continue
 
@@ -873,7 +873,8 @@ class IRCSession():
 
             # Set last started time.
             if self.db is not None:
-                self.db[self.last_started] = time.time()
+                last_started_key = self.db_key("last_started")
+                await self.db.put(last_started_key, time.time())
 
             # Trigger register if needed.
             await self.register_user()
@@ -996,16 +997,16 @@ class IRCSession():
         # Save user details if needed.
         if self.db is not None:
             nick_key = self.db_key("nick")
-            nick_info = self.db.get(nick_key, None)
+            nick_info = await self.db.get(nick_key, None)
             if nick_info is None:
-                self.db[nick_key] = {
+                await self.db.put(nick_key, {
                     "domain": self.irc_server,
                     "nick": self.nick,
                     "username": self.username,
                     "user_pass": self.user_pass,
                     "email": self.email,
                     "last_refresh": time.time()
-                }
+                })
 
         return self
 
@@ -1121,15 +1122,14 @@ class IRCSession():
         if self.db is not None:
             # Chan list update.
             chans_key = self.db_key("chan_list")
-            chan_list = self.db.get(chans_key, [])
-            chan_list.append(chan_name)
-            self.db[chans_key] = chan_list
+            chan_list = await self.db.get(chans_key, [])
+            chan_list.add(chan_name)
+            await self.db.put(chans_key, chan_list)
 
             # Chan meta data.
-            chan_key = self.db_key(f"chan/{chan_name}")
-            self.db[chan_key] = {
+            await self.db.put(self.last_started, {
                 "last_refresh": time.time()
-            }
+            })
 
         return True
     
@@ -1195,45 +1195,45 @@ class IRCDNS():
 
         self.servers = servers
         self.start_lock = asyncio.Lock()
-        self.db = shelve.open(
+        self.db = SqliteKVS(
             os.path.join(
                 os.path.expanduser("~"),
-                "irc_dns.db"
+                "ircdns_" + sha3_256(f"{IRC_PREFIX} db {self.seed}") + ".sqlite"
             )
         )
 
+    async def start(self):
+        await self.db.start()
+        return self
+
     # Don't include servers older than 48 hours.
-    def get_server_len(self):
+    async def get_server_len(self):
         # No sessions to base exclusion on.
         if not len(self.sessions):
             return len(self.servers)
         
         # Exclude servers that have been offline a long time.
-        count = 0
-        for n in range(0, len(self.sessions)):
-            last_started = self.sessions[n].last_started
-            start = time.time()
-            duration = start - self.db.get(
-                last_started,
-                start
-            )
-
+        count = 0; start = time.time()
+        for n in range(0, len(self.servers)):
+            last_started_key = f"{self.servers[n]['domain']}/last_started"
+            last_started = await self.db.get(last_started_key, start)
+            duration = start - last_started
             if duration < IRC_FRESHNESS:
                 count += 1
 
         return count
 
-    def get_register_failure_max(self):
-        return int(0.4 * self.get_server_len())
+    async def get_register_failure_max(self):
+        return int(0.4 * await self.get_server_len())
     
-    def get_register_success_min(self):
-        return self.get_server_len() - self.get_register_failure_max()
+    async def get_register_success_min(self):
+        return await self.get_server_len() - await self.get_register_failure_max()
     
-    def get_register_success_max(self):
-        return self.get_server_len()
+    async def get_register_success_max(self):
+        return await self.get_server_len()
     
-    def get_lookup_success_min(self):
-        return self.get_register_failure_max() + 1
+    async def get_lookup_success_min(self):
+        return await self.get_register_failure_max() + 1
     
     def count_started_sessions(self):
         # Count existing 
@@ -1245,13 +1245,13 @@ class IRCDNS():
         return success_no
 
     async def close(self):
-        self.db.close()
         tasks = []
         for i in range(0, self.p_sessions_next):
             task = self.sessions[i].close()
             tasks.append(task)
 
         await asyncio.gather(*tasks)
+        await self.db.close()
 
     async def start_n(self, n):
         await self.start_lock.acquire()
@@ -1323,7 +1323,7 @@ class IRCDNS():
                 len(self.servers)
             )
         )
-        if success_no < self.get_register_success_min():
+        if success_no < await self.get_register_success_min():
             raise Exception("Insufficient sessions.")
         
         # Pre-cache chan name hashes.
@@ -1335,7 +1335,7 @@ class IRCDNS():
             async def is_name_available(n):
                 # Simulate name being available if we already own it.
                 # This will allow the code to pass and be reused.
-                if self.sessions[n].db_is_name_registered(name, tld, pw):
+                if await self.sessions[n].db_is_name_registered(name, tld, pw):
                     return True
 
                 # Convert name to server-specific hash.
@@ -1377,7 +1377,7 @@ class IRCDNS():
         for is_chan_available in results:
             if is_chan_available:
                 available_count += 1
-        if available_count < self.get_register_success_min():
+        if available_count < await self.get_register_success_min():
             raise Exception("Not enough names available.")
         
         # Register name.
@@ -1397,7 +1397,7 @@ class IRCDNS():
                         ]
 
                 # Name already registered so skip.
-                if self.sessions[n].db_is_name_registered(name, tld, pw):
+                if await self.sessions[n].db_is_name_registered(name, tld, pw):
                     return [
                         n,
                         self.sessions[n].nick
@@ -1454,6 +1454,7 @@ class IRCDNS():
                 pw,
                 self.executor
             )
+            chan_info_key = self.sessions[n].db_key(f"chan/{chan_name}")
 
             # Get the time-lock field.
             time_lock = self.sessions[n].chan_time_locks[chan_name]
@@ -1465,16 +1466,17 @@ class IRCDNS():
                 "pw": pw
             }
 
-            # CGet list of channels for this server.
-            key_name = self.sessions[n].db_key("chan_list")
-            chan_list = self.db.get(key_name, [])
+            # Get list of channels for this server.
+            chan_list_key = self.sessions[n].db_key("chan_list")
+            chan_list = await self.db.get(chan_list_key, set())
+            chan_list.add(chan_name)
+            await self.db.put(chan_list_key, chan_list)
 
             # Get failure count for registration.
             failure_count = 0
-            old_record = list_get_dict("chan_name", chan_name, chan_list)
-            if old_record is not None:
-                if "failure_count" in old_record:
-                    failure_count = old_record["failure_count"]
+            old_record = await self.db.get(chan_info_key, {})
+            if "failure_count" in old_record:
+                failure_count = old_record["failure_count"]
             if reg_status != IRC_REGISTER_SUCCESS:
                 failure_count += 1
 
@@ -1489,14 +1491,8 @@ class IRCDNS():
                 "last_refresh": time.time()
             }
 
-            # Ensure existing copy of this chan is overwritten.
-            # Otherwise repeat calls could grow the list forever.
-            sub_list = list_exclude_dict("chan_name", chan_name, chan_list)
-            sub_list.append(record)
-
             # Record the changes.
-            self.db[key_name] = sub_list
-            self.db[f"chan/{chan_name}"] = record
+            await self.db.put(chan_info_key, record)
             records.append(record)
 
         return records
@@ -1554,9 +1550,9 @@ class IRCDNS():
                 success_no, _ = await self.start_n(still_needed)
                 still_needed -= success_no
 
-    def n_more_or_best(self, results):
+    async def n_more_or_best(self, results):
         if not len(results):
-            return self.get_lookup_success_min()
+            return await self.get_lookup_success_min()
         
         table = {}
         for r in results:
@@ -1574,7 +1570,7 @@ class IRCDNS():
             if len(highest) < len(table[r_id]):
                 highest = table[r_id]
 
-        if len(highest) >= self.get_lookup_success_min():
+        if len(highest) >= await self.get_lookup_success_min():
             freshest = highest[0]
             for result in highest:
                 if result["time"] > freshest["time"]:
@@ -1582,7 +1578,7 @@ class IRCDNS():
 
             return freshest
         else:
-            return self.get_lookup_success_min() - len(highest)
+            return await self.get_lookup_success_min() - len(highest)
         
     async def n_name_lookups(self, n, start_p, name, tld, pw=""):
         async def helper(self, session_offset, chan_name):
@@ -1637,12 +1633,12 @@ class IRCDNS():
         # Open the bare minimum number of sessions
         # for a successful consensus result.
         await self.acquire_at_least(
-            self.get_lookup_success_min()
+            await self.get_lookup_success_min()
         )
 
         # Get minimum number of chan topics.
         results = []; start_p = 0
-        names_required = self.n_more_or_best(results)
+        names_required = await self.n_more_or_best(results)
         while isinstance(names_required, int):
             more, start_p = await self.n_name_lookups(
                 names_required,
@@ -1653,10 +1649,10 @@ class IRCDNS():
             )
 
             results += more
-            names_required = self.n_more_or_best(results)
+            names_required = await self.n_more_or_best(results)
 
         # Return freshest result.
-        assert(len(results) >= self.get_lookup_success_min())
+        assert(len(results) >= await self.get_lookup_success_min())
         if isinstance(names_required, dict):
             freshest = names_required
             return freshest
@@ -1719,10 +1715,10 @@ class IRCRefresher():
 
         # Return coroutine that does nothing if no refresh needed.
         # Otherwise returns the coroutine that does the refresh.
-        def check_last_refresh(sub_key, expiry_days, expiry_func):
+        async def check_last_refresh(sub_key, expiry_days, expiry_func):
             # Extract meta data.
             key_name = session.db_key(sub_key)
-            info = db.get(key_name, None)
+            info = await db.get(key_name, None)
             if info is None:
                 return self.placeholder()
             if "last_refresh" not in info:
@@ -1739,7 +1735,7 @@ class IRCRefresher():
             if duration >= expiry_secs:
                 # Update refresh timer.
                 info["last_refresh"] = time.time()
-                db[key_name] = info
+                await db.put(key_name, info)
 
                 # Factory that returns coroutine to await on.
                 return expiry_func()
@@ -1754,10 +1750,11 @@ class IRCRefresher():
             session = self.manager.sessions[n]
             
             # Loop over all channels registered to session.
-            chan_list = session.db_load_chan_list()
-            for chan_info in chan_list:
+            chan_list = await session.db_load_chan_list()
+            for chan_name in chan_list:
                 # Check the channel info for expiry.
-                chan_name = chan_info["chan_name"]
+                chan_info_key = session.db_key(f"chan/{chan_name}")
+                chan_info = await session.db.get(chan_info_key, {})
                 expiry_days = session.server_info["chan_expiry"]
                 tasks.append(
                     check_last_refresh(

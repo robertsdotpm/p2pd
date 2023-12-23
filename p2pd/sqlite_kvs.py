@@ -15,6 +15,7 @@ Using Sqlite as the underlying library also makes the database highly reliable,
 resistent to corruption, and probably has safe-guards for multi-process access.
 """
 
+from collections import OrderedDict
 import aiosqlite
 
 class SqliteKVS():
@@ -58,13 +59,15 @@ class SqliteKVS():
 
     # Select values by key name.
     # Decode any complex values back to Python types.
-    async def get(self, key):
+    async def get(self, key, default=None):
         query = 'SELECT value FROM kv WHERE key = ?'
         cursor = await self.db.execute(query, (key,))
         item = await cursor.fetchone()
 
         # No entry by that key exists.
         if item is None:
+            if default is not None:
+                return default
             raise KeyError(key)
         
         return eval(item[0])

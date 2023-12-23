@@ -58,7 +58,8 @@ class MockIRCChan(IRCChan):
 class MockIRCSession(IRCSession):
     async def start(self, i):
         if self.db is not None:
-            self.db[self.last_started] = time.time()
+            last_started_key = self.db_key("last_started")
+            await self.db.put(last_started_key, time.time())
 
         self.started.set_result(True)
 
@@ -244,7 +245,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         ]
 
         interface = None
-        ircdns = IRCDNS(
+        ircdns = await IRCDNS(
             i=interface,
             seed=IRC_SEED,
             clsSess=MockIRCSession,
@@ -252,7 +253,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             servers=servers,
             executor=executor,
             do_shuffle=False
-        )
+        ).start()
 
         # Sanity checks on length.
 
@@ -262,6 +263,11 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         await ircdns.start_n(1)
         assert(ircdns.p_sessions_next == len(servers))
+
+        #cd projects/p2pd/tests
+        #  python -m unittest test_irc_dns.TestIRCDNS.test_start_n
+
+
 
         exception_thrown = 1
         try:
@@ -273,8 +279,10 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         await ircdns.close()
 
+
+
         # Test partial start-continue
-        ircdns = IRCDNS(
+        ircdns = await IRCDNS(
             i=interface,
             seed=IRC_SEED,
             clsSess=MockIRCSession,
@@ -282,7 +290,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             servers=servers,
             executor=executor,
             do_shuffle=False
-        )
+        ).start()
 
         await ircdns.start_n(2)
         assert(ircdns.p_sessions_next == 2)
@@ -303,6 +311,18 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         assert(irc_is_valid_chan_name(dns_hash))
         assert(len(dns_hash) <= 32)
+
+        assert(await ircdns.get_server_len() == len(servers))
+        assert(await ircdns.get_register_failure_max() == 2)
+
+        assert(await ircdns.get_register_success_min() == 3)
+
+
+        assert(await ircdns.get_register_success_max() == len(servers))
+
+
+        assert(await ircdns.get_lookup_success_min() == 3)
+
 
         # Register, store, then get.
         ret = await ircdns.name_register(dns_name, dns_tld)
@@ -340,14 +360,14 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         # Get results list.
         results, _ = await ircdns.n_name_lookups(
-            ircdns.get_lookup_success_min(),
+            await ircdns.get_lookup_success_min(),
             0,
             dns_name,
             dns_tld
         )
 
 
-        best = ircdns.n_more_or_best(results)
+        best = await ircdns.n_more_or_best(results)
 
         # Check that best value is correct.
         highest = results[0]["time"]
@@ -376,7 +396,9 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         class MockIRCSession2(MockIRCSession):
             async def start(self, i):
                 if self.db is not None:
-                    self.db[self.last_started] = time.time()
+                    last_started_key = self.db_key("last_started")
+                    await self.db.put(last_started_key, time.time())
+
 
                 if self.offset not in [1, 5]:
                     self.started.set_result(True)
@@ -384,7 +406,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
                     raise Exception("Cannot start!")
 
         interface = None
-        ircdns = IRCDNS(
+        ircdns = await IRCDNS(
             i=interface,
             seed=IRC_SEED,
             clsSess=MockIRCSession2,
@@ -392,7 +414,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             servers=IRC_TEST_SERVERS_SEVEN,
             executor=executor,
             do_shuffle=False
-        )
+        ).start()
 
 
         assert(ircdns.get_server_len() == 7)
@@ -420,7 +442,9 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             offset_count = {}
             async def start(self, i):
                 if self.db is not None:
-                    self.db[self.last_started] = time.time()
+                    last_started_key = self.db_key("last_started")
+                    await self.db.put(last_started_key, time.time())
+
 
                 if self.offset not in self.offset_count:
                     self.offset_count[self.offset] = 0
@@ -441,7 +465,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
                 return False
 
         interface = None
-        ircdns = IRCDNS(
+        ircdns = await IRCDNS(
             i=interface,
             seed=IRC_SEED,
             clsSess=MockIRCSession4,
@@ -449,7 +473,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             servers=IRC_TEST_SERVERS_SEVEN,
             executor=executor,
             do_shuffle=False
-        )
+        ).start()
 
         await ircdns.start_n(len(IRC_TEST_SERVERS_SEVEN))
         assert(ircdns.p_sessions_next == len(IRC_TEST_SERVERS_SEVEN))
@@ -469,7 +493,9 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             offset_count = {}
             async def start(self, i):
                 if self.db is not None:
-                    self.db[self.last_started] = time.time()
+                    last_started_key = self.db_key("last_started")
+                    await self.db.put(last_started_key, time.time())
+
 
                 if self.offset not in self.offset_count:
                     self.offset_count[self.offset] = 0
@@ -499,7 +525,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
                 return False
                 
         interface = None
-        ircdns = IRCDNS(
+        ircdns = await IRCDNS(
             i=interface,
             seed=IRC_SEED,
             clsSess=MockIRCSession5,
@@ -507,7 +533,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             servers=IRC_TEST_SERVERS_SEVEN,
             executor=executor,
             do_shuffle=False
-        )
+        ).start()
 
         dns_name = "dns_name8"; dns_tld = "dns_tld8"
         ret = await ircdns.name_register(dns_name, dns_tld)
@@ -526,7 +552,9 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         class MockIRCSession3(MockIRCSession):
             async def start(self, i):
                 if self.db is not None:
-                    self.db[self.last_started] = time.time()
+                    last_started_key = self.db_key("last_started")
+                    await self.db.put(last_started_key, time.time())
+
 
                 # Simulate one server down.
                 if self.offset not in [5]:
@@ -546,7 +574,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
                 return False
 
         interface = None
-        ircdns = IRCDNS(
+        ircdns = await IRCDNS(
             i=interface,
             seed=IRC_SEED,
             clsSess=MockIRCSession3,
@@ -554,7 +582,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             servers=IRC_TEST_SERVERS_SEVEN,
             executor=executor,
             do_shuffle=False
-        )
+        ).start()
 
         dns_name = "p2pd_test3"
         dns_tld = "test_tld3"
@@ -571,7 +599,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
     async def test_to_check_db_integrity_multi_chan_reg(self):
         interface = None
-        ircdns = IRCDNS(
+        ircdns = await IRCDNS(
             i=interface,
             seed=IRC_SEED,
             clsSess=MockIRCSession,
@@ -579,7 +607,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             servers=IRC_TEST_SERVERS_SEVEN,
             executor=executor,
             do_shuffle=False
-        )
+        ).start()
 
         ret = await ircdns.name_register("test_name4", "tld4")
         ret = await ircdns.name_register("test_name5", "tld5")
@@ -621,7 +649,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         The refresh code is fairly straight forwards so easier to test.
         """
 
-        ircdns = IRCDNS(
+        ircdns = await IRCDNS(
             i=None,
             seed=IRC_SEED,
             clsSess=MockIRCSession,
@@ -629,7 +657,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             servers=IRC_TEST_SERVERS_SEVEN,
             executor=executor,
             do_shuffle=False
-        )
+        ).start()
         await ircdns.start_n(len(IRC_TEST_SERVERS_SEVEN))
 
         chan_name = "expired_chan"
@@ -705,7 +733,9 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             offset_count = {}
             async def start(self, i):
                 if self.db is not None:
-                    self.db[self.last_started] = time.time()
+                    last_started_key = self.db_key("last_started")
+                    await self.db.put(last_started_key, time.time())
+
 
                 if self.offset not in self.offset_count:
                     self.offset_count[self.offset] = 0
@@ -727,7 +757,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             def db_is_name_registered(self, name, tld, pw=""):
                 return False
             
-        ircdns = IRCDNS(
+        ircdns = await IRCDNS(
             i=None,
             seed=IRC_SEED,
             clsSess=MockIRCSession6,
@@ -735,7 +765,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             servers=IRC_TEST_SERVERS_SEVEN,
             executor=executor,
             do_shuffle=False
-        )
+        ).start()
 
         dns_name = "dns_name9"; dns_tld = "dns_tld9"
         ret = await ircdns.name_register(dns_name, dns_tld)
@@ -773,13 +803,13 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         seed = "test_seed2" * 20
         i = await Interface().start()
-        ircdns = IRCDNS(
+        ircdns = await IRCDNS(
             i,
             seed,
             server_list,
             executor,
             do_shuffle=False
-        )
+        ).start()
 
         
 
