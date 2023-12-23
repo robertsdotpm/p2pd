@@ -247,7 +247,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         interface = None
         ircdns = await IRCDNS(
             i=interface,
-            seed=IRC_SEED,
+            seed="1" + IRC_SEED,
             clsSess=MockIRCSession,
             clsChan=MockIRCChan,
             servers=servers,
@@ -284,7 +284,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         # Test partial start-continue
         ircdns = await IRCDNS(
             i=interface,
-            seed=IRC_SEED,
+            seed="2" + IRC_SEED,
             clsSess=MockIRCSession,
             clsChan=MockIRCChan,
             servers=servers,
@@ -408,7 +408,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         interface = None
         ircdns = await IRCDNS(
             i=interface,
-            seed=IRC_SEED,
+            seed="3" + IRC_SEED,
             clsSess=MockIRCSession2,
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
@@ -417,8 +417,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         ).start()
 
 
-        assert(ircdns.get_server_len() == 7)
-        assert(ircdns.get_register_success_min() == 5)
+        assert(await ircdns.get_server_len() == 7)
+        assert(await ircdns.get_register_success_min() == 5)
         dns_name = "p2pd_test2"
         dns_tld = "test_tld2"
         dns_val = "test val2"
@@ -461,13 +461,13 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
                         raise Exception("Start failure!")
 
             # Disable DB caching for this test.
-            def db_is_name_registered(self, name, tld, pw=""):
+            async def db_is_name_registered(self, name, tld, pw=""):
                 return False
 
         interface = None
         ircdns = await IRCDNS(
             i=interface,
-            seed=IRC_SEED,
+            seed="4" + IRC_SEED,
             clsSess=MockIRCSession4,
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
@@ -521,13 +521,13 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
                     return await super().is_chan_registered(chan_name)
                 
             # Disable DB caching for this test.
-            def db_is_name_registered(self, name, tld, pw=""):
+            async def db_is_name_registered(self, name, tld, pw=""):
                 return False
                 
         interface = None
         ircdns = await IRCDNS(
             i=interface,
-            seed=IRC_SEED,
+            seed="5" + IRC_SEED,
             clsSess=MockIRCSession5,
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
@@ -570,13 +570,13 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
                     return await super().is_chan_registered(chan_name)
                 
             # Disable DB caching for this test.
-            def db_is_name_registered(self, name, tld, pw=""):
+            async def db_is_name_registered(self, name, tld, pw=""):
                 return False
 
         interface = None
         ircdns = await IRCDNS(
             i=interface,
-            seed=IRC_SEED,
+            seed="6" + IRC_SEED,
             clsSess=MockIRCSession3,
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
@@ -601,7 +601,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         interface = None
         ircdns = await IRCDNS(
             i=interface,
-            seed=IRC_SEED,
+            seed="7" + IRC_SEED,
             clsSess=MockIRCSession,
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
@@ -613,7 +613,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         ret = await ircdns.name_register("test_name5", "tld5")
 
         # Get list of chans stored in first session.
-        chan_list = ircdns.sessions[0].db_load_chan_list()
+        chan_list = await ircdns.sessions[0].db_load_chan_list()
         vectors = [
             ["test_name4", "tld4"],
             ["test_name5", "tld5"]
@@ -628,7 +628,9 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             }
 
             found = False
-            for chan_info in chan_list:
+            for chan_name in chan_list:
+                chan_info_key = ircdns.sessions[0].db_key(f"chan/{chan_name}")
+                chan_info = await ircdns.db.get(chan_info_key, {})
                 if "dns" not in chan_info:
                     continue
 
@@ -651,7 +653,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         ircdns = await IRCDNS(
             i=None,
-            seed=IRC_SEED,
+            seed="8" + IRC_SEED,
             clsSess=MockIRCSession,
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
@@ -679,19 +681,18 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             s = ircdns.sessions[n]
             s.refresh_chan_fired = None
             s.refresh_nick_fired = None
-            chan_list = s.db_load_chan_list()
-            sub_list = list_exclude_dict("chan_name", chan_name, chan_list)
-            sub_list.append(chan_info)
+            chan_list = await s.db_load_chan_list()
+            chan_list.add(chan_name)
             
             # Simulate expired channel.
             key_name = s.db_key("chan_list")
-            db[key_name] = sub_list
+            await db.put(key_name, chan_list)
             key_name = s.db_key(f"chan/{chan_name}")
-            db[key_name] = chan_info
+            await db.put(key_name, chan_info)
 
             # Simulate expired nick.
             key_name = s.db_key("nick")
-            db[key_name] = nick_info
+            await db.put(key_name, nick_info)
 
         # Skeleton functions just to know if they were triggered.
         async def refresh_chan(chan_name, session):
@@ -728,6 +729,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         await ircdns.close()
     
+    # python -m unittest test_irc_dns.TestIRCDNS.test_irc_refresher_does_register
     async def test_irc_refresher_does_register(self):
         class MockIRCSession6(MockIRCSession):
             offset_count = {}
@@ -754,12 +756,12 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
                         raise Exception("Start failure!")
                 
             # Disable DB caching for this test.
-            def db_is_name_registered(self, name, tld, pw=""):
+            async def db_is_name_registered(self, name, tld, pw=""):
                 return False
             
         ircdns = await IRCDNS(
             i=None,
-            seed=IRC_SEED,
+            seed="9" + IRC_SEED,
             clsSess=MockIRCSession6,
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
@@ -775,12 +777,14 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         refresher = IRCRefresher(ircdns)
         refresher.register_chan = lambda x: None
-        await refresher.refresher()
+        await refresher.refresher(ignore_failure=True)
 
         # Check that register was ran for the channel in refresh.
         register_success = False
-        chan_list = ircdns.sessions[0].db_load_chan_list()
-        for chan_info in chan_list:
+        chan_list = await ircdns.sessions[0].db_load_chan_list()
+        for chan_name in chan_list:
+            chan_info_key = ircdns.sessions[0].db_key(f"chan/{chan_name}")
+            chan_info = await ircdns.db.get(chan_info_key, {})
             if "dns" not in chan_info:
                 continue
 
@@ -917,14 +921,6 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
     async def test_find_more_servers(self):
         pass
-
-    async def test_async_db(self):
-        db = await ubase.init_db("irc_dns.test.sqlite")
-        await db.put("some_key", 1)
-        ret = await db.get("some_key")
-        print(ret)
-        await db.close()
-        print(db)
 
 if __name__ == '__main__':
     main()

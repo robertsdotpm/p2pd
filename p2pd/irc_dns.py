@@ -798,10 +798,10 @@ class IRCSession():
         return f"{self.irc_server}/{sub_key}"
     
     async def db_load_chan_list(self):
-        chan_list = []
+        chan_list = set()
         if self.db is not None:
             key_name = self.db_key("chan_list")
-            chan_list = await self.db.get(key_name, [])
+            chan_list = await self.db.get(key_name, chan_list)
 
         return chan_list
     
@@ -1335,7 +1335,8 @@ class IRCDNS():
             async def is_name_available(n):
                 # Simulate name being available if we already own it.
                 # This will allow the code to pass and be reused.
-                if await self.sessions[n].db_is_name_registered(name, tld, pw):
+                already_reg = await (self.sessions[n].db_is_name_registered(name, tld, pw))
+                if already_reg:
                     return True
 
                 # Convert name to server-specific hash.
@@ -1397,7 +1398,8 @@ class IRCDNS():
                         ]
 
                 # Name already registered so skip.
-                if await self.sessions[n].db_is_name_registered(name, tld, pw):
+                already_reg = await (self.sessions[n].db_is_name_registered(name, tld, pw))
+                if already_reg:
                     return [
                         n,
                         self.sessions[n].nick
@@ -1709,7 +1711,7 @@ class IRCRefresher():
             ).pack()
         )
 
-    async def refresher(self):
+    async def refresher(self, ignore_failure=False):
         tasks = []
         db = self.manager.db
 
@@ -1718,9 +1720,7 @@ class IRCRefresher():
         async def check_last_refresh(sub_key, expiry_days, expiry_func):
             # Extract meta data.
             key_name = session.db_key(sub_key)
-            info = await db.get(key_name, None)
-            if info is None:
-                return self.placeholder()
+            info = await db.get(key_name, {})
             if "last_refresh" not in info:
                 return self.placeholder()
 
@@ -1757,7 +1757,7 @@ class IRCRefresher():
                 chan_info = await session.db.get(chan_info_key, {})
                 expiry_days = session.server_info["chan_expiry"]
                 tasks.append(
-                    check_last_refresh(
+                    await check_last_refresh(
                         f"chan/{chan_name}",
                         expiry_days,
                         lambda: self.refresh_chan(chan_name, session)
@@ -1771,10 +1771,12 @@ class IRCRefresher():
                     continue 
                 if "dns" not in chan_info:
                     continue
-                if "failure_count" not in chan_info:
-                    chan_info["failure_count"] = 0
-                if chan_info["failure_count"] >= 3:
-                    continue
+
+                if not ignore_failure:
+                    if "failure_count" not in chan_info:
+                        chan_info["failure_count"] = 0
+                    if chan_info["failure_count"] >= 3:
+                        continue
 
                 # If the chan info status was start failure
                 # try to call register on the name again.
@@ -1792,7 +1794,7 @@ class IRCRefresher():
 
             # See if nick needs to be refreshed.
             tasks.append(
-                check_last_refresh(
+                await check_last_refresh(
                     "nick",
                     session.server_info["nick_expiry"],
                     lambda: self.refresh_nick(session)
