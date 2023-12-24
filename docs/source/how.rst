@@ -54,16 +54,14 @@ design of domain names used in the DNS system.
 Instead of visiting websites by their IP addresses almost everyone visits
 them by a registered name. DNS has proven to be a robust system but one
 which is centralized and costs money to use. For convenience, P2PD provides a
-free to use API that implements a authenticated key-value store. The names
-registered by this API automatically expire after a month. But clients can
-easily migrate to new names before this happens.
+permissioned, key-value store built on top of public IRC infrastructure.
+For want of a better name: it is called 'IRCDNS.'
 
-Currently this system is provided by a simple PHP script that reads and
-writes to a SQLite database. The reason for this design is normally
-providers of free computing resources don't provide static, public IPs.
-But this approach reuses existing IPs which allows it to run on many free web
-hosts (or almost free hosts) for next to no cost. A project that has no
-infrastructure costs is by definition my survivable than one that doesn't.
+The reason for this design choice is that seemingly no other system provides
+ubiquitous, open, and reliable service for a key-value store. Many similar
+projects exist but they either cost money to use (ENS), have no formalized
+APIs for name registration (OpenNIC), or don't offer features needed to manage
+names (distributed hash tables 'DHTs.') 
 
 Signaling
 -----------

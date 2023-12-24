@@ -38,7 +38,7 @@ P2PD offers engineers the following features:
    the chances of success. The algorithm supports a diverse number of
    NAT configurations for the best results possible.
 - **Port forwarding (IPv4) and pin hole (IPv6.)** Automatically
-   handles openning ports on the router to increase reachability.
+   handles opening ports on the router to increase reachability.
 - **IPv6 ready from day 1.** Supports IPv4 and IPv6. Introduces a new
    format for addresses that offers insight into a peer's
    NIC cards, internal network, and NAT devices.
@@ -52,6 +52,7 @@ P2PD offers engineers the following features:
    between a peer-to-peer connection.
 - **Minimal dependencies.** Most of the code in P2PD uses the Python
   standard library to improve portability and reduce packaging issues.
-- **Built on open protocols.** P2PD uses **STUN** for address lookups,
-   **MQTT** for signaling messages, and **TURN** for last resort proxying.
+- **Built on open protocols.** P2PD uses **IRC** as a name system,
+   **STUN** for address lookups, **MQTT** for signaling messages, and
+   **TURN** for last resort message relaying.
    All of these protocols have public infrastructure.

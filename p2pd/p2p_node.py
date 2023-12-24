@@ -1,5 +1,5 @@
+import secrets
 import asyncio
-import gc
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
 from decimal import Decimal as Dec
@@ -7,6 +7,7 @@ from .p2p_pipe import *
 from .daemon import *
 from .p2p_protocol import *
 from .signaling import *
+from .irc_dns import IRCDNS, IRCRefresher, IRC_SERVERS, IRC_REGISTER_FAILURE
 
 NODE_CONF = dict_child({
     # Reusing address can hide errors for the socket state.
@@ -108,8 +109,10 @@ class P2PUtils():
 
 # Main class for the P2P node server.
 class P2PNode(Daemon, P2PUtils):
-    def __init__(self, if_list, port=NODE_PORT, node_id=None, ip=None, signal_offsets=None, enable_upnp=False, conf=NODE_CONF):
+    def __init__(self, if_list, port=NODE_PORT, node_id=None, ip=None, signal_offsets=None, enable_upnp=False, conf=NODE_CONF, seed=None):
         super().__init__()
+        self.seed = seed or secrets.token_bytes(24)
+        self.irc_dns = IRCDNS(if_list[0], self.seed, IRC_SERVERS)
         self.conf = conf
         self.signal_offsets = signal_offsets
         self.port = port
@@ -262,6 +265,12 @@ class P2PNode(Daemon, P2PUtils):
 
     # Connect to a remote P2P node using a number of techniques.
     async def connect(self, addr_bytes, strategies=P2P_STRATEGIES, timeout=60):
+        # Assume that its a IRCDNS name.
+        if isinstance(addr_bytes, list):
+            addr_bytes.append("") # Optional that may have been forgotten.
+            ret = await self.irc_dns.name_lookup(*addr_bytes[:3])
+            addr_bytes = ret["msg"]
+
         # Create a TCP connection to the peer using the strategies
         # defined in the strategies list.
         p2p_pipe = P2PPipe(self)
@@ -271,11 +280,18 @@ class P2PNode(Daemon, P2PUtils):
             timeout=timeout
         )
     
-    async def register(self, name, registrar_id="000webhost", value=None):
-        route = self.if_list[0].route()
-        pdns = PDNS(name, registrar_id)
-        value = value or self.address()
-        return await pdns.register(route, to_s(value))
+    """
+    Register this name on up to N IRC servers if needed.
+    Then set the value at that name to this nodes address
+    """
+    async def register(self, name_field):
+        name_field.append("") # Optional that they may have forgotten.
+        out, status = await self.irc_dns.name_register(*name_field[:3])
+        if status != IRC_REGISTER_FAILURE:
+            name_field.insert(0, self.address)
+            await self.irc_dns.store_value(*name_field[:4])
+        
+        return out, status
 
     # Get our node server's address.
     def address(self):

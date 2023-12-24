@@ -53,4 +53,4 @@ def copy_p2pd_install_files_as_needed():
         shutil.copy(kvs_db_copy_path, kvs_db_install_path)
 
 if __name__ == '__main__':
-    copy_p2pd_install_files_as_needed()
+    pass

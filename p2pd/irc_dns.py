@@ -31,10 +31,11 @@ impossible or impractical depending on usage.
 
 ---
     high priority:
-    - still need to test regular dnsmanager usage. as all current code has used mocks
-        - remove print statements
-    - write documentation
     - Add logging to the software to replace print statements
+    - still need to test regular dnsmanager usage. as all current code has used mocks
+    - finish writing article
+    - merge to main and push to pypi
+    - post article
     
 ----------------------------
     future features out of scope:

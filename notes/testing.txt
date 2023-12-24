@@ -21,6 +21,3 @@ before your programs timeout is reached. It's worth researching techniques to
 inject different behaviors into a network stack when running test code. For
 example: Netflix has a tool called 'chaos monkey' that randomly reboots services
 to test graceful recovery.
-
-The PDNS code needs to be similarly well-tested as it deals with services that
-provide free resources. Many of which are offered on an as-is basis.

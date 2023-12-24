@@ -15,22 +15,31 @@ it may not work properly with P2PD.
 | **Let's start with how to connect to another peer.**
 
 The code has two functions that simulate what two different computers might
-run (**computer_a** and **computer_b**.) They both need to know each others 'names'
-and addressing information is shared over PDNS (a simple API provided by
-a PHP script that implements a key-value store.)
+run (**computer_a** and **computer_b**.) Since it is usually impractical
+for people to directly remember IP address information names are used instead.
+Here the naming solution is provided by 'IRCDNS' - a permissioned, key-value
+store that P2PD provides running on IRC infrastructure.
 
 .. literalinclude:: examples/example_1.py
     :language: python3
 
-You can use this library as a black box if you want. The code handles loading network interfaces, enumerating routers, bypassing NATs,
-and establishing connections. But even more is possible.
+If you use 'IRCDNS' to name your node the first thing to understand is the seed. Seeds are 24 or more cryptographically random bytes (such as from
+secrets.token_bytes() or from hashlib.sha3_256) that is used to
+generate your account details on IRC networks. Your account details
+let you register and update names so you should save your seed!
 
-It can be used as a way to do network programming in general. Whether
-you want to write multi-protocol, multi-address clients or servers.
-Using P2PD makes this simple. And it supports either using async or sync
-callbacks  or a pull / push style API. Something like the Python
-equivalent of 'protocol classes' versus 'stream reader / writers'
-but with more control.
+Names consist of three parts. The main name, the TLD, and an optional password.
+For example: ['my awesome name', 'cats', ''] represents 'my awesome name' on the
+'cats' TLD with no password. You can point a name to your P2P address by
+passing that list to the register call for the node object. Otherwise,
+you can set a name to any value node.irc_dns.name_register(value, name, tld, pw) to use a name for a different purpose.
+
+P2PD handles loading interfaces, enumerating routers, bypassing NATs,
+and establishing direct connections to other peers. It is useful for
+peer-to-peer networking and as a general way to do network programming; Whether
+you want to write multi-protocol, multi-address clients or servers. You can
+use async or sync callbacks; pull / push style APIs... The software even
+has an optional REST API so it can be used outside of Python.
 
 | **If you were to use Python by itself for network programming you would likely**
 | **have to implement some of these features:**
@@ -57,6 +66,7 @@ but with more control.
         - While it does not provide the same methods for UDP.
         -   I've created software that provides the same API features
             whether its a server or connection; TCP or UDP; IPv4 or IPv6
+    - A naming system
 
 | Fortunately I've done this already!
 | The next topics teach you more about network programming with P2PD.

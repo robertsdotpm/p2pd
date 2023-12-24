@@ -38,7 +38,8 @@ class TestPyExamples(unittest.IsolatedAsyncioTestCase):
 
     # So they can be tested concurrently.
     async def test_1(self):
-        await self.do_py_example(1)
+        print("Skipping testing py ex 1 to avoid registering IRC accounts.")
+        #await self.do_py_example(1)
 
     async def test_2(self):
         await self.do_py_example(2)
