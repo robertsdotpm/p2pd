@@ -113,6 +113,7 @@ class P2PNode(Daemon, P2PUtils):
         super().__init__()
         self.seed = seed or secrets.token_bytes(24)
         self.irc_dns = IRCDNS(if_list[0], self.seed, IRC_SERVERS)
+        self.irc_refresher = IRCRefresher(self.irc_dns)
         self.conf = conf
         self.signal_offsets = signal_offsets
         self.port = port
@@ -292,6 +293,9 @@ class P2PNode(Daemon, P2PUtils):
             await self.irc_dns.store_value(*name_field[:4])
         
         return out, status
+    
+    async def refresh_names(self):
+        await self.irc_refresher.refresher()
 
     # Get our node server's address.
     def address(self):

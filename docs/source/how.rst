@@ -169,7 +169,7 @@ Next Steps
 
 Now you have a good understanding how P2PD works. Choose a specialty:
 
-1.  I want to learn :doc:`how to use the P2PD REST API.<rest_api>`
-        :doc:`I'm not interested in touching any Python code.<rest_api>`
-2.  I want to learn :doc:`how to use P2PD's library in my Python 3 program.<python/basics>`
+1.  I want to learn :doc:`how to use P2PD's library in my Python 3 program.<python/basics>`
         :doc:`I think Python is le based so let's use it.<python/basics>`
+2.  I want to learn :doc:`how to use the P2PD REST API.<rest_api>`
+        :doc:`I'm not interested in touching any Python code.<rest_api>`
