@@ -830,9 +830,6 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         # Cleanup.
         await ircdns.close()
 
-    async def test_simulate_net_exceptions(self):
-        pass
-
     async def test_irc_servers_work(self):
         return
         dns_value = "Test dns val."

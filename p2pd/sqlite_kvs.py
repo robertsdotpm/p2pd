@@ -38,12 +38,6 @@ class SqliteKVS():
         await self.db.close()
         self.db = None
 
-    def __del__(self):
-        if self.db is not None:
-            asyncio.create_task(
-                self.close()
-            )
-
     async def __aenter__(self):
         return await self.start()
     

@@ -31,10 +31,9 @@ impossible or impractical depending on usage.
 
 ---
     high priority:
-    - saboteurs to throw errors in some of the funcs and try to crash the
-code. make it more resilient if one server doesnt worke
-
     - still need to test regular dnsmanager usage. as all current code has used mocks
+        - remove print statements
+    - write documentation
     
 ----------------------------
     future features out of scope:
@@ -46,8 +45,6 @@ code. make it more resilient if one server doesnt worke
         - refresh to prevent that
         - channel successor
         - if an operator is interfering then could disable that server frm the list automatically (and the account should stil be active)
-
-    - write more comments for what you've written hastily
 
 --------------------------------------
 """
@@ -265,6 +262,7 @@ def f_irc_pass(x):
         )
     )[:30]
 
+# Used for encoding channel names.
 def f_sha3_b36(msg):
     h_b = hashlib.sha3_256(to_b(msg)).digest()
     return to_s(
@@ -274,11 +272,14 @@ def f_sha3_b36(msg):
         )
     )
 
+# Used to make sure that ECDSA private keys are valid when using hashes for them.
 def f_sha3_to_ecdsa_priv(msg):
+    # Numbers must be <= to this hex number.
     max_hex = "FFFFFFFF00000000FFFFFFFFFFFFFFFF"
     max_hex += "BCE6FAADA7179E84F3B9CAC2FC632551"
     max_int = int(max_hex, 16)
 
+    # Function hashes the input until it meets the requirements above.
     # Continue until hash hex is <= max_int.
     while 1:
         h_b = hashlib.sha3_256(to_b(msg)).digest()
@@ -289,8 +290,11 @@ def f_sha3_to_ecdsa_priv(msg):
         else:
             msg = h_b
 
+# Function that adds verifiable delays to channel names to
+# prevent race conditions when registering channel names.
 def f_chan_pow(msg):
     # Time locks help prevent registration front-running.
+    # Argon2 is highly adjustable for memory, CPU, and GPUs.
     time_lock = argon2pure.argon2(
         # Msg portion.
         msg,
@@ -327,6 +331,7 @@ def f_chan_pow(msg):
     return h, time_lock
 
 # Not meant to provide bullet-proof security.
+# A simple function that implements one-time pads with key-stretching.
 def f_otp(msg, otp):
     # Make otp long enough.
     while len(otp) < len(msg):
@@ -341,6 +346,9 @@ def f_otp(msg, otp):
 
     return buf
 
+# IRC channel topics can be used to store a value.
+# My algorithm uses threshold consensus to choose a topic value.
+# Signed, encrypted, and secured against race conditions.
 async def f_pack_topic(value, name, tld, pw, ses, clsChan, executor=None):
     # Bytes used to make ECDSA priv key.
     priv = f_sha3_to_ecdsa_priv(
@@ -379,12 +387,14 @@ async def f_pack_topic(value, name, tld, pw, ses, clsChan, executor=None):
     val_buf += to_b(value)
 
     # Weakly encrypted topic value.
+    # The payload portion has a unique one-time pad from the time-lock.
     val_buf = f_otp(
         val_buf,
         b_sha3_256(b"msg " + time_lock)
     )
 
     # Signed val_buf with vk.
+    # Signal portion has a unique one-time pad from the time-lock.
     sig_buf = sk.sign(val_buf)
     sig_buf = f_otp(
         sig_buf,
@@ -398,6 +408,10 @@ async def f_pack_topic(value, name, tld, pw, ses, clsChan, executor=None):
         to_s(encodebytes(val_buf, charset=B92_CHARSET)),
     ), chan
 
+# This function validates the format of a topic.
+# It will extract ECDSA public keys from the signature.
+# Validate the signature across the message.
+# Handle base decode and decryption.
 def f_unpack_topic(chan_name, topic, session):
     if topic is None:
         return None
@@ -427,13 +441,15 @@ def f_unpack_topic(chan_name, topic, session):
         hashfunc=hashlib.sha3_256
     )
 
+    # Public key extraction returns multiple possibilities.
+    # The algorithm converges on the right key through basic consensus.
     vk_ids = []
     for vk in vk_list:
         vk_ids.append(
             vk.to_string("compressed")
         )
 
-    # Anything that validates is the right public key.
+    # Anything that validates is a public key worth keeping.
     for vk in vk_list:
         try:
             vk.verify(
@@ -454,11 +470,13 @@ def f_unpack_topic(chan_name, topic, session):
         except:
             log_exception()
 
+# Matches a basic channel name in IRC.
 def irc_is_valid_chan_name(chan_name):
     p = "^[#&+!][a-zA-Z0-9_-]+$"
     return re.match(p, chan_name) != None
 
-# Example user!ident@hostname
+# Example user!ident@hostname.
+# Used to validate senders of messages from IRC protocol messages.
 def irc_extract_sender(sender):
     p = "([^!@]+)(?:!([^@]+))?(?:@([\s\S]+))?"
     parts = re.findall(p, sender)
@@ -509,6 +527,11 @@ def irc_extract_msgs(buf):
 
     return msgs, buf
 
+"""
+IRC is a simple text-bases protocol. This class handles building valid
+IRC messages for sending replies back to the server.
+Many parts of the IRC protocol message are optional and this class handles that.
+"""
 class IRCMsg():
     def __init__(self, prefix="", cmd="", param="", suffix=""):
         self.prefix = prefix or ""
@@ -516,6 +539,7 @@ class IRCMsg():
         self.param = param or ""
         self.suffix = suffix or ""
 
+    # Build a valid IRC protocol message.
     def pack(self):
         out = ""
         if len(self.prefix):
@@ -531,15 +555,22 @@ class IRCMsg():
         out += "\r\n"
         return to_b(out)
     
+    # Output the protocol message as a string.
     def __str__(self):
         return to_s(self.pack())
     
+    # Output the protocol message as bytes.
     def __bytes__(self):
         return self.pack()
     
+    # Compare the serialized version of two IRCMsg classes.
     def __eq__(self, other):
         return str(self) == str(other)
 
+"""
+IRC channels need to know how to encode their own names
+and keep their topics updated.
+"""
 class IRCChan:
     def __init__(self, chan_name, session):
         self.session = session
@@ -613,7 +644,14 @@ class IRCChan:
 
         self.set_topic_done = asyncio.Future()
         return self
-    
+
+"""
+The sub-set of the IRC protocol this software implements is as bellow.
+This function is purely data-bases. It takes IRCMsg objects and either
+returns new IRCMsg objects as replies or None. The caller is responsible
+for transmitting these replies. This greatly simplifies testing the
+protocol as there is no network I/O done here.
+"""
 def irc_proto(self, msg):
     print(f"Got {msg.pack()}")
 
@@ -741,15 +779,21 @@ def irc_proto(self, msg):
             irc_chan = IRCChan(chan, self)
             self.chans[chan] = irc_chan
 
+"""
+An 'IRCSession' is designed to record a connection to a unique IRC server.
+These sessions have names uniquely identified to them through channel
+registrations. The session needs to be able to implement basic features
+of IRC like channel registration, user registration, login, and so on.
+"""
 class IRCSession():
     def __init__(self, server_info, seed, db=None, offset=None):
         assert(len(seed) >= 24)
         self.started = asyncio.Future()
-        self.con = None
-        self.recv_buf = ""
         self.get_motd = asyncio.Future()
         self.login_status = asyncio.Future()
         self.chans_loaded = asyncio.Future()
+        self.con = None
+        self.recv_buf = ""
         self.chan_owners = {}
         self.chan_topics = {}
         self.chan_ident = {}
@@ -768,6 +812,11 @@ class IRCSession():
         self.chans = {}
 
         # Derive details for IRC server.
+        """
+        Session details are determined by a combination of the unique
+        IRC server's domain with the cryptographically secure seed value.
+        This allows for password management to be far easier.
+        """
         self.irc_server = self.server_info["domain"]
         self.username = "u" + f_sha3_b36(IRC_PREFIX + ":user:" + self.irc_server + seed)[:7]
         self.user_pass = f_irc_pass(IRC_PREFIX + ":pass:" + self.irc_server + seed)
@@ -781,9 +830,11 @@ class IRCSession():
         assert(len(self.nick) <= 8)
         assert(len(self.email) <= 26)
 
+    # Used for creating keys in the key-value store database for this session.
     def db_key(self, sub_key):
         return f"{self.irc_server}/{sub_key}"
     
+    # The session stores a list of channels its registered as a set.
     async def db_load_chan_list(self):
         chan_list = set()
         if self.db is not None:
@@ -792,6 +843,13 @@ class IRCSession():
 
         return chan_list
     
+    """
+    Since IRC servers may go up and down or name registrations may fail
+    its important to track the state of name registrations. This is
+    a higher level function that works on the level of names rather
+    than channels. It determines the status of this threshold name
+    registration as it relates to this session.
+    """
     async def db_is_name_registered(self, name, tld, pw=""):
         dns = {
             "name": name,
@@ -799,22 +857,28 @@ class IRCSession():
             "pw": pw
         }
 
-        
+        # Get list of unique channels. 
         chan_list = await self.db_load_chan_list()
         for chan_name in chan_list:
+            # Each chan name indexes meta data related to a name registration.
             key_name = self.db_key(f"chan/{chan_name}")
             chan_meta = await self.db.get(key_name, {})
             if "dns" not in chan_meta:
                 continue
-
+            
+            # If the meta data is not the name we're looking for skip it.
             if dns != chan_meta["dns"]:
                 continue
 
+            # If the name was registered already return true.
             if chan_meta["status"] == IRC_REGISTER_SUCCESS:
                 return True
 
+        # Otherwise return false.
         return False
     
+    # Connect to a particular IRC server using interface i with AF [0].
+    # Also handles login / registration.
     async def start(self, i, timeout=60):
         async def do_start():
             # Choose a supported AF.
@@ -933,11 +997,14 @@ class IRCSession():
         self.chan_time_locks[h] = time_lock
         return h
     
+    # Close this session gracefully (send IRC QUIT command.)
+    # This prevents many timed out sessions on the IRC server.
     async def close(self):
         if self.con is not None:
             await self.con.send(IRCMsg(cmd="QUIT").pack())
             await self.con.close()
 
+    # Not used.
     async def get_chan_reg_syntax(self):
         await self.con.send(
             IRCMsg(
@@ -947,6 +1014,7 @@ class IRCSession():
             ).pack()
         )
 
+    # Look up the value stored in a channel topic.
     async def get_chan_topic(self, chan_name):
         # Return cached result.
         if chan_name in self.chan_topics:
@@ -974,6 +1042,7 @@ class IRCSession():
         # Wait for channel topic.
         return await self.chan_topics[chan_name]
     
+    # Send commands to register the user from the seed in this class.
     async def register_user(self):
         # Build register command.
         suffix = f"REGISTER"
@@ -995,6 +1064,7 @@ class IRCSession():
 
         return self
 
+    # Returns channel owner if registered or False.
     async def is_chan_registered(self, chan_name):
         self.chan_infos[chan_name] = asyncio.Future()
         await self.con.send(
@@ -1010,6 +1080,8 @@ class IRCSession():
             10
         )
     
+    # Register a new channel under our scheme.
+    # Many modes are set to minimize abuse.
     async def register_chan(self, chan_name, chan_desc="desc"):
         if chan_name in self.chan_registered:
             return True
@@ -1118,25 +1190,14 @@ class IRCSession():
 
         return True
     
-    async def load_owned_chans(self):
-        await self.con.send(
-            IRCMsg(
-                cmd="WHOIS",
-                param=f"{self.nick}",
-            ).pack()
-        )
-
-        return await self.chans_loaded
-
-        return
-        await self.con.send(
-            IRCMsg(
-                cmd="PRIVMSG",
-                param="ChanServ",
-                suffix=f"LIST {self.nick}!{self.username}@*"
-            ).pack()
-        )
-
+    """
+    Called asynchronously when a new message arrives on the pipe.
+    These messages may be partial so they're appended to an existing
+    buffer and a function processes them for validity.
+    Then another function that implements a portion of the IRC
+    protocol is called on each valid IRC message with any replies
+    forwarded back to the server pipe.
+    """
     async def msg_cb(self, msg, client_tup, pipe):
         print(msg)
 
@@ -1165,21 +1226,58 @@ class IRCSession():
         except Exception:
             log_exception()
 
+"""
+The main 'manager' that handles threshold consensus of name registrations
+and lookups using IRC. Has a list of 'sessions' representing different
+IRC servers and some simple limits that determine success.
+"""
 class IRCDNS():
     def __init__(self, i, seed, servers, executor=None, clsChan=IRCChan, clsSess=IRCSession, do_shuffle=True):
         self.i = i
         self.seed = seed
         self.sessions = {}
         self.p_sessions_next = 0
+
+        """
+        The classes to use to create channels and sessions are dynamic.
+        The reason for this is it allows for mock classes to be dynamically
+        passed to IRCDNS for the purposes of testing core logic within
+        this class. Otherwise the above two classes are used.
+        """
         self.clsChan = clsChan
         self.clsSess = clsSess
+
+        """
+        Executors represent processpoolexecutors that allow for the
+        verifiable delay function to be 'saved up' in parallel and
+        used to register multiple channels concurrently. This
+        makes things faster and prevents race conditions.
+        """
         self.executor = executor
 
+        """
+        To help with load balancing -- servers may be shuffled.
+        This leads to non-determinism which makes testing harder so
+        it can be disabled if needed.
+        """
         if do_shuffle:
             random.shuffle(servers)
 
         self.servers = servers
+
+        """
+        The start_n function modifies a pointer called p_sessions_next
+        that points to the offset in the sessions dictionary to store the
+        next session at. If multiple coroutines call start_n and are interrupted
+        the pointers value may be malformed leading to sessions being overwritten.
+        """
         self.start_lock = asyncio.Lock()
+
+        """
+        Key information about names is stored in a simple SQlite database using
+        a simple key-value approach. The database location is determined by
+        the seed and prefix passed to the class.
+        """
         self.db = SqliteKVS(
             os.path.join(
                 os.path.expanduser("~"),
@@ -1196,6 +1294,13 @@ class IRCDNS():
         return self
 
     # Don't include servers older than 48 hours.
+    """
+    The idea of this function is to allow for the set of what are
+    considered 'valid servers' to be dynamically adjusted. If such
+    a set is fixed and they determine consensus for registration success
+    and lookups then servers that go offline forever may break the module.
+    Similarly, servers that disable registrations would also qualify.
+    """
     async def get_server_len(self):
         # No sessions to base exclusion on.
         if not len(self.sessions):
@@ -1212,6 +1317,11 @@ class IRCDNS():
 
         return count
 
+    """
+    These are all simple math functions to determine how many servers
+    can fail and calls still succeed. I've chosen that up to 40% can fail.
+    This number results in few servers in a list of 5 and seems to feel right.
+    """
     async def get_register_failure_max(self):
         return int(0.4 * await self.get_server_len())
     
@@ -1224,6 +1334,11 @@ class IRCDNS():
     async def get_lookup_success_min(self):
         return await self.get_register_failure_max() + 1
     
+    """
+    When calling 'start' on a session there is a future set at the very end
+    of login / registration / get message of the day to indicate success.
+    This function counts success by looking at those set futures.
+    """
     def count_started_sessions(self):
         # Count existing 
         success_no = 0
@@ -1233,6 +1348,7 @@ class IRCDNS():
 
         return success_no
 
+    # Close all open pipes to IRC servers and close the database.
     async def close(self):
         tasks = []
         for i in range(0, self.p_sessions_next):
@@ -1242,6 +1358,7 @@ class IRCDNS():
         await asyncio.gather(*tasks)
         await self.db.close()
 
+    # Start n new sessions.
     async def start_n(self, n):
         await self.start_lock.acquire()
         try:
@@ -1285,14 +1402,24 @@ class IRCDNS():
         finally:
             self.start_lock.release()
 
+    """
+    The verifiable delay function (Argon2) is slow and its used
+    to calculate what a channels name should be. To speed things up
+    a simple table of channel names is saved from higher-level names
+    and returned instantly when requesting the channel name.
+    This greatly simplifies the existing code. You can see that
+    this occurs in parallel using process executors (different CPU cores.)
+    """
     async def pre_cache(self, name, tld, pw=""):
         tasks = []
         for n in range(0, self.p_sessions_next):
-            task = self.sessions[n].get_irc_chan_name(
-                name,
-                tld,
-                pw,
-                self.executor
+            task = async_wrap_errors(
+                self.sessions[n].get_irc_chan_name(
+                    name,
+                    tld,
+                    pw,
+                    self.executor
+                )
             )
 
             tasks.append(task)
@@ -1300,6 +1427,23 @@ class IRCDNS():
         if len(tasks):
             await asyncio.gather(*tasks)
     
+    """
+    This is a massive function that has many features.
+        - It ensures names are only registered if there's enough sessions
+        where the names are available to satisfy threshold requirements
+        (hence you could call this 'atomic.')
+        - It is able to handle partial registrations that result from past
+        calls (by restarting sessions that may have not been available.)
+        - It is able to handle differences between name availability and
+        session failures (to maximize success.)
+        - It handles state by recording registrations across servers in
+        a simple local database using a key-value store.
+        - It enables successive calls to be done on the same name and takes
+        into account names that you already know (so that the call can easily
+        be used to attempt to register names on sessions that weren't online.)
+
+    It's the most important function in this module.
+    """
     async def name_register(self, name, tld, pw=""):
         # Ensure the session pointer hasn't overflowed.
         assert(self.p_sessions_next <= len(self.servers))
@@ -1357,7 +1501,11 @@ class IRCDNS():
             
             # Skip sessions that aren't connected.
             if self.sessions[n].started.done():
-                tasks.append(is_name_available(n))
+                tasks.append(
+                    async_wrap_errors(
+                        is_name_available(n)
+                    )
+                )
 
         # Run availability checks concurrently.
         results = await asyncio.gather(*tasks)
@@ -1365,7 +1513,7 @@ class IRCDNS():
         # Check if there's enough names available.
         available_count = 0
         for is_chan_available in results:
-            if is_chan_available:
+            if is_name_available is not None and is_chan_available:
                 available_count += 1
         if available_count < await self.get_register_success_min():
             raise Exception("Not enough names available.")
@@ -1412,7 +1560,11 @@ class IRCDNS():
                     await self.sessions[n].is_chan_registered(chan_name)
                 ]
 
-            tasks.append(do_register(n))
+            tasks.append(
+                async_wrap_errors(
+                    do_register(n)
+                )
+            )
 
         # Do registration tasks concurrently.
         results = await asyncio.gather(*tasks)
@@ -1438,6 +1590,10 @@ class IRCDNS():
             # Check channel owner after registration.
             # Results need to exist for success to be possible.
             for r in results:
+                # Exception occurred.
+                if r is None:
+                    continue
+
                 # If the session offset is this and
                 # the session nick matches the channel nick.
                 if n == r[0] and r[1] == self.sessions[n].nick:
@@ -1450,12 +1606,18 @@ class IRCDNS():
 
             # Get the chan name.
             # Calling this here also ensures time_lock exists.
-            chan_name = await self.sessions[n].get_irc_chan_name(
-                name,
-                tld,
-                pw,
-                self.executor
+            chan_name = await async_wrap_errors(
+                self.sessions[n].get_irc_chan_name(
+                    name,
+                    tld,
+                    pw,
+                    self.executor
+                )
             )
+            if chan_name is None:
+                continue
+
+            # Store chan info here.
             chan_info_key = self.sessions[n].db_key(f"chan/{chan_name}")
 
             # Get the time-lock field.
@@ -1498,6 +1660,14 @@ class IRCDNS():
 
         return records, error_no
     
+    """
+    This function handles storing a value at a given name across
+    a threshold of IRC servers. It will ensure that the name has a unique
+    'identity' (through an ECDSA key); that the identity is encrypted;
+    that the value is encrypted; and that its hard to determine what the name
+    is in order to improve privacy. Timestamps are also part of the
+    structure and the lookup function prioritizes freshness where possible.
+    """
     async def store_value(self, value, name, tld, pw=""):
         async def helper(n):
             # Select session to use.
@@ -1530,12 +1700,15 @@ class IRCDNS():
         tasks = []
         for n in range(0, len(self.servers)):
             tasks.append(
-                helper(n)
+                async_wrap_errors(
+                    helper(n)
+                )
             )
 
         # Execute tasks to update topics.
         await asyncio.gather(*tasks)
 
+    # Ensures that a certain number of sessions are started.
     async def acquire_at_least(self, target):
         # Count existing 
         success_no = self.count_started_sessions()
@@ -1551,6 +1724,12 @@ class IRCDNS():
                 success_no, _ = await self.start_n(still_needed)
                 still_needed -= success_no
 
+    """
+    For a lookup request to succeed a certain number of results need to
+    be gathered - enough so that it is beyond doubt that the gathered
+    results represent a name stored on a subset of servers that are large
+    enough to count as a valid registration (this prevents attacks.)
+    """
     async def n_more_or_best(self, results):
         if not len(results):
             return await self.get_lookup_success_min()
@@ -1581,6 +1760,11 @@ class IRCDNS():
         else:
             return await self.get_lookup_success_min() - len(highest)
         
+    """
+    This is a bulk function that handles making individual lookup
+    requests to each IRC session for a name and decoding and returned values.
+    The above function will still need to succeed to choose the best result.
+    """
     async def n_name_lookups(self, n, start_p, name, tld, pw=""):
         async def helper(self, session_offset, chan_name):
             session = self.sessions[session_offset]
@@ -1627,6 +1811,12 @@ class IRCDNS():
         else:
             return [], p
         
+    """
+    This is a high-level function used to translate a name into a value
+    that is stored across multiple IRC servers for integrity protection.
+    It will decrypt the value, handle identity verification, prioritize
+    freshness, and ensure there's enough results to constitute a valid name.
+    """
     async def name_lookup(self, name, tld, pw=""):  
         # Pre-cache name hashes.
         await self.pre_cache(name, tld, pw)
@@ -1658,6 +1848,15 @@ class IRCDNS():
             freshest = names_required
             return freshest
         
+"""
+On IRC networks nicknames that don't login for a certain period will expire
+and their associated channels will be dropped. Likewise, channels with
+no activity will expire. For this solution to be practical there needs to
+be a way to check if any nicks or channels are close to expiry and refresh
+them. Currently this is a simple call to refresh on an IRCDNS object. I've
+also made the refresher call register on names that were only partially
+registered (up to a count of 5) in order to be more fault-tolerant.
+"""
 class IRCRefresher():
     def __init__(self, manager):
         self.manager = manager
@@ -1737,7 +1936,9 @@ class IRCRefresher():
                 await db.put(key_name, info)
 
                 # Factory that returns coroutine to await on.
-                return expiry_func()
+                return async_wrap_errors(
+                    expiry_func()
+                )
             
             # So results can be passed to gather.
             return self.placeholder()
