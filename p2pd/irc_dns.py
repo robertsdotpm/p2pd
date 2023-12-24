@@ -34,6 +34,7 @@ impossible or impractical depending on usage.
     - still need to test regular dnsmanager usage. as all current code has used mocks
         - remove print statements
     - write documentation
+    - Add logging to the software to replace print statements
     
 ----------------------------
     future features out of scope:
@@ -57,6 +58,7 @@ import time
 import struct
 import argon2pure
 import binascii
+from concurrent.futures import ProcessPoolExecutor
 from ecdsa import SigningKey, VerifyingKey, SECP256k1
 from .utils import *
 from .address import *
@@ -68,6 +70,8 @@ from .install import *
 from .sqlite_kvs import *
 
 IRC_PREFIX = "20"
+
+IRC_SALT = "IRCDNS - improve entropy for weak seeds."
 
 IRC_VERSION = "Friendly P2PD user - see p2pd.net/irc"
 
@@ -353,7 +357,7 @@ async def f_pack_topic(value, name, tld, pw, ses, clsChan, executor=None):
     # Bytes used to make ECDSA priv key.
     priv = f_sha3_to_ecdsa_priv(
         to_b(
-            f"{name}{tld}{pw}{ses.seed}"
+            f"{name}{tld}{pw}{IRC_SALT}{ses.seed}"
         )
     )
 
@@ -579,6 +583,7 @@ class IRCChan:
             IRC_PREFIX +
             chan_name + 
             session.irc_server + 
+            IRC_SALT + 
             session.seed
         )
 
@@ -818,10 +823,10 @@ class IRCSession():
         This allows for password management to be far easier.
         """
         self.irc_server = self.server_info["domain"]
-        self.username = "u" + f_sha3_b36(IRC_PREFIX + ":user:" + self.irc_server + seed)[:7]
-        self.user_pass = f_irc_pass(IRC_PREFIX + ":pass:" + self.irc_server + seed)
-        self.nick = "n" + f_sha3_b36(IRC_PREFIX + ":nick:" + self.irc_server + seed)[:7]
-        self.email = "e" + f_sha3_b36(IRC_PREFIX + ":email:" + self.irc_server + seed)[:15]
+        self.username = "u" + f_sha3_b36(IRC_PREFIX + ":user:" + self.irc_server + IRC_SALT + seed)[:7]
+        self.user_pass = f_irc_pass(IRC_PREFIX + ":pass:" + self.irc_server + IRC_SALT + seed)
+        self.nick = "n" + f_sha3_b36(IRC_PREFIX + ":nick:" + self.irc_server + IRC_SALT + seed)[:7]
+        self.email = "e" + f_sha3_b36(IRC_PREFIX + ":email:" + self.irc_server + IRC_SALT + seed)[:15]
         self.email += "@p2pd.net"
 
         # Sanity checks.
@@ -1254,6 +1259,13 @@ class IRCDNS():
         makes things faster and prevents race conditions.
         """
         self.executor = executor
+        if self.executor is None:
+            # We will handle executor cleanup.
+            self.close_executor = True
+            self.executor = ProcessPoolExecutor()
+        else:
+            # Caller has to clean up their executors.
+            self.close_executor = False
 
         """
         To help with load balancing -- servers may be shuffled.
@@ -1281,7 +1293,7 @@ class IRCDNS():
         self.db = SqliteKVS(
             os.path.join(
                 os.path.expanduser("~"),
-                "ircdns_" + sha3_256(f"{IRC_PREFIX} db {self.seed}") + ".sqlite"
+                "ircdns_" + sha3_256(f"{IRC_PREFIX} db {IRC_SALT}{self.seed}") + ".sqlite"
             )
         )
 
@@ -1357,6 +1369,10 @@ class IRCDNS():
 
         await asyncio.gather(*tasks)
         await self.db.close()
+        if self.close_executor:
+            if self.executor is not None:
+                self.executor.shutdown(wait=False)
+                self.executor = None
 
     # Start n new sessions.
     async def start_n(self, n):
