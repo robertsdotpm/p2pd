@@ -31,18 +31,13 @@ impossible or impractical depending on usage.
 
 ---
     high priority:
-    - todo write test that simulates nick save db code.
-    --------
-
-    final tasks:
     - saboteurs to throw errors in some of the funcs and try to crash the
 code. make it more resilient if one server doesnt worke
 
     - still need to test regular dnsmanager usage. as all current code has used mocks
-        
-    - write more comments for what you've written hastily
+    
 ----------------------------
-    background questions about:
+    future features out of scope:
 
     - servers that are online but disable reg?
         - could parse the special flags at the start of the IRC server header and dynamically disable servers without the right flags
@@ -52,7 +47,8 @@ code. make it more resilient if one server doesnt worke
         - channel successor
         - if an operator is interfering then could disable that server frm the list automatically (and the account should stil be active)
 
-    - if someone sends you private messages what can they do via the protocol?
+    - write more comments for what you've written hastily
+
 --------------------------------------
 """
 
@@ -644,6 +640,9 @@ def irc_proto(self, msg):
     
     # Login if account already exists.
     for nick_success in IRC_NICK_POS:
+        if msg.cmd != "NOTICE":
+            continue
+
         if len(re.findall(nick_success, msg.suffix)):
             print("sending identify. 2")
             return IRCMsg(
@@ -659,6 +658,9 @@ def irc_proto(self, msg):
 
     # Login ident success or account register.
     for success_msg in IRC_POS_LOGIN_MSGS:
+        if msg.cmd != "NOTICE":
+            continue
+
         if len(re.findall(success_msg, msg.suffix)):
             print("login success")
             self.login_status.set_result(True)
@@ -694,6 +696,10 @@ def irc_proto(self, msg):
                 self.chans[chan].set_topic_done.set_result(
                     msg.suffix or True
                 )
+
+    # The rest must be in response to notices.
+    if msg.cmd != "NOTICE":
+        return
 
     # Support checking if a channel is registered.
     # Response for a channel INFO request.
@@ -871,6 +877,18 @@ class IRCSession():
             # Load pre-existing owned channels.
             #await self.load_owned_chans()
 
+            # Save user details if needed.
+            if self.db is not None:
+                nick_key = self.db_key("nick")
+                await self.db.put(nick_key, {
+                    "domain": self.irc_server,
+                    "nick": self.nick,
+                    "username": self.username,
+                    "user_pass": self.user_pass,
+                    "email": self.email,
+                    "last_refresh": time.time()
+                })
+
             self.started.set_result(True)
             return self
         
@@ -974,20 +992,6 @@ class IRCSession():
                 suffix=suffix
             ).pack()
         )
-
-        # Save user details if needed.
-        if self.db is not None:
-            nick_key = self.db_key("nick")
-            nick_info = await self.db.get(nick_key, None)
-            if nick_info is None:
-                await self.db.put(nick_key, {
-                    "domain": self.irc_server,
-                    "nick": self.nick,
-                    "username": self.username,
-                    "user_pass": self.user_pass,
-                    "email": self.email,
-                    "last_refresh": time.time()
-                })
 
         return self
 
@@ -1185,6 +1189,10 @@ class IRCDNS():
 
     async def start(self):
         await self.db.start()
+
+        # Save seed to DB.
+        await self.db.put("seed", self.seed)
+
         return self
 
     # Don't include servers older than 48 hours.
@@ -1418,7 +1426,7 @@ class IRCDNS():
         }
 
         # Get owners for channels to see success.
-        records = [], error_no = IRC_REGISTER_SUCCESS
+        records = []; error_no = IRC_REGISTER_SUCCESS
         for n in range(0, self.p_sessions_next):
             # Default to failure.
             reg_status = IRC_REGISTER_FAILURE

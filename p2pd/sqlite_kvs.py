@@ -15,6 +15,7 @@ Using Sqlite as the underlying library also makes the database highly reliable,
 resistent to corruption, and probably has safe-guards for multi-process access.
 """
 
+import asyncio
 from collections import OrderedDict
 import aiosqlite
 
@@ -35,6 +36,13 @@ class SqliteKVS():
     # Ensure the DB is closed to avoid corruption.
     async def close(self):
         await self.db.close()
+        self.db = None
+
+    def __del__(self):
+        if self.db is not None:
+            asyncio.create_task(
+                self.close()
+            )
 
     async def __aenter__(self):
         return await self.start()
@@ -46,6 +54,7 @@ class SqliteKVS():
         query = 'SELECT COUNT(*) FROM kv'
         cursor = await self.db.execute(query)
         rows = (await cursor.fetchone())[0]
+        await cursor.close()
         return rows if rows is not None else 0
 
     # Overwrite a row attached to a key.
@@ -63,6 +72,7 @@ class SqliteKVS():
         query = 'SELECT value FROM kv WHERE key = ?'
         cursor = await self.db.execute(query, (key,))
         item = await cursor.fetchone()
+        await cursor.close()
 
         # No entry by that key exists.
         if item is None:
@@ -125,6 +135,7 @@ class SqliteKVS():
         query = 'SELECT 1 FROM kv WHERE key = ?'
         cursor = await self.db.execute(query, (key,))
         ret = await cursor.fetchone()
+        await cursor.close()
         return ret is not None
     
     async def __aiter__(self):

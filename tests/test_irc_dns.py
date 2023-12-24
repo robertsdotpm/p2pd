@@ -61,6 +61,17 @@ class MockIRCSession(IRCSession):
             last_started_key = self.db_key("last_started")
             await self.db.put(last_started_key, time.time())
 
+            # Save user details if needed.
+            nick_key = self.db_key("nick")
+            await self.db.put(nick_key, {
+                "domain": self.irc_server,
+                "nick": self.nick,
+                "username": self.username,
+                "user_pass": self.user_pass,
+                "email": self.email,
+                "last_refresh": time.time()
+            })
+
         self.started.set_result(True)
 
     async def is_chan_registered(self, chan_name):
@@ -75,7 +86,6 @@ class MockIRCSession(IRCSession):
     async def get_chan_topic(self, chan_name):
         return self.chans[chan_name].pending_topic
 
-executor = ProcessPoolExecutor()
 
 # python -m unittest test_irc_dns.TestIRCDNS.
 class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
@@ -325,7 +335,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
 
         # Register, store, then get.
-        ret = await ircdns.name_register(dns_name, dns_tld)
+        ret, _ = await ircdns.name_register(dns_name, dns_tld)
         assert(len(ret))
 
 
@@ -422,7 +432,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         dns_name = "p2pd_test2"
         dns_tld = "test_tld2"
         dns_val = "test val2"
-        ret = await ircdns.name_register(dns_name, dns_tld)
+        ret, _ = await ircdns.name_register(dns_name, dns_tld)
         await ircdns.store_value(dns_val, dns_name, dns_tld)
 
         ret = await ircdns.name_lookup(dns_name, dns_tld)
@@ -477,7 +487,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         await ircdns.start_n(len(IRC_TEST_SERVERS_SEVEN))
         assert(ircdns.p_sessions_next == len(IRC_TEST_SERVERS_SEVEN))
-        ret = await ircdns.name_register("test_name6", "test_tld6")
+        ret, _ = await ircdns.name_register("test_name6", "test_tld6")
         for chan_info in ret:
             assert(chan_info["status"] == IRC_REGISTER_SUCCESS)
 
@@ -536,12 +546,12 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         ).start()
 
         dns_name = "dns_name8"; dns_tld = "dns_tld8"
-        ret = await ircdns.name_register(dns_name, dns_tld)
+        ret, _ = await ircdns.name_register(dns_name, dns_tld)
         assert(ret[0]["status"] == IRC_START_FAILURE)
         assert(ret[1]["status"] == IRC_REGISTER_FAILURE)
         assert(ret[2]["status"] == IRC_REGISTER_SUCCESS)
 
-        ret = await ircdns.name_register(dns_name, dns_tld)
+        ret, _ = await ircdns.name_register(dns_name, dns_tld)
         assert(ret[0]["status"] == IRC_REGISTER_SUCCESS)
         assert(ret[1]["status"] == IRC_REGISTER_FAILURE)
         assert(ret[2]["status"] == IRC_REGISTER_SUCCESS)
@@ -587,7 +597,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         dns_name = "p2pd_test3"
         dns_tld = "test_tld3"
         dns_val = "test val3"
-        ret = await ircdns.name_register(dns_name, dns_tld)
+        ret, _ = await ircdns.name_register(dns_name, dns_tld)
         assert(ret[2]["status"] == IRC_REGISTER_FAILURE)
         assert(ret[5]["status"] == IRC_START_FAILURE)
         assert(ret[0]["status"] == IRC_REGISTER_SUCCESS)
@@ -609,8 +619,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             do_shuffle=False
         ).start()
 
-        ret = await ircdns.name_register("test_name4", "tld4")
-        ret = await ircdns.name_register("test_name5", "tld5")
+        ret, _ = await ircdns.name_register("test_name4", "tld4")
+        ret, _ = await ircdns.name_register("test_name5", "tld5")
 
         # Get list of chans stored in first session.
         chan_list = await ircdns.sessions[0].db_load_chan_list()
@@ -770,7 +780,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         ).start()
 
         dns_name = "dns_name9"; dns_tld = "dns_tld9"
-        ret = await ircdns.name_register(dns_name, dns_tld)
+        ret, _ = await ircdns.name_register(dns_name, dns_tld)
         assert(ret[0]["status"] == IRC_START_FAILURE)
         assert(ret[1]["status"] == IRC_REGISTER_SUCCESS)
         dns = ret[0]["dns"]
@@ -795,6 +805,33 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         await ircdns.close()
 
+    async def test_nick_details_save(self):
+        ircdns = await IRCDNS(
+            i=None,
+            seed="10" + IRC_SEED,
+            clsSess=MockIRCSession,
+            clsChan=MockIRCChan,
+            servers=IRC_TEST_SERVERS_SEVEN,
+            executor=executor,
+            do_shuffle=False
+        ).start()
+
+        # Start only a single session at offset 0.
+        await ircdns.start_n(1)
+
+        # Attempt to fetch sessions nick details.
+        nick_key = ircdns.sessions[0].db_key("nick")
+        nick_info = await ircdns.db.get(nick_key, {})
+        vectors = ["domain", "nick", "username", "user_pass"]
+        vectors += ["email", "last_refresh"]
+        for vector in vectors:
+            assert(vector in nick_info)
+
+        # Cleanup.
+        await ircdns.close()
+
+    async def test_simulate_net_exceptions(self):
+        pass
 
     async def test_irc_servers_work(self):
         return
@@ -923,7 +960,9 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         pass
 
 if __name__ == '__main__':
+    executor = ProcessPoolExecutor()
     main()
+    executor.shutdown(wait=False)
 
 """
 
