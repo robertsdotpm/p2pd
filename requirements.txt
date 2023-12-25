@@ -1,4 +1,3 @@
-sphinx_rtd_theme # For documentation.
 netifaces == 0.11.0; sys_platform != 'win32' # Used for NIC info.
 gmqtt == 0.6.11 # MQTT is used for signaling messages.
 ntplib == 0.4.0 # Used for synchronization in TCP hole punching.

@@ -3,7 +3,7 @@
 # -- Project information
 
 project = 'P2PD'
-copyright = '2022'
+copyright = '2023'
 author = 'Matthew Roberts'
 
 release = '0.1'
