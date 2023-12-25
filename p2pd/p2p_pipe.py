@@ -289,7 +289,7 @@ class P2PPipe():
                 timeout
             )
             p2p_pipe, strategy = task.result()
-        except asyncio.CancelledError:
+        except Exception:
             log_exception()
 
         # When it's done delete the pending reference.
@@ -319,13 +319,12 @@ class P2PPipe():
             if not len(p2p_dest[af]):
                 continue
 
-            # (1) Get first interface for AF.
-            # (2) Build a 'route' from it with it's main NIC IP.
-            # (3) Bind to the route at port 0. Return itself.
-            route = await self.node.ifs.get(af).route(af).bind()
+            async def attempt_con(af, info):
+                # (1) Get first interface for AF.
+                # (2) Build a 'route' from it with it's main NIC IP.
+                # (3) Bind to the route at port 0. Return itself.
+                route = await self.node.ifs.get(af).route(af).bind()
 
-            # Similar to 'happy eyeballs.'
-            for info in p2p_dest[af]:
                 # Connect to this address.
                 dest = await Address(
                     str(info["ext"]),
@@ -333,19 +332,27 @@ class P2PPipe():
                     route
                 ).res()
 
+                return await pipe_open(
+                    route=route,
+                    proto=proto,
+                    dest=dest,
+                    msg_cb=self.node.msg_cb
+                )
+
+            # Similar to 'happy eyeballs.'
+            for info in p2p_dest[af]:
                 # Schedule the coroutine.
                 tasks.append(
-                    pipe_open(
-                        route=route,
-                        proto=proto,
-                        dest=dest,
-                        msg_cb=self.node.msg_cb
+                    async_wrap_errors(
+                        attempt_con(af, info)
                     )
                 )
 
         # Do all connections concurrently.
-        pipes = await asyncio.gather(*tasks)
-        pipes = strip_none(pipes)
+        pipes = []
+        if len(tasks):
+            pipes = await asyncio.gather(*tasks)
+            pipes = strip_none(pipes)
 
         # Only keep the first connection.
         if len(pipes) > 1:

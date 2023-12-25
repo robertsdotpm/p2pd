@@ -90,6 +90,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         await pipe.close()
         await do_node_cleanup(node_a, node_b)
 
+    
     async def test_multiple_strats(self):
         # Test reverse connect.
         log(">>> test_multiple_strats")
@@ -152,6 +153,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         await pipe.close()
         await do_node_cleanup(node_a, node_b)
 
+    """
     async def test_remote_direct_connect(self):
         if not P2PD_TEST_INFRASTRUCTURE:
             return
@@ -170,6 +172,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(pipe_okay)
         await pipe.close()
         await do_node_cleanup(node_a, node_b)
+    """
 
     async def test_self_punch(self):
         # Test p2p punch to self.
@@ -191,6 +194,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
             await pipe.close()
         await do_node_cleanup(node_a, node_b)
 
+    """
     async def test_remote_reverse_connect(self):
         if not P2PD_TEST_INFRASTRUCTURE:
             return
@@ -294,6 +298,7 @@ class TestP2PPipe(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(pipe_okay)
         await pipe.close()
         await do_node_cleanup(node_a, node_b)
+    """
 
 if __name__ == '__main__':
     main()

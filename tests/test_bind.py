@@ -4,6 +4,37 @@ from p2pd.net import BLACK_HOLE_IPS, ip_norm, DUEL_STACK, IP6, IP4
 from p2pd.net import NIC_BIND, EXT_BIND, TCP, socket_factory
 
 class TestBind(unittest.IsolatedAsyncioTestCase):
+    async def test_bind_closure(self):
+        pass
+
+        i = await Interface().start_local()
+        b = Bind(i, None, leave_none=1)
+
+        b.af = IP4
+        out = (await bind_closure(b)(80, "127.0.0.1"))._bind_tups
+        assert(out == {1: ('127.0.0.1', 80), 2: ('127.0.0.1', 80)})
+
+        out = (await bind_closure(b)(80, "192.168.0.1"))._bind_tups
+        assert(out == {1: ('192.168.0.1', 80), 2: ('192.168.0.1', 80)})
+
+        out = (await bind_closure(b)(80, "8.8.8.8"))._bind_tups
+        assert(out == {1: ('8.8.8.8', 80), 2: ('8.8.8.8', 80)})
+
+        out = (await bind_closure(b)(80, "0.0.0.0"))._bind_tups
+        assert(out == {1: ('0.0.0.0', 80), 2: ('0.0.0.0', 80)})
+
+        # This is where things tend to go badly.
+        b.af = IP6
+
+        out = (await bind_closure(b)(80, "::1"))._bind_tups
+
+
+        out = (await bind_closure(b)(80, "fe80::6c00:b217:18ca:e365"))._bind_tups
+        #assert(out[1][2] > 0 or out[2][2] > 0)
+
+
+        #out = (await bind_closure(b)(80, ""))._bind_tups
+        
     async def test_bind(self):
         i = await Interface().start_local()
         af = i.stack if i.stack != DUEL_STACK else IP4

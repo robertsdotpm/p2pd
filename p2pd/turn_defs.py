@@ -215,7 +215,7 @@ class TurnIPAddress:
             data = self._xor_cookie(data)
         data = memoryview(data)
         self.family = data[0:2]
-        self.port = b_to_i(data[2:4])
+        self.port = b_to_i(data[2:4], 'big')
         if self.family == b"\x00\x01":
             self.ip_b = data[4:8]
             self.af = socket.AF_INET
@@ -303,7 +303,7 @@ class TurnMessage:
             # Unpack first two fields of an attribute.
             attr_hdr = msg[self.attr_cursor:self.attr_cursor + 4]
             m_attr = attr_hdr[0:2]
-            m_len = b_to_i(attr_hdr[2:4])
+            m_len = b_to_i(attr_hdr[2:4], 'big')
 
             # Avoid overflows for attribute data.
             self.attr_cursor += 4
@@ -343,7 +343,7 @@ class TurnMessage:
         if msg_len >= 20:
             # Unpack message fields.
             self.msg_type = msg[0:2]
-            self.msg_len = b_to_i(msg[2:4])
+            self.msg_len = b_to_i(msg[2:4], 'big')
             self.magic_cookie = msg[4:8]
             self.txn_id = msg[8:20]
 

@@ -54,7 +54,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         await d.close()
 
     async def test_daemon(self):
-        server_port = 10123
+        server_port = 0
         loopbacks = {
             IP4: "127.0.0.1",
             IP6: "::1"
@@ -83,6 +83,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
             route = await interface.route(af)
             addrs = [route.nic(), loopbacks[af]]
 
+
             # Test connect to link local.
             if af == IP6:
                 addrs.append(route.link_local())
@@ -92,7 +93,6 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                 for proto in [UDP, TCP]:
                     # Fresh route per server.
                     route = await interface.route(af).bind(ips=addr, port=server_port)
-                    dest = await Address(addr, server_port, route).res()
 
                     # Daemon instance.
                     echod = await EchoServer().listen_all(
@@ -100,9 +100,11 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                         [server_port],
                         [proto]
                     )
+                    server_port = echod.get_listen_port()
+                    dest = await Address(addr, server_port, route).res()
 
                     # Spawn a pipe to the echo server.
-                    test_route = await interface.route(af).bind()
+                    test_route = await interface.route(af).bind(ips=addr)
                     pipe = await pipe_open(
                         proto,
                         test_route,
@@ -114,7 +116,8 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                     pipe.subscribe(SUB_ALL)
 
                     # Send message to server.
-                    await pipe.send(msg, dest.tup)
+                    #print(dest.tup in pipe.stream.handle)
+                    send_ret = await pipe.send(msg, dest.tup)
 
                     # Receive data back.
                     data = await pipe.recv(SUB_ALL)

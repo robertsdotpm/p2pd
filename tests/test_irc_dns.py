@@ -18,7 +18,7 @@ import pprint
 from p2pd.test_init import *
 from p2pd import *
 
-IRC_SEED = "123" * 30
+IRC_SEED = b"123" * 30
 IRC_SERV_INFO = {
     'domain': 'example.com',
     'afs': [IP4, IP6],
@@ -257,7 +257,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         interface = None
         ircdns = await IRCDNS(
             i=interface,
-            seed="1" + IRC_SEED,
+            seed=b"1" + IRC_SEED,
             clsSess=MockIRCSession,
             clsChan=MockIRCChan,
             servers=servers,
@@ -294,7 +294,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         # Test partial start-continue
         ircdns = await IRCDNS(
             i=interface,
-            seed="2" + IRC_SEED,
+            seed=b"2" + IRC_SEED,
             clsSess=MockIRCSession,
             clsChan=MockIRCChan,
             servers=servers,
@@ -418,7 +418,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         interface = None
         ircdns = await IRCDNS(
             i=interface,
-            seed="3" + IRC_SEED,
+            seed=b"3" + IRC_SEED,
             clsSess=MockIRCSession2,
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
@@ -477,7 +477,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         interface = None
         ircdns = await IRCDNS(
             i=interface,
-            seed="4" + IRC_SEED,
+            seed=b"4" + IRC_SEED,
             clsSess=MockIRCSession4,
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
@@ -537,7 +537,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         interface = None
         ircdns = await IRCDNS(
             i=interface,
-            seed="5" + IRC_SEED,
+            seed=b"5" + IRC_SEED,
             clsSess=MockIRCSession5,
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
@@ -586,7 +586,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         interface = None
         ircdns = await IRCDNS(
             i=interface,
-            seed="6" + IRC_SEED,
+            seed=b"6" + IRC_SEED,
             clsSess=MockIRCSession3,
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
@@ -611,7 +611,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         interface = None
         ircdns = await IRCDNS(
             i=interface,
-            seed="7" + IRC_SEED,
+            seed=b"7" + IRC_SEED,
             clsSess=MockIRCSession,
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
@@ -663,7 +663,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         ircdns = await IRCDNS(
             i=None,
-            seed="8" + IRC_SEED,
+            seed=b"8" + IRC_SEED,
             clsSess=MockIRCSession,
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
@@ -771,7 +771,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             
         ircdns = await IRCDNS(
             i=None,
-            seed="9" + IRC_SEED,
+            seed=b"9" + IRC_SEED,
             clsSess=MockIRCSession6,
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
@@ -808,7 +808,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
     async def test_nick_details_save(self):
         ircdns = await IRCDNS(
             i=None,
-            seed="10" + IRC_SEED,
+            seed=b"10" + IRC_SEED,
             clsSess=MockIRCSession,
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
@@ -830,6 +830,37 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         # Cleanup.
         await ircdns.close()
 
+    async def test_irc_dns_real_world(self):
+        return
+        interface = await Interface()
+        seed = b_sha3_256(b"some secret seed")
+        ircdns = await IRCDNS(
+            i=interface,
+            seed=seed,
+            servers=IRC_SERVERS
+        ).start()
+        refresher = IRCRefresher(ircdns)
+
+        # Register a new name from scratch.
+        name_info = ["muh awesome name", "node"]
+        await ircdns.name_register(*name_info)
+
+        # Do two different write/reads.
+        for _ in range(0, 2):
+            # Store value in entry.
+            name_val  = rand_plain(10)
+            await ircdns.store_value(*[name_val] + name_info)
+
+            # Lookup its value and check results.
+            ret = await ircdns.name_lookup(*name_info)
+            assert(to_b(ret["msg"]) == to_b(name_val))
+
+        # Test refresher also doesn't crash.
+        await refresher.refresher()
+
+        # Cleanup the dns manager.
+        await ircdns.close()
+
     async def test_irc_servers_work(self):
         return
         dns_value = "Test dns val."
@@ -839,7 +870,7 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
         executor = ProcessPoolExecutor()
         server_list = IRC_SERVERS
 
-        seed = "test_seed2" * 20
+        seed = b"test_seed2" * 20
         i = await Interface().start()
         ircdns = await IRCDNS(
             i,

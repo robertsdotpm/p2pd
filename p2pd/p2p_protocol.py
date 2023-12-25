@@ -80,10 +80,11 @@ async def signal_protocol(self, msg, signal_pipe):
                 p2p_pipe.direct_connect(p2p_dest, pipe_id, proto=proto),
                 10
             )
-        except asyncio.TimeoutError:
+        except Exception as e:
             log("p2p direct timeout in node.")
+            log_exception()
             return
-
+        
         # Setup pipe reference.
         if pipe is not None:
             log("p2p direct in node got a valid pipe.")

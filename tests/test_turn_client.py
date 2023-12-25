@@ -103,7 +103,7 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
         # Network interface details.
         log(">>> test_turn")
         n = 0
-        i = await Interface().start_local()
+        i = await Interface()
         af = i.supported()[0]
         r = await i.route(af).bind()
 

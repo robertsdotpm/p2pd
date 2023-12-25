@@ -29,7 +29,7 @@ class TestSock(unittest.IsolatedAsyncioTestCase):
         s2.close()
 
     async def test_socket_factory_connect(self):
-        loop = asyncio.get_running_loop()
+        loop = asyncio.get_event_loop()
         i = await Interface().start_local()
         af = i.supported()[0]
         r = await i.route(af).bind(0)

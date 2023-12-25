@@ -335,7 +335,7 @@ class P2PDServer(Daemon):
                 "error": 1
             }
 
-        resp = await get_response()
+        resp = await async_wrap_errors(get_response())
         if resp is not None:
             await send_json(
                 resp,

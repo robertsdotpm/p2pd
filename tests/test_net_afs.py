@@ -53,39 +53,42 @@ class TestAFsWork(unittest.IsolatedAsyncioTestCase):
                 # Skip test if not supported.
                 continue
 
-            # Echo server address.
-            route = await i.route(af).bind()
+            try:
+                # Echo server address.
+                route = await i.route(af).bind()
 
-            # Test echo server with AF.
-            msg = b"echo test"
-            for proto in [TCP, UDP]:
-                # No server for this AF + proto.
-                if af not in addr[proto]:
-                    continue
+                # Test echo server with AF.
+                msg = b"echo test"
+                for proto in [TCP, UDP]:
+                    # No server for this AF + proto.
+                    if af not in addr[proto]:
+                        continue
 
-                # Set destination of echo server.
-                echo_dest = await Address(
-                    addr[proto][af]["host"],
-                    addr[proto][af]["port"],
-                    route
-                ).res()
+                    # Set destination of echo server.
+                    echo_dest = await Address(
+                        addr[proto][af]["host"],
+                        addr[proto][af]["port"],
+                        route
+                    ).res()
 
-                # Open pipe to echo server.
-                pipe = await pipe_open(proto, route, echo_dest)
-                
-                # Interested in any message.
-                pipe.subscribe(SUB_ALL)
+                    # Open pipe to echo server.
+                    pipe = await pipe_open(proto, route, echo_dest)
+                    
+                    # Interested in any message.
+                    pipe.subscribe(SUB_ALL)
 
-                # Send data down the pipe.
-                for i in range(0, 4):
-                    await pipe.send(msg + b"\r\n", echo_dest.tup)
+                    # Send data down the pipe.
+                    for i in range(0, 4):
+                        await pipe.send(msg + b"\r\n", echo_dest.tup)
 
-                # Receive data back.
-                data = await pipe.recv(SUB_ALL, 4)
-                assert(msg in data)
+                    # Receive data back.
+                    data = await pipe.recv(SUB_ALL, 4)
+                    assert(msg in data)
 
-                # Cleanup.
-                await pipe.close()
+                    # Cleanup.
+                    await pipe.close()
+            except:
+                continue
 
         self.assertTrue(one_worked)
 

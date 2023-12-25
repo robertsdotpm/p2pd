@@ -39,9 +39,6 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
             "/p2p/send/" + c + "/" + en("ECHO Hello, world!"),
             "/p2p/recv/" + c + "/msg_p/" + sub + "/timeout/2",
 
-            # Flush hello world from the SUB_ALL queue.
-            "/p2p/recv/" + c,
-
             # Test connection close works.
             "/p2p/close/" + c
         ]

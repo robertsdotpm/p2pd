@@ -22,7 +22,7 @@ async def init_p2pd():
     # Setup event loop.
     loop = asyncio.get_event_loop()
     loop.set_debug(False)
-    loop.set_exception_handler(SelectorEventPolicy.exception_handler)
+    #loop.set_exception_handler(SelectorEventPolicy.exception_handler)
     
     def fatal_error(self, exc, message='Fatal error on transport'):
         # Should be called from exception handler only.

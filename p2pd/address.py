@@ -99,6 +99,13 @@ class Address():
                     if af not in afs_found:
                         afs_found.append(af)
 
+        # Strip %n from tup 0 if it exists.
+        """
+        addr_tup = (
+            ip_strip_if(addr_tup[0]),
+        ) + addr_tup[1:]
+        """
+
         # No results found for our requirements.
         if addr_tup is None:
             log("> Address: res couldnt find compatible address")
@@ -108,7 +115,7 @@ class Address():
             self.tup = addr_tup
 
         # Set attributes of the IP like if private or loopback.
-        self.ip_set_info(addr_tup[0])
+        self.ip_set_info(ip_strip_if(addr_tup[0]))
         self.afs_found = afs_found
         self.resolved = True
         return self

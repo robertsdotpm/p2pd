@@ -31,8 +31,6 @@ impossible or impractical depending on usage.
 
 ---
     high priority:
-    - Add logging to the software to replace print statements
-    - still need to test regular dnsmanager usage. as all current code has used mocks
     - finish writing article
     - merge to main and push to pypi
     - post article
@@ -40,8 +38,8 @@ impossible or impractical depending on usage.
 ----------------------------
     future features out of scope:
 
-    - servers that are online but disable reg?
-        - could parse the special flags at the start of the IRC server header and dynamically disable servers without the right flags
+    - need a mechanism to fetch active servers from a repo if servers
+    have registration disabled
 
     - if account gets deleted for inactivity?
         - refresh to prevent that
@@ -69,10 +67,6 @@ from .base_n import encodebytes, decodebytes
 from .base_n import B36_CHARSET, B64_CHARSET, B92_CHARSET
 from .install import *
 from .sqlite_kvs import *
-
-IRC_PREFIX = "20"
-
-IRC_SALT = "IRCDNS - improve entropy for weak seeds."
 
 IRC_VERSION = "Friendly P2PD user - see p2pd.net/irc"
 
@@ -253,6 +247,9 @@ IRC_CONF = dict_child({
 
 IRC_FRESHNESS = 172800
 
+IRC_PREFIX = b"20"
+IRC_SALT = b"IRCDNS - improve entropy for weak seeds."
+
 ####################################################################################
 
 # SHA3 digest in ascii truncated to a str limit.
@@ -357,9 +354,7 @@ def f_otp(msg, otp):
 async def f_pack_topic(value, name, tld, pw, ses, clsChan, executor=None):
     # Bytes used to make ECDSA priv key.
     priv = f_sha3_to_ecdsa_priv(
-        to_b(
-            f"{name}{tld}{pw}{IRC_SALT}{ses.seed}"
-        )
+        to_b(f"{name}{tld}{pw}") + IRC_SALT + ses.seed
     )
 
     # ECDSA secret key.
@@ -539,9 +534,10 @@ Many parts of the IRC protocol message are optional and this class handles that.
 """
 class IRCMsg():
     def __init__(self, prefix="", cmd="", param="", suffix=""):
-        self.prefix = prefix or ""
-        self.cmd = cmd or ""
-        self.param = param or ""
+        irc_safe = lambda m: m.replace(":", "")
+        self.prefix = irc_safe(prefix or "")
+        self.cmd = irc_safe(cmd or "")
+        self.param = irc_safe(param or "")
         self.suffix = suffix or ""
 
     # Build a valid IRC protocol message.
@@ -582,8 +578,8 @@ class IRCChan:
         self.chan_name = chan_name
         self.chan_pass = f_irc_pass(
             IRC_PREFIX +
-            chan_name + 
-            session.irc_server + 
+            to_b(chan_name) + 
+            to_b(session.irc_server) + 
             IRC_SALT + 
             session.seed
         )
@@ -659,7 +655,7 @@ for transmitting these replies. This greatly simplifies testing the
 protocol as there is no network I/O done here.
 """
 def irc_proto(self, msg):
-    print(f"Got {msg.pack()}")
+    log(f"Got {msg.pack()}")
 
     # Process ping.
     if msg.cmd == "PING":
@@ -688,7 +684,7 @@ def irc_proto(self, msg):
             continue
 
         if len(re.findall(nick_success, msg.suffix)):
-            print("sending identify. 2")
+            log("sending identify. 2")
             return IRCMsg(
                 cmd="PRIVMSG",
                 param="NickServ",
@@ -706,7 +702,7 @@ def irc_proto(self, msg):
             continue
 
         if len(re.findall(success_msg, msg.suffix)):
-            print("login success")
+            log("login success")
             self.login_status.set_result(True)
             return
 
@@ -772,19 +768,6 @@ def irc_proto(self, msg):
                     owner[0]
                 )
 
-    # Channels loaded.
-    if "End of /WHOIS list" in msg.suffix:
-        self.chans_loaded.set_result(True)
-
-    # Response from a WHOIS request.
-    if msg.cmd == "319":
-        return
-        chans = msg.suffix.replace("@", "")
-        chans = chans.split()
-        for chan in chans:
-            irc_chan = IRCChan(chan, self)
-            self.chans[chan] = irc_chan
-
 """
 An 'IRCSession' is designed to record a connection to a unique IRC server.
 These sessions have names uniquely identified to them through channel
@@ -824,10 +807,10 @@ class IRCSession():
         This allows for password management to be far easier.
         """
         self.irc_server = self.server_info["domain"]
-        self.username = "u" + f_sha3_b36(IRC_PREFIX + ":user:" + self.irc_server + IRC_SALT + seed)[:7]
-        self.user_pass = f_irc_pass(IRC_PREFIX + ":pass:" + self.irc_server + IRC_SALT + seed)
-        self.nick = "n" + f_sha3_b36(IRC_PREFIX + ":nick:" + self.irc_server + IRC_SALT + seed)[:7]
-        self.email = "e" + f_sha3_b36(IRC_PREFIX + ":email:" + self.irc_server + IRC_SALT + seed)[:15]
+        self.username = "u" + f_sha3_b36(IRC_PREFIX + b":user:" + to_b(self.irc_server) + IRC_SALT + seed)[:7]
+        self.user_pass = f_irc_pass(IRC_PREFIX + b":pass:" + to_b(self.irc_server) + IRC_SALT + seed)
+        self.nick = "n" + f_sha3_b36(IRC_PREFIX + b":nick:" + to_b(self.irc_server) + IRC_SALT + seed)[:7]
+        self.email = "e" + f_sha3_b36(IRC_PREFIX + b":email:" + to_b(self.irc_server) + IRC_SALT + seed)[:15]
         self.email += "@p2pd.net"
 
         # Sanity checks.
@@ -926,7 +909,7 @@ class IRCSession():
             await asyncio.wait_for(
                 self.get_motd, 30
             )
-            print("get motd done")
+            log("get motd done")
 
             # Set last started time.
             if self.db is not None:
@@ -935,14 +918,14 @@ class IRCSession():
 
             # Trigger register if needed.
             await self.register_user()
-            print("register user done")
+            log("register user done")
 
             # Wait for login success.
             # Some servers scan for open proxies for a while.
             await asyncio.wait_for(
                 self.login_status, 15
             )
-            print("get login status done.")
+            log("get login status done.")
 
             # Load pre-existing owned channels.
             #await self.load_owned_chans()
@@ -1010,22 +993,8 @@ class IRCSession():
             await self.con.send(IRCMsg(cmd="QUIT").pack())
             await self.con.close()
 
-    # Not used.
-    async def get_chan_reg_syntax(self):
-        await self.con.send(
-            IRCMsg(
-                cmd="PRIVMSG",
-                param="ChanServ",
-                suffix=f"REGISTER"
-            ).pack()
-        )
-
     # Look up the value stored in a channel topic.
     async def get_chan_topic(self, chan_name):
-        # Return cached result.
-        if chan_name in self.chan_topics:
-            return await self.chan_topics[chan_name]
-        
         # Setup topic future.
         self.chan_topics[chan_name] = asyncio.Future()
 
@@ -1205,7 +1174,7 @@ class IRCSession():
     forwarded back to the server pipe.
     """
     async def msg_cb(self, msg, client_tup, pipe):
-        print(msg)
+        log(msg)
 
         try:
             # Keep a buffer of potential protocol messages.
@@ -1294,7 +1263,7 @@ class IRCDNS():
         self.db = SqliteKVS(
             os.path.join(
                 os.path.expanduser("~"),
-                "ircdns_" + sha3_256(f"{IRC_PREFIX} db {IRC_SALT}{self.seed}") + ".sqlite"
+                "ircdns_" + sha3_256(IRC_PREFIX + b"db" + IRC_SALT + self.seed) + ".sqlite"
             )
         )
 

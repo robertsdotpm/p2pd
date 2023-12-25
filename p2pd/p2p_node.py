@@ -144,7 +144,9 @@ class P2PNode(Daemon, P2PUtils):
 
     # Used by the MQTT clients.
     async def signal_protocol(self, msg, signal_pipe):
-        return await signal_protocol(self, msg, signal_pipe)
+        return await async_wrap_errors(
+            signal_protocol(self, msg, signal_pipe)
+        )
 
     # Used by the node servers.
     async def msg_cb(self, msg, client_tup, pipe):
