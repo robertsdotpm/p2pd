@@ -1,8 +1,88 @@
 # pragma: no cover
 import re
+import winreg
 from .utils import *
 from .cmd_tools import *
 from .net import *
+
+"""
+Net name is very specifically not the interface name or
+its description. Examples of the net name are 'local area network.'
+Examples of an interface name 'Intel ... ethernet v10'.
+
+"""
+def nt_get_net_infos():
+    root_key = winreg.OpenKey(
+        winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\ControlSet001\Control\Network",
+        0,
+        winreg.KEY_READ
+    )
+
+    # Recursively crawl all portions looking for the right field.
+    # Windows loves to make things easy.
+    def recurse_search(root_key, guid=None):
+        results = []
+        for sub_offset in range(0, winreg.QueryInfoKey(root_key)[0]):
+            sub_name = winreg.EnumKey(root_key, sub_offset)
+            sub_key = None
+            try:
+                sub_key = winreg.OpenKey(root_key, sub_name)
+                if sub_name == "Connection":
+                    con_name = winreg.QueryValueEx(sub_key, "Name")[0]
+                    results.append([con_name, guid])
+                else:
+                    if re.match("{[^{}]+}", sub_name) == None:
+                        continue
+
+                    results += recurse_search(
+                        sub_key,
+                        guid=sub_name
+                    )
+            except:
+                pass
+            finally:
+                if sub_key is not None:
+                    sub_key.Close()
+
+        return results
+
+    # Build list of con_name -> guid mappings.
+    results = recurse_search(root_key)
+    root_key.Close()
+
+    # Look up interface names.
+    root_key = winreg.OpenKey(
+        winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkCards",
+        0,
+        winreg.KEY_READ
+    )
+
+    # con_name -> {"guid": ..., "if_name": ...}
+    infos = {}
+    for sub_offset in range(0, winreg.QueryInfoKey(root_key)[0]):
+        sub_name = winreg.EnumKey(root_key, sub_offset)
+        sub_key = None
+        found_guid = found_if_name = ""
+        try:
+            sub_key = winreg.OpenKey(root_key, sub_name)
+            found_guid = winreg.QueryValueEx(sub_key, "ServiceName")[0]
+            found_if_name = winreg.QueryValueEx(sub_key, "Description")[0]
+        except:
+            pass
+        finally:
+            if sub_key is not None:
+                sub_key.Close()
+
+        for result in results:
+            con_name, saved_guid = result
+            if saved_guid == found_guid:
+                infos[con_name] = {
+                    "guid": saved_guid,
+                    "if_name": found_if_name
+                }
+
+    root_key.Close()
+    return infos
 
 async def nt_ipv6_routes(no): # pragma: no cover
     out = await cmd("route print")
