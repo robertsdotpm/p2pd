@@ -276,10 +276,24 @@ def get_cidr_from_route_infos(needle_ip, route_infos):
 
     return [cidr, netmask]
 
-def netsh_get_mac_by_ip(needle_ip, mac_infos):
+def netsh_get_mac_by_ip(addr_infos, mac_infos):
     for mac_info in mac_infos:
-        if needle_ip == mac_info["ip"]:
-            return mac_info["mac"]
+        print()
+        print(mac_info["ip"])
+        for addr_info in addr_infos:
+            print(addr_info["addr"])
+            if addr_info["addr"] == mac_info["ip"]:
+                return mac_info["mac"]
+            
+    """
+    x@WIN7 P:\p2pd>route print
+    ===========================================================================
+    Interface List
+    11...00 0c 29 73 ec 23 ......Intel(R) PRO/1000 MT Network Connection
+    1...........................Software Loopback Interface 1
+    12...00 00 00 00 00 00 00 e0 Microsoft ISATAP Adapter
+    ===========================================================================
+    """
 
 async def if_infos_from_netsh():
     con_table = win_con_name_lookup()
@@ -292,6 +306,9 @@ async def if_infos_from_netsh():
 
         addr_info = {IP4: [], IP6: []}
         for af in [IP4, IP6]:
+            if if_index not in out["addrs"][af]:
+                continue
+
             for found_addr in out["addrs"][af][if_index]:
                 cidr, netmask = get_cidr_from_route_infos(
                     found_addr["addr"],
@@ -312,14 +329,14 @@ async def if_infos_from_netsh():
         if con_name not in out["macs"][IP4]:
             continue
 
-        mac = netsh_get_mac_by_ip()
-
+        mac_info = out["macs"][IP4][con_name]
+        mac = netsh_get_mac_by_ip(addr_info[IP4], mac_info)
         result = {
             "con_name": con_name,
             "guid": con_table[con_name]["guid"],
             "name": con_table[con_name]["if_name"],
             "no": if_index,
-            "mac": out["macs"][IP4][con_name]["mac"],
+            "mac": mac,
             "addr": addr_info,
             "gws": {
                 IP4: None,
