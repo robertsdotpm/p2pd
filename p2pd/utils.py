@@ -580,7 +580,12 @@ def selector_event_loop():
     return asyncio.SelectorEventLoop(selector)
 
 def get_loop(loop=None):
+    loop = asyncio.get_event_loop()
+    return loop
     if loop is None:
+        loop = selector_event_loop()
+        print(loop)
+        print("another change")
         if sys.platform == "win32":
             loop = asyncio.ProactorEventLoop()
         else:

@@ -116,6 +116,44 @@ def win_arg_escape(arg, allow_vars=0):
 
     return arg
 
+def get_powershell_path():
+    ps_dir = "%WINDIR%\System32\WindowsPowerShell"
+    ps_dir = os.path.expandvars(ps_dir)
+    dir_list = os.listdir(ps_dir)
+
+    version_dir = None
+    version_info = None
+    for sub_dir in dir_list:
+        p = "v([0-9]+)(?:[.]([0-9]+))?"
+        out = re.findall(p, sub_dir)
+        if not len(out):
+            continue
+        out = out[0]
+
+        if version_dir is None:
+            version_dir = sub_dir
+            version_info = out
+            continue
+
+        big_version, little_version = out
+        if big_version > version_info[0]:
+            version_dir = sub_dir
+            version_info = out
+            continue
+
+        if big_version == version_info[0]:
+            if little_version > version_info[1]:
+                version_dir = sub_dir
+                version_info = out
+                continue
+
+    if version_dir is None:
+        raise Exception("Cannot find powershell dir.")
+    
+    ps_dir = os.path.join(ps_dir, version_dir, "powershell.exe")
+    #ps_dir = ps_dir.replace('\\', '\\\\')
+    return ps_dir
+
 """
 There is an issue with create_subprocess_shell on Windows 10
 with the latest Python versions. When you try use this code

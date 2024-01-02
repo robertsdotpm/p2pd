@@ -62,6 +62,7 @@ Notes:
 
 import re
 import base64
+import os
 from .ip_range import *
 from .cmd_tools import *
 
@@ -328,8 +329,12 @@ def extract_if_fields(ifs_str):
 # Ignore hidden adapters. Non-physical or down.
 # Specify desc and index to show full entry.
 async def get_ifaces():
+    # ssh -l x win7 cd projects\p2pd\tests
+    ps_path = get_powershell_path()
+    print(ps_path)
     try:
-        out = await cmd('powershell "Get-NetAdapter -physical | where status -eq up  | Format-List -Property InterfaceDescription,ifIndex,InterfaceGuid,MacAddress"', timeout=CMD_TIMEOUT)
+        out = await cmd(f'{ps_path} "Get-NetAdapter -physical | where status -eq up  | Format-List -Property InterfaceDescription,ifIndex,InterfaceGuid,MacAddress"', timeout=CMD_TIMEOUT)
+        print(out)
     except Exception:
         log_exception()
         out = ""

@@ -374,9 +374,13 @@ class RESTD(Daemon):
         for api in self.apis[req.command]:
             named, positional = req.api(api.args)
 
-            # Not a matching API method.
-            if len(named) != len(api.args):
-                continue
+            # Matches /.
+            if len(self.apis[req.command]) == 1:
+                pass
+            else:
+                # Not a matching API method.
+                if len(named) != len(api.args):
+                    continue
 
             # Find best matching API method.
             if len(positional) < positional_no:
