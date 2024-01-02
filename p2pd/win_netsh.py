@@ -1,9 +1,11 @@
 import re
 import asyncio
 import pprint
+import winreg
 
 from .net import *
 from .cmd_tools import *
+from .ip_range import IPRange
 
 class NetshParse():
     # netsh interface ipv4 show interfaces
@@ -12,16 +14,17 @@ class NetshParse():
     def show_interfaces(af, msg):
         p = "([0-9]+)\s+([0-9]+)\s+([0-9]+)\s+([a-z0-9]+)\s+([^\r\n]+)"
         out = re.findall(p, msg)
-        results = []
+        results = {}
         for match_group in out:
             if_index, metric, mtu, state, name = match_group
-            results.append({
-                "if_index": if_index,
-                "metric": metric,
-                "mtu": mtu,
-                "state": state,
-                "name": name
-            })
+            if if_index not in results:
+                results[if_index] = {
+                    "if_index": if_index,
+                    "metric": metric,
+                    "mtu": mtu,
+                    "state": state,
+                    "con_name": name
+                }
 
         return [af, "ifs", results]
     
@@ -76,7 +79,7 @@ class NetshParse():
         out = re.findall(p, msg)
         results = {}
         for match_group in out:
-            publish, rtype, metric, prefix, if_index, if_name = match_group
+            publish, rtype, metric, prefix, if_index, con_name = match_group
             if if_index not in results:
                 results[if_index] = []
 
@@ -85,7 +88,7 @@ class NetshParse():
                 "rtype": rtype,
                 "metric": metric,
                 "prefix": prefix,
-                "if_name": if_name
+                "con_name": con_name
             })
 
         return [af, "routes", results]
@@ -98,11 +101,11 @@ class NetshParse():
         out = re.findall(p, msg)
         results = {}
         for match_group in out:
-            mac_addr, ip_addr, ip_type, if_name = match_group
-            if if_name not in results:
-                results[if_name] = []
+            mac_addr, ip_addr, ip_type, con_name = match_group
+            if con_name not in results:
+                results[con_name] = []
 
-            results[if_name].append({
+            results[con_name].append({
                 "mac": mac_addr,
                 "ip": ip_addr,
                 "type": ip_type,
@@ -155,10 +158,17 @@ async def do_netsh_cmds():
                 cmd_val = f"netsh interface {af_val} show {show_val}"
                 tasks.append(helper(af, cmd_val, cmd_vector[0]))
 
+    # Execute all netsh commands concurrently.
     results = await asyncio.gather(*tasks)
+
+    # Combine results to make them easier to process.
     info = {}
     for result in results:
         af, k, v = result
+        if k == "ifs":
+            info["ifs"] = v
+            continue
+
         if k not in info:
             info[k] = {}
 
@@ -166,4 +176,165 @@ async def do_netsh_cmds():
 
     return info
 
-async_test(do_netsh_cmds)
+
+"""
+Net name is very specifically not the interface name or
+its description. Examples of the net name are 'local area network.'
+Examples of an interface name 'Intel ... ethernet v10'.
+
+"""
+def win_con_name_lookup():
+    root_key = winreg.OpenKey(
+        winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\ControlSet001\Control\Network",
+        0,
+        winreg.KEY_READ
+    )
+
+    # Recursively crawl all portions looking for the right field.
+    # Windows loves to make things easy.
+    def recurse_search(root_key, guid=None):
+        results = []
+        for sub_offset in range(0, winreg.QueryInfoKey(root_key)[0]):
+            sub_name = winreg.EnumKey(root_key, sub_offset)
+            sub_key = None
+            try:
+                sub_key = winreg.OpenKey(root_key, sub_name)
+                if sub_name == "Connection":
+                    con_name = winreg.QueryValueEx(sub_key, "Name")[0]
+                    results.append([con_name, guid])
+                else:
+                    if re.match("{[^{}]+}", sub_name) == None:
+                        continue
+
+                    results += recurse_search(
+                        sub_key,
+                        guid=sub_name
+                    )
+            except:
+                pass
+            finally:
+                if sub_key is not None:
+                    sub_key.Close()
+
+        return results
+
+    # Build list of con_name -> guid mappings.
+    results = recurse_search(root_key)
+    root_key.Close()
+
+    # Look up interface names.
+    root_key = winreg.OpenKey(
+        winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkCards",
+        0,
+        winreg.KEY_READ
+    )
+
+    # con_name -> {"guid": ..., "if_name": ...}
+    infos = {}
+    for sub_offset in range(0, winreg.QueryInfoKey(root_key)[0]):
+        sub_name = winreg.EnumKey(root_key, sub_offset)
+        sub_key = None
+        found_guid = found_if_name = ""
+        try:
+            sub_key = winreg.OpenKey(root_key, sub_name)
+            found_guid = winreg.QueryValueEx(sub_key, "ServiceName")[0]
+            found_if_name = winreg.QueryValueEx(sub_key, "Description")[0]
+        except:
+            pass
+        finally:
+            if sub_key is not None:
+                sub_key.Close()
+
+        for result in results:
+            con_name, saved_guid = result
+            if saved_guid == found_guid:
+                infos[con_name] = {
+                    "guid": saved_guid,
+                    "if_name": found_if_name
+                }
+
+    root_key.Close()
+    return infos
+
+def get_cidr_from_route_infos(needle_ip, route_infos):
+    netmask = None
+    cidr = 128
+    for route_info in route_infos:
+        prefix_ip, prefix_cidr = route_info["prefix"].split("/")
+        prefix_cidr = int(prefix_cidr)
+
+        prefix_ipr = IPRange(prefix_ip, cidr=prefix_cidr)
+        masked_needle_net = toggle_host_bits(
+            prefix_ipr.netmask,
+            needle_ip
+        )
+        masked_needle_ipr = IPRange(masked_needle_net, cidr=prefix_cidr)
+        if prefix_ipr == masked_needle_ipr:
+            if prefix_cidr <= cidr:
+                cidr = prefix_cidr
+                netmask = prefix_ipr.netmask
+
+    return [cidr, netmask]
+
+def netsh_get_mac_by_ip(needle_ip, mac_infos):
+    for mac_info in mac_infos:
+        if needle_ip == mac_info["ip"]:
+            return mac_info["mac"]
+
+async def if_infos_from_netsh():
+    con_table = win_con_name_lookup()
+    out = await do_netsh_cmds()
+
+    if_infos = []
+    for if_index in out["ifs"]:
+        if_info = out["ifs"][if_index]
+        con_name = if_info["con_name"]
+
+        addr_info = {IP4: [], IP6: []}
+        for af in [IP4, IP6]:
+            for found_addr in out["addrs"][af][if_index]:
+                cidr, netmask = get_cidr_from_route_infos(
+                    found_addr["addr"],
+                    out["routes"][af][if_index]
+                )
+
+                addr = {
+                    "addr": found_addr["addr"],
+                    "af": af,
+                    "cidr": cidr,
+                    "netmask": netmask
+                }
+                addr_info[af].append(addr)
+
+        if con_name not in con_table:
+            continue
+
+        if con_name not in out["macs"][IP4]:
+            continue
+
+        mac = netsh_get_mac_by_ip()
+
+        result = {
+            "con_name": con_name,
+            "guid": con_table[con_name]["guid"],
+            "name": con_table[con_name]["if_name"],
+            "no": if_index,
+            "mac": out["macs"][IP4][con_name]["mac"],
+            "addr": addr_info,
+            "gws": {
+                IP4: None,
+                IP6: None
+            },
+            "defaults": []
+        }
+
+        if_infos.append(result)
+
+    print(if_infos)
+    return if_infos
+
+class NetshNetifaces():
+    async def start():
+        pass
+
+async_test(if_infos_from_netsh)

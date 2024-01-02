@@ -461,6 +461,8 @@ class Netifaces():
     async def start(self):
         # Use a single script to load all info at once.
         if_infos = await load_ifs_from_ps1()
+        print(if_infos)
+
         self.by_guid_index = {}
         for if_info in if_infos:
             self.by_guid_index[if_info["guid"]] = if_info
