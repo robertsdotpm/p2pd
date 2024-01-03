@@ -271,6 +271,11 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
         log("> STUN skipping get nat port mapping - s = None")
         return ret
 
+    # 
+    log(f"Stun req pipe details: {pipe.sock.getsockname()}, {pipe.route._bind_tups}")
+    log(f"{pipe.sock}")
+    log(f"{tran_info}")
+
     # Init values.
     str_len = to_hs( struct.pack("!h", int(len(extra_data) / 2)) )
     str_data = ''.join([BindRequestMsg, str_len, to_h(tran_info[2]), extra_data])
@@ -289,6 +294,7 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
 
     # Keep trying to get through.
     log("> STUN do request dest = {}:{}".format(*dest_addr.tup))
+    assert(conf["packet_retry"])
     for i in range(0, conf["packet_retry"]):
         try:
             # Send request.
@@ -393,7 +399,9 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
                 )
                 )
         except asyncio.TimeoutError as e:
-            log("> STUN get nat port map.. sendto e = %s, timeout = %s" % (str(e), str(conf["recv_timeout"])))
+            log("> STUN send recv timed out = get nat port map.. sendto e = %s, timeout = %s" % (str(e), str(conf["recv_timeout"])))
+            log_exception()
+            
 
         # Allow other coroutines to do work.
         await asyncio.sleep(0.5)
@@ -472,6 +480,7 @@ async def stun_sub_test(msg, dest, interface, af, proto, source_port, changed, e
     log("> STUN %s" % (msg))
 
     # Set transaction ID if no match function provided.
+    log(f"changed tup for tran info pattern = {changed.tup} {local_addr}._")
     if tran_info is None:
         tran_info = tran_info_patterns(changed.tup)
 
@@ -558,6 +567,7 @@ class STUNClient():
         servers = servers or get_stun_servers(af, proto)
         stun_addr = None
         for server in servers:
+            print(server)
             for i in range(conf["retry_no"]):
                 # Get a valid STUN Address.
                 for j in range(conf["addr_retry"]):

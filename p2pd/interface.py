@@ -199,6 +199,7 @@ class Interface():
 
         # No name specified.
         # Get name of default interface.
+        log(f"Load if info = {self.name}")
         if self.name is None or self.name == "":
             # Windows -- default interface name is a GUID.
             # This is ugly AF.
@@ -209,12 +210,13 @@ class Interface():
                 self.name = iface_name
 
             # Allow blank interface names to be used for testing.
-            log("> default interface loaded")
+            log(f"> default interface loaded = {iface_name}")
 
             # May not be accurate.
             # Start() is the best way to set this.
             if self.stack == DUEL_STACK:
                 self.stack = iface_af
+                log(f"if load changing stack to {self.stack}")
 
         # Windows NIC descriptions are used for the name
         # if the interfaces are detected as all hex.

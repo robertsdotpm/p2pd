@@ -401,7 +401,7 @@ async def if_infos_from_netsh():
             "con_name": con_name,
             "guid": con_table[con_name]["guid"],
             "name": con_table[con_name]["if_name"],
-            "no": if_index,
+            "no": int(if_index),
             "mac": mac,
             "addr": addr_info,
             "gws": gws,
@@ -412,14 +412,3 @@ async def if_infos_from_netsh():
 
     return if_infos
 
-class NetshNetifaces():
-    async def start():
-        pass
-
-async_test(if_infos_from_netsh)
-
-"""
-need to add timeouts to current cmd calls in previous module so
-it cant block everything if a binary isnt available.
-default now
-"""

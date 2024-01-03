@@ -362,13 +362,16 @@ def what_exception():
 
 def log_exception():
     exc_type, exc_obj, exc_tb = sys.exc_info()
-    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-    exc_out = traceback.format_exc()
-    log("> {}, line {} = {}".format(
-        fname,
-        exc_tb.tb_lineno,
-        exc_out
-    ))
+    try:
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        exc_out = traceback.format_exc()
+        log("> {}, line {} = {}".format(
+            fname,
+            exc_tb.tb_lineno,
+            exc_out
+        ))
+    except:
+        pass
 
 async def async_wrap_errors(coro, timeout=None):
     try:
@@ -580,12 +583,7 @@ def selector_event_loop():
     return asyncio.SelectorEventLoop(selector)
 
 def get_loop(loop=None):
-    loop = asyncio.get_event_loop()
-    return loop
     if loop is None:
-        loop = selector_event_loop()
-        print(loop)
-        print("another change")
         if sys.platform == "win32":
             loop = asyncio.ProactorEventLoop()
         else:

@@ -61,10 +61,9 @@ Notes:
 """
 
 import re
-import base64
-import os
 from .ip_range import *
 from .cmd_tools import *
+from .win_netsh import if_infos_from_netsh
 
 CMD_TIMEOUT = 10
 
@@ -121,7 +120,9 @@ Foreach($iface in $ifs){
 
 async def load_ifs_from_ps1():
     # Get all interface details as one big script.
-    out = await ps1_exec_trick(IFS_PS1)
+    out = await asyncio.wait_for(ps1_exec_trick(IFS_PS1), 10)
+    if "InterfaceDescription" not in out:
+        raise Exception("Invalid powershell output for net script.")
 
     # Load default interface by if_index.
     default_ifs = {IP4: None, IP6: None}
@@ -211,7 +212,6 @@ async def load_ifs_from_ps1():
             if len(if_infos):
                 if if_infos[0]["gws"][af] is not None:
                     if_infos[0]["defaults"].append(af)
-
 
     return if_infos
 
@@ -329,12 +329,14 @@ def extract_if_fields(ifs_str):
 # Ignore hidden adapters. Non-physical or down.
 # Specify desc and index to show full entry.
 async def get_ifaces():
-    # ssh -l x win7 cd projects\p2pd\tests
     ps_path = get_powershell_path()
-    print(ps_path)
     try:
-        out = await cmd(f'{ps_path} "Get-NetAdapter -physical | where status -eq up  | Format-List -Property InterfaceDescription,ifIndex,InterfaceGuid,MacAddress"', timeout=CMD_TIMEOUT)
-        print(out)
+        out = await asyncio.wait_for(
+            cmd(f'{ps_path} "Get-NetAdapter -physical | where status -eq up  | Format-List -Property InterfaceDescription,ifIndex,InterfaceGuid,MacAddress"'),
+            CMD_TIMEOUT
+        )
+        if "InterfaceDescription" not in out:
+            raise Exception("Get net adapter error.")
     except Exception:
         log_exception()
         out = ""
@@ -459,8 +461,29 @@ class Netifaces():
         pass
 
     async def start(self):
-        # Use a single script to load all info at once.
-        if_infos = await load_ifs_from_ps1()
+        """
+        At first powershell is attempted to load the network
+        information - however the 'cmdlets' needed for this are
+        only available when the version is >= Windows 8.1.
+        Hence, where this fails, and on older versions the netsh
+        client is used. Netsh is well-supported on older versions
+        but on newer versions its being phased out.
+        """
+        try:
+            if_infos = await asyncio.wait_for(
+                load_ifs_from_ps1(),
+                CMD_TIMEOUT
+            )
+            print("Using powershell networking.")
+            log_exception()
+        except:
+            if_infos = await asyncio.wait_for(
+                if_infos_from_netsh(),
+                CMD_TIMEOUT
+            )
+            print("using netsh networking.")
+            log_exception()
+
         print(if_infos)
 
         self.by_guid_index = {}

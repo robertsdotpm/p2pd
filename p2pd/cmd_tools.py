@@ -151,7 +151,6 @@ def get_powershell_path():
         raise Exception("Cannot find powershell dir.")
     
     ps_dir = os.path.join(ps_dir, version_dir, "powershell.exe")
-    #ps_dir = ps_dir.replace('\\', '\\\\')
     return ps_dir
 
 """
@@ -227,7 +226,9 @@ def powershell_encoded_cmd(ps1):
 
 async def ps1_exec_trick(ps1):
     param = powershell_encoded_cmd(ps1)
-    out = await cmd(f"powershell -encodedCommand {param}", timeout=None)
+    ps_path = get_powershell_path()
+    out = await cmd(f"{ps_path} -encodedCommand {param}", timeout=None)
+    log(out)
     return out
 
 async def is_pshell_restricted():

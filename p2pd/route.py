@@ -672,19 +672,23 @@ at least it only has to be done once.
 async def ipr_is_public(nic_ipr, stun_client, route_infos, stun_conf, is_default=False):
     # Use this IP for bind call.
     src_ip = ip_norm(str(nic_ipr[0]))
-    log(F"src_ip = {src_ip}")
+    log(F"using src_ip = {src_ip}, af = {stun_client.af} for STUN bind!")
     local_addr = await Bind(
         stun_client.interface,
         af=stun_client.af,
         port=0,
         ips=src_ip
     ).res()
+    log(f"Bind obj = {local_addr}")
 
     # Get external IP and compare to bind IP.
     wan_ip = await stun_client.get_wan_ip(
         local_addr=local_addr,
         conf=stun_conf
     )
+    log(f"Stun returned = {wan_ip}")
+    if wan_ip is None:
+        raise Exception("Unable to get wan IP.")
 
     # Record this wan_ip.
     ext_ipr = IPRange(wan_ip, cidr=CIDR_WAN)
@@ -734,17 +738,20 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
     if_addresses = netifaces.ifaddresses(nic_id)
     if netifaces_af in if_addresses:
         bound_addresses = if_addresses[netifaces_af]
+        log(f"Testing {bound_addresses}")
         tasks = []
         first_private = True
         for info in bound_addresses:
             nic_ipr = await netiface_addr_to_ipr(af, info, interface, loop, skip_bind_test)
             log(f"Nic ipr in route = {nic_ipr}")
             if nic_ipr is None:
+                log(f"Nic ipr is None so skipping")
                 continue
 
             # Include link locals in their own set.
             if ip_norm(nic_ipr[0])[:4] == "fe80":
                 link_locals.append(nic_ipr)
+                log(f"Addr is link local so skipping")
                 continue
 
             # All private IPs go to the same route.
@@ -758,7 +765,7 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                     tasks.append(
                         async_wrap_errors(
                             ipr_is_public(nic_ipr, stun_client, route_infos, stun_conf),
-                            timeout=15
+                            timeout=10
                         )
                     )
 
@@ -771,7 +778,7 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                     tasks.append(
                         async_wrap_errors(
                             ipr_is_public(nic_ipr, stun_client, route_infos, stun_conf),
-                            timeout=15
+                            timeout=10
                         )
                     )
                 else:
@@ -791,6 +798,10 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
         # Process pending tasks.
         if len(tasks):
             await asyncio.gather(*tasks)
+
+            # Failure.
+            if not len(route_infos):
+                return [routes, link_locals]
 
             # Choose a random ext address for the default.
             if "default" not in route_infos:
@@ -837,6 +848,7 @@ async def Routes(interface_list, af, netifaces, skip_resolve=False):
     # Copy route pool from Interface if it already exists.
     # Otherwise schedule task to get list of routes.
     for iface in interface_list:
+        log(f"Routes task += {af} {skip_resolve} {netifaces}")
         tasks.append(
             get_routes(iface, af, skip_resolve, netifaces=netifaces)
         )
