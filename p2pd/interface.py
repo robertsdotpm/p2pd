@@ -22,7 +22,7 @@ async def init_p2pd():
     # Setup event loop.
     loop = asyncio.get_event_loop()
     loop.set_debug(False)
-    #loop.set_exception_handler(SelectorEventPolicy.exception_handler)
+    loop.set_exception_handler(SelectorEventPolicy.exception_handler)
     
     def fatal_error(self, exc, message='Fatal error on transport'):
         # Should be called from exception handler only.
@@ -34,7 +34,7 @@ async def init_p2pd():
         })
         self._force_close(exc)
 
-    #asyncio.selector_events._SelectorTransport._fatal_error = fatal_error
+    asyncio.selector_events._SelectorTransport._fatal_error = fatal_error
 
     # Attempt to get monkey patched netifaces.
     netifaces = Interface.get_netifaces()

@@ -559,18 +559,16 @@ async def gather_or_cancel(tasks, timeout):
         return []
 
 class SelectorEventPolicy(asyncio.DefaultEventLoopPolicy):
-    """
     @staticmethod
     def exception_handler(self, context):
         print("exception handler")
         print(context)
-    """
 
     @staticmethod
     def loop_setup(loop):
         loop.set_debug(False)
-        #loop.set_exception_handler(SelectorEventPolicy.exception_handler)
-        #loop.default_exception_handler = SelectorEventPolicy.exception_handler
+        loop.set_exception_handler(SelectorEventPolicy.exception_handler)
+        loop.default_exception_handler = SelectorEventPolicy.exception_handler
 
     def new_event_loop(self):
         selector = selectors.SelectSelector()
@@ -583,6 +581,7 @@ def selector_event_loop():
     return asyncio.SelectorEventLoop(selector)
 
 def get_loop(loop=None):
+    return selector_event_loop()
     if loop is None:
         if sys.platform == "win32":
             loop = asyncio.ProactorEventLoop()
