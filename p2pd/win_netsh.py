@@ -1,11 +1,5 @@
-"""
-gateway and default?
-"""
-
-
 import re
 import asyncio
-import pprint
 import winreg
 
 from .net import *
@@ -124,20 +118,32 @@ class NetshParse():
     @staticmethod
     def show_gws(af, msg):
         p = "[pP]hysical[ ]+[aA]ddress[^:]+:([^\r\n]+)[\r\n][\s\S]+?[dD]efault[ ]+[gG]ateway[^:]+:((?:\s*[a-fA-F0-9:.%]+[\r\n])(?:\s*[a-fA-F0-9:.%]+[\r\n])?)"
-        out = re.findall(p, msg)
-        results = {}
-        for match_group in out:
-            mac, gws = match_group
-            mac = mac.strip().lower()
-            gws = gws.strip()
-            gws = gws.split()
-            af_gws = {IP4: None, IP6: None}
-            for offset in range(0, len(gws)):
-                gw = ip_strip_if(gws[offset])
-                gw_ipr = IPRange(ip=gw)
-                af_gws[gw_ipr.af] = gw
+        sections = msg.split("\r\n\r\n")
 
-            results[mac] = af_gws
+        results = {}
+        for section in sections:
+            out = re.findall(p, section)
+            for match_group in out:
+                mac, gws = match_group
+                mac = mac.strip().lower()
+                gws = gws.strip()
+                gws = gws.split()
+                af_gws = {IP4: None, IP6: None}
+
+                success = False
+                for offset in range(0, len(gws)):
+                    try:
+                        gw = ip_strip_if(gws[offset])
+                        gw_ipr = IPRange(ip=gw)
+                        af_gws[gw_ipr.af] = gw
+                    except:
+                        continue
+                    success = True
+
+                if not success:
+                    continue
+
+                results[mac] = af_gws
 
         return [af, "gws", results]
 
@@ -355,6 +361,7 @@ async def if_infos_from_netsh():
 
         mac = out["macs"][IP4][if_index]["mac"].rstrip().lower()
         if mac not in out["gws"][IP4]:
+            print(mac)
             print(out["gws"][IP4])
             continue
 
@@ -367,7 +374,7 @@ async def if_infos_from_netsh():
             "addr": addr_info,
             "gws": out["gws"][IP4][mac],
 
-            
+
             "defaults": []
         }
 
@@ -385,4 +392,5 @@ async_test(if_infos_from_netsh)
 """
 need to add timeouts to current cmd calls in previous module so
 it cant block everything if a binary isnt available.
+default now
 """
