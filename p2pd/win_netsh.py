@@ -1,3 +1,8 @@
+"""
+gateway and default?
+"""
+
+
 import re
 import asyncio
 import pprint
@@ -93,23 +98,21 @@ class NetshParse():
 
         return [af, "routes", results]
     
-    # netsh interface ipv4 show ipnettomedia
+    # route print
     # Also has ipv6 results.
     @staticmethod
     def show_mac(af, msg):
-        p = "(?:(?=\S*[-:]+\S*)(?=\S*[0-9a-fA-F]+\S*))([0-9a-fA-F-:]+)\s+([^\s]+)\s+([^\s]+)\s+([^\r\n]+)"
+        p = "([0-9]+)[.]{2,}([0-9a-fA-F ]+)[ .]+([^\r\n]+)[\r\n]"
         out = re.findall(p, msg)
         results = {}
         for match_group in out:
-            mac_addr, ip_addr, ip_type, con_name = match_group
-            if con_name not in results:
-                results[con_name] = []
-
-            results[con_name].append({
-                "mac": mac_addr,
-                "ip": ip_addr,
-                "type": ip_type,
-            })
+            if_index, mac, if_name = match_group
+            mac = mac.strip()
+            mac = mac.replace(" ", "-")
+            results[if_index] = {
+                "if_name": if_name,
+                "mac": mac
+            }
 
         return [af, "macs", results]
 
@@ -140,7 +143,7 @@ async def do_netsh_cmds():
         [
             parser.show_mac,
             {
-                IP4: "ipnettomedia",
+                IP4: "route print",
             }
         ]
     ]
@@ -155,7 +158,11 @@ async def do_netsh_cmds():
             if af in cmd_vector[1]:
                 show_val = cmd_vector[1][af]
                 af_val = "ipv4" if af == IP4 else "ipv6"
-                cmd_val = f"netsh interface {af_val} show {show_val}"
+                if show_val == "route print":
+                    cmd_val = "route print"
+                else:
+                    cmd_val = f"netsh interface {af_val} show {show_val}"
+
                 tasks.append(helper(af, cmd_val, cmd_vector[0]))
 
     # Execute all netsh commands concurrently.
@@ -262,6 +269,8 @@ def get_cidr_from_route_infos(needle_ip, route_infos):
     for route_info in route_infos:
         prefix_ip, prefix_cidr = route_info["prefix"].split("/")
         prefix_cidr = int(prefix_cidr)
+        if not prefix_cidr:
+            continue
 
         prefix_ipr = IPRange(prefix_ip, cidr=prefix_cidr)
         masked_needle_net = toggle_host_bits(
@@ -269,31 +278,13 @@ def get_cidr_from_route_infos(needle_ip, route_infos):
             needle_ip
         )
         masked_needle_ipr = IPRange(masked_needle_net, cidr=prefix_cidr)
+
         if prefix_ipr == masked_needle_ipr:
             if prefix_cidr <= cidr:
                 cidr = prefix_cidr
                 netmask = prefix_ipr.netmask
 
     return [cidr, netmask]
-
-def netsh_get_mac_by_ip(addr_infos, mac_infos):
-    for mac_info in mac_infos:
-        print()
-        print(mac_info["ip"])
-        for addr_info in addr_infos:
-            print(addr_info["addr"])
-            if addr_info["addr"] == mac_info["ip"]:
-                return mac_info["mac"]
-            
-    """
-    x@WIN7 P:\p2pd>route print
-    ===========================================================================
-    Interface List
-    11...00 0c 29 73 ec 23 ......Intel(R) PRO/1000 MT Network Connection
-    1...........................Software Loopback Interface 1
-    12...00 00 00 00 00 00 00 e0 Microsoft ISATAP Adapter
-    ===========================================================================
-    """
 
 async def if_infos_from_netsh():
     con_table = win_con_name_lookup()
@@ -326,17 +317,15 @@ async def if_infos_from_netsh():
         if con_name not in con_table:
             continue
 
-        if con_name not in out["macs"][IP4]:
+        if if_index not in out["macs"][IP4]:
             continue
 
-        mac_info = out["macs"][IP4][con_name]
-        mac = netsh_get_mac_by_ip(addr_info[IP4], mac_info)
         result = {
             "con_name": con_name,
             "guid": con_table[con_name]["guid"],
             "name": con_table[con_name]["if_name"],
             "no": if_index,
-            "mac": mac,
+            "mac": out["macs"][IP4][if_index]["mac"],
             "addr": addr_info,
             "gws": {
                 IP4: None,
@@ -355,3 +344,8 @@ class NetshNetifaces():
         pass
 
 async_test(if_infos_from_netsh)
+
+"""
+need to add timeouts to current cmd calls in previous module so
+it cant block everything if a binary isnt available.
+"""
