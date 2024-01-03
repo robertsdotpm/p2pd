@@ -272,13 +272,15 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
         return ret
 
     # 
-    log(f"Stun req pipe details: {pipe.sock.getsockname()}, {pipe.route._bind_tups}")
+    log(f"Stun req pipe details: {pipe.sock.getsockname()}, {pipe.route._bind_tups} to {dest_addr.tup}")
     log(f"{pipe.sock}")
     log(f"{tran_info}")
 
     # Init values.
     str_len = to_hs( struct.pack("!h", int(len(extra_data) / 2)) )
     str_data = ''.join([BindRequestMsg, str_len, to_h(tran_info[2]), extra_data])
+
+
     data = binascii.a2b_hex(str_data)
     recvCorr = False
     recieved = False
@@ -480,7 +482,7 @@ async def stun_sub_test(msg, dest, interface, af, proto, source_port, changed, e
     log("> STUN %s" % (msg))
 
     # Set transaction ID if no match function provided.
-    log(f"changed tup for tran info pattern = {changed.tup} {local_addr}._")
+    log(f"changed tup for tran info pattern = {changed.tup} {local_addr._bind_tups}")
     if tran_info is None:
         tran_info = tran_info_patterns(changed.tup)
 
