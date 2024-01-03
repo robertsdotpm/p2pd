@@ -15,6 +15,7 @@ from .ip_range import IPRange
 class NetshParse():
     # netsh interface ipv4 show interfaces
     # netsh interface ipv6 show interfaces
+    # if_index: 
     @staticmethod
     def show_interfaces(af, msg):
         p = "([0-9]+)\s+([0-9]+)\s+([0-9]+)\s+([a-z0-9]+)\s+([^\r\n]+)"
@@ -35,6 +36,7 @@ class NetshParse():
     
     # netsh interface ipv4 show ipaddresses
     # netsh interface ipv6 show addresses
+    # if_index: ...
     @staticmethod
     def show_addresses(af, msg):
         msg = re.sub("%[0-9]+", "", msg)
@@ -100,6 +102,7 @@ class NetshParse():
     
     # route print
     # Also has ipv6 results.
+    # if_index: ... if_name, mac
     @staticmethod
     def show_mac(af, msg):
         p = "([0-9]+)[.]{2,}([0-9a-fA-F ]+)[ .]+([^\r\n]+)[\r\n]"
@@ -107,7 +110,7 @@ class NetshParse():
         results = {}
         for match_group in out:
             if_index, mac, if_name = match_group
-            mac = mac.strip()
+            mac = mac.strip().lower()
             mac = mac.replace(" ", "-")
             results[if_index] = {
                 "if_name": if_name,
@@ -115,6 +118,28 @@ class NetshParse():
             }
 
         return [af, "macs", results]
+    
+    # ipconfig /all
+    # mac: {ip4: ..., IP6: ...}
+    @staticmethod
+    def show_gws(af, msg):
+        p = "[pP]hysical[ ]+[aA]ddress[^:]+:([^\r\n]+)[\r\n][\s\S]+?[dD]efault[ ]+[gG]ateway[^:]+:((?:\s*[a-fA-F0-9:.%]+[\r\n])(?:\s*[a-fA-F0-9:.%]+[\r\n])?)"
+        out = re.findall(p, msg)
+        results = {}
+        for match_group in out:
+            mac, gws = match_group
+            mac = mac.strip().lower()
+            gws = gws.strip()
+            gws = gws.split()
+            af_gws = {IP4: None, IP6: None}
+            for offset in range(0, len(gws)):
+                gw = ip_strip_if(gws[offset])
+                gw_ipr = IPRange(ip=gw)
+                af_gws[gw_ipr.af] = gw
+
+            results[mac] = af_gws
+
+        return [af, "gws", results]
 
 async def do_netsh_cmds():
     parser = NetshParse()
@@ -144,7 +169,15 @@ async def do_netsh_cmds():
             parser.show_mac,
             {
                 IP4: "route print",
-            }
+            },
+            False
+        ],
+        [
+            parser.show_gws,
+            {
+                IP4: "ipconfig /all",
+            },
+            False
         ]
     ]
 
@@ -158,8 +191,8 @@ async def do_netsh_cmds():
             if af in cmd_vector[1]:
                 show_val = cmd_vector[1][af]
                 af_val = "ipv4" if af == IP4 else "ipv6"
-                if show_val == "route print":
-                    cmd_val = "route print"
+                if len(cmd_vector) > 2:
+                    cmd_val = show_val
                 else:
                     cmd_val = f"netsh interface {af_val} show {show_val}"
 
@@ -320,17 +353,21 @@ async def if_infos_from_netsh():
         if if_index not in out["macs"][IP4]:
             continue
 
+        mac = out["macs"][IP4][if_index]["mac"].rstrip().lower()
+        if mac not in out["gws"][IP4]:
+            print(out["gws"][IP4])
+            continue
+
         result = {
             "con_name": con_name,
             "guid": con_table[con_name]["guid"],
             "name": con_table[con_name]["if_name"],
             "no": if_index,
-            "mac": out["macs"][IP4][if_index]["mac"],
+            "mac": mac,
             "addr": addr_info,
-            "gws": {
-                IP4: None,
-                IP6: None
-            },
+            "gws": out["gws"][IP4][mac],
+
+            
             "defaults": []
         }
 
