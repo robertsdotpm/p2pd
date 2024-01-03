@@ -101,7 +101,7 @@ class NetshParse():
     def show_mac(af, msg):
         p = "([0-9]+)[.]{2,}([0-9a-fA-F ]+)[ .]+([^\r\n]+)[\r\n]"
         out = re.findall(p, msg)
-        results = {}
+        results = {"default": {IP4: None, IP6: None}}
         for match_group in out:
             if_index, mac, if_name = match_group
             mac = mac.strip().lower()
@@ -109,6 +109,25 @@ class NetshParse():
             results[if_index] = {
                 "if_name": if_name,
                 "mac": mac
+            }
+
+        # Setup entries for default gateways IP4.
+        p = "0[.]0[.]0[.]0\s+0[.]0[.]0[.]0\s+([^\s]+)\s+([^\s]+)\s+[0-9]+"
+        out = re.findall(p, msg)
+        if len(out):
+            gw_ip, if_ip = out[0]
+            results["default"][IP4] = {
+                "gw_ip": gw_ip.strip(),
+                "if_ip": if_ip.strip()
+            }
+
+        # Setup entries for default gateways IP6.
+        p = "[0-9]+\s+[0-9]+\s+::\/0\s+([^\s]+)"
+        out = re.findall(p, msg)
+        if len(out):
+            gw_ip = out[0]
+            results["default"][IP6] = {
+                "gw_ip": gw_ip.strip()
             }
 
         return [af, "macs", results]
@@ -361,9 +380,22 @@ async def if_infos_from_netsh():
 
         mac = out["macs"][IP4][if_index]["mac"].rstrip().lower()
         if mac not in out["gws"][IP4]:
-            print(mac)
-            print(out["gws"][IP4])
             continue
+        gws = out["gws"][IP4][mac]
+
+        # Determine if interface isdefault for any AF.
+        defaults = []
+        for test_af in [IP4, IP6]:
+            af_default = out["macs"][IP4]["default"][test_af]
+            if af_default is None:
+                continue
+
+            af_gw = gws[test_af]
+            if af_gw is None:
+                continue
+
+            if IPRange(af_gw) == IPRange(af_default["gw_ip"]):
+                defaults.append(test_af)
 
         result = {
             "con_name": con_name,
@@ -372,15 +404,12 @@ async def if_infos_from_netsh():
             "no": if_index,
             "mac": mac,
             "addr": addr_info,
-            "gws": out["gws"][IP4][mac],
-
-
-            "defaults": []
+            "gws": gws,
+            "defaults": defaults
         }
 
         if_infos.append(result)
 
-    print(if_infos)
     return if_infos
 
 class NetshNetifaces():
