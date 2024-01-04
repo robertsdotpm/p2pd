@@ -27,17 +27,18 @@ P2PD_NET_ADDR_BYTES = b'0,3-[0,149.56.128.148,149.56.128.148,10001,1,1,0]-[0,260
 # Otherwise the name (probably) won't exist.
 P2PD_IFS = []
 
-vmaj, vmin, _ = platform.python_version_tuple()
-vmaj = int(vmaj); vmin = int(vmin)
-if vmaj < 3:
-    raise Exception("Python 2 not supported.")
-if vmin <= 4:
-    raise Exception("Project needs >= 3.5")
+def test_init_main():
+    vmaj, vmin, _ = platform.python_version_tuple()
+    vmaj = int(vmaj); vmin = int(vmin)
+    if vmaj < 3:
+        raise Exception("Python 2 not supported.")
+    if vmin <= 4:
+        raise Exception("Project needs >= 3.5")
 
-if not hasattr(unittest, "IsolatedAsyncioTestCase"):
-    log("patching isolated asyncio test case")
-    import aiounittest
-    unittest.IsolatedAsyncioTestCase = aiounittest.AsyncTestCase
+    if not hasattr(unittest, "IsolatedAsyncioTestCase"):
+        log("patching isolated asyncio test case")
+        import aiounittest
+        unittest.IsolatedAsyncioTestCase = aiounittest.AsyncTestCase
 
 
 class PatchedAsyncTest(unittest.IsolatedAsyncioTestCase):

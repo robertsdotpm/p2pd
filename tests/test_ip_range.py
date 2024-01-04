@@ -1,6 +1,5 @@
-from p2pd.test_init import *
-from p2pd import IPRange
-from p2pd.net import BLACK_HOLE_IPS, ip_norm
+from p2pd import *
+test_init_main()
 
 class TestIPRange(unittest.IsolatedAsyncioTestCase):
     async def test_ip_range_iter(self):

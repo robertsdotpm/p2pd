@@ -1,9 +1,5 @@
-from p2pd.test_init import *
-from p2pd.net import *
-from p2pd.interface import *
-from p2pd.base_stream import *
-from p2pd.rest_api import *
-from p2pd.http_client_lib import *
+from p2pd import *
+test_init_main()
 
 class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
     async def test_p2pd_server(self):

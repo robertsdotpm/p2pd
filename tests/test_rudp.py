@@ -1,9 +1,5 @@
-from p2pd.test_init import *
-from p2pd import IPRange, HOST_TYPE_IP, HOST_TYPE_DOMAIN, Address
-from p2pd import IP6, IP4, Route, Interface
-from p2pd.net import ip_norm, RUDP, UDP, NET_CONF
-from p2pd.base_stream import pipe_open, SUB_ALL, BaseProto
-from p2pd.ack_udp import ACKUDP, BaseACKProto
+from p2pd import *
+test_init_main()
 
 class TestRUDP(unittest.IsolatedAsyncioTestCase):
     async def test_rudp(self):

@@ -1,6 +1,5 @@
-from p2pd.test_init import *
 from p2pd import *
-import re
+test_init_main()
 
 """
 All of the Python code used in the documentation gets tested

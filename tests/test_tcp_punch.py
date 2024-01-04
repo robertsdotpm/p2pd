@@ -1,11 +1,8 @@
-import asyncio
-from p2pd.test_init import *
-from p2pd.p2p_node import *
-from p2pd.p2p_utils import *
-import multiprocessing
 from decimal import Decimal as Dec
+from p2pd import *
 
-asyncio.set_event_loop_policy(SelectorEventPolicy())
+test_init_main()
+
 class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
     async def test_map_info_to_their_maps(self):
         map_info = {

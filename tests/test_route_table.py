@@ -1,10 +1,7 @@
-from p2pd.test_init import *
 import platform
 import multiprocessing
-from p2pd.net import VALID_AFS
-from p2pd.cmd_tools import *
-from p2pd import Interface, IP4, IP6
-from p2pd.route_table import is_internet_if, get_route_table
+from p2pd import *
+test_init_main()
 
 RELATED_PLATFORMS = ["Linux", "Darwin", "FreeBSD"]
 

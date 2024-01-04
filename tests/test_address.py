@@ -1,7 +1,5 @@
-from p2pd.test_init import *
-from p2pd import Address, HOST_TYPE_IP, HOST_TYPE_DOMAIN
-from p2pd import IP6, IP4
-from p2pd import Interface
+from p2pd import *
+test_init_main()
 
 class TestIPRange(unittest.IsolatedAsyncioTestCase):
     async def test_domain_resolve(self):

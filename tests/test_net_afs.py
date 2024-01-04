@@ -3,19 +3,13 @@ nc -4 -u p2pd.net 7
 
 """
 
-from p2pd.test_init import *
+
 try:
     from .static_route import *
 except:
     from static_route import *
-from p2pd.utils import what_exception, log_exception
-from p2pd import IPRange, Bind, Route, Interface, pipe_open
-from p2pd import Address
-from p2pd.net import BLACK_HOLE_IPS, ip_norm, DUEL_STACK, IP6, IP4
-from p2pd.net import NIC_BIND, EXT_BIND, VALID_AFS, TCP, UDP
-from p2pd.base_stream import SUB_ALL
-
-asyncio.set_event_loop_policy(SelectorEventPolicy())
+from p2pd import *
+test_init_main()
 
 class TestAFsWork(unittest.IsolatedAsyncioTestCase):
     async def test_afs(self):

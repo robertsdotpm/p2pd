@@ -1,7 +1,5 @@
-from p2pd.test_init import *
-from p2pd.settings import *
-from p2pd.signaling import SignalMock
-from p2pd.utils import rand_plain, to_s
+from p2pd import *
+test_init_main()
 
 class TestSignaling(unittest.IsolatedAsyncioTestCase):
     async def test_node_signaling(self):

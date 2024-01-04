@@ -1,9 +1,5 @@
-import multiprocessing
-from p2pd.test_init import *
-from p2pd.base_stream import *
-from p2pd.turn_defs import *
-from p2pd.turn_client import *
-from p2pd.http_client_lib import *
+from p2pd import *
+test_init_main()
 
 async def get_turn_client(af, interface, turn_offset):
     # Get a route for this interface.

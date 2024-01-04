@@ -3,21 +3,14 @@ nc -4 -u p2pd.net 7
 
 """
 
-from p2pd.test_init import *
+
 try:
     from .static_route import *
 except:
     from static_route import *
 import os
-from p2pd.utils import log_exception, what_exception
-from p2pd import STUNClient, Interface
-from p2pd.settings import *
-from p2pd.net import VALID_AFS, TCP, UDP
-from p2pd.nat import *
-from p2pd.base_stream import pipe_open, SUB_ALL, BaseProto
-from p2pd.stun_client import tran_info_patterns, do_stun_request
-from p2pd.stun_client import changeRequest, changePortRequest
-from p2pd.ip_range import IPRange
+from p2pd import *
+test_init_main()
 
 env = os.environ.copy()
 class TestStunClient(unittest.IsolatedAsyncioTestCase):

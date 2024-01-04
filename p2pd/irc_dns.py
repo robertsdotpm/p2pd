@@ -1207,7 +1207,8 @@ and lookups using IRC. Has a list of 'sessions' representing different
 IRC servers and some simple limits that determine success.
 """
 class IRCDNS():
-    def __init__(self, i, seed, servers, executor=None, clsChan=IRCChan, clsSess=IRCSession, do_shuffle=True):
+    def __init__(self, i, seed, servers, executor=None, clsChan=IRCChan, clsSess=IRCSession, do_shuffle=True, freshness_check=True):
+        self.freshness_check = freshness_check
         self.i = i
         self.seed = seed
         self.sessions = {}
@@ -1289,13 +1290,15 @@ class IRCDNS():
             return len(self.servers)
         
         # Exclude servers that have been offline a long time.
-        count = 0; start = time.time()
-        for n in range(0, len(self.servers)):
-            last_started_key = f"{self.servers[n]['domain']}/last_started"
-            last_started = await self.db.get(last_started_key, start)
-            duration = start - last_started
-            if duration < IRC_FRESHNESS:
-                count += 1
+        count = len(self.servers)
+        if self.freshness_check:
+            count = 0; start = time.time()
+            for n in range(0, len(self.servers)):
+                last_started_key = f"{self.servers[n]['domain']}/last_started"
+                last_started = await self.db.get(last_started_key, start)
+                duration = start - last_started
+                if duration < IRC_FRESHNESS:
+                    count += 1
 
         return count
 

@@ -14,9 +14,8 @@
         return
 """
 
-import pprint
-from p2pd.test_init import *
 from p2pd import *
+test_init_main()
 
 IRC_SEED = b"123" * 30
 IRC_SERV_INFO = {
@@ -262,7 +261,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             clsChan=MockIRCChan,
             servers=servers,
             executor=executor,
-            do_shuffle=False
+            do_shuffle=False,
+            freshness_check=False
         ).start()
 
         # Sanity checks on length.
@@ -299,7 +299,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             clsChan=MockIRCChan,
             servers=servers,
             executor=executor,
-            do_shuffle=False
+            do_shuffle=False,
+            freshness_check=False
         ).start()
 
         await ircdns.start_n(2)
@@ -321,7 +322,6 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
 
         assert(irc_is_valid_chan_name(dns_hash))
         assert(len(dns_hash) <= 32)
-
         assert(await ircdns.get_server_len() == len(servers))
         assert(await ircdns.get_register_failure_max() == 2)
 
@@ -423,7 +423,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
             executor=executor,
-            do_shuffle=False
+            do_shuffle=False,
+            freshness_check=False
         ).start()
 
 
@@ -482,7 +483,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
             executor=executor,
-            do_shuffle=False
+            do_shuffle=False,
+            freshness_check=False
         ).start()
 
         await ircdns.start_n(len(IRC_TEST_SERVERS_SEVEN))
@@ -542,7 +544,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
             executor=executor,
-            do_shuffle=False
+            do_shuffle=False,
+            freshness_check=False
         ).start()
 
         dns_name = "dns_name8"; dns_tld = "dns_tld8"
@@ -591,7 +594,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
             executor=executor,
-            do_shuffle=False
+            do_shuffle=False,
+            freshness_check=False
         ).start()
 
         dns_name = "p2pd_test3"
@@ -616,7 +620,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
             executor=executor,
-            do_shuffle=False
+            do_shuffle=False,
+            freshness_check=False
         ).start()
 
         ret, _ = await ircdns.name_register("test_name4", "tld4")
@@ -668,7 +673,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
             executor=executor,
-            do_shuffle=False
+            do_shuffle=False,
+            freshness_check=False
         ).start()
         await ircdns.start_n(len(IRC_TEST_SERVERS_SEVEN))
 
@@ -776,7 +782,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
             executor=executor,
-            do_shuffle=False
+            do_shuffle=False,
+            freshness_check=False
         ).start()
 
         dns_name = "dns_name9"; dns_tld = "dns_tld9"
@@ -813,7 +820,8 @@ class TestIRCDNS(unittest.IsolatedAsyncioTestCase):
             clsChan=MockIRCChan,
             servers=IRC_TEST_SERVERS_SEVEN,
             executor=executor,
-            do_shuffle=False
+            do_shuffle=False,
+            freshness_check=False
         ).start()
 
         # Start only a single session at offset 0.

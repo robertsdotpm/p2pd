@@ -1,7 +1,5 @@
-from p2pd.test_init import *
-import random
-from p2pd.clock_skew import *
-from p2pd.settings import *
+from p2pd import *
+test_init_main()
 
 class TestClockSkew(unittest.IsolatedAsyncioTestCase):
     async def test_get_ntp_pool_ntp(self):

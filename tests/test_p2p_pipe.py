@@ -1,17 +1,9 @@
-from p2pd.test_init import *
-
 import warnings
 import socket
-import multiprocessing
-from decimal import Decimal as Dec
-from p2pd.utils import *
-from p2pd.p2p_addr import is_p2p_addr_us
-from p2pd.p2p_node import *
-from p2pd.p2p_utils import *
-from p2pd.p2p_pipe import *
-from p2pd.interface import *
+from p2pd import *
+test_init_main()
 
-asyncio.set_event_loop_policy(SelectorEventPolicy())
+
 async def test_setup(netifaces=None, ifs=None):
     # Suppress socket unclosed warnings.
     if not hasattr(test_setup, "netifaces"):

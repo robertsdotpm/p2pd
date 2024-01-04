@@ -1,13 +1,6 @@
-from p2pd.test_init import *
-from p2pd import IP6, IP4, Route, Interface
-from p2pd.net import AF_ANY, VALID_AFS, VALID_ANY_ADDR
-from p2pd.errors import *
-from p2pd.nat import nat_info
-from p2pd.utils import what_exception
-from p2pd.interface import load_interfaces, filter_trash_interfaces
-from p2pd.interface import if_list_to_dict, dict_to_if_list
+from p2pd import *
+test_init_main()
 
-asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestInterface(unittest.IsolatedAsyncioTestCase):
     # Should find at least a valid iface on whatever OS.
     async def test_default_interface(self):

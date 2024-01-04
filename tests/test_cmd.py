@@ -2,8 +2,8 @@ import platform
 import sys
 import os
 import multiprocessing
-from p2pd.test_init import *
-from p2pd.cmd_tools import *
+from p2pd import *
+test_init_main()
 
 
 class TestCmd(unittest.IsolatedAsyncioTestCase):
@@ -181,5 +181,4 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(out in (True, False))
 
 if __name__ == '__main__':
-    multiprocessing.set_start_method("spawn")
     main()

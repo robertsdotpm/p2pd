@@ -19,11 +19,12 @@ if __name__ != '__main__':
     from .turn_client import TURNClient
     from .tcp_punch import TCPPunch
     from .daemon import Daemon
+    from .echo_server import *
     from .http_client_lib import http_req, ParseHTTPResponse, WebCurl
     from .http_client_lib import http_req_buf
     from .http_server_lib import rest_service, send_json, send_binary, RESTD, api_route_closure
     from .http_server_lib import ParseHTTPRequest
-    from .rest_api import P2PDServer, start_p2pd_server
+    from .rest_api import P2PDServer, start_p2pd_server, P2PD_PORT
     from .p2p_addr import *
     from .p2p_pipe import *
     from .p2p_node import P2PNode
@@ -33,5 +34,6 @@ if __name__ != '__main__':
     from .toxiserver import ToxiMainServer
     from .sqlite_kvs import SqliteKVS
     from .irc_dns import *
+    from .test_init import *
 
 

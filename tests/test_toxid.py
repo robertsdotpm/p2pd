@@ -1,11 +1,5 @@
-import platform
-from p2pd.test_init import *
-from p2pd.utils import *
-from p2pd.net import VALID_AFS
-from p2pd.win_netifaces import *
-from p2pd.echo_server import *
-from p2pd.toxiclient import *
-from p2pd.toxiserver import *
+from p2pd import *
+test_init_main()
 
 streams = lambda: [ToxiToxic().downstream(), ToxiToxic().upstream()]
 

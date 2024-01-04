@@ -1,9 +1,6 @@
-from p2pd.test_init import *
-from p2pd.address import *
-from p2pd.net import *
-from p2pd.interface import *
-from p2pd.stun_client import *
-import socket
+from p2pd import *
+test_init_main()
+
 class TestSock(unittest.IsolatedAsyncioTestCase):
     async def test_reuse_port(self):
         s1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

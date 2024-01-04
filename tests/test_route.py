@@ -1,9 +1,5 @@
-from p2pd.test_init import *
-from p2pd import IPRange, HOST_TYPE_IP, HOST_TYPE_DOMAIN
-from p2pd import IP6, IP4, Route
-from p2pd.interface import Interface
-from p2pd.net import Bind, cidr_to_netmask
-from p2pd.route import *
+from p2pd import *
+test_init_main()
 
 class TestRoute(unittest.IsolatedAsyncioTestCase):
     async def test_invalid_wan(self):

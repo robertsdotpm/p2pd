@@ -1,7 +1,5 @@
-from p2pd.test_init import *
-from p2pd import IPRange, Bind, Route, Interface
-from p2pd.net import BLACK_HOLE_IPS, ip_norm, DUEL_STACK, IP6, IP4
-from p2pd.net import NIC_BIND, EXT_BIND, TCP, socket_factory
+from p2pd import *
+test_init_main()
 
 class TestBind(unittest.IsolatedAsyncioTestCase):
     async def test_bind_closure(self):

@@ -1,10 +1,6 @@
 import uuid
-from p2pd.test_init import *
-from p2pd.http_client_lib import *
-
-
-asyncio.set_event_loop_policy(SelectorEventPolicy())
-
+from p2pd import *
+test_init_main()
 
 class TestHTTPClientLib(unittest.IsolatedAsyncioTestCase):
     # Should break as chunked is not supported.

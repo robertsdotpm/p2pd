@@ -1,12 +1,5 @@
-from p2pd.test_init import *
-from p2pd import IPRange, HOST_TYPE_IP, HOST_TYPE_DOMAIN
-from p2pd import IP6, IP4, Route, Interface
-from p2pd.net import VALID_AFS, ip_norm, TCP, UDP, Bind
-from p2pd.echo_server import EchoServer
-from p2pd.base_stream import pipe_open, SUB_ALL
-from p2pd.address import Address
-from p2pd.utils import what_exception
-from p2pd.daemon import Daemon
+from p2pd import *
+test_init_main()
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestDaemon(unittest.IsolatedAsyncioTestCase):
