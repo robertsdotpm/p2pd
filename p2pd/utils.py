@@ -74,19 +74,6 @@ def proactorfy(self=None):
 
     return loop
 
-if sys.platform == 'win32':
-    # Won't work on older Python < 3.6.
-    try:
-        #log("Calling proactorfy to use proactoreventpolicy")
-        #proactorfy()
-
-        # Only available on later Python versions.
-        #asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-        pass
-    except Exception:
-        pass
-
-
 
 STATUS_RETRY = 1
 STATUS_SUCCESS = 2
