@@ -19,8 +19,27 @@ import selectors
 import copy
 import hashlib
 
+if "P2PD_DEBUG" in os.environ: 
+    IS_DEBUG = 1
+    logging.basicConfig(
+        filename='program.log',
+        level=logging.DEBUG,
+        format='[%(asctime)s.%(msecs)03d] @ [%(filename)s:%(lineno)d] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    def log(m):
+        if "P2PD_DEBUG" not in os.environ:
+            return
+
+        logging.info(m)
+else:
+    IS_DEBUG = 0
+    log = lambda m: None
+
 # Yoloswaggins.
 if not hasattr(asyncio, 'create_task'):
+    log("No create_task, using ensure future instead.")
     asyncio.create_task = asyncio.ensure_future
 
 vmaj, vmin, _ = platform.python_version_tuple()
@@ -58,30 +77,16 @@ def proactorfy(self=None):
 if sys.platform == 'win32':
     # Won't work on older Python < 3.6.
     try:
-        proactorfy()
+        #log("Calling proactorfy to use proactoreventpolicy")
+        #proactorfy()
 
         # Only available on later Python versions.
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        #asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        pass
     except Exception:
         pass
 
-if "P2PD_DEBUG" in os.environ: 
-    IS_DEBUG = 1
-    logging.basicConfig(
-        filename='program.log',
-        level=logging.DEBUG,
-        format='[%(asctime)s.%(msecs)03d] @ [%(filename)s:%(lineno)d] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
 
-    def log(m):
-        if "P2PD_DEBUG" not in os.environ:
-            return
-
-        logging.info(m)
-else:
-    IS_DEBUG = 0
-    log = lambda m: None
 
 STATUS_RETRY = 1
 STATUS_SUCCESS = 2

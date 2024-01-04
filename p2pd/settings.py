@@ -193,16 +193,30 @@ STUND_SERVERS = {
         },
     ],
     IP6: [
-
         {
-            "host": "stunserver.stunprotocol.org",
-            "primary": {"ip": "2600:1f16:8c5:101:80b:b58b:828:8df4", "port": 3478},
-            "secondary": {"ip": "2600:1f16:08c5:0101:6388:1fb6:8b7e:00c2", "port": 3479},
+            "host": "p2pd.net",
+            "primary": {"ip": "2a01:4f9:3081:50d9::2", "port": 3478},
+            "secondary": {"ip": "2a01:4f9:3081:50d9::3", "port": 3479},
         },
+        
     ]
 }
 
 """
+            "host": "stunserver.stunprotocol.org",
+            "primary": {"ip": "2600:1f16:8c5:101:80b:b58b:828:8df4", "port": 3478},
+            "secondary": {"ip": "2600:1f16:08c5:0101:6388:1fb6:8b7e:00c2", "port": 3479},
+        },
+        {
+            "host": "stun.hot-chilli.net",
+            "primary": {"ip": "2a01:4f8:242:56ca::2", "port": 3478},
+            "secondary": {"ip": "2a01:04f8:0242:56ca:0000:0000:0000:0003", "port": 3479},
+        },
+        {
+            "host": "stun.simlar.org",
+            "primary": {"ip": "2a02:f98:0:50:2ff:23ff:fe42:1b23", "port": 3478},
+            "secondary": {"ip": "2a02:0f98:0000:0050:02ff:23ff:fe42:1b24", "port": 3479},
+        },
 {
     "host": "stunserver.stunprotocol.org",
     "primary": {"ip": "2600:1f16:8c5:101:80b:b58b:828:8df4", "port": 3478},
