@@ -73,12 +73,13 @@ from p2pd import *
 if platform.system() == "Windows":
     class TestWinNetifaces(unittest.IsolatedAsyncioTestCase):
         
-        try:
-            async def test_get_interfaces(self):
+        async def test_win_netifaces_ps(self):
+            try:
+                # test_get_interfaces(self):
                 out = await get_ifaces()
                 self.assertTrue(out != "")
 
-            async def test_get_default_interface_by_if(self):
+                #test_get_default_interface_by_if(self):
                 found_one = False
                 for af in VALID_AFS:
                     out = await get_default_iface_by_af(af)
@@ -88,12 +89,12 @@ if platform.system() == "Windows":
 
                 self.assertTrue(found_one)
 
-            async def test_extract_if_fields(self):
+                # async def test_extract_if_fields(self):
                 out = await get_ifaces()
                 results = extract_if_fields(out)
                 self.assertTrue(len(results))
 
-            async def test_get_addr_info_by_if_index(self):
+                # async def test_get_addr_info_by_if_index(self):
                 out = await get_ifaces()
                 result = extract_if_fields(out)[0]
                 out = await get_addr_info_by_if_index(result["no"])
@@ -106,7 +107,7 @@ if platform.system() == "Windows":
 
                 self.assertTrue(found_one)
 
-            async def test_get_default_gw_by_if_index(self):
+                # async def test_get_default_gw_by_if_index(self):
                 out = await get_ifaces()
                 result = extract_if_fields(out)[0]
                 
@@ -119,7 +120,7 @@ if platform.system() == "Windows":
 
                 self.assertTrue(found_one)
 
-            async def test_win_load_interface_state(self):
+                # async def test_win_load_interface_state(self):
                 out = await get_ifaces()
                 results = extract_if_fields(out)
                 out = await win_load_interface_state(results)
@@ -128,9 +129,9 @@ if platform.system() == "Windows":
                 # Should find at least one default gateway.
                 gws = win_set_gateways(out)
                 self.assertTrue(gws["default"] != {})
-        except:
-            log("test win ifaces failed using powershell code. Possible failure.")
-            log_exception()
+            except:
+                log("test win ifaces failed using powershell code. Possible failure.")
+                log_exception()
 
         async def test_win_netifaces_class(self):
             n = await Netifaces().start()
