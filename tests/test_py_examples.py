@@ -1,3 +1,4 @@
+import os
 from p2pd import *
 
 
@@ -5,13 +6,21 @@ from p2pd import *
 All of the Python code used in the documentation gets tested
 using this module. Easy to know if examples still work.
 """
-
-EXAMPLES_DIR = "../docs/source/python/examples"
+parent_dir = os.path.dirname(__file__)
+EXAMPLES_DIR = os.path.join(
+    parent_dir,
+    "../",
+    "docs/",
+    "source/",
+    "python/",
+    "examples/"
+)
 
 class TestPyExamples(unittest.IsolatedAsyncioTestCase):
     async def do_py_example(self, n):
         print(n)
-        with open(f"{EXAMPLES_DIR}/example_{n}.py") as fp:
+        py_path = os.path.join(EXAMPLES_DIR, f"example_{n}.py")
+        with open(py_path) as fp:
             py_code = fp.read()
 
             # Event loop is already running so replace
