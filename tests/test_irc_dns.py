@@ -50,6 +50,8 @@ IRC_TEST_SERVERS_SEVEN = [
     {"domain": "g", "chan_expiry": 14, "nick_expiry": 14},
 ]
 
+executor = ProcessPoolExecutor()
+
 class MockIRCChan(IRCChan):
     async def set_topic(self, topic):
         self.pending_topic = topic
