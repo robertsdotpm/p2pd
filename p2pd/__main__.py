@@ -25,7 +25,7 @@ class AsyncIOInteractiveConsole(code.InteractiveConsole):
 
     def __init__(self, locals, loop):
         super().__init__(locals)
-        #self.compile.compiler.flags |= ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
+        self.compile.compiler.flags |= ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
 
         self.loop = loop
 
