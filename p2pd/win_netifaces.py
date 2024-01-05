@@ -101,7 +101,7 @@ Foreach($iface in $ifs){
     }
 
     # Build a list of IPs.
-    $ips = [System.Collections.ArrayList]::new()
+    $ips = @()
     $addrs = Get-NetIPAddress -InterfaceIndex $iface.ifIndex
     Foreach($addr in $addrs){
         $ips += $addr.IPAddress
@@ -123,6 +123,8 @@ async def load_ifs_from_ps1():
     out = await asyncio.wait_for(ps1_exec_trick(IFS_PS1), 10)
     if "InterfaceDescription" not in out:
         raise Exception("Invalid powershell output for net script.")
+    if "MethodNotFound" in out:
+        raise Exception("Unknown error with powershell.")
 
     # Load default interface by if_index.
     default_ifs = {IP4: None, IP6: None}
