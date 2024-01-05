@@ -9,7 +9,7 @@ try:
 except:
     from static_route import *
 from p2pd import *
-test_init_main()
+
 
 class TestAFsWork(unittest.IsolatedAsyncioTestCase):
     async def test_afs(self):

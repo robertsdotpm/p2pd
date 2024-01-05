@@ -1,5 +1,5 @@
 from p2pd import *
-test_init_main()
+
 
 class TestRUDP(unittest.IsolatedAsyncioTestCase):
     async def test_rudp(self):

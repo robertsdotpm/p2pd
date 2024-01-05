@@ -1,5 +1,5 @@
 from p2pd import *
-test_init_main()
+
 
 class TestBind(unittest.IsolatedAsyncioTestCase):
     async def test_bind_closure(self):

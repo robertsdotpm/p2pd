@@ -1,7 +1,7 @@
 import warnings
 import socket
 from p2pd import *
-test_init_main()
+
 
 
 async def test_setup(netifaces=None, ifs=None):

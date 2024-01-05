@@ -17,7 +17,7 @@ so far. Hopefully it works well on other OSes, too.
 """
 
 from p2pd import *
-test_init_main()
+
 
 class MinReader(asyncio.StreamReaderProtocol):
     def __init__(self, reader):

@@ -1,7 +1,7 @@
 from decimal import Decimal as Dec
 from p2pd import *
 
-test_init_main()
+
 
 class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
     async def test_map_info_to_their_maps(self):

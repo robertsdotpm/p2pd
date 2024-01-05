@@ -1,5 +1,5 @@
 from p2pd import *
-test_init_main()
+
 
 class TestSock(unittest.IsolatedAsyncioTestCase):
     async def test_reuse_port(self):

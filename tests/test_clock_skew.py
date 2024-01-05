@@ -1,5 +1,5 @@
 from p2pd import *
-test_init_main()
+
 
 class TestClockSkew(unittest.IsolatedAsyncioTestCase):
     async def test_get_ntp_pool_ntp(self):

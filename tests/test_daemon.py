@@ -1,5 +1,5 @@
 from p2pd import *
-test_init_main()
+
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestDaemon(unittest.IsolatedAsyncioTestCase):

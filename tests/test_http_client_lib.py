@@ -1,6 +1,6 @@
 import uuid
 from p2pd import *
-test_init_main()
+
 
 class TestHTTPClientLib(unittest.IsolatedAsyncioTestCase):
     # Should break as chunked is not supported.

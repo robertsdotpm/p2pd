@@ -3,7 +3,7 @@ import sys
 import os
 import multiprocessing
 from p2pd import *
-test_init_main()
+
 
 
 class TestCmd(unittest.IsolatedAsyncioTestCase):

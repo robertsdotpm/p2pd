@@ -11,6 +11,11 @@ import multiprocessing
 import platform
 from asyncio import futures
 
+vmaj, vmin, _ = platform.python_version_tuple()
+if int(vmin) < 8:
+    print("P2PD REPL needs >= Python 3.8")
+    exit()
+
 from . import __version__ as p2pdv
 from .utils import SelectorEventPolicy
 asyncio.set_event_loop_policy(SelectorEventPolicy())
@@ -20,7 +25,7 @@ class AsyncIOInteractiveConsole(code.InteractiveConsole):
 
     def __init__(self, locals, loop):
         super().__init__(locals)
-        self.compile.compiler.flags |= ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
+        #self.compile.compiler.flags |= ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
 
         self.loop = loop
 

@@ -10,7 +10,7 @@ except:
     from static_route import *
 import os
 from p2pd import *
-test_init_main()
+
 
 env = os.environ.copy()
 class TestStunClient(unittest.IsolatedAsyncioTestCase):

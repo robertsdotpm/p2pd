@@ -4,7 +4,7 @@ nc -4 -u p2pd.net 7
 """
 
 from p2pd import *
-test_init_main()
+
 
 class TestIPv6(unittest.IsolatedAsyncioTestCase):
     async def test_ipv6(self):

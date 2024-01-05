@@ -1,7 +1,7 @@
 import platform
 import multiprocessing
 from p2pd import *
-test_init_main()
+
 
 RELATED_PLATFORMS = ["Linux", "Darwin", "FreeBSD"]
 

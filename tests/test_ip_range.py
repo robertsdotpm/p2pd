@@ -1,5 +1,5 @@
 from p2pd import *
-test_init_main()
+
 
 class TestIPRange(unittest.IsolatedAsyncioTestCase):
     async def test_ip_range_iter(self):

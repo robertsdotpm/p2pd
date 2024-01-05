@@ -1,5 +1,5 @@
 from p2pd import *
-test_init_main()
+
 
 async def get_turn_client(af, interface, turn_offset):
     # Get a route for this interface.

@@ -1,5 +1,5 @@
 from p2pd import *
-test_init_main()
+
 
 class TestNAT(unittest.IsolatedAsyncioTestCase):
     async def test_preserving_delta(self):

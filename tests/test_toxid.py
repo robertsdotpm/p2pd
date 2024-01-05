@@ -1,5 +1,5 @@
 from p2pd import *
-test_init_main()
+
 
 streams = lambda: [ToxiToxic().downstream(), ToxiToxic().upstream()]
 

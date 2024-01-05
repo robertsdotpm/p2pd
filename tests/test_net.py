@@ -1,5 +1,5 @@
 from p2pd import *
-test_init_main()
+
 
 class TestNet(unittest.IsolatedAsyncioTestCase):
     async def test_ip_norm(self):

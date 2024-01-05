@@ -1,5 +1,5 @@
 from p2pd import *
-test_init_main()
+
 
 """
 All of the Python code used in the documentation gets tested

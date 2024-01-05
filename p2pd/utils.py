@@ -18,6 +18,7 @@ import platform
 import selectors
 import copy
 import hashlib
+import unittest
 
 if "P2PD_DEBUG" in os.environ: 
     IS_DEBUG = 1
@@ -52,6 +53,18 @@ if vmin < 8:
         pass
 if vmin < 5:
     raise Exception("Non-Windows OS needs Python 3.5 or higher")
+
+vmaj, vmin, _ = platform.python_version_tuple()
+vmaj = int(vmaj); vmin = int(vmin)
+if vmaj < 3:
+    raise Exception("Python 2 not supported.")
+if vmin <= 4:
+    raise Exception("Project needs >= 3.5")
+
+if not hasattr(unittest, "IsolatedAsyncioTestCase"):
+    log("patching isolated asyncio test case")
+    import aiounittest
+    unittest.IsolatedAsyncioTestCase = aiounittest.AsyncTestCase
 
 def proactorfy(self=None):
     """

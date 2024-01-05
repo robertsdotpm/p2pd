@@ -15,7 +15,7 @@
 """
 
 from p2pd import *
-test_init_main()
+
 
 IRC_SEED = b"123" * 30
 IRC_SERV_INFO = {

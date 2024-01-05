@@ -1,5 +1,5 @@
 from p2pd import *
-test_init_main()
+
 
 class TestRoute(unittest.IsolatedAsyncioTestCase):
     async def test_invalid_wan(self):

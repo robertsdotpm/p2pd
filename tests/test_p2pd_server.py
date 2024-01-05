@@ -1,5 +1,5 @@
 from p2pd import *
-test_init_main()
+
 
 class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
     async def test_p2pd_server(self):

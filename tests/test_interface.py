@@ -1,5 +1,5 @@
 from p2pd import *
-test_init_main()
+
 
 class TestInterface(unittest.IsolatedAsyncioTestCase):
     # Should find at least a valid iface on whatever OS.

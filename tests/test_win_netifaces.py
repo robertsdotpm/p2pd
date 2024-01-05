@@ -68,7 +68,7 @@ todo: dont use the commandencoded trick
 
 import platform
 from p2pd import *
-test_init_main()
+
 
 if platform.system() == "Windows":
     class TestWinNetifaces(unittest.IsolatedAsyncioTestCase):

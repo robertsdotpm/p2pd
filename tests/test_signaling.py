@@ -1,5 +1,5 @@
 from p2pd import *
-test_init_main()
+
 
 class TestSignaling(unittest.IsolatedAsyncioTestCase):
     async def test_node_signaling(self):
