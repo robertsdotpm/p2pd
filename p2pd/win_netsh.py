@@ -99,7 +99,7 @@ class NetshParse():
     # if_index: ... if_name, mac
     @staticmethod
     def show_mac(af, msg):
-        p = "([0-9]+)[.]{2,}([0-9a-fA-F ]+)[ .]+([^\r\n]+)[\r\n]"
+        p = "([0-9]+)\s*[.]{2,}([0-9a-fA-F ]+)[ .]+([^\r\n]+)[\r\n]"
         out = re.findall(p, msg)
         results = {"default": {IP4: None, IP6: None}}
         for match_group in out:
