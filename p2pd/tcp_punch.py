@@ -172,7 +172,7 @@ class TCPPunch():
         self.executors = executors
         self.queue_manager = queue_manager
         if self.interface.nat["type"] in BLOCKING_NATS:
-            raise Exception("Peer NAT type is unreachable.")
+            log("Peer NAT type is unreachable.")
 
         self.active_no = 0
 

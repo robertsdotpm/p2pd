@@ -6,6 +6,7 @@ class TestIPRange(unittest.IsolatedAsyncioTestCase):
         i = await Interface().start_local()
         r = i.route()
         a = await Address("www.google.com", 80, r).res()
+        print(a.host_type)
         self.assertEqual(a.host_type, HOST_TYPE_DOMAIN)
 
     async def test_v6_resolve(self):
