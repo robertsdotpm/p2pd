@@ -79,8 +79,8 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
 
             # Test connect to link local.
-            #if af == IP6:
-            #    addrs.append(route.link_local())
+            if af == IP6:
+                addrs.append(route.link_local())
 
             for addr in addrs:
                 log(f"test daemon addr = {addr}")

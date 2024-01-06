@@ -507,7 +507,7 @@ def bind_closure(self):
 
                 # Add interface descriptor if it's link local.
                 is_priv = ip_obj.is_private
-                not_all = bind_ip == "::" # Needed for V6 AF_ANY for some reason.
+                not_all = bind_ip != "::" and ip_f(bind_ip) != ip_f("::1") # Needed for V6 AF_ANY for some reason.
                 if is_priv and not_all:
                     # Interface specified by no on windows.
                     if platform.system() == "Windows":
@@ -517,14 +517,10 @@ def bind_closure(self):
                         )
                     else:
                         # Other platforms just use the name
-                        bind_ip = "%s%%%s" % (
-                            bind_ip,
-                            self.interface.name
-                        )
+                        bind_ip = f"{bind_ip}%{self.interface.name}"
 
                 # Get bind info using get address.
                 # This includes the special 'flow info' and 'scope id'
-                
                 addr_infos = await loop.getaddrinfo(
                     bind_ip,
                     port
@@ -535,8 +531,6 @@ def bind_closure(self):
                     raise Exception("Can't resolve IPv6 address for bind.")
                 
                 self._bind_tups[bind_type] = addr_infos[0][4]
-
-                
                 if is_priv and platform.system() == "Windows":
                     self._bind_tups[bind_type] = self._bind_tups[bind_type][:3] + (self.interface.nic_no,)
             else:
