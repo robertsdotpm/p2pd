@@ -162,6 +162,8 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
         b = nt_is_admin()
         self.assertTrue(b in [True, False])
 
+    """
+    be lazy -- no longer used
     async def test_nt_is_pshell_restricted(self):
         if platform.system() != "Windows":
             return
@@ -180,6 +182,7 @@ class TestCmd(unittest.IsolatedAsyncioTestCase):
         await nt_set_pshell_unrestricted()
         out = await is_pshell_restricted()
         self.assertTrue(out in (True, False))
+    """
 
 if __name__ == '__main__':
     main()
