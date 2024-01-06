@@ -125,6 +125,8 @@ async def load_ifs_from_ps1():
         raise Exception("Invalid powershell output for net script.")
     if "MethodNotFound" in out:
         raise Exception("Unknown error with powershell.")
+    if "is not recognized as the name" in out:
+        raise Exception("Powershell doesn't support these features.")
 
     # Load default interface by if_index.
     default_ifs = {IP4: None, IP6: None}
