@@ -4,6 +4,7 @@ import platform
 import multiprocessing
 import socket
 import pprint
+from functools import lru_cache
 from .errors import *
 from .settings import *
 from .route import *
@@ -14,6 +15,46 @@ if sys.platform == "win32":
 else:
     import netifaces as netifaces
 
+def get_interface_af(netifaces, name):
+    af_list = []
+    for af in [IP4, IP6]:
+        if len(netifaces.ifaddresses(name)[af]):
+            af_list.append(af)
+
+    if len(af_list) == 2:
+        return DUEL_STACK
+    
+    if len(af_list) == 1:
+        return af_list[0]
+    
+    return UNKNOWN_STACK
+
+@lru_cache(maxsize=None)
+def get_default_nic_ip(af):
+    af = int(af)
+    try:
+        with socket.socket(af, socket.SOCK_DGRAM) as s:
+            s.connect((BLACK_HOLE_IPS[af], 80))
+            return s.getsockname()[0]
+    except:
+        log_exception()
+        return ""
+
+def get_default_iface(netifaces, afs=VALID_AFS, exp=1, duel_stack_test=True):
+    for af in afs:
+        af = int(af)
+        nic_ip = get_default_nic_ip(af)
+        for if_name in netifaces.interfaces():
+            addr_infos = netifaces.ifaddresses(if_name)
+            print(addr_infos)
+            if af not in addr_infos:
+                continue
+
+            for addr_info in addr_infos[af]:
+                if addr_info["addr"] == nic_ip:
+                    return if_name
+        
+    return ""
 
 async def init_p2pd():
     global ENABLE_UDP
@@ -60,7 +101,8 @@ async def init_p2pd():
     sock = None
     try:
         # Figure out what address family default interface supports.
-        _, af = get_default_iface(netifaces)
+        if_name = get_default_iface(netifaces)
+        af = get_interface_af(netifaces, if_name)
         if af == AF_ANY: # Duel stack. Just use v4.
             af = IP4
 
@@ -81,6 +123,7 @@ async def init_p2pd():
         now I don't have time. It's better to show a clear reason
         why the library won't work then to silently fail.
         """
+        what_exception()
         raise Exception("Error this library needs UDP support to work.")
     
 
@@ -93,42 +136,6 @@ async def init_p2pd():
             sock.close()
 
     return netifaces
-
-def get_default_iface(netifaces, preference=AF_ANY, exp=1, duel_stack_test=True):
-    gws = netiface_gateways(netifaces, get_interface_type, preference=preference)
-    gateway = None
-    iface = None
-                    
-    # Convert any to netifaces.af.
-    if preference == AF_ANY:
-        # First valid address family for default gateway.
-        preference = list(gws["default"])[0]
-    else:
-        preference = af_to_netiface(preference)
-    
-    # Get address of gateway for 'default' interface.
-    preference = int(preference)
-    if preference in gws["default"]:
-        iface = gws["default"][preference][1]
-            
-    # Check found a default interface for ipv4 or ipv6.
-    if iface == None:
-        raise Exception("Couldn't find default WAN interface. Specify IPs manually in config to bypass this error.")
-
-    # See if this iface is duel-stack.
-    af = netiface_to_af(preference, netifaces)
-    if duel_stack_test:
-        af_index = VALID_AFS.index(preference)
-        af_len = len(VALID_AFS)
-        other_af = VALID_AFS[(af_index - 1) % af_len]
-        try:
-            other_iface, _ = get_default_iface(netifaces, other_af, duel_stack_test=False)
-        except Exception:
-            other_iface = None
-        if other_iface == iface:
-            af = DUEL_STACK
-        
-    return [iface, af]
 
 def get_interface_type(name):
     name = name.lower()
@@ -195,7 +202,7 @@ class Interface():
             if self.name not in [IP4, IP6, AF_ANY]:
                 raise InterfaceInvalidAF
 
-            self.name, _ = get_default_iface(self.netifaces, preference=self.name)
+            self.name = get_default_iface(self.netifaces, afs=[self.name])
 
         # No name specified.
         # Get name of default interface.
@@ -203,7 +210,8 @@ class Interface():
         if self.name is None or self.name == "":
             # Windows -- default interface name is a GUID.
             # This is ugly AF.
-            iface_name, iface_af = get_default_iface(self.netifaces)
+            iface_name = get_default_iface(self.netifaces)
+            iface_af = get_interface_af(self.netifaces, iface_name)
             if iface_name is None:
                 raise InterfaceNotFound
             else:
@@ -322,7 +330,7 @@ class Interface():
         o = self.from_dict(state)
         self.__dict__ = o.__dict__
 
-    async def start_local(self, rp=None, skip_resolve=False):
+    async def do_start(self, rp=None, skip_resolve=False):
         # Load internal interface details.
         if Interface.get_netifaces() is None:
             self.netifaces = await init_p2pd()
@@ -331,44 +339,12 @@ class Interface():
         self.load_if_info()
 
         # Get routes for AF.
+        log(f"Starting resolve with stack type = {self.stack}")
         if rp == None:
-            af_list = self.supported(skip_resolve=1)
+            af_list = self.supported(skip_resolve=True)
             tasks = []
             for af in af_list:
-                async def helper(af):
-                    route = await self.route_test(af)
-                    if route is None:
-                        # Empty route pool.
-                        self.rp[af] = RoutePool()
-                    else:
-                        self.rp[af] = RoutePool([route])
-
-                tasks.append(helper(af))
-
-            # Get all the routes concurrently.
-            await asyncio.gather(*tasks)
-        else:
-            self.rp = rp
-
-        # Update stack type based on routable.
-        self.stack = get_interface_stack(self.rp)
-        assert(self.stack in VALID_STACKS)
-        self.resolved = True
-        return self
-
-    async def start(self, rp=None, skip_resolve=False):
-        # Load internal interface details.
-        if Interface.get_netifaces() is None:
-            self.netifaces = await init_p2pd()
-
-        # Process interface name in right format.
-        self.load_if_info()
-
-        # Get routes for AF.
-        if rp == None:
-            af_list = self.supported(skip_resolve=1)
-            tasks = []
-            for af in af_list:
+                log(f"Attempting to resolve {af}")
                 async def helper(af):
                     try:
                         self.rp[af] = await Routes(
@@ -404,6 +380,12 @@ class Interface():
         assert(self.stack in VALID_STACKS)
         self.resolved = True
         return self
+    
+    async def start_local(self, rp=None, skip_resolve=True):
+        return await self.do_start(rp=rp, skip_resolve=skip_resolve)
+
+    async def start(self, rp=None, skip_resolve=False):
+        return await self.do_start(rp=rp, skip_resolve=skip_resolve)
 
     def __await__(self):
         return self.start().__await__()
@@ -506,18 +488,32 @@ class Interface():
     should be a way to detect loss of internet connection though.
     """
     def is_default(self, af, gws=None):
-        af = af_to_netiface(af)
-        gws = gws or netiface_gateways(self.netifaces, get_interface_type, preference=af)
-        def_gws = gws["default"]
-        if af not in def_gws:
-            return False
-        else:
-            info = def_gws[af]
-            if info[1] == self.name:
-                return True
-            else:
+        def try_netiface_check(af, gws):
+            af = af_to_netiface(af)
+            gws = gws or netiface_gateways(self.netifaces, get_interface_type, preference=af)
+            def_gws = gws["default"]
+            if af not in def_gws:
                 return False
-
+            else:
+                info = def_gws[af]
+                if info[1] == self.name:
+                    return True
+                else:
+                    return False
+        def try_sock_trick(af):    
+            if_name = get_default_iface(
+                self.netifaces,
+                afs=[af]
+            )
+            if if_name == "":
+                return False
+            
+            return self.name == if_name
+        
+        ret = try_sock_trick(af) or try_netiface_check(af, gws)
+        log(f"is_default set = {ret}")
+        return ret
+    
     def supported(self, skip_resolve=0):
         if not skip_resolve:
             assert(self.resolved)

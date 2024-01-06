@@ -113,7 +113,7 @@ def pack_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=N
         # Loop over AFs.
         for af in [IP4, IP6]:
             # Append AF type.
-            buf += bytes([af])
+            buf += bytes([int(af)])
 
             # AF type is not supported.
             if not len(interface.rp[af].routes):
@@ -143,12 +143,13 @@ def pack_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=N
             # nat type 1 - 7
             # delta type 1 - 7
             # delta value +/- port
-            buf += struct.pack(
-                "BBl",
+            nat_packed = struct.pack(
+                "BBxxi",
                 nat_type,
                 delta_type,
                 delta_value
             )
+            buf += nat_packed
 
             # Convert IPs to bytes.
             buf += bytes(IPRange(ip or r.nic()))
@@ -215,6 +216,8 @@ def unpack_peer_addr(addr):
         for _ in range(0, 2):
             # Get AF at pointer.
             af = addr[p]; p += 1
+            if isinstance(af, bytes):
+                af = b_to_i(af)
 
             # Address type for IF unsupported.
             if addr[p] == 0:
@@ -227,7 +230,7 @@ def unpack_peer_addr(addr):
                 p += 1
 
             # Unpack interface details.
-            parts = struct.unpack("BBl", addr[p:p + 8]); p += 8;
+            parts = struct.unpack("BBxxi", addr[p:p + 8]); p += 8;
             nat_type = parts[0]
             delta_type = parts[1]
             delta_value = parts[2]
@@ -235,6 +238,7 @@ def unpack_peer_addr(addr):
             # Determine IP field sizes based on AF.
             if af == IP4:
                 ip_size = 4
+                
             if af == IP6:
                 ip_size = 16
 
@@ -247,8 +251,8 @@ def unpack_peer_addr(addr):
             nat = nat_info(nat_type, delta)
             as_dict = {
                 "if_index": if_index,
-                "ext": IPRange(b_to_i(b_ext_ip)),
-                "nic": IPRange(b_to_i(b_nic_ip)),
+                "ext": IPRange(socket.inet_ntop(af, b_ext_ip)),
+                "nic": IPRange(socket.inet_ntop(af, b_nic_ip)),
                 "nat": nat,
                 "port": port
             }

@@ -830,8 +830,10 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                     )
 
         # Add link locals to routes.
+        log(f"Calling set link locals on routes {len(routes)}")
         [r.set_link_locals(link_locals) for r in routes]
         
+    log(f"Link locals at end of load router = {link_locals}")
     return [routes, link_locals]
 
 async def Routes(interface_list, af, netifaces, skip_resolve=False):

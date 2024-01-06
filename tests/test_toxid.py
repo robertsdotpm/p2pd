@@ -11,7 +11,7 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
         }, NET_CONF)
 
         # Create main Toxi server.
-        i = await Interface().start_local(skip_resolve=True)
+        i = await Interface().start_local()
         route = await i.route().bind(ips="127.0.0.1")
         toxid = ToxiMainServer([i])
         await toxid.listen_specific(

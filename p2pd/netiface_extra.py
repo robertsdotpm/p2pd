@@ -104,6 +104,10 @@ async def get_nic_private_ips(interface, af, netifaces, loop=None):
 
     return nic_iprs
 
+"""
+Netifaces doesn't return the right default interface
+on android. Need a patch for this.
+"""
 def netiface_gateways(netifaces, get_interface_type, preference=AF_ANY):
     gws = netifaces.gateways()
     gateway = None
@@ -121,6 +125,7 @@ def netiface_gateways(netifaces, get_interface_type, preference=AF_ANY):
         # Check the address families of related GWs.
         for af in afs:
             # No entry for AF found in GW info.
+            log(f"Trying {af} in netiface_gateways")
             if af not in gws:
                 continue
                 
@@ -140,10 +145,12 @@ def netiface_gateways(netifaces, get_interface_type, preference=AF_ANY):
                 
                 # Unknown / bad interface type.
                 if if_type == INTERFACE_UNKNOWN:
+                    log("iface type unknown {if_name}")
                     continue
                     
                 # Use this interface GW info as the default.
-                gws["default"][af] = net_info
+                if net_info[2]:
+                    gws["default"][af] = net_info
                 break
                 
     return gws

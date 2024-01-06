@@ -55,6 +55,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
         at_least_one = False
         for af in [IP4, IP6]:
+            log(f"Test daemon af = {af}")
             try:
                 interface = await Interface(af).start()
                 at_least_one = True
@@ -78,12 +79,15 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
 
             # Test connect to link local.
-            if af == IP6:
-                addrs.append(route.link_local())
+            #if af == IP6:
+            #    addrs.append(route.link_local())
 
             for addr in addrs:
+                log(f"test daemon addr = {addr}")
                 msg = b"hello world ay lmaoo"
                 for proto in [UDP, TCP]:
+                    log(f"test daemon proto = {proto}")
+
                     # Fresh route per server.
                     route = await interface.route(af).bind(ips=addr, port=server_port)
 
