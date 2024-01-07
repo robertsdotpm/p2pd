@@ -6,3 +6,4 @@ xmltodict # Needed for UPnP SOAP protocol stuff.
 ecdsa # Used for identifying IRCDNS names.
 argon2pure # Used for PoWs in IRCDNS.
 aiosqlite # Used for DB KVS in IRCDNS.
+pyroute2 # Fallback for interface lookups on Android with netlink.
