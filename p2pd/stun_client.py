@@ -564,7 +564,6 @@ class STUNClient():
         servers = servers or get_stun_servers(af, proto)
         stun_addr = None
         for server in servers:
-            print(server)
             for i in range(conf["retry_no"]):
                 # Get a valid STUN Address.
                 for j in range(conf["addr_retry"]):

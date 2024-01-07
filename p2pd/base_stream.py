@@ -540,8 +540,6 @@ class BaseProto(BaseACKProto):
 
     # UDP packets.
     def datagram_received(self, data, client_tup):
-        print(data)
-        print(client_tup)
         log(f"Base proto recv udp = {client_tup}")
         if self.transport is None:
             log(f"Skipping process data cause transport none 1.")

@@ -478,17 +478,13 @@ class Netifaces():
                 load_ifs_from_ps1(),
                 CMD_TIMEOUT
             )
-            print("Using powershell networking.")
             log_exception()
         except:
             if_infos = await asyncio.wait_for(
                 if_infos_from_netsh(),
                 CMD_TIMEOUT
             )
-            print("using netsh networking.")
             log_exception()
-
-        print(if_infos)
 
         self.by_guid_index = {}
         for if_info in if_infos:

@@ -46,7 +46,6 @@ def get_default_iface(netifaces, afs=VALID_AFS, exp=1, duel_stack_test=True):
         nic_ip = get_default_nic_ip(af)
         for if_name in netifaces.interfaces():
             addr_infos = netifaces.ifaddresses(if_name)
-            print(addr_infos)
             if af not in addr_infos:
                 continue
 
