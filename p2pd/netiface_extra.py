@@ -5,7 +5,7 @@ from .cmd_tools import *
 
 async def get_mac_mixed(if_name):
     mac_p = f"([0-9a-fA-F]{2}[\s-:]*){6}"
-    win_p = f"[0-9]+\s*[.]+([^.\r\n]+)\s*[.]+"
+    win_p = f"[0-9]+\s*[.]+([^.]+)\s*[.]+"
     grep_p = "egrep 'lladdr|ether|link'"
     win_f = lambda x: re.findall(win_p + re.escape(if_name), x)[0]
     vectors = {
