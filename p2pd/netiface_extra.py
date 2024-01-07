@@ -4,8 +4,8 @@ from .ip_range import *
 from .cmd_tools import *
 
 async def get_mac_mixed(if_name):
-    mac_p = f"([0-9a-fA-F]{2}[\s-:]*){6}"
-    win_p = f"[0-9]+\s*[.]+([^.]+)\s*[.]+"
+    mac_p = "((?:[0-9a-fA-F]{2}[\s:-]*){6})"
+    win_p = "[0-9]+\s*[.]+([^.]+)\s*[.]+"
     grep_p = "egrep 'lladdr|ether|link'"
     win_f = lambda x: re.findall(win_p + re.escape(if_name), x)[0]
     vectors = {
@@ -41,18 +41,26 @@ async def get_mac_mixed(if_name):
     for vector in try_vectors:
         lookup_cmd, proc_f = vector
         out = await cmd(lookup_cmd)
-        if not len(re.findall(mac_p, out)):
-            continue
+        try:
+            out = proc_f(out).strip()
+            out = out.replace(" ", "-")
+            out = out.replace(":", "-")
+            if not len(re.findall(mac_p, out)):
+                continue
 
-        out = proc_f(out).strip()
-        out = out.replace(" ", "-")
-        out = out.replace(":", "-")
-        return out
+            return out
+        except:
+            log_exception()
     
-    import pyroute2
-    with pyroute2.NDB() as ndb:
-        with ndb.interfaces[if_name] as interface:
-            return interface["address"]
+    if os_name != "Windows":
+        try:
+            import pyroute2
+            with pyroute2.NDB() as ndb:
+                with ndb.interfaces[if_name] as interface:
+                    return interface["address"]
+        except:
+            log_exception()
+            return None
 
 # Netifaces apparently doesn't use their own values...
 def af_to_netiface(af):
