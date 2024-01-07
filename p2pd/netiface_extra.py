@@ -40,7 +40,7 @@ async def get_mac_mixed(if_name):
     try_vectors = vectors[os_name]
     for vector in try_vectors:
         lookup_cmd, proc_f = vector
-        out = await cmd(lookup_cmd)
+        out = await cmd(lookup_cmd, er=None)
         try:
             out = proc_f(out).strip()
             out = out.replace(" ", "-")

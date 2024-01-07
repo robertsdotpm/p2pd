@@ -162,7 +162,7 @@ you want to execute to powershell.
 
 Example: 'powershell "route print"'
 """
-async def cmd(value, io=None, timeout=10):
+async def cmd(value, io=None, er=True, timeout=10):
     # Output type.
     out_type = value
     null_out = to_type('', out_type)
@@ -174,11 +174,16 @@ async def cmd(value, io=None, timeout=10):
 
     this_dir = os.path.dirname(__file__)
     try:
+        if er is None:
+            er = asyncio.subprocess.DEVNULL
+        else:
+            er = None
+
         proc = await asyncio.create_subprocess_shell(
             value,
             stdin=in_val,
             stdout=asyncio.subprocess.PIPE,
-            # stderr=asyncio.subprocess.PIPE,
+            stderr=er,
             cwd=this_dir,
             shell=True
         )
@@ -195,9 +200,14 @@ async def cmd(value, io=None, timeout=10):
     except NotImplementedError:
         # Backup function for old Python versions.
         @run_in_executor
-        def blocking_cmd():
+        def blocking_cmd(er):
             try:
-                proc = subprocess.run(value, stdout=subprocess.PIPE, shell=True, timeout=timeout)
+                if er is None:
+                    er = subprocess.DEVNULL
+                else:
+                    er = None
+
+                proc = subprocess.run(value, stdout=subprocess.PIPE, shell=True, stderr=er, timeout=timeout)
                 stdout = proc.stdout
                 stderr = proc.stderr
             except subprocess.TimeoutExpired:
@@ -207,7 +217,7 @@ async def cmd(value, io=None, timeout=10):
             return stdout, stderr
         
         # Use an executor to run the blocking command so the event loop isn't wrekt.
-        stdout, stderr = await blocking_cmd()
+        stdout, stderr = await blocking_cmd(er)
 
     # Log any visible errors.
     if stderr is not None and len(stderr):
