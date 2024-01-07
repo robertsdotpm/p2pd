@@ -1,5 +1,36 @@
+import re
 from .net import *
 from .ip_range import *
+from .cmd_tools import *
+
+async def get_mac_mixed(if_name):
+    win_p = f"[0-9]+\s*[.]+([^.\r\n]+)\s*[.]+"
+    win_f = lambda x: re.findall(win_p + re.escape(if_name), x)[0]
+    vectors = {
+        "Linux": [
+            f"cat /sys/class/net/{if_name}/address",
+            lambda x: x
+        ],
+        "OpenBSD": [
+            f"ifconfig {if_name} | egrep 'lladdr|ether'",
+            lambda x: re.findall("\s+[a-zA-Z]+\s+([^\s]+)", x)[0]
+        ],
+        "Windows": [
+            "route print",
+            win_f
+        ]
+    }
+    vectors["Darwin"] = vectors["OpenBSD"]
+    os_name = platform.system()
+    if os_name not in vectors:
+        return None
+    
+    lookup_cmd, proc_f = vectors[os_name]
+    out = await cmd(lookup_cmd)
+    out = proc_f(out).strip()
+    out = out.replace(" ", "-")
+    out = out.replace(":", "-")
+    return out
 
 # Netifaces apparently doesn't use their own values...
 def af_to_netiface(af):
@@ -26,7 +57,10 @@ def is_af_routable(af, netifaces):
     af = af_to_netiface(af)
     return af in netifaces.gateways()
 
-def get_mac_address(name, netifaces):
+async def get_mac_address(name, netifaces):
+    if netifaces.AF_LINK not in netifaces.ifaddresses(name):
+        return await get_mac_mixed(name)
+    
     return netifaces.ifaddresses(name)[netifaces.AF_LINK][0]["addr"]
     
 # Note: Discards subnet for single addresses.

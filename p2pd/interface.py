@@ -244,11 +244,6 @@ class Interface():
             else:
                 self.id = self.name
 
-            # Set MAC address of Interface.
-            self.mac = get_mac_address(self.name, self.netifaces)
-            if self.mac is None:
-                raise Exception("mac none.")
-
     def to_dict(self):
         from .var_names import TXT
         return {
@@ -379,6 +374,12 @@ class Interface():
         self.stack = get_interface_stack(self.rp)
         assert(self.stack in VALID_STACKS)
         self.resolved = True
+
+        # Set MAC address of Interface.
+        self.mac = await get_mac_address(self.name, self.netifaces)
+        if self.mac is None:
+            raise Exception("mac none.")
+
         return self
     
     async def start_local(self, rp=None, skip_resolve=True):
