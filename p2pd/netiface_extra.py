@@ -52,7 +52,7 @@ async def get_mac_mixed(if_name):
         except:
             log_exception()
     
-    if os_name != "Windows":
+    if os_name not in ["Darwin", "Windows"]:
         try:
             import pyroute2
             with pyroute2.NDB() as ndb:
