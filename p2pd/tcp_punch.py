@@ -711,7 +711,7 @@ class TCPPunch():
         Optimized and tested for remote connections.
         """
         async def remote_mode(dest_addr, af, interface, local, remote, rmaps, is_connected):
-            #print("mode = remote")
+            #"mode = remote")
             #print(f"bound on {local}")
 
             # Con occuring every 
