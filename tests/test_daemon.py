@@ -67,6 +67,9 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                 """
                 continue
 
+            if af not in interface.supported():
+                continue
+
             """
             (1) Get first route for AF type.
             (2) Use in-built method and manually specify bind IP of '*'.

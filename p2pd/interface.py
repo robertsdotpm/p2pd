@@ -18,6 +18,9 @@ else:
 def get_interface_af(netifaces, name):
     af_list = []
     for af in [IP4, IP6]:
+        if af not in netifaces.ifaddresses(name):
+            continue
+        
         if len(netifaces.ifaddresses(name)[af]):
             af_list.append(af)
 

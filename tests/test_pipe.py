@@ -25,14 +25,17 @@ class MinReader(asyncio.StreamReaderProtocol):
         super().__init__(reader)
 
     def connection_made(self, transport):
+        print("con made.")
         self.transport = transport
         super().connection_made(transport)
 
     def data_received(self, data):
+        print(f"got data {data}")
         super().data_received(data)
 
     # Patch for stream reader protocol bug.
     def eof_received(self):
+        print("In eof received")
         reader = self._stream_reader
         if reader is not None:
             reader.feed_eof()
@@ -40,6 +43,7 @@ class MinReader(asyncio.StreamReaderProtocol):
         return False
 
     def connection_lost(self, exc):
+        print("in con lost.")
         # The socket has been closed
         self.close_set = True
 
@@ -56,6 +60,7 @@ async def create_server():
         sock=lsock
     )
 
+    print(lsock.getsockname())
     dest = ("127.0.0.1", lsock.getsockname()[1])
     return server, dest, mr
 
@@ -90,6 +95,7 @@ class TestPipe(unittest.IsolatedAsyncioTestCase):
         # Create client socket.
         cs = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
+
         # Disable TCPs regular graceful close mode.
         # This means an RST is sent instead of FIN.
         linger = struct.pack('ii', 1, 0)
@@ -101,16 +107,26 @@ class TestPipe(unittest.IsolatedAsyncioTestCase):
         
         # Connect to server and teardown connection.
         cs.connect(dest)
+
+        # Ensure connection_made was called.
+        await asyncio.sleep(1)
         cs.send(b"test")
         cs.close()
-
-        # Check connection_lost was called.
-        await asyncio.sleep(3)
-        assert(mr.close_set)
 
         # Cleanup.
         server.close()
         await server.wait_closed()
 
+        # Ensure connection_made was called.
+        await asyncio.sleep(1)
+        assert(mr.close_set)
+
+        """
+        There seems to be a race condition between wait_closed and 
+        connection_lost on OpenBSD at least. See https://github.com/robertsdotpm/p2pd/issues/14
+        TODO: Fix this.
+        """
+
 if __name__ == '__main__':
+
     main()

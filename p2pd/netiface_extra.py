@@ -101,9 +101,19 @@ async def get_mac_address(name, netifaces):
 async def netiface_addr_to_ipr(af, info, interface, loop, skip_bind_test):
     # Some interfaces might not have valid information set.
     if "addr" not in info:
+        log("Addr not in info.")
         return None
+    
+    # Todo: fix this.
+    # This occurs on BSD.
     if "netmask" not in info:
-        return None
+        log("netmask not in info.")
+        if af == IP4:
+            info["cidr"] = 24
+            info["netmask"] = "255.255.255.0"
+        if af == IP6:
+            info["cidr"] = 64
+            info["netmask"] = "ffff:ffff:ffff:ffff::0000"
     
     nic_ipr = IPRange(info["addr"], info["netmask"])
 
@@ -148,6 +158,7 @@ async def netiface_addr_to_ipr(af, info, interface, loop, skip_bind_test):
 
         # Don't add this address to any route.
         if invalid_subnet:
+            log("Invalid subnet")
             return None
 
     return nic_ipr

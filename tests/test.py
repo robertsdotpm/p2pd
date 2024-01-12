@@ -1,6 +1,13 @@
 from p2pd import *
 
 async def do_something():
+    ifs = netifaces.interfaces()
+    print(ifs)
+    # ['lo0', 'em0', 'enc0', 'pflog0']
+    addrs = netifaces.ifaddresses("em0")
+    print(addrs)
+    # {18: [{'addr': '...'}], 2: [{'addr': '192.168.8.197', 'broadcast': '192.168.8.255'}]}
+
     await init_p2pd()
     i = await Interface()
     print(i)
