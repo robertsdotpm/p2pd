@@ -191,8 +191,14 @@ class Router():
         if dst_ip not in deltas:
             rand_port = random.randrange(1024, MAX_PORT + 1),
             deltas[dst_ip] = {
+                # Random start port.
                 "start": rand_port,
-                "value": rand_port
+
+                # Tracked current port.
+                "value": rand_port,
+
+                # Local delta.
+                "local": 0
             }
 
     # Used by connect on own NAT to simulate 'openning' the NAT.
@@ -209,18 +215,19 @@ class Router():
         if dst_ip not in mappings:
             return dst_port
         else:
-            for i in range(0, MAX_PORT):
-                port = (dst_port + i) % (MAX_PORT + 1)
+            while 1:
+                port = random.randrange(1024, MAX_PORT + 1)
                 if port in mappings[dst_ip]:
                     continue
 
                 return port
 
     # Allocates a new port for use with a new mapping.
-    def request_delta(self, af, proto, src_ip, src_port, dst_ip, dst_port):
-        delta_type = self.nat["delta"]["type"]
+    def request_delta(self, af, proto, src_ip, src_port, dst_ip, dst_port, delta_type=None):
+        delta_type = delta_type or self.nat["delta"]["type"]
         mappings = self.mappings[af][proto]
         deltas = self.deltas[af][proto][dst_ip]
+        port = 0
 
         # The NAT reuses the same src_port.
         if delta_type == EQUAL_DELTA:
@@ -253,18 +260,28 @@ class Router():
             # Save new allocation port value.
             deltas["value"] = delta
 
+        """
+        The distance between allocated ports also depends on
+        the source port. So if you want to know what remote
+        mappings occur you need to preserve the same delta
+        in local port mappings.
+        """
+        if delta_type == DEPENDENT_DELTA:
+            delta = deltas["start"] + self.nat["delta"]["value"] + src_port
+            port = field_wrap(
+                delta,
+                [1024, MAX_PORT]
+            )
+
         # Request port is already allocated.
         # Use the first free port from that offset.
-        if port in mappings[dst_ip]:
+        if port in mappings[dst_ip] or not port:
             return self.unused_delta(
                 af,
                 proto,
                 dst_ip,
                 port
             )
-
-        
-
 
     # The other side calls this which returns a mapping
     # based on whether there's an approval + the nat setup.
