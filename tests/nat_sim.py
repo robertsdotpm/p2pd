@@ -284,7 +284,6 @@ class Router():
     def request_approval(self, af, proto, dst_ip, dst_port, nat_ip, nat_port):
         # Blocked.
         if self.nat["type"] in [BLOCKED_NAT, SYMMETRIC_UDP_FIREWALL]:
-            print("a")
             return 0
 
         # Open internet -- can use any inbound port.
@@ -294,10 +293,8 @@ class Router():
         # No mappings for this NAT IP exist.
         mappings = self.mappings[af][proto]
         if nat_ip not in mappings:
-            print("b")
             return 0
         if nat_port not in mappings[nat_ip]:
-            print("c")
             return 0
 
         # Handle the main NATs.
@@ -310,7 +307,6 @@ class Router():
         # Inbound IP must be approved.
         if self.nat["type"] == RESTRICT_NAT:
             if dst_ip not in self.approvals:
-                print("d")
                 return 0
 
         # Both inbound IP and port must be aproved.
