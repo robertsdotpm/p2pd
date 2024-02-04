@@ -142,7 +142,7 @@ class Router():
     def init_delta(self, af, proto, dst_ip):
         deltas = self.deltas[af][proto]
         if dst_ip not in deltas:
-            rand_port = from_range(*self.nat["range"])
+            rand_port = from_range(self.nat["range"])
             deltas[dst_ip] = {
                 # Random start port.
                 "start": rand_port,
@@ -161,7 +161,7 @@ class Router():
             return dst_port
         else:
             while 1:
-                port = from_range(*self.nat["range"])
+                port = from_range(self.nat["range"])
                 if port in mappings[dst_ip]:
                     continue
 
@@ -185,7 +185,7 @@ class Router():
         # a fixed port offset to define remote mappings.
         if delta_type == PRESERV_DELTA:
             port = field_wrap(
-                (src_port - 1) + self.rand_start_port,
+                src_port + self.nat["delta"]["value"],
                 self.nat["range"]
             )
 
@@ -212,7 +212,7 @@ class Router():
         in local port mappings.
         """
         if delta_type == DEPENDENT_DELTA:
-            delta = deltas["start"] + self.nat["delta"]["value"] + src_port
+            delta = src_port + deltas["start"] + self.nat["delta"]["value"]
             port = field_wrap(
                 delta,
                 self.nat["range"]
@@ -220,7 +220,10 @@ class Router():
 
         # Request port is already allocated.
         # Use the first free port from that offset.
-        if port in mappings[dst_ip] or not port:
+        if dst_ip in mappings:
+            if port in mappings:
+                port = 0
+        if not port:
             return self.unused_port(
                 af,
                 proto,
@@ -228,22 +231,26 @@ class Router():
                 port
             )
 
+        return port
+
     # Used by connect on own NAT to simulate 'openning' the NAT.
     def approve_inbound(self, af, proto, src_ip, src_port, dst_ip, dst_port, nat_ip):
         # Add dst ip and port to approvals.
-        approvals.setdefault(dst_ip, {})
-        approvals[dst_ip][dst_port] = 1
+        self.approvals.setdefault(dst_ip, {})
+        self.approvals[dst_ip][dst_port] = 1
 
         # Reuse an existing mapping if it exists.
         mapping = None
         mappings = self.mappings[af][proto]
-        local_endpoint = [src_ip, src_port]
+        local_endpoint = str([src_ip, src_port])
         reuse_nats = [FULL_CONE, RESTRICT_NAT, RESTRICT_PORT_NAT]
         if nat_ip in mappings:
             if local_endpoint in mappings:
                 mapping = mappings[nat_ip][local_endpoint]
                 if self.nat["type"] in reuse_nats:
                     mapping = mappings[nat_ip][local_endpoint]
+        else:
+            mappings[nat_ip] = {}
 
         # Otherwise create a new mapping.
         if mapping is None:
@@ -263,7 +270,7 @@ class Router():
                 # The mappings are indexed by local endpoints.
                 mapping = [af, proto, dst_ip, dst_port, nat_port]
                 mappings[nat_ip][local_endpoint] = mapping
-                mappings[nat_ip][mapping[2]] = mapping
+                mappings[nat_ip][mapping[-1]] = mapping
 
         # Return results.
         if mapping is not None:
@@ -274,9 +281,10 @@ class Router():
 
     # The other side calls this which returns a mapping
     # based on whether there's an approval + the nat setup.
-    async def request_approval(self, af, proto, dst_ip, dst_port, nat_ip, nat_port):
+    def request_approval(self, af, proto, dst_ip, dst_port, nat_ip, nat_port):
         # Blocked.
         if self.nat["type"] in [BLOCKED_NAT, SYMMETRIC_UDP_FIREWALL]:
+            print("a")
             return 0
 
         # Open internet -- can use any inbound port.
@@ -285,9 +293,11 @@ class Router():
 
         # No mappings for this NAT IP exist.
         mappings = self.mappings[af][proto]
-        if nat_ip is not in mappings:
+        if nat_ip not in mappings:
+            print("b")
             return 0
         if nat_port not in mappings[nat_ip]:
+            print("c")
             return 0
 
         # Handle the main NATs.
@@ -300,10 +310,11 @@ class Router():
         # Inbound IP must be approved.
         if self.nat["type"] == RESTRICT_NAT:
             if dst_ip not in self.approvals:
+                print("d")
                 return 0
 
         # Both inbound IP and port must be aproved.
-        if self.nat["type"] in RESTRICT_PORT_NAT:
+        if self.nat["type"] == RESTRICT_PORT_NAT:
             if dst_ip not in self.approvals:
                 return 0
             if dst_port not in self.approvals[dst_ip]:
@@ -321,70 +332,53 @@ class Router():
         
 
 async def nat_sim_main():
-    print(NAT_IPR_V4)
-    print(len(NAT_IPR_V4))
+    af = IP4
+    proto = TCP
+    int_ipr = IPRange("127.64.0.0", cidr=10)
+    src_port = 1337
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.setsockopt(socket.SOL_IP, socket.IP_TRANSPARENT, 1)
-    s.close()
-    return
+    ext_ipr = IPRange("127.128.0.0", cidr=10)
 
-    """
-    # creating this, for convenience (will be used in later examples)
-    IP_FREEBIND = 15
-
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.setsockopt(socket.SOL_IP, IP_FREEBIND, 1)
-    
-    s.bind(("192.168.8.221", 0))
-    s.listen(1)
-    print(s)
-    print(s.getsockname())
-    """
+    print(int_ipr)
+    print(len(int_ipr))
 
 
-    s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s2.setsockopt(socket.SOL_IP, 15, 1)
-    s2.bind(("192.168.8.233", 0))
-    s2.connect(("192.168.8.233", 56871))
-
-    print(s2)
-    s2.close()
+    n1 = nat_info(RESTRICT_NAT, delta=delta_info(DEPENDENT_DELTA, 10))
+    r1 = Router(n1)
+    r1.init_delta(af, proto, str(ext_ipr + 0))
 
 
+ 
+    p1 = r1.request_port(af, proto, str(int_ipr + 0), src_port, str(ext_ipr + 0))
+    print(p1)
+    p1 = r1.request_port(af, proto, str(int_ipr + 0), src_port + 3, str(ext_ipr + 0))
+    print(p1)
 
-    return
-    port = 55555
-    ext_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    ext_bind = ("127.0.0.1", port)
-    ext_sock.bind(ext_bind)
-    ext_sock.listen(1)
+    m1 = r1.approve_inbound(
+        af,
+        proto,
+        str(int_ipr + 0),
+        1337,
+        str(ext_ipr + 0),
+        10123,
+        str(ext_ipr + 1)
+    )
 
-    con_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    con_sock.bind(("192.168.8.183", port))
-    con_sock.connect(ext_bind)
-    print("after non-blocking con")
-    print(con_sock)
+    print(m1)
 
-    client_sock = ext_sock.accept()
-    print(client_sock)
+    a1 = r1.request_approval(
+        af,
+        proto,
+        str(ext_ipr + 0),
+        10123,
+        str(ext_ipr + 1),
+        m1
+    )
+
+    print(a1)
 
 
 
-
-    return
-
-    # nic ip will be primary, loopback will be 'change'
-    test_port = 3390
-    ip = "127.0.0.1"
-    proto = UDP
-    i = await Interface().start_local()
-
-    nat_sim = NATSim(iface=i)
-
-    await nat_sim.start()
-    print(nat_sim.ext_ports)
-    await nat_sim.close()
 
     return
     route = await i.route().bind(port=test_port, ips=ip)

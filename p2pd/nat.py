@@ -99,7 +99,7 @@ def f_is_hard(n, d):
     not_easy = n not in EASY_NATS
     return not_easy and d["type"] not in [PRESERV_DELTA, EQUAL_DELTA]
 
-def delta_info(delta_type, delta_value):
+def delta_info(delta_type, delta_value=NA_DELTA):
     return {
         "type": delta_type,
         "value": delta_value
