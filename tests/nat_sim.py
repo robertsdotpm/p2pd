@@ -32,7 +32,8 @@ far now its assumed this will be manually configured.
 NAT_IPR_V4 = IPRange("135.0.0.0", cidr=8)
 
 
-
+REUSE_NATS = [FULL_CONE, RESTRICT_NAT, RESTRICT_PORT_NAT]
+CREATE_NATS = REUSE_NATS + [SYMMETRIC_NAT]
 STUN_IP_PRIMARY = 1
 STUN_IP_CHANGE = 2
 STUN_PORT_PRIMARY = 1
@@ -170,7 +171,8 @@ class NATSim():
 class Router():
     def __init__(self, nat):
         self.nat = nat
-        self.endpoints = {
+
+        self.approvals = {
             IP4: { UDP: {}, TCP: {} },
             IP6: { UDP: {}, TCP: {} },
         }
@@ -201,16 +203,8 @@ class Router():
                 "local": 0
             }
 
-    # Used by connect on own NAT to simulate 'openning' the NAT.
-    def approve_inbound(self, af, proto, dst_ip, dst_port):
-        endpoints = self.endpoints[af][proto]
-        if dst_ip not in af_proto:
-            endpoints[dst_ip] = {}
-
-        endpoints[dst_ip][dst_port] = 1
-
     # Return first unused port from a given port.
-    def unused_delta(self, af, proto, dst_ip, dst_port):
+    def unused_port(self, af, proto, dst_ip, dst_port):
         mappings = self.mappings[af][proto]
         if dst_ip not in mappings:
             return dst_port
@@ -223,8 +217,8 @@ class Router():
                 return port
 
     # Allocates a new port for use with a new mapping.
-    def request_delta(self, af, proto, src_ip, src_port, dst_ip, dst_port, delta_type=None):
-        delta_type = delta_type or self.nat["delta"]["type"]
+    def request_port(self, af, proto, src_ip, src_port, dst_ip):
+        delta_type = self.nat["delta"]["type"]
         mappings = self.mappings[af][proto]
         deltas = self.deltas[af][proto][dst_ip]
         port = 0
@@ -276,32 +270,85 @@ class Router():
         # Request port is already allocated.
         # Use the first free port from that offset.
         if port in mappings[dst_ip] or not port:
-            return self.unused_delta(
+            return self.unused_port(
                 af,
                 proto,
                 dst_ip,
                 port
             )
 
+    # Used by connect on own NAT to simulate 'openning' the NAT.
+    def approve_inbound(self, af, proto, src_ip, src_port, dst_ip, dst_port, nat_ip):
+        # Add dst ip and port to approvals.
+        approvals.setdefault(dst_ip, {})
+        approvals[dst_ip][dst_port] = 1
+
+        # Reuse an existing mapping if it exists.
+        local_endpoint = [src_ip, src_port]
+        mappings = self.mappings[af][proto]
+        mapping = None
+        if nat_ip in mappings:
+            if local_endpoint in mappings:
+                mapping = mappings[nat_ip][local_endpoint]
+                if self.nat["type"] in REUSE_NATS:
+                    mapping = mappings[nat_ip][local_endpoint]
+
+        # Otherwise create a new mapping.
+        if mapping is None:
+            # Only certain NATs need a new 'mapping.'
+            if self.nat["type"] in CREATE_NATS:
+                # Request new port for the mapping.
+                nat_port = request_port(af,
+                    proto,
+                    src_ip,
+                    src_port,
+                    dst_ip
+                )
+
+                # The mappings are indexed by local endpoints.
+                mapping = [af, proto, nat_port]
+                mappings[nat_ip][local_endpoint] = mapping
+                mappings[nat_ip][mapping[2]] = mapping
+
+        # Return results.
+        if mapping is not None:
+            return mapping[-1]
+            
+        # Return results.
+        return 0
+
     # The other side calls this which returns a mapping
     # based on whether there's an approval + the nat setup.
-    async def create_mapping(self, af, proto, src_ip, src_port, dst_ip, dst_port):
+    async def request_approval(self, af, proto, dst_ip, dst_port, nat_ip, nat_port):
         self.init_delta(af, proto, dst_ip)
-        af_proto = self.mappings[af][proto]
+        endpoints = self.endpoints[af][proto]
+        mappings = self.mappings[af][proto]
         mapping = None
-        if self.nat["type"] == OPEN_INTERNET:
-            mapping = [af, proto, dst_ip, dst_port]
 
-        if self.nat["type"] == BLOCKED_NAT:
-            mapping = None
+        # No mappings for this NAT IP exist.
+        if nat_ip is not in mappings:
+            return 0
+        else:
+            mapping = mappings[nat_ip][nat_port]
+            if self.nat["type"] == FULL_CONE:
+                return nat_port
 
-        if self.nat["type"] == FULL_CONE:
-            # Reuse existing mapping if it exists.
-            if dst_ip in af_proto:
-                if dst_port in af_proto[dst_ip]:
-                    mapping = [af, proto, dst_ip, dst_port]
+            if self.nat["type"] == RESTRICT_NAT:
+                # Inbound destination must be approved.
+                if dst_ip != self.approvals:
+                    return 0
 
-            # Create new mapping 
+            if self.nat["type"] == RESTRICT_PORT_NAT:
+                # Inbound destination must be approved.
+                if dst_ip != self.approvals:
+                    return 0
+
+                # Inbound destination must use same port.
+                if dst_port != self.approvals[dst_ip]:
+                    return 0
+
+
+
 
         
 
