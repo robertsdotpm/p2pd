@@ -451,6 +451,40 @@ Then put it all together.
 2. create the punch nodes for the test
 """
 
+async def nat_sim_node(loopback, routers):
+    # Patch sock connect.
+    loop = asyncio.get_event_loop()
+    loop.sock_connect = patch_sock_connect(routers)
+
+    # Initialize interface.
+    interface = await Interface.start_local()
+    interface.unique_loopback = loopback
+
+    # Load clock skew for test machine.
+    if not hasattr(nat_sim_node, "clock_skew"):
+        nat_sim_node.clock_skew = (await SysClock(interface).start()).clock_skew
+
+    # Load process pool executors.
+    pp_executors = await get_pp_executors(workers=2)
+
+    # Start the main node.
+    node = await start_p2p_node(
+        node_id=node_name(b"nat_sim_node" + rand_plain(8), interface),
+
+        # Get brand new unassigned listen port.
+        # Avoid TIME_WAIT buggy sockets from port reuse.
+        port=0,
+        ifs=[interface],
+        clock_skew=nat_sim_node.clock_skew,
+        pp_executors=pp_executors,
+        enable_upnp=False
+    )
+
+    # Patch the mapping function for the STUNClient.
+    node.STUNClient.get_mapping = patch_get_mapping(routers)
+
+    return node
+
 
 async def nat_sim_main():
     af = IP4

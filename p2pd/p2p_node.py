@@ -111,6 +111,7 @@ class P2PUtils():
 class P2PNode(Daemon, P2PUtils):
     def __init__(self, if_list, port=NODE_PORT, node_id=None, ip=None, signal_offsets=None, enable_upnp=False, conf=NODE_CONF, seed=None):
         super().__init__()
+        self.STUNClient = STUNClient
         self.seed = seed or secrets.token_bytes(24)
         self.irc_dns = IRCDNS(if_list[0], self.seed, IRC_SERVERS)
         self.irc_refresher = IRCRefresher(self.irc_dns)
