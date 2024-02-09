@@ -120,8 +120,9 @@ class STUNServer(Daemon):
         await pipe.send(reply, client_tup)
 
 class Router():
-    def __init__(self, nat):
+    def __init__(self, nat, nat_ip):
         self.nat = nat
+        self.nat_ip = nat_ip
 
         self.approvals = {
             IP4: { UDP: {}, TCP: {} },
@@ -233,7 +234,12 @@ class Router():
 
         return port
 
-    # Used by connect on own NAT to simulate 'openning' the NAT.
+    """
+    Used by connect on own NAT to simulate 'openning' the NAT.
+    dst... = not where you're connecting to -- their local address
+    used to connect to our NAT.
+    src... = the local addressing details for the con
+    """
     def approve_inbound(self, af, proto, src_ip, src_port, dst_ip, dst_port, nat_ip):
         # Add dst ip and port to approvals.
         self.approvals.setdefault(dst_ip, {})
@@ -281,28 +287,28 @@ class Router():
 
     # The other side calls this which returns a mapping
     # based on whether there's an approval + the nat setup.
-    def request_approval(self, af, proto, dst_ip, dst_port, nat_ip, nat_port):
+    def request_approval(self, af, proto, dst_ip, dst_port, nat_ip):
         # Blocked.
         if self.nat["type"] in [BLOCKED_NAT, SYMMETRIC_UDP_FIREWALL]:
             return 0
 
         # Open internet -- can use any inbound port.
         if self.nat["type"] == OPEN_INTERNET:
-            return nat_port
+            return dst_port
 
         # No mappings for this NAT IP exist.
         mappings = self.mappings[af][proto]
         if nat_ip not in mappings:
             return 0
-        if nat_port not in mappings[nat_ip]:
+        if dst_port not in mappings[nat_ip]:
             return 0
 
         # Handle the main NATs.
-        mapping = mappings[nat_ip][nat_port]
+        mapping = mappings[nat_ip][dst_port]
 
         # Anyone can reuse this mapping.
         if self.nat["type"] == FULL_CONE:
-            return nat_port
+            return dst_port
 
         # Inbound IP must be approved.
         if self.nat["type"] == RESTRICT_NAT:
@@ -320,12 +326,131 @@ class Router():
         if self.nat["type"] == SYMMETRIC_NAT:
             if dst_ip != mapping[-3]:
                 return 0
-            if dst_ip != mapping[-2]:
+            if dst_port != mapping[-2]:
                 return 0
 
         # Otherwise success.
-        return nat_port
-        
+        return dst_port
+
+def lan_ip_to_router_ip(ip, routers_ipr=IPRange("127.128.0.0", cidr=10)):
+    lan_ip = IPRange(ip)
+    router_ipr = routers_ipr + (int(lan_ip) - 1)
+    return str(router_ipr)
+
+def patch_sock_connect(routers, loop=None):
+    routers_ipr = IPRange("127.128.0.0", cidr=10)
+    lans_ipr = IPRange("127.64.0.0", cidr=10)
+    loop = loop or asyncio.get_event_loop()
+    unpacked_connect = loop.sock_connect
+
+    async def patched_connect(sock, dest_tup):
+        src_tup = sock.getsockname()
+        src_ipr = IPRange(src_tup[0])
+        dest_ipr = IPRange(dest_tup[0])
+
+        # Connection to another virtual LAN machine.
+        if src_ipr in lan_ipr and dest_ipr in lan_ipr:
+            # Convert to our router IP.
+            our_router_ip = lan_ip_to_router_ip(src_tup[0])
+
+            # Get reference to our router.
+            our_router = routers[our_router_ip]
+
+            # Whitelist this destination in our router.
+            our_router.approve_inbound(
+                af=src_ipr.af,
+                proto=sock.type,
+                src_ip=src_tup[0],
+                src_port=src_tup[1],
+                dst_ip=dest_tup[0],
+                dst_port=dst_port[1],
+                nat_ip=our_router_ip
+            )
+
+            # Convert to their router IP.
+            their_router_ip = lan_ip_to_router_ip(dest_tup[0])
+
+            # Get reference to their router.
+            their_router = routers[their_router_ip]
+
+            # Check if we're allow to connect to them.
+            ret = their_router.request_approval(
+                af=src_ipr.af,
+                proto=sock.type,
+                dst_ip=dest_tup[0],
+                dest_port=dest_port[1],
+                nat_ip=their_router_ip
+            )
+
+            if ret is 0:
+                raise Exception("Sim NAT router returned 0.")
+            
+
+        return await unpacked_connect(sock, dest_tup)
+
+    return patched_connect
+
+# Patch get mapping?
+# get_nat_predictions
+"""
+                _, s, local_port, remote_port, _, _ = await stun_client.get_mapping(
+                    proto=STREAM,
+                    source_port=high_port
+                )
+
+STUN client get_mapping needs to be patched but what instance of stun_client
+    p2p_pipe.py
+        stun_client
+            get_mapping
+"""
+
+def patch_get_mapping(routers):
+    async def patched_func(self, proto, af=None, source_port=0, group="map", do_close=0, fast_fail=0, servers=None, conf=STUN_CONF):
+        # Bind to a unique loopback address in 127/8.
+        af = af or self.af
+        ips = self.interface.unique_loopback
+        route = self.interface.route(af)
+        await route.bind(ips=ips, port=source_port)
+
+        # This is a socket that is bound to that address.
+        sock = await socket_factory(route, conf=STUN_CONF)
+        local_tup = sock.getsockname()
+
+        # Get a reference to the router that belongs to this machine.
+        router_ip = lan_ip_to_router_ip(local_tup[0])
+        router = routers[router_ip]
+
+        # Create a new mapping.
+        mapping = router.approve_inbound(
+            af=af,
+            proto=proto,
+            src_ip=local_tup[0],
+            src_port=local_tup[1],
+            dst_ip=router_ip,
+            dst_port=3478,
+            nat_ip=router_ip
+        )
+
+        return [
+            self.interface,
+            sock,
+            local_tup[1],
+            mapping,
+            local_tup[0],
+            0.0
+        ]
+
+    return patched_func
+
+"""
+Patch interface.route to use the local nic ipr.
+
+Then put it all together.
+
+1. manually set interface.unique_loopback
+2. create the punch nodes for the test
+"""
+
 
 async def nat_sim_main():
     af = IP4
@@ -366,9 +491,8 @@ async def nat_sim_main():
         af,
         proto,
         str(ext_ipr + 0),
-        10123,
-        str(ext_ipr + 1),
-        m1
+        m1,
+        str(ext_ipr + 1)
     )
 
     print(a1)
@@ -407,3 +531,10 @@ async def nat_sim_main():
     print(ret[1].sock)
 
 async_test(nat_sim_main)
+
+
+"""
+
+
+
+"""
