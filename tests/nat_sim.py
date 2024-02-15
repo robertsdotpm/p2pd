@@ -1,34 +1,7 @@
 from p2pd import *
 import socket
 
-"""
-https://powerdns.org/tproxydoc/tproxy.md.html
-https://blog.cloudflare.com/how-we-built-spectrum
-https://tetrate.io/blog/what-is-tproxy-and-how-does-it-work/
 
-For network interfaces we can normally assume the availability
-of two addresses:
-    - loopback
-    - local addresses (like 192.168 and maybe 'link-local')
-
-Unfortunately, this is not enough to simulate a routers NAT.
-Think about it: when you're doing TCP punching code you need
-to reuse ports so that external mapping allocations are
-preserved. But if the external address is the same internal
-address collisions with the connect sockets bound port
-are guaranteed depending on NAT characteristics.
-
-The solution is to have access to a block of IPs in order
-to simulate:
-    - Multiple 'external' addresses.
-    - Internal gateway addresses.
-    - Connect sockets.
-
-That needs a lot of distinct IPs and they ought to be on
-the same subnet to simplify things. It's hard to write code
-that will automatically setup the IP blocks needed so
-far now its assumed this will be manually configured.
-"""
 NAT_IPR_V4 = IPRange("135.0.0.0", cidr=8)
 
 
@@ -213,7 +186,7 @@ class Router():
         in local port mappings.
         """
         if delta_type == DEPENDENT_DELTA:
-            delta = src_port + deltas["start"] + self.nat["delta"]["value"]
+            delta = deltas["start"] + (self.nat["delta"]["value"] * src_port)
             port = field_wrap(
                 delta,
                 self.nat["range"]
@@ -255,6 +228,7 @@ class Router():
                 mapping = mappings[nat_ip][local_endpoint]
                 if self.nat["type"] in reuse_nats:
                     mapping = mappings[nat_ip][local_endpoint]
+                    print("reuse map")
         else:
             mappings[nat_ip] = {}
 
@@ -264,6 +238,7 @@ class Router():
             create_nats = reuse_nats + [SYMMETRIC_NAT]
             if self.nat["type"] in create_nats:
                 # Request new port for the mapping.
+                print("create nat")
                 self.init_delta(af, proto, dst_ip)
                 nat_port = self.request_port(
                     af,
@@ -272,6 +247,7 @@ class Router():
                     src_port,
                     dst_ip
                 )
+                print("got = ", nat_port)
 
                 # The mappings are indexed by local endpoints.
                 mapping = [af, proto, dst_ip, dst_port, nat_port]
@@ -404,8 +380,8 @@ STUN client get_mapping needs to be patched but what instance of stun_client
             get_mapping
 """
 
-def patch_get_mapping(routers):
-    async def patched_func(self, proto, af=None, source_port=0, group="map", do_close=0, fast_fail=0, servers=None, conf=STUN_CONF):
+def patch_get_mapping(routers, self):
+    async def patched_func(proto, af=None, source_port=0, group="map", do_close=0, fast_fail=0, servers=None, conf=STUN_CONF):
         # Bind to a unique loopback address in 127/8.
         af = af or self.af
         ips = self.interface.unique_loopback
@@ -415,6 +391,7 @@ def patch_get_mapping(routers):
         # This is a socket that is bound to that address.
         sock = await socket_factory(route, conf=STUN_CONF)
         local_tup = sock.getsockname()
+
 
         # Get a reference to the router that belongs to this machine.
         router_ip = lan_ip_to_router_ip(local_tup[0])
@@ -451,7 +428,12 @@ Then put it all together.
 2. create the punch nodes for the test
 """
 
-async def nat_sim_node(loopback, routers):
+async def nat_sim_node(loopback, nat, routers):
+    # Create router instance.
+    router_ip = lan_ip_to_router_ip(loopback)
+    router = Router(nat, router_ip)
+    routers[router_ip] = router
+
     # Patch sock connect.
     loop = asyncio.get_event_loop()
     loop.sock_connect = patch_sock_connect(routers)
@@ -487,6 +469,39 @@ async def nat_sim_node(loopback, routers):
 
 
 async def nat_sim_main():
+    delta = delta_info(DEPENDENT_DELTA, 10)
+    nat = nat_info(RESTRICT_NAT, delta)
+    nat_ip = IPRange("127.128.0.1", cidr=32)
+    router = Router(nat, nat_ip)
+    routers = {
+        str(nat_ip): router
+    }
+
+
+    interface = await Interface().start_local()
+    interface.unique_loopback = "127.64.0.1"
+    stun_client = STUNClient(interface)
+    stun_client.get_mapping = patch_get_mapping(routers, stun_client)
+
+    out = await stun_client.get_mapping(UDP, source_port=50000)
+    print(out)
+
+    out = await stun_client.get_mapping(UDP, source_port=50001)
+    print(out)
+
+    print(router.deltas)
+    print()
+    print(router.mappings)
+    print()
+    print(router.approvals)
+
+    ret = await interface.load_nat(stun_client)
+    print(ret)
+
+    return
+
+
+
     af = IP4
     proto = TCP
     int_ipr = IPRange("127.64.0.0", cidr=10)

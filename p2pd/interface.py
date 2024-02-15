@@ -398,7 +398,7 @@ class Interface():
         assert(nat.keys() == nat_info().keys())
         self.nat = nat
 
-    async def load_nat(self):
+    async def load_nat(self, stun_client=None):
         # Try to avoid circular imports.
         from .base_stream import pipe_open
         from .stun_client import STUNClient, STUN_CONF
@@ -410,7 +410,7 @@ class Interface():
         else:
             # STUN is used to get the delta type.
             af = IP4
-            stun_client = STUNClient(
+            stun_client = stun_client or STUNClient(
                 self,
                 af
             )
