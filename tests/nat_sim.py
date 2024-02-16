@@ -1,8 +1,24 @@
 from p2pd import *
 import socket
 
+CLIENT_IPRS = {
+    IP4: IPRange("127.192.0.0", cidr=10)
+}
 
-NAT_IPR_V4 = IPRange("135.0.0.0", cidr=8)
+EXT_IPRS = {
+    IP4: IPRange("8.192.0.0", cidr=10)
+}
+
+ROUTER_IPRS = {
+    IP4: IPRange("127.128.0.0", cidr=10)
+}
+
+STUN_ADDRS = {
+    IP4: {
+        "ip": ["127.64.0.1", "127.64.0.2"],
+        "port": [3478, 3479]
+    }
+}
 
 
 STUN_IP_PRIMARY = 1
@@ -13,33 +29,78 @@ STUN_MAPPED_ADDR = b"\x00\x01"
 STUN_SRC_ADDR = b"\x00\x04"
 STUN_CHANGED_ADDR = b"\x00\x05"
 
+SRC_IP_NO_CHANGE = 0
+SRC_PORT_NO_CHANGE = 0
+
+def change_src_mode(af, needle, offset):
+    for entry in STUN_ADDRS[af][offset]:
+        if entry != needle:
+            return entry
+
 def stun_write_attr(attr_type, attr_val):
     buf = attr_type
     buf += (  b"\x00" + i_to_b( len(attr_val) )  )[-2:]
     buf += attr_val
     return buf
 
-def stun_endpoint_attr_val(end_tup, sock):
-    ip, port = end_tup
-    if sock.family == socket.AF_INET6:
+def stun_endpoint_attr(end_tup, af):
+    ip, port = end_tup[0:2]
+    if af == IP6:
         ip = ipv6_norm(ip)
     attr_val = b"\x00\x00" # Some kind of padding.
     attr_val += (  b"\x00" + i_to_b( port )  )[-2:]
     attr_val += socket.inet_aton(ip)
     return attr_val
 
-class STUNServer(Daemon):
-    def __init__(self, ip_actor, ip_port):
-        self.ip_actor = ip_actor
-        self.ip_port = ip_port
-        self.nat = None
+def lan_ip_to_router_ip(ip):
+    lan_ipr = IPRange(ip)
+    router_ipr = ROUTER_IPRS[lan_ipr.af]
+    router_ipr = router_ipr + (int(lan_ipr) - 1)
+    return str(router_ipr)
 
-    def set_nat(self, nat):
-        self.nat = nat
+def lan_ip_to_ext_ip(ip):
+    lan_ipr = IPRange(ip)
+    ext_ipr = EXT_IPRS[lan_ipr.af]
+    ext_ipr = ext_ipr + (int(lan_ipr) - 1)
+    return str(ext_ipr)
+
+class STUNRouterServer(Daemon):
+    def __init__(self, af, proto, serv_ip, serv_port, routers, stun_servs):
+        self.af = af
+        self.proto = proto
+        self.serv_ip = serv_ip
+        self.serv_port = serv_port
+        self.routers = routers
+        self.stun_servs = stun_servs
+
+        self.change_ip = change_src_mode(
+            self.af,
+            self.serv_ip,
+            "ip"
+        )
+
+        self.change_port = change_src_mode(
+            self.af,
+            self.serv_port,
+            "port"
+        )
 
     async def msg_cb(self, msg, client_tup, pipe):
         print(msg)
         print(client_tup)
+        # Source mode for sending responses from.
+        src_mode = [
+            self.serv_ip,
+            self.serv_port
+        ]
+
+        # Only accept connections from a certain range.
+        af = pipe.route.af
+        client_ipr = IPRange(client_tup[0])
+        if client_ipr not in CLIENT_IPRS[af]:
+            print(f"Client IPR: {client_ipr} error.")
+            return
+
 
         # Minimum request size.
         msg_len = len(msg)
@@ -53,6 +114,15 @@ class STUNServer(Daemon):
         tran_id = msg[4:20]
         if extra_len + 20 <= msg_len:
             extra = msg[20:][:extra_len]
+            extra = binascii.b2a_hex(extra)
+
+            # Change source IP.
+            if extra == changeRequest:
+                src_mode[0] = self.change_ip
+
+            # Change source port.
+            if extra == changePortRequest:
+                src_mode[1] = self.change_port
         else:
             extra = None
 
@@ -61,24 +131,54 @@ class STUNServer(Daemon):
             print("2")
             return
 
+        # Get fields to send back based on their 'router.'
+        router_ip = lan_ip_to_router_ip(client_tup[0])
+        router = self.routers[router_ip]
+        mapping = router.request_approval(
+            self.af,
+            self.proto,
+            src_mode[0],
+            src_mode[1],
+            router_ip
+        )
+
+        # If their router rejected it then return.
+        if not ret:
+            print("Router rejected this.")
+            return
+
         # Bind response msg.
         reply = b"\x01\x01"
 
-        # Show their endpoint and our own.
-        try:
-            mapped_data = stun_endpoint_attr_val(client_tup, pipe.sock)
-            attrs = stun_write_attr(STUN_MAPPED_ADDR, mapped_data)
-            server_data = stun_endpoint_attr_val(
-                client_tup[:2], pipe.sock
+        # Write external address and port view.
+        ext_tup = copy.deepcopy(client_tup)
+        ext_tup[0] = lan_ip_to_ext_ip(client_tup[0])
+        ext_tup[1] = mapping
+        attrs = stun_write_attr(
+            STUN_MAPPED_ADDR,
+            stun_endpoint_attr(ext_tup, af)
+        )
+
+        # Write the servers own local address.
+        attrs += stun_write_attr(
+            STUN_SRC_ADDR,
+            stun_endpoint_attr(
+                (self.serv_ip, self.serv_port),
+                af
             )
-            for attr_type in [STUN_SRC_ADDR, STUN_CHANGED_ADDR]:
-                attrs += stun_write_attr(
-                    attr_type,
-                    server_data
-                )
-        except:
-            what_exception()
-            return
+        )
+
+        # Write the servers change address details.
+        attrs += stun_write_attr(
+            STUN_CHANGED_ADDR,
+            stun_endpoint_attr(
+                (
+                    self.change_ip,
+                    self.change_port
+                ),
+                af
+            )
+        )
 
         # Attr len.
         reply += (  b"\x00" + i_to_b( len(attrs) )  )[-2:]
@@ -89,8 +189,10 @@ class STUNServer(Daemon):
         # Attrs.
         reply += attrs
 
-        # Send reply.
-        await pipe.send(reply, client_tup)
+        # Send reply (possible from different endpoint.)
+        out_pipes = self.stun_servs[af][proto]
+        out_pipe = out_pipes[src_mode[0]][src_mode[1]]
+        await out_pipe.send(reply, client_tup)
 
 class Router():
     def __init__(self, nat, nat_ip):
@@ -307,11 +409,6 @@ class Router():
 
         # Otherwise success.
         return dst_port
-
-def lan_ip_to_router_ip(ip, routers_ipr=IPRange("127.128.0.0", cidr=10)):
-    lan_ip = IPRange(ip)
-    router_ipr = routers_ipr + (int(lan_ip) - 1)
-    return str(router_ipr)
 
 def patch_sock_connect(routers, loop=None):
     routers_ipr = IPRange("127.128.0.0", cidr=10)
