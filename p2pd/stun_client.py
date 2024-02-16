@@ -601,6 +601,7 @@ class STUNClient():
                 msg = "doing stun sub test for %s" % (name)
                 ret = await stun_sub_test(msg, stun_addr, interface, af, proto, source_port, stun_addr, "", local_addr=local_addr, conf=conf, init_pipe=self.init_pipe)
                 nat_info, pipe = ret
+                print(ret)
 
                 # Check response.
                 error = stun_check_reply(stun_addr, nat_info, lax)

@@ -398,7 +398,7 @@ class Interface():
         assert(nat.keys() == nat_info().keys())
         self.nat = nat
 
-    async def load_nat(self, stun_client=None):
+    async def load_nat(self, stun_client=None, stun_servers=None, pipe=None):
         # Try to avoid circular imports.
         from .base_stream import pipe_open
         from .stun_client import STUNClient, STUN_CONF
@@ -416,23 +416,30 @@ class Interface():
             )
 
             # Get the NAT type.
-            route = await self.route(af).bind()
-            pipe = await pipe_open(UDP, route=route, conf=STUN_CONF)
+            if pipe is None:
+                route = await self.route(af).bind()
+                pipe = await pipe_open(UDP, route=route, conf=STUN_CONF)
+                print("load nat pipe.")
+                print(pipe.sock)
+
 
             # Run delta test.
-            nat_type, delta = await asyncio.wait_for(
+            stun_servers = stun_servers or STUND_SERVERS[af]
+            nat_type, = await asyncio.wait_for(
                 asyncio.gather(*[
                     async_wrap_errors(
-                        fast_nat_test(pipe, STUND_SERVERS[af])
+                        fast_nat_test(pipe, stun_servers)
                     ),
-                    async_wrap_errors(
-                        delta_test(stun_client)
-                    )
+
+                    #async_wrap_errors(
+                    #    delta_test(stun_client)
+                    #)
                 ]),
                 timeout=4
             )
 
-            nat = nat_info(nat_type, delta)
+            #delta = delta_info()
+            nat = nat_info(nat_type)
             await pipe.close()
 
         # Load NAT type and delta info.

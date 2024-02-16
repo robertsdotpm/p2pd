@@ -139,6 +139,8 @@ async def nat_test_exec(dest_addr, reply_addr, payload, pipe, q, test_coro):
         conf=conf
     )
 
+    print(ret)
+
     # Valid reply.
     if ret is not None and not isinstance(ret, tuple):
         if ret["resp"]:

@@ -97,6 +97,9 @@ class STUNRouterServer(Daemon):
                 self.serv_port
             ]
 
+            print(f"src_mode = {src_mode}")
+            print(f"change = {self.change_ip} {self.change_port}")
+
             # Only accept connections from a certain range.
             af = pipe.route.af
             client_ipr = IPRange(client_tup[0])
@@ -118,6 +121,7 @@ class STUNRouterServer(Daemon):
             if extra_len + 20 <= msg_len:
                 extra = msg[20:][:extra_len]
                 extra = binascii.b2a_hex(extra)
+                print(extra)
 
                 # Change source IP.
                 if extra == changeRequest:
@@ -145,6 +149,8 @@ class STUNRouterServer(Daemon):
                 self.proto,
                 src_mode[0],
                 src_mode[1],
+                client_tup[0],
+                client_tup[1],
                 router_ip
             )
 
@@ -334,6 +340,17 @@ class Router():
         self.approvals.setdefault(dst_ip, {})
         self.approvals[dst_ip][dst_port] = 1
 
+        """
+        1. make a new mapping for restrict nat
+        if local endpoint doesnt exist or localendpoint[dst]
+            doesnt exist.
+        2. make a new mapping for restrict port if
+        localendpoint[dst + dst port] doesnt exist
+        3. symmetric has new for all of them
+        4. full code makes new if localendpoit doesnt exist
+
+        """
+
         # Reuse an existing mapping if it exists.
         mapping = None
         mappings = self.mappings[af][proto]
@@ -368,11 +385,11 @@ class Router():
                 # The mappings are indexed by local endpoints.
                 mapping = [af, proto, dst_ip, dst_port, nat_port]
                 mappings[nat_ip][local_endpoint] = mapping
-                mappings[nat_ip][mapping[-1]] = mapping
+                #mappings[nat_ip][mapping[-1]] = mapping
 
                 # Mappings are also indexed by destination.
-                dst_endpoint = str([dst_ip, dst_port])
-                mappings[nat_ip][dst_endpoint] = mapping
+                #dst_endpoint = str([dst_ip, dst_port])
+                #mappings[nat_ip][dst_endpoint] = mapping
 
         # Return results.
         if mapping is not None:
@@ -383,7 +400,7 @@ class Router():
 
     # The other side calls this which returns a mapping
     # based on whether there's an approval + the nat setup.
-    def request_approval(self, af, proto, dst_ip, dst_port, nat_ip):
+    def request_approval(self, af, proto, src_ip, src_port, dst_ip, dst_port, nat_ip):
         # Blocked.
         if self.nat["type"] in [BLOCKED_NAT, SYMMETRIC_UDP_FIREWALL]:
             print("a")
@@ -398,13 +415,13 @@ class Router():
         if nat_ip not in mappings:
             print("b")
             return 0
-        dst_endpoint = str([dst_ip, dst_port])
-        if dst_endpoint not in mappings[nat_ip]:
+        src_endpoint = str([src_ip, src_port])
+        if src_endpoint not in mappings[nat_ip]:
             print("c")
             return 0
 
         # Handle the main NATs.
-        mapping = mappings[nat_ip][dst_endpoint]
+        mapping = mappings[nat_ip][src_endpoint]
 
         # Anyone can reuse this mapping.
         if self.nat["type"] == FULL_CONE:
@@ -503,6 +520,28 @@ STUN client get_mapping needs to be patched but what instance of stun_client
             get_mapping
 """
 
+def nat_approve_pipe(pipe, dest_tup, routers):
+    # Get a reference to the router for this machine.
+    local_tup = pipe.sock.getsockname()
+    router_ip = lan_ip_to_router_ip(local_tup[0])
+    router = routers[router_ip]
+    print(f"patched: {local_tup} {dest_tup} {router_ip}")
+    print(pipe.route.af)
+    print(pipe.sock.type)
+
+    # Create a new mapping.
+    mapping = router.approve_inbound(
+        af=pipe.route.af,
+        proto=pipe.sock.type,
+        src_ip=dest_tup[0],
+        src_port=dest_tup[1],
+        dst_ip=local_tup[0],
+        dst_port=local_tup[1],
+        nat_ip=router_ip
+    )
+
+    print(f"mapping p: {mapping} {router.mappings}")
+
 def patch_init_pipe(init_pipe, routers):
     async def patched(dest_addr, interface, af, proto, source_port, local_addr=None, conf=STUN_CONF):
         try:
@@ -516,27 +555,8 @@ def patch_init_pipe(init_pipe, routers):
                 conf
             )
 
+            nat_approve_pipe(pipe, routers)
 
-            # Get a reference to the router for this machine.
-            local_tup = pipe.sock.getsockname()
-            router_ip = lan_ip_to_router_ip(local_tup[0])
-            router = routers[router_ip]
-            print(f"patched: {local_tup} {dest_addr.tup} {router_ip}")
-            print(af)
-            print(proto)
-
-            # Create a new mapping.
-            mapping = router.approve_inbound(
-                af=af,
-                proto=proto,
-                src_ip=local_tup[0],
-                src_port=local_tup[1],
-                dst_ip=dest_addr.tup[0],
-                dst_port=dest_addr.tup[1],
-                nat_ip=router_ip
-            )
-
-            print(f"mapping p: {mapping} {router.mappings}")
 
             return pipe
         except:
@@ -710,12 +730,36 @@ async def nat_sim_main():
         },
     ]
 
+    STUND_SERVERS[IP4] = stun_servers
+
+    """
     print("before get mappings")
     ret = await stun_client.get_mapping(proto, servers=stun_servers)
     print(ret)
 
-    await close_stun_servs(stun_servs)
+    symmetric independent delta
+    """
 
+    route = await interface.route(af).bind()
+    pipe = await pipe_open(UDP, route=route, conf=STUN_CONF)
+    print("load nat pipe.")
+    print(pipe.sock)
+
+    #nat_approve_pipe(pipe, routers)
+    # nat_test_exec needs to be patched to approve the dest
+
+
+    serv_info = [stun_servers[0]["primary"]["ip"], 3478]
+    nat_approve_pipe(pipe, serv_info, routers)
+    serv_info = [stun_servers[0]["secondary"]["ip"], 3478]
+    nat_approve_pipe(pipe, serv_info, routers)
+
+    ret = await interface.load_nat(stun_client, stun_servers, pipe)
+    print(ret)
+
+
+
+    await close_stun_servs(stun_servs)
 
     return
 
@@ -740,7 +784,8 @@ async def nat_sim_main():
     print()
     print(router.approvals)
 
-    ret = await interface.load_nat(stun_client)
+
+    ret = await interface.load_nat(stun_client, stun_servers, pipe)
     print(ret)
 
     return
