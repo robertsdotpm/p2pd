@@ -65,13 +65,14 @@ def lan_ip_to_ext_ip(ip):
     return str(ext_ipr)
 
 class STUNRouterServer(Daemon):
-    def __init__(self, af, proto, serv_ip, serv_port, routers, stun_servs):
+    def __init__(self, af, proto, serv_ip, serv_port, routers, serv_pipes):
+        super().__init__()
         self.af = af
         self.proto = proto
         self.serv_ip = serv_ip
         self.serv_port = serv_port
         self.routers = routers
-        self.stun_servs = stun_servs
+        self.serv_pipes = serv_pipes
 
         self.change_ip = change_src_mode(
             self.af,
@@ -190,6 +191,7 @@ class STUNRouterServer(Daemon):
         reply += attrs
 
         # Send reply (possible from different endpoint.)
+        # TODO: if TCP -- make a new connection.
         out_pipes = self.stun_servs[af][proto]
         out_pipe = out_pipes[src_mode[0]][src_mode[1]]
         await out_pipe.send(reply, client_tup)
@@ -564,8 +566,71 @@ async def nat_sim_node(loopback, nat, routers):
 
     return node
 
+async def start_stun_servs(af, proto, interface, routers):
+    serv_pipes = {
+        IP4: {
+            UDP: {}, TCP: {}
+        },
+        IP6: {
+            UDP: {}, TCP: {}
+        },
+    }
+    servs = copy.deepcopy(serv_pipes)
+
+
+    for serv_ip in STUN_ADDRS[af]["ip"]:
+        route = await interface.route(af).bind(ips=serv_ip)
+        for serv_port in STUN_ADDRS[af]["port"]:
+            serv = STUNRouterServer(
+                af=af,
+                proto=proto,
+                serv_ip=serv_ip,
+                serv_port=serv_port,
+                routers=routers,
+                serv_pipes=serv_pipes
+            )
+
+            await serv.listen_specific(
+                targets=[[route, proto]],
+            )
+
+            # Server 0, offset 2 is the pipe.
+            # Need to make this more clean in the future...
+            serv_pipe = serv.servers[0][2]
+            serv_pipes[af][proto][serv_port] = serv_pipe
+            servs[af][proto][serv_port] = serv
+
+    return serv_pipes, servs
+
+async def close_stun_servs(servs):
+    tasks = []
+    for af in [IP4, IP6]:
+        for proto in [TCP, UDP]:
+            sub_servs = servs[af][proto]
+            for serv_port in sub_servs:
+                serv = sub_servs[serv_port]
+                tasks.append(serv.close())
+
+    await asyncio.gather(*tasks)
 
 async def nat_sim_main():
+    af = IP4
+    proto = UDP
+    interface = await Interface().start_local()
+    routers = {}
+    stun_serv_pipes, stun_servs = await start_stun_servs(
+        af,
+        proto,
+        interface,
+        routers
+    )
+
+    await close_stun_servs(stun_servs)
+
+
+    return
+
+
     delta = delta_info(DEPENDENT_DELTA, 10)
     nat = nat_info(RESTRICT_NAT, delta)
     nat_ip = IPRange("127.128.0.1", cidr=32)
