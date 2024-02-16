@@ -87,114 +87,126 @@ class STUNRouterServer(Daemon):
         )
 
     async def msg_cb(self, msg, client_tup, pipe):
-        print(msg)
-        print(client_tup)
-        # Source mode for sending responses from.
-        src_mode = [
-            self.serv_ip,
-            self.serv_port
-        ]
+        try:
+            print(f"got stun req from {client_tup} at {self.serv_ip} {self.serv_port}")
+            print(msg)
 
-        # Only accept connections from a certain range.
-        af = pipe.route.af
-        client_ipr = IPRange(client_tup[0])
-        if client_ipr not in CLIENT_IPRS[af]:
-            print(f"Client IPR: {client_ipr} error.")
-            return
+            # Source mode for sending responses from.
+            src_mode = [
+                self.serv_ip,
+                self.serv_port
+            ]
+
+            # Only accept connections from a certain range.
+            af = pipe.route.af
+            client_ipr = IPRange(client_tup[0])
+            if client_ipr not in CLIENT_IPRS[af]:
+                print(f"Client IPR: {client_ipr} error.")
+                return
 
 
-        # Minimum request size.
-        msg_len = len(msg)
-        if msg_len < 20:
-            print("1")
-            return
+            # Minimum request size.
+            msg_len = len(msg)
+            if msg_len < 20:
+                print("1")
+                return
 
-        # Unpack request.
-        hdr = msg[0:2]
-        extra_len = b_to_i(msg[2:4])
-        tran_id = msg[4:20]
-        if extra_len + 20 <= msg_len:
-            extra = msg[20:][:extra_len]
-            extra = binascii.b2a_hex(extra)
+            # Unpack request.
+            hdr = msg[0:2]
+            extra_len = b_to_i(msg[2:4])
+            tran_id = msg[4:20]
+            if extra_len + 20 <= msg_len:
+                extra = msg[20:][:extra_len]
+                extra = binascii.b2a_hex(extra)
 
-            # Change source IP.
-            if extra == changeRequest:
-                src_mode[0] = self.change_ip
+                # Change source IP.
+                if extra == changeRequest:
+                    src_mode[0] = self.change_ip
 
-            # Change source port.
-            if extra == changePortRequest:
-                src_mode[1] = self.change_port
-        else:
-            extra = None
+                # Change source port.
+                if extra == changePortRequest:
+                    src_mode[1] = self.change_port
+            else:
+                extra = None
 
-        # Check hdr.
-        if hdr != b"\x00\x01":
-            print("2")
-            return
+            # Check hdr.
+            if hdr != b"\x00\x01":
+                print("2")
+                return
 
-        # Get fields to send back based on their 'router.'
-        router_ip = lan_ip_to_router_ip(client_tup[0])
-        router = self.routers[router_ip]
-        mapping = router.request_approval(
-            self.af,
-            self.proto,
-            src_mode[0],
-            src_mode[1],
-            router_ip
-        )
+            # Get fields to send back based on their 'router.'
+            router_ip = lan_ip_to_router_ip(client_tup[0])
+            print(f"using router: {router_ip}")
+            print(f"using params: {self.af} {self.proto} {src_mode}")
 
-        # If their router rejected it then return.
-        if not ret:
-            print("Router rejected this.")
-            return
-
-        # Bind response msg.
-        reply = b"\x01\x01"
-
-        # Write external address and port view.
-        ext_tup = copy.deepcopy(client_tup)
-        ext_tup[0] = lan_ip_to_ext_ip(client_tup[0])
-        ext_tup[1] = mapping
-        attrs = stun_write_attr(
-            STUN_MAPPED_ADDR,
-            stun_endpoint_attr(ext_tup, af)
-        )
-
-        # Write the servers own local address.
-        attrs += stun_write_attr(
-            STUN_SRC_ADDR,
-            stun_endpoint_attr(
-                (self.serv_ip, self.serv_port),
-                af
+            router = self.routers[router_ip]
+            mapping = router.request_approval(
+                self.af,
+                self.proto,
+                src_mode[0],
+                src_mode[1],
+                router_ip
             )
-        )
 
-        # Write the servers change address details.
-        attrs += stun_write_attr(
-            STUN_CHANGED_ADDR,
-            stun_endpoint_attr(
-                (
-                    self.change_ip,
-                    self.change_port
-                ),
-                af
+            # If their router rejected it then return.
+            if not mapping:
+                print("Router rejected this.")
+                return
+
+            print(f"accepted {mapping}")
+
+            # Bind response msg.
+            reply = b"\x01\x01"
+
+            # Write external address and port view.
+            ext_tup = list(client_tup[:])
+            ext_tup[0] = lan_ip_to_ext_ip(client_tup[0])
+            ext_tup[1] = mapping
+            attrs = stun_write_attr(
+                STUN_MAPPED_ADDR,
+                stun_endpoint_attr(ext_tup, af)
             )
-        )
 
-        # Attr len.
-        reply += (  b"\x00" + i_to_b( len(attrs) )  )[-2:]
+            # Write the servers own local address.
+            attrs += stun_write_attr(
+                STUN_SRC_ADDR,
+                stun_endpoint_attr(
+                    (self.serv_ip, self.serv_port),
+                    af
+                )
+            )
 
-        # Tran id.
-        reply += tran_id
+            # Write the servers change address details.
+            attrs += stun_write_attr(
+                STUN_CHANGED_ADDR,
+                stun_endpoint_attr(
+                    (
+                        self.change_ip,
+                        self.change_port
+                    ),
+                    af
+                )
+            )
 
-        # Attrs.
-        reply += attrs
+            # Attr len.
+            reply += (  b"\x00" + i_to_b( len(attrs) )  )[-2:]
 
-        # Send reply (possible from different endpoint.)
-        # TODO: if TCP -- make a new connection.
-        out_pipes = self.stun_servs[af][proto]
-        out_pipe = out_pipes[src_mode[0]][src_mode[1]]
-        await out_pipe.send(reply, client_tup)
+            # Tran id.
+            reply += tran_id
+
+            # Attrs.
+            reply += attrs
+
+            # Send reply (possible from different endpoint.)
+            # TODO: if TCP -- make a new connection.
+            out_pipes = self.serv_pipes[af][self.proto]
+            out_pipe = out_pipes[src_mode[0]][src_mode[1]]
+
+            print(out_pipe.sock)
+            print(reply)
+            await out_pipe.send(reply, client_tup)
+        except:
+            log_exception()
 
 class Router():
     def __init__(self, nat, nat_ip):
@@ -358,6 +370,10 @@ class Router():
                 mappings[nat_ip][local_endpoint] = mapping
                 mappings[nat_ip][mapping[-1]] = mapping
 
+                # Mappings are also indexed by destination.
+                dst_endpoint = str([dst_ip, dst_port])
+                mappings[nat_ip][dst_endpoint] = mapping
+
         # Return results.
         if mapping is not None:
             return mapping[-1]
@@ -370,6 +386,7 @@ class Router():
     def request_approval(self, af, proto, dst_ip, dst_port, nat_ip):
         # Blocked.
         if self.nat["type"] in [BLOCKED_NAT, SYMMETRIC_UDP_FIREWALL]:
+            print("a")
             return 0
 
         # Open internet -- can use any inbound port.
@@ -379,12 +396,15 @@ class Router():
         # No mappings for this NAT IP exist.
         mappings = self.mappings[af][proto]
         if nat_ip not in mappings:
+            print("b")
             return 0
-        if dst_port not in mappings[nat_ip]:
+        dst_endpoint = str([dst_ip, dst_port])
+        if dst_endpoint not in mappings[nat_ip]:
+            print("c")
             return 0
 
         # Handle the main NATs.
-        mapping = mappings[nat_ip][dst_port]
+        mapping = mappings[nat_ip][dst_endpoint]
 
         # Anyone can reuse this mapping.
         if self.nat["type"] == FULL_CONE:
@@ -393,13 +413,16 @@ class Router():
         # Inbound IP must be approved.
         if self.nat["type"] == RESTRICT_NAT:
             if dst_ip not in self.approvals:
+                print("d")
                 return 0
 
         # Both inbound IP and port must be aproved.
         if self.nat["type"] == RESTRICT_PORT_NAT:
             if dst_ip not in self.approvals:
+                print("e")
                 return 0
             if dst_port not in self.approvals[dst_ip]:
+                print("f")
                 return 0
 
         # The inbound dest has to match the mapping.
@@ -410,6 +433,7 @@ class Router():
                 return 0
 
         # Otherwise success.
+        print("g")
         return dst_port
 
 def patch_sock_connect(routers, loop=None):
@@ -479,44 +503,46 @@ STUN client get_mapping needs to be patched but what instance of stun_client
             get_mapping
 """
 
-def patch_get_mapping(routers, self):
-    async def patched_func(proto, af=None, source_port=0, group="map", do_close=0, fast_fail=0, servers=None, conf=STUN_CONF):
-        # Bind to a unique loopback address in 127/8.
-        af = af or self.af
-        ips = self.interface.unique_loopback
-        route = self.interface.route(af)
-        await route.bind(ips=ips, port=source_port)
+def patch_init_pipe(init_pipe, routers):
+    async def patched(dest_addr, interface, af, proto, source_port, local_addr=None, conf=STUN_CONF):
+        try:
+            pipe = await init_pipe(
+                dest_addr,
+                interface,
+                af,
+                proto,
+                source_port,
+                local_addr,
+                conf
+            )
 
-        # This is a socket that is bound to that address.
-        sock = await socket_factory(route, conf=STUN_CONF)
-        local_tup = sock.getsockname()
 
+            # Get a reference to the router for this machine.
+            local_tup = pipe.sock.getsockname()
+            router_ip = lan_ip_to_router_ip(local_tup[0])
+            router = routers[router_ip]
+            print(f"patched: {local_tup} {dest_addr.tup} {router_ip}")
+            print(af)
+            print(proto)
 
-        # Get a reference to the router that belongs to this machine.
-        router_ip = lan_ip_to_router_ip(local_tup[0])
-        router = routers[router_ip]
+            # Create a new mapping.
+            mapping = router.approve_inbound(
+                af=af,
+                proto=proto,
+                src_ip=local_tup[0],
+                src_port=local_tup[1],
+                dst_ip=dest_addr.tup[0],
+                dst_port=dest_addr.tup[1],
+                nat_ip=router_ip
+            )
 
-        # Create a new mapping.
-        mapping = router.approve_inbound(
-            af=af,
-            proto=proto,
-            src_ip=local_tup[0],
-            src_port=local_tup[1],
-            dst_ip=router_ip,
-            dst_port=3478,
-            nat_ip=router_ip
-        )
+            print(f"mapping p: {mapping} {router.mappings}")
 
-        return [
-            self.interface,
-            sock,
-            local_tup[1],
-            mapping,
-            local_tup[0],
-            0.0
-        ]
+            return pipe
+        except:
+            log_exception()
 
-    return patched_func
+    return patched
 
 """
 Patch interface.route to use the local nic ipr.
@@ -579,8 +605,13 @@ async def start_stun_servs(af, proto, interface, routers):
 
 
     for serv_ip in STUN_ADDRS[af]["ip"]:
-        route = await interface.route(af).bind(ips=serv_ip)
         for serv_port in STUN_ADDRS[af]["port"]:
+            # Listen details.
+            route = await interface.route(af).bind(
+                ips=serv_ip,
+                port=serv_port
+            )
+
             serv = STUNRouterServer(
                 af=af,
                 proto=proto,
@@ -597,8 +628,12 @@ async def start_stun_servs(af, proto, interface, routers):
             # Server 0, offset 2 is the pipe.
             # Need to make this more clean in the future...
             serv_pipe = serv.servers[0][2]
-            serv_pipes[af][proto][serv_port] = serv_pipe
-            servs[af][proto][serv_port] = serv
+            if serv_ip not in serv_pipes[af][proto]:
+                serv_pipes[af][proto][serv_ip] = {}
+                servs[af][proto][serv_ip] = {}
+
+            serv_pipes[af][proto][serv_ip][serv_port] = serv_pipe
+            servs[af][proto][serv_ip][serv_port] = serv
 
     return serv_pipes, servs
 
@@ -607,30 +642,28 @@ async def close_stun_servs(servs):
     for af in [IP4, IP6]:
         for proto in [TCP, UDP]:
             sub_servs = servs[af][proto]
-            for serv_port in sub_servs:
-                serv = sub_servs[serv_port]
-                tasks.append(serv.close())
+            for serv_ip in sub_servs:
+                sub_serv = sub_servs[serv_ip]
+                for serv_port in sub_serv:
+                    serv = sub_serv[serv_port]
+                    tasks.append(serv.close())
 
     await asyncio.gather(*tasks)
 
+def patch_route(af, ip, interface):
+    def patched(af_ignore=None, bind_port=0):
+        return Route(
+            af=af,
+            nic_ips=[IPRange(ip)],
+            ext_ips=[IPRange(ip)],
+            interface=interface,
+            ext_check=0
+        )
+
+    return patched
+
 async def nat_sim_main():
-    af = IP4
-    proto = UDP
-    interface = await Interface().start_local()
-    routers = {}
-    stun_serv_pipes, stun_servs = await start_stun_servs(
-        af,
-        proto,
-        interface,
-        routers
-    )
-
-    await close_stun_servs(stun_servs)
-
-
-    return
-
-
+    # Single simulated router.
     delta = delta_info(DEPENDENT_DELTA, 10)
     nat = nat_info(RESTRICT_NAT, delta)
     nat_ip = IPRange("127.128.0.1", cidr=32)
@@ -638,6 +671,56 @@ async def nat_sim_main():
     routers = {
         str(nat_ip): router
     }
+
+
+    af = IP4
+    proto = UDP
+    interface = await Interface().start_local()
+    stun_serv_pipes, stun_servs = await start_stun_servs(
+        af,
+        proto,
+        interface,
+        routers
+    )
+
+
+    print(stun_serv_pipes)
+
+    print("stun servs started")
+
+
+    interface.route = patch_route(af, "127.192.0.1", interface)
+    stun_client = STUNClient(
+        interface=interface,
+        af=af,
+        proto=proto
+    )
+
+    init_pipe_original = stun_client.init_pipe
+    stun_client.init_pipe = patch_init_pipe(
+        init_pipe_original,
+        routers
+    )
+
+    stun_servers = [
+        {
+            "host": "local_hax",
+            "primary": {"ip": "127.64.0.1", "port": 3478},
+            "secondary": {"ip": "127.64.0.2", "port": 3479},
+        },
+    ]
+
+    print("before get mappings")
+    ret = await stun_client.get_mapping(proto, servers=stun_servers)
+    print(ret)
+
+    await close_stun_servs(stun_servs)
+
+
+    return
+
+
+
 
 
     interface = await Interface().start_local()

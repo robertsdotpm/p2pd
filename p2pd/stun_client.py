@@ -474,7 +474,7 @@ async def stun_check_addr_info(stun_host, stun_port, af, proto, interface, local
     return dest_addr
 
 # Code for doing a single NAT test with logging.
-async def stun_sub_test(msg, dest, interface, af, proto, source_port, changed, extra="", pipe=None, tran_info=None, local_addr=None, conf=STUN_CONF):
+async def stun_sub_test(msg, dest, interface, af, proto, source_port, changed, extra="", pipe=None, tran_info=None, local_addr=None, conf=STUN_CONF, init_pipe=init_pipe):
     log("> STUN %s" % (msg))
 
     # Set transaction ID if no match function provided.
@@ -527,6 +527,7 @@ class STUNClient():
 
         # Threshold / Number = agreement.
         self.t, self.n = consensus
+        self.init_pipe = init_pipe
 
     def rand_server(self):
         servers = get_stun_servers(self.af, self.proto)
@@ -598,7 +599,7 @@ class STUNClient():
 
                 # Do stun test.
                 msg = "doing stun sub test for %s" % (name)
-                ret = await stun_sub_test(msg, stun_addr, interface, af, proto, source_port, stun_addr, "", local_addr=local_addr, conf=conf)
+                ret = await stun_sub_test(msg, stun_addr, interface, af, proto, source_port, stun_addr, "", local_addr=local_addr, conf=conf, init_pipe=self.init_pipe)
                 nat_info, pipe = ret
 
                 # Check response.
