@@ -115,7 +115,7 @@ async def new_stun_server_format(af):
 
     print(servers)
 
-async def nat_test_exec(dest_addr, reply_addr, payload, pipe, q, test_coro):
+async def nat_test_exec(dest_addr, reply_addr, payload, pipe, q, test_coro, test_index):
     # Expect messages from this reply_addr.
     tran_info = tran_info_patterns(reply_addr.tup)
     pipe.subscribe(tran_info[0:2])
@@ -139,7 +139,8 @@ async def nat_test_exec(dest_addr, reply_addr, payload, pipe, q, test_coro):
         conf=conf
     )
 
-    print(ret)
+    print(f"nat test {test_index} results {ret}")
+
 
     # Valid reply.
     if ret is not None and not isinstance(ret, tuple):
@@ -174,6 +175,9 @@ async def nat_test_workers(pipe, q, test_index, test_coro, servers):
 
             # Run the test and return the results.
             payload = NAT_TEST_SCHEMA[test_index][0]
+            print(test_index)
+            print(addrs[0])
+            print(addrs[1])
             return await nat_test_exec(
                 # Send to and expect from.
                 addrs[0],
@@ -189,7 +193,10 @@ async def nat_test_workers(pipe, q, test_index, test_coro, servers):
                 q,
 
                 # Test-specific code.
-                test_coro
+                test_coro,
+
+                # For logging.
+                test_index
             )
 
         workers.append(worker(server_no))
@@ -269,6 +276,15 @@ async def fast_nat_test(pipe, test_servers, timeout=NAT_TEST_TIMEOUT):
     """
     test_index = 0
     for sub_test in [[test_one, test_two], [test_three, test_four]]:
+        # Approve sub test.
+        if test_index == 0:
+            serv_info = ["127.64.0.1", 3478]
+            pipe.nat_approve_pipe(pipe, serv_info, pipe.routers)
+        if test_index == 2:
+            serv_info = ["127.64.0.2", 3478]
+            pipe.nat_approve_pipe(pipe, serv_info, pipe.routers)
+        
+
         # Get a list of workers for first two NAT tests.
         workers = []
         for test_coro in sub_test:
@@ -289,14 +305,19 @@ async def fast_nat_test(pipe, test_servers, timeout=NAT_TEST_TIMEOUT):
         try:
             # First result in or timeout.
             for task in asyncio.as_completed(workers, timeout=timeout):
-                ret = await task
+                ret = await async_wrap_errors(task)
                 if ret is not None:
+                    print("nat test returing as")
+                    print(ret)
                     return ret
         except asyncio.TimeoutError:
+            print("test timeout.")
+            what_exception()
             continue
 
     # All tests timed out.
     # Determine return value.
+    print(q_list)
     if no_stun_resp_check(q_list):
         return BLOCKED_NAT
     else:
