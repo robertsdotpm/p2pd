@@ -465,12 +465,13 @@ async def stun_check_addr_info(stun_host, stun_port, af, proto, interface, local
         log("> STUN get_nat_type domain a records empty")
         return None
 
+    """
     # If the stun server resolves to a local address then skip it.
-    if not IS_DEBUG:
-        if ipaddress.ip_address(dest_addr.target()).is_private:
-            log("> STUN get_nat_type skipping private dns ip")
-            return None
-
+    if ipaddress.ip_address(dest_addr.target()).is_private:
+        log("> STUN get_nat_type skipping private dns ip")
+        return None
+    """
+        
     return dest_addr
 
 # Code for doing a single NAT test with logging.
@@ -601,7 +602,6 @@ class STUNClient():
                 msg = "doing stun sub test for %s" % (name)
                 ret = await stun_sub_test(msg, stun_addr, interface, af, proto, source_port, stun_addr, "", local_addr=local_addr, conf=conf, init_pipe=self.init_pipe)
                 nat_info, pipe = ret
-                print(ret)
 
                 # Check response.
                 error = stun_check_reply(stun_addr, nat_info, lax)

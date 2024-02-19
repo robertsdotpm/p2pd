@@ -150,13 +150,14 @@ class STUNRouterServer(Daemon):
 
             router = self.routers[router_ip]
             mapping = router.request_approval(
-                self.af,
-                self.proto,
-                src_mode[0],
-                src_mode[1],
-                client_tup[0],
-                client_tup[1],
-                router_ip
+                (
+                    src_mode[0],
+                    src_mode[1],
+                ),
+                (
+                    client_tup[0],
+                    client_tup[1],
+                )
             )
 
             # If their router rejected it then return.
@@ -224,12 +225,16 @@ class STUNRouterServer(Daemon):
 
             print(out_pipe.sock)
             print(reply)
-            await out_pipe.send(reply, client_tup)
+            asyncio.ensure_future(out_pipe.send(reply, client_tup))
         except:
-            log_exception()
+            pass
+            #log_exception()
+            #pass
 
 class Router():
-    def __init__(self, nat, nat_ip):
+    def __init__(self, af, proto, nat, nat_ip):
+        self.af = af
+        self.proto = proto
         self.nat = nat
         self.nat_ip = nat_ip
 
@@ -249,11 +254,11 @@ class Router():
         }
 
     # Used to track increasing delta values for mapping ports.
-    def init_delta(self, af, proto, lan_ip):
-        deltas = self.deltas[af][proto]
-        if lan_ip not in deltas:
+    def init_delta(self, lan_tup):
+        deltas = self.deltas[self.af][self.proto]
+        if lan_tup[0] not in deltas:
             rand_port = from_range(self.nat["range"])
-            deltas[lan_ip] = {
+            deltas[lan_tup[0]] = {
                 # Random start port.
                 "start": rand_port,
 
@@ -264,30 +269,20 @@ class Router():
                 "local": 0
             }
 
-    def get_mapping_id(self, af, proto, src_ip, src_port, lan_ip, lan_port):
-        mapping_id = [lan_ip, lan_port, 0, 0]
-
-        """
-        This doesn't seem necessary and that makes sense.
-        You're trying to make a mapping to the lan endpoint.
-        if self.nat["type"] in [RESTRICT_NAT, SYMMETRIC_NAT]:
-            mapping_id[2] = src_ip
-
-        if self.nat["type"] in [SYMMETRIC_NAT]:
-            mapping_id[3] = src_port
-        """
+    def get_mapping_id(self, lan_tup):
+        mapping_id = [self.af, self.proto, lan_tup[0], lan_tup[1]]
 
         return tuple(mapping_id)
 
     # Allocates a new port for use with a new mapping.
     # TODO: fix with new logic
-    def request_port(self, af, proto, src_ip, src_port, lan_ip, lan_port, nat_ip, recurse=1):
+    def request_port(self, lan_tup, recurse=1):
         delta_type = self.nat["delta"]["type"]
         print(f"delta_type = {delta_type}")
 
 
-        mappings = self.mappings[af][proto]
-        deltas = self.deltas[af][proto][lan_ip]
+        mappings = self.mappings[self.af][self.proto]
+        deltas = self.deltas[self.af][self.proto][ lan_tup[0] ]
         port = 0
 
         print(f"deltas init value = {deltas['value']}")
@@ -295,13 +290,13 @@ class Router():
         # The NAT reuses the same src_port.
         if delta_type == EQUAL_DELTA:
             print("equal delta.")
-            port = lan_port
+            port = lan_tup[1]
 
         # The distance between local ports is applied to
         # a fixed port offset to define remote mappings.
         if delta_type == PRESERV_DELTA:
             port = field_wrap(
-                lan_port + self.nat["delta"]["value"],
+                lan_tup[1] + self.nat["delta"]["value"],
                 self.nat["range"]
             )
 
@@ -328,48 +323,35 @@ class Router():
         in local port mappings.
         """
         if delta_type == DEPENDENT_DELTA:
-            dis = n_dist(lan_port, deltas["local"] or lan_port) or 1
+            dis = n_dist(lan_tup[1], deltas["local"] or lan_tup[1]) or 1
             delta = deltas["value"] + (self.nat["delta"]["value"] * dis)
             port = field_wrap(
                 delta,
                 self.nat["range"]
             )
-            deltas["local"] = lan_port
+            deltas["local"] = lan_tup[1]
             deltas["value"] = port
 
         if delta_type == RANDOM_DELTA:
-            port = in_range(self.nat["range"])
+            port = from_range(self.nat["range"])
 
 
         # Request port is already allocated.
         # Use the first free port from that offset.
-        """
-        while 1:
-            #mapping_id = self.get_mapping_id(af, proto, src_ip, src_port, lan_ip, port)
-            if port in mappings[nat_ip]:
-                port = from_range(self.nat["range"])
-            else:
-                break
-        """
-
         if recurse:
             for i in range(1, MAX_PORT + 1):
-                #mapping_id = self.get_mapping_id(af, proto, src_ip, src_port, lan_ip, port)
-                if port in mappings[nat_ip]:
+                if port in mappings:
                     port = self.request_port(
-                        af,
-                        proto,
-                        src_ip,
-                        src_port,
-                        lan_ip,
-                        field_wrap(lan_port + i, [1, MAX_PORT]),
-                        nat_ip,
+                        lan_tup,
+                        (
+                            lan_tup[0],
+                            field_wrap(lan_tup[1] + i, [1, MAX_PORT])
+                        ),
                         recurse=0
                     )
                 else:
                     break
         
-
         return port
 
     """
@@ -378,36 +360,17 @@ class Router():
     used to connect to our NAT.
     src... = the local addressing details for the con
     """
-    def accept_connect(self, af, proto, src_ip, src_port, lan_ip, lan_port, nat_ip):
+    def accept_connect(self, src_tup, lan_tup):
         # Reuse an existing mapping if it exists.
         mapping = None
-        mappings = self.mappings[af][proto]
-        if nat_ip not in mappings:
-            self.mappings[af][proto][nat_ip] = {}
+        mappings = self.mappings[self.af][self.proto]
         print(f" nat type = {self.nat['type']}")
         
-        """
-        same mapping:
-            full cone:
-                - bound to lan ip lan port
 
-            restrict:
-                - bound to a specifid src_ip, lan ip, lan port
-
-            restrict:
-                - optionally a specific src_port
-
-            symmetric:
-                - per con
-
-            
-        """
-
-
-        mapping_id = self.get_mapping_id(af, proto, src_ip, src_port, lan_ip, lan_port)
+        mapping_id = self.get_mapping_id(lan_tup)
         if self.nat["type"] != SYMMETRIC_NAT:
-            if mapping_id in mappings[nat_ip]:
-                mapping = mappings[nat_ip][mapping_id]
+            if mapping_id in mappings:
+                mapping = mappings[mapping_id]
         print(mapping_id)
 
         # Otherwise create a new mapping.
@@ -418,31 +381,22 @@ class Router():
             if self.nat["type"] in create_nats:
                 # Request new port for the mapping.
                 print("create nat")
-                self.init_delta(af, proto, lan_ip)
-                nat_port = self.request_port(
-                    af,
-                    proto,
-                    src_ip,
-                    src_port,
-                    lan_ip,
-                    lan_port,
-                    nat_ip
-                )
+                self.init_delta(lan_tup)
+                nat_port = self.request_port(lan_tup)
                 print("got = ", nat_port)
 
                 # The mappings are indexed by local endpoints.
-                mapping = [af, proto, src_ip, src_port, lan_ip, lan_port, nat_port]
-                mappings[nat_ip][mapping_id] = mapping
-                mappings[nat_ip][nat_port] = mapping
+                mapping = [self.af, self.proto, src_tup[0], src_tup[1], lan_tup[0], lan_tup[1], nat_port]
+                mappings[mapping_id] = mapping
+                mappings[nat_port] = mapping
 
                 # Mappings are also indexed by destination.
                 #dst_endpoint = str([dst_ip, dst_port])
                 #mappings[nat_ip][dst_endpoint] = mapping
 
         # Add dst ip and port to approvals.
-        self.approvals.setdefault(nat_ip, {})
-        self.approvals[nat_ip].setdefault(src_ip, {})
-        self.approvals[nat_ip][src_ip][src_port] = 1
+        self.approvals.setdefault(src_tup[0], {})
+        self.approvals[ src_tup[0] ][ src_tup[1] ] = 1
 
         # Return results.
         if mapping is not None:
@@ -453,7 +407,7 @@ class Router():
 
     # The other side calls this which returns a mapping
     # based on whether there's an approval + the nat setup.
-    def request_approval(self, af, proto, src_ip, src_port, lan_ip, lan_port, nat_ip):
+    def request_approval(self, src_tup, lan_tup):
         # Blocked.
         if self.nat["type"] in [BLOCKED_NAT, SYMMETRIC_UDP_FIREWALL]:
             print("a")
@@ -461,53 +415,47 @@ class Router():
 
         # Open internet -- can use any inbound port.
         if self.nat["type"] == OPEN_INTERNET:
-            return lan_port
+            return lan_tup[1]
 
         # No mappings for this NAT IP exist.
-        mappings = self.mappings[af][proto]
-        if nat_ip not in mappings:
-            print("c")
-            return 0
-
-
-
-        mapping_id = self.get_mapping_id(af, proto, src_ip, src_port, lan_ip, lan_port)
+        mappings = self.mappings[self.af][self.proto]
+        mapping_id = self.get_mapping_id(lan_tup)
         print(f"req approval = {mapping_id}")
         
-        if mapping_id not in mappings[nat_ip]:
+        if mapping_id not in mappings:
             print("b")
             return 0
 
-        approvals = self.approvals[nat_ip]
         if self.nat["type"] in [RESTRICT_NAT, RESTRICT_PORT_NAT]:
-            if src_ip not in self.approvals[nat_ip]:
+            if src_tup[0] not in self.approvals:
                 print("d")
                 return 0
 
         if self.nat["type"] == RESTRICT_PORT_NAT:
-            if src_port not in self.approvals[nat_ip][src_ip]:
+            if src_tup[1] not in self.approvals[ src_tup[0] ]:
                 print("e")
                 return 0
 
-        mapping = mappings[nat_ip][mapping_id]
+        mapping = mappings[mapping_id]
         if self.nat["type"] == SYMMETRIC_NAT:
-            if src_ip != mapping[2]:
+            if src_tup[0] != mapping[2]:
                 print("f")
                 return 0
 
-            if src_port != mapping[3]:
+            if src_tup[1] != mapping[3]:
                 print("g")
                 return 0
 
-            if lan_ip != mapping[4]:
+            if lan_tup[0] != mapping[4]:
                 print("h")
                 return 0
 
-            if lan_port != mapping[5]:
+            if lan_tup[1] != mapping[5]:
                 print("j")
                 return 0
 
         return mapping[-1]
+
 
 
 def patch_sock_connect(routers, loop=None):
@@ -590,15 +538,7 @@ def nat_approve_pipe(pipe, dest_tup, routers):
     print(pipe.sock.type)
 
     # Create a new mapping.
-    mapping = router.accept_connect(
-        af=pipe.route.af,
-        proto=pipe.sock.type,
-        src_ip=dest_tup[0],
-        src_port=dest_tup[1],
-        lan_ip=local_tup[0],
-        lan_port=local_tup[1],
-        nat_ip=router_ip
-    )
+    mapping = router.accept_connect(dest_tup, local_tup)
 
     print(f"mapping p: {mapping} {router.mappings}")
 
@@ -744,22 +684,22 @@ def patch_route(af, ip, interface):
 
 async def nat_sim_main():
     # Single simulated router.
-    delta = delta_info(EQUAL_DELTA, 20)
-    nat = nat_info(FULL_CONE, delta)
+    delta = delta_info(DEPENDENT_DELTA, 20)
+    nat = nat_info(RESTRICT_PORT_NAT, delta)
 
     # DEPENDENT_DELTA broken still
     # RESTRICT port nat broken still
 
 
     nat_ip = IPRange("127.128.0.1", cidr=32)
-    router = Router(nat, nat_ip)
+    af = IP4
+    proto = UDP
+    router = Router(af, proto, nat, nat_ip)
     routers = {
         str(nat_ip): router
     }
 
 
-    af = IP4
-    proto = UDP
     interface = await Interface().start_local()
     stun_serv_pipes, stun_servs = await start_stun_servs(
         af,
@@ -825,6 +765,7 @@ async def nat_sim_main():
 
     #nat_approve_pipe(pipe, routers)
     # nat_test_exec needs to be patched to approve the dest
+
 
 
 

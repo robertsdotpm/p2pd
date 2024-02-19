@@ -195,7 +195,7 @@ async def nat_test_workers(pipe, q, test_index, test_coro, servers):
                 # Test-specific code.
                 test_coro,
 
-                # For logging.
+                # For `log`ging.
                 test_index
             )
 
