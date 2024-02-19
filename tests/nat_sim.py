@@ -1,3 +1,7 @@
+"""
+Now the patching code needs to be cleaned up a little.
+"""
+
 from p2pd import *
 import socket
 
@@ -21,16 +25,9 @@ STUN_ADDRS = {
 }
 
 
-STUN_IP_PRIMARY = 1
-STUN_IP_CHANGE = 2
-STUN_PORT_PRIMARY = 1
-STUN_PORT_CHANGE = 2
 STUN_MAPPED_ADDR = b"\x00\x01"
 STUN_SRC_ADDR = b"\x00\x04"
 STUN_CHANGED_ADDR = b"\x00\x05"
-
-SRC_IP_NO_CHANGE = 0
-SRC_PORT_NO_CHANGE = 0
 
 def change_src_mode(af, needle, offset):
     for entry in STUN_ADDRS[af][offset]:
@@ -64,7 +61,7 @@ def lan_ip_to_ext_ip(ip):
     ext_ipr = ext_ipr + (int(lan_ipr) - 1)
     return str(ext_ipr)
 
-class STUNRouterServer(Daemon):
+class FakeSTUNServer(Daemon):
     def __init__(self, af, proto, serv_ip, serv_port, routers, serv_pipes):
         super().__init__()
         self.af = af
@@ -86,8 +83,6 @@ class STUNRouterServer(Daemon):
             "port"
         )
 
-        print(f"change port = {self.change_port}")
-
 
     async def msg_cb(self, msg, client_tup, pipe):
         try:
@@ -99,26 +94,20 @@ class STUNRouterServer(Daemon):
                 self.serv_port
             ]
 
-            print(f"src_mode = {src_mode}")
-            print(f"change = {self.change_ip} {self.change_port}")
-
             # Only accept connections from a certain range.
             af = pipe.route.af
             client_ipr = IPRange(client_tup[0])
             if client_ipr not in CLIENT_IPRS[af]:
-                print(f"Client IPR: {client_ipr} error.")
                 return
 
 
             # Minimum request size.
             msg_len = len(msg)
             if msg_len < 20:
-                print("1")
                 return
 
             # Unpack request.
             hdr = msg[0:2]
-            extra_len = b_to_i(msg[2:4])
             tran_id = msg[4:20]
             extra = msg[20:]
             if len(extra):
@@ -255,10 +244,9 @@ class Router():
 
     # Used to track increasing delta values for mapping ports.
     def init_delta(self, lan_tup):
-        deltas = self.deltas[self.af][self.proto]
-        if lan_tup[0] not in deltas:
+        if lan_tup[0] not in self.deltas:
             rand_port = from_range(self.nat["range"])
-            deltas[lan_tup[0]] = {
+            self.deltas[lan_tup[0]] = {
                 # Random start port.
                 "start": rand_port,
 
@@ -275,14 +263,12 @@ class Router():
         return tuple(mapping_id)
 
     # Allocates a new port for use with a new mapping.
-    # TODO: fix with new logic
     def request_port(self, lan_tup, recurse=1):
         delta_type = self.nat["delta"]["type"]
         print(f"delta_type = {delta_type}")
 
 
-        mappings = self.mappings[self.af][self.proto]
-        deltas = self.deltas[self.af][self.proto][ lan_tup[0] ]
+        deltas = self.deltas[ lan_tup[0] ]
         port = 0
 
         print(f"deltas init value = {deltas['value']}")
@@ -340,7 +326,7 @@ class Router():
         # Use the first free port from that offset.
         if recurse:
             for i in range(1, MAX_PORT + 1):
-                if port in mappings:
+                if port in self.mappings:
                     port = self.request_port(
                         lan_tup,
                         (
@@ -361,16 +347,23 @@ class Router():
     src... = the local addressing details for the con
     """
     def accept_connect(self, src_tup, lan_tup):
+        # No need to make mapping.
+        if self.nat["type"] == OPEN_INTERNET:
+            return lan_tup[1]
+        
+        # Can't map.
+        if self.nat["type"] in [BLOCKED_NAT, SYMMETRIC_UDP_FIREWALL]:
+            return 0
+
         # Reuse an existing mapping if it exists.
         mapping = None
-        mappings = self.mappings[self.af][self.proto]
         print(f" nat type = {self.nat['type']}")
         
 
         mapping_id = self.get_mapping_id(lan_tup)
         if self.nat["type"] != SYMMETRIC_NAT:
-            if mapping_id in mappings:
-                mapping = mappings[mapping_id]
+            if mapping_id in self.mappings:
+                mapping = self.mappings[mapping_id]
         print(mapping_id)
 
         # Otherwise create a new mapping.
@@ -380,19 +373,13 @@ class Router():
             create_nats = reuse_nats + [SYMMETRIC_NAT]
             if self.nat["type"] in create_nats:
                 # Request new port for the mapping.
-                print("create nat")
                 self.init_delta(lan_tup)
                 nat_port = self.request_port(lan_tup)
-                print("got = ", nat_port)
 
                 # The mappings are indexed by local endpoints.
                 mapping = [self.af, self.proto, src_tup[0], src_tup[1], lan_tup[0], lan_tup[1], nat_port]
-                mappings[mapping_id] = mapping
-                mappings[nat_port] = mapping
-
-                # Mappings are also indexed by destination.
-                #dst_endpoint = str([dst_ip, dst_port])
-                #mappings[nat_ip][dst_endpoint] = mapping
+                self.mappings[mapping_id] = mapping
+                self.mappings[nat_port] = mapping
 
         # Add dst ip and port to approvals.
         self.approvals.setdefault(src_tup[0], {})
@@ -418,11 +405,10 @@ class Router():
             return lan_tup[1]
 
         # No mappings for this NAT IP exist.
-        mappings = self.mappings[self.af][self.proto]
         mapping_id = self.get_mapping_id(lan_tup)
         print(f"req approval = {mapping_id}")
         
-        if mapping_id not in mappings:
+        if mapping_id not in self.mappings:
             print("b")
             return 0
 
@@ -436,7 +422,7 @@ class Router():
                 print("e")
                 return 0
 
-        mapping = mappings[mapping_id]
+        mapping = self.mappings[mapping_id]
         if self.nat["type"] == SYMMETRIC_NAT:
             if src_tup[0] != mapping[2]:
                 print("f")
@@ -632,7 +618,7 @@ async def start_stun_servs(af, proto, interface, routers):
                 port=serv_port
             )
 
-            serv = STUNRouterServer(
+            serv = FakeSTUNServer(
                 af=af,
                 proto=proto,
                 serv_ip=serv_ip,
@@ -785,112 +771,6 @@ async def nat_sim_main():
     await close_stun_servs(stun_servs)
 
     return
-
-
-
-
-
-    interface = await Interface().start_local()
-    interface.unique_loopback = "127.64.0.1"
-    stun_client = STUNClient(interface)
-    stun_client.get_mapping = patch_get_mapping(routers, stun_client)
-
-    out = await stun_client.get_mapping(UDP, source_port=50000)
-    print(out)
-
-    out = await stun_client.get_mapping(UDP, source_port=50001)
-    print(out)
-
-    print(router.deltas)
-    print()
-    print(router.mappings)
-    print()
-    print(router.approvals)
-
-
-    ret = await interface.load_nat(stun_client, stun_servers, pipe)
-    print(ret)
-
-    return
-
-
-
-    af = IP4
-    proto = TCP
-    int_ipr = IPRange("127.64.0.0", cidr=10)
-    src_port = 1337
-
-    ext_ipr = IPRange("127.128.0.0", cidr=10)
-
-    print(int_ipr)
-    print(len(int_ipr))
-
-
-    n1 = nat_info(RESTRICT_NAT, delta=delta_info(DEPENDENT_DELTA, 10))
-    r1 = Router(n1)
-    r1.init_delta(af, proto, str(ext_ipr + 0))
-
-
- 
-    p1 = r1.request_port(af, proto, str(int_ipr + 0), src_port, str(ext_ipr + 0))
-    print(p1)
-    p1 = r1.request_port(af, proto, str(int_ipr + 0), src_port + 3, str(ext_ipr + 0))
-    print(p1)
-
-    m1 = r1.approve_inbound(
-        af,
-        proto,
-        str(int_ipr + 0),
-        1337,
-        str(ext_ipr + 0),
-        10123,
-        str(ext_ipr + 1)
-    )
-
-    print(m1)
-
-    a1 = r1.request_approval(
-        af,
-        proto,
-        str(ext_ipr + 0),
-        m1,
-        str(ext_ipr + 1)
-    )
-
-    print(a1)
-
-
-
-
-    return
-    route = await i.route().bind(port=test_port, ips=ip)
-    stun_server = STUNServer(STUN_IP_PRIMARY, STUN_PORT_PRIMARY)
-    await stun_server.listen_specific(
-        [[route, proto]]
-    )
-    print(stun_server)
-    
-    stun_client = STUNClient(i)
-
-    servers = [
-        {
-            "host": "local",
-            # i.route().nic()
-            "primary": {"ip": ip, "port": test_port},
-            "secondary": {"ip": ip, "port": test_port},
-        },
-    ]
-
-
-    ret = await stun_client.get_mapping(
-        proto=proto,
-        servers=servers
-    )
-
-    await stun_server.close()
-
-    print(ret)
-    print(ret[1].sock)
 
 async_test(nat_sim_main)
 
