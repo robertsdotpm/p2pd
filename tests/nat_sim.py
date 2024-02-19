@@ -267,12 +267,15 @@ class Router():
     def get_mapping_id(self, af, proto, src_ip, src_port, lan_ip, lan_port):
         mapping_id = [lan_ip, lan_port, 0, 0]
 
-
+        """
+        This doesn't seem necessary and that makes sense.
+        You're trying to make a mapping to the lan endpoint.
         if self.nat["type"] in [RESTRICT_NAT, SYMMETRIC_NAT]:
             mapping_id[2] = src_ip
 
         if self.nat["type"] in [SYMMETRIC_NAT]:
             mapping_id[3] = src_port
+        """
 
         return tuple(mapping_id)
 
@@ -741,8 +744,8 @@ def patch_route(af, ip, interface):
 
 async def nat_sim_main():
     # Single simulated router.
-    delta = delta_info(DEPENDENT_DELTA, 20)
-    nat = nat_info(RESTRICT_NAT, delta)
+    delta = delta_info(EQUAL_DELTA, 20)
+    nat = nat_info(FULL_CONE, delta)
 
     # DEPENDENT_DELTA broken still
     # RESTRICT port nat broken still
