@@ -425,21 +425,21 @@ class Interface():
 
             # Run delta test.
             stun_servers = stun_servers or STUND_SERVERS[af]
-            nat_type, = await asyncio.wait_for(
+            nat_type, delta = await asyncio.wait_for(
                 asyncio.gather(*[
                     async_wrap_errors(
                         fast_nat_test(pipe, stun_servers)
                     ),
 
-                    #async_wrap_errors(
-                    #    delta_test(stun_client)
-                    #)
+                    async_wrap_errors(
+                        delta_test(stun_client)
+                    )
                 ]),
                 timeout=4
             )
 
-            #delta = delta_info()
-            nat = nat_info(nat_type)
+
+            nat = nat_info(nat_type, delta)
             await pipe.close()
 
         # Load NAT type and delta info.

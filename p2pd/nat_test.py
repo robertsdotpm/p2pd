@@ -222,6 +222,8 @@ def non_symmetric_check(q_list):
     # NAT reuses mappings given same internal (ip and port)
     port_check = q1[0]['rport'] == q3[0]['rport']
     ip_check = ip_f(q1[0]['rip']) == ip_f(q3[0]['rip'])
+
+    print(f"non sym: {port_check} {ip_check}")
     if port_check and ip_check:
         return True
 
@@ -283,6 +285,8 @@ async def fast_nat_test(pipe, test_servers, timeout=NAT_TEST_TIMEOUT):
         if test_index == 2:
             serv_info = ["127.64.0.2", 3478]
             pipe.nat_approve_pipe(pipe, serv_info, pipe.routers)
+            if pipe.nat["type"] == RESTRICT_PORT_NAT:
+                pass
         
 
         # Get a list of workers for first two NAT tests.
