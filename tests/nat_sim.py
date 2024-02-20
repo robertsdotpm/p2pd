@@ -1,5 +1,7 @@
 """
 Now the patching code needs to be cleaned up a little.
+
+I think the right way is to dynamically start a sub server that forwards back to the node so that more patching doesn't need to be done to the connect code. Then its all just done through STUN.
 """
 
 from p2pd import *
@@ -219,6 +221,64 @@ class FakeSTUNServer(Daemon):
             pass
             #log_exception()
             #pass
+        
+async def start_stun_servs(af, proto, interface, routers):
+    serv_pipes = {
+        IP4: {
+            UDP: {}, TCP: {}
+        },
+        IP6: {
+            UDP: {}, TCP: {}
+        },
+    }
+    servs = copy.deepcopy(serv_pipes)
+
+
+    for serv_ip in STUN_ADDRS[af]["ip"]:
+        for serv_port in STUN_ADDRS[af]["port"]:
+            # Listen details.
+            route = await interface.route(af).bind(
+                ips=serv_ip,
+                port=serv_port
+            )
+
+            serv = FakeSTUNServer(
+                af=af,
+                proto=proto,
+                serv_ip=serv_ip,
+                serv_port=serv_port,
+                routers=routers,
+                serv_pipes=serv_pipes
+            )
+
+            await serv.listen_specific(
+                targets=[[route, proto]],
+            )
+
+            # Server 0, offset 2 is the pipe.
+            # Need to make this more clean in the future...
+            serv_pipe = serv.servers[0][2]
+            if serv_ip not in serv_pipes[af][proto]:
+                serv_pipes[af][proto][serv_ip] = {}
+                servs[af][proto][serv_ip] = {}
+
+            serv_pipes[af][proto][serv_ip][serv_port] = serv_pipe
+            servs[af][proto][serv_ip][serv_port] = serv
+
+    return serv_pipes, servs
+
+async def close_stun_servs(servs):
+    tasks = []
+    for af in [IP4, IP6]:
+        for proto in [TCP, UDP]:
+            sub_servs = servs[af][proto]
+            for serv_ip in sub_servs:
+                sub_serv = sub_servs[serv_ip]
+                for serv_port in sub_serv:
+                    serv = sub_serv[serv_port]
+                    tasks.append(serv.close())
+
+    await asyncio.gather(*tasks)
 
 class Router():
     def __init__(self, af, proto, nat, nat_ip):
@@ -442,77 +502,17 @@ class Router():
 
         return mapping[-1]
 
+def patch_route(af, ip, interface):
+    def patched(af_ignore=None, bind_port=0):
+        return Route(
+            af=af,
+            nic_ips=[IPRange(ip)],
+            ext_ips=[IPRange(ip)],
+            interface=interface,
+            ext_check=0
+        )
 
-
-def patch_sock_connect(routers, loop=None):
-    routers_ipr = IPRange("127.128.0.0", cidr=10)
-    lans_ipr = IPRange("127.64.0.0", cidr=10)
-    loop = loop or asyncio.get_event_loop()
-    unpacked_connect = loop.sock_connect
-
-    async def patched_connect(sock, dest_tup):
-        src_tup = sock.getsockname()
-        src_ipr = IPRange(src_tup[0])
-        dest_ipr = IPRange(dest_tup[0])
-
-        # Connection to another virtual LAN machine.
-        if src_ipr in lan_ipr and dest_ipr in lan_ipr:
-            # Convert to our router IP.
-            our_router_ip = lan_ip_to_router_ip(src_tup[0])
-
-            # Get reference to our router.
-            our_router = routers[our_router_ip]
-
-            # Whitelist this destination in our router.
-            our_router.approve_inbound(
-                af=src_ipr.af,
-                proto=sock.type,
-                src_ip=src_tup[0],
-                src_port=src_tup[1],
-                dst_ip=dest_tup[0],
-                dst_port=dst_port[1],
-                nat_ip=our_router_ip
-            )
-
-            # Convert to their router IP.
-            their_router_ip = lan_ip_to_router_ip(dest_tup[0])
-
-            # Get reference to their router.
-            their_router = routers[their_router_ip]
-
-            # Check if we're allow to connect to them.
-            ret = their_router.request_approval(
-                af=src_ipr.af,
-                proto=sock.type,
-
-
-
-                dst_ip=dest_tup[0],
-                dest_port=dest_port[1],
-                nat_ip=their_router_ip
-            )
-
-            if ret is 0:
-                raise Exception("Sim NAT router returned 0.")
-            
-
-        return await unpacked_connect(sock, dest_tup)
-
-    return patched_connect
-
-# Patch get mapping?
-# get_nat_predictions
-"""
-                _, s, local_port, remote_port, _, _ = await stun_client.get_mapping(
-                    proto=STREAM,
-                    source_port=high_port
-                )
-
-STUN client get_mapping needs to be patched but what instance of stun_client
-    p2p_pipe.py
-        stun_client
-            get_mapping
-"""
+    return patched
 
 def nat_approve_pipe(pipe, dest_tup, routers):
     # Get a reference to the router for this machine.
@@ -525,7 +525,6 @@ def nat_approve_pipe(pipe, dest_tup, routers):
 
     # Create a new mapping.
     mapping = router.accept_connect(dest_tup, local_tup)
-
     print(f"mapping p: {mapping} {router.mappings}")
 
 def patch_init_pipe(init_pipe, routers):
@@ -542,8 +541,6 @@ def patch_init_pipe(init_pipe, routers):
             )
 
             nat_approve_pipe(pipe, dest_addr.tup, routers)
-
-
             return pipe
         except:
             log_exception()
@@ -551,14 +548,6 @@ def patch_init_pipe(init_pipe, routers):
     return patched
 
 """
-Patch interface.route to use the local nic ipr.
-
-Then put it all together.
-
-1. manually set interface.unique_loopback
-2. create the punch nodes for the test
-"""
-
 async def nat_sim_node(loopback, nat, routers):
     # Create router instance.
     router_ip = lan_ip_to_router_ip(loopback)
@@ -594,88 +583,14 @@ async def nat_sim_node(loopback, nat, routers):
     )
 
     # Patch the mapping function for the STUNClient.
-    node.STUNClient.get_mapping = patch_get_mapping(routers)
-
+    #node.STUNClient.get_mapping = patch_get_mapping(routers)
     return node
-
-async def start_stun_servs(af, proto, interface, routers):
-    serv_pipes = {
-        IP4: {
-            UDP: {}, TCP: {}
-        },
-        IP6: {
-            UDP: {}, TCP: {}
-        },
-    }
-    servs = copy.deepcopy(serv_pipes)
-
-
-    for serv_ip in STUN_ADDRS[af]["ip"]:
-        for serv_port in STUN_ADDRS[af]["port"]:
-            # Listen details.
-            route = await interface.route(af).bind(
-                ips=serv_ip,
-                port=serv_port
-            )
-
-            serv = FakeSTUNServer(
-                af=af,
-                proto=proto,
-                serv_ip=serv_ip,
-                serv_port=serv_port,
-                routers=routers,
-                serv_pipes=serv_pipes
-            )
-
-            await serv.listen_specific(
-                targets=[[route, proto]],
-            )
-
-            # Server 0, offset 2 is the pipe.
-            # Need to make this more clean in the future...
-            serv_pipe = serv.servers[0][2]
-            if serv_ip not in serv_pipes[af][proto]:
-                serv_pipes[af][proto][serv_ip] = {}
-                servs[af][proto][serv_ip] = {}
-
-            serv_pipes[af][proto][serv_ip][serv_port] = serv_pipe
-            servs[af][proto][serv_ip][serv_port] = serv
-
-    return serv_pipes, servs
-
-async def close_stun_servs(servs):
-    tasks = []
-    for af in [IP4, IP6]:
-        for proto in [TCP, UDP]:
-            sub_servs = servs[af][proto]
-            for serv_ip in sub_servs:
-                sub_serv = sub_servs[serv_ip]
-                for serv_port in sub_serv:
-                    serv = sub_serv[serv_port]
-                    tasks.append(serv.close())
-
-    await asyncio.gather(*tasks)
-
-def patch_route(af, ip, interface):
-    def patched(af_ignore=None, bind_port=0):
-        return Route(
-            af=af,
-            nic_ips=[IPRange(ip)],
-            ext_ips=[IPRange(ip)],
-            interface=interface,
-            ext_check=0
-        )
-
-    return patched
+"""
 
 async def nat_sim_main():
     # Single simulated router.
     delta = delta_info(DEPENDENT_DELTA, 20)
     nat = nat_info(RESTRICT_PORT_NAT, delta)
-
-    # DEPENDENT_DELTA broken still
-    # RESTRICT port nat broken still
-
 
     nat_ip = IPRange("127.128.0.1", cidr=32)
     af = IP4
@@ -723,23 +638,6 @@ async def nat_sim_main():
 
     STUND_SERVERS[IP4] = stun_servers
 
-    """
-    print("before get mappings")
-    ret = await stun_client.get_mapping(proto, servers=stun_servers)
-    print(ret)
-
-    symmetric independent delta
-    """
-
-    """
-    out = await stun_client.get_mapping(UDP, source_port=50000, servers=stun_servers)
-    print(out)
-    out = await stun_client.get_mapping(UDP, source_port=50001)
-    print(out)
-
-    return
-    """
-    
 
     route = await interface.route(af).bind()
     pipe = await pipe_open(UDP, route=route, conf=STUN_CONF)
@@ -749,19 +647,6 @@ async def nat_sim_main():
     pipe.routers = routers
     pipe.nat_approve_pipe = nat_approve_pipe
 
-    #nat_approve_pipe(pipe, routers)
-    # nat_test_exec needs to be patched to approve the dest
-
-
-
-
-
-    """
-    serv_info = [stun_servers[0]["primary"]["ip"], 3478]
-    nat_approve_pipe(pipe, serv_info, routers)
-    serv_info = [stun_servers[0]["secondary"]["ip"], 3478]
-    nat_approve_pipe(pipe, serv_info, routers)
-    """
 
     ret = await interface.load_nat(stun_client, stun_servers, pipe)
     print(ret)
@@ -773,10 +658,3 @@ async def nat_sim_main():
     return
 
 async_test(nat_sim_main)
-
-
-"""
-
-
-
-"""
