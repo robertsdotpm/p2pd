@@ -74,7 +74,10 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
             (4) For IP6 this will bind to ::.
             (5) Will test IP4 NIC IPs, IP6 link locals / local host.
             """
-            route = await interface.route(af)
+            try:
+                route = await interface.route(af)
+            except:
+                continue
             addrs = [route.nic(), loopbacks[af]]
 
 

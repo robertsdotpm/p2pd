@@ -4,8 +4,8 @@ from .ip_range import *
 from .cmd_tools import *
 
 async def get_mac_mixed(if_name):
-    mac_p = "((?:[0-9a-fA-F]{2}[\s:-]*){6})"
-    win_p = "[0-9]+\s*[.]+([^.]+)\s*[.]+"
+    mac_p = r"((?:[0-9a-fA-F]{2}[\s:-]*){6})"
+    win_p = r"[0-9]+\s*[.]+([^.]+)\s*[.]+"
     grep_p = "egrep 'lladdr|ether|link'"
     win_f = lambda x: re.findall(win_p + re.escape(if_name), x)[0]
     vectors = {
@@ -22,7 +22,7 @@ async def get_mac_mixed(if_name):
         "OpenBSD": [
             [
                 f"ifconfig {if_name} | {grep_p}",
-                lambda x: re.findall("\s+[a-zA-Z]+\s+([^\s]+)", x)[0]
+                lambda x: re.findall(r"\s+[a-zA-Z]+\s+([^\s]+)", x)[0]
             ]
         ],
         "Windows": [
