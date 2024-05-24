@@ -791,3 +791,20 @@ async def get_high_port_socket(route, sock_type=TCP):
         return s, n
     
     raise Exception("Could not bind high range port.")
+
+async def proto_recv(pipe):
+    n = 1 if pipe.stream.proto == TCP else 5
+    for _ in range(0, n):
+        try:
+            return await pipe.recv()
+        except:
+            continue
+
+async def proto_send(pipe, buf):
+    n = 1 if pipe.stream.proto == TCP else 5
+    for _ in range(0, n):
+        try:
+            await pipe.send(buf)
+            await asyncio.sleep(0.1)
+        except:
+            continue

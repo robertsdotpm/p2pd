@@ -34,6 +34,8 @@ if __name__ != '__main__':
     from .toxiserver import ToxiMainServer
     from .sqlite_kvs import SqliteKVS
     from .irc_dns import *
+    from .pnp_server import *
+    from .pnp_client import *
     from .test_init import *
 
 

@@ -19,6 +19,8 @@ import selectors
 import copy
 import hashlib
 import unittest
+import ecdsa
+from ecdsa.curves import NIST192p
 
 if "P2PD_DEBUG" in os.environ: 
     IS_DEBUG = 1
@@ -651,6 +653,40 @@ def sqlite_dict_factory(cursor, row):
         d[col[0]] = row[idx]
     return d
 
+def recover_verify_key(msg_b, sig_b, vk_b=None, curve=NIST192p, hashfunc=hashlib.sha1):
+   # List of possible verify keys recovered from sig.
+    vk_list = ecdsa.VerifyingKey.from_public_key_recovery(
+        signature=sig_b,
+        data=msg_b,
+        curve=curve,
+        hashfunc=hashfunc
+    )
+
+    # Ensure vk_b needle found.
+    if vk_b is not None:
+        vk_b_found = False
+        for vk in vk_list:
+            if vk.to_string("compressed") == vk_b:
+                vk_b_found = True
+                break
+
+        if not vk_b_found:
+            raise Exception("VKb not found.")
+
+    # Anything that validates is the right verify key.
+    for vk in vk_list:
+        try:
+            vk.verify(
+                sig_b,
+                msg_b
+            )
+            return vk
+        except:
+            # Fail
+            continue
+
+    raise Exception("Could not recover verify key.")
+
 if __name__ == "__main__": # pragma: no cover
     x = [1, 1]
     y = [2, 2]
@@ -669,4 +705,3 @@ if __name__ == "__main__": # pragma: no cover
     y = [5, 20]
     assert(range_intersects(x, y) == True)
 
-    
