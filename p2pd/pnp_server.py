@@ -256,16 +256,14 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
 
         # Ensure name limit is respected.
         # [ ... active names, ? ]
-        """
         print("testing bump limit")
         sql  = "SELECT COUNT(*) FROM names WHERE af=%s "
         sql += "AND ip_id=%s"
-        ret = await cur.execute(sql, (int(af), ip_id,))
+        await cur.execute(sql, (int(af), ip_id,))
         names_used = (await cur.fetchone())[0]
         name_limit = name_limit_by_af(af, serv)
         if names_used >= name_limit:
-            raise Exception("Insert name af2 over limit.")
-        """
+            raise Exception("Insert name for af over limit.")
 
         sql = """
         INSERT INTO names

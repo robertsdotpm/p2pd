@@ -123,7 +123,6 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
 
         await serv.close()
 
-    # Todo: add politeness bump test.
     async def test_pnp_name_pop_works(self):
         # Set test params needed for test
         vectors = [
@@ -159,10 +158,8 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
             await serv.close()
 
     async def test_pnp_freshness_limit(self):
-        # 0, 1, 2 ... oldest = 0
-        # 1, 2, 3 (oldest is popped)
         name_limit = 3
-        for af in [IP4]:
+        for af in VALID_AFS:
             await pnp_clear_tables()
             clients, serv = await pnp_get_test_client_serv(name_limit, name_limit)
 
@@ -176,16 +173,42 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
                 ret = await clients[af].fetch(f"{i}")
                 assert(ret == b"val")
 
-            """
-            Need to think more about how this should happen.
-            """
             # Check insert over limit rejected.
             ret = await clients[af].fetch("4")
-            print(ret)
             assert(ret == None)
-
             await serv.close()
-            
+
+    async def test_pnp_respect_owner_access(self):
+        i = await Interface().start_local()
+        await pnp_clear_tables()
+        _, serv = await pnp_get_test_client_serv()
+
+        alice = {}
+        bob = {}
+        for af in VALID_AFS:
+            route = i.route(af)
+            dest = await Address('localhost', PNP_TEST_PORT, route)
+            alice[af] = PNPClient(SigningKey.generate(), dest)
+            bob[af] = PNPClient(SigningKey.generate(), dest)
+
+        test_name = b"some_name"
+        alice_val = b"alice_val"
+        for af in VALID_AFS:
+            await alice[af].push(test_name, alice_val)
+            await asyncio.sleep(2)
+
+            # Bob tries to write to alices name with incorrect sig.
+            await bob[af].push(test_name, b"changed val")
+            await asyncio.sleep(2)
+
+            # The changes aren't saved then.
+            ret = await bob[af].fetch(test_name)
+            assert(ret == alice_val)
+
+        await serv.close()
+
+    async def test_pnp_polite_no_bump(self):
+        pass     
 
     """
     test pops respect name limit (af dependant)
@@ -195,10 +218,6 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
         - dude to the code and need to test addresses the
         special test range of addresses might be useful here
   
-
-    ensure we cant modify others names
-
-    test freshness limit prevents unwanted early bumps
     """
 
 
