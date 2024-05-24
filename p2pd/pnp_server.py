@@ -217,7 +217,7 @@ async def fetch_name(cur, name):
     return row
     name_exists = row is not None
 
-async def record_name(cur, af, ip_id, name, value, owner_pub, updated):
+async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
     # Does name already exist.
     row = await fetch_name(cur, name)
     name_exists = row is not None
@@ -253,6 +253,20 @@ async def record_name(cur, af, ip_id, name, value, owner_pub, updated):
     # Create a new name.
     if not name_exists:
         print("inserting new name")
+
+        # Ensure name limit is respected.
+        # [ ... active names, ? ]
+        """
+        print("testing bump limit")
+        sql  = "SELECT COUNT(*) FROM names WHERE af=%s "
+        sql += "AND ip_id=%s"
+        ret = await cur.execute(sql, (int(af), ip_id,))
+        names_used = (await cur.fetchone())[0]
+        name_limit = name_limit_by_af(af, serv)
+        if names_used >= name_limit:
+            raise Exception("Insert name af2 over limit.")
+        """
+
         sql = """
         INSERT INTO names
         (
@@ -302,7 +316,7 @@ async def verified_write_name(db_con, cur, serv, behavior, updated, name, value,
 
     # Record name if needed and get its ID.
     # Also supports transfering a name to a new IP.
-    name_row = await record_name(cur, af, ip_id, name, value, owner_pub, updated)
+    name_row = await record_name(cur, serv, af, ip_id, name, value, owner_pub, updated)
 
     # Save current changes so the bump check can prune the excess.
     await db_con.commit()

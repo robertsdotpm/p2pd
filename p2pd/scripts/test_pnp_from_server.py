@@ -158,12 +158,47 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
             # Cleanup server.
             await serv.close()
 
+    async def test_pnp_freshness_limit(self):
+        # 0, 1, 2 ... oldest = 0
+        # 1, 2, 3 (oldest is popped)
+        name_limit = 3
+        for af in [IP4]:
+            await pnp_clear_tables()
+            clients, serv = await pnp_get_test_client_serv(name_limit, name_limit)
+
+            # Fill the stack past name_limit.
+            for i in range(1, name_limit + 2):
+                await clients[af].push(f"{i}", "val")
+                await asyncio.sleep(1)
+
+            # Check values still exist.
+            for i in range(1, name_limit + 1):
+                ret = await clients[af].fetch(f"{i}")
+                assert(ret == b"val")
+
+            """
+            Need to think more about how this should happen.
+            """
+            # Check insert over limit rejected.
+            ret = await clients[af].fetch("4")
+            print(ret)
+            assert(ret == None)
+
+            await serv.close()
+            
+
     """
     test pops respect name limit (af dependant)
         test polite behavior
 
     test v6 range restrictions
+        - dude to the code and need to test addresses the
+        special test range of addresses might be useful here
+  
+
     ensure we cant modify others names
+
+    test freshness limit prevents unwanted early bumps
     """
 
 
