@@ -208,20 +208,33 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
         await serv.close()
 
     async def test_pnp_polite_no_bump(self):
-        pass     
+        name_limit = 3
+        for af in VALID_AFS:
+            await pnp_clear_tables()
+            clients, serv = await pnp_get_test_client_serv(name_limit, name_limit, 0)
+
+            # Fill up the name queue.
+            for i in range(0, name_limit):
+                await clients[af].push(f"{i}", f"{i}")
+                await asyncio.sleep(2)
+
+            # Normally this would bump one.
+            await clients[af].push(f"3", f"3", BEHAVIOR_DONT_BUMP)
+            ret = await clients[af].fetch(f"3")
+            assert(ret == None)
+
+            # All original values should exist.
+            for i in range(0, name_limit):
+                ret = await clients[af].fetch(f"{i}")
+                assert(ret == to_b(f"{i}"))
+
+            await serv.close() 
 
     """
-    test pops respect name limit (af dependant)
-        test polite behavior
-
     test v6 range restrictions
         - dude to the code and need to test addresses the
         special test range of addresses might be useful here
-  
     """
-
-
-
 
 if __name__ == '__main__':
     main()

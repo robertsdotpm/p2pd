@@ -159,27 +159,29 @@ def name_limit_by_af(af, serv):
     if af == IP6:
         return serv.v6_name_limit
 
+# TODO: maybe just use this in insert name?
 async def will_bump_names(af, cur, serv, ip_id):
     current_time = int(time.time())
     min_name_duration = serv.min_name_duration
     sql = f"""
-    SELECT id
-    FROM names 
+    SELECT COUNT(*)
+    FROM names
     WHERE ip_id = %s
     AND af = %s
     AND (({current_time} - timestamp) >= {min_name_duration})
-    ORDER BY timestamp ASC 
-    LIMIT 100 OFFSET %s
     """
+    print(sql)
 
     name_limit = name_limit_by_af(af, serv)
-    await cur.execute(sql, (ip_id, int(af), name_limit))
-    row = await cur.fetchone()
+    await cur.execute(sql, (ip_id, int(af),))
+    names_used = (await cur.fetchone())[0]
+    print("in will bump names = ")
+    print(names_used)
 
-    if row is None:
-        return False
-    else:
+    if names_used >= name_limit:
         return True
+    else:
+        return False
 
 async def bump_name_overflows(af, cur, serv, ip_id):
     print("Testing for pop")
@@ -257,14 +259,24 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
         # Ensure name limit is respected.
         # [ ... active names, ? ]
         print("testing bump limit")
-        sql  = "SELECT COUNT(*) FROM names WHERE af=%s "
-        sql += "AND ip_id=%s"
-        await cur.execute(sql, (int(af), ip_id,))
-        names_used = (await cur.fetchone())[0]
-        name_limit = name_limit_by_af(af, serv)
-        if names_used >= name_limit:
-            raise Exception("Insert name for af over limit.")
 
+        will_bump = await will_bump_names(af, cur, serv, ip_id)
+        if not will_bump:
+            sql  = "SELECT COUNT(*) FROM names WHERE af=%s "
+            sql += "AND ip_id=%s"
+            await cur.execute(sql, (int(af), ip_id,))
+            names_used = (await cur.fetchone())[0]
+            name_limit = name_limit_by_af(af, serv)
+            if names_used >= name_limit:
+                raise Exception("insert name limit reached.")
+        
+
+        """
+        will_bump = await will_bump_names(af, cur, serv, ip_id)
+        if will_bump:
+            raise Exception("Insert name for af over limit.")
+        """
+            
         sql = """
         INSERT INTO names
         (

@@ -21,9 +21,9 @@ class PNPClient():
         pipe = await pipe_open(self.proto, route, self.dest)
         return pipe
 
-    async def push(self, name, value):
+    async def push(self, name, value, behavior=BEHAVIOR_DO_BUMP):
         pipe = await self.get_dest_pipe()
-        pkt = PNPPacket(name, value, self.vkc)
+        pkt = PNPPacket(name, value, self.vkc, behavior=behavior)
         pnp_msg = pkt.get_msg_to_sign()
         sig = self.sk.sign(pnp_msg)
         print("Sending sig = ")
