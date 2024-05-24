@@ -25,11 +25,11 @@ async def pnp_clear_tables():
         
     db_con.close()
 
-async def pnp_get_test_client_serv():
+async def pnp_get_test_client_serv(v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION):
     i = await Interface().start_local()
     serv_v4 = await i.route(IP4).bind(PNP_TEST_PORT, ips="127.0.0.1")
     serv_v6 = await i.route(IP6).bind(PNP_TEST_PORT, ips="::1")
-    serv = await PNPServer().listen_all(
+    serv = await PNPServer(v4_name_limit, v6_name_limit, min_name_duration).listen_all(
         [serv_v4, serv_v6],
         [PNP_TEST_PORT],
         [TCP, UDP]
@@ -72,7 +72,7 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
 
     async def test_pnp_migrate_name_afs(self):
         async def is_af_valid(af):
-            sql = "SELECT * FROM names WHERE name=%s AND AF=%s"
+            sql = "SELECT * FROM names WHERE name=%s AND af=%s"
             db_con = await aiomysql.connect(
                 user=DB_USER, 
                 password=DB_PASS,
@@ -82,7 +82,10 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
             is_valid = False
             async with db_con.cursor() as cur:
                 await cur.execute(sql, (PNP_TEST_NAME, int(af)))
-                is_valid = (await cur.fetchone()) is not None
+                row = await cur.fetchone()
+                print(row)
+                print(af)
+                is_valid = row is not None
 
             db_con.close()
             return is_valid
@@ -105,6 +108,9 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
                 if af_x == af_y:
                     continue
 
+                # New signed updates need a higher time stamp.
+                await asyncio.sleep(2)
+
                 # Do the migration.
                 await clients[af_y].push(
                     PNP_TEST_NAME,
@@ -115,14 +121,47 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
                 is_valid = await is_af_valid(af_y)
                 assert(is_valid)
 
+        await serv.close()
 
+    # Todo: add politeness bump test.
+    async def test_pnp_name_pop_works(self):
+        # Set test params needed for test
+        vectors = [
+            [IP4, 3],
+            [IP6, 3]
+        ]
 
+        # 0, 1, 2 ... oldest = 0
+        # 1, 2, 3 (oldest is popped)
+        for af, name_limit in vectors:
+            await pnp_clear_tables()
+            clients, serv = await pnp_get_test_client_serv(3, 3, 0)
 
+            # Fill the stack.
+            for i in range(0, name_limit):
+                await clients[af].push(f"{i}", "val")
+                await asyncio.sleep(1)
+
+            # Now pop the oldest.
+            await clients[af].push(f"3", "val")
+            await asyncio.sleep(1)
+
+            # Now validate the values.
+            for i in range(1, name_limit + 1):
+                ret = await clients[af].fetch(f"{i}")
+                assert(ret == b"val")
+
+            # Oldest should be popped.
+            ret = await clients[af].fetch(f"0")
+            assert(ret == None)
+
+            # Cleanup server.
+            await serv.close()
 
     """
-    test migrate af x <--> af y
     test pops respect name limit (af dependant)
-        set the min MIN_NAME_DURATION to 0 to test 
+        test polite behavior
+
     test v6 range restrictions
     ensure we cant modify others names
     """

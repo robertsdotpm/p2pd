@@ -153,25 +153,26 @@ async def record_ip(af, params):
 
     return ip_id
 
-def name_limit_by_af(af):
+def name_limit_by_af(af, serv):
     if af == IP4:
-        return V4_NAME_LIMIT
+        return serv.v4_name_limit
     if af == IP6:
-        return V6_NAME_LIMIT
+        return serv.v6_name_limit
 
-async def will_bump_names(af, cur, ip_id):
+async def will_bump_names(af, cur, serv, ip_id):
     current_time = int(time.time())
+    min_name_duration = serv.min_name_duration
     sql = f"""
     SELECT id
     FROM names 
     WHERE ip_id = %s
     AND af = %s
-    AND (({current_time} - timestamp) >= {MIN_NAME_DURATION})
+    AND (({current_time} - timestamp) >= {min_name_duration})
     ORDER BY timestamp ASC 
     LIMIT 100 OFFSET %s
     """
 
-    name_limit = name_limit_by_af(af)
+    name_limit = name_limit_by_af(af, serv)
     await cur.execute(sql, (ip_id, int(af), name_limit))
     row = await cur.fetchone()
 
@@ -180,12 +181,13 @@ async def will_bump_names(af, cur, ip_id):
     else:
         return True
 
-async def bump_name_overflows(af, cur, ip_id):
+async def bump_name_overflows(af, cur, serv, ip_id):
     print("Testing for pop")
 
     # Set number of names allowed per IP.
-    name_limit = name_limit_by_af(af)
+    name_limit = name_limit_by_af(af, serv)
     current_time = int(time.time())
+    min_name_duration = serv.min_name_duration
     sql = f"""
     DELETE FROM names
     WHERE id IN (
@@ -195,8 +197,8 @@ async def bump_name_overflows(af, cur, ip_id):
             FROM names 
             WHERE ip_id = %s
             AND af = %s
-            AND (({current_time} - timestamp) >= {MIN_NAME_DURATION})
-            ORDER BY timestamp ASC 
+            AND (({current_time} - timestamp) >= {min_name_duration})
+            ORDER BY timestamp DESC 
             LIMIT 100 OFFSET %s
         ) AS rows_to_delete
     );
@@ -283,7 +285,7 @@ async def verified_delete_name(db_con, cur, name):
     await cur.execute(sql, (name))
     await db_con.commit()
 
-async def verified_write_name(db_con, cur, behavior, updated, name, value, owner_pub, af, ip_str):
+async def verified_write_name(db_con, cur, serv, behavior, updated, name, value, owner_pub, af, ip_str):
     # Convert ip_str into an IPRange instance.
     cidr = 32 if af == IP4 else 128
     ipr = IPRange(ip_str, cidr=cidr)
@@ -294,7 +296,7 @@ async def verified_write_name(db_con, cur, behavior, updated, name, value, owner
 
     # Polite mode: only insert if it doesn't bump others.
     if behavior == BEHAVIOR_DONT_BUMP:
-        will_bump = await will_bump_names(af, cur, ip_id)
+        will_bump = await will_bump_names(af, cur, serv, ip_id)
         if will_bump:
             return
 
@@ -310,13 +312,16 @@ async def verified_write_name(db_con, cur, behavior, updated, name, value, owner
     # - V6 has 1 per IP (and multiple IPs per user.)
     # - V4 has multiple names per IP (and 1 IP per user.)
     if name_row is None or name_row[-1] != ip_id:
-        await bump_name_overflows(af, cur, ip_id)
+        await bump_name_overflows(af, cur, serv, ip_id)
 
     # Save current changes.
     await db_con.commit()
 
 class PNPServer(Daemon):
-    def __init__(self):
+    def __init__(self, v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION):
+        self.v4_name_limit = v4_name_limit
+        self.v6_name_limit = v6_name_limit
+        self.min_name_duration = min_name_duration
         super().__init__()
         
 
@@ -394,6 +399,7 @@ class PNPServer(Daemon):
                 await verified_write_name(
                     db_con,
                     cur,
+                    self,
                     pkt.behavior,
                     pkt.updated,
                     pkt.name,
