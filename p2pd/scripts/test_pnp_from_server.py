@@ -51,7 +51,7 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
     async def test_pnp_insert_fetch_del(self):
         await pnp_clear_tables()
         clients, serv = await pnp_get_test_client_serv()
-        for af in VALID_AFS:
+        for af in VALID_AFS: # VALID_AFS
             # Do insert.
             await clients[af].push(
                 PNP_TEST_NAME,
@@ -61,6 +61,19 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
             # Test value was stored by retrieval.
             ret = await clients[af].fetch(PNP_TEST_NAME)
             assert(ret == PNP_TEST_VALUE)
+
+            # Do update.
+            await clients[af].push(
+                PNP_TEST_NAME,
+                PNP_TEST_VALUE + b"changed"
+            )
+
+            # Ensure new timestamp greater than old.
+            await asyncio.sleep(2)
+
+            # Test value was stored by retrieval.
+            ret = await clients[af].fetch(PNP_TEST_NAME)
+            assert(ret == (PNP_TEST_VALUE + b"changed"))
 
             # Now delete the value.
             await clients[af].delete(PNP_TEST_NAME)

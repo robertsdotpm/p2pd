@@ -232,26 +232,31 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
 
         sql  = """
         UPDATE names SET 
-        name=%s,
         value=%s,
         af=%s,
-        ip_id=%s
-        WHERE name=%s AND timestamp < %s
+        ip_id=%s,
+        timestamp=%s
+        WHERE name=%s
         """
         print(sql)
         print("Doing update name")
+        print(name)
+        print(value)
+        print(updated)
 
-        await cur.execute(sql, 
+        ret = await cur.execute(sql, 
             (
-                name,
                 value,
                 int(af),
                 ip_id,
-                name,
-                updated
+                updated,
+                name
             )
         )
+        print(ret)
 
+        row = (row[0], name, value, row[3], af, ip_id, updated)
+        
     # Create a new name.
     if not name_exists:
         print("inserting new name")
@@ -387,6 +392,8 @@ class PNPServer(Daemon):
                 if row is not None:
                     # If no sig fetch name value.
                     if pkt.sig is None or not len(pkt.sig):
+                        print("No sig for operation.")
+
                         resp = PNPPacket(
                             name=pkt.name,
                             value=row[2],
