@@ -25,10 +25,10 @@ async def pnp_clear_tables():
         
     db_con.close()
 
-async def pnp_get_test_client_serv(v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION):
+async def pnp_get_test_client_serv(v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION, v6_serv_ips="::1"):
     i = await Interface().start_local()
     serv_v4 = await i.route(IP4).bind(PNP_TEST_PORT, ips="127.0.0.1")
-    serv_v6 = await i.route(IP6).bind(PNP_TEST_PORT, ips="::1")
+    serv_v6 = await i.route(IP6).bind(PNP_TEST_PORT, ips=v6_serv_ips)
     serv = await PNPServer(v4_name_limit, v6_name_limit, min_name_duration).listen_all(
         [serv_v4, serv_v6],
         [PNP_TEST_PORT],
@@ -36,9 +36,10 @@ async def pnp_get_test_client_serv(v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6
     )
 
     clients = {}
+    dest_ips = {IP4: "127.0.0.1", IP6: v6_serv_ips}
     for af in VALID_AFS:
         route = i.route(af)
-        dest = await Address('localhost', PNP_TEST_PORT, route)
+        dest = await Address(dest_ips[af], PNP_TEST_PORT, route)
         clients[af] = PNPClient(PNP_LOCAL_SK, dest)
 
     return clients, serv
@@ -231,10 +232,109 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
             await serv.close() 
 
     """
-    test v6 range restrictions
-        - dude to the code and need to test addresses the
-        special test range of addresses might be useful here
+ip address add fe80:3456:7890:1111:0000:0000:0000:0001/128 dev enp0s31f6
+ip address add fe80:3456:7890:1111:0000:0000:0000:0002/128 dev enp0s31f6
+ip address add fe80:3456:7890:1111:0000:0000:0000:0003/128 dev enp0s31f6
+ip address add fe80:3456:7890:2222:0000:0000:0000:0001/128 dev enp0s31f6
+ip address add fe80:3456:7890:2222:0000:0000:0000:0002/128 dev enp0s31f6
+ip address add fe80:3456:7890:2222:0000:0000:0000:0003/128 dev enp0s31f6
+ip address add fe80:3456:7890:3333:0000:0000:0000:0001/128 dev enp0s31f6
     """
+    async def test_pnp_v6_range_limits(self):
+        """
+        i = await Interface().start_local()
+        r = await i.route(IP6).bind(ips="fe80:3456:7890:1111:0000:0000:0000:0001")
+        p = await pipe_open(TCP, r)
+        print(p)
+        print(p.sock)
+        await p.close()
+        return
+        """
+    
+
+        # Subnet limit = 2
+        # Iface limit = 2
+        await pnp_clear_tables()
+        clients, serv = await pnp_get_test_client_serv(v6_serv_ips="fe80:3456:7890:1111:0000:0000:0000:0001")
+        serv.set_v6_limits(2, 2)
+
+        vectors = [
+            # Exhaust iface limit:
+            [
+                # glob          net  iface
+                "fe80:3456:7890:1111:0000:0000:0000:0001",
+                b"0"
+            ],
+            [
+                # glob          net  iface
+                "fe80:3456:7890:1111:0000:0000:0000:0002",
+                b"1"
+            ],
+            [
+                # glob          net  iface
+                "fe80:3456:7890:1111:0000:0000:0000:0003",
+                None
+            ],
+
+            # Exhaust subnet limit.
+            [
+                # glob          net  iface
+                "fe80:3456:7890:2222:0000:0000:0000:0001",
+                b"3"
+            ],
+            [
+                # glob          net  iface
+                "fe80:3456:7890:2222:0000:0000:0000:0002",
+                b"4"
+            ],
+            [
+                # glob          net  iface
+                "fe80:3456:7890:2222:0000:0000:0000:0003",
+                None
+            ],
+            [
+                # glob          net  iface
+                "fe80:3456:7890:3333:0000:0000:0000:0001",
+                None
+            ],
+        ]
+
+        for offset in range(0, len(vectors)):
+            src_ip, expect = vectors[offset]
+            client = clients[IP6]
+
+            # Patch client pipe to use a specific fixed IP.
+            async def get_dest_pipe():
+                # Bind to specific local IP.
+                route = client.dest.route.interface.route(
+                    client.dest.route.af
+                
+                )
+                print(f"binding to {src_ip}")
+                await route.bind(ips=src_ip)
+                print(route._bind_tups)
+
+                # Return a pipe to the PNP server.
+                return await pipe_open(
+                    client.proto,
+                    route,
+                    client.dest
+                )
+
+            # Patch the client to use specific src ip.
+            client.get_dest_pipe = get_dest_pipe
+
+            # Test out the vector.
+            await client.push(f"{offset}", f"{offset}")
+            await asyncio.sleep(2)
+            ret = await client.fetch(f"{offset}")
+            if ret is None:
+                assert(expect is None)
+            else:
+                assert(expect == to_b(f"{offset}"))
+
+        # Cleanup.
+        await serv.close()
 
 if __name__ == '__main__':
     main()

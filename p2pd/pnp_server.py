@@ -97,7 +97,7 @@ def get_v6_parts(ipr):
     print(v6_iface_id)
     return v6_parts
 
-async def record_v6(params):
+async def record_v6(params, serv):
     # Replace ipr parameter with v6_parts.
     params = (params[0],) + get_v6_parts(params[1])
 
@@ -111,11 +111,11 @@ async def record_v6(params):
     # Start logic to handle inserting the IPv6.
     if v6_record is None:
         # Are we within the subnet limitations?
-        if not (v6_lan_exists or (v6_subnets_used <= V6_SUBNET_LIMIT)):
+        if not (v6_lan_exists or (v6_subnets_used < serv.v6_subnet_limit)):
             raise Exception("IPv6 subnet limit reached.")
 
         # Are we within the iface limitations?
-        if not (v6_ifaces_used <= V6_IFACE_LIMIT):
+        if not (v6_ifaces_used < serv.v6_iface_limit):
             raise Exception("IPv6 iface limit reached.")
         
         # IP row ID.
@@ -126,7 +126,7 @@ async def record_v6(params):
 
     return ip_id
 
-async def record_v4(params):
+async def record_v4(params, serv):
     cur, ipr = params
 
     sql = "SELECT * FROM ipv4s WHERE v4_val=%s"
@@ -143,13 +143,13 @@ async def record_v4(params):
 
     return ip_id
 
-async def record_ip(af, params):
+async def record_ip(af, params, serv):
     if af == IP6:
-        ip_id = await record_v6(params)
+        ip_id = await record_v6(params, serv)
     
     # Load existing ip_id or create it - V4.
     if af == IP4:
-        ip_id = await record_v4(params)
+        ip_id = await record_v4(params, serv)
 
     return ip_id
 
@@ -316,7 +316,7 @@ async def verified_write_name(db_con, cur, serv, behavior, updated, name, value,
 
     # Record IP if needed and get its ID.
     # If it's V6 allocation limits are enforced on subnets.
-    ip_id = await record_ip(af, (cur, ipr,))
+    ip_id = await record_ip(af, (cur, ipr,), serv)
 
     # Polite mode: only insert if it doesn't bump others.
     if behavior == BEHAVIOR_DONT_BUMP:
@@ -346,11 +346,17 @@ class PNPServer(Daemon):
         self.v4_name_limit = v4_name_limit
         self.v6_name_limit = v6_name_limit
         self.min_name_duration = min_name_duration
+        self.v6_subnet_limit = V6_SUBNET_LIMIT
+        self.v6_iface_limit = V6_IFACE_LIMIT
         super().__init__()
         
+    def set_v6_limits(self, v6_subnet_limit, v6_iface_limit):
+        self.v6_subnet_limit = v6_subnet_limit
+        self.v6_iface_limit = v6_iface_limit
 
     async def msg_cb(self, msg, client_tup, pipe):
         print("connected")
+        print(client_tup)
         cidr = 32 if pipe.route.af == IP4 else 128
         db_con = None
         try:
@@ -488,5 +494,3 @@ async def main_workspace():
     await serv.close()
 
     #await verified_post_name('name', 'val', 'pub', IP6, '2001:4860:4860::8888')
-
-async_test(main_workspace)
