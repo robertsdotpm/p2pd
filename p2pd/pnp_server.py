@@ -227,7 +227,7 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
     # Update an existing name.
     if name_exists:
         print("updating name")
-        if row[6] > updated:
+        if row[6] >= updated:
             raise Exception("Replay attack for name update.")
 
         sql  = """
@@ -256,7 +256,7 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
         print(ret)
 
         row = (row[0], name, value, row[3], af, ip_id, updated)
-        
+
     # Create a new name.
     if not name_exists:
         print("inserting new name")
@@ -309,7 +309,14 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
 
     return row
 
-async def verified_delete_name(db_con, cur, name):
+async def verified_delete_name(db_con, cur, name, updated):
+    row = await fetch_name(cur, name)
+    if row is None:
+        return
+    
+    if row[6] >= updated:
+        raise Exception("Replay attack for name update.")
+        
     sql = "DELETE FROM names WHERE name = %s"
     await cur.execute(sql, (name))
     await db_con.commit()
@@ -367,6 +374,7 @@ class PNPServer(Daemon):
         try:
             pkt = PNPPacket.unpack(msg)
             pnp_msg = pkt.get_msg_to_sign()
+            print(pkt.vkc)
             print(pkt.name)
             print(pkt.value)
             print(pkt.sig)
@@ -384,7 +392,7 @@ class PNPServer(Daemon):
             print(db_con)
 
             async with db_con.cursor() as cur:
-                await cur.execute("SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+                #await cur.execute("SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE")
                 row = await fetch_name(cur, pkt.name)
                 print("row = ")
                 print(row)
@@ -397,7 +405,8 @@ class PNPServer(Daemon):
                         resp = PNPPacket(
                             name=pkt.name,
                             value=row[2],
-                            updated=row[6]
+                            updated=row[6],
+                            vkc=row[3]
                         ).get_msg_to_sign()
                         await proto_send(pipe, resp)
                         return
@@ -412,7 +421,8 @@ class PNPServer(Daemon):
                         await verified_delete_name(
                             db_con,
                             cur,
-                            pkt.name
+                            pkt.name,
+                            pkt.updated
                         )
                         await proto_send(pipe, pnp_msg)
                         return
@@ -422,7 +432,8 @@ class PNPServer(Daemon):
                     resp = PNPPacket(
                         name=pkt.name,
                         value=b"",
-                        updated=0
+                        updated=0,
+                        vkc=pkt.vkc
                     ).get_msg_to_sign()
                     await proto_send(pipe, resp)
                     return

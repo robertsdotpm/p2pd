@@ -194,11 +194,6 @@ STUND_SERVERS = {
     ],
     IP6: [
         {
-            "host": "p2pd.net",
-            "primary": {"ip": "2a01:4f9:3081:50d9::2", "port": 3478},
-            "secondary": {"ip": "2a01:4f9:3081:50d9::3", "port": 3479},
-        },
-        {
             "host": "stunserver.stunprotocol.org",
             "primary": {"ip": "2600:1f16:8c5:101:80b:b58b:828:8df4", "port": 3478},
             "secondary": {"ip": "2600:1f16:08c5:0101:6388:1fb6:8b7e:00c2", "port": 3479},
@@ -348,14 +343,6 @@ NATs, unfortunately. So they've been removed from the server list for now.
     },
 """
 TURN_SERVERS = [
-    {
-        "host": b"p2pd.net",
-        "port": 34780,
-        "afs": [IP4, IP6],
-        "user": b"",
-        "pass": b"",
-        "realm": b"p2pd.net"
-    },
     {
         "host": b"peerjs.com",
         "port": 3478,

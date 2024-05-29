@@ -1,4 +1,13 @@
 
+"""
+If you do multiple calls with the api and dont sleep between them
+the timestamp can end up being the same and get rejected by the client
+it might make sense to for the update initialization to be done by the client
+with an async sleep to ensure its always unique. the problem is only apparently for push and delete tho.
+
+
+"""
+
 from p2pd import *
 
 """
@@ -60,7 +69,12 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
 
             # Test value was stored by retrieval.
             ret = await clients[af].fetch(PNP_TEST_NAME)
-            assert(ret == PNP_TEST_VALUE)
+            update_x = ret.updated
+            assert(ret.value == PNP_TEST_VALUE)
+            assert(ret.vkc == clients[af].vkc)
+
+            # Ensure new timestamp greater than old.
+            await asyncio.sleep(2)
 
             # Do update.
             await clients[af].push(
@@ -68,19 +82,23 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
                 PNP_TEST_VALUE + b"changed"
             )
 
-            # Ensure new timestamp greater than old.
-            await asyncio.sleep(2)
-
             # Test value was stored by retrieval.
             ret = await clients[af].fetch(PNP_TEST_NAME)
-            assert(ret == (PNP_TEST_VALUE + b"changed"))
+            update_y = ret.updated
+            assert(ret.value == (PNP_TEST_VALUE + b"changed"))
+            assert(ret.vkc == clients[af].vkc)
+            print(update_y)
+            print(update_x)
+            assert(update_y > update_x)
 
             # Now delete the value.
-            await clients[af].delete(PNP_TEST_NAME)
+            ret = await clients[af].delete(PNP_TEST_NAME)
+            assert(ret.vkc == clients[af].vkc)
 
             # Test value was deleted.
             ret = await clients[af].fetch(PNP_TEST_NAME)
-            assert(ret == None)
+            assert(ret.value == None)
+            assert(ret.vkc == clients[af].vkc)
 
         await serv.close()
 
@@ -162,11 +180,11 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
             # Now validate the values.
             for i in range(1, name_limit + 1):
                 ret = await clients[af].fetch(f"{i}")
-                assert(ret == b"val")
+                assert(ret.value == b"val")
 
             # Oldest should be popped.
             ret = await clients[af].fetch(f"0")
-            assert(ret == None)
+            assert(ret.value == None)
 
             # Cleanup server.
             await serv.close()
@@ -185,11 +203,11 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
             # Check values still exist.
             for i in range(1, name_limit + 1):
                 ret = await clients[af].fetch(f"{i}")
-                assert(ret == b"val")
+                assert(ret.value == b"val")
 
             # Check insert over limit rejected.
             ret = await clients[af].fetch("4")
-            assert(ret == None)
+            assert(ret.value == None)
             await serv.close()
 
     async def test_pnp_respect_owner_access(self):
@@ -217,7 +235,7 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
 
             # The changes aren't saved then.
             ret = await bob[af].fetch(test_name)
-            assert(ret == alice_val)
+            assert(ret.value == alice_val)
 
         await serv.close()
 
@@ -235,12 +253,12 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
             # Normally this would bump one.
             await clients[af].push(f"3", f"3", BEHAVIOR_DONT_BUMP)
             ret = await clients[af].fetch(f"3")
-            assert(ret == None)
+            assert(ret.value == None)
 
             # All original values should exist.
             for i in range(0, name_limit):
                 ret = await clients[af].fetch(f"{i}")
-                assert(ret == to_b(f"{i}"))
+                assert(ret.value == to_b(f"{i}"))
 
             await serv.close() 
 
@@ -341,7 +359,7 @@ ip address add fe80:3456:7890:3333:0000:0000:0000:0001/128 dev enp0s31f6
             await client.push(f"{offset}", f"{offset}")
             await asyncio.sleep(2)
             ret = await client.fetch(f"{offset}")
-            if ret is None:
+            if ret.value is None:
                 assert(expect is None)
             else:
                 assert(expect == to_b(f"{offset}"))
@@ -349,5 +367,7 @@ ip address add fe80:3456:7890:3333:0000:0000:0000:0001/128 dev enp0s31f6
         # Cleanup.
         await serv.close()
 
+# Prune admin code?
+# make sure your pub key is returned
 if __name__ == '__main__':
     main()

@@ -21,6 +21,20 @@ class PNPClient():
         pipe = await pipe_open(self.proto, route, self.dest)
         return pipe
 
+    async def return_resp(self, pipe):
+        try:
+            buf = await proto_recv(pipe)
+            pkt = PNPPacket.unpack(buf)
+            if not pkt.updated:
+                pkt.value = None
+
+            return pkt
+        except:
+            log_exception()
+            return None
+        finally:
+            await pipe.close()
+
     async def push(self, name, value, behavior=BEHAVIOR_DO_BUMP):
         pipe = await self.get_dest_pipe()
         pkt = PNPPacket(name, value, self.vkc, behavior=behavior)
@@ -31,26 +45,14 @@ class PNPClient():
         print("sending pre msg = ")
         print(pnp_msg)
         await pipe.send(pnp_msg + sig)
-        await proto_recv(pipe)
-        await pipe.close()
+        return await self.return_resp(pipe)
 
     async def fetch(self, name):
         pipe = await self.get_dest_pipe()
         pkt = PNPPacket(name, vkc=self.vkc)
         pnp_msg = pkt.get_msg_to_sign()
         await pipe.send(pnp_msg)
-        try:
-            buf = await proto_recv(pipe)
-            pkt = PNPPacket.unpack(buf)
-            if pkt.updated:
-                return pkt.value
-            else:
-                return None
-        except:
-            log_exception()
-            return None
-        finally:
-            await pipe.close()
+        return await self.return_resp(pipe)
 
     async def delete(self, name):
         pipe = await self.get_dest_pipe()
@@ -62,5 +64,4 @@ class PNPClient():
         print("sending pre msg = ")
         print(pnp_msg)
         await pipe.send(pnp_msg + sig)
-        await proto_recv(pipe)
-        await pipe.close()
+        return await self.return_resp(pipe)
