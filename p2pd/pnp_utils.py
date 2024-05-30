@@ -1,6 +1,7 @@
 import time
-import struct
+import random
 import os
+import struct
 from ecdsa import VerifyingKey
 from .utils import *
 
@@ -22,7 +23,7 @@ BEHAVIOR_DO_BUMP = 1
 BEHAVIOR_DONT_BUMP = 0
 
 class PNPPacket():
-    def __init__(self, name, value=b"", vkc=None, sig=None, updated=None, behavior=BEHAVIOR_DO_BUMP):
+    def __init__(self, name, value=b"", vkc=None, sig=None, updated=None, behavior=BEHAVIOR_DO_BUMP, pkid=None):
         if updated is not None:
             self.updated = updated
         else:
@@ -35,6 +36,7 @@ class PNPPacket():
         self.vkc = vkc
         self.sig = sig
         self.behavior = behavior
+        self.pkid = pkid or random.randrange(0, 2 ** 32)
 
     def get_msg_to_sign(self):
         return PNPPacket(
@@ -43,7 +45,8 @@ class PNPPacket():
             updated=self.updated,
             vkc=self.vkc,
             sig=None,
-            behavior=self.behavior
+            behavior=self.behavior,
+            pkid=self.pkid
         ).pack()
 
     def is_valid_sig(self):
@@ -62,12 +65,15 @@ class PNPPacket():
     def pack(self):
         buf = b""
 
+        # ID for packet.
+        print(self.pkid)
+        buf += struct.pack("<I", self.pkid)
+
         # Behavior for changes.
         buf += bytes([self.behavior])
 
         # Prevent replay.
         buf += struct.pack("<Q", self.updated)
-        assert(len(buf) == 9)
 
         # Header (lens.)
         buf += bytes([self.name_len])
@@ -90,6 +96,9 @@ class PNPPacket():
         # Point at start of buffer.
         p = 0
 
+        # Packet ID.
+        pkid = struct.unpack("<I", buf[p:p + 4])[0]; p += 4;
+
         # Extract behavior.
         behavior = buf[p]; p += 1;
 
@@ -110,5 +119,5 @@ class PNPPacket():
         vkc = buf[p:p + 25]; p += 25;
         sig = buf[p:]
 
-        return PNPPacket(name, val, vkc, sig, updated, behavior)
+        return PNPPacket(name, val, vkc, sig, updated, behavior, pkid)
 

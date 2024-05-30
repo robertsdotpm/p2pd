@@ -379,6 +379,7 @@ class PNPServer(Daemon):
             print(pkt.value)
             print(pkt.sig)
             print(pkt.updated)
+            print(pkt.pkid)
             print(msg)
 
 
@@ -406,7 +407,8 @@ class PNPServer(Daemon):
                             name=pkt.name,
                             value=row[2],
                             updated=row[6],
-                            vkc=row[3]
+                            vkc=row[3],
+                            pkid=pkt.pkid
                         ).get_msg_to_sign()
                         await proto_send(pipe, resp)
                         return
@@ -433,7 +435,8 @@ class PNPServer(Daemon):
                         name=pkt.name,
                         value=b"",
                         updated=0,
-                        vkc=pkt.vkc
+                        vkc=pkt.vkc,
+                        pkid=pkt.pkid
                     ).get_msg_to_sign()
                     await proto_send(pipe, resp)
                     return

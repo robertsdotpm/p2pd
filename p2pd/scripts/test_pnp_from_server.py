@@ -5,7 +5,7 @@ the timestamp can end up being the same and get rejected by the client
 it might make sense to for the update initialization to be done by the client
 with an async sleep to ensure its always unique. the problem is only apparently for push and delete tho.
 
-
+add random nonce that gets returned to help udp protocol
 """
 
 from p2pd import *

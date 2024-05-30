@@ -15,6 +15,21 @@ class PNPClient():
         self.names = {}
         self.proto = proto
 
+    async def get_updated(self, name):
+        if name not in self.names:
+            t = int(time.time())
+            self.names[name] = t
+            return t
+
+        while 1:
+            t = int(time.time())
+            if t == self.names[name]:
+                await asyncio.sleep(1)
+                continue
+            else:
+                self.names[name] = t
+                return t
+
     async def get_dest_pipe(self):
         route = self.dest.route.interface.route(self.dest.route.af)
         route = await route.bind()
@@ -27,7 +42,6 @@ class PNPClient():
             pkt = PNPPacket.unpack(buf)
             if not pkt.updated:
                 pkt.value = None
-
             return pkt
         except:
             log_exception()
@@ -35,9 +49,17 @@ class PNPClient():
         finally:
             await pipe.close()
 
-    async def push(self, name, value, behavior=BEHAVIOR_DO_BUMP):
+    async def fetch(self, name):
         pipe = await self.get_dest_pipe()
-        pkt = PNPPacket(name, value, self.vkc, behavior=behavior)
+        pkt = PNPPacket(name, vkc=self.vkc)
+        pnp_msg = pkt.get_msg_to_sign()
+        await pipe.send(pnp_msg)
+        return await self.return_resp(pipe)
+
+    async def push(self, name, value, behavior=BEHAVIOR_DO_BUMP):
+        t = await self.get_updated(name)
+        pipe = await self.get_dest_pipe()
+        pkt = PNPPacket(name, value, self.vkc, None, t, behavior)
         pnp_msg = pkt.get_msg_to_sign()
         sig = self.sk.sign(pnp_msg)
         print("Sending sig = ")
@@ -47,16 +69,10 @@ class PNPClient():
         await pipe.send(pnp_msg + sig)
         return await self.return_resp(pipe)
 
-    async def fetch(self, name):
-        pipe = await self.get_dest_pipe()
-        pkt = PNPPacket(name, vkc=self.vkc)
-        pnp_msg = pkt.get_msg_to_sign()
-        await pipe.send(pnp_msg)
-        return await self.return_resp(pipe)
-
     async def delete(self, name):
+        t = await self.get_updated(name)
         pipe = await self.get_dest_pipe()
-        pkt = PNPPacket(name, vkc=self.vkc)
+        pkt = PNPPacket(name, vkc=self.vkc, updated=t)
         pnp_msg = pkt.get_msg_to_sign()
         sig = self.sk.sign(pnp_msg)
         print("Sending sig = ")
