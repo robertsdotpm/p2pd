@@ -47,10 +47,28 @@ async def pnp_cleanup_client_serv(client, serv):
     await serv.close()
 
 class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
-    async def test_pnp_insert_fetch_del(self):
-        await pnp_clear_tables()
+    async def test_pnp_val_sqli(self):
+        evil_val = b"testvalue'); DROP TABLE names; --"
         clients, serv = await pnp_get_test_client_serv()
         for af in VALID_AFS: # VALID_AFS
+            await pnp_clear_tables()
+
+           # Do insert.
+            await clients[af].push(
+                PNP_TEST_NAME,
+                evil_val
+            )
+
+            ret = await clients[af].fetch(PNP_TEST_NAME)
+            assert(ret.value == evil_val)
+
+        await serv.close()
+
+    async def test_pnp_insert_fetch_del(self):
+        clients, serv = await pnp_get_test_client_serv()
+        for af in VALID_AFS: # VALID_AFS
+            await pnp_clear_tables()
+
             # Do insert.
             await clients[af].push(
                 PNP_TEST_NAME,
@@ -202,7 +220,6 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
 
     async def test_pnp_respect_owner_access(self):
         i = await Interface().start_local()
-        await pnp_clear_tables()
         _, serv = await pnp_get_test_client_serv()
 
         alice = {}
@@ -216,6 +233,7 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
         test_name = b"some_name"
         alice_val = b"alice_val"
         for af in VALID_AFS:
+            await pnp_clear_tables()
             await alice[af].push(test_name, alice_val)
             await asyncio.sleep(2)
 
