@@ -12,6 +12,9 @@ pruning all expired (access to localhost)
 increase name no so demos are possible for both afs
 test you cant update others names
 
+make unput validation game stronger
+add measures to prevent race conditions in concurrent code
+
 """
 
 
@@ -25,8 +28,8 @@ from .daemon import *
 async def v6_range_usage(cur, v6_glob_main, v6_glob_extra, v6_lan_id, _):
     # Count number of subnets used.
     sql  = "SELECT COUNT(DISTINCT v6_lan_id) "
-    sql += "FROM ipv6s WHERE v6_glob_main=%s AND v6_glob_extra=%s"
-    await cur.execute(sql, (v6_glob_main, v6_glob_extra))
+    sql += "FROM ipv6s WHERE v6_glob_main=%s AND v6_glob_extra=%s FOR UPDATE"
+    await cur.execute(sql, (v6_glob_main, v6_glob_extra,))
 
     v6_subnets_used = (await cur.fetchone())[0]
     print("Subnets used = ", v6_subnets_used)
@@ -34,8 +37,8 @@ async def v6_range_usage(cur, v6_glob_main, v6_glob_extra, v6_lan_id, _):
     # Count number of interfaces used.
     sql  = "SELECT COUNT(*) FROM ipv6s "
     sql += "WHERE v6_glob_main=%s AND v6_glob_extra=%s "
-    sql += "AND v6_lan_id=%s "
-    sql_params = (v6_glob_main, v6_glob_extra, v6_lan_id)
+    sql += "AND v6_lan_id=%s FOR UPDATE"
+    sql_params = (v6_glob_main, v6_glob_extra, v6_lan_id,)
 
     await cur.execute(sql, sql_params)
     v6_ifaces_used = (await cur.fetchone())[0]
@@ -47,16 +50,16 @@ async def v6_exists(cur, v6_glob_main, v6_glob_extra, v6_lan_id, v6_iface_id):
     # Check if v6 subnet component exists.
     sql  = "SELECT * FROM ipv6s WHERE v6_glob_main=%s "
     sql += "AND v6_glob_extra=%s AND v6_lan_id=%s "
-    sql_params = (v6_glob_main, v6_glob_extra, v6_lan_id)
+    sql_params = (v6_glob_main, v6_glob_extra, v6_lan_id,)
 
-    await cur.execute(sql, sql_params)
+    await cur.execute(sql + " FOR UPDATE", sql_params)
     v6_lan_exists = (await cur.fetchone()) is not None
 
     # Check if IPv6 record exists.
-    sql += "AND v6_iface_id=%s"
+    sql += "AND v6_iface_id=%s FOR UPDATE"
     await cur.execute(
         sql.replace("COUNT(*)", "*"), # Change count to select.
-        (v6_glob_main, v6_glob_extra, v6_lan_id, v6_iface_id)
+        (v6_glob_main, v6_glob_extra, v6_lan_id, v6_iface_id,)
     )
 
     v6_record = await cur.fetchone()
@@ -73,8 +76,8 @@ async def v6_insert(cur, v6_glob_main, v6_glob_extra, v6_lan_id, v6_iface_id):
         )
         VALUES (%s, %s, %s, %s, %s)
     """
-    sql_params = (v6_glob_main, v6_glob_extra, v6_lan_id)
-    sql_params += (v6_iface_id, int(time.time()))
+    sql_params = (v6_glob_main, v6_glob_extra, v6_lan_id,)
+    sql_params += (v6_iface_id, int(time.time()),)
 
     await cur.execute(sql, sql_params)
     return cur.lastrowid
@@ -129,7 +132,7 @@ async def record_v6(params, serv):
 async def record_v4(params, serv):
     cur, ipr = params
 
-    sql = "SELECT * FROM ipv4s WHERE v4_val=%s"
+    sql = "SELECT * FROM ipv4s WHERE v4_val=%s FOR UPDATE"
     await cur.execute(sql, (int(ipr),))
     row = await cur.fetchone()
 
@@ -138,7 +141,7 @@ async def record_v4(params, serv):
     else:
         sql  = "INSERT INTO ipv4s (v4_val, timestamp) "
         sql += "VALUES (%s, %s)"
-        await cur.execute(sql, (int(ipr), int(time.time())))
+        await cur.execute(sql, (int(ipr), int(time.time()),))
         ip_id = cur.lastrowid
 
     return ip_id
@@ -169,6 +172,7 @@ async def will_bump_names(af, cur, serv, ip_id):
     WHERE ip_id = %s
     AND af = %s
     AND (({current_time} - timestamp) >= {min_name_duration})
+    FOR UPDATE
     """
     print(sql)
 
@@ -202,22 +206,25 @@ async def bump_name_overflows(af, cur, serv, ip_id):
             AND (({current_time} - timestamp) >= {min_name_duration})
             ORDER BY timestamp DESC 
             LIMIT 100 OFFSET %s
+            FOR UPDATE
         ) AS rows_to_delete
     );
     """
     print(sql)
     print("ip_id = ", ip_id)
-    out = await cur.execute(sql, (ip_id, int(af), name_limit))
+    out = await cur.execute(sql, (ip_id, int(af), name_limit,))
     print(out)
 
-async def fetch_name(cur, name):
+async def fetch_name(cur, name, lock=DB_WRITE_LOCK):
     # Does name already exist.
-    sql = "SELECT * FROM names WHERE name=%s"
+    sql = "SELECT * FROM names WHERE name=%s "
+    if lock == DB_WRITE_LOCK:
+        sql += "FOR UPDATE"
+
     await cur.execute(sql, (name,))
     row = await cur.fetchone()
     print("test name", row)
     return row
-    name_exists = row is not None
 
 async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
     # Does name already exist.
@@ -236,7 +243,8 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
         af=%s,
         ip_id=%s,
         timestamp=%s
-        WHERE name=%s
+        WHERE name=%s 
+        AND timestamp=%s
         """
         print(sql)
         print("Doing update name")
@@ -250,12 +258,16 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
                 int(af),
                 ip_id,
                 updated,
-                name
+                name,
+                row[6]
             )
         )
-        print(ret)
+        print("update name ret ", ret)
+        if not ret:
+            return None
 
         row = (row[0], name, value, row[3], af, ip_id, updated)
+        return row
 
     # Create a new name.
     if not name_exists:
@@ -268,7 +280,7 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
         will_bump = await will_bump_names(af, cur, serv, ip_id)
         if not will_bump:
             sql  = "SELECT COUNT(*) FROM names WHERE af=%s "
-            sql += "AND ip_id=%s"
+            sql += "AND ip_id=%s FOR UPDATE"
             await cur.execute(sql, (int(af), ip_id,))
             names_used = (await cur.fetchone())[0]
             name_limit = name_limit_by_af(af, serv)
@@ -302,12 +314,11 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
                 owner_pub,
                 int(af),
                 ip_id,
-                updated
+                updated,
             )
         )
         print("insert name ret ", ret)
-
-    return row
+        return await fetch_name(cur, name)
 
 async def verified_delete_name(db_con, cur, name, updated):
     row = await fetch_name(cur, name)
@@ -317,8 +328,9 @@ async def verified_delete_name(db_con, cur, name, updated):
     if row[6] >= updated:
         raise Exception("Replay attack for name update.")
         
-    sql = "DELETE FROM names WHERE name = %s"
-    await cur.execute(sql, (name))
+    sql  = "DELETE FROM names WHERE "
+    sql += "name = %s AND timestamp = %s"
+    await cur.execute(sql, (name, row[6]))
     await db_con.commit()
 
 async def verified_write_name(db_con, cur, serv, behavior, updated, name, value, owner_pub, af, ip_str):
@@ -329,6 +341,9 @@ async def verified_write_name(db_con, cur, serv, behavior, updated, name, value,
     # Record IP if needed and get its ID.
     # If it's V6 allocation limits are enforced on subnets.
     ip_id = await record_ip(af, (cur, ipr,), serv)
+    if ip_id is None:
+        print("record ip is none")
+        return
 
     # Polite mode: only insert if it doesn't bump others.
     if behavior == BEHAVIOR_DONT_BUMP:
@@ -339,9 +354,12 @@ async def verified_write_name(db_con, cur, serv, behavior, updated, name, value,
     # Record name if needed and get its ID.
     # Also supports transfering a name to a new IP.
     name_row = await record_name(cur, serv, af, ip_id, name, value, owner_pub, updated)
+    if name_row is None:
+        print("name row is none")
+        return
 
     # Save current changes so the bump check can prune the excess.
-    await db_con.commit()
+    #await db_con.commit()
 
     # Prune any names over the limit for an IP.
     # - Prioritize removing the oldest first.
@@ -394,7 +412,7 @@ class PNPServer(Daemon):
 
             async with db_con.cursor() as cur:
                 #await cur.execute("SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE")
-                row = await fetch_name(cur, pkt.name)
+                row = await fetch_name(cur, pkt.name, DB_READ_LOCK)
                 print("row = ")
                 print(row)
 

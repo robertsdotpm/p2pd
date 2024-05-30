@@ -22,6 +22,7 @@ MIN_NAME_DURATION = 60 * 60 * 24 * 7 # 7 days to migrate names.
 BEHAVIOR_DO_BUMP = 1
 BEHAVIOR_DONT_BUMP = 0
 
+
 class PNPPacket():
     def __init__(self, name, value=b"", vkc=None, sig=None, updated=None, behavior=BEHAVIOR_DO_BUMP, pkid=None):
         if updated is not None:

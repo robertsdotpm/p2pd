@@ -350,6 +350,7 @@ ip address add fe80:3456:7890:3333:0000:0000:0000:0001/128 dev enp0s31f6
             await asyncio.sleep(2)
             ret = await client.fetch(f"{offset}")
             if ret.value is None:
+                print(ret.value)
                 assert(expect is None)
             else:
                 assert(expect == to_b(f"{offset}"))

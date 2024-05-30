@@ -89,7 +89,8 @@ def proactorfy(self=None):
 
     return loop
 
-
+DB_READ_LOCK = 0
+DB_WRITE_LOCK = 1
 STATUS_RETRY = 1
 STATUS_SUCCESS = 2
 STATUS_FAILURE = 3
