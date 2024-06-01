@@ -12,12 +12,13 @@ DB_PASS = os.environ['PNP_DB_PW']
 #####################################################################################
 PNP_PORT = 5300
 PNP_NAME_LEN = 30 # 10
-PNP_VAL_LEN = 135 
+PNP_VAL_LEN = 300 
 V4_NAME_LIMIT = 10 #4
 V6_NAME_LIMIT = 10 #1
 V6_GLOB_LIMIT = 3
 V6_SUBNET_LIMIT = 15000
 V6_IFACE_LIMIT = 10
+V6_ADDR_EXPIRY = 60 * 60 * 24 * 30 # 30 days no change expiry.
 MIN_NAME_DURATION = 60 * 60 * 24 * 7 # 7 days to migrate names.
 BEHAVIOR_DO_BUMP = 1
 BEHAVIOR_DONT_BUMP = 0

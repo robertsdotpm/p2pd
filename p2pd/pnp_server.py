@@ -1,12 +1,8 @@
 """
-pruning all expired (access to localhost)
-    - prune ipv6s not refreshed for n
-        - delete associated names
-    - delete all names for both afs that have expired
-
-
-make unput validation game stronger
-
+pune access script
+server run script
+move that os env param load from the module
+delete debug crap
 """
 
 from typing import Tuple, Type, Union
@@ -326,6 +322,59 @@ async def verified_delete_name(db_con, cur, name, updated):
     await cur.execute(sql, (name, int(row[6])))
     await db_con.commit()
 
+async def verified_pruning(db_con, cur, serv, updated):
+    # Delete all ipv6s that haven't been updated for X seconds.
+    sql = """
+    DELETE FROM ipv6s
+    WHERE ((%s - timestamp) >= %s)
+    """
+    await cur.execute(sql, (
+        int(updated),
+        int(serv.v6_addr_expiry),
+    ))
+
+    # Delete all names that haven't been updated for X seconds.
+    sql = """
+    DELETE FROM names
+    WHERE ((%s - timestamp) >= %s)
+    """
+    await cur.execute(sql, (
+        int(updated),
+        int(serv.min_name_duration),
+    ))
+
+    # Delete all IPs that don't have associated names.
+    """
+    This query uses a sub-query to select all names associated
+    with a specific IP address family. The parent query deletes
+    all records from the IP table if no names refer back to
+    an IP row. Since the name row uses a different column name
+    for the id field (ip_id) the field is given an alias (id.)
+    The parent query can now delete all rows that don't have
+    an ID in the sub query result set.
+
+    Note: this query could get slow with many names.
+    """
+    for table, af in [["ipv4s", 2], ["ipv6s", 10]]:
+        sql = f"""
+        DELETE FROM %s
+        WHERE id NOT IN (
+            SELECT ip_id as id
+            FROM (
+                SELECT ip_id
+                FROM names 
+                WHERE af=%s
+            ) AS results
+        );
+        """
+        await cur.execute(sql, (
+            table,
+            af,
+        ))
+
+    await db_con.commit()
+
+
 async def verified_write_name(db_con, cur: Type[Cursor], serv: Type[Daemon], behavior: int, updated: int, name: bytes, value: bytes, owner_pub: bytes, af, ip_str: int):
     # Convert ip_str into an IPRange instance.
     cidr = 32 if af == IP4 else 128
@@ -362,10 +411,11 @@ async def verified_write_name(db_con, cur: Type[Cursor], serv: Type[Daemon], beh
     await db_con.commit()
 
 class PNPServer(Daemon):
-    def __init__(self, v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION):
+    def __init__(self, v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION, v6_addr_expiry=V6_ADDR_EXPIRY):
         self.v4_name_limit = v4_name_limit
         self.v6_name_limit = v6_name_limit
         self.min_name_duration = min_name_duration
+        self.v6_addr_expiry = v6_addr_expiry
         self.v6_subnet_limit = V6_SUBNET_LIMIT
         self.v6_iface_limit = V6_IFACE_LIMIT
         super().__init__()

@@ -24,11 +24,19 @@ async def pnp_clear_tables():
         
     db_con.close()
 
-async def pnp_get_test_client_serv(v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION, v6_serv_ips="::1"):
+async def pnp_get_test_client_serv(v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION, v6_serv_ips="::1", v6_addr_expiry=V6_ADDR_EXPIRY):
     i = await Interface().start_local()
     serv_v4 = await i.route(IP4).bind(PNP_TEST_PORT, ips="127.0.0.1")
     serv_v6 = await i.route(IP6).bind(PNP_TEST_PORT, ips=v6_serv_ips)
-    serv = await PNPServer(v4_name_limit, v6_name_limit, min_name_duration).listen_all(
+
+    serv = PNPServer(
+        v4_name_limit,
+        v6_name_limit,
+        min_name_duration,
+        v6_addr_expiry
+    )
+    
+    await serv.listen_all(
         [serv_v4, serv_v6],
         [PNP_TEST_PORT],
         [TCP, UDP]
