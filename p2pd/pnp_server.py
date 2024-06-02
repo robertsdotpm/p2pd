@@ -1,7 +1,4 @@
 """
-pune access script
-server run script
-move that os env param load from the module
 delete debug crap
 """
 
@@ -328,20 +325,22 @@ async def verified_pruning(db_con, cur, serv, updated):
     DELETE FROM ipv6s
     WHERE ((%s - timestamp) >= %s)
     """
-    await cur.execute(sql, (
+    ret = await cur.execute(sql, (
         int(updated),
         int(serv.v6_addr_expiry),
     ))
+    print(f"deleted {ret} stale ipv6s")
 
     # Delete all names that haven't been updated for X seconds.
     sql = """
     DELETE FROM names
     WHERE ((%s - timestamp) >= %s)
     """
-    await cur.execute(sql, (
+    ret = await cur.execute(sql, (
         int(updated),
         int(serv.min_name_duration),
     ))
+    print(f"deleted {ret} stale names")
 
     # Delete all IPs that don't have associated names.
     """
@@ -356,8 +355,6 @@ async def verified_pruning(db_con, cur, serv, updated):
     Note: this query could get slow with many names.
     """
     for table, af in [["ipv4s", 2], ["ipv6s", 10]]:
-        print(table)
-        print(af)
         sql = f"""
         DELETE FROM {table} WHERE id NOT IN (
             SELECT ip_id as id
@@ -368,10 +365,10 @@ async def verified_pruning(db_con, cur, serv, updated):
             ) AS results
         );
         """
-        print(sql)
-        await cur.execute(sql, (
+        ret = await cur.execute(sql, (
             af,
         ))
+        print(f"deleted {ret} lone rows from {table}")
 
     await db_con.commit()
 
@@ -537,44 +534,27 @@ class PNPServer(Daemon):
             if db_con is not None:
                 db_con.close()
 
-async def main_workspace():
-    return
-    #sk = SigningKey.generate()
+async def start_pnp_server(bind_port):
+    i = await Interface().start_local()
+    serv_v4 = await i.route(IP4).bind(bind_port)
+    serv_v6 = await i.route(IP6).bind(bind_port)
 
-    # Just use a fixed key for testing.
-    test_name = "pnp_name"
-    test_val = "pnp_val"
-    sk = SigningKey.from_string(
-        string=(b"test" * 100)[:24],
-        #hashfunc=hashlib.sha3_256,
-        #curve=SECP256k1s
+    # Load PNP server class with DB details.
+    db_pass = input("db pass: ")
+    serv = PNPServer(
+        "root",
+        db_pass,
+        "pnp"
     )
 
-
-    vk = sk.verifying_key
-    vkc = vk.to_string("compressed")
-    print(vkc)
-    assert(len(vkc) == 25)
-
-    i = await Interface().start_local()
-    serv_v4 = await i.route(IP4).bind(PNP_PORT)
-    serv_v6 = await i.route(IP6).bind(PNP_PORT)
-    serv = await PNPServer().listen_all(
+    # Start the server listening on public routes.
+    print("Now starting PNP serv on ...")
+    print(serv_v4)
+    print(serv_v6)
+    await serv.listen_all(
         [serv_v4, serv_v6],
         [PNP_PORT],
         [TCP, UDP]
     )
-    dest = await Address('p2pd.net', PNP_PORT, i.route())
-    client = PNPClient(sk, dest)
-    #await client.delete(test_name)
-    await client.push(test_name, test_val)
-    out = await client.fetch(test_name)
 
-    print("fetch result = ", out)
-
-    while 1:
-        await asyncio.sleep(1)
-
-    await serv.close()
-
-    #await verified_post_name('name', 'val', 'pub', IP6, '2001:4860:4860::8888')
+    return serv
