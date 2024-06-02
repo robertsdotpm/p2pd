@@ -8,12 +8,15 @@ PNP_LOCAL_SK = SigningKey.generate()
 PNP_TEST_PORT = PNP_PORT + 1
 PNP_TEST_NAME = b"pnp_test_name"
 PNP_TEST_VALUE = b"pnp_test_value"
+PNP_TEST_DB_USER = "root"
+PNP_TEST_DB_NAME = "pnp"
+PNP_TEST_DB_PASS = input("db pw: ")
 
 async def pnp_clear_tables():
     db_con = await aiomysql.connect(
-        user=DB_USER, 
-        password=DB_PASS,
-        db=DB_NAME
+        user=PNP_TEST_DB_USER, 
+        password=PNP_TEST_DB_PASS,
+        db=PNP_TEST_DB_NAME
     )
 
     async with db_con.cursor() as cur:
@@ -30,6 +33,9 @@ async def pnp_get_test_client_serv(v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6
     serv_v6 = await i.route(IP6).bind(PNP_TEST_PORT, ips=v6_serv_ips)
 
     serv = PNPServer(
+        PNP_TEST_DB_USER,
+        PNP_TEST_DB_PASS,
+        PNP_TEST_DB_NAME,
         v4_name_limit,
         v6_name_limit,
         min_name_duration,
@@ -55,6 +61,61 @@ async def pnp_cleanup_client_serv(client, serv):
     await serv.close()
 
 class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
+    async def test_pnp_prune(self):
+        clients, serv = await pnp_get_test_client_serv()
+        await pnp_clear_tables()
+
+        # Make all v6 addresses expire.
+        serv.v6_addr_expiry = 0
+
+        await clients[IP6].push(
+            PNP_TEST_NAME,
+            PNP_TEST_VALUE
+        )
+
+        db_con = await aiomysql.connect(
+            user=PNP_TEST_DB_USER, 
+            password=PNP_TEST_DB_PASS,
+            db=PNP_TEST_DB_NAME
+        )
+
+        # Will delete the ipv6 value as it expires.
+        # The name remains unaffected.
+        async with db_con.cursor() as cur:
+            updated = time.time()
+            await verified_pruning(db_con, cur, serv, updated)
+
+        # Make all names expire.
+        # Don't make the address expire this time.
+        serv.min_name_duration = 0
+        serv.v6_addr_expiry = 10000000
+
+        # Will create a new ipv6 and name entry.
+        await clients[IP6].push(
+            PNP_TEST_NAME + b"2",
+            PNP_TEST_VALUE
+        )
+
+        """
+        All names should expire leaving a lone ip with no name.
+        Then the final clause will run and sweep up that IP
+        since it has no attached names.
+        """
+        async with db_con.cursor() as cur:
+            updated = time.time()
+            await verified_pruning(db_con, cur, serv, updated)
+
+        # After everything runs both tables should be empty.
+        async with db_con.cursor() as cur:
+            for t in ["ipv6s", "names"]:
+                sql = f"SELECT COUNT(*) FROM {t} WHERE 1=1"
+                await cur.execute(sql)
+                no = (await cur.fetchone())[0]
+                assert(no == 0)
+
+        db_con.close()
+        await serv.close()
+
     async def test_pnp_val_sqli(self):
         evil_val = b"testvalue'); DROP TABLE names; --"
         clients, serv = await pnp_get_test_client_serv()
@@ -122,9 +183,9 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
         async def is_af_valid(af):
             sql = "SELECT * FROM names WHERE name=%s AND af=%s"
             db_con = await aiomysql.connect(
-                user=DB_USER, 
-                password=DB_PASS,
-                db=DB_NAME
+                user=PNP_TEST_DB_USER, 
+                password=PNP_TEST_DB_PASS,
+                db=PNP_TEST_DB_NAME
             )
 
             is_valid = False

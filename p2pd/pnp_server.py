@@ -356,9 +356,10 @@ async def verified_pruning(db_con, cur, serv, updated):
     Note: this query could get slow with many names.
     """
     for table, af in [["ipv4s", 2], ["ipv6s", 10]]:
+        print(table)
+        print(af)
         sql = f"""
-        DELETE FROM %s
-        WHERE id NOT IN (
+        DELETE FROM {table} WHERE id NOT IN (
             SELECT ip_id as id
             FROM (
                 SELECT ip_id
@@ -367,8 +368,8 @@ async def verified_pruning(db_con, cur, serv, updated):
             ) AS results
         );
         """
+        print(sql)
         await cur.execute(sql, (
-            table,
             af,
         ))
 
@@ -411,7 +412,10 @@ async def verified_write_name(db_con, cur: Type[Cursor], serv: Type[Daemon], beh
     await db_con.commit()
 
 class PNPServer(Daemon):
-    def __init__(self, v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION, v6_addr_expiry=V6_ADDR_EXPIRY):
+    def __init__(self, db_user, db_pass, db_name, v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION, v6_addr_expiry=V6_ADDR_EXPIRY):
+        self.db_user = db_user
+        self.db_pass = db_pass
+        self.db_name = db_name
         self.v4_name_limit = v4_name_limit
         self.v6_name_limit = v6_name_limit
         self.min_name_duration = min_name_duration
@@ -444,9 +448,9 @@ class PNPServer(Daemon):
 
 
             db_con = await aiomysql.connect(
-                user=DB_USER, 
-                password=DB_PASS,
-                db=DB_NAME
+                user=self.db_user, 
+                password=self.db_pass,
+                db=self.db_name
             )
             print(db_con)
 

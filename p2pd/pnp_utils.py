@@ -5,14 +5,10 @@ import struct
 from ecdsa import VerifyingKey
 from .utils import *
 
-DB_NAME = "pnp"
-DB_USER = "root"
-DB_PASS = os.environ['PNP_DB_PW']
-
 #####################################################################################
 PNP_PORT = 5300
-PNP_NAME_LEN = 30 # 10
-PNP_VAL_LEN = 300 
+PNP_NAME_LEN = 50 # 10
+PNP_VAL_LEN = 500
 V4_NAME_LIMIT = 10 #4
 V6_NAME_LIMIT = 10 #1
 V6_GLOB_LIMIT = 3
