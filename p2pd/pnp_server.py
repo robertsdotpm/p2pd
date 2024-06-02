@@ -1,11 +1,29 @@
 """
-delete debug crap
+This is a server that allows anyone to store key-value records.
+    - Keys (or names) point to an ECDSA pub key (owner.)
+    - Anyone who knows the key can read the value.
+    - The owner can change the value with a signed request.
+    - Only those with the private key can update the value.
+    - There is a set number of names allocated per IP.
+    - Since many people have dynamic IPs names must be
+    periodically 'refreshed' which prevents expiry and ensures
+    that they are associated with the right IP.
+    - New names past the limit per IP bump off olderest names.
+    - To prevent names being bumped before they can be refreshed
+    each name is allowed to exist for a minimum period.
+    - Thus, names are repeatedly migrated been IPs and refreshed
+    as they are needed. Or allowed to expire automatically.
+
+This is a registration-less, permissioned, key-value store
+that uses IP limits to reduce spam.
 """
 
+
+import os
 from typing import Tuple, Type, Union
 import aiomysql
 from aiomysql import Cursor
-from ecdsa import SigningKey, VerifyingKey
+from ecdsa import VerifyingKey
 from .pnp_utils import *
 from .net import *
 from .ip_range import IPRange
@@ -16,20 +34,17 @@ async def v6_range_usage(cur: Type[Cursor], v6_glob_main: int, v6_glob_extra: in
     sql  = "SELECT COUNT(DISTINCT v6_lan_id) "
     sql += "FROM ipv6s WHERE v6_glob_main=%s AND v6_glob_extra=%s FOR UPDATE"
     await cur.execute(sql, (int(v6_glob_main), int(v6_glob_extra),))
-
     v6_subnets_used = (await cur.fetchone())[0]
-    print("Subnets used = ", v6_subnets_used)
 
     # Count number of interfaces used.
     sql  = "SELECT COUNT(id) FROM ipv6s "
     sql += "WHERE v6_glob_main=%s AND v6_glob_extra=%s "
     sql += "AND v6_lan_id=%s FOR UPDATE"
     sql_params = (int(v6_glob_main), int(v6_glob_extra), int(v6_lan_id),)
-
     await cur.execute(sql, sql_params)
     v6_ifaces_used = (await cur.fetchone())[0]
-    print("ifaces used = ", v6_ifaces_used)
 
+    # Return results.
     return v6_subnets_used, v6_ifaces_used
 
 async def v6_exists(cur: Type[Cursor], v6_glob_main: int, v6_glob_extra: int, v6_lan_id: int, v6_iface_id: int) -> Tuple[int, int]:
@@ -37,7 +52,6 @@ async def v6_exists(cur: Type[Cursor], v6_glob_main: int, v6_glob_extra: int, v6
     sql  = "SELECT id FROM ipv6s WHERE v6_glob_main=%s "
     sql += "AND v6_glob_extra=%s AND v6_lan_id=%s "
     sql_params = (int(v6_glob_main), int(v6_glob_extra), int(v6_lan_id),)
-
     await cur.execute(sql + " FOR UPDATE", sql_params)
     v6_lan_exists = (await cur.fetchone()) is not None
 
@@ -47,11 +61,13 @@ async def v6_exists(cur: Type[Cursor], v6_glob_main: int, v6_glob_extra: int, v6
         sql.replace(" COUNT(id) ", " id "), # Change count to select.
         (int(v6_glob_main), int(v6_glob_extra), int(v6_lan_id), int(v6_iface_id),)
     )
-
     v6_record = await cur.fetchone()
+
+    # Return results.
     return v6_lan_exists, v6_record
 
 async def v6_insert(cur: Type[Cursor], v6_glob_main: int, v6_glob_extra: int, v6_lan_id: int, v6_iface_id: int) -> Union[int, None]:
+    # Insert a new IPv6 IP.
     sql = """INSERT INTO ipv6s
         (
             v6_glob_main,
@@ -64,10 +80,12 @@ async def v6_insert(cur: Type[Cursor], v6_glob_main: int, v6_glob_extra: int, v6
     """
     sql_params = (int(v6_glob_main), int(v6_glob_extra), int(v6_lan_id),)
     sql_params += (int(v6_iface_id), int(time.time()),)
-
     await cur.execute(sql, sql_params)
+
+    # Return the new row index.
     return cur.lastrowid
 
+# Breaks down an IPv6 into fields for DB storage.
 def get_v6_parts(ipr: Type[IPRange]) -> Tuple[int, int, int, int]:
     ip_str = str(ipr) # Normalize IPv6.
     v6_glob_main = int(ip_str[:9].replace(':', ''), 16) # :
@@ -76,14 +94,6 @@ def get_v6_parts(ipr: Type[IPRange]) -> Tuple[int, int, int, int]:
     v6_iface_id = int(ip_str[20:].replace(':', ''), 16) # :
     v6_parts = (v6_glob_main, v6_glob_extra, v6_lan_id, v6_iface_id)
 
-    #v6_glob_main = 23
-    #v6_glob_extra = 19
-    #v6_lan_id = 3
-
-    print(v6_glob_main)
-    print(v6_glob_extra)
-    print(v6_lan_id)
-    print(v6_iface_id)
     return v6_parts
 
 async def record_v6(params, serv: Type[Daemon]) -> Union[int, None]:
@@ -116,15 +126,18 @@ async def record_v6(params, serv: Type[Daemon]) -> Union[int, None]:
     return ip_id
 
 async def record_v4(params, serv: Type[Daemon]) -> Union[int, None]:
+    # Main params.
     cur, ipr = params
 
+    # Check if IPv4 exists.
     sql = "SELECT id FROM ipv4s WHERE v4_val=%s FOR UPDATE"
     await cur.execute(sql, (int(ipr),))
     row = await cur.fetchone()
-
     if row is not None:
+        # If it does return the ID.
         ip_id = row[0]
     else:
+        # Otherwise insert the new IP and return its row ID.
         sql  = "INSERT INTO ipv4s (v4_val, timestamp) "
         sql += "VALUES (%s, %s)"
         await cur.execute(sql, (int(ipr), int(time.time()),))
@@ -142,13 +155,15 @@ async def record_ip(af, params, serv: Type[Daemon]) -> Union[int, None]:
 
     return ip_id
 
+# Each IP can own X names.
+# Where X depends on the address family.
 def name_limit_by_af(af, serv: Type[Daemon]) -> int:
     if af == IP4:
         return serv.v4_name_limit
     if af == IP6:
         return serv.v6_name_limit
 
-# TODO: maybe just use this in insert name?
+# Used to check if a new insert for an IP bumps old names.
 async def will_bump_names(af, cur: Type[Cursor], serv: Type[Daemon], ip_id: int) -> bool:
     current_time = time.time()
     min_name_duration = serv.min_name_duration
@@ -160,22 +175,16 @@ async def will_bump_names(af, cur: Type[Cursor], serv: Type[Daemon], ip_id: int)
     AND ((%s - timestamp) >= %s)
     FOR UPDATE
     """
-    print(sql)
 
     name_limit = name_limit_by_af(af, serv)
     await cur.execute(sql, (int(ip_id), int(af), int(current_time), int(min_name_duration),))
     names_used = (await cur.fetchone())[0]
-    print("in will bump names = ")
-    print(names_used)
-
     if names_used >= name_limit:
         return True
     else:
         return False
 
 async def bump_name_overflows(af, cur: Type[Cursor], serv: Type[Daemon], ip_id: int) -> int:
-    print("Testing for pop")
-
     # Set number of names allowed per IP.
     name_limit = name_limit_by_af(af, serv)
     current_time = time.time()
@@ -196,10 +205,7 @@ async def bump_name_overflows(af, cur: Type[Cursor], serv: Type[Daemon], ip_id: 
         ) AS rows_to_delete
     );
     """
-    print(sql)
-    print("ip_id = ", ip_id)
-    out = await cur.execute(sql, (int(ip_id), int(af), int(current_time), int(min_name_duration), int(name_limit),))
-    print(out)
+    await cur.execute(sql, (int(ip_id), int(af), int(current_time), int(min_name_duration), int(name_limit),))
 
 async def fetch_name(cur: Type[Cursor], name: bytes, lock=DB_WRITE_LOCK):
     # Does name already exist.
@@ -209,7 +215,6 @@ async def fetch_name(cur: Type[Cursor], name: bytes, lock=DB_WRITE_LOCK):
 
     await cur.execute(sql, (name,))
     row = await cur.fetchone()
-    print("test name", row)
     return row
 
 async def record_name(cur: Type[Cursor], serv: Type[Daemon], af, ip_id: int, name: bytes, value: bytes, owner_pub: bytes, updated: int):
@@ -219,7 +224,6 @@ async def record_name(cur: Type[Cursor], serv: Type[Daemon], af, ip_id: int, nam
 
     # Update an existing name.
     if name_exists:
-        print("updating name")
         if row[6] >= updated:
             raise Exception("Replay attack for name update.")
 
@@ -232,12 +236,6 @@ async def record_name(cur: Type[Cursor], serv: Type[Daemon], af, ip_id: int, nam
         WHERE name=%s 
         AND timestamp=%s
         """
-        print(sql)
-        print("Doing update name")
-        print(name)
-        print(value)
-        print(updated)
-
         ret = await cur.execute(sql, 
             (
                 value,
@@ -248,7 +246,6 @@ async def record_name(cur: Type[Cursor], serv: Type[Daemon], af, ip_id: int, nam
                 int(row[6])
             )
         )
-        print("update name ret ", ret)
         if not ret:
             return None
 
@@ -257,12 +254,8 @@ async def record_name(cur: Type[Cursor], serv: Type[Daemon], af, ip_id: int, nam
 
     # Create a new name.
     if not name_exists:
-        print("inserting new name")
-
         # Ensure name limit is respected.
         # [ ... active names, ? ]
-        print("testing bump limit")
-
         will_bump = await will_bump_names(af, cur, serv, ip_id)
         if not will_bump:
             sql  = "SELECT COUNT(id) FROM names WHERE af=%s "
@@ -272,14 +265,8 @@ async def record_name(cur: Type[Cursor], serv: Type[Daemon], af, ip_id: int, nam
             name_limit = name_limit_by_af(af, serv)
             if names_used >= name_limit:
                 raise Exception("insert name limit reached.")
-        
-
-        """
-        will_bump = await will_bump_names(af, cur, serv, ip_id)
-        if will_bump:
-            raise Exception("Insert name for af over limit.")
-        """
-            
+         
+        # Insert a brand new name.
         sql = """
         INSERT INTO names
         (
@@ -292,7 +279,6 @@ async def record_name(cur: Type[Cursor], serv: Type[Daemon], af, ip_id: int, nam
         )
         VALUES(%s, %s, %s, %s, %s, %s)
         """
-
         ret = await cur.execute(sql, 
             (
                 name,
@@ -303,9 +289,11 @@ async def record_name(cur: Type[Cursor], serv: Type[Daemon], af, ip_id: int, nam
                 int(updated),
             )
         )
-        print("insert name ret ", ret)
+
+        # Fetch the new row (so we know the ID.)
         return await fetch_name(cur, name)
 
+# Deletes a name if a signed request is more recent.
 async def verified_delete_name(db_con, cur, name, updated):
     row = await fetch_name(cur, name)
     if row is None:
@@ -319,6 +307,7 @@ async def verified_delete_name(db_con, cur, name, updated):
     await cur.execute(sql, (name, int(row[6])))
     await db_con.commit()
 
+# Prunes unneeded records from the DB.
 async def verified_pruning(db_con, cur, serv, updated):
     # Delete all ipv6s that haven't been updated for X seconds.
     sql = """
@@ -382,7 +371,6 @@ async def verified_write_name(db_con, cur: Type[Cursor], serv: Type[Daemon], beh
     # If it's V6 allocation limits are enforced on subnets.
     ip_id = await record_ip(af, (cur, ipr,), serv)
     if ip_id is None:
-        print("record ip is none")
         return
 
     # Polite mode: only insert if it doesn't bump others.
@@ -395,7 +383,6 @@ async def verified_write_name(db_con, cur: Type[Cursor], serv: Type[Daemon], beh
     # Also supports transfering a name to a new IP.
     name_row = await record_name(cur, serv, af, ip_id, name, value, owner_pub, updated)
     if name_row is None:
-        print("name row is none")
         return
 
     # Prune any names over the limit for an IP.
@@ -419,49 +406,35 @@ class PNPServer(Daemon):
         self.v6_addr_expiry = v6_addr_expiry
         self.v6_subnet_limit = V6_SUBNET_LIMIT
         self.v6_iface_limit = V6_IFACE_LIMIT
+        self.debug = False
         super().__init__()
+
+    def set_debug(self, val):
+        self.debug = val
         
     def set_v6_limits(self, v6_subnet_limit: int, v6_iface_limit: int):
         self.v6_subnet_limit = v6_subnet_limit
         self.v6_iface_limit = v6_iface_limit
 
     async def msg_cb(self, msg: bytes, client_tup, pipe: Type[BaseProto]):
-        print("connected")
-        print(client_tup)
         cidr = 32 if pipe.route.af == IP4 else 128
         db_con = None
         try:
             pkt = PNPPacket.unpack(msg)
             pnp_msg = pkt.get_msg_to_sign()
-            print(pkt.vkc)
-            print(pkt.name)
-            print(pkt.value)
-            print(pkt.sig)
-            print(pkt.updated)
-            print(pkt.pkid)
-            print(msg)
-
-
-
-
             db_con = await aiomysql.connect(
                 user=self.db_user, 
                 password=self.db_pass,
                 db=self.db_name
             )
-            print(db_con)
 
             async with db_con.cursor() as cur:
                 #await cur.execute("SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE")
-                row = await fetch_name(cur, pkt.name, DB_READ_LOCK)
-                print("row = ")
-                print(row)
 
+                row = await fetch_name(cur, pkt.name, DB_READ_LOCK)
                 if row is not None:
                     # If no sig fetch name value.
                     if pkt.sig is None or not len(pkt.sig):
-                        print("No sig for operation.")
-
                         resp = PNPPacket(
                             name=pkt.name,
                             value=row[2],
@@ -476,7 +449,6 @@ class PNPServer(Daemon):
                     # Ensure valid sig for next delete op.
                     vk = VerifyingKey.from_string(row[3])
                     vk.verify(pkt.sig, pnp_msg)
-                    print("Sig valid")
 
                     # Delete pre-existing value.
                     if not len(pkt.value):
@@ -501,12 +473,11 @@ class PNPServer(Daemon):
                     await proto_send(pipe, resp)
                     return
 
-                # Write to name.
+                # Check signature is valid.
                 if not pkt.is_valid_sig():
-                    print("pkt not valid sig for insert.")
-                    print(pnp_msg)
                     return
 
+                # Create a new name entry.
                 await verified_write_name(
                     db_con,
                     cur,
@@ -520,16 +491,9 @@ class PNPServer(Daemon):
                     str(IPRange(client_tup[0], cidr=cidr))
                 )
                 await proto_send(pipe, pnp_msg)
-                
-                print("End verified write name")
-
-
-            return
-            await async_wrap_errors(
-                pipe.send(msg, client_tup)
-            )
         except:
-            log_exception()
+            if self.debug:
+                log_exception()
         finally:
             if db_con is not None:
                 db_con.close()
@@ -539,8 +503,13 @@ async def start_pnp_server(bind_port):
     serv_v4 = await i.route(IP4).bind(bind_port)
     serv_v6 = await i.route(IP6).bind(bind_port)
 
+    # Load mysql root password details.
+    if "PNP_DB_PW" in os.environ:
+        db_pass = os.environ["PNP_DB_PW"]
+    else:
+        db_pass = input("db pass: ")
+
     # Load PNP server class with DB details.
-    db_pass = input("db pass: ")
     serv = PNPServer(
         "root",
         db_pass,

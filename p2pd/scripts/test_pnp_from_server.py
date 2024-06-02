@@ -164,8 +164,6 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
             update_y = ret.updated
             assert(ret.value == (PNP_TEST_VALUE + b"changed"))
             assert(ret.vkc == clients[af].vkc)
-            print(update_y)
-            print(update_x)
             assert(update_y > update_x)
 
             # Now delete the value.
@@ -192,8 +190,6 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
             async with db_con.cursor() as cur:
                 await cur.execute(sql, (PNP_TEST_NAME, int(af)))
                 row = await cur.fetchone()
-                print(row)
-                print(af)
                 is_valid = row is not None
 
             db_con.close()
@@ -349,17 +345,6 @@ ip address add fe80:3456:7890:2222:0000:0000:0000:0003/128 dev enp0s31f6
 ip address add fe80:3456:7890:3333:0000:0000:0000:0001/128 dev enp0s31f6
     """
     async def test_pnp_v6_range_limits(self):
-        """
-        i = await Interface().start_local()
-        r = await i.route(IP6).bind(ips="fe80:3456:7890:1111:0000:0000:0000:0001")
-        p = await pipe_open(TCP, r)
-        print(p)
-        print(p.sock)
-        await p.close()
-        return
-        """
-    
-
         # Subnet limit = 2
         # Iface limit = 2
         await pnp_clear_tables()
@@ -418,9 +403,7 @@ ip address add fe80:3456:7890:3333:0000:0000:0000:0001/128 dev enp0s31f6
                     client.dest.route.af
                 
                 )
-                print(f"binding to {src_ip}")
                 await route.bind(ips=src_ip)
-                print(route._bind_tups)
 
                 # Return a pipe to the PNP server.
                 return await pipe_open(
@@ -437,7 +420,6 @@ ip address add fe80:3456:7890:3333:0000:0000:0000:0001/128 dev enp0s31f6
             await asyncio.sleep(2)
             ret = await client.fetch(f"{offset}")
             if ret.value is None:
-                print(ret.value)
                 assert(expect is None)
             else:
                 assert(expect == to_b(f"{offset}"))

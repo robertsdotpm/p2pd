@@ -50,8 +50,6 @@ class PNPPacket():
     def is_valid_sig(self):
         vk = VerifyingKey.from_string(self.vkc)
         msg = self.get_msg_to_sign()
-        print("test sig msg = ")
-        print(msg)
         try:
             # recover_verify_key(msg, self.sig, vk_b)
             vk.verify(self.sig, msg)
@@ -64,13 +62,12 @@ class PNPPacket():
         buf = b""
 
         # ID for packet.
-        print(self.pkid)
         buf += struct.pack("<I", self.pkid)
 
         # Behavior for changes.
         buf += bytes([self.behavior])
 
-        # Prevent replay.
+        # `Pr`event replay.
         buf += struct.pack("<Q", self.updated)
 
         # Header (lens.)
@@ -102,8 +99,6 @@ class PNPPacket():
 
         # Extract timestamp portion.
         updated = struct.unpack("<Q", buf[p:p + 8])[0]; p += 8;
-        print("unpack updated = ")
-        print(updated)
 
         # Extract header portion.
         name_len = min(buf[p], PNP_NAME_LEN); p += 1;
