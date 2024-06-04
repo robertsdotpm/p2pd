@@ -19,6 +19,10 @@ class PNPClient():
         secp_k = ecies.generate_key()
         self.reply_sk = secp_k.secret
         self.reply_pk = secp_k.public_key.format(True)
+        print(f"reply pk len = {len(self.reply_pk)}")
+        print(f"our reply pk = {self.reply_pk}")
+
+        assert(len(self.reply_pk) == 33)
 
     async def get_updated(self, name):
         if name not in self.names:

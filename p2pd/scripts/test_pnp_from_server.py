@@ -2,9 +2,9 @@
 # add encryption so names cant be hijacked.
 # Use RSA its simple enough that it will be implemented correctly
 # and it can be done highly portable tho its slow AF.
+
+import os
 from p2pd import *
-
-
 
 """
 Don't use a fixed key so randoms can't screw with the tests.
@@ -12,14 +12,19 @@ Not that you want to run this on production anyway.
 """
 PNP_LOCAL_SK = SigningKey.generate()
 PNP_TEST_PORT = PNP_PORT + 1
-PNP_TEST_ENC_SK = "0x3b16a32a049d78b733c4e6fb3abba42b58b6ce23c5997f56f4bb0547eeec9b2f"
-PNP_TEST_ENC_PK = "0x03b909547869ef9a071f6d02be37c668ae0241ed3675d166241b3a59e089b5c96"
-PNP_TEST_ENC_PK += "92ab38018cc7205789bd5f0ba9c714aaf74602b232038ab5d8645efd645d340"
+PNP_TEST_ENC_PK = b'\x03\x85\x97u\xb1z\xcf\xbb\xf0U0!\x9d\xe9\x8bI\xbc\xf10\xba1\xd4\xa2k\xdb\xbd\xddy\xb7\x07\x94\n\xd8'
+PNP_TEST_ENC_SK = b'\x98\x0b\x0e\xfb\x99\xa0\xab\xf8t\x10\xb9\xaf\x10\x97\xb3\xaaI\xa4!@\xfc\xfbZ\xeftO\t)km\x9bi'
+
 PNP_TEST_NAME = b"pnp_test_name"
 PNP_TEST_VALUE = b"pnp_test_value"
 PNP_TEST_DB_USER = "root"
 PNP_TEST_DB_NAME = "pnp"
-PNP_TEST_DB_PASS = input("db pw: ")
+
+# Load mysql root password details.
+if "PNP_DB_PW" in os.environ:
+    PNP_TEST_DB_PASS = os.environ["PNP_DB_PW"]
+else:
+    PNP_TEST_DB_PASS = input("db pass: ")
 
 async def pnp_clear_tables():
     db_con = await aiomysql.connect(
@@ -64,7 +69,7 @@ async def pnp_get_test_client_serv(v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6
     for af in VALID_AFS:
         route = i.route(af)
         dest = await Address(dest_ips[af], PNP_TEST_PORT, route)
-        clients[af] = PNPClient(PNP_LOCAL_SK, dest)
+        clients[af] = PNPClient(PNP_LOCAL_SK, dest, PNP_TEST_ENC_PK)
 
     return clients, serv
 

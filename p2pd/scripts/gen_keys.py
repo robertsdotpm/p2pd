@@ -1,7 +1,15 @@
-from ecies.utils import generate_eth_key, generate_key
-eth_k = generate_eth_key()
-sk_hex = eth_k.to_hex()  # hex string
-pk_hex = eth_k.public_key.to_hex()  # hex string
+from ecies.utils import generate_key
+from ecies import encrypt, decrypt
+secp_k = generate_key()
+reply_sk = secp_k.secret
+reply_pk = secp_k.public_key.format(True)
 
-print(f"Pub key = {pk_hex}")
-print(f"Priv key = {sk_hex}")
+
+print(reply_pk)
+print(len(reply_pk))
+
+print(reply_sk)
+
+
+x = decrypt(reply_sk, encrypt(reply_pk, b"test secret data"))
+print(x)

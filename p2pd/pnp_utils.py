@@ -76,7 +76,7 @@ class PNPPacket():
         if self.reply_pk is not None:
             buf += self.reply_pk
         else:
-            buf += b"\0" * 32
+            buf += b"\0" * 33
 
         # Behavior for changes.
         buf += bytes([self.behavior])
@@ -109,7 +109,7 @@ class PNPPacket():
         pkid = struct.unpack("<I", buf[p:p + 4])[0]; p += 4;
 
         # Reply pk.
-        reply_pk = buf[p:p + 32]; p += 32;
+        reply_pk = buf[p:p + 33]; p += 33;
         if not reply_pk:
             reply_pk = None
 

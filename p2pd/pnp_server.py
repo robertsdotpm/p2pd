@@ -415,6 +415,9 @@ class PNPServer(Daemon):
 
     def serv_resp(self, pkt):
         reply_pk = pkt.reply_pk
+        print("Serv resp = ")
+        print(reply_pk)
+        print(len(reply_pk))
 
         # Replace received packet reply address with our own.
         pkt.reply_pk = self.reply_pk
@@ -424,6 +427,7 @@ class PNPServer(Daemon):
 
         # Send encrypted if supported.
         if reply_pk is not None:
+            print("pkt reply pkt is none.")
             buf = ecies.encrypt(reply_pk, buf)
 
         return buf
@@ -437,6 +441,9 @@ class PNPServer(Daemon):
 
     async def msg_cb(self, msg: bytes, client_tup, pipe: Type[BaseProto]):
         msg = ecies.decrypt(self.reply_sk, msg)
+        print("decrypted msg = ")
+        print(msg)
+
         cidr = 32 if pipe.route.af == IP4 else 128
         db_con = None
         try:
@@ -461,6 +468,7 @@ class PNPServer(Daemon):
                             updated=row[6],
                             vkc=row[3],
                             pkid=pkt.pkid,
+                            reply_pk=pkt.reply_pk,
                         )
 
                         buf = self.serv_resp(resp)
@@ -491,7 +499,8 @@ class PNPServer(Daemon):
                         value=b"",
                         updated=0,
                         vkc=pkt.vkc,
-                        pkid=pkt.pkid
+                        pkid=pkt.pkid,
+                        reply_pk=pkt.reply_pk,
                     )
                     buf = self.serv_resp(resp)
                     await proto_send(pipe, buf)
