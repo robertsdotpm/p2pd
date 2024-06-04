@@ -308,8 +308,8 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
         for af in VALID_AFS:
             route = i.route(af)
             dest = await Address('localhost', PNP_TEST_PORT, route)
-            alice[af] = PNPClient(SigningKey.generate(), dest)
-            bob[af] = PNPClient(SigningKey.generate(), dest)
+            alice[af] = PNPClient(SigningKey.generate(), dest, PNP_TEST_ENC_PK)
+            bob[af] = PNPClient(SigningKey.generate(), dest, PNP_TEST_ENC_PK)
 
         test_name = b"some_name"
         alice_val = b"alice_val"
