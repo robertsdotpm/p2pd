@@ -105,6 +105,7 @@ to_i = lambda x: x if isinstance(x, int) else int(x, 16)
 to_n = lambda x: x if isinstance(x, int) else int(to_s(x), 10)
 i_to_b = lambda x, o='little': x.to_bytes((x.bit_length() + 7) // 8, o)
 b_to_i = lambda x, o='little': int.from_bytes(x, o)
+h_to_b = lambda x, o='little': binascii.unhexlify(to_b(x))
 valid_port = lambda p: p >= 1 and p <= MAX_PORT
 port_wrap = lambda p: (p % MAX_PORT) or 1
 to_unique = lambda x: [i for n, i in enumerate(x) if i not in x[:n]]

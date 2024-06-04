@@ -1,7 +1,4 @@
 # Test non-printable binary push-get
-# add encryption so names cant be hijacked.
-# Use RSA its simple enough that it will be implemented correctly
-# and it can be done highly portable tho its slow AF.
 
 import os
 from p2pd import *

@@ -22,7 +22,6 @@ Todo: test IPv6 works - setup home for it again.
 
 import ecies
 import os
-from typing import Tuple, Type, Union
 import aiomysql
 from aiomysql import Cursor
 from ecdsa import VerifyingKey
@@ -31,7 +30,7 @@ from .net import *
 from .ip_range import IPRange
 from .daemon import *
 
-async def v6_range_usage(cur: Type[Cursor], v6_glob_main: int, v6_glob_extra: int, v6_lan_id: int, _: int) -> Tuple[int, int]:
+async def v6_range_usage(cur, v6_glob_main, v6_glob_extra, v6_lan_id, _):
     # Count number of subnets used.
     sql  = "SELECT COUNT(DISTINCT v6_lan_id) "
     sql += "FROM ipv6s WHERE v6_glob_main=%s AND v6_glob_extra=%s FOR UPDATE"
@@ -49,7 +48,7 @@ async def v6_range_usage(cur: Type[Cursor], v6_glob_main: int, v6_glob_extra: in
     # Return results.
     return v6_subnets_used, v6_ifaces_used
 
-async def v6_exists(cur: Type[Cursor], v6_glob_main: int, v6_glob_extra: int, v6_lan_id: int, v6_iface_id: int) -> Tuple[int, int]:
+async def v6_exists(cur, v6_glob_main, v6_glob_extra, v6_lan_id, v6_iface_id):
     # Check if v6 subnet component exists.
     sql  = "SELECT id FROM ipv6s WHERE v6_glob_main=%s "
     sql += "AND v6_glob_extra=%s AND v6_lan_id=%s "
@@ -68,7 +67,7 @@ async def v6_exists(cur: Type[Cursor], v6_glob_main: int, v6_glob_extra: int, v6
     # Return results.
     return v6_lan_exists, v6_record
 
-async def v6_insert(cur: Type[Cursor], v6_glob_main: int, v6_glob_extra: int, v6_lan_id: int, v6_iface_id: int) -> Union[int, None]:
+async def v6_insert(cur, v6_glob_main, v6_glob_extra, v6_lan_id, v6_iface_id):
     # Insert a new IPv6 IP.
     sql = """INSERT INTO ipv6s
         (
@@ -88,7 +87,7 @@ async def v6_insert(cur: Type[Cursor], v6_glob_main: int, v6_glob_extra: int, v6
     return cur.lastrowid
 
 # Breaks down an IPv6 into fields for DB storage.
-def get_v6_parts(ipr: Type[IPRange]) -> Tuple[int, int, int, int]:
+def get_v6_parts(ipr):
     ip_str = str(ipr) # Normalize IPv6.
     v6_glob_main = int(ip_str[:9].replace(':', ''), 16) # :
     v6_glob_extra = int(ip_str[10:14], 16)
@@ -98,7 +97,7 @@ def get_v6_parts(ipr: Type[IPRange]) -> Tuple[int, int, int, int]:
 
     return v6_parts
 
-async def record_v6(params, serv: Type[Daemon]) -> Union[int, None]:
+async def record_v6(params, serv):
     # Replace ipr parameter with v6_parts.
     params = (params[0],) + get_v6_parts(params[1])
 
@@ -127,7 +126,7 @@ async def record_v6(params, serv: Type[Daemon]) -> Union[int, None]:
 
     return ip_id
 
-async def record_v4(params, serv: Type[Daemon]) -> Union[int, None]:
+async def record_v4(params, serv):
     # Main params.
     cur, ipr = params
 
@@ -147,7 +146,7 @@ async def record_v4(params, serv: Type[Daemon]) -> Union[int, None]:
 
     return ip_id
 
-async def record_ip(af, params, serv: Type[Daemon]) -> Union[int, None]:
+async def record_ip(af, params, serv):
     if af == IP6:
         ip_id = await record_v6(params, serv)
     
@@ -159,14 +158,14 @@ async def record_ip(af, params, serv: Type[Daemon]) -> Union[int, None]:
 
 # Each IP can own X names.
 # Where X depends on the address family.
-def name_limit_by_af(af, serv: Type[Daemon]) -> int:
+def name_limit_by_af(af, serv):
     if af == IP4:
         return serv.v4_name_limit
     if af == IP6:
         return serv.v6_name_limit
 
 # Used to check if a new insert for an IP bumps old names.
-async def will_bump_names(af, cur: Type[Cursor], serv: Type[Daemon], ip_id: int) -> bool:
+async def will_bump_names(af, cur, serv, ip_id):
     current_time = time.time()
     min_name_duration = serv.min_name_duration
     sql = f"""
@@ -186,7 +185,7 @@ async def will_bump_names(af, cur: Type[Cursor], serv: Type[Daemon], ip_id: int)
     else:
         return False
 
-async def bump_name_overflows(af, cur: Type[Cursor], serv: Type[Daemon], ip_id: int) -> int:
+async def bump_name_overflows(af, cur, serv, ip_id):
     # Set number of names allowed per IP.
     name_limit = name_limit_by_af(af, serv)
     current_time = time.time()
@@ -209,7 +208,7 @@ async def bump_name_overflows(af, cur: Type[Cursor], serv: Type[Daemon], ip_id: 
     """
     await cur.execute(sql, (int(ip_id), int(af), int(current_time), int(min_name_duration), int(name_limit),))
 
-async def fetch_name(cur: Type[Cursor], name: bytes, lock=DB_WRITE_LOCK):
+async def fetch_name(cur, name, lock=DB_WRITE_LOCK):
     # Does name already exist.
     sql = "SELECT * FROM names WHERE name=%s "
     if lock == DB_WRITE_LOCK:
@@ -219,7 +218,7 @@ async def fetch_name(cur: Type[Cursor], name: bytes, lock=DB_WRITE_LOCK):
     row = await cur.fetchone()
     return row
 
-async def record_name(cur: Type[Cursor], serv: Type[Daemon], af, ip_id: int, name: bytes, value: bytes, owner_pub: bytes, updated: int):
+async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
     # Does name already exist.
     row = await fetch_name(cur, name)
     name_exists = row is not None
@@ -364,7 +363,7 @@ async def verified_pruning(db_con, cur, serv, updated):
     await db_con.commit()
 
 
-async def verified_write_name(db_con, cur: Type[Cursor], serv: Type[Daemon], behavior: int, updated: int, name: bytes, value: bytes, owner_pub: bytes, af, ip_str: int):
+async def verified_write_name(db_con, cur, serv, behavior, updated, name, value, owner_pub, af, ip_str):
     # Convert ip_str into an IPRange instance.
     cidr = 32 if af == IP4 else 128
     ipr = IPRange(ip_str, cidr=cidr)
@@ -431,11 +430,11 @@ class PNPServer(Daemon):
     def set_debug(self, val):
         self.debug = val
         
-    def set_v6_limits(self, v6_subnet_limit: int, v6_iface_limit: int):
+    def set_v6_limits(self, v6_subnet_limit, v6_iface_limit):
         self.v6_subnet_limit = v6_subnet_limit
         self.v6_iface_limit = v6_iface_limit
 
-    async def msg_cb(self, msg: bytes, client_tup, pipe: Type[BaseProto]):
+    async def msg_cb(self, msg, client_tup, pipe):
         msg = ecies.decrypt(self.reply_sk, msg)
         cidr = 32 if pipe.route.af == IP4 else 128
         db_con = None
@@ -537,11 +536,25 @@ async def start_pnp_server(bind_port):
     else:
         db_pass = input("db pass: ")
 
+    # Load server reply public key.
+    if "PNP_ENC_PK" in os.environ:
+        reply_pk_hex = os.environ["PNP_ENC_PK"]
+    else:
+        reply_pk_hex = input("reply pk: ")
+
+    # Load server reply private key
+    if "PNP_ENC_SK" in os.environ:
+        reply_sk_hex = os.environ["PNP_ENC_SK"]
+    else:
+        reply_sk_hex = input("reply sk: ")
+
     # Load PNP server class with DB details.
     serv = PNPServer(
         "root",
         db_pass,
-        "pnp"
+        "pnp",
+        h_to_b(reply_sk_hex),
+        h_to_b(reply_pk_hex)
     )
 
     # Start the server listening on public routes.
@@ -555,3 +568,4 @@ async def start_pnp_server(bind_port):
     )
 
     return serv
+

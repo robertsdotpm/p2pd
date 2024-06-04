@@ -1,15 +1,12 @@
 from ecies.utils import generate_key
 from ecies import encrypt, decrypt
+from p2pd import to_h
 secp_k = generate_key()
 reply_sk = secp_k.secret
 reply_pk = secp_k.public_key.format(True)
 
+reply_pk_hex = to_h(reply_pk)
+reply_sk_hex = to_h(reply_sk)
 
-print(reply_pk)
-print(len(reply_pk))
-
-print(reply_sk)
-
-
-x = decrypt(reply_sk, encrypt(reply_pk, b"test secret data"))
-print(x)
+print(f"reply pk hex = {reply_pk_hex}")
+print(f"reply sk hex = {reply_sk_hex}")
