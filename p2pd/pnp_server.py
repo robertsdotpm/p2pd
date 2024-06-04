@@ -16,9 +16,11 @@ This is a server that allows anyone to store key-value records.
 
 This is a registration-less, permissioned, key-value store
 that uses IP limits to reduce spam.
+
+Todo: test IPv6 works - setup home for it again.
 """
 
-
+import ecies
 import os
 from typing import Tuple, Type, Union
 import aiomysql
@@ -396,10 +398,12 @@ async def verified_write_name(db_con, cur: Type[Cursor], serv: Type[Daemon], beh
     await db_con.commit()
 
 class PNPServer(Daemon):
-    def __init__(self, db_user, db_pass, db_name, v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION, v6_addr_expiry=V6_ADDR_EXPIRY):
+    def __init__(self, db_user, db_pass, db_name, reply_sk, reply_pk, v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION, v6_addr_expiry=V6_ADDR_EXPIRY):
         self.db_user = db_user
         self.db_pass = db_pass
         self.db_name = db_name
+        self.reply_sk = reply_sk
+        self.reply_pk = reply_pk
         self.v4_name_limit = v4_name_limit
         self.v6_name_limit = v6_name_limit
         self.min_name_duration = min_name_duration
@@ -409,6 +413,21 @@ class PNPServer(Daemon):
         self.debug = False
         super().__init__()
 
+    def serv_resp(self, pkt):
+        reply_pk = pkt.reply_pk
+
+        # Replace received packet reply address with our own.
+        pkt.reply_pk = self.reply_pk
+
+        # Serialize updated response. 
+        buf = pkt.get_msg_to_sign()
+
+        # Send encrypted if supported.
+        if reply_pk is not None:
+            buf = ecies.encrypt(reply_pk, buf)
+
+        return buf
+
     def set_debug(self, val):
         self.debug = val
         
@@ -417,6 +436,7 @@ class PNPServer(Daemon):
         self.v6_iface_limit = v6_iface_limit
 
     async def msg_cb(self, msg: bytes, client_tup, pipe: Type[BaseProto]):
+        msg = ecies.decrypt(self.reply_sk, msg)
         cidr = 32 if pipe.route.af == IP4 else 128
         db_con = None
         try:
@@ -440,9 +460,11 @@ class PNPServer(Daemon):
                             value=row[2],
                             updated=row[6],
                             vkc=row[3],
-                            pkid=pkt.pkid
-                        ).get_msg_to_sign()
-                        await proto_send(pipe, resp)
+                            pkid=pkt.pkid,
+                        )
+
+                        buf = self.serv_resp(resp)
+                        await proto_send(pipe, buf)
                         await cur.commit()
                         return
 
@@ -458,7 +480,8 @@ class PNPServer(Daemon):
                             pkt.name,
                             pkt.updated
                         )
-                        await proto_send(pipe, pnp_msg)
+                        buf = self.serv_resp(pkt)
+                        await proto_send(pipe, buf)
                         return
 
                 # A fetch failed.
@@ -469,8 +492,9 @@ class PNPServer(Daemon):
                         updated=0,
                         vkc=pkt.vkc,
                         pkid=pkt.pkid
-                    ).get_msg_to_sign()
-                    await proto_send(pipe, resp)
+                    )
+                    buf = self.serv_resp(resp)
+                    await proto_send(pipe, buf)
                     return
 
                 # Check signature is valid.
@@ -490,7 +514,9 @@ class PNPServer(Daemon):
                     pipe.route.af,
                     str(IPRange(client_tup[0], cidr=cidr))
                 )
-                await proto_send(pipe, pnp_msg)
+
+                buf = self.serv_resp(pkt)
+                await proto_send(pipe, buf)
         except:
             if self.debug:
                 log_exception()

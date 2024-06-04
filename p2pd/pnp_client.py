@@ -1,3 +1,4 @@
+import ecies
 from .base_stream import *
 from .pnp_utils import *
 
@@ -8,12 +9,16 @@ status receipt it may return an invalid value
 indicating that the server hasn't done the previous call yet.
 """
 class PNPClient():
-    def __init__(self, sk, dest, proto=TCP):
+    def __init__(self, sk, dest, dest_pk, proto=TCP):
+        self.dest_pk = dest_pk
         self.dest = dest
         self.sk = sk
         self.vkc = sk.verifying_key.to_string("compressed")
         self.names = {}
         self.proto = proto
+        secp_k = ecies.generate_key()
+        self.reply_sk = secp_k.secret
+        self.reply_pk = secp_k.public_key.format(True)
 
     async def get_updated(self, name):
         if name not in self.names:
@@ -39,6 +44,7 @@ class PNPClient():
     async def return_resp(self, pipe):
         try:
             buf = await proto_recv(pipe)
+            buf = ecies.decrypt(self.reply_sk, buf)
             pkt = PNPPacket.unpack(buf)
             if not pkt.updated:
                 pkt.value = None
@@ -49,27 +55,39 @@ class PNPClient():
         finally:
             await pipe.close()
 
+    async def send_pkt(self, pipe, pkt, sign=True):
+        pkt.reply_pk = self.reply_pk
+        pnp_msg = pkt.get_msg_to_sign()
+        if sign:
+            sig = self.sk.sign(pnp_msg)
+        else:
+            sig = b""
+
+        buf = pnp_msg + sig
+        enc_msg = ecies.encrypt(self.dest_pk, buf)
+        
+        end = 1 if self.proto == TCP else 3
+        for _ in range(0, end):
+            await pipe.send(enc_msg)
+            if end > 1:
+                await asyncio.sleep(0.5)
+
     async def fetch(self, name):
         pipe = await self.get_dest_pipe()
         pkt = PNPPacket(name, vkc=self.vkc)
-        pnp_msg = pkt.get_msg_to_sign()
-        await pipe.send(pnp_msg)
+        await self.send_pkt(pipe, pkt, sign=False)
         return await self.return_resp(pipe)
 
     async def push(self, name, value, behavior=BEHAVIOR_DO_BUMP):
         t = await self.get_updated(name)
         pipe = await self.get_dest_pipe()
         pkt = PNPPacket(name, value, self.vkc, None, t, behavior)
-        pnp_msg = pkt.get_msg_to_sign()
-        sig = self.sk.sign(pnp_msg)
-        await pipe.send(pnp_msg + sig)
+        await self.send_pkt(pipe, pkt)
         return await self.return_resp(pipe)
 
     async def delete(self, name):
         t = await self.get_updated(name)
         pipe = await self.get_dest_pipe()
         pkt = PNPPacket(name, vkc=self.vkc, updated=t)
-        pnp_msg = pkt.get_msg_to_sign()
-        sig = self.sk.sign(pnp_msg)
-        await pipe.send(pnp_msg + sig)
+        await self.send_pkt(pipe, pkt)
         return await self.return_resp(pipe)

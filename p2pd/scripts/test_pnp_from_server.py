@@ -1,4 +1,10 @@
+# Test non-printable binary push-get
+# add encryption so names cant be hijacked.
+# Use RSA its simple enough that it will be implemented correctly
+# and it can be done highly portable tho its slow AF.
 from p2pd import *
+
+
 
 """
 Don't use a fixed key so randoms can't screw with the tests.
@@ -6,6 +12,9 @@ Not that you want to run this on production anyway.
 """
 PNP_LOCAL_SK = SigningKey.generate()
 PNP_TEST_PORT = PNP_PORT + 1
+PNP_TEST_ENC_SK = "0x3b16a32a049d78b733c4e6fb3abba42b58b6ce23c5997f56f4bb0547eeec9b2f"
+PNP_TEST_ENC_PK = "0x03b909547869ef9a071f6d02be37c668ae0241ed3675d166241b3a59e089b5c96"
+PNP_TEST_ENC_PK += "92ab38018cc7205789bd5f0ba9c714aaf74602b232038ab5d8645efd645d340"
 PNP_TEST_NAME = b"pnp_test_name"
 PNP_TEST_VALUE = b"pnp_test_value"
 PNP_TEST_DB_USER = "root"
@@ -36,6 +45,8 @@ async def pnp_get_test_client_serv(v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6
         PNP_TEST_DB_USER,
         PNP_TEST_DB_PASS,
         PNP_TEST_DB_NAME,
+        PNP_TEST_ENC_SK,
+        PNP_TEST_ENC_PK,
         v4_name_limit,
         v6_name_limit,
         min_name_duration,
@@ -336,13 +347,13 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
             await serv.close() 
 
     """
-ip address add fe80:3456:7890:1111:0000:0000:0000:0001/128 dev enp0s31f6
-ip address add fe80:3456:7890:1111:0000:0000:0000:0002/128 dev enp0s31f6
-ip address add fe80:3456:7890:1111:0000:0000:0000:0003/128 dev enp0s31f6
-ip address add fe80:3456:7890:2222:0000:0000:0000:0001/128 dev enp0s31f6
-ip address add fe80:3456:7890:2222:0000:0000:0000:0002/128 dev enp0s31f6
-ip address add fe80:3456:7890:2222:0000:0000:0000:0003/128 dev enp0s31f6
-ip address add fe80:3456:7890:3333:0000:0000:0000:0001/128 dev enp0s31f6
+ip address add fe80:3456:7890:1111:0000:0000:0000:0001/128 dev enp3s0
+ip address add fe80:3456:7890:1111:0000:0000:0000:0002/128 dev enp3s0
+ip address add fe80:3456:7890:1111:0000:0000:0000:0003/128 dev enp3s0
+ip address add fe80:3456:7890:2222:0000:0000:0000:0001/128 dev enp3s0
+ip address add fe80:3456:7890:2222:0000:0000:0000:0002/128 dev enp3s0
+ip address add fe80:3456:7890:2222:0000:0000:0000:0003/128 dev enp3s0
+ip address add fe80:3456:7890:3333:0000:0000:0000:0001/128 dev enp3s0
     """
     async def test_pnp_v6_range_limits(self):
         # Subnet limit = 2

@@ -3,7 +3,11 @@ gmqtt == 0.6.11 # MQTT is used for signaling messages.
 ntplib == 0.4.0 # Used for synchronization in TCP hole punching.
 aiounittest == 1.4.2 # Needed for unit tests on some Python versions.
 xmltodict # Needed for UPnP SOAP protocol stuff.
-ecdsa # Used for identifying IRCDNS names.
-argon2pure # Used for PoWs in IRCDNS.
-aiosqlite # Used for DB KVS in IRCDNS.
+ecdsa # Used for signing messages.
+
+# Used for encryption: ECDH + RC6.
+git+https://github.com/robertsdotpm/ecies.git
+
+aiomysql # Used for PNP.
+
 pyroute2; platform_system != "Windows" and platform_system != "Darwin" # Fallback for interface lookups on Android with netlink.

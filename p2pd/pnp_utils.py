@@ -1,7 +1,7 @@
 import time
 import random
-import os
 import struct
+import ecies
 from ecdsa import VerifyingKey
 from .utils import *
 
@@ -21,7 +21,7 @@ BEHAVIOR_DONT_BUMP = 0
 
 
 class PNPPacket():
-    def __init__(self, name, value=b"", vkc=None, sig=None, updated=None, behavior=BEHAVIOR_DO_BUMP, pkid=None):
+    def __init__(self, name, value=b"", vkc=None, sig=None, updated=None, behavior=BEHAVIOR_DO_BUMP, pkid=None, reply_pk=None, reply_sk=None):
         if updated is not None:
             self.updated = updated
         else:
@@ -35,6 +35,13 @@ class PNPPacket():
         self.sig = sig
         self.behavior = behavior
         self.pkid = pkid or random.randrange(0, 2 ** 32)
+        self.reply_pk = reply_pk
+        self.reply_sk = reply_sk
+
+    def gen_reply_key(self):
+        secp_k = ecies.generate_key()
+        self.reply_sk = secp_k.secret
+        self.reply_pk = secp_k.public_key.format(True)
 
     def get_msg_to_sign(self):
         return PNPPacket(
@@ -44,7 +51,8 @@ class PNPPacket():
             vkc=self.vkc,
             sig=None,
             behavior=self.behavior,
-            pkid=self.pkid
+            pkid=self.pkid,
+            reply_pk=self.reply_pk,
         ).pack()
 
     def is_valid_sig(self):
@@ -63,6 +71,12 @@ class PNPPacket():
 
         # ID for packet.
         buf += struct.pack("<I", self.pkid)
+
+        # Reply pk.
+        if self.reply_pk is not None:
+            buf += self.reply_pk
+        else:
+            buf += b"\0" * 32
 
         # Behavior for changes.
         buf += bytes([self.behavior])
@@ -94,6 +108,11 @@ class PNPPacket():
         # Packet ID.
         pkid = struct.unpack("<I", buf[p:p + 4])[0]; p += 4;
 
+        # Reply pk.
+        reply_pk = buf[p:p + 32]; p += 32;
+        if not reply_pk:
+            reply_pk = None
+
         # Extract behavior.
         behavior = buf[p]; p += 1;
 
@@ -112,5 +131,5 @@ class PNPPacket():
         vkc = buf[p:p + 25]; p += 25;
         sig = buf[p:]
 
-        return PNPPacket(name, val, vkc, sig, updated, behavior, pkid)
+        return PNPPacket(name, val, vkc, sig, updated, behavior, pkid, reply_pk)
 
