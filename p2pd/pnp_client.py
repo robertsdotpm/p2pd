@@ -1,6 +1,6 @@
 # TODO: different key per request.
 
-from .ecies import generate_key, decrypt
+from .ecies import generate_key, decrypt, encrypt
 from .base_stream import *
 from .pnp_utils import *
 
