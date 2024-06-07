@@ -1,5 +1,3 @@
-# Test non-printable binary push-get
-
 import os
 from p2pd import *
 
@@ -70,10 +68,30 @@ async def pnp_get_test_client_serv(v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6
 
     return clients, serv
 
-async def pnp_cleanup_client_serv(client, serv):
-    await serv.close()
-
 class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
+    async def test_pnp_non_ascii_io(self):
+        clients, serv = await pnp_get_test_client_serv()
+        await pnp_clear_tables()
+
+        # Generate mostly the full range of bytes.
+        buf = b""
+        for i in range(1, 255):
+            buf += bytes([i])
+
+        # Test store and get.
+        for af in VALID_AFS:
+            client = clients[af]
+            await client.push(
+                PNP_TEST_NAME,
+                buf
+            )
+
+            pkt = await client.fetch(PNP_TEST_NAME)
+            assert(pkt.value == buf)
+
+        await serv.close()
+
+
     async def test_pnp_prune(self):
         clients, serv = await pnp_get_test_client_serv()
         await pnp_clear_tables()

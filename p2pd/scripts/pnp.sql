@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost
--- Generation Time: Jun 02, 2024 at 03:46 AM
+-- Generation Time: Jun 07, 2024 at 07:30 AM
 -- Server version: 10.5.23-MariaDB-0+deb11u1
 -- PHP Version: 7.4.33
 
@@ -56,8 +56,8 @@ CREATE TABLE `ipv6s` (
 
 CREATE TABLE `names` (
   `id` bigint(20) UNSIGNED NOT NULL,
-  `name` varchar(50) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-  `value` varchar(500) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `name` varbinary(50) NOT NULL,
+  `value` varbinary(500) NOT NULL,
   `owner_pub` binary(25) NOT NULL,
   `af` tinyint(3) UNSIGNED NOT NULL,
   `ip_id` bigint(20) UNSIGNED NOT NULL,
@@ -97,19 +97,19 @@ ALTER TABLE `names`
 -- AUTO_INCREMENT for table `ipv4s`
 --
 ALTER TABLE `ipv4s`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=236;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=308;
 
 --
 -- AUTO_INCREMENT for table `ipv6s`
 --
 ALTER TABLE `ipv6s`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=265;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=383;
 
 --
 -- AUTO_INCREMENT for table `names`
 --
 ALTER TABLE `names`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=910;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1210;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
