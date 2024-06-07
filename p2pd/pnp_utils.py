@@ -1,7 +1,7 @@
 import time
 import random
 import struct
-import ecies
+from .ecies import generate_key
 from ecdsa import VerifyingKey
 from .utils import *
 
@@ -39,7 +39,7 @@ class PNPPacket():
         self.reply_sk = reply_sk
 
     def gen_reply_key(self):
-        secp_k = ecies.generate_key()
+        secp_k = generate_key()
         self.reply_sk = secp_k.secret
         self.reply_pk = secp_k.public_key.format(True)
 
