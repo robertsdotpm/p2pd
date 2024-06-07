@@ -20,7 +20,7 @@ that uses IP limits to reduce spam.
 Todo: test IPv6 works - setup home for it again.
 """
 
-import ecies
+from .ecies import encrypt, decrypt
 import os
 import aiomysql
 from aiomysql import Cursor

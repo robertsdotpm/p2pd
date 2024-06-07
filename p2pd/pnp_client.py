@@ -1,4 +1,4 @@
-import ecies
+from .ecies import generate_key, decrypt
 from .base_stream import *
 from .pnp_utils import *
 

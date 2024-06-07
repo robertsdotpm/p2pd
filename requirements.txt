@@ -4,10 +4,8 @@ ntplib == 0.4.0 # Used for synchronization in TCP hole punching.
 aiounittest == 1.4.2 # Needed for unit tests on some Python versions.
 xmltodict # Needed for UPnP SOAP protocol stuff.
 ecdsa # Used for signing messages.
-
-# Used for encryption: ECDH + RC6.
-git+https://github.com/robertsdotpm/ecies.git
-
 aiomysql # Used for PNP.
-
 pyroute2; platform_system != "Windows" and platform_system != "Darwin" # Fallback for interface lookups on Android with netlink.
+
+# These are the dependencies for ECIES.
+coincurve >=13,<20
