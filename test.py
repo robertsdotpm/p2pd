@@ -1,16 +1,32 @@
 from p2pd import *
-from p2pd.scripts.test_pnp_from_server import PNP_TEST_ENC_SK
+import time
+from ecdsa import SigningKey
+
+
 
 async def main():
-    i = await Interface().start_local()
-    dest = await Address("2a01:04f8:010a:3ce0:0000:0000:0000:0002", PNP_PORT)
-    dest_pk = "0249fb385ed71aee6862fdb3c0d4f8b193592eca4d61acc983ac5d6d3d3893689f"
-    client = PNPClient(PNP_TEST_ENC_SK, dest, dest_pk)
+    TEST_SK = b'\xfe\xb1w~v\xfe\xc4:\x83\xa6C\x19\xde\x11\xc2\xc8\xc4A\xdaEC\x01\xc2\x9d'
+    #sk = SigningKey.generate()
+    #sk_string = sk.to_string()
+    #print(sk_string)
+    sk = SigningKey.from_string(TEST_SK)
+    
 
-    name = "my_test_name"
+    i = await Interface().start_local()
+
+    route = i.route(IP6)
+    dest = await Address("2607:5300:0060:80b0:0000:0000:0000:0001", PNP_PORT, route)
+    dest_pk = "03f20b5dcfa5d319635a34f18cb47b339c34f515515a5be733cd7a7f8494e97136"
+    client = PNPClient(sk, dest, dest_pk)
+
+    name = "my_test_name2"
     await client.push(name, "val")
+
+    t1 = time.time()
     out = await client.fetch(name)
     print(out.value)
-    assert(out == b"val")
+    assert(out.value == b"val")
+    t2 = time.time()
+    print(t2 - t1)
 
 async_test(main)

@@ -9,17 +9,11 @@ PNP_LOCAL_SK = SigningKey.generate()
 PNP_TEST_PORT = PNP_PORT + 1
 PNP_TEST_ENC_PK = b'\x03\x85\x97u\xb1z\xcf\xbb\xf0U0!\x9d\xe9\x8bI\xbc\xf10\xba1\xd4\xa2k\xdb\xbd\xddy\xb7\x07\x94\n\xd8'
 PNP_TEST_ENC_SK = b'\x98\x0b\x0e\xfb\x99\xa0\xab\xf8t\x10\xb9\xaf\x10\x97\xb3\xaaI\xa4!@\xfc\xfbZ\xeftO\t)km\x9bi'
-
+PNP_TEST_DB_PASS = ""
 PNP_TEST_NAME = b"pnp_test_name"
 PNP_TEST_VALUE = b"pnp_test_value"
 PNP_TEST_DB_USER = "root"
 PNP_TEST_DB_NAME = "pnp"
-
-# Load mysql root password details.
-if "PNP_DB_PW" in os.environ:
-    PNP_TEST_DB_PASS = os.environ["PNP_DB_PW"]
-else:
-    PNP_TEST_DB_PASS = input("db pass: ")
 
 async def pnp_clear_tables():
     db_con = await aiomysql.connect(
@@ -153,7 +147,7 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
         for af in VALID_AFS: # VALID_AFS
             await pnp_clear_tables()
 
-           # Do insert.
+            # Do insert.
             await clients[af].push(
                 PNP_TEST_NAME,
                 evil_val
@@ -461,4 +455,10 @@ ip address add fe80:3456:7890:3333:0000:0000:0000:0001/128 dev enp3s0
 # Prune admin code?
 # make sure your pub key is returned
 if __name__ == '__main__':
+    # Load mysql root password details.
+    if "PNP_DB_PW" in os.environ:
+        PNP_TEST_DB_PASS = os.environ["PNP_DB_PW"]
+    else:
+        PNP_TEST_DB_PASS = input("db pass: ")
+
     main()
