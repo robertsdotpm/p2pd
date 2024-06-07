@@ -1,6 +1,5 @@
 from p2pd import to_h
 from p2pd.ecies.utils import generate_key
-from p2pd.ecies import encrypt, decrypt
 secp_k = generate_key()
 reply_sk = secp_k.secret
 reply_pk = secp_k.public_key.format(True)

@@ -423,7 +423,7 @@ class PNPServer(Daemon):
 
         # Send encrypted if supported.
         if reply_pk is not None:
-            buf = ecies.encrypt(reply_pk, buf)
+            buf = encrypt(reply_pk, buf)
 
         return buf
 
@@ -435,7 +435,7 @@ class PNPServer(Daemon):
         self.v6_iface_limit = v6_iface_limit
 
     async def msg_cb(self, msg, client_tup, pipe):
-        msg = ecies.decrypt(self.reply_sk, msg)
+        msg = decrypt(self.reply_sk, msg)
         cidr = 32 if pipe.route.af == IP4 else 128
         db_con = None
         try:

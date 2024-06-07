@@ -18,7 +18,7 @@ class PNPClient():
         self.vkc = sk.verifying_key.to_string("compressed")
         self.names = {}
         self.proto = proto
-        secp_k = ecies.generate_key()
+        secp_k = generate_key()
         self.reply_sk = secp_k.secret
         self.reply_pk = secp_k.public_key.format(True)
         assert(len(self.reply_pk) == 33)
@@ -47,7 +47,7 @@ class PNPClient():
     async def return_resp(self, pipe):
         try:
             buf = await proto_recv(pipe)
-            buf = ecies.decrypt(self.reply_sk, buf)
+            buf = decrypt(self.reply_sk, buf)
             pkt = PNPPacket.unpack(buf)
             if not pkt.updated:
                 pkt.value = None
@@ -67,7 +67,7 @@ class PNPClient():
             sig = b""
 
         buf = pnp_msg + sig
-        enc_msg = ecies.encrypt(self.dest_pk, buf)
+        enc_msg = encrypt(self.dest_pk, buf)
         
         end = 1 if self.proto == TCP else 3
         for _ in range(0, end):
