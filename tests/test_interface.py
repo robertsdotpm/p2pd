@@ -14,36 +14,6 @@ bind:
 flag loopback:
     [:2]
 
-V6_VALID_ANY = ["*", "::", "::/0", ""]
-V6_VALID_LOCALHOST = ["localhost", "::1"]
-V4_VALID_LOCALHOST = ["localhost", "127.0.0.1"]
-V4_VALID_ANY = ["*", "0.0.0.0", ""]
-NIC_BIND = 1
-EXT_BIND = 2
-IP_PRIVATE = 3
-IP_PUBLIC = 4
-IP_APPEND = 5
-IP_BIND_TUP = 6
-
-bind_magic = [
-    # No interface added to IP for V6 ANY.
-    ["*", IP6, IP_APPEND, V6_VALID_ANY, "::", ""],
-
-    # Windows needs the nic no added to v6 private IPs.
-    ["Windows", IP6, IP_APPEND, IP_PRIVATE, "", "nic_no"],
-
-    # Whereas other operating systems use the interface name,
-    ["*", IP6, IP_APPEND, IP_PRIVATE, "", "name"],
-
-    # Localhost V6 bind tups don't need the scope ID.
-    ["*", IP6, IP_BIND_TUP, V6_VALID_LOCALHOST, "::1", [3, 0]],
-
-    # Other private v6 bind tups need the scope id in Windows.
-    ["Windows", IP6, IP_BIND_TUP, IP_PRIVATE, None, [3, "nic_no"]],
-
-    # Make sure to normalize unusual bind all values for v4.
-    ["*", IP4, IP_APPEND, V4_VALID_ANY, "0.0.0.0", ""],
-]
 
 
 - only one rule exc from change type
@@ -60,10 +30,163 @@ else clause
 
 """
 
+V6_VALID_ANY = ["*", "::", "::/0", "", "0000:0000:0000:0000:0000:0000:0000:0000"]
+V6_VALID_LOCALHOST = ["localhost", "::1"]
+V4_VALID_LOCALHOST = ["localhost", "127.0.0.1"]
+VALID_LOCALHOST = ["localhost", "::1", "127.0.0.1"]
+V4_VALID_ANY = ["*", "0.0.0.0", ""]
+NIC_BIND = 1
+EXT_BIND = 2
+IP_PRIVATE = 3
+IP_PUBLIC = 4
+IP_APPEND = 5
+IP_BIND_TUP = 6
 
+class BindRule():
+    def __init__(self, bind_rule):
+        self.platform = bind_rule[0]
+        self.af = bind_rule[1]
+        self.type = bind_rule[2]
+        self.hey = bind_rule[3]
+        self.norm = bind_rule[4]
+        self.change = bind_rule[5]
+
+async def binder(af, interface=None, ip="", port=0, loop=None):
+    # Table of edge-cases for bind() across platforms and AFs.
+    bind_magic = [
+        # Bypasses the need for interface details for localhost binds.
+        ["*", VALID_AFS, IP_APPEND, VALID_LOCALHOST, "", ""],
+
+        # No interface added to IP for V6 ANY.
+        ["*", IP6, IP_APPEND, V6_VALID_ANY, "::", ""],
+
+        # Make sure to normalize unusual bind all values for v4.
+        ["*", IP4, IP_APPEND, V4_VALID_ANY, "0.0.0.0", ""],
+
+        # Windows needs the nic no added to v6 private IPs.
+        ["Windows", IP6, IP_APPEND, IP_PRIVATE, "", "nic_no"],
+
+        # ... whereas other operating systems use the interface name.
+        ["*", IP6, IP_APPEND, IP_PRIVATE, "", "name"],
+
+        # Windows v6 bind any doesn't need scope ID.
+        ["Windows", IP6, IP_BIND_TUP, V6_VALID_ANY, None, [3, 0]],
+
+        # Localhost V6 bind tups don't need the scope ID.
+        ["*", IP6, IP_BIND_TUP, V6_VALID_LOCALHOST, None, [3, 0]],
+
+        # Other private v6 bind tups need the scope id in Windows.
+        ["Windows", IP6, IP_BIND_TUP, IP_PRIVATE, None, [3, "nic_no"]],
+    ]
+
+    # Replace variable names with contents.
+    def parse_change_val(var_str, interface):
+        if var_str == "nic_no":
+            return interface.nic_no
+        if var_str == "name":
+            return interface.name
+
+    # Test whether bind rule matches.
+    def test_bind_rule(ip, af, bind_rule, rule_type):
+        bind_rule = BindRule(bind_rule)
+
+        # Skip rule types we're not processing.
+        if bind_rule.type != rule_type:
+            return
+
+        # Skip address types that don't apply to us.
+        if type(bind_rule.af) == list:
+            if af not in bind_rule.af:
+                return
+        else:
+            if af != bind_rule.af:
+                return
+
+        # Skip platform rules that don't match us.
+        if bind_rule.platform not in ["*", platform.system()]:
+            return
+
+        # Check hey for matches.
+        if type(bind_rule.hey) == list:
+            if ip not in bind_rule.hey:
+                return
+        if type(bind_rule.hey) == int:
+            if bind_rule.hey == IP_PRIVATE:
+                ipr = ip_f(ip)
+                if not ipr.is_private:
+                    return
+
+        return bind_rule
+
+    # Process bind rules.
+    bind_tup = None
+    for bind_rule in bind_magic:
+        bind_rule = test_bind_rule(ip, af, bind_rule, IP_APPEND)
+        if not bind_rule:
+            continue
+
+        # Do norm rule.
+        if bind_rule.norm == "":
+            ip = str(ip_f(ip))
+        else:
+            if bind_rule.norm is not None:
+                ip = bind_rule.norm
+
+        # Do logic specific to IP_APPEND.
+        if bind_rule.change is not None:
+            val = parse_change_val(bind_rule.change, interface)
+            if val:
+                ip += f"%{val}"
+            else:
+                ip += bind_rule.change
+
+        # Only one rule ran per type.
+        break
+
+    # Lookup correct bind tuples to use.
+    loop = loop or asyncio.get_event_loop()
+    addr_infos = await loop.getaddrinfo(ip, port)
+    if not len(addr_infos):
+        raise Exception("Can't resolve IPv6 address for bind.")
+    
+    # Set initial bind tup.
+    bind_tup = addr_infos[0][4]
+        
+    # Manipulate bind tuples if needed.
+    for bind_rule in bind_magic:
+        # Skip rule types we're not processing.
+        bind_rule = test_bind_rule(ip, af, bind_rule, IP_BIND_TUP)
+        if not bind_rule:
+            continue
+
+        # Apply changes to the bind tuple.
+        offset, val_str = bind_rule.change
+        val = parse_change_val(val_str, interface) or val_str
+        bind_tup = list(bind_tup)
+        bind_tup[offset] = val
+        bind_tup = tuple(bind_tup)
+            
+        # Only one rule ran per type.
+        break
+
+    return bind_tup
 
 class TestInterface(unittest.IsolatedAsyncioTestCase):
     async def test_fallback_zero_bind(self):
+        ip = "::"
+        port = 0
+        af = IP6
+        interface = None
+        t = await binder(af, interface, ip, port)
+        print(t)
+
+
+
+
+
+
+
+        return
         i = await Interface().start_local()
         af = IP6
         local_addr = await Bind(
@@ -174,4 +297,5 @@ class TestInterface(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(as_s in repr(i))
 
 if __name__ == '__main__':
+
     main()
