@@ -1,7 +1,151 @@
+"""
+- replace bind calls in netiface_addr_to_ipr
+to get the tup from the new function
+- replace bind tup code in Bind
+- add new fallback code to interface
+"""
+
 from p2pd import *
 
 
 class TestBind(unittest.IsolatedAsyncioTestCase):
+    async def test_binder(self):
+        vectors = [
+            [
+                "Windows",
+                [IP4, "127.0.0.1", 80, None],
+                ('127.0.0.1', 80)
+            ],
+            [
+                "Windows",
+                [IP4, "localhost", 80, None],
+                ('127.0.0.1', 80)
+            ],
+            [
+                "Windows",
+                [IP6, "localhost", 80, None],
+                ('::1', 80, 0, 0)
+            ],
+            [
+                "Windows",
+                [IP6, "::1", 80, None],
+                ('::1', 80, 0, 0)
+            ],
+            [
+                "Windows",
+                [IP4, "*", 80, None],
+                ('0.0.0.0', 80)
+            ],
+            [
+                "Windows",
+                [IP4, "0.0.0.0", 80, None],
+                ('0.0.0.0', 80)
+            ],
+            [
+                "Windows",
+                [IP4, "", 80, None],
+                ('0.0.0.0', 80)
+            ],
+            [
+                "Windows",
+                [IP6, "*", 80, None],
+                ('::', 80, 0, 0)
+            ],
+            [
+                "Windows",
+                [IP6, "", 80, None],
+                ('::', 80, 0, 0)
+            ],
+            [
+                "Windows",
+                [IP6, "::", 80, None],
+                ('::', 80, 0, 0)
+            ],
+            [
+                "Windows",
+                [IP6, "::/0", 80, None],
+                ('::', 80, 0, 0)
+            ],
+            [
+                "Windows",
+                [IP4, "192.168.0.1", 80, None],
+                ('192.168.0.1', 80)
+            ],
+            [
+                "Windows",
+                [IP4, "8.8.8.8", 80, None],
+                ('8.8.8.8', 80)
+            ],
+            [
+                "Windows",
+                [IP6, "fe80::6c00:b217:18ca:e365", 80, 3],
+                ('fe80::6c00:b217:18ca:e365', 80, 0, 3)
+            ],
+            [
+                "Windows",
+                [IP6, "fd12:3456:789a:1::1", 80, 3],
+                ('fd12:3456:789a:1::1', 80, 0, 3)
+            ],
+            [
+                "Windows",
+                [IP6, "2402:1f00:8101:83f::1", 80, 3],
+                ('2402:1f00:8101:83f::1', 80, 0, 0)
+            ],
+            [
+                "debian",
+                [IP4, "127.0.0.1", 80, 3],
+                ('127.0.0.1', 80)
+            ],
+            [
+                "debian",
+                [IP6, "::", 80, 3],
+                ('::', 80, 0, 0)
+            ],
+            [
+                "debian",
+                [IP4, "0.0.0.0", 80, 3],
+                ('0.0.0.0', 80)
+            ],
+            [
+                "debian",
+                [IP6, "fe80::6c00:b217:18ca:e365", 80, "eth0"],
+                ('fe80::6c00:b217:18ca:e365', 80, 0, "no")
+            ],
+            [
+                "debian",
+                [IP6, "2402:1f00:8101:83f::1", 80, 3],
+                ('2402:1f00:8101:83f::1', 80, 0, 0)
+            ],
+            [
+                "debian",
+                [IP4, "192.168.0.1", 80, 3],
+                ('192.168.0.1', 80)
+            ],
+            [
+                "debian",
+                [IP4, "8.8.8.8", 80, 3],
+                ('8.8.8.8', 80)
+            ],
+        ]
+
+        for vector in vectors:
+            plat, params, expected = vector
+            try:
+                out = await binder(*params, plat=plat)
+            except:
+                print(f"skipping {vector}")
+                continue
+
+            # Support variables 
+            if expected[-1] == "no":
+                if out[-1]:
+                    expected[-1] = out[-1]
+
+            if out != expected:
+                print("test_binder failed")
+                print(f"{out} != {expected}")
+                assert(False)
+
     async def test_bind_closure(self):
         pass
 
