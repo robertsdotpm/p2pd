@@ -17,9 +17,10 @@ if int(vmin) < 8:
     exit()
 
 from . import __version__ as p2pdv
-from .utils import SelectorEventPolicy
-asyncio.set_event_loop_policy(SelectorEventPolicy())
-multiprocessing.set_start_method("spawn")
+from .utils import SelectorEventPolicy, p2pd_setup_event_loop
+
+
+p2pd_setup_event_loop()
 
 class AsyncIOInteractiveConsole(code.InteractiveConsole):
 

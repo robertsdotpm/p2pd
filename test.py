@@ -2,8 +2,6 @@ from p2pd import *
 import time
 from ecdsa import SigningKey
 
-
-
 async def main():
     TEST_SK = b'\xfe\xb1w~v\xfe\xc4:\x83\xa6C\x19\xde\x11\xc2\xc8\xc4A\xdaEC\x01\xc2\x9d'
     #sk = SigningKey.generate()

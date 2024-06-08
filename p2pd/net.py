@@ -100,6 +100,11 @@ NODE_PORT = 10001
 # Address object types.
 IPA_TYPES = ipa_types = (ipaddress.IPv4Address, ipaddress.IPv6Address)
 
+ANY_ADDR_LOOKUP = {
+    IP4: "0.0.0.0",
+    IP6: "::"
+}
+
 # Convert string proto values to enums.
 PROTO_LOOKUP = {
     "TCP": TCP,
@@ -494,6 +499,7 @@ def bind_closure(self):
         # Creates two bind tuples for nic private IP and external address.
         for bind_info in [[NIC_BIND, nic_bind], [EXT_BIND, ext_bind]]:
             bind_type, bind_ip = bind_info
+            print(bind_ip)
             if bind_ip is None:
                 # Set a blank bind tuple for this.
                 log("> bind type = {} was None".format(bind_type))
@@ -533,6 +539,8 @@ def bind_closure(self):
                 self._bind_tups[bind_type] = addr_infos[0][4]
                 if is_priv and platform.system() == "Windows":
                     self._bind_tups[bind_type] = self._bind_tups[bind_type][:3] + (self.interface.nic_no,)
+
+
             else:
                 # Otherwise this is all you need.
                 self._bind_tups[bind_type] = (bind_ip, port)

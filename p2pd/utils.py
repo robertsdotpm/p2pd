@@ -20,6 +20,7 @@ import copy
 import hashlib
 import unittest
 import ecdsa
+import multiprocessing
 from ecdsa.curves import NIST192p
 
 if "P2PD_DEBUG" in os.environ: 
@@ -584,6 +585,21 @@ class SelectorEventPolicy(asyncio.DefaultEventLoopPolicy):
         loop = asyncio.SelectorEventLoop(selector)
         SelectorEventPolicy.loop_setup(loop)
         return loop
+    
+def p2pd_setup_event_loop():
+    # If default isn't spawn then change it.
+    # But only if it hasn't already been set.
+    if multiprocessing.get_start_method() != "spawn":
+        start_method = multiprocessing.get_start_method(allow_none=True)
+
+        # First time setting this otherwise it will throw an error.
+        if start_method is None:
+            multiprocessing.set_start_method("spawn")
+
+    # Set the event loop policy to the selector if its not.
+    policy = asyncio.get_event_loop_policy()
+    if not isinstance(policy, SelectorEventPolicy):
+        asyncio.set_event_loop_policy(SelectorEventPolicy())
 
 def selector_event_loop():
     selector = selectors.SelectSelector()
@@ -605,10 +621,26 @@ def get_loop(loop=None):
 def handle_exceptions(loop, context):
     pass
 
+def get_running_loop():
+    try:
+        version = sys.version_info[1]
+        if version >= 7:
+            return asyncio.get_running_loop()
+        else:
+            return asyncio.get_event_loop()
+    except RuntimeError:
+        return None
+
 # Will be used in sample code to avoid boilerplate.
 def async_test(f, args=[], loop=None):
-    #uvloop.install()
-    loop = get_loop(loop)
+    try:
+        loop = get_running_loop()
+    except:
+        #uvloop.install()
+
+        # Create an event loop if one isn't running.
+        loop = get_loop(loop)
+
     #if IS_DEBUG:
     #    loop.set_debug(True)
     loop.set_debug(True)
@@ -618,8 +650,9 @@ def async_test(f, args=[], loop=None):
         loop.run_until_complete(f(*args))
     else:
         loop.run_until_complete(f())
-    loop.close()
- 
+
+    #loop.close()
+
 
 async def return_true(result=None):
     return True
@@ -639,16 +672,6 @@ def async_to_sync(f, params=None, loop=None):
             
         return closure
 
-def get_running_loop():
-    try:
-        version = sys.version_info[1]
-        if version >= 7:
-            return asyncio.get_running_loop()
-        else:
-            return asyncio.get_event_loop()
-    except RuntimeError:
-        return None
-
 def sqlite_dict_factory(cursor, row):
     d = {}
     for idx, col in enumerate(cursor.description):
@@ -656,7 +679,7 @@ def sqlite_dict_factory(cursor, row):
     return d
 
 def recover_verify_key(msg_b, sig_b, vk_b=None, curve=NIST192p, hashfunc=hashlib.sha1):
-   # List of possible verify keys recovered from sig.
+    # List of possible verify keys recovered from sig.
     vk_list = ecdsa.VerifyingKey.from_public_key_recovery(
         signature=sig_b,
         data=msg_b,

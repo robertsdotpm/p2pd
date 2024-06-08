@@ -53,18 +53,21 @@ class Naming():
             tasks.append(task)
 
         success_no = 0
-        results = await asyncio.wait_for(
-            asyncio.gather(*tasks),
-            timeout
-        )
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks),
+                timeout
+            )
 
-        for pkt in results:
-            if pkt is None:
-                continue
-            if pkt.value is None:
-                continue
+            for pkt in results:
+                if pkt is None:
+                    continue
+                if pkt.value is None:
+                    continue
 
-            success_no += 1
+                success_no += 1
+        except asyncio.TimeoutError:
+            success_no = 0
 
         if success_no == 0:
             raise FullNameFailure("Name action failed. All servers down.")
@@ -100,6 +103,7 @@ class Naming():
 
 async def workspace():
     TEST_SK = b'\xfe\xb1w~v\xfe\xc4:\x83\xa6C\x19\xde\x11\xc2\xc8\xc4A\xdaEC\x01\xc2\x9d'
+    TEST_SK = (b"12345" * 100)[:24]
     test_sk_hex = to_h(TEST_SK)
     i = await Interface().start_local()
     print(i)
@@ -109,6 +113,7 @@ async def workspace():
     await n.start()
     await n.push(name, "some test val")
 
+    return
     out = await n.fetch(name)
     print(out.value)
 

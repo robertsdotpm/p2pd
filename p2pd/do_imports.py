@@ -4,7 +4,7 @@ import os
 if __name__ != '__main__':
     os.environ["PYTHONIOENCODING"] = "utf-8"
     from .errors import *
-    from .utils import log, what_exception, log_exception, async_test, SelectorEventPolicy
+    from .utils import log, what_exception, log_exception, async_test, SelectorEventPolicy, p2pd_setup_event_loop
 
     from .cmd_tools import *
     from .net import *

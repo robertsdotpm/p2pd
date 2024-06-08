@@ -9,8 +9,7 @@ if not '-m' in sys.argv:
     from .do_imports import *
 
 if __name__ == "__main__":
-    multiprocessing.set_start_method("spawn")
-    asyncio.set_event_loop_policy(SelectorEventPolicy())
+    p2pd_setup_event_loop()
 
 __version__ = '2.7.9'
 
