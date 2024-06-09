@@ -92,10 +92,10 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
                     # Fresh route per server.
                     echo_route = await interface.route(af).bind(ips=addr, port=server_port)
-                    print()
-                    print(echo_route)
-                    print(echo_route.nic_bind)
-                    print(echo_route._bind_tups)
+                    #print()
+                    #print(echo_route)
+                    #print(echo_route.nic_bind)
+                    #print(echo_route._bind_tups)
 
                     # Daemon instance.
                     echod = await EchoServer().listen_all(
@@ -103,8 +103,8 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                         [server_port],
                         [proto]
                     )
-                    print(echod.servers[0][2].sock)
-                    print(echod.servers[0][2].route._bind_tups)
+                    #print(echod.servers[0][2].sock)
+                    #print(echod.servers[0][2].route._bind_tups)
                     server_port = echod.get_listen_port()
                     if addr == "*":
                         addr = "localhost"
@@ -126,11 +126,6 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                     # Send message to server.
                     #print(dest.tup in pipe.stream.handle)
                     send_ret = await pipe.send(msg, dest.tup)
-
-
-                    print(af)
-                    print(addr)
-                    print(proto)
 
                     # Receive data back.
                     data = await pipe.recv(SUB_ALL)

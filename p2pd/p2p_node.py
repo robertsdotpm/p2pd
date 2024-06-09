@@ -24,7 +24,7 @@ class P2PUtils():
             route = server[0]
 
             # Only forward to public IPv6 addresses.
-            ipr = IPRange(route.bind_ip(route.af))
+            ipr = IPRange(route.nic())
             if route.af == IP6 and ipr.is_private:
                 continue
 

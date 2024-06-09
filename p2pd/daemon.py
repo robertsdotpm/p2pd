@@ -106,7 +106,7 @@ class Daemon():
                 await route.bind(port)
 
             log('starting server {}:{} p={}, af={}'.format(
-                route.bind_ip(),
+                route.nic(),
                 route.bind_port,
                 proto,
                 route.af

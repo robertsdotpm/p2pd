@@ -198,7 +198,7 @@ class Route(Bind):
     async def forward(self, port=None, proto="TCP"):
         assert(self.resolved)
         port = port or self.bind_port
-        ip = self.bind_ip(self.af)
+        ip = self.nic()
         src_addr = await Address(
             ip,
             port,
@@ -452,8 +452,6 @@ class Route(Bind):
             route.link_route_pool(self.route_pool)
         route.ips = self.ips
         route.bind_port = self.bind_port
-        route.nic_bind = self.nic_bind
-        route.ext_bind = self.ext_bind
         route._bind_tups = copy.deepcopy(self._bind_tups)
         route.resolved = self.resolved
         route.set_link_locals(copy.deepcopy(self.link_locals))
@@ -925,8 +923,7 @@ async def bind_to_route(bind_obj):
     """
     assert(bind_obj.resolved)
     interface = bind_obj.interface
-    nic_bind = bind_obj._bind_tups[NIC_BIND][0]
-    ext_bind = bind_obj._bind_tups[EXT_BIND][0]
+    nic_bind = ext_bind = bind_obj._bind_tups[0]
     af = bind_obj.af
     assert(interface.resolved)
 

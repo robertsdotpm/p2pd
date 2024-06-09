@@ -241,7 +241,7 @@ async def fast_nat_test(pipe, test_servers, timeout=NAT_TEST_TIMEOUT):
 
     # Open NAT type.
     async def test_one(ret, test_pipe):
-        source_ip = test_pipe.route.bind_ip()
+        source_ip = test_pipe.route.nic()
         if ip_f(ret['rip']) == ip_f(source_ip):
             return OPEN_INTERNET
 

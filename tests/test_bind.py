@@ -191,19 +191,19 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
 
         b.af = IP4
         out = (await bind_closure(b)(80, "127.0.0.1"))._bind_tups
-        assert(out == {1: ('127.0.0.1', 80), 2: ('127.0.0.1', 80)})
+        assert(out == ('127.0.0.1', 80))
 
         b = Bind(i, IP4, leave_none=1)
         out = (await bind_closure(b)(80, "192.168.0.1"))._bind_tups
-        assert(out == {1: ('192.168.0.1', 80), 2: ('192.168.0.1', 80)})
+        assert(out == ('192.168.0.1', 80))
 
         b = Bind(i, IP4, leave_none=1)
         out = (await bind_closure(b)(80, "8.8.8.8"))._bind_tups
-        assert(out == {1: ('8.8.8.8', 80), 2: ('8.8.8.8', 80)})
+        assert(out == ('8.8.8.8', 80))
 
         b = Bind(i, IP4, leave_none=1)
         out = (await bind_closure(b)(80, "0.0.0.0"))._bind_tups
-        assert(out == {1: ('0.0.0.0', 80), 2: ('0.0.0.0', 80)})
+        assert(out == ('0.0.0.0', 80))
 
         # This is where things tend to go badly.
         b.af = IP6
@@ -260,7 +260,6 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
         tests = ["192.168.0.1", "8.8.8.8"]
         for ip in tests:
             b = Bind(i, IP4, ips=ip)
-            self.assertEqual(b.nic_bind, ip)
             await b.bind()
             self.assertEqual(b.bind_tup(flag=NIC_BIND)[0], ip)
 
@@ -302,11 +301,7 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
 
         route = await i.route(af).bind(13453, "*")
         bind_tup = ("0.0.0.0", 13453)
-        expected_tups = {
-            EXT_BIND: bind_tup,
-            NIC_BIND: bind_tup
-        }
-        self.assertEqual(route._bind_tups, expected_tups)
+        self.assertEqual(route._bind_tups, bind_tup)
         s = await socket_factory(route)
         self.assertTrue(s is not None)
         if s is not None:

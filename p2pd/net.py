@@ -637,38 +637,28 @@ def bind_closure(self):
         if self.resolved:
             return
         
-        ips = ips or self.ips
+        # Bind parameters.
         port = port or self.bind_port
+        ips = ips or self.ips
+        if ips is None:
+            # Bind parent.
+            if hasattr(self, "interface") and self.interface is not None:
+                route = self.interface.route(self.af)
+                ips = route.nic()
+            else:
+                # Being inherited from route.
+                ips = self.nic()
+
+        # Number or name - platform specific.
         if self.interface is not None:
             nic_id = self.interface.id
         else:
             nic_id = None
 
-        if ips is not None:
-            nic_bind = ips
-            ext_bind = ips
-        else:
-            # Bind parent.
-            if self.nic_bind is None and self.ext_bind is None:
-                route = self.interface.route(self.af)
-                nic_bind = route.nic()
-                ext_bind = route.ext()
-            else:
-                # Being inherited from route.
-                nic_bind = self.nic()
-                ext_bind = self.ext()
-
         # Get bind tuple for NIC bind.
-        self._bind_tups[NIC_BIND] = await binder(
-            af=self.af, ip=nic_bind, port=port, nic_id=nic_id
+        self._bind_tups = await binder(
+            af=self.af, ip=ips, port=port, nic_id=nic_id
         )
-        self.nic_bind = self._bind_tups[NIC_BIND][0]
-
-        # Get bind tuple for EXT bind.
-        self._bind_tups[EXT_BIND] = await binder(
-            af=self.af, ip=ext_bind, port=port, nic_id=nic_id
-        )
-        self.ext_bind = self._bind_tups[EXT_BIND][0]
 
         # Save state.
         self.bind_port = port
@@ -691,18 +681,11 @@ class Bind():
         self.af = af
         self.resolved = False
         self.bind_port = port
-        self.nic_bind = self.ext_bind = ips
 
         # Will store a tuple that can be passed to bind.
-        self._bind_tups = {NIC_BIND: None, EXT_BIND: None}
+        self._bind_tups = ()
         if not hasattr(self, "bind"):
             self.bind = bind_closure(self)
-
-    def nic(self):
-        return self._bind_tups[NIC_BIND][0]
-    
-    def ext(self):
-        return self._bind_tups[EXT_BIND][0]
 
     def __await__(self):
         return self.bind().__await__()
@@ -713,10 +696,6 @@ class Bind():
     async def start(self):
         await self.res()
 
-    def bind_ip(self, af=None):
-        af = af or self.af
-        return self.nic_bind if af == IP4 else self.ext_bind
-
     def bind_tup(self, port=None, flag=NIC_BIND):
         # Handle loopback support.
         if flag == LOOPBACK_BIND:
@@ -726,7 +705,7 @@ class Bind():
                 return ("127.0.0.1", self.bind_port)
 
         # Spawn a new copy of the bind tup (if needed.)
-        tup = self._bind_tups[flag]
+        tup = self._bind_tups
         if port is not None:
             tup = copy.deepcopy(tup)
             tup[1] = port
