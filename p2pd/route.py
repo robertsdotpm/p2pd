@@ -749,6 +749,7 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
                 continue
 
             # Include link locals in their own set.
+            # Todo: theres other prefixes like UNL.
             if ip_norm(nic_ipr[0])[:4] == "fe80":
                 link_locals.append(nic_ipr)
                 log(f"Addr is link local so skipping")

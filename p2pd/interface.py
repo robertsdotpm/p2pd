@@ -177,6 +177,7 @@ class Interface():
     def __init__(self, name=None, stack=DUEL_STACK, nat=None, netifaces=None):
         super().__init__()
         self.resolved = False
+        self.id = None
         self.nat = nat or nat_info()
         self.name = name
         self.rp = {IP4: RoutePool(), IP6: RoutePool()}

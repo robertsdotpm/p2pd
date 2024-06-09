@@ -1,3 +1,9 @@
+"""
+You can still flood the DB with names since min duration
+feature ignores them in the count. There should be a buffer
+for create to allow pending but limit it.
+"""
+
 import os
 from p2pd import *
 

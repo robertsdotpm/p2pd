@@ -589,8 +589,13 @@ async def binder(af, ip="", port=0, nic_id=None, loop=None, plat=platform.system
 
     # Lookup correct bind tuples to use.
     loop = loop or asyncio.get_event_loop()
-    addr_infos = await loop.getaddrinfo(ip, port)
+    try:
+        addr_infos = await loop.getaddrinfo(ip, port)
+    except:
+        addr_infos = []
+
     if not len(addr_infos):
+        print(f"get addr info {ip} {port}")
         raise Exception("Can't resolve IPv6 address for bind.")
     
     # Set initial bind tup.
@@ -629,83 +634,44 @@ But that's the API I wanted.
 """
 def bind_closure(self):
     async def bind(port=None, ips=None):
-        loop = asyncio.get_event_loop()
+        if self.resolved:
+            return
+        
+        ips = ips or self.ips
         port = port or self.bind_port
-        if ips is not None:
-            # Tested.
-            nic_bind, ext_bind = self._convert_ips(
-                ips=ips,
-                af=self.af,
-                interface=self.interface,
-            )
+        if self.interface is not None:
+            nic_id = self.interface.id
         else:
-            # Being inherited by a Route object.
+            nic_id = None
+
+        if ips is not None:
+            nic_bind = ips
+            ext_bind = ips
+        else:
+            # Bind parent.
             if self.nic_bind is None and self.ext_bind is None:
+                route = self.interface.route(self.af)
+                nic_bind = route.nic()
+                ext_bind = route.ext()
+            else:
+                # Being inherited from route.
                 nic_bind = self.nic()
                 ext_bind = self.ext()
-            else:
-                # Use interface fields set by _convert_ips.
-                # Tested.
-                nic_bind = self.nic_bind
-                ext_bind = self.ext_bind
 
-        # Creates two bind tuples for nic private IP and external address.
-        for bind_info in [[NIC_BIND, nic_bind], [EXT_BIND, ext_bind]]:
-            bind_type, bind_ip = bind_info
-            print(bind_ip)
-            if bind_ip is None:
-                # Set a blank bind tuple for this.
-                log("> bind type = {} was None".format(bind_type))
-                self._bind_tups[bind_type] = (None, None)
-                continue
+        # Get bind tuple for NIC bind.
+        self._bind_tups[NIC_BIND] = await binder(
+            af=self.af, ip=nic_bind, port=port, nic_id=nic_id
+        )
+        self.nic_bind = self._bind_tups[NIC_BIND][0]
 
-            # Add scope ID for IPv6.
-            if self.af == IP6:
-                # Convert bind IP to an IPAddress obj.
-                ip_obj = ip_f(bind_ip)
+        # Get bind tuple for EXT bind.
+        self._bind_tups[EXT_BIND] = await binder(
+            af=self.af, ip=ext_bind, port=port, nic_id=nic_id
+        )
+        self.ext_bind = self._bind_tups[EXT_BIND][0]
 
-                # Add interface descriptor if it's link local.
-                is_priv = ip_obj.is_private
-                not_all = bind_ip != "::" and ip_f(bind_ip) != ip_f("::1") # Needed for V6 AF_ANY for some reason.
-                if is_priv and not_all:
-                    # Interface specified by no on windows.
-                    if platform.system() == "Windows":
-                        bind_ip = "%s%%%d" % (
-                            bind_ip,
-                            self.interface.nic_no
-                        )
-                    else:
-                        # Other platforms just use the name
-                        bind_ip = f"{bind_ip}%{self.interface.name}"
-
-                # Get bind info using get address.
-                # This includes the special 'flow info' and 'scope id'
-                addr_infos = await loop.getaddrinfo(
-                    bind_ip,
-                    port
-                )
-
-                # (Host, port, flow info, interface ID)
-                if not len(addr_infos):
-                    raise Exception("Can't resolve IPv6 address for bind.")
-                
-                self._bind_tups[bind_type] = addr_infos[0][4]
-                if is_priv and platform.system() == "Windows":
-                    self._bind_tups[bind_type] = self._bind_tups[bind_type][:3] + (self.interface.nic_no,)
-
-
-            else:
-                # Otherwise this is all you need.
-                self._bind_tups[bind_type] = (bind_ip, port)
-
-            # Patch for IPv6 localhost.
-            if self._bind_tups[bind_type][0] == "::1":
-                new_bind_tup = self._bind_tups[bind_type][:-1] + (0,)
-                self._bind_tups[bind_type] = new_bind_tup
-
-        #bind.addr = getattr(bind, 'addr', self._addr)
+        # Save state.
         self.bind_port = port
-        self.nic_bind, self.ext_bind = nic_bind, ext_bind
         self.resolved = True
         return self
         
@@ -725,71 +691,21 @@ class Bind():
         self.af = af
         self.resolved = False
         self.bind_port = port
-        if leave_none:
-            self.nic_bind = self.ext_bind = None
-        else:
-            self.nic_bind, self.ext_bind = self._convert_ips(
-                ips=ips,
-                af=af,
-                interface=interface
-            )
+        self.nic_bind = self.ext_bind = ips
 
         # Will store a tuple that can be passed to bind.
         self._bind_tups = {NIC_BIND: None, EXT_BIND: None}
         if not hasattr(self, "bind"):
             self.bind = bind_closure(self)
 
+    def nic(self):
+        return self._bind_tups[NIC_BIND][0]
+    
+    def ext(self):
+        return self._bind_tups[EXT_BIND][0]
+
     def __await__(self):
         return self.bind().__await__()
-
-    """
-    ips param can be one of any number of types. The idea is to
-    extract a target IP to bind on. This is a bit excessive but
-    still. Here it is. 
-    """
-    def _convert_ips(self, ips, af, interface=None):
-        # Use interface IPs.
-        ip_val = ext_bind = nic_bind = None
-        if interface is not None and ips is None:
-            main_route = interface.route(af)
-            nic_bind = main_route.nic()
-            ext_bind = main_route.ext()
-
-            # Make it so the program crashes if they
-            # try to use a default ext when fetching
-            # the bind tuple.
-            if af == IP6 and not interface.resolved:
-                ext_bind = None
-                
-            return nic_bind, ext_bind 
-
-        # Only choose the version we need.
-        if ips is not None and isinstance(ips, dict):
-            ip_val = ips[af]
-
-        # Code to pass an Interface or Address
-        # to initalise the ips list.
-        if isinstance(ips, str):
-            ip_val = ips
-
-        # No idea what ips is.
-        if ip_val is None:
-            raise NotImplemented("Can't bind to that type.")
-
-        # Convert special values in IP val.
-        if ip_val in ["", "*"]:
-            if af == IP6:
-                nic_bind = ext_bind = ip_val = "::"
-            else:
-                nic_bind = ext_bind = ip_val = "0.0.0.0"
-        else:
-            ip_val = ip_norm(ip_val)
-            ip_obj = ip_f(ip_val)
-            assert(af == v_to_af(ip_obj.version))
-            nic_bind = ip_val
-            ext_bind = ip_val
-
-        return nic_bind, ext_bind
 
     async def res(self):
         return await self.bind()

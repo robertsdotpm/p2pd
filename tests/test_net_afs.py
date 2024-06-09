@@ -47,6 +47,7 @@ class TestAFsWork(unittest.IsolatedAsyncioTestCase):
                 # Skip test if not supported.
                 continue
 
+            pipe = None
             try:
                 # Echo server address.
                 route = await i.route(af).bind()
@@ -81,10 +82,15 @@ class TestAFsWork(unittest.IsolatedAsyncioTestCase):
 
                     # Cleanup.
                     await pipe.close()
+                    pipe = None
             except:
-                continue
+                log_exception()
+            finally:
+                if pipe is not None:
+                    await pipe.close()
 
         self.assertTrue(one_worked)
+        await asyncio.sleep(2)
 
 if __name__ == '__main__':
     main()

@@ -78,8 +78,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                 route = await interface.route(af)
             except:
                 continue
-            addrs = [route.nic(), loopbacks[af]]
-
+            addrs = [route.nic(), loopbacks[af], "*"]
 
             # Test connect to link local.
             if af == IP6:
@@ -92,16 +91,25 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                     log(f"test daemon proto = {proto}")
 
                     # Fresh route per server.
-                    route = await interface.route(af).bind(ips=addr, port=server_port)
+                    echo_route = await interface.route(af).bind(ips=addr, port=server_port)
+                    print()
+                    print(echo_route)
+                    print(echo_route.nic_bind)
+                    print(echo_route._bind_tups)
 
                     # Daemon instance.
                     echod = await EchoServer().listen_all(
-                        [route],
+                        [echo_route],
                         [server_port],
                         [proto]
                     )
+                    print(echod.servers[0][2].sock)
+                    print(echod.servers[0][2].route._bind_tups)
                     server_port = echod.get_listen_port()
-                    dest = await Address(addr, server_port, route).res()
+                    if addr == "*":
+                        addr = "localhost"
+
+                    dest = await Address(addr, server_port, echo_route).res()
 
                     # Spawn a pipe to the echo server.
                     test_route = await interface.route(af).bind(ips=addr)
@@ -118,6 +126,11 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                     # Send message to server.
                     #print(dest.tup in pipe.stream.handle)
                     send_ret = await pipe.send(msg, dest.tup)
+
+
+                    print(af)
+                    print(addr)
+                    print(proto)
 
                     # Receive data back.
                     data = await pipe.recv(SUB_ALL)

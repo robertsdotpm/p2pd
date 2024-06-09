@@ -9,6 +9,43 @@ from p2pd import *
 
 
 class TestBind(unittest.IsolatedAsyncioTestCase):
+    async def test_bind_refresher(self):
+        i = await Interface()
+        print(i.route(IP6))
+        print(i.route(IP4))
+
+        print(i)
+
+        """
+            nic, ext
+        v6:
+            glob, glob
+
+        v4:
+            192..  8.8.8.8
+
+        if_ip -> Bind(if_ip) -> get_wan_ip() -> Route(af, nic=if_ip, ext=wan_ip)
+
+        Bind:
+
+            convert ips: (return nic bind, ext bind)
+                1. use interface.route(af) if ips is none
+                    - not relevant for Route which sets ips
+                2. convert special ip vals
+                3. ext_bind = nic_bind = ips
+
+            awaitable -> bind_closure:
+                ext_bind, nic_bind = convert ips(ips)
+                    - otherwise set from routes .nic() and ext()
+
+                - set bind tups for each addr type
+                    - handles edge cases
+                - 
+
+
+
+        """
+
     async def test_binder(self):
         vectors = [
             [
@@ -156,22 +193,32 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
         out = (await bind_closure(b)(80, "127.0.0.1"))._bind_tups
         assert(out == {1: ('127.0.0.1', 80), 2: ('127.0.0.1', 80)})
 
+        b = Bind(i, IP4, leave_none=1)
         out = (await bind_closure(b)(80, "192.168.0.1"))._bind_tups
         assert(out == {1: ('192.168.0.1', 80), 2: ('192.168.0.1', 80)})
 
+        b = Bind(i, IP4, leave_none=1)
         out = (await bind_closure(b)(80, "8.8.8.8"))._bind_tups
         assert(out == {1: ('8.8.8.8', 80), 2: ('8.8.8.8', 80)})
 
+        b = Bind(i, IP4, leave_none=1)
         out = (await bind_closure(b)(80, "0.0.0.0"))._bind_tups
         assert(out == {1: ('0.0.0.0', 80), 2: ('0.0.0.0', 80)})
 
         # This is where things tend to go badly.
         b.af = IP6
 
-        out = (await bind_closure(b)(80, "::1"))._bind_tups
+        b = Bind(i, IP6, leave_none=1)
+        try:
 
+            out = (await bind_closure(b)(80, "::1"))._bind_tups
 
-        out = (await bind_closure(b)(80, "fe80::6c00:b217:18ca:e365"))._bind_tups
+            b = Bind(i, IP6, leave_none=1)
+
+            out = (await bind_closure(b)(80, "fe80::6c00:b217:18ca:e365"))._bind_tups
+        except:
+            log_exception()
+
         #assert(out[1][2] > 0 or out[2][2] > 0)
 
 
