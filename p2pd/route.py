@@ -66,7 +66,7 @@ import copy
 import ipaddress
 import pprint
 import inspect
-from functools import total_ordering
+from functools import total_ordering, cmp_to_key
 from .ip_range import *
 from .netiface_extra import *
 from .upnp import *
@@ -832,33 +832,68 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
         log(f"Calling set link locals on routes {len(routes)}")
         [r.set_link_locals(link_locals) for r in routes]
 
+    # Deterministically order routes list.
+    cmp = lambda r1, r2: int(r1.ext_ips[0]) - int(r2.ext_ips[0])
+    routes = sorted(routes, key=cmp_to_key(cmp))
+
     # Fallback to default if no route found.
     """
     It may make sense to run this concurrently and
     insert the route in the list if there's no duplicate route ext.
     """
-    if not len(routes):
-        local_addr = await Bind(
-            stun_client.interface,
-            af=af,
-            port=0,
-            ips=ANY_ADDR_LOOKUP[af]
-        ).res()
 
-        # Get external IP and compare to bind IP.
-        wan_ip = await stun_client.get_wan_ip(
-            local_addr=local_addr,
-            conf=stun_conf
-        )
+    """
+    Binding to any address lets the interface choose
+    the default IP for the interface.
+    This allows this address to be set first in the
+    route list while still returning deterministic routes.
+    """
+    local_addr = await Bind(
+        stun_client.interface,
+        af=af,
+        port=0,
+        ips=ANY_ADDR_LOOKUP[af]
+    ).res()
 
-        if wan_ip is not None:
-            cidr = af_to_cidr(af)
-            nic_ipr = IPRange(ANY_ADDR_LOOKUP[af], cidr=cidr)
-            ext_ipr = IPRange(wan_ip, cidr=cidr)
-            routes = [
-                Route(af, [nic_ipr], [ext_ipr], interface)
-            ]
+    # Get external IP and compare to bind IP.
+    wan_ip = await stun_client.get_wan_ip(
+        local_addr=local_addr,
+        conf=stun_conf
+    )
 
+    """
+    If the default route was found successfully then
+    its used to check for duplicates in the route list
+    which are removed. The default route is then
+    inserted first in the route list which avoids
+    bind issues on platforms that have 'strong route'
+    selection behavior where they might ignore bind
+    addresses for TCP.
+    """
+    default_route = None
+    if wan_ip is not None:
+        # Convert default details to a Route object.
+        cidr = af_to_cidr(af)
+        nic_ipr = IPRange(ANY_ADDR_LOOKUP[af], cidr=cidr)
+        ext_ipr = IPRange(wan_ip, cidr=cidr)
+        default_route = Route(af, [nic_ipr], [ext_ipr], interface)
+    
+        # Remove default route from routes list.
+        cleaned_routes = []
+        for route in routes:
+            do_remove = False
+            for ext_ipr in route.ext_ips:
+                if len(ext_ipr) == 1:
+                    if default_route.ext_ips[0] == ext_ipr:
+                        default_route = route
+                        do_remove = True
+                        break
+
+            if not do_remove:
+                cleaned_routes.append(route)
+
+        # Ensure that the default route is first.
+        routes = [default_route] + cleaned_routes
         
     log(f"Link locals at end of load router = {link_locals}")
     return [routes, link_locals]

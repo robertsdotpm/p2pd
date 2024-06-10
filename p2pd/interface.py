@@ -465,10 +465,10 @@ class Interface():
             af = af or self.supported()[0]
             assert(af in self.what_afs())
 
-        # Main route is last.
+        # Main route is first.
         if af in self.rp:
             if len(self.rp[af].routes):
-                return copy.deepcopy(self.rp[af].routes[-1])
+                return copy.deepcopy(self.rp[af].routes[0])
 
         raise Exception(f"No route for {af} found.")
 

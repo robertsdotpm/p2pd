@@ -595,7 +595,6 @@ async def binder(af, ip="", port=0, nic_id=None, loop=None, plat=platform.system
         addr_infos = []
 
     if not len(addr_infos):
-        print(f"get addr info {ip} {port}")
         raise Exception("Can't resolve IPv6 address for bind.")
     
     # Set initial bind tup.
@@ -741,8 +740,6 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
 
             # If dest_addr was a domain it will be AF_ANY.
             # We need to specify a type for the socket though.
-
-            print(route.af)
             if route.af not in dest_addr.supported():
                 raise Exception("Route af not supported by dest addr")
 

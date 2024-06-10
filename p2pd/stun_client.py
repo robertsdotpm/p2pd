@@ -298,15 +298,12 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
             # Send request.
             # Multiplexed for UDP stream.
             # For TCP the dest addr arg is ignored.
-            print(pipe.sock)
-            print(data)
             if not await pipe.stream.send(data, dest_addr.tup):
                 log("STUN req send all unknown error.")
                 continue
 
             # Receive response -- but only
             # expect a certain client addr.
-            print(tran_info)
             buf = await pipe.recv(
                 tran_info[:2],
                 timeout=conf["recv_timeout"]
@@ -435,8 +432,6 @@ async def init_pipe(dest_addr, interface, af, proto, source_port, local_addr=Non
         """
 
         local_addr = await route.bind(source_port)
-        print(local_addr)
-        print(local_addr._bind_tups)
 
     pipe = await pipe_open(
         route=local_addr,

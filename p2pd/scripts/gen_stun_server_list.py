@@ -13,8 +13,11 @@ there has to be a way around this "strong host model" ensures it uses the interf
 """
 
 from p2pd import *
+import pprint 
 
-def get_existing_stun_servers():
+
+
+def get_existing_stun_servers(serv_path="stun_servers.txt"):
     serv_addr_set = set()
     for serv_dict in [STUNT_SERVERS, STUND_SERVERS]:
         for af in VALID_AFS:
@@ -26,7 +29,27 @@ def get_existing_stun_servers():
                         serv_tup = (host, port)
                         serv_addr_set.add(serv_tup)
 
-    return list(serv_addr_set)
+                    break
+
+    # Add in details from the 
+    serv_addr_set = set()
+    fp = open(serv_path, 'r')
+    lines = fp.readlines()
+    for line in lines:
+        line = line.replace('"', "")
+
+        try:
+            ip, port = line.split(":")
+            port = port.strip()
+            port = int(port)
+        except:
+            ip = line
+            port = 3478
+
+        ip = ip.strip()
+        serv_addr_set.add((ip, port))
+
+    return serv_addr_set
 
 # UDP needs secondary and primary
 # TCP doesnt
@@ -52,7 +75,6 @@ async def validate_stun_server(af, host, port, proto, interface, recurse=True):
         return None
     
     # Can't connect to the STUN server.
-    print(proto)
     pipe = await init_pipe(dest_addr, interface, af, proto, 0)
     if pipe is None:
         log("> STUN valid servers ... first s is none.")
@@ -69,7 +91,9 @@ async def validate_stun_server(af, host, port, proto, interface, recurse=True):
     )
 
     # Set source port.
-    lax = 1 if proto == UDP else 0
+    lax = 0 if proto == UDP else 1
+
+
     error = stun_check_reply(dest_addr, nat_info, lax)
     if error:
         log("> STUN valid servers ... first reply error = %s." % (error))
@@ -78,34 +102,36 @@ async def validate_stun_server(af, host, port, proto, interface, recurse=True):
     # Validate change.
     if recurse:
         change_ret = await validate_stun_server(af, ret["cip"], ret["cport"], proto, interface, recurse=False)
-        if proto == TCP:
+        if proto == UDP:
             if change_ret is None:
                 return
         else:
             if change_ret is None:
                 ret["cip"] = ret["cport"] = None
 
-    print(ret)
+    if ret["sip"] is None:
+        return None
 
     await pipe.close()    
     return [af, host, ret["sip"], ret["sport"], ret["cip"], ret["cport"], proto]
 
 async def workspace():
     i = await Interface().start()
-    print(i)
-    print(NOT_WINDOWS)
 
     existing_addrs = get_existing_stun_servers()
-    existing_addrs = [existing_addrs[0]]
-    existing_addrs = [("stunserver.stunprotocol.org", 3478)]
+    existing_addrs = list(existing_addrs)
+    #existing_addrs = [("stunserver.stunprotocol.org", 3478)]
+    
 
     
+
+    """
     # 4d64:57a5 this doesnt work for TCP
-    r = await i.route(IP6).bind(ips="", port=0)
+    r = await i.route(IP6).bind()
+
     a = await Address("stunserver.stunprotocol.org", 3478, r)
     print(a.tup)
 
-    """
     p = await init_pipe(a, i, IP6, TCP, 0, r)
     print(p)
 
@@ -117,27 +143,26 @@ async def workspace():
     resp = await curl.vars().get("/")
     print(resp.out)
     return
-    """
+    
 
     print(STUN_CONF)
     ret = await stun_sub_test("", a, i, IP6, TCP, 0, a, local_addr=r)
     print(ret)
 
-    """
+    
     it seems that TCP bind cant use all the interface addresses
     that UDP bind can?
 
     The interface code should put routes in a deterministic order.
 
 
-    """
-    return
+
 
     s = STUNClient(i, proto=TCP)
     out = await s.get_wan_ip()
     print(out)
     return
-    
+    """
 
     tasks = []
     for proto in [UDP, TCP]:
@@ -147,10 +172,12 @@ async def workspace():
                 task = validate_stun_server(af, host, port, proto, i)
                 tasks.append(task)
 
-    results = await asyncio.gather(*tasks)
-    print(results)
-    return
-
+    results = []
+    for task in tasks:
+        result = await task
+        print(result)
+        results.append(result)
+    
     stund_servers = {IP4: [], IP6: []}
     stunt_servers = {IP4: [], IP6: []}
     serv_lookup = {UDP: stund_servers, TCP: stunt_servers}
@@ -167,11 +194,24 @@ async def workspace():
         }
         serv_list.append(entry)
 
+    # Todo: filter out alias domains.
+
+    stund_servers = pprint.pformat(stund_servers)
+    stunt_servers = pprint.pformat(stunt_servers)
+
     print(stund_servers)
     print()
     print()
     print()
     print(stunt_servers)
+
+    with open("stund.txt", "w") as fp1:
+        fp1.truncate()
+        fp1.write(str(stund_servers))
+
+    with open("stunt.txt", "w") as fp2:
+        fp2.truncate()
+        fp2.write(str(stunt_servers))
 
 
 async_test(workspace)
