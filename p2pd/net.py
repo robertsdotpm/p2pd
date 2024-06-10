@@ -741,6 +741,8 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
 
             # If dest_addr was a domain it will be AF_ANY.
             # We need to specify a type for the socket though.
+
+            print(route.af)
             if route.af not in dest_addr.supported():
                 raise Exception("Route af not supported by dest addr")
 
@@ -776,6 +778,7 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
     # specifically bind to it (which requires root.)
     try:
         if route.interface is not None:
+
             is_default = route.interface.is_default(route.af)
             if not is_default and NOT_WINDOWS:
                 #log("> attemping to bind to non default iface")

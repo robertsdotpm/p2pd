@@ -1,66 +1,34 @@
 from p2pd import *
 
-"""
-
-nic_bind, ext_bind
-
-bind:
-    convert ips:
-        interface (assumes resolved)
-
-"", localhost, ::1
-*, ::, ::/0, 0.0.0.0
-
-flag loopback:
-    [:2]
-
-
-
-- only one rule exc from change type
-
-
-PLATFORM, NIC|EXT, AF, IP_TYPE (link local), normalisation, change, [BIND_IP, ip suffix "nic_no"],
-PLAT, *, IP6, PRIVATE, [BIND_TUP, [3, 0]]
-DEFAULT
-
-
-... modify tup? 
-
-else clause
-
-"""
-
-
-
-
 class TestInterface(unittest.IsolatedAsyncioTestCase):
     async def test_fallback_zero_bind(self):
-        return
-        i = await Interface().start_local()
-        af = IP6
-        local_addr = await Bind(
-            i,
-            af=af,
-            port=0,
-            ips=ANY_ADDR_LOOKUP[af]
-        ).res()
+        # The default interface.
+        i = Interface()
 
+        # Load a netifaces instance for the interfaces.
+        netifaces = await init_p2pd()
 
-        # '::', p, 0, 0 for ipv6
-        # '0.0.0.0' p for ipv4
-        # Listen all prob isnt properly tested then.
-        # Returning tups directly for any might make sense.
-        t = local_addr._bind_tups[1][:-1] + (0,)
-        local_addr._bind_tups[1] = t
-        local_addr._bind_tups[2] = t
-        print(local_addr._bind_tups)
+        # Make sure the interface loads its regular netifaces.
+        # As the call about modifies this state.
+        Interface.get_netifaces = lambda: None
 
+        # The get_routes func will get zero IF ips.
+        netifaces.ifaddresses = lambda x: {IP4: [], IP6: []}
 
-        stun_client = STUNClient(i, af)
-        wan_ip = await stun_client.get_wan_ip(
-            local_addr=local_addr
-        )
-        print(wan_ip)
+        # Use the patches netifaces for route resolution.
+        await i.start(netifaces=netifaces)
+
+        # Now ensure there's a fallback route.
+        af = i.supported()[0]
+        cidr = af_to_cidr(af)
+        route = i.route(af)
+
+        # The fallbacks nic ip should be on the any addr.
+        nic_ipr = IPRange(ANY_ADDR_LOOKUP[af], cidr=cidr)
+        assert(route.nic_ips[0] == nic_ipr)
+
+        # While its ext IP should be public.
+        assert(route.ext_ips[0].is_public)
 
     # Should find at least a valid iface on whatever OS.
     async def test_default_interface(self):

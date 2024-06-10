@@ -259,7 +259,7 @@ async def do_web_req(addr, http_buf, do_close, conf=NET_CONF):
     log(f"{addr.route} {addr}")
 
     # Open TCP connection to HTTP server.
-    route = addr.route.interface.route()
+    route = addr.route.interface.route(addr.af)
     route = await route.bind()
     try:
         p = await pipe_open(

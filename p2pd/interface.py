@@ -325,13 +325,17 @@ class Interface():
         o = self.from_dict(state)
         self.__dict__ = o.__dict__
 
-    async def do_start(self, rp=None, skip_resolve=False):
+    async def do_start(self, rp=None, skip_resolve=False, netifaces=None):
         # Load internal interface details.
         if Interface.get_netifaces() is None:
             self.netifaces = await init_p2pd()
 
         # Process interface name in right format.
         self.load_if_info()
+
+        # This will be used for the routes call.
+        # It's only purpose is to pass in a custom netifaces for tests.
+        netifaces = netifaces or self.netifaces
 
         # Get routes for AF.
         log(f"Starting resolve with stack type = {self.stack}")
@@ -345,7 +349,7 @@ class Interface():
                         self.rp[af] = await Routes(
                             [self],
                             af,
-                            self.netifaces,
+                            netifaces,
                             skip_resolve
                         )
                     except NoGatewayForAF:
@@ -382,11 +386,11 @@ class Interface():
 
         return self
     
-    async def start_local(self, rp=None, skip_resolve=True):
-        return await self.do_start(rp=rp, skip_resolve=skip_resolve)
+    async def start_local(self, rp=None, skip_resolve=True, netifaces=None):
+        return await self.do_start(rp=rp, skip_resolve=skip_resolve, netifaces=netifaces)
 
-    async def start(self, rp=None, skip_resolve=False):
-        return await self.do_start(rp=rp, skip_resolve=skip_resolve)
+    async def start(self, rp=None, skip_resolve=False, netifaces=None):
+        return await self.do_start(rp=rp, skip_resolve=skip_resolve, netifaces=netifaces)
 
     def __await__(self):
         return self.start().__await__()

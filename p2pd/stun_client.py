@@ -124,7 +124,7 @@ def gen_tran_id():
     return rand_b(16)
 
 # Filter all other messages that don't match this.
-def tran_info_patterns(src_tup=None):
+def tran_info_patterns(src_tup):
     tranid = gen_tran_id()
     b_msg_p = b".{4}" + re.escape(tranid)
     b_addr_p = b"%s:%d" % (
@@ -298,12 +298,15 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
             # Send request.
             # Multiplexed for UDP stream.
             # For TCP the dest addr arg is ignored.
+            print(pipe.sock)
+            print(data)
             if not await pipe.stream.send(data, dest_addr.tup):
                 log("STUN req send all unknown error.")
                 continue
 
             # Receive response -- but only
             # expect a certain client addr.
+            print(tran_info)
             buf = await pipe.recv(
                 tran_info[:2],
                 timeout=conf["recv_timeout"]
@@ -399,6 +402,8 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
         except asyncio.TimeoutError as e:
             log("> STUN send recv timed out = get nat port map.. sendto e = %s, timeout = %s" % (str(e), str(conf["recv_timeout"])))
             log_exception()
+        except:
+            log_exception()
             
 
         # Allow other coroutines to do work.
@@ -430,6 +435,8 @@ async def init_pipe(dest_addr, interface, af, proto, source_port, local_addr=Non
         """
 
         local_addr = await route.bind(source_port)
+        print(local_addr)
+        print(local_addr._bind_tups)
 
     pipe = await pipe_open(
         route=local_addr,
@@ -481,6 +488,7 @@ async def stun_sub_test(msg, dest, interface, af, proto, source_port, changed, e
     if tran_info is None:
         tran_info = tran_info_patterns(changed.tup)
 
+
     # New con for every req if it's TCP.
     if proto == TCP:
         if pipe is not None:
@@ -505,6 +513,7 @@ async def stun_sub_test(msg, dest, interface, af, proto, source_port, changed, e
         if pipe is None:
             return None, None
 
+    #print(tran_info)
     pipe.subscribe(tran_info[:2])
     return await async_wrap_errors(
         do_stun_request(

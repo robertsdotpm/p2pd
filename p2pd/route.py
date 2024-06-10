@@ -833,24 +833,32 @@ async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, ne
         [r.set_link_locals(link_locals) for r in routes]
 
     # Fallback to default if no route found.
-    #routes = []
-    #if not len(routes):
     """
-    local_addr = await Bind(
-        stun_client.interface,
-        af=af,
-        port=0,
-        ips=ANY_ADDR_LOOKUP[af]
-    ).res()
-    log(f"Bind obj = {local_addr}")
+    It may make sense to run this concurrently and
+    insert the route in the list if there's no duplicate route ext.
+    """
+    if not len(routes):
+        local_addr = await Bind(
+            stun_client.interface,
+            af=af,
+            port=0,
+            ips=ANY_ADDR_LOOKUP[af]
+        ).res()
 
-    # Get external IP and compare to bind IP.
-    wan_ip = await stun_client.get_wan_ip(
-        local_addr=local_addr,
-        conf=stun_conf
-    )
-    print(wan_ip)
-    """
+        # Get external IP and compare to bind IP.
+        wan_ip = await stun_client.get_wan_ip(
+            local_addr=local_addr,
+            conf=stun_conf
+        )
+
+        if wan_ip is not None:
+            cidr = af_to_cidr(af)
+            nic_ipr = IPRange(ANY_ADDR_LOOKUP[af], cidr=cidr)
+            ext_ipr = IPRange(wan_ip, cidr=cidr)
+            routes = [
+                Route(af, [nic_ipr], [ext_ipr], interface)
+            ]
+
         
     log(f"Link locals at end of load router = {link_locals}")
     return [routes, link_locals]
