@@ -1,3 +1,5 @@
+stun1.p2pd.net
+stun2.p2pd.net
 stun.globaltel.co.uk
 stun.voipgate.com
 stun.voipjet.com
