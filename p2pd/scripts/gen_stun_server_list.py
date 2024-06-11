@@ -13,9 +13,6 @@ there has to be a way around this "strong host model" ensures it uses the interf
 """
 
 from p2pd import *
-import pprint 
-
-
 
 def get_existing_stun_servers(serv_path="stun_servers.txt"):
     serv_addr_set = set()
@@ -32,12 +29,10 @@ def get_existing_stun_servers(serv_path="stun_servers.txt"):
                     break
 
     # Add in details from the 
-    serv_addr_set = set()
     fp = open(serv_path, 'r')
     lines = fp.readlines()
     for line in lines:
         line = line.replace('"', "")
-
         try:
             ip, port = line.split(":")
             port = port.strip()
@@ -92,8 +87,6 @@ async def validate_stun_server(af, host, port, proto, interface, recurse=True):
 
     # Set source port.
     lax = 0 if proto == UDP else 1
-
-
     error = stun_check_reply(dest_addr, nat_info, lax)
     if error:
         log("> STUN valid servers ... first reply error = %s." % (error))
@@ -121,9 +114,10 @@ async def workspace():
     existing_addrs = get_existing_stun_servers()
     existing_addrs = list(existing_addrs)
     #existing_addrs = [("stunserver.stunprotocol.org", 3478)]
-    
 
-    
+    #existing_addrs = [("p2pd.net", 3478)]
+
+
 
     """
     # 4d64:57a5 this doesnt work for TCP
@@ -172,6 +166,10 @@ async def workspace():
                 task = validate_stun_server(af, host, port, proto, i)
                 tasks.append(task)
 
+    """
+    todo: why doesn't concurrency work? Is it a problem with getaddrinfo?
+    Is the library to blame? I think this would yield interesting insights
+    """
     results = []
     for task in tasks:
         result = await task
@@ -195,10 +193,33 @@ async def workspace():
         serv_list.append(entry)
 
     # Todo: filter out alias domains.
+    for serv_index in [stund_servers, stunt_servers]:
+        clean_index = {IP4: [], IP6: []}
+        for af in VALID_AFS:
+            seen_ips = set()
+            for serv_info in serv_index[af]:
+                add_this = True
+                for ip_type in ["primary", "secondary"]:
+                    ip = serv_info[ip_type]["ip"]
+                    if ip in seen_ips:
+                        add_this = False
 
-    stund_servers = pprint.pformat(stund_servers)
-    stunt_servers = pprint.pformat(stunt_servers)
+                    seen_ips.add(ip)
 
+                if add_this:
+                    clean_index[af].append(serv_info)
+
+        serv_index.clear()
+        serv_index.update(clean_index)
+
+    def format_serv_dict(serv_dict):
+        s_index = str(serv_dict)
+        s_index = s_index.replace('<AddressFamily.AF_INET6: 23>', 'IP6')
+        s_index = s_index.replace('<AddressFamily.AF_INET: 2>', 'IP4')
+        return serv_dict
+
+    stund_servers = format_serv_dict(stund_servers)
+    stunt_servers = format_serv_dict(stunt_servers)
     print(stund_servers)
     print()
     print()
