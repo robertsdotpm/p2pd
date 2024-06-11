@@ -28,6 +28,9 @@ TODO: sort the hosts by how fast they respond to a STUN request from domain reso
 TODO: It seems that this is a pattern that reoccurs in several functions.
 The general form might also make sense to add to the Net module.
 TODO: Refactor code. The code in this module offers many good features but the code reflects too much cruft. It could do with a good cleanup.
+
+https://datatracker.ietf.org/doc/html/rfc8489
+    magic cookie?
 """
 
 import time
@@ -77,7 +80,9 @@ STUN_CONF = dict_child({
     "addr_retry": 2,
 
     # Seconds to use for a DNS request before timeout exception.
-    "dns_timeout": 2,
+    "dns_timeout": 5, # 2
+
+    "recv_config": 5,
 
     # N of M required for agreement.
     "consensus": [1, 1],
@@ -91,6 +96,7 @@ STUN_CONF = dict_child({
 }, NET_CONF)
 
 # stun consts
+MagicCookie = '2112A442'
 MappedAddress = '0001'
 SourceAddress = '0004'
 ChangedAddress = '0005'
@@ -121,7 +127,7 @@ def get_stun_servers(af, proto):
 # Kind of like a poor-mans sequence number for UDP packets.
 # Not that useful when TCP is used with the servers.
 def gen_tran_id():
-    return rand_b(16)
+    return rand_b(12) # 
 
 # Filter all other messages that don't match this.
 def tran_info_patterns(src_tup):
@@ -274,7 +280,7 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
 
     # Init values.
     str_len = to_hs( struct.pack("!h", int(len(extra_data) / 2)) )
-    str_data = ''.join([BindRequestMsg, str_len, to_h(tran_info[2]), extra_data])
+    str_data = ''.join([BindRequestMsg, str_len, "2112A442", to_h(tran_info[2]), extra_data])
 
 
     data = binascii.a2b_hex(str_data)
@@ -308,6 +314,7 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
                 tran_info[:2],
                 timeout=conf["recv_timeout"]
             )
+            print(buf)
 
             # Error or timeout.
             if buf is None:
@@ -327,7 +334,7 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
             # Process response
             # Only interested in bind responses tho.
             bind_resp_msg = dictValToMsgType[msgtype] == "BindResponseMsg"
-            tranid_match = tran_info[2] == buf[4:20]
+            tranid_match = tran_info[2] in buf
             if bind_resp_msg and tranid_match:
                 # Extract length of message attributes.
                 len_message = int(to_h(buf[2:4]), 16)

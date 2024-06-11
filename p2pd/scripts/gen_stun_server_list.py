@@ -1,5 +1,8 @@
 from p2pd import *
 
+ENABLE_PROTOS = [TCP]
+ENABLE_AFS = [IP4]
+
 def get_existing_stun_servers(serv_path="stun_servers.txt"):
     serv_addr_set = set()
     for serv_dict in [STUNT_SERVERS, STUND_SERVERS]:
@@ -15,6 +18,7 @@ def get_existing_stun_servers(serv_path="stun_servers.txt"):
                     break
 
     # Add in details from the 
+    serv_addr_set = set()
     fp = open(serv_path, 'r')
     lines = fp.readlines()
     for line in lines:
@@ -54,6 +58,7 @@ async def validate_stun_server(af, host, port, proto, interface, recurse=True):
     
     # Can't connect to the STUN server.
     pipe = await init_pipe(dest_addr, interface, af, proto, 0)
+    print(pipe.sock)
     if pipe is None:
         log("> STUN valid servers ... first s is none.")
         return None
@@ -85,8 +90,15 @@ async def validate_stun_server(af, host, port, proto, interface, recurse=True):
             if change_ret is None:
                 ret["cip"] = ret["cport"] = None
 
-    if ret["sip"] is None:
+    # Sanity checking.
+    if ret["ret"] is None:
         return None
+    
+    # This doesn't technically make it a bad server.
+    if ret["sip"] is None:
+        ret["sip"] = dest_addr.tup[0]
+    if ret["sport"] is None:
+        ret["sport"] = dest_addr.tup[1]
 
     await pipe.close()    
     return [af, host, ret["sip"], ret["sport"], ret["cip"], ret["cport"], proto]
@@ -97,10 +109,13 @@ async def workspace():
     # Get a big list of STUN server tuples.
     existing_addrs = get_existing_stun_servers()
     existing_addrs = list(existing_addrs)
-    #existing_addrs = [("stunserver.stunprotocol.org", 3478)]
+    existing_addrs = [("stun.zentauron.de", 3478)]
+    #existing_addrs = [("34.74.124.204", 3478)] stun.moonlight-stream.org
+        
+
     tasks = []
-    for proto in [UDP, TCP]:
-        for af in VALID_AFS:
+    for proto in ENABLE_PROTOS:
+        for af in ENABLE_AFS:
             for serv_addr in existing_addrs:
                 host, port = serv_addr
                 task = validate_stun_server(af, host, port, proto, i)
