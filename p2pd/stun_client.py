@@ -96,7 +96,7 @@ STUN_CONF = dict_child({
 }, NET_CONF)
 
 # stun consts
-MagicCookie = '2112A442'
+MagicCookie = '21345123'
 MappedAddress = '0001'
 SourceAddress = '0004'
 ChangedAddress = '0005'
@@ -115,6 +115,9 @@ changePortRequest = ''.join(
     [ChangeRequest, '0004', "00000002"]
 )
 
+# 802b
+# 802c
+
 def get_stun_servers(af, proto):
     if proto == UDP:
         servers = STUND_SERVERS
@@ -132,7 +135,7 @@ def gen_tran_id():
 # Filter all other messages that don't match this.
 def tran_info_patterns(src_tup):
     tranid = gen_tran_id()
-    b_msg_p = b".{4}" + re.escape(tranid)
+    b_msg_p = re.escape(tranid)
     b_addr_p = b"%s:%d" % (
         re.escape(
             to_b(src_tup[0])
@@ -280,7 +283,7 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
 
     # Init values.
     str_len = to_hs( struct.pack("!h", int(len(extra_data) / 2)) )
-    str_data = ''.join([BindRequestMsg, str_len, "2112A442", to_h(tran_info[2]), extra_data])
+    str_data = ''.join([BindRequestMsg, str_len, MagicCookie, to_h(tran_info[2]), extra_data])
 
 
     data = binascii.a2b_hex(str_data)
@@ -314,11 +317,11 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
                 tran_info[:2],
                 timeout=conf["recv_timeout"]
             )
-            print(buf)
 
             # Error or timeout.
             if buf is None:
                 raise asyncio.TimeoutError("STUN recv n timeout.")
+            print(buf)
 
             # Check buffer is min length to avoid overflows.
             if len(buf) < 20:
@@ -371,6 +374,9 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
                     # Log attribute type.
                     log("> STUN found attribute type = %s" % (to_s(attr_type)))
 
+                    print(attr_type)
+                    print(ChangedAddress)
+
                     # Your remote IP and reply port. The important part.
                     if attr_type == MappedAddress:
                         ip, port = extract_addr(buf, dest_addr.chosen, base)
@@ -391,6 +397,7 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
                         ret['cip'] = ip
                         ret['cport'] = port
                         log(f"set ChangedAddress {ip}:{port}")
+                        print(f"cip = {ip} {port}")
 
                     base = base + 4 + attr_len
                     len_remain -= (4 + attr_len)
@@ -709,113 +716,6 @@ class STUNClient():
 #######################################################################
 
 if __name__ == "__main__": # pragma: no cover
-    """
-
-    Some custom STUN servers don't include the rip attribute
-    for change requests -- in this case we issue get_wan_ips
-    to both test addresses and use the result for the tests.
-    for ip_check in [[1, stun_addr], [3, nat_tests[1][2]]]:
-        n, addr = ip_check
-        if test[n]['rip'] is None:
-            ret, test_pipe = await stun_sub_test(
-                "custom get ip for non conforming server",
-                addr,
-                interface,
-                af,
-                proto,
-                0,
-                addr,
-                ""
-            )
-
-            print(ret)
-
-            await test_pipe.close()
-            test[n]['rip'] = ret['rip']
-
-    # Filters out invalid servers based on response.
-    async def get_valid_stun_servers(interface, af, proto, group="map", sock_timeout=2, check_change=0):
-        return
-        valid_servers = []
-        extended_servers = []
-        stun_servers = get_stun_servers(af, proto, group)
-        for stun_server in stun_servers:
-            dest_addr = await stun_check_addr_info(
-                stun_server[0],
-                stun_server[1],
-                af,
-                proto,
-                stun_check_addr_info
-            )
-            if dest_addr is None:
-                log("> STUN valid servers ... dest addr is none.")
-                continue
-
-            s, _ = await init_socket(dest_addr, interface, af, proto, 0)
-            if s is None:
-                log("> STUN valid servers ... first s is none.")
-                continue
-
-            # Get initial port mapping.
-            # A response is expected.
-            tran_info = tran_info_closure(dest_addr)
-            s.subscribe(tran_info[1])
-            nat_info = ret = await do_stun_request(
-                s,
-                dest_addr,
-                tran_info
-            )
-
-            # Set source port.
-            lax = not check_change
-            error = stun_check_reply(dest_addr, ret, lax)
-            if error:
-                log("> STUN valid servers ... first reply error = %s." % (error))
-                continue
-
-            if check_change:
-                changed_addr = await stun_check_addr_info(
-                    ret["ChangcipedIP"],
-                    dest_addr.port,
-                    af,
-                    proto,
-                    interface
-                )
-                if changed_addr is None:
-                    log("> STUN valid servers ... changed addr is none.")
-                    continue
-
-                s, _ = await init_socket(changed_addr, interface, af, proto, 0)
-                if s is None:
-                    log("> STUN valid servers ... second s is none.")
-                    continue
-
-                tran_info = tran_info_closure(changed_addr)
-                s.subscribe(tran_info[1])
-                ret = await do_stun_request(
-                    s,
-                    changed_addr,
-                    tran_info
-                )
-
-                # Check reply.
-                error = stun_check_reply(changed_addr, ret, lax)
-                if error:
-                    log("> STUN valid servers ... error 2 = %s." % (error))
-                    continue
-
-            extended_servers.append(
-                [stun_server[0], nat_info["cport"]]
-            )
-            extended_servers.append(
-                [ret["cip"], ret["cport"]]
-            )
-
-            valid_servers.append([stun_server[0], stun_server[1]])
-
-        return valid_servers, extended_servers
-    """
-
     async def test_stun_client():
 
         from .interface import Interface, load_interfaces, init_p2pd

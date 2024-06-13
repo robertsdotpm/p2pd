@@ -9,7 +9,6 @@ TYPE_UDP_SERVER = 2
 TYPE_TCP_CON = 3
 TYPE_TCP_SERVER = 4
 TYPE_TCP_CLIENT = 5
-SUB_ALL = [b"", b""]
 
 """
 The code in this class supports a pull / fetch style use-case.

@@ -19,6 +19,9 @@ Note to any engineers:
 
 If you wanted to run P2PD privately you could simply
 point all of these servers to your private infrastructure.
+
+https://github.com/pradt2/always-online-stun/tree/master
+https://datatracker.ietf.org/doc/html/rfc8489
 """
 
 PNP_SERVERS = {

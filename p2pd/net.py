@@ -142,6 +142,7 @@ IP_PUBLIC = 4
 IP_APPEND = 5
 IP_BIND_TUP = 6
 NOT_WINDOWS = platform.system() != "Windows"
+SUB_ALL = [b"", b""]
 
 # Fine tune various network settings.
 NET_CONF = {
@@ -187,6 +188,9 @@ NET_CONF = {
     # Whether to set SO_LINGER. None = off.
     # Non-none = linger value.
     "linger": None,
+
+    # Retry N times on reply timeout.
+    "send_retry": 2,
 
     # Ref to an event loop.
     "loop": None
@@ -863,4 +867,18 @@ async def proto_send(pipe, buf):
             await pipe.send(buf)
             await asyncio.sleep(0.1)
         except:
+            continue
+
+async def send_recv_loop(pipe, buf, sub=SUB_ALL, conf=NET_CONF):
+    retry = conf["send_retry"]
+    n = 1 if pipe.stream.proto == TCP else retry
+    for _ in range(0, n):
+        try:
+            await pipe.send(buf, pipe.stream.dest_tup)
+            return await pipe.recv(
+                sub=sub,
+                timeout=conf["recv_timeout"]
+            )
+        except:
+            what_exception()
             continue

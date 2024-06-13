@@ -634,7 +634,9 @@ def get_running_loop():
 # Will be used in sample code to avoid boilerplate.
 def async_test(f, args=[], loop=None):
     try:
-        loop = get_running_loop()
+        loop = asyncio.get_event_loop()
+        if loop is None:
+            raise Exception("Creating event loop.")
     except:
         #uvloop.install()
 
@@ -711,6 +713,15 @@ def recover_verify_key(msg_b, sig_b, vk_b=None, curve=NIST192p, hashfunc=hashlib
             continue
 
     raise Exception("Could not recover verify key.")
+
+def buf_in_class(cls, buf):
+    for member in dir(cls):
+        val = getattr(cls, member)
+        if type(val) != type(buf):
+            continue
+        if val == buf:
+            return True
+    return False
 
 if __name__ == "__main__": # pragma: no cover
     x = [1, 1]

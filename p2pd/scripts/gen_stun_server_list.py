@@ -105,6 +105,8 @@ async def validate_stun_server(af, host, port, proto, interface, recurse=True):
 
 async def workspace():
     i = await Interface().start()
+    print(i)
+    return
 
     # Get a big list of STUN server tuples.
     existing_addrs = get_existing_stun_servers()
