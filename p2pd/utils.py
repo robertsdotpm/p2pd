@@ -720,7 +720,8 @@ def buf_in_class(cls, buf):
         if type(val) != type(buf):
             continue
         if val == buf:
-            return True
+            return member
+        
     return False
 
 if __name__ == "__main__": # pragma: no cover

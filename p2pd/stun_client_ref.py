@@ -6,7 +6,19 @@ With magic cookie = RFC 5389 >= mode
 
 the gen stun code needs to be updated to reflect this 
 
+    msgtype = buf[0:2]
+    if msgtype != b"\1\1":
+    
+prob needs different logic if 8489 is selected
+like the bit mask stuff
 
+what about attributes?
+
+-- look for xor mapped address todo:
+
+... and insert a MAPPED-ADDRESS attribute instead of an XOR-
+   MAPPED-ADDRESS attribute.
+    - make sure to support this xor mapped attribute
 """
 
 import re
@@ -18,84 +30,19 @@ from .net import *
 from .address import Address
 from .interface import Interface
 from .base_stream import pipe_open
+from .stun_defs import *
 from .stun_utils import *
 
-def stun_proto(buf, af):
-    # Initialize a list of dict keys with None.
-    fields = ["resp", "rip", "rport", "sip", "sport", "cip", "cport"]
-    ret = {} and [ret.setdefault(field, None) for field in fields]
 
-    # Check buffer is min length to avoid overflows.
-    if len(buf) < 20:
-        log("Invalid buf len in main STUN res.")
-        return
-
-    # Only support certain message type.
-    msgtype = buf[0:2]
-    if msgtype != b"\1\1":
-        log("> STUN unknown msg type %s" % (to_hs(msgtype)))
-        return
-
-    # Extract length of message attributes.
-    len_message = int(to_h(buf[2:4]), 16)
-    len_remain = len_message
-
-    # Avoid overflowing buffer.
-    if len(buf) - 20 < len_message:
-        log("> Invalid message length recv for stun reply.")
-        return
-
-    # Start processing message attributes.
-    log("> stun parsing bind = %d" % len_remain)
-    base = 20
-    ret['resp'] = True
-    while len_remain > 0:
-        # Avoid overflow for attribute parsing.
-        if base + 4 >= len(buf):
-            log("> new attr field overflow")
-            break
-
-        # Extract attributes from message buffer.
-        attr_type = buf[base:(base + 2)]
-        attr_len = int(to_h(buf[(base + 2):(base + 4)]), 16)
-
-        # Avoid attribute overflows.
-        if attr_len <= 0:
-            log("> STUN attr len")
-            break
-        if attr_len + base + 4 > len(buf):
-            log("> attr len overflow")
-            break
-
-        # Log attribute type.
-        log("> STUN found attribute type = %s" % (to_hs(attr_type)))
-
-        # Your remote IP and reply port. The important part.
-        if attr_type == b'\0\1':
-            ip, port = extract_addr(buf, af, base)
-            ret['rip'] = ip
-            ret['rport'] = port
-            log(f"set mapped address {ip}:{port}")
-
-        # Address that the STUN server would send change reqs from.
-        if attr_type == b'\0\5':
-            ip, port = extract_addr(buf, af, base)
-            ret['cip'] = ip
-            ret['cport'] = port
-            log(f"set ChangedAddress {ip}:{port}")
-
-        base = base + 4 + attr_len
-        len_remain -= (4 + attr_len)
-
-    return ret
 
 
 class STUNClientRef():
-    def __init__(self, dest, proto=UDP, conf=NET_CONF):
+    def __init__(self, dest, proto=UDP, mode=RFC3489, conf=NET_CONF):
         self.dest = dest
         self.interface = self.dest.route.interface
         self.af = self.dest.af
         self.proto = proto
+        self.mode = mode
         self.conf = conf
 
     async def get_route(self, route):
@@ -143,6 +90,15 @@ class STUNClientRef():
 
 if __name__ == "__main__":
     async def test_stun_client():
+        buf = b''
+        buf = b'\x01\x01\x000!4Q#\x95\xb2/\xb8@\xa5\xb9\x99[\xe9\xda\xbb\x00\x01\x00\x08\x00\x01\xe1&\x9f\xc4\xc1\xb7\x00\x04\x00\x08\x00\x01\r\x96Xc\xd3\xd8\x00\x05\x00\x08\x00\x01\r\x97Xc\xd3\xd3\x80 \x00\x08\x00\x01\xc0\x12\xbe\xf0\x90\x94'
+        ret = stun_proto2(buf, IP4)
+        print(ret)
+
+        return
+
+
+
         i = await Interface().start_local()
         a = await Address("stunserver.stunprotocol.org", 3478, i.route(IP4))
         s = STUNClientRef(a)
