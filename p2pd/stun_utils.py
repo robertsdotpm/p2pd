@@ -46,7 +46,7 @@ def stun_proto(buf, af):
         print(bytes(attr_data))
         print()
 
-        # Skip already set.
+        # Set our remote IP and port.
         if not hasattr(msg, "rtup"):
             xor_addr_attrs = [STUNAttrs.XorMappedAddressX, STUNAttrs.XorMappedAddress]
             if attr_code in xor_addr_attrs:
@@ -67,6 +67,7 @@ def stun_proto(buf, af):
                 
                 print(msg.rtup)
 
+        # Set the additional IP and port for this server.
         if not hasattr(msg, "ctup"):
             if attr_code == STUNAttrs.ChangedAddress:
                 stun_addr_field = STUNAddrTup(
