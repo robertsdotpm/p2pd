@@ -724,6 +724,18 @@ def buf_in_class(cls, buf):
         
     return False
 
+def xor_bufs(a, b):
+    a = bytearray(a)
+    b = bytearray(b)
+
+    # Create a list of ints representing XOR cookie.
+    r = bytearray(); b_len = len(b); a_len = len(a);
+    for i in range(0, max(a_len, b_len) ):
+        r.append(a[i % a_len] ^ b[i % b_len])
+
+    # Return cookie as bytearray to avoid making a copy.
+    return bytes(r)[:min(a_len, b_len)]
+
 if __name__ == "__main__": # pragma: no cover
     x = [1, 1]
     y = [2, 2]

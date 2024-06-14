@@ -88,8 +88,12 @@ class STUNClientRef():
     async def get_mapping(self, route=None):
         route = await self.get_route(route)
 
-if __name__ == "__main__":
+
+
     async def test_stun_client():
+        """
+        Xport ^ txid = port
+        """
         buf = b''
         buf = b'\x01\x01\x000!4Q#\x95\xb2/\xb8@\xa5\xb9\x99[\xe9\xda\xbb\x00\x01\x00\x08\x00\x01\xe1&\x9f\xc4\xc1\xb7\x00\x04\x00\x08\x00\x01\r\x96Xc\xd3\xd8\x00\x05\x00\x08\x00\x01\r\x97Xc\xd3\xd3\x80 \x00\x08\x00\x01\xc0\x12\xbe\xf0\x90\x94'
         ret = stun_proto2(buf, IP4)

@@ -1,8 +1,18 @@
+"""
+
+
+
+
+
+"""
+
 from struct import pack
 import hmac
 import socket
 import hashlib
+import socket
 from .utils import *
+from .net import *
 
 STUN_CHANGE_NONE = 1
 STUN_CHANGE_PORT = 2
@@ -99,78 +109,108 @@ class STUNMsgCodes:
 
     get = classmethod(lambda cls, val, type_=int: _get_const_name(cls, val, type_))
 
-class STUNIPAddress:
-    def __init__(self,  ip=None, port=None, family=b"\x00\x01", do_xor=True, xor_extra=b""):
-        self.family = family # 1 for ipv4, 2 for ipv6
-        self.af = None
-        self.ip = ip # type: str
-        self.ip_b = None
+class STUNAddrTup:
+    def __init__(self, ip=None, port=None, af=IP4, txid=b"", magic_cookie=STUN_MAGIC_XOR):
+        self.ip = ip
         self.port = port 
-        self.do_xor = do_xor
-        self.xor_extra = xor_extra
-        if ip is not None:
-            if family == b"\x00\x01":
-                self.ip_b = socket.inet_pton(
-                    socket.AF_INET,
-                    self.ip
-                )
-            else:
-                self.ip_b = socket.inet_pton(
-                    socket.AF_INET6,
-                    self.ip
-                )
+        self.af = af
+        self.txid = txid
+        self.magic_cookie = magic_cookie
+        self.tup = ()
 
-    def _xor_cookie(self, a):
-        # Make virtual bytearray using pointers.
-        b = bytearray().join([
-            memoryview(STUN_MAGIC_XOR),
-            memoryview(self.xor_extra)
-        ])
+    def get_family_buf(self):
+        if self.af == IP4:
+            return b"\0\1"
+        else:
+            return b"\0\2"
+        
+    @staticmethod
+    def get_addr_bufs(af, attr_data):
+        port_buf = attr_data[2:4]
+        if af == IP4:
+            ip_buf = attr_data[4:8]
+        else:
+            ip_buf = attr_data[4:20]
 
-        # Create a list of ints representing XOR cookie.
-        r = bytearray(); b_len = len(b); a_len = len(a);
-        for i in range(0, max(a_len, b_len) ):
-            r.append(a[i % a_len] ^ b[i % b_len])
+        return (ip_buf, port_buf)
+    
+    @staticmethod
+    def addr_bufs_to_tup(af, ip_buf, port_buf):
+        port = b_to_i(port_buf, 'big')
+        ip = socket.inet_ntop(af, ip_buf)
+        return (ip, port)
 
-        # Return cookie as bytearray to avoid making a copy.
-        return r
+    def decode(self, code, data):
+        # Get field bufs.
+        ip_buf, port_buf = STUNAddrTup.get_addr_bufs(self.af, data)
 
-    def encode(self) -> bytes:
+        # XORed per individual fields.
+        if code == STUNAttrs.XorMappedAddressX:
+            # Get field bufs.
+            ip_buf, port_buf = STUNAddrTup.get_addr_bufs(self.af, data)
+
+            # UnXOR.
+            mask = self.magic_cookie + self.txid
+            port_buf = xor_bufs(port_buf, mask)
+            ip_buf = xor_bufs(ip_buf, mask)
+
+        # XORed starting from the port to the IP.
+        if code == STUNAttrs.XorMappedAddress:
+            mask = b'\x00\x00\x21\x12' + self.magic_cookie + self.txid
+            data = xor_bufs(data, mask)
+
+            # Get field bufs.
+            ip_buf, port_buf = STUNAddrTup.get_addr_bufs(self.af, data)
+
+        # Convert to correct format.
+        self.tup = STUNAddrTup.addr_bufs_to_tup(self.af, ip_buf, port_buf)
+        return ip_buf, port_buf, data
+    
+    def encode(self, code):
+        # Convert IP address to binary.
+        family = self.get_family_buf()
+        if family == b"\0\1":
+            ip_b = socket.inet_pton(
+                socket.AF_INET,
+                self.ip
+            )
+        else:
+            ip_b = socket.inet_pton(
+                socket.AF_INET6,
+                self.ip
+            )
+
         # Avoid copying fields as much as possible.
         buf = bytearray().join([
-            self.family,
+            family,
             memoryview(pack('!H', self.port)),
-            self.ip_b
+            ip_b
         ])
 
-        # XOR IPAddress required for IPv6.
-        if self.do_xor:
-            buf = self._xor_cookie(buf)
+        dec_ip, dec_port, dec_buf = self.decode(code, buf)
+
+        # Decode moved to XOR across whole buffer so use that.
+        if dec_buf != buf:
+            return dec_buf
+        else:
+            # Decode moved to encode IP and port segments manually.
+            # Amend fields.
+            if dec_port != dec_port:
+                return bytearray().join([
+                    family,
+                    dec_port,
+                    dec_ip
+                ])
 
         return buf
-
-    def decode(self, data: bytes):
-        if self.do_xor:
-            data = self._xor_cookie(data)
-        data = memoryview(data)
-        self.family = data[0:2]
-        self.port = b_to_i(data[2:4], 'big')
-        if self.family == b"\x00\x01":
-            self.ip_b = data[4:8]
-            self.af = socket.AF_INET
-        else:
-            self.ip_b = data[4:20]
-            self.af = socket.AF_INET6
-
-        self.ip = socket.inet_ntop(self.af, self.ip_b)
-
-    def pack(self, ip: str, port: int, family: int) -> bytes:
-        inst = STUNIPAddress(ip=ip, port=port, do_xor=self.do_xor, family=family, xor_extra=self.xor_extra)
+    
+    def pack(self, ip, port, af):
+        inst = STUNAddrTup(ip=ip, port=port, af=af, xor_extra=self.xor_extra, magic_cookie=self.magic_cookie)
         return inst.encode()
 
-    def unpack(self, data: bytes, family: int):
-        inst = STUNIPAddress(do_xor=self.do_xor, family=family, xor_extra=self.xor_extra)
-        inst.decode(data)
+    def unpack(self, code, data):
+        inst = STUNAddrTup(af=self.af, txid=self.txid, magic_cookie=self.magic_cookie)
+        inst.decode(code, data)
         return inst
 
     def __str__(self):
@@ -203,7 +243,7 @@ class STUNMsg:
             data = pack(fmt, *data)
         else:
             data = data[0]
-            if isinstance(data, STUNIPAddress):
+            if isinstance(data, STUNAddrTup):
                 data = data.encode()
 
         # Rule of 4:
