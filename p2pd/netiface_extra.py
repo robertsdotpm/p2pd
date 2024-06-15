@@ -98,7 +98,7 @@ async def get_mac_address(name, netifaces):
     return netifaces.ifaddresses(name)[netifaces.AF_LINK][0]["addr"]
     
 # Note: Discards subnet for single addresses.
-async def netiface_addr_to_ipr(af, info, interface, loop, skip_bind_test):
+async def netiface_addr_to_ipr(af, nic_id, info):
     # Some interfaces might not have valid information set.
     if "addr" not in info:
         return None
@@ -120,28 +120,26 @@ async def netiface_addr_to_ipr(af, info, interface, loop, skip_bind_test):
     If a range is detected test that the range is valid by
     trying to bind on the first and last address.
     """
-    if not skip_bind_test and not nic_ipr.i_host:
+    if not nic_ipr.i_host:
         invalid_subnet = False
         for host_index in [0, -1]:
             ip_obj = nic_ipr[host_index]
             bind_ip = str(ip_obj)
-            if af == IP6:
-                bind_ip = ip6_patch_bind_ip(ip_obj, bind_ip, interface)
+            bind_tup = await binder(
+                af,
+                bind_ip,
+                nic_id=nic_id
+            )
 
             s = socket.socket(af, TCP)
             try:
-                addr_infos = await loop.getaddrinfo(
-                    bind_ip,
-                    0
-                )
-                s.bind(addr_infos[0][4])
+                s.bind(bind_tup)
             except Exception:
                 log_exception()
                 log(f"af = {af}, bind_ip = {bind_ip}")
-                log(f"{addr_infos[0][4]}")
+                log(f"{bind_tup}")
                 log(f"{s}")
                 log(">get routes invalid subnet for {}".format(str(nic_ipr)))
-                invalid_subnet = True
             finally:
                 s.close()
                 break

@@ -7,7 +7,8 @@ import pprint
 from functools import lru_cache
 from .errors import *
 from .settings import *
-from .route import *
+from .route_defs import *
+from .route_utils import *
 from .nat import *
 from .route_table import *
 if sys.platform == "win32":

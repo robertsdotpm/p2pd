@@ -11,7 +11,8 @@ if __name__ != '__main__':
     from .address import Address
     from .ip_range import IPRange
     from .upnp import port_forward
-    from .route import Route, RoutePool, Routes, get_routes
+    from .route_defs import Route, RoutePool, Routes
+    from .route_utils import get_routes
     from .base_stream import pipe_open, SUB_ALL
     from .interface import Interface, Interfaces, init_p2pd
     from .clock_skew import SysClock

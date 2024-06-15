@@ -462,7 +462,7 @@ def ip_norm(ip):
 
     return ip
 
-def ip6_patch_bind_ip(ip_obj, bind_ip, interface):
+def ip6_patch_bind_ip(ip_obj, bind_ip, nic_id):
     # Add interface descriptor if it's link local.
     if ip_obj.is_private:
         if to_s(bind_ip[0:2]).lower() == "fe":
@@ -470,13 +470,13 @@ def ip6_patch_bind_ip(ip_obj, bind_ip, interface):
             if platform.system() == "Windows":
                 bind_ip = "%s%%%d" % (
                     bind_ip,
-                    interface.nic_no
+                    nic_id
                 )
             else:
                 # Other platforms just use the name
                 bind_ip = "%s%%%s" % (
                     bind_ip,
-                    interface.name
+                    nic_id
                 )
 
     return bind_ip
