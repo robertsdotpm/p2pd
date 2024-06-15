@@ -3,8 +3,6 @@ Without magic cookie = 3489 mode
     - cips / ports / change requests
 With magic cookie = RFC 5389 >= mode
     - no change requests
-
-the gen stun code needs to be updated to reflect this 
 """
 
 from .errors import *
@@ -16,6 +14,8 @@ from .base_stream import pipe_open, BaseProto
 from .stun_defs import *
 from .stun_utils import *
 from .route import Route
+from .pattern_factory import *
+from .settings import *
 
 
 class STUNClientRef():
@@ -186,7 +186,33 @@ async def test_stun_client():
 
     await r.pipe.close()
 
-async_test(test_stun_client)
+
+async def test_con_stun_client():
+    af = IP4; proto = UDP;
+    i = await Interface().start_local()
+    stun_clients = []
+    tasks = []
+    for n in range(0, 5):
+        dest = await Address(
+            STUND_SERVERS[af][n]["primary"]["ip"],
+            STUND_SERVERS[af][n]["primary"]["port"],
+            i.route(af)
+        )
+        stun_client = STUNClientRef(dest, proto=proto)
+        stun_clients.append(stun_client)
+        task = stun_client.get_wan_ip()
+        tasks.append(task)
+
+    min_agree = 2
+    out = await concurrent_first_agree_or_best(
+        min_agree,
+        tasks,
+        timeout=2
+    )
+
+    print(out)
+
+async_test(test_con_stun_client)
 
 
 
