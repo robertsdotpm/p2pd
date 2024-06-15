@@ -70,7 +70,7 @@ from .upnp import *
 from .address import *
 from .route_defs import *
 from .pattern_factory import *
-from .stun_client import *
+from .settings import *
 
 """
 As there's only one STUN server in the preview release the
@@ -178,17 +178,17 @@ async def ipr_is_public(nic_ipr, stun_client, route_infos, stun_conf, is_default
     # Save details for this route.
     route_infos[ext_ipr].append(nic_ipr)
 
-async def get_nic_iprs(af, nic_id, netifaces):
+async def get_nic_iprs(af, interface, netifaces):
     tasks = []
     netifaces_af = af_to_netiface(af)
-    if_addresses = netifaces.ifaddresses(nic_id)
+    if_addresses = netifaces.ifaddresses(interface.name)
     if netifaces_af in if_addresses:
         bound_addresses = if_addresses[netifaces_af]
         for info in bound_addresses:
             # Only because it calls getaddrinfo is it async.
             task = netiface_addr_to_ipr(
                 af,
-                nic_id,
+                interface.id,
                 info
             )
 
@@ -197,21 +197,22 @@ async def get_nic_iprs(af, nic_id, netifaces):
     results = await asyncio.gather(*tasks)
     return [r for r in results if r is not None]
 
-async def get_default_route(min_agree, stun_clients, timeout):
+async def get_wan_ip_cfab(src_ip, min_agree, stun_clients, timeout):
     tasks = []
     interface = stun_clients[0].interface
+    af = stun_clients[0].af
     for stun_client in stun_clients:
-        af = stun_client.af
-        route = stun_client.interface.route()
-        await route.bind(
-            ips=ANY_ADDR_LOOKUP[af],
-            port=0
-        )
+        local_addr = await Bind(
+            stun_client.interface,
+            af=stun_client.af,
+            port=0,
+            ips=src_ip
+        ).res()
 
         # Get external IP and compare to bind IP.
         task = stun_client.get_wan_ip(
             # Will be upgraded to a pipe.
-            pipe=route
+            pipe=local_addr
         )
         tasks.append(task)
 
@@ -221,14 +222,48 @@ async def get_default_route(min_agree, stun_clients, timeout):
         timeout
     )
 
-    if wan_ip is not None:
-        # Convert default details to a Route object.
-        cidr = af_to_cidr(af)
-        nic_ipr = IPRange(ANY_ADDR_LOOKUP[af], cidr=cidr)
-        ext_ipr = IPRange(wan_ip, cidr=cidr)
-        return ["default", Route(af, [nic_ipr], [ext_ipr], interface)]
+    if wan_ip is None:
+        return None
+    
+    # Convert default details to a Route object.
+    cidr = af_to_cidr(af)
+    ext_ipr = IPRange(wan_ip, cidr=cidr)
+    nic_ipr = IPRange(src_ip, cidr=cidr)
+    if nic_ipr.is_private or src_ip != wan_ip:
+        nic_ipr.is_private = True
+        nic_ipr.is_public = False
+    else:
+        nic_ipr.is_private = False
+        nic_ipr.is_public = True
 
-async def get_routes_with_res(af, max_agree, interface, netifaces):
+
+    return (src_ip, Route(af, [nic_ipr], [ext_ipr], interface))
+
+def sort_routes(default_route, routes):
+    # Deterministically order routes list.
+    cmp = lambda r1, r2: int(r1.ext_ips[0]) - int(r2.ext_ips[0])
+    routes = sorted(routes, key=cmp_to_key(cmp))
+
+    # Remove default route from routes list.
+    cleaned_routes = []
+    for route in routes:
+        do_remove = False
+        for ext_ipr in route.ext_ips:
+            if len(ext_ipr) == 1:
+                if default_route.ext_ips[0] == ext_ipr:
+                    default_route = route
+                    do_remove = True
+                    break
+
+        if not do_remove:
+            cleaned_routes.append(route)
+
+    # Ensure that the default route is first.
+    return [default_route] + cleaned_routes
+
+async def get_routes_with_res(af, min_agree, max_agree, interface, netifaces, timeout):
+    from .stun_client import get_stun_clients, STUNClient
+
     # Copy random STUN servers to use.
     serv_list = STUND_SERVERS[af][:]
     random.shuffle(serv_list)
@@ -236,7 +271,7 @@ async def get_routes_with_res(af, max_agree, interface, netifaces):
 
     # Used to resolve nic addresses.
     stun_clients = await get_stun_clients(af, serv_list, interface)
-    nic_iprs = await get_nic_iprs(af, interface.id, netifaces)
+    nic_iprs = await get_nic_iprs(af, interface, netifaces)
 
     # Get a list of tasks to resolve NIC addresses.
     tasks = []
@@ -252,7 +287,35 @@ async def get_routes_with_res(af, max_agree, interface, netifaces):
             priv_iprs.append(nic_ipr)
             continue
         else:
-            pass
+            src_ip = ip_norm(str(nic_ipr[0]))
+            task = get_wan_ip_cfab(src_ip, min_agree, stun_clients, timeout)
+            tasks.append(task)
+
+    # Append task for get default route.
+    any_ip = ANY_ADDR_LOOKUP[af]
+    task = get_wan_ip_cfab(any_ip, min_agree, stun_clients, timeout)
+    tasks.append(task)
+
+    # Resolve interface addresses CFAB.
+    results = await asyncio.gather(*tasks)
+
+
+    # Find default route.
+    default_route = [y for x, y in results if x == any_ip][0]
+    routes = [y for x, y in results if x != any_ip]
+    #print(routes)
+    if len(priv_iprs):
+        priv_route = Route(af, priv_iprs, default_route.ext_ips, interface)
+        routes.append(priv_route)
+
+    # Deterministic sort routes -- add default first.
+    routes = sort_routes(default_route, routes)
+
+    # Set link locals in route list.
+    [r.set_link_locals(link_locals) for r in routes]
+
+    # Return results back to caller.
+    return [routes, link_locals]
 
 async def get_routes(interface, af, skip_resolve=False, skip_bind_test=False, netifaces=None, stun_client=None):
     from .stun_client import STUNClient, STUN_CONF

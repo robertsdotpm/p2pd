@@ -879,6 +879,8 @@ async def send_recv_loop(pipe, buf, sub=SUB_ALL):
                 sub=sub,
                 timeout=pipe.conf["recv_timeout"]
             )
-        except:
-            what_exception()
+        except asyncio.TimeoutError:
             continue
+        except Exception:
+            log_exception()
+            return

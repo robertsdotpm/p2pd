@@ -347,12 +347,16 @@ class Interface():
                 log(f"Attempting to resolve {af}")
                 async def helper(af):
                     try:
-                        self.rp[af] = await Routes(
-                            [self],
+                        routes, link_locals = await get_routes_with_res(
                             af,
+                            2,
+                            5,
+                            self,
                             netifaces,
-                            skip_resolve
+                            2
                         )
+
+                        self.rp[af] = RoutePool(routes, link_locals)
                     except NoGatewayForAF:
                         # Empty route pool.
                         self.rp[af] = RoutePool()

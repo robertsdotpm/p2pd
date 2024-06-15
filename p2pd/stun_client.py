@@ -9,13 +9,12 @@ from .errors import *
 from .utils import *
 from .net import *
 from .address import Address
-from .interface import Interface
 from .base_stream import pipe_open, BaseProto
 from .stun_defs import *
 from .stun_utils import *
-from .route_utils import Route
 from .pattern_factory import *
 from .settings import *
+from .route_defs import Route
 
 
 class STUNClient():
@@ -41,6 +40,8 @@ class STUNClient():
         # Route passed in already bound.
         # Upgrade it to a pipe.
         if isinstance(unknown, Route):
+            route = unknown
+        if isinstance(unknown, Bind):
             route = unknown
 
         # Otherwise use details to make a new pipe.
@@ -145,13 +146,19 @@ class STUNClient():
             return (ltup[1], reply.rtup[1], reply.pipe)
 
 async def get_stun_clients(af, serv_list, interface, proto=UDP):
+    class MockRoute:
+        def __init__(self):
+            self.af = af
+            self.interface = interface
+
+    mock_route = MockRoute()
     stun_clients = []
     for serv_info in serv_list:
         async def get_stun_client(serv_info):
             dest = await Address(
                 serv_info["primary"]["ip"],
                 serv_info["primary"]["port"],
-                interface.route(af)
+                mock_route
             )
             return STUNClient(dest, proto=proto)
         
@@ -173,7 +180,7 @@ async def test_stun_client():
     return
 
     """
-
+    from .interface import Interface
 
 
     i = await Interface().start_local()
@@ -202,6 +209,7 @@ async def test_stun_client():
 
 
 async def test_con_stun_client():
+    from .interface import Interface
     af = IP4; proto = UDP;
     i = await Interface().start_local()
     stun_clients = []
@@ -226,7 +234,8 @@ async def test_con_stun_client():
 
     print(out)
 
-async_test(test_con_stun_client)
+if __name__ == "__main__":
+    async_test(test_con_stun_client)
 
 
 

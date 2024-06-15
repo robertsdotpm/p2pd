@@ -1,6 +1,13 @@
 from p2pd import *
 
 class TestInterface(unittest.IsolatedAsyncioTestCase):
+    async def test_regular(self):
+        i = await Interface()
+        print(i)
+        loop = asyncio.get_event_loop()
+        print(loop)
+
+
     async def test_fallback_zero_bind(self):
         # The default interface.
         i = Interface()

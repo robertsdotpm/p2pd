@@ -11,12 +11,12 @@ if __name__ != '__main__':
     from .address import Address
     from .ip_range import IPRange
     from .upnp import port_forward
-    from .route_defs import Route, RoutePool, Routes
-    from .route_utils import get_routes
+    from .route_defs import Route, RoutePool
+    from .route_utils import get_routes, Routes, get_routes_with_res
     from .base_stream import pipe_open, SUB_ALL
     from .interface import Interface, Interfaces, init_p2pd
     from .clock_skew import SysClock
-    from .stun_client import STUNClient
+    from .stun_client import STUNClient, get_stun_clients
     from .turn_client import TURNClient
     from .tcp_punch import TCPPunch
     from .daemon import Daemon

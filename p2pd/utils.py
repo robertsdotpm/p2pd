@@ -571,8 +571,8 @@ async def gather_or_cancel(tasks, timeout):
 class SelectorEventPolicy(asyncio.DefaultEventLoopPolicy):
     @staticmethod
     def exception_handler(self, context):
-        print("exception handler")
-        print(context)
+        log("exception handler")
+        log(context)
 
     @staticmethod
     def loop_setup(loop):
@@ -653,7 +653,7 @@ def async_test(f, args=[], loop=None):
     else:
         loop.run_until_complete(f())
 
-    #loop.close()
+    loop.close()
 
 
 async def return_true(result=None):

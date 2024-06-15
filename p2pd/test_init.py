@@ -102,10 +102,10 @@ class FakeSTUNClient():
     def set_wan_ip(self, wan_ip):
         self.wan_ip = wan_ip
 
-    async def get_wan_ip(self, af=None, interface=None, fast_fail=0, servers=None, local_addr=None, conf=STUN_CONF):
+    async def get_wan_ip(self, af=None, interface=None, fast_fail=0, servers=None, local_addr=None, conf=NET_CONF):
         return ip_norm(self.wan_ip)
 
-    async def get_mapping(self, proto, af=None, source_port=0, group="map", alt_port=0, do_close=0, fast_fail=0, servers=None, conf=STUN_CONF):
+    async def get_mapping(self, proto, af=None, source_port=0, group="map", alt_port=0, do_close=0, fast_fail=0, servers=None, conf=NET_CONF):
         run_time = time.time()
         local, mapped = self.mappings[self.p]
         out = [self.interface, self.sock, local, mapped, self.rip, run_time]
