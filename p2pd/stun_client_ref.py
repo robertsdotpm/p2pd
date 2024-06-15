@@ -12,10 +12,11 @@ from .utils import *
 from .net import *
 from .address import Address
 from .interface import Interface
-from .base_stream import pipe_open
+from .base_stream import pipe_open, BaseProto
 from .stun_defs import *
 from .stun_utils import *
 from .route import Route
+
 
 class STUNClientRef():
     def __init__(self, dest, proto=UDP, mode=RFC3489, conf=NET_CONF):
@@ -26,13 +27,23 @@ class STUNClientRef():
         self.mode = mode
         self.conf = conf
 
-    async def get_route(self, route):
-        if route is None:
-            route = await self.interface.route(self.af).bind()
+    # Boilerplate to get a pipe to the STUN server.
+    async def _get_dest_pipe(self, unknown):
+        # Already open pipe.
+        if isinstance(unknown, BaseProto):
+            return unknown
 
-        return route
-    
-    async def get_dest_pipe(self, route):
+        # Open a new con to STUN server.
+        if unknown is None:
+            route = self.interface.route(self.af)
+            await route.bind()
+
+        # Route passed in already bound.
+        # Upgrade it to a pipe.
+        if isinstance(unknown, Route):
+            route = unknown
+
+        # Otherwise use details to make a new pipe.
         return await pipe_open(
             self.proto,
             route,
@@ -40,47 +51,15 @@ class STUNClientRef():
             conf=self.conf
         )
     
-    # Handles making a STUN request to a server.
-    # Pipe also accepts route and its upgraded to a pipe.
-    async def get_stun_reply(self, reply_addr=None, pipe=None, attrs=[]):
-        """
-        The function uses subscriptions to the TXID so that even
-        on unordered protocols like UDP the right reply is returned.
-        The reply address forms part of that pattern which is an
-        elegant way to validate responses from change requests
-        which will otherwise timeout on incorrect addresses.
-        """
-        if reply_addr is None:
-            reply_addr = self.dest
-
-        # Open con to STUN server.
-        if pipe is None or isinstance(pipe, Route):
-            route = await self.get_route(pipe)
-            pipe = await self.get_dest_pipe(route)
-            if pipe is None:
-                raise ErrorPipeOpen("STUN pipe open failed.")
-
-        # Build the STUN message.
-        msg = STUNMsg(mode=self.mode)
-        for attr in attrs:
-            attr_code, attr_data = attr
-            msg.write_attr(attr_code, attr_data)
-
-        # Subscribe to replies that match the req tran ID.
-        sub = sub_to_stun_reply(msg.txn_id, reply_addr.tup)
-        pipe.subscribe(sub)
-
-        # Send the req and get a matching reply.
-        send_buf = msg.pack()
-        recv_buf = await send_recv_loop(pipe, send_buf, sub, self.conf)
-        if recv_buf is None:
-            raise ErrorNoReply("STUN recv loop got no reply.")
-
-        # Return response.
-        reply, _ = stun_proto(recv_buf, self.dest.af)
-        reply.pipe = pipe
-        reply.stup = reply_addr.tup
-        return reply
+    # Returns a STUN reply based on how client was setup.
+    async def get_stun_reply(self, pipe=None, attrs=[]):
+        pipe = await self._get_dest_pipe(pipe)
+        return await get_stun_reply(
+            self.mode,
+            self.dest, 
+            pipe,
+            attrs
+        )
     
     # Use a different port for the reply.
     async def get_change_port_reply(self, ctup, pipe=None):
@@ -102,7 +81,9 @@ class STUNClientRef():
         )
 
         # Flag to make the port change request.
-        return await self.get_stun_reply(
+        pipe = await self._get_dest_pipe(pipe)
+        return await get_stun_reply(
+            self.mode,
             reply_addr,
             pipe,
             [[STUNAttrs.ChangeRequest, b"\0\0\0\2"]]
@@ -128,7 +109,9 @@ class STUNClientRef():
         )
 
         # Flag to make the tup change request.
-        return await self.get_stun_reply(
+        pipe = await self._get_dest_pipe(pipe)
+        return await get_stun_reply(
+            self.mode,
             reply_addr,
             pipe,
             [[STUNAttrs.ChangeRequest, b"\0\0\0\6"]]
@@ -136,7 +119,13 @@ class STUNClientRef():
 
     # Return only your remote IP.
     async def get_wan_ip(self, pipe=None):
-        reply = await self.get_stun_reply(self.dest, pipe)
+        pipe = await self._get_dest_pipe(pipe)
+        reply = await get_stun_reply(
+            self.mode,
+            self.dest,
+            pipe
+        )
+
         await reply.pipe.close()
         if hasattr(reply, "rtup"):
             return reply.rtup[0]
@@ -144,7 +133,13 @@ class STUNClientRef():
     # Return information on your local + remote port.
     # The pipe is left open to be used with punch code.
     async def get_mapping(self, pipe=None):
-        reply = await self.get_stun_reply(self.dest, pipe)
+        pipe = await self._get_dest_pipe(pipe)
+        reply = await get_stun_reply(
+            self.mode,
+            self.dest,
+            pipe
+        )
+
         ltup = reply.pipe.getsockname()
         if hasattr(reply, "rtup"):
             return (ltup[1], reply.rtup[1], reply.pipe)

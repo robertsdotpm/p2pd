@@ -21,6 +21,8 @@ from struct import pack, unpack
 import socket
 from .utils import *
 from .stun_defs import *
+from .net import *
+from .route import Route
     
 # Filter all other messages that don't match this.
 def sub_to_stun_reply(tran_id, dest_tup):
@@ -72,6 +74,38 @@ def stun_proto(buf, af):
                 msg.ctup = stun_addr_field.tup
         
     return msg, buf
+
+# Handles making a STUN request to a server.
+# Pipe also accepts route and its upgraded to a pipe.
+async def get_stun_reply(mode, reply_addr, pipe, attrs=[]):
+    """
+    The function uses subscriptions to the TXID so that even
+    on unordered protocols like UDP the right reply is returned.
+    The reply address forms part of that pattern which is an
+    elegant way to validate responses from change requests
+    which will otherwise timeout on incorrect addresses.
+    """
+    # Build the STUN message.
+    msg = STUNMsg(mode=mode)
+    for attr in attrs:
+        attr_code, attr_data = attr
+        msg.write_attr(attr_code, attr_data)
+
+    # Subscribe to replies that match the req tran ID.
+    sub = sub_to_stun_reply(msg.txn_id, reply_addr.tup)
+    pipe.subscribe(sub)
+
+    # Send the req and get a matching reply.
+    send_buf = msg.pack()
+    recv_buf = await send_recv_loop(pipe, send_buf, sub)
+    if recv_buf is None:
+        raise ErrorNoReply("STUN recv loop got no reply.")
+
+    # Return response.
+    reply, _ = stun_proto(recv_buf, reply_addr.af)
+    reply.pipe = pipe
+    reply.stup = reply_addr.tup
+    return reply
 
 async def test_stun_utils():
     m = STUNMsg()
