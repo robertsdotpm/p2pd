@@ -325,7 +325,6 @@ class STUNMsg:
 
         return bytes().join([
             msg_type,
-            self.msg_type,
             pack("!H", self.msg_len),
             self.magic_cookie,
             self.txn_id,

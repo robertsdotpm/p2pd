@@ -23,7 +23,7 @@ from .utils import *
 from .stun_defs import *
     
 # Filter all other messages that don't match this.
-def sub_stun_msg(tran_id, dest_tup):
+def sub_to_stun_reply(tran_id, dest_tup):
     b_msg_p = re.escape(tran_id)
     b_addr_p = b"%s:%d" % (
         re.escape(
@@ -36,16 +36,16 @@ def sub_stun_msg(tran_id, dest_tup):
 
 def stun_proto(buf, af):
     msg, buf = STUNMsg.unpack(buf)
-    print(msg.magic_cookie)
     while not msg.eof():
         attr_code, _, attr_data = msg.read_attr()
-
         attr_name = buf_in_class(STUNAttrs, bytes(attr_code))
+        """
         print(attr_name)
         print(bytes(attr_code))
         print(bytes(attr_data))
         print()
-
+        """
+        
         # Set our remote IP and port.
         if not hasattr(msg, "rtup"):
             xor_addr_attrs = [STUNAttrs.XorMappedAddressX, STUNAttrs.XorMappedAddress]
@@ -57,15 +57,11 @@ def stun_proto(buf, af):
                 ).unpack(attr_code, stun_addr_field.tup)
                 msg.rtup = stun_addr_field.tup
 
-                print(msg.rtup)
-
             if attr_code == STUNAttrs.MappedAddress:
                 stun_addr_field = STUNAddrTup(
                     af=af
                 ).unpack(attr_code, attr_data)
                 msg.rtup = stun_addr_field.tup
-                
-                print(msg.rtup)
 
         # Set the additional IP and port for this server.
         if not hasattr(msg, "ctup"):
@@ -74,9 +70,7 @@ def stun_proto(buf, af):
                     af=af
                 ).unpack(attr_code, attr_data)
                 msg.ctup = stun_addr_field.tup
-                print(f"change addr {msg.ctup}")
         
-    print(msg)
     return msg, buf
 
 async def test_stun_utils():

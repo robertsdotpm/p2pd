@@ -9,3 +9,9 @@ class InterfaceNotFound(Exception):
 
 class InterfaceInvalidAF(Exception):
     pass
+
+class ErrorNoReply(Exception):
+    pass
+
+class ErrorPipeOpen(Exception):
+    pass

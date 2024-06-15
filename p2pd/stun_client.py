@@ -321,6 +321,8 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
             # Error or timeout.
             if buf is None:
                 raise asyncio.TimeoutError("STUN recv n timeout.")
+            
+            # Todo: remove
             print(buf)
 
             # Check buffer is min length to avoid overflows.
@@ -374,9 +376,6 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
                     # Log attribute type.
                     log("> STUN found attribute type = %s" % (to_s(attr_type)))
 
-                    print(attr_type)
-                    print(ChangedAddress)
-
                     # Your remote IP and reply port. The important part.
                     if attr_type == MappedAddress:
                         ip, port = extract_addr(buf, dest_addr.chosen, base)
@@ -397,7 +396,6 @@ async def do_stun_request(pipe, dest_addr, tran_info, extra_data="", changed_add
                         ret['cip'] = ip
                         ret['cport'] = port
                         log(f"set ChangedAddress {ip}:{port}")
-                        print(f"cip = {ip} {port}")
 
                     base = base + 4 + attr_len
                     len_remain -= (4 + attr_len)
