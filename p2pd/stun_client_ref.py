@@ -5,20 +5,6 @@ With magic cookie = RFC 5389 >= mode
     - no change requests
 
 the gen stun code needs to be updated to reflect this 
-
-    msgtype = buf[0:2]
-    if msgtype != b"\1\1":
-    
-prob needs different logic if 8489 is selected
-like the bit mask stuff
-
-what about attributes?
-
--- look for xor mapped address todo:
-
-... and insert a MAPPED-ADDRESS attribute instead of an XOR-
-   MAPPED-ADDRESS attribute.
-    - make sure to support this xor mapped attribute
 """
 
 from .errors import *
@@ -93,15 +79,17 @@ class STUNClientRef():
         # Return response.
         reply, _ = stun_proto(recv_buf, self.dest.af)
         reply.pipe = pipe
+        reply.stup = reply_addr.tup
         return reply
     
     # Use a different port for the reply.
     async def get_change_port_reply(self, ctup, pipe=None):
-        attr = [
-            STUNAttrs.ChangeRequest,
-            b"\0\0\0\2"
-        ]
+        # Sanity check against expectations.
+        if self.mode != RFC3489:
+            error = "STUN change port only supported in RFC3480 mode."
+            raise ErrorFeatureDeprecated(error)
 
+        # Expect a reply from this address.
         reply_addr = await Address(
             # The IP stays the same.
             self.dest.tup[0],
@@ -113,19 +101,21 @@ class STUNClientRef():
             self.interface.route(self.af)
         )
 
+        # Flag to make the port change request.
         return await self.get_stun_reply(
             reply_addr,
             pipe,
-            [attr]
+            [[STUNAttrs.ChangeRequest, b"\0\0\0\2"]]
         )
 
     # Use a different IP and port for the reply.
     async def get_change_tup_reply(self, ctup, pipe=None):
-        attr = [
-            STUNAttrs.ChangeRequest,
-            b"\0\0\0\6"
-        ]
+        # Sanity check against expectations.
+        if self.mode != RFC3489:
+            error = "STUN change port only supported in RFC3480 mode."
+            raise ErrorFeatureDeprecated(error)
 
+        # Expect a reply from this address.
         reply_addr = await Address(
             # The IP differs.
             ctup[0],
@@ -137,10 +127,11 @@ class STUNClientRef():
             self.interface.route(self.af)
         )
 
+        # Flag to make the tup change request.
         return await self.get_stun_reply(
             reply_addr,
             pipe,
-            [attr]
+            [[STUNAttrs.ChangeRequest, b"\0\0\0\6"]]
         )
 
     # Return only your remote IP.
@@ -181,6 +172,7 @@ async def test_stun_client():
     s = STUNClientRef(a)
     r = await s.get_stun_reply()
     print(r.rtup)
+    print(r.stup)
     print(r.ctup)
     print(r.pipe.sock)
 
@@ -189,13 +181,13 @@ async def test_stun_client():
     print("change port reply = ")
     print(c1)
     print(c1.rtup)
-    print(c1.ctup)
+    print(c1.stup)
 
     c1 = await s.get_change_tup_reply(r.ctup)
     print("change tup reply = ")
     print(c1)
     print(c1.rtup)
-    print(c1.ctup)
+    print(c1.stup)
 
     await r.pipe.close()
 

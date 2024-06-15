@@ -15,3 +15,6 @@ class ErrorNoReply(Exception):
 
 class ErrorPipeOpen(Exception):
     pass
+
+class ErrorFeatureDeprecated(Exception):
+    pass
