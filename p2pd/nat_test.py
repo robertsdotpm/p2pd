@@ -234,6 +234,11 @@ async def nat_test_main():
     # Use same pipe with multiplexing for reuse tests.
     #t1 = timestamp(1)
     i = await Interface()
+    print(i)
+
+    await asyncio.sleep(2)
+
+    return
     af = IP4
     route = await i.route(af).bind(0)
     pipe = await pipe_open(UDP, route=route)

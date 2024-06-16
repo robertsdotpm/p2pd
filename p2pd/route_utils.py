@@ -244,39 +244,60 @@ def sort_routes(default_route, routes):
     cmp = lambda r1, r2: int(r1.ext_ips[0]) - int(r2.ext_ips[0])
     routes = sorted(routes, key=cmp_to_key(cmp))
 
+    # If default route not found return early.
+    if default_route is None:
+        return routes
+
     # Remove default route from routes list.
     cleaned_routes = []
+    new_default = default_route
     for route in routes:
         do_remove = False
-        for ext_ipr in route.ext_ips:
-            if len(ext_ipr) == 1:
-                if default_route.ext_ips[0] == ext_ipr:
-                    default_route = route
-                    do_remove = True
-                    break
+        if route.nic_ips == default_route.nic_ips:
+            do_remove = True
+        else:
+            for ext_ipr in route.ext_ips:
+                if len(ext_ipr) == 1:
+                    if default_route.ext_ips[0] == ext_ipr:
+                        # Ensure the nic IPs are set.
+                        new_default = route
+                        do_remove = True
+                        break
 
         if not do_remove:
             cleaned_routes.append(route)
 
     # Ensure that the default route is first.
-    return [default_route] + cleaned_routes
+    return [new_default] + cleaned_routes
 
-async def get_routes_with_res(af, min_agree, max_agree, interface, netifaces, timeout):
-    from .stun_client import get_stun_clients, STUNClient
+def get_route_by_src(src_ip, results):
+    route = [y for x, y in results if x == src_ip]
+    if len(route):
+        route = route[0]
+    else:
+        route = None
 
-    # Copy random STUN servers to use.
-    serv_list = STUND_SERVERS[af][:]
-    random.shuffle(serv_list)
-    serv_list = serv_list[:max_agree]
+    return route
 
-    # Used to resolve nic addresses.
-    stun_clients = await get_stun_clients(af, serv_list, interface)
-    nic_iprs = await get_nic_iprs(af, interface, netifaces)
+def exclude_routes_by_src(src_ips, results):
+    new_list = []
+    for src_ip, route in results:
+        found_src = False
+        for needle_ip in src_ips:
+            if src_ip == needle_ip:
+                found_src = True
+        
+        if not found_src:
+            new_list.append(route)
 
+    return new_list
+
+async def get_routes_with_res(af, min_agree, interface, stun_clients, netifaces, timeout):
     # Get a list of tasks to resolve NIC addresses.
     tasks = []
     link_locals = []
     priv_iprs = []
+    nic_iprs = await get_nic_iprs(af, interface, netifaces)
     for nic_ipr in nic_iprs:
         if ip_norm(nic_ipr[0])[:4] == "fe80":
             link_locals.append(nic_ipr)
@@ -296,17 +317,33 @@ async def get_routes_with_res(af, min_agree, max_agree, interface, netifaces, ti
     task = get_wan_ip_cfab(any_ip, min_agree, stun_clients, timeout)
     tasks.append(task)
 
+    # Append task to get route using priv nic.
+    priv_src = ""
+    if len(priv_iprs):
+        priv_src = ip_norm(str(priv_iprs[0]))
+        task = get_wan_ip_cfab(priv_src, min_agree, stun_clients, timeout)
+        tasks.append(task)
+
     # Resolve interface addresses CFAB.
     results = await asyncio.gather(*tasks)
 
-
     # Find default route.
-    default_route = [y for x, y in results if x == any_ip][0]
-    routes = [y for x, y in results if x != any_ip]
-    #print(routes)
+    default_route = get_route_by_src(any_ip, results)
+    priv_route = get_route_by_src(priv_src, results)
+    routes = exclude_routes_by_src([any_ip, priv_src], results)
+
+    # Add a single route for all private IPs.
     if len(priv_iprs):
-        priv_route = Route(af, priv_iprs, default_route.ext_ips, interface)
-        routes.append(priv_route)
+        priv_ext = None
+        if default_route is not None:
+            priv_ext = default_route.ext_ips
+        else:
+            if priv_route is not None:
+                priv_ext = priv_route.ext_ips
+
+        if priv_ext is not None:
+            priv_route = Route(af, priv_iprs, priv_ext, interface)
+            routes.append(priv_route)
 
     # Deterministic sort routes -- add default first.
     routes = sort_routes(default_route, routes)

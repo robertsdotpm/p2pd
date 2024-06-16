@@ -344,18 +344,27 @@ class Interface():
 
         # Get routes for AF.
         log(f"Starting resolve with stack type = {self.stack}")
+        max_agree = 5
         if rp == None:
             af_list = self.supported(skip_resolve=True)
             tasks = []
             for af in af_list:
                 log(f"Attempting to resolve {af}")
-                async def helper(af):
+                # Copy random STUN servers to use.
+                serv_list = STUND_SERVERS[af][:]
+                random.shuffle(serv_list)
+                serv_list = serv_list[:max_agree]
+
+                # Used to resolve nic addresses.
+                stun_clients = await get_stun_clients(af, serv_list, self)
+
+                async def helper(af, stun_clients):
                     try:
                         routes, link_locals = await get_routes_with_res(
                             af,
                             2,
-                            5,
                             self,
+                            stun_clients,
                             netifaces,
                             2
                         )
@@ -369,7 +378,7 @@ class Interface():
                 tasks.append(
                     asyncio.wait_for(
                         async_wrap_errors(
-                            helper(af)
+                            helper(af, stun_clients)
                         ),
                         15
                     )

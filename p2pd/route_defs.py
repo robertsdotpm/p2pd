@@ -292,6 +292,9 @@ class Route(Bind):
     # Route != [Route, ...] = [Route, ...]
     # (max len = len(right operand))
     def __ne__(self, other):
+        if self is other:
+            return False
+
         # Compare selfs WAN to others WAN.
         if isinstance(other, Route):
             return self.ext_ips[0] != other.ext_ips[0]
