@@ -105,6 +105,10 @@ async def validate_stun_server(af, host, port, proto, interface, recurse=True):
 
 async def workspace():
     i = await Interface().start()
+    dest = await Address("stun.voip.blackberry.com", 3478, i.route(IP4))
+    sc = STUNClient(dest, mode=RFC5389, proto=TCP)
+    reply = await sc.get_mapping()
+    print(reply)
     print(i)
     return
 

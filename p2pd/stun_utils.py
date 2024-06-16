@@ -53,7 +53,7 @@ def stun_proto(buf, af):
                     af=af,
                     txid=msg.txn_id,
                     magic_cookie=msg.magic_cookie,
-                ).unpack(attr_code, stun_addr_field.tup)
+                ).unpack(attr_code, attr_data)
                 msg.rtup = stun_addr_field.tup
 
             if attr_code == STUNAttrs.MappedAddress:
