@@ -223,7 +223,7 @@ they results will be 'out of order' or unpredictable and
 lead to invalid results. Concurrency is thus disabled.
 This code is very badly written but it's at least tested.
 """
-async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="map", concurrency=True):
+async def delta_test(stun_clients, test_no=8, threshold=5, concurrency=True):
     """
     - When getting a list of ports to use for tests
     calculate the port to start at.
@@ -233,6 +233,7 @@ async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="ma
     - port_dist = distance between successive ports
     from start_port to test_no, incremented by port_dist.
     """
+    assert(len(stun_clients) >= test_no)
     def get_start_port(port_dist, range_info=[]):
         # Random port skipping reserved and max ports.
         rand_start_port = lambda: random.randrange(
@@ -291,17 +292,21 @@ async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="ma
                     raise Exception("src less than 4k in mapping behavior.")
                 
                 # Avoid relying on any one server. 
-                server = stun_client.rand_server()
+                stun_client = random.choice(stun_clients)
                 
                 # Get mapping using specific source port.
-                _, s, local, mapped, _, _ = await stun_client.get_mapping(
-                    proto,
-                    do_close=0,
-                    source_port=src_port,
-                    group=group,
-                    conf=conf,
-                    servers=[server]
+                iface = stun_client.interface
+                route = iface.route(stun_client.af)
+                await route.bind(port=src_port)
+
+                ret = await stun_client.get_mapping(
+                    pipe=route
                 )
+
+                if ret is None:
+                    raise Exception("No stun reply in delta map")
+                else:
+                    local, mapped, s = ret
 
                 # Return mapping results.
                 return [local, mapped, s]
@@ -378,7 +383,8 @@ async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="ma
         results = []
         for task in tasks:
             result = await task
-            results.append(result)
+            if result is not None:
+                results.append(result)
 
     """
     Check for:
@@ -393,7 +399,8 @@ async def delta_test(stun_client, test_no=8, threshold=5, proto=DGRAM, group="ma
 
     # Close previous sockets.
     get_delta_value(delta_no, dist_no, local_dist, preserv_dist, results)
-    socks = await sock_close_all(socks)
+    [await p.close() for p in socks if p is not None]
+    socks = []
 
     # See if any of the above tests succeeded.
     test_names = [ EQUAL_DELTA, PRESERV_DELTA ]
@@ -853,16 +860,24 @@ def nat_check_for_low_ports(map_info):
                 raise Exception(error)
 
 async def nat_predict_main():
-    from .stun_client import STUNClient
+    from .stun_client import STUNClient, get_stun_clients
     from .interface import Interface, init_p2pd
+    from .settings import STUND_SERVERS
 
     # Load default interface.
-    i = await Interface().start_local()
-    s = STUNClient(i)
+    i = await Interface()
+    stun_servs = STUND_SERVERS[IP4][:]
+    random.shuffle(stun_servs)
+
+    stun_clients = await get_stun_clients(
+        IP4,
+        stun_servs[:8],
+        i
+    ) 
     
     # Run delta test and profile it.
     s1 = timestamp(1)
-    out = await delta_test(s)
+    out = await delta_test(stun_clients)
     print(f"delta test time = {timestamp(1) - s1}")
     print(out)
 

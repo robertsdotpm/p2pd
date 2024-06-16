@@ -12,6 +12,7 @@ from .route_utils import *
 from .nat import *
 from .route_table import *
 from .stun_client import *
+from .nat_test import fast_nat_test
 if sys.platform == "win32":
     from .win_netifaces import *
 else:
@@ -421,8 +422,6 @@ class Interface():
     async def load_nat(self):
         # Try to avoid circular imports.
         from .base_stream import pipe_open
-        from .stun_client import STUNClient, STUN_CONF
-        from .nat_test import fast_nat_test
         
         # IPv6 only has no NAT!
         if IP4 not in self.supported():
@@ -430,14 +429,18 @@ class Interface():
         else:
             # STUN is used to get the delta type.
             af = IP4
-            stun_client = STUNClient(
-                self,
-                af
+            nat_test_no = 8
+            stun_servs = STUND_SERVERS[af][:]
+            random.shuffle(stun_servs)
+            stun_clients = await get_stun_clients(
+                af,
+                stun_servs[:nat_test_no],
+                self
             )
 
             # Get the NAT type.
             route = await self.route(af).bind()
-            pipe = await pipe_open(UDP, route=route, conf=STUN_CONF)
+            pipe = await pipe_open(UDP, route=route)
 
             # Run delta test.
             nat_type, delta = await asyncio.wait_for(
@@ -446,7 +449,7 @@ class Interface():
                         fast_nat_test(pipe, STUND_SERVERS[af])
                     ),
                     async_wrap_errors(
-                        delta_test(stun_client)
+                        delta_test(stun_clients)
                     )
                 ]),
                 timeout=4

@@ -146,7 +146,7 @@ class STUNClient():
             pipe
         )
 
-        ltup = reply.pipe.getsockname()
+        ltup = reply.pipe.sock.getsockname()
         if hasattr(reply, "rtup"):
             return (ltup[1], reply.rtup[1], reply.pipe)
 
