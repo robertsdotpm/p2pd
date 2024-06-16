@@ -1,6 +1,5 @@
 import asyncio
 import re
-import pickle
 from .ack_udp import *
 from .net import *
 

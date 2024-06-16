@@ -653,7 +653,7 @@ def async_test(f, args=[], loop=None):
     else:
         loop.run_until_complete(f())
 
-    loop.close()
+    #loop.close()
 
 
 async def return_true(result=None):

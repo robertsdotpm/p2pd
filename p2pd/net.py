@@ -869,12 +869,12 @@ async def proto_send(pipe, buf):
         except:
             continue
 
-async def send_recv_loop(pipe, buf, sub=SUB_ALL):
+async def send_recv_loop(dest, pipe, buf, sub=SUB_ALL):
     retry = pipe.conf["send_retry"]
     n = 1 if pipe.stream.proto == TCP else retry
     for _ in range(0, n):
         try:
-            await pipe.send(buf, pipe.stream.dest_tup)
+            await pipe.send(buf, dest.tup)
             return await pipe.recv(
                 sub=sub,
                 timeout=pipe.conf["recv_timeout"]

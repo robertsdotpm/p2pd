@@ -27,6 +27,7 @@ import time
 from .settings import *
 from .ip_range import *
 from .stun_client import *
+from .nat import *
 
 # Constants for a NAT test.
 NAT_TEST_NO = 5
@@ -36,114 +37,39 @@ NAT_TEST_TIMEOUT = 0.5
 # Shows order of RFC 3489 NAT enumeration sets.
 NAT_TEST_SCHEMA = [
     # Detects: open NAT.
-    ["", "primary", "primary", "primary", "primary"],
+    [STUN_CHANGE_NONE, "primary", "primary", "primary", "primary"],
 
     # Detects: full cone NAT.
     # Change both reply IP and port.
-    [changeRequest, "primary", "primary", "secondary", "secondary"],
+    [STUN_CHANGE_BOTH, "primary", "primary", "secondary", "secondary"],
 
     # Detects: non-symmetric NAT.
-    ["", "secondary", "primary", "secondary", "primary"],
+    [STUN_CHANGE_NONE, "secondary", "primary", "secondary", "primary"],
 
     # Detects: between restrict and port restrict.
     # Change only the reply port.
-    [changePortRequest, "secondary", "primary", "secondary", "secondary"],
+    [STUN_CHANGE_PORT, "secondary", "primary", "secondary", "secondary"],
 ]
 
-def filter_nat_servers(nat_servers):
-    out = []
-
-    def find_duplicates(hey, cmp_ipr=None):
-        ip_types = ["primary", "secondary"]
-        for entry in hey:
-            for ip_type in ip_types:
-                entry_ip = entry[ip_type]["ip"]
-                if entry_ip is None:
-                    continue
-                else:
-                    entry_ipr = IPRange(entry_ip)
-
-                if cmp_ipr is not None:
-                    if entry_ipr == cmp_ipr:
-                        return True
-                else:
-                    if not find_duplicates(out, entry_ipr):
-                        out.append(entry)
-
-        return False
-            
-    find_duplicates(nat_servers)
-    return out
-
-async def new_stun_server_format(af):
-    servers = []
-    for index in range(0, len(STUND_SERVERS[af])):
-        route = i.route(af)
-        stun_addr = await Address(
-            STUND_SERVERS[af][index][0],
-            STUND_SERVERS[af][index][1],
-            route
-        )
-
-        out = await do_nat_test(
-            stun_addr=stun_addr,
-            interface=i,
-            af=af,
-            proto=TCP,
-            group="change"
-        )
-
-        print(out)
-
-        if out is None or isinstance(out, tuple):
-            continue
-    
-        svr = {
-            "host": STUND_SERVERS[af][index][0],
-            "primary": {
-                "ip": stun_addr.tup[0],
-                "port": stun_addr.tup[1]
-            },
-            "secondary": {
-                "ip": out["cip"],
-                "port": out["cport"]
-            }
-        }
-
-        servers.append(svr)
-
-
-    print(servers)
-
 async def nat_test_exec(dest_addr, reply_addr, payload, pipe, q, test_coro):
-    # Expect messages from this reply_addr.
-    tran_info = tran_info_patterns(reply_addr.tup)
-    pipe.subscribe(tran_info[0:2])
-    conf = dict_merge(STUN_CONF, {
-        "packet_retry": 1,
-        "recv_timeout": NAT_TEST_TIMEOUT
-    })
+    stun_client = STUNClient(dest_addr)
+    if payload == STUN_CHANGE_NONE:
+        reply = await stun_client.get_stun_reply(pipe)
+    if payload == STUN_CHANGE_PORT:
+        reply = await stun_client.get_change_port_reply(
+            reply_addr.tup, pipe
+        )
+    if payload == STUN_CHANGE_BOTH:
+        reply = await stun_client.get_change_tup_reply(
+            reply_addr.tup, pipe
+        )
 
-    # Do first NAT test.
-    ret, _ = await stun_sub_test(
-        "running nat test",
-        dest_addr,
-        pipe.route.interface,
-        pipe.route.af,
-        UDP,
-        pipe.sock.getsockname()[1],
-        reply_addr,
-        payload,
-        pipe=pipe,
-        tran_info=tran_info,
-        conf=conf
-    )
+    ret = await stun_reply_to_ret_dic(reply)
 
     # Valid reply.
     if ret is not None and not isinstance(ret, tuple):
-        if ret["resp"]:
-            q.append(ret)
-            return await test_coro(ret, pipe)
+        q.append(ret)
+        return await test_coro(ret, pipe)
 
     return None
 
@@ -172,22 +98,24 @@ async def nat_test_workers(pipe, q, test_index, test_coro, servers):
 
             # Run the test and return the results.
             payload = NAT_TEST_SCHEMA[test_index][0]
-            return await nat_test_exec(
-                # Send to and expect from.
-                addrs[0],
-                addrs[1],
+            return await async_wrap_errors(
+                nat_test_exec(
+                    # Send to and expect from.
+                    addrs[0],
+                    addrs[1],
 
-                # Type of STUN request to send.
-                payload,
+                    # Type of STUN request to send.
+                    payload,
 
-                # Pipe to reuse for UDP.
-                pipe,
+                    # Pipe to reuse for UDP.
+                    pipe,
 
-                # Async queue to store the results.
-                q,
+                    # Async queue to store the results.
+                    q,
 
-                # Test-specific code.
-                test_coro
+                    # Test-specific code.
+                    test_coro
+                )
             )
 
         workers.append(worker(server_no))
@@ -231,9 +159,6 @@ def no_stun_resp_check(q_list):
     return True
 
 async def fast_nat_test(pipe, test_servers, timeout=NAT_TEST_TIMEOUT):
-    # Ensure all primary and secondary IPs are unique
-    test_servers = filter_nat_servers(test_servers)
-
     # Store STUN request results here.
     # n = index of test e.g. [0] = test 1.
     q_list = [[], [], [], []]
@@ -304,6 +229,37 @@ async def fast_nat_test(pipe, test_servers, timeout=NAT_TEST_TIMEOUT):
 async def nat_test_main():
     from .interface import Interface, init_p2pd
 
+    loop = asyncio.get_event_loop()
+
+    # Use same pipe with multiplexing for reuse tests.
+    #t1 = timestamp(1)
+    i = await Interface()
+    af = IP4
+    route = await i.route(af).bind(0)
+    pipe = await pipe_open(UDP, route=route)
+    assert(pipe is not None)
+    s = STUNClient(
+        await Address("stun1.p2pd.net", 3478, i.route(af))
+    )
+
+
+
+    # Determine NAT type.
+    t1 = timestamp(1)
+    servers = STUND_SERVERS[af]
+    nat_type = await fast_nat_test(pipe, servers)
+    print(nat_type)
+
+    # How long the NAT type took.
+    t2 = timestamp(1) - t1
+    print(f"nat time = {t2}")
+    await pipe.close()
+    # 0.8
+
+    # Wait for all lagging tests to end.
+    await asyncio.sleep(NAT_TEST_TIMEOUT)
+
+    return
     # Load internal interface details.
     t1 = timestamp(1)
     netifaces = await init_p2pd()
@@ -321,29 +277,6 @@ async def nat_test_main():
     print(f"Interface() load_nat = {duration}")
     await asyncio.sleep(NAT_TEST_NO)
     return
-
-
-    # Use same pipe with multiplexing for reuse tests.
-    #t1 = timestamp(1)
-    af = IP4
-    route = await i.route(af).bind(0)
-    pipe = await pipe_open(UDP, route=route, conf=STUN_CONF)
-    assert(pipe is not None)
-
-    # Determine NAT type.
-    t1 = timestamp(1)
-    servers = STUND_SERVERS[af]
-    nat_type = await fast_nat_test(pipe, servers)
-    print(nat_type)
-
-    # How long the NAT type took.
-    t2 = timestamp(1) - t1
-    print(f"nat time = {t2}")
-    await pipe.close()
-    # 0.8
-
-    # Wait for all lagging tests to end.
-    await asyncio.sleep(NAT_TEST_TIMEOUT)
 
 if __name__ == "__main__":
     async_test(nat_test_main)

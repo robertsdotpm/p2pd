@@ -57,6 +57,7 @@ class STUNClient():
         pipe = await self._get_dest_pipe(pipe)
         return await get_stun_reply(
             self.mode,
+            self.dest,
             self.dest, 
             pipe,
             attrs
@@ -85,6 +86,7 @@ class STUNClient():
         pipe = await self._get_dest_pipe(pipe)
         return await get_stun_reply(
             self.mode,
+            self.dest,
             reply_addr,
             pipe,
             [[STUNAttrs.ChangeRequest, b"\0\0\0\2"]]
@@ -113,6 +115,7 @@ class STUNClient():
         pipe = await self._get_dest_pipe(pipe)
         return await get_stun_reply(
             self.mode,
+            self.dest,
             reply_addr,
             pipe,
             [[STUNAttrs.ChangeRequest, b"\0\0\0\6"]]
@@ -123,6 +126,7 @@ class STUNClient():
         pipe = await self._get_dest_pipe(pipe)
         reply = await get_stun_reply(
             self.mode,
+            self.dest,
             self.dest,
             pipe
         )
@@ -137,6 +141,7 @@ class STUNClient():
         pipe = await self._get_dest_pipe(pipe)
         reply = await get_stun_reply(
             self.mode,
+            self.dest,
             self.dest,
             pipe
         )
@@ -232,7 +237,10 @@ async def test_con_stun_client():
         timeout=2
     )
 
+
     print(out)
+
+    await asyncio.sleep(2)
 
 if __name__ == "__main__":
     async_test(test_con_stun_client)

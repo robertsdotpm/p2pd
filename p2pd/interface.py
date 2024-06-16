@@ -11,6 +11,7 @@ from .route_defs import *
 from .route_utils import *
 from .nat import *
 from .route_table import *
+from .stun_client import *
 if sys.platform == "win32":
     from .win_netifaces import *
 else:
@@ -66,13 +67,16 @@ async def init_p2pd():
     loop.set_exception_handler(SelectorEventPolicy.exception_handler)
     
     def fatal_error(self, exc, message='Fatal error on transport'):
-        # Should be called from exception handler only.
-        self._loop.call_exception_handler({
+        er = {
             'message': message,
             'exception': exc,
             'transport': self,
             'protocol': self._protocol,
-        })
+        }
+        log(er)
+
+        # Should be called from exception handler only.
+        #self.call_exception_handler(er)
         self._force_close(exc)
 
     asyncio.selector_events._SelectorTransport._fatal_error = fatal_error

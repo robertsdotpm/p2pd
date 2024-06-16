@@ -74,7 +74,7 @@ def stun_proto(buf, af):
 
 # Handles making a STUN request to a server.
 # Pipe also accepts route and its upgraded to a pipe.
-async def get_stun_reply(mode, reply_addr, pipe, attrs=[]):
+async def get_stun_reply(mode, dest_addr, reply_addr, pipe, attrs=[]):
     """
     The function uses subscriptions to the TXID so that even
     on unordered protocols like UDP the right reply is returned.
@@ -94,7 +94,7 @@ async def get_stun_reply(mode, reply_addr, pipe, attrs=[]):
 
     # Send the req and get a matching reply.
     send_buf = msg.pack()
-    recv_buf = await send_recv_loop(pipe, send_buf, sub)
+    recv_buf = await send_recv_loop(dest_addr, pipe, send_buf, sub)
     if recv_buf is None:
         raise ErrorNoReply("STUN recv loop got no reply.")
 
@@ -103,6 +103,39 @@ async def get_stun_reply(mode, reply_addr, pipe, attrs=[]):
     reply.pipe = pipe
     reply.stup = reply_addr.tup
     return reply
+
+async def stun_reply_to_ret_dic(reply):
+    ret = {}
+    if reply is None:
+        return None
+
+    if hasattr(reply, "ctup"):
+        ret["cip"] = reply.ctup[0]
+        ret["cport"] = reply.ctup[1]
+    else:
+        return None
+    
+    if hasattr(reply, "rtup"):
+        ret["rip"] = reply.rtup[0]
+        ret["rport"] = reply.rtup[1]
+    else:
+        return None
+    
+    if hasattr(reply, "stup"):
+        ret["sip"] = reply.stup[0]
+        ret["sport"] = reply.stup[1]
+    else:
+        return None
+    
+    if hasattr(reply, "pipe"):
+        ltup = reply.pipe.sock.getsockname()[0:2]
+        ret["lip"], ret["lport"] = ltup
+    else:
+        return None
+    
+    ret["resp"] = True
+    return ret
+    
 
 async def test_stun_utils():
     m = STUNMsg()
