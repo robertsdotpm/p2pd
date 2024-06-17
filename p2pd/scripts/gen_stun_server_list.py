@@ -1,7 +1,26 @@
+"""
+I think maybe I know what the concurrency issue is:
+
+- lets say you have a list of coroutines
+- you pass them to async gather with a timeout expecting
+to limit the operation until some time
+- ideally: in this instance what you want to do is to
+force all coroutines that dont return a result before
+the timeout to return none and fail
+- but instead: a single slow coroutine that doesnt finish
+in time leads to timing out the entire list of results
+- that makes using async gather across a list of servers
+a bad idea -- it would be easy enough to write an alternative
+- finally: when its combined with domain lookups to places
+that dont exist or services that are no longer there it
+means that you cannot possibly get results back
+
+"""
+
 from p2pd import *
 
-ENABLE_PROTOS = [TCP]
-ENABLE_AFS = [IP4]
+ENABLE_PROTOS = [TCP, UDP]
+ENABLE_AFS = [IP4, IP6]
 
 def get_existing_stun_servers(serv_path="stun_servers.txt"):
     serv_addr_set = set()
@@ -18,7 +37,6 @@ def get_existing_stun_servers(serv_path="stun_servers.txt"):
                     break
 
     # Add in details from the 
-    serv_addr_set = set()
     fp = open(serv_path, 'r')
     lines = fp.readlines()
     for line in lines:
@@ -36,96 +54,94 @@ def get_existing_stun_servers(serv_path="stun_servers.txt"):
 
     return serv_addr_set
 
-async def validate_stun_server(af, host, port, proto, interface, recurse=True):
-    # Resolve host to IP.
-    try:
-        dest_addr = await stun_check_addr_info(
-            host,
-            port,
-            af,
-            proto,
-            interface
-        )
-    except Exception as e:
-        # Unable to find A or AAA record for address family.
-        log("> STUN get_nat_type can't load A/AAA %s" % (str(e)))
-        return None
-    
-    # If address check didn't pass skip.
-    if dest_addr is None:
-        log("> STUN valid servers ... dest addr is none.")
-        return None
-    
-    # Can't connect to the STUN server.
-    pipe = await init_pipe(dest_addr, interface, af, proto, 0)
-    print(pipe.sock)
-    if pipe is None:
-        log("> STUN valid servers ... first s is none.")
-        return None
-    
-    # Get initial port mapping.
-    # A response is expected.
-    tran_info = tran_info_patterns(dest_addr.tup)
-    pipe.subscribe(tran_info[:2])
-    ret = nat_info = await do_stun_request(
-        pipe,
-        dest_addr,
-        tran_info
+async def validate_stun_server(af, host, port, proto, interface, mode, recurse=True):
+    # Attempt to resolve STUN server address.
+    route = interface.route(af)
+    dest = await Address(
+        host,
+        port,
+        route=route
     )
+    if not len(dest.tup):
+        return
+    
+    """
+    Some 'public' STUN servers like to point to private
+    addresses. This could be dangerous.
+    """
+    ipr = IPRange(dest.tup[0], cidr=af_to_cidr(af))
+    if ipr.is_private:
+        return
 
-    # Set source port.
-    lax = 0 if proto == UDP else 1
-    error = stun_check_reply(dest_addr, nat_info, lax)
-    if error:
-        log("> STUN valid servers ... first reply error = %s." % (error))
-        return None
-
-    # Validate change.
-    if recurse:
-        change_ret = await validate_stun_server(af, ret["cip"], ret["cport"], proto, interface, recurse=False)
-        if proto == UDP:
-            if change_ret is None:
-                return
-        else:
-            if change_ret is None:
-                ret["cip"] = ret["cport"] = None
-
-    # Sanity checking.
-    if ret["ret"] is None:
+    # New pipe used for the req.
+    stun_client = STUNClient(dest, proto, mode)
+    try:
+        reply = await stun_client.get_stun_reply()
+    except:
         return None
     
-    # This doesn't technically make it a bad server.
-    if ret["sip"] is None:
-        ret["sip"] = dest_addr.tup[0]
-    if ret["sport"] is None:
-        ret["sport"] = dest_addr.tup[1]
+    reply = validate_stun_reply(reply, mode)
+    if reply is None:
+        return
+    
+    # Validate change server reply.
+    ctup = (None, None)
+    if mode == RFC3489:
+        if recurse:
+            creply = await validate_stun_server(
+                af,
+                reply.ctup[0],
+                reply.ctup[1],
+                proto,
+                interface,
+                mode,
+                recurse=False # Avoid infinite loop.
+            )
+            if creply is not None:
+                ctup = reply.ctup
+    
+    # Cleanup.
+    if hasattr(reply, "pipe"):
+        await reply.pipe.close()  
 
-    await pipe.close()    
-    return [af, host, ret["sip"], ret["sport"], ret["cip"], ret["cport"], proto]
+    # Return all the gathered data.
+    return [
+        af,
+        host,
+        dest.tup[0],
+        dest.tup[1], 
+        ctup[0],
+        ctup[1],
+        proto,
+        mode
+    ]
 
 async def workspace():
     i = await Interface().start()
+    """
     dest = await Address("stun.voip.blackberry.com", 3478, i.route(IP4))
     sc = STUNClient(dest, mode=RFC5389, proto=TCP)
     reply = await sc.get_mapping()
-    print(reply)
-    print(i)
-    return
+    """
+
 
     # Get a big list of STUN server tuples.
     existing_addrs = get_existing_stun_servers()
     existing_addrs = list(existing_addrs)
     existing_addrs = [("stun.zentauron.de", 3478)]
     #existing_addrs = [("34.74.124.204", 3478)] stun.moonlight-stream.org
+    existing_addrs = [("stun1.p2pd.net", 3478)]
         
-
+    # 2 * 2 * 2 per server
+    # maybe do all these tests for each server in a batch
     tasks = []
-    for proto in ENABLE_PROTOS:
-        for af in ENABLE_AFS:
-            for serv_addr in existing_addrs:
-                host, port = serv_addr
-                task = validate_stun_server(af, host, port, proto, i)
-                tasks.append(task)
+    for mode in [RFC3489, RFC5389]:
+        for proto in ENABLE_PROTOS:
+            for af in ENABLE_AFS:
+                for serv_addr in existing_addrs:
+                    host, port = serv_addr
+                    task = validate_stun_server(af, host, port, proto, i, mode)
+                    tasks.append(task)
 
     """
     todo: why doesn't concurrency work? Is it a problem with getaddrinfo?
@@ -139,41 +155,57 @@ async def workspace():
         results.append(result)
     
     # Generate a list of servers for use with settings.py.
-    stund_servers = {IP4: [], IP6: []}
-    stunt_servers = {IP4: [], IP6: []}
-    serv_lookup = {UDP: stund_servers, TCP: stunt_servers}
+    stun_change_servers = {
+        UDP: { IP4: [], IP6: [] },
+        TCP: { IP4: [], IP6: [] }
+    }
+    stun_map_servers = {
+        UDP: { IP4: [], IP6: [] },
+        TCP: { IP4: [], IP6: [] }
+    } 
+
+
     for result in results:
         if result is None:
             continue
 
-        af, host, sip, sport, cip, cport, proto = result
-        serv_list = serv_lookup[proto][af]
+        af, host, sip, sport, cip, cport, proto, mode = result
+
+        # If it has change tup add to change list.
+        if cip is not None and cport is not None:
+            serv_list = stun_change_servers
+        else:
+            serv_list = stun_map_servers
+
         entry = {
+            "mode": mode,
             "host": host,
             "primary": {"ip": sip, "port": sport},
             "secondary": {"ip": cip, "port": cport},
         }
-        serv_list.append(entry)
+
+        serv_list[proto][af].append(entry)
 
     # Filter alias domains.
-    for serv_index in [stund_servers, stunt_servers]:
-        clean_index = {IP4: [], IP6: []}
-        for af in VALID_AFS:
-            seen_ips = set()
-            for serv_info in serv_index[af]:
-                add_this = True
-                for ip_type in ["primary", "secondary"]:
-                    ip = serv_info[ip_type]["ip"]
-                    if ip in seen_ips:
-                        add_this = False
+    for serv_index in [stun_map_servers, stun_change_servers]:
+        for proto in [UDP, TCP]:
+            clean_index = {IP4: [], IP6: []}
+            for af in VALID_AFS:
+                seen_ips = set()
+                for serv_info in serv_index[proto][af]:
+                    add_this = True
+                    for ip_type in ["primary", "secondary"]:
+                        ip = serv_info[ip_type]["ip"]
+                        if ip in seen_ips:
+                            add_this = False
 
-                    seen_ips.add(ip)
+                        seen_ips.add(ip)
 
-                if add_this:
-                    clean_index[af].append(serv_info)
+                    if add_this:
+                        clean_index[af].append(serv_info)
 
-        serv_index.clear()
-        serv_index.update(clean_index)
+            serv_index[proto].clear()
+            serv_index[proto].update(clean_index)
 
     # Convert settings dict to a string.
     # Remove invalid array keys for formatting.
@@ -181,25 +213,27 @@ async def workspace():
         s_index = str(serv_dict)
         s_index = s_index.replace('<AddressFamily.AF_INET6: 23>', 'IP6')
         s_index = s_index.replace('<AddressFamily.AF_INET: 2>', 'IP4')
-        return serv_dict
+        s_index = s_index.replace('<SocketKind.SOCK_STREAM: 1>', 'TCP')
+        s_index = s_index.replace('<SocketKind.SOCK_DGRAM: 2>', 'UDP')
+        return s_index
 
     # Display results.
-    stund_servers = format_serv_dict(stund_servers)
-    stunt_servers = format_serv_dict(stunt_servers)
-    print(stund_servers)
+    stun_change_servers = format_serv_dict(stun_change_servers)
+    stun_map_servers = format_serv_dict(stun_map_servers)
+    print(stun_change_servers)
     print()
     print()
     print()
-    print(stunt_servers)
+    print(stun_map_servers)
 
     # Record results.
-    with open("stund.txt", "w") as fp1:
+    with open("stun_change.txt", "w") as fp1:
         fp1.truncate()
-        fp1.write(str(stund_servers))
+        fp1.write(str(stun_change_servers))
 
-    with open("stunt.txt", "w") as fp2:
+    with open("stun_map.txt", "w") as fp2:
         fp2.truncate()
-        fp2.write(str(stunt_servers))
+        fp2.write(str(stun_map_servers))
 
 
 async_test(workspace)

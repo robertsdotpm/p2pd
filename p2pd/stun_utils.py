@@ -20,6 +20,7 @@ create a pointer function for memory views.
 from .utils import *
 from .stun_defs import *
 from .net import *
+from .ip_range import *
     
 # Filter all other messages that don't match this.
 def sub_to_stun_reply(tran_id, dest_tup):
@@ -35,6 +36,7 @@ def sub_to_stun_reply(tran_id, dest_tup):
 
 def stun_proto(buf, af):
     msg, buf = STUNMsg.unpack(buf)
+    msg.af = af
     while not msg.eof():
         attr_code, _, attr_data = msg.read_attr()
         attr_name = buf_in_class(STUNAttrs, bytes(attr_code))
@@ -135,6 +137,58 @@ async def stun_reply_to_ret_dic(reply):
     
     ret["resp"] = True
     return ret
+
+def validate_stun_reply(reply, mode):
+    if reply is None:
+        log(f'{to_h(reply.txn_id)}: reply none')
+        return None
+    
+    # Pipe needs to exist to check change addrs.
+    if not hasattr(reply, "pipe"):
+        log(f'{to_h(reply.txn_id)}: no pipe')
+        return None
+    
+    # Reply addr is stup of the server.
+    req_attrs = ["stup", "rtup"]
+    extra_attrs = req_attrs[:]
+    if mode == RFC3489:
+        extra_attrs.append("ctup")
+
+    # Check attrs exist in the reply.
+    for req_attr in extra_attrs:
+        if not hasattr(reply, req_attr):
+            log(f'{to_h(reply.txn_id)}: no attr {req_attr}')
+            return None
+
+    # The follow tups should all have pub IPs.
+    for req_attr in extra_attrs:
+        tup_ip, tup_port = getattr(reply, req_attr)[:2]
+        cidr = af_to_cidr(reply.af)
+        ipr = IPRange(tup_ip, cidr=cidr)
+        if ipr.is_private:
+            log(f'{to_h(reply.txn_id)}: {tup_ip} priv')
+            return None
+        if not valid_port(tup_port):
+            log(f'{to_h(reply.txn_id)}: {tup_port} bad')
+            return None
+        
+    # Extended validation for RFC3489.
+    if mode == RFC3489:
+        # Change IP different from reply IP.
+        if reply.stup[0] == reply.ctup[0]:
+            log(f'{to_h(reply.txn_id)}: bad {reply.ctup[0]} 1')
+            return None
+        
+        # Change port different from reply port.
+        if reply.stup[1] == reply.ctup[1]:
+            log(f'{to_h(reply.txn_id)}: bad {reply.ctup[0]} 2')
+            return None
+
+    return reply
+    # stup - reply addr
+    # ltup .reply.pipe.sock.getsockname()
+    # ctup -- change tup
+    # rtup -- remove tup
     
 
 async def test_stun_utils():
