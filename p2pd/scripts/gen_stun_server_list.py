@@ -15,12 +15,37 @@ a bad idea -- it would be easy enough to write an alternative
 that dont exist or services that are no longer there it
 means that you cannot possibly get results back
 
+Pythons get addrinfo just calls the regular sync socket
+function in an executor which is probably capped at cpu core no
+thats probably why the performance is terrible for high
+concurrency
+
 """
 
 from p2pd import *
 
+TASK_TIMEOUT = 10
 ENABLE_PROTOS = [TCP, UDP]
 ENABLE_AFS = [IP4, IP6]
+
+STUN_CONF = dict_child({
+    # Retry N times on reply timeout.
+    "packet_retry": 2,
+
+    # Retry N times on invalid address.
+    "addr_retry": 2,
+
+    # Seconds to use for a DNS request before timeout exception.
+    "dns_timeout": 8, # 2
+
+    "recv_config": 5,
+
+    "con_timeout": 3,
+
+    # Retry no -- if an individual call fails how
+    # many times to retry the whole thing.
+    "retry_no": 3,
+}, NET_CONF)
 
 def get_existing_stun_servers(serv_path="stun_servers.txt"):
     serv_addr_set = set()
@@ -54,16 +79,20 @@ def get_existing_stun_servers(serv_path="stun_servers.txt"):
 
     return serv_addr_set
 
-async def validate_stun_server(af, host, port, proto, interface, mode, recurse=True):
+async def validate_stun_server(af, host, port, proto, interface, mode, timeout, recurse=True):
     # Attempt to resolve STUN server address.
     route = interface.route(af)
-    dest = await Address(
-        host,
-        port,
-        route=route
-    )
-    if not len(dest.tup):
-        return
+    try:
+        dest = await Address(
+            host,
+            port,
+            route=route,
+            timeout=STUN_CONF["dns_timeout"]
+        )
+        if not len(dest.tup):
+            return
+    except:
+        log(f"val stun server addr fail: {host}:{port}")
     
     """
     Some 'public' STUN servers like to point to private
@@ -74,7 +103,7 @@ async def validate_stun_server(af, host, port, proto, interface, mode, recurse=T
         return
 
     # New pipe used for the req.
-    stun_client = STUNClient(dest, proto, mode)
+    stun_client = STUNClient(dest, proto, mode, conf=STUN_CONF)
     try:
         reply = await stun_client.get_stun_reply()
     except:
@@ -95,6 +124,7 @@ async def validate_stun_server(af, host, port, proto, interface, mode, recurse=T
                 proto,
                 interface,
                 mode,
+                timeout,
                 recurse=False # Avoid infinite loop.
             )
             if creply is not None:
@@ -128,19 +158,25 @@ async def workspace():
     # Get a big list of STUN server tuples.
     existing_addrs = get_existing_stun_servers()
     existing_addrs = list(existing_addrs)
-    existing_addrs = [("stun.zentauron.de", 3478)]
+    #existing_addrs = [("stun.zentauron.de", 3478)]
     #existing_addrs = [("34.74.124.204", 3478)] stun.moonlight-stream.org
-    existing_addrs = [("stun1.p2pd.net", 3478)]
+    #existing_addrs = [("stun1.p2pd.net", 3478)]
+    existing_addrs = existing_addrs[:40]
         
     # 2 * 2 * 2 per server
     # maybe do all these tests for each server in a batch
     tasks = []
+    task_timeout = 10
     for mode in [RFC3489, RFC5389]:
         for proto in ENABLE_PROTOS:
             for af in ENABLE_AFS:
                 for serv_addr in existing_addrs:
                     host, port = serv_addr
-                    task = validate_stun_server(af, host, port, proto, i, mode)
+                    task = async_wrap_errors(
+                        validate_stun_server(af, host, port, proto, i, mode, task_timeout-2),
+                        timeout=10
+                    )
+
                     tasks.append(task)
 
     """
@@ -149,10 +185,13 @@ async def workspace():
     """
     # Validate stun server.
     results = []
+    """
     for task in tasks:
         result = await task
         print(result)
         results.append(result)
+    """
+    results = await asyncio.gather(*tasks)
     
     # Generate a list of servers for use with settings.py.
     stun_change_servers = {
@@ -206,6 +245,10 @@ async def workspace():
 
             serv_index[proto].clear()
             serv_index[proto].update(clean_index)
+
+    # Indication if test was right.
+    print(len(stun_change_servers[UDP][IP4]))
+    print(len(stun_map_servers[UDP][IP4]))
 
     # Convert settings dict to a string.
     # Remove invalid array keys for formatting.
