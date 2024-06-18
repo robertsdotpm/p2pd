@@ -22,6 +22,7 @@ concurrency
 
 """
 
+import platform
 import trio
 
 import dns.message
@@ -29,6 +30,10 @@ import dns.asyncquery
 import dns.asyncresolver
 
 from p2pd import *
+
+if platform.system() == "Windows":
+    loop = asyncio.ProactorEventLoop()
+    asyncio.set_event_loop(loop)
 
 
 TASK_TIMEOUT = 10
@@ -61,8 +66,6 @@ def dns_get_ip(r):
     """
     for i in range(0, len(r.answer)):
         answer = r.answer[i]
-        print(answer)
-        print(answer.rdtype.value)
         if answer.rdtype.value in [28, 1]:
             return str(answer.to_rdataset()[0])
 
@@ -104,14 +107,21 @@ async def validate_stun_server(af, host, port, proto, interface, mode, timeout, 
     # Attempt to resolve STUN server address.
     route = interface.route(af)
     try:
-        if recurse:
+        ip = None
+        try:
+            ipr = IPRange(host, cidr=af_to_cidr(af))
+            ip = host
+        except:
+            pass
+
+        if ip is None:
             if af == IP4:
                 q = dns.message.make_query(host, "A")
-                r = await dns.asyncquery.udp(q, "8.8.8.8")
+                r = await dns.asyncquery.tcp(q, "8.8.8.8")
                 ip = dns_get_ip(r)
             if af == IP6:
                 q = dns.message.make_query(host, "AAAA")
-                r = await dns.asyncquery.udp(q, "2001:4860:4860::8888")
+                r = await dns.asyncquery.tcp(q, "2001:4860:4860::8888")
                 ip = dns_get_ip(r)
 
             if ip is None:
@@ -119,15 +129,17 @@ async def validate_stun_server(af, host, port, proto, interface, mode, timeout, 
         else:
             ip = host
         
-        print(ip)
-        
         dest = Address(
             ip,
             port,
             route=route,
             timeout=STUN_CONF["dns_timeout"]
         )
-        dest.tup = (ip, port)
+        if af == IP6:
+            dest.tup = (ip, port, 0, 0)
+        else:
+            dest.tup = (ip, port)
+
         dest.af = dest.chose = af
         dest.target = ip
         dest.afs_found = [af]
@@ -155,6 +167,7 @@ async def validate_stun_server(af, host, port, proto, interface, mode, timeout, 
     try:
         reply = await stun_client.get_stun_reply()
     except:
+        log_exception()
         log(f"{af} {host} {proto} {mode} get reply {recurse} none")
         return None
     
@@ -205,9 +218,12 @@ async def validate_stun_server(af, host, port, proto, interface, mode, timeout, 
 
 
 async def workspace():
+
+
     
-    q = dns.message.make_query('google.com', "A")
-    r = await dns.asyncquery.udp(q, "8.8.8.8")
+    q = dns.message.make_query('google.com', "AAAA")
+    r = await dns.asyncquery.udp(q, "2001:4860:4860::8888")
+
     print(dir(r.answer.count))
     #print(r.answer[1])
     
@@ -242,8 +258,11 @@ async def workspace():
     existing_addrs = list(existing_addrs)
     #existing_addrs = [("stun.zentauron.de", 3478)]
     #existing_addrs = [("34.74.124.204", 3478)] stun.moonlight-stream.org
-    #existing_addrs = [("stun.voipwise.com", 3478)]
-    existing_addrs = existing_addrs[:40]
+    #existing_addrs = [("stun1.p2pd.net", 3478)]
+    #existing_addrs = existing_addrs
+    existing_addrs = [("stun.l.google.com", 19302)]
+    print(len(STUND_SERVERS[IP4]))
+    print(len(existing_addrs))
         
     # 2 * 2 * 2 per server
     # maybe do all these tests for each server in a batch
@@ -274,6 +293,14 @@ async def workspace():
         print(result)
         results.append(result)
     """
+
+    """
+    while len(tasks):
+        sub_tasks = tasks[:10]
+        tasks = tasks[10:]
+        results += await asyncio.gather(*sub_tasks)
+
+    """
     results = await asyncio.gather(*tasks)
     
     # Generate a list of servers for use with settings.py.
@@ -291,7 +318,7 @@ async def workspace():
         if result is None:
             continue
 
-        print(result)
+        #print(result)
         af, host, sip, sport, cip, cport, proto, mode = result
 
         # If it has change tup add to change list.
@@ -345,7 +372,6 @@ async def workspace():
         return s_index
 
     # Display results.
-    print(stun_change_servers)
     stun_change_servers = format_serv_dict(stun_change_servers)
     stun_map_servers = format_serv_dict(stun_map_servers)
     print(stun_change_servers)
