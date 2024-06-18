@@ -97,6 +97,7 @@ async def get_stun_reply(mode, dest_addr, reply_addr, pipe, attrs=[]):
     # Send the req and get a matching reply.
     send_buf = msg.pack()
     recv_buf = await send_recv_loop(dest_addr, pipe, send_buf, sub)
+    log(f"stun reply {mode} {pipe.endpoint_type} {recv_buf}")
     if recv_buf is None:
         raise ErrorNoReply("STUN recv loop got no reply.")
 
@@ -166,22 +167,10 @@ def validate_stun_reply(reply, mode):
         cidr = af_to_cidr(reply.af)
         ipr = IPRange(tup_ip, cidr=cidr)
         if ipr.is_private:
-            log(f'{to_h(reply.txn_id)}: {tup_ip} priv')
+            log(f'{req_attr} {to_h(reply.txn_id)}: {tup_ip} priv')
             return None
         if not valid_port(tup_port):
-            log(f'{to_h(reply.txn_id)}: {tup_port} bad')
-            return None
-        
-    # Extended validation for RFC3489.
-    if mode == RFC3489:
-        # Change IP different from reply IP.
-        if reply.stup[0] == reply.ctup[0]:
-            log(f'{to_h(reply.txn_id)}: bad {reply.ctup[0]} 1')
-            return None
-        
-        # Change port different from reply port.
-        if reply.stup[1] == reply.ctup[1]:
-            log(f'{to_h(reply.txn_id)}: bad {reply.ctup[0]} 2')
+            log(f'{req_attr} {to_h(reply.txn_id)}: {tup_port} bad')
             return None
 
     return reply

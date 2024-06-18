@@ -569,10 +569,13 @@ async def binder(af, ip="", port=0, nic_id=None, loop=None, plat=platform.system
 
     # Process IP_APPEND bind rules.
     bind_tup = None
+    rule_triggered = False
     for bind_rule in bind_magic:
         bind_rule = match_bind_rule(ip, af, plat, bind_rule, IP_APPEND)
         if not bind_rule:
             continue
+        else:
+            rule_triggered = True
 
         # Do norm rule.
         if bind_rule.norm == "":
@@ -592,17 +595,23 @@ async def binder(af, ip="", port=0, nic_id=None, loop=None, plat=platform.system
         break
 
     # Lookup correct bind tuples to use.
-    loop = loop or asyncio.get_event_loop()
-    try:
-        addr_infos = await loop.getaddrinfo(ip, port)
-    except:
-        addr_infos = []
+    if rule_triggered:
+        loop = loop or asyncio.get_event_loop()
+        try:
+            addr_infos = await loop.getaddrinfo(ip, port)
+        except:
+            addr_infos = []
 
-    if not len(addr_infos):
-        raise Exception("Can't resolve IPv6 address for bind.")
-    
-    # Set initial bind tup.
-    bind_tup = addr_infos[0][4]
+        if not len(addr_infos):
+            raise Exception("Can't resolve IPv6 address for bind.")
+        
+        # Set initial bind tup.
+        bind_tup = addr_infos[0][4]
+    else:
+        if af == IP4:
+            return (ip, port)
+        if af == IP6:
+            return (ip, port, 0, 0)
         
     # Process IP_BIND_TUP if needed.
     for bind_rule in bind_magic:
@@ -870,8 +879,8 @@ async def proto_send(pipe, buf):
             continue
 
 async def send_recv_loop(dest, pipe, buf, sub=SUB_ALL):
-    retry = pipe.conf["send_retry"]
-    n = 1 if pipe.stream.proto == TCP else retry
+    #retry = 3
+    n = 1 if pipe.stream.proto == TCP else 3
     for _ in range(0, n):
         try:
             await pipe.send(buf, dest.tup)

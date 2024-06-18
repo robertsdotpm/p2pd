@@ -21,6 +21,8 @@ thats probably why the performance is terrible for high
 concurrency
 
 """
+from concurrent.futures import ThreadPoolExecutor
+
 
 import platform
 import trio
@@ -42,7 +44,7 @@ ENABLE_AFS = [IP4, IP6]
 
 STUN_CONF = dict_child({
     # Retry N times on reply timeout.
-    "packet_retry": 2,
+    "packet_retry": 3,
 
     # Retry N times on invalid address.
     "addr_retry": 2,
@@ -115,15 +117,20 @@ async def validate_stun_server(af, host, port, proto, interface, mode, timeout, 
             pass
 
         if ip is None:
-            if af == IP4:
-                q = dns.message.make_query(host, "A")
-                r = await dns.asyncquery.tcp(q, "8.8.8.8")
-                ip = dns_get_ip(r)
-            if af == IP6:
-                q = dns.message.make_query(host, "AAAA")
-                r = await dns.asyncquery.tcp(q, "2001:4860:4860::8888")
-                ip = dns_get_ip(r)
+            async def res_name():
+                ip = None
+                if af == IP4:
+                    q = dns.message.make_query(host, "A")
+                    r = await dns.asyncquery.udp(q, "8.8.8.8")
+                    ip = dns_get_ip(r)
+                if af == IP6:
+                    q = dns.message.make_query(host, "AAAA")
+                    r = await dns.asyncquery.udp(q, "2001:4860:4860::8888")
+                    ip = dns_get_ip(r)
 
+                return ip
+                
+            ip = await asyncio.wait_for(res_name(), STUN_CONF["dns_timeout"])
             if ip is None:
                 return None
         else:
@@ -175,17 +182,29 @@ async def validate_stun_server(af, host, port, proto, interface, mode, timeout, 
     if reply is None:
         log(f"{af} {host} valid stun reply is none")
         return
-    
+
     # Validate change server reply.
     ctup = (None, None)
     if mode == RFC3489:
         if recurse and hasattr(reply, "ctup"):
             try:
+                # Change IP different from reply IP.
+                if reply.stup[0] == reply.ctup[0]:
+                    log(f'ctup bad {to_h(reply.txn_id)}: bad {reply.ctup[0]} 1')
+                    return None
+                
+                # Change port different from reply port.
+                if reply.stup[1] == reply.ctup[1]:
+                    log(f'ctup bad {to_h(reply.txn_id)}: bad {reply.ctup[0]} 2')
+                    return None
+
+
                 creply = await validate_stun_server(
                     af,
                     reply.ctup[0],
                     reply.ctup[1],
                     proto,
+
                     interface,
                     mode,
                     timeout,
@@ -218,7 +237,10 @@ async def validate_stun_server(af, host, port, proto, interface, mode, timeout, 
 
 
 async def workspace():
+    loop = asyncio.get_running_loop()
 
+    # Set the default executor
+    #loop.set_default_executor(ThreadPoolExecutor(150))
 
     
     q = dns.message.make_query('google.com', "AAAA")
@@ -258,35 +280,42 @@ async def workspace():
     existing_addrs = list(existing_addrs)
     #existing_addrs = [("stun.zentauron.de", 3478)]
     #existing_addrs = [("34.74.124.204", 3478)] stun.moonlight-stream.org
-    #existing_addrs = [("stun1.p2pd.net", 3478)]
-    #existing_addrs = existing_addrs
-    existing_addrs = [("stun.l.google.com", 19302)]
+    #existing_addrs = [("stunserver.stunprotocol.org", 3478)]
+    #existing_addrs = existing_addrs[:100]
+    #existing_addrs = [("stun.l.google.com", 19302)]
     print(len(STUND_SERVERS[IP4]))
     print(len(existing_addrs))
         
     # 2 * 2 * 2 per server
     # maybe do all these tests for each server in a batch
     results = []
-    tasks = []
-    task_timeout = 10
-    for mode in [RFC3489, RFC5389]:
-        for proto in ENABLE_PROTOS:
-            for af in ENABLE_AFS:
-                for serv_addr in existing_addrs:
+    #tasks = []
+    task_timeout = 10    
+    for serv_addr in existing_addrs:
+        tasks = []
+        for mode in [RFC3489, RFC5389]:
+            for proto in ENABLE_PROTOS:
+                for af in ENABLE_AFS:
                     host, port = serv_addr
+
                     task = async_wrap_errors(
                         validate_stun_server(af, host, port, proto, i, mode, task_timeout-2),
                         timeout=10
                     )
+                    
 
                     tasks.append(task)
+
+        out = await asyncio.gather(*tasks)
+        print(out)
+        results += out
 
     """
     todo: why doesn't concurrency work? Is it a problem with getaddrinfo?
     Is the library to blame? I think this would yield interesting insights
     """
     # Validate stun server.
-    results = []
+    #results = []
     """
     for task in tasks:
         result = await task
@@ -295,13 +324,17 @@ async def workspace():
     """
 
     """
+    c = 8
     while len(tasks):
-        sub_tasks = tasks[:10]
-        tasks = tasks[10:]
-        results += await asyncio.gather(*sub_tasks)
-
+        sub_tasks = tasks[:c]
+        tasks = tasks[c:]
+        out = await asyncio.gather(*sub_tasks)
+        print(out)
+        results += out
     """
-    results = await asyncio.gather(*tasks)
+
+
+    #results = await asyncio.gather(*tasks)
     
     # Generate a list of servers for use with settings.py.
     stun_change_servers = {
@@ -346,6 +379,9 @@ async def workspace():
                     add_this = True
                     for ip_type in ["primary", "secondary"]:
                         ip = serv_info[ip_type]["ip"]
+                        if ip is None:
+                            continue
+                        
                         if ip in seen_ips:
                             add_this = False
 
@@ -354,8 +390,8 @@ async def workspace():
                     if add_this:
                         clean_index[af].append(serv_info)
 
-            serv_index[proto].clear()
-            serv_index[proto].update(clean_index)
+
+            serv_index[proto] = clean_index
 
     # Indication if test was right.
     print(len(stun_change_servers[UDP][IP4]))
