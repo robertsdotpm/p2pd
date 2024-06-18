@@ -22,7 +22,14 @@ concurrency
 
 """
 
+import trio
+
+import dns.message
+import dns.asyncquery
+import dns.asyncresolver
+
 from p2pd import *
+
 
 TASK_TIMEOUT = 10
 ENABLE_PROTOS = [TCP, UDP]
@@ -40,12 +47,26 @@ STUN_CONF = dict_child({
 
     "recv_config": 5,
 
-    "con_timeout": 3,
+    "con_timeout": 8,
 
     # Retry no -- if an individual call fails how
     # many times to retry the whole thing.
     "retry_no": 3,
 }, NET_CONF)
+
+def dns_get_ip(r):
+    """
+    if not len(r.answer):
+        r.answer = [r.answer]
+    """
+    for i in range(0, len(r.answer)):
+        answer = r.answer[i]
+        print(answer)
+        print(answer.rdtype.value)
+        if answer.rdtype.value in [28, 1]:
+            return str(answer.to_rdataset()[0])
+
+
 
 def get_existing_stun_servers(serv_path="stun_servers.txt"):
     serv_addr_set = set()
@@ -83,16 +104,42 @@ async def validate_stun_server(af, host, port, proto, interface, mode, timeout, 
     # Attempt to resolve STUN server address.
     route = interface.route(af)
     try:
-        dest = await Address(
-            host,
+        if recurse:
+            if af == IP4:
+                q = dns.message.make_query(host, "A")
+                r = await dns.asyncquery.udp(q, "8.8.8.8")
+                ip = dns_get_ip(r)
+            if af == IP6:
+                q = dns.message.make_query(host, "AAAA")
+                r = await dns.asyncquery.udp(q, "2001:4860:4860::8888")
+                ip = dns_get_ip(r)
+
+            if ip is None:
+                return None
+        else:
+            ip = host
+        
+        print(ip)
+        
+        dest = Address(
+            ip,
             port,
             route=route,
             timeout=STUN_CONF["dns_timeout"]
         )
-        if not len(dest.tup):
-            return
+        dest.tup = (ip, port)
+        dest.af = dest.chose = af
+        dest.target = ip
+        dest.afs_found = [af]
+        dest.is_loopback = False
+        dest.is_private = False
+        dest.is_public = True
+        dest.resolved = True
+        
     except:
+        log_exception()
         log(f"val stun server addr fail: {host}:{port}")
+        return None
     
     """
     Some 'public' STUN servers like to point to private
@@ -100,35 +147,44 @@ async def validate_stun_server(af, host, port, proto, interface, mode, timeout, 
     """
     ipr = IPRange(dest.tup[0], cidr=af_to_cidr(af))
     if ipr.is_private:
-        return
+        log(f"{af} {host} {recurse} is private")
+        return None
 
     # New pipe used for the req.
     stun_client = STUNClient(dest, proto, mode, conf=STUN_CONF)
     try:
         reply = await stun_client.get_stun_reply()
     except:
+        log(f"{af} {host} {proto} {mode} get reply {recurse} none")
         return None
     
     reply = validate_stun_reply(reply, mode)
     if reply is None:
+        log(f"{af} {host} valid stun reply is none")
         return
     
     # Validate change server reply.
     ctup = (None, None)
     if mode == RFC3489:
-        if recurse:
-            creply = await validate_stun_server(
-                af,
-                reply.ctup[0],
-                reply.ctup[1],
-                proto,
-                interface,
-                mode,
-                timeout,
-                recurse=False # Avoid infinite loop.
-            )
+        if recurse and hasattr(reply, "ctup"):
+            try:
+                creply = await validate_stun_server(
+                    af,
+                    reply.ctup[0],
+                    reply.ctup[1],
+                    proto,
+                    interface,
+                    mode,
+                    timeout,
+                    recurse=False # Avoid infinite loop.
+                )
+            except:
+                log(f"vaid stun recurse failed {af} {host}")
+                log_exception()
             if creply is not None:
                 ctup = reply.ctup
+            else:
+                log(f"{af} {host} {reply.ctup} ctup get reply {recurse} none")
     
     # Cleanup.
     if hasattr(reply, "pipe"):
@@ -146,8 +202,34 @@ async def validate_stun_server(af, host, port, proto, interface, mode, timeout, 
         mode
     ]
 
+
+
 async def workspace():
+    
+    q = dns.message.make_query('google.com', "A")
+    r = await dns.asyncquery.udp(q, "8.8.8.8")
+    print(dir(r.answer.count))
+    #print(r.answer[1])
+    
+
+    #return
+
+
+    ip = r.answer[0].to_rdataset()[0]
+    print(ip)
+    print(dir(r.answer[0].rdtype))
+    print(r.answer[0].rdtype.value)
+
+
+    print(ip)
+    
+    
+    
     i = await Interface().start()
+
+
+
+
     """
     dest = await Address("stun.voip.blackberry.com", 3478, i.route(IP4))
     sc = STUNClient(dest, mode=RFC5389, proto=TCP)
@@ -160,11 +242,12 @@ async def workspace():
     existing_addrs = list(existing_addrs)
     #existing_addrs = [("stun.zentauron.de", 3478)]
     #existing_addrs = [("34.74.124.204", 3478)] stun.moonlight-stream.org
-    #existing_addrs = [("stun1.p2pd.net", 3478)]
+    #existing_addrs = [("stun.voipwise.com", 3478)]
     existing_addrs = existing_addrs[:40]
         
     # 2 * 2 * 2 per server
     # maybe do all these tests for each server in a batch
+    results = []
     tasks = []
     task_timeout = 10
     for mode in [RFC3489, RFC5389]:
@@ -208,6 +291,7 @@ async def workspace():
         if result is None:
             continue
 
+        print(result)
         af, host, sip, sport, cip, cport, proto, mode = result
 
         # If it has change tup add to change list.
@@ -261,6 +345,7 @@ async def workspace():
         return s_index
 
     # Display results.
+    print(stun_change_servers)
     stun_change_servers = format_serv_dict(stun_change_servers)
     stun_map_servers = format_serv_dict(stun_map_servers)
     print(stun_change_servers)
