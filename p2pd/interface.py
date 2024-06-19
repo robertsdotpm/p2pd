@@ -406,9 +406,6 @@ class Interface():
             raise Exception("mac none.")
 
         return self
-    
-    async def start_local(self, rp=None, skip_resolve=True, netifaces=None):
-        return await self.do_start(rp=rp, skip_resolve=skip_resolve, netifaces=netifaces)
 
     async def start(self, rp=None, skip_resolve=False, netifaces=None):
         return await self.do_start(rp=rp, skip_resolve=skip_resolve, netifaces=netifaces)
