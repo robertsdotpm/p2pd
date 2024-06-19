@@ -1,0 +1,40 @@
+# async loop.getaddrinfo
+
+It needs to be said that the code that implements
+loop.getaddrinfo uses a blocking socket.getaddrinfo
+call that's executed in a threading pool
+(by default limited to processor count.)
+This is poorly suited for async code and has caused network software to timeout in the past.
+
+In the future it may make sense to optimize this to avoid
+using this call where bind tups can be created by hand and
+to use an async DNS client so that everything is async.
+
+# Many concurrent pipes
+
+It makes sense that in network programming one might
+want to make many concurrent connections. I've
+learned this is greatly problematic. The reason
+for this is because of a myriad of resource caps.
+
+Starting with the event loop. If you're on windows
+and use the selector event loop it caps you to 64
+sockets. Just 64 sockets. That's how few connections
+you can make if they're TCP.
+
+Then there's the case of network quad tups: [af, ip, port, protocol] There's a limit of 68000~ ports per
+interface address, per protocol. Python itself has
+resource limits for sockets. It can be quite low --
+RLIMIT_NOFILE is 1024. If you're checking 1000
+hosts with different address families, protocols,
+and modes suddenly its like:
+
+mode_no = 2; af_no = 2; proto_no = 2;
+host_no * af_no * proto_no * mode_no = 8000
+
+Then you can easily go over socket limits and if that's
+the case its not just opening sockets that becomes a
+problem -- you have to correctly close them in such
+a way that they're immediately available for use.
+So failure to clean up properly is just as bad.
+

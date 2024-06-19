@@ -3,6 +3,42 @@ Without magic cookie = 3489 mode
     - cips / ports / change requests
 With magic cookie = RFC 5389 >= mode
     - no change requests
+
+Original stun code was based on https://github.com/talkiq/pystun3 but through trial-and-error I found that this
+code incorrectly handles magic cookies, xor encoding,
+and has many other issues.
+
+The current code is based on extensive modifications to the TURN proxy code found in this repo: https://github.com/trichimtrich/turnproxy which includes a very good
+parser for STUN messages. I've merged in logic from
+talkiqs fork and my bug fixes for NAT detection.
+
+changes:
+- full async support
+- add more stun servers
+- test that they all work
+- improve error checking
+- add ipv6 support
+- improve commenting
+- fix some smol bugs (including nat test bugs)
+- load balancing to avoid overloading
+- result average support to avoid invalid servers
+- separate list of hosts that support ipv6 for less failures on ipv6
+- TCP support (for get mappings)
+- delta n test (some nats have predictable mappings and assign then a delta apart)
+- added better checking for 'change IPs' and made a new address family for hosts that return correct change ip responses. the nat determination code needs to use these hosts. for regular 'get wan ip' and 'get port mapped' lookups you can use the change hosts or the mapping hosts (larger list)
+- proper support for RFC 3489 and RFC 5389 >=
+
+Note 1: Some of the response times for DNS lookups to the STUN servers in
+this module are on the order of 1 second or higher -- an astronomical
+amount of time for a network. I have tried to use concurrency patterns
+where ever possible to avoid delaying other, faster lookups.4
+
+Note 2: I've read the STUN RFC and it seems to indicate that many of the fields in the protocol format take place over byte boundaries. Yet the client code here works on all the servers I've tested it on and doesn't make these assumptions. It's possible the spec is wrong or maybe my code just won't work with particular features of the STUN protocol. No idea.
+
+TODO: sort the hosts by how fast they respond to a STUN request from domain resolution to reply time.
+TODO: It seems that this is a pattern that reoccurs in several functions.
+The general form might also make sense to add to the Net module.
+TODO: Refactor code. The code in this module offers many good features but the code reflects too much cruft. It could do with a good cleanup.
 """
 
 from .errors import *
@@ -165,7 +201,11 @@ async def get_stun_clients(af, serv_list, interface, proto=UDP):
                 serv_info["primary"]["port"],
                 mock_route
             )
-            return STUNClient(dest, proto=proto)
+            return STUNClient(
+                dest,
+                proto=proto,
+                mode=serv_info["mode"],
+            )
         
         stun_clients.append(get_stun_client(serv_info))
 

@@ -266,15 +266,6 @@ async def delta_test(stun_clients, test_no=8, threshold=5, concurrency=True):
 
     # Create a list of tasks to get a mapping for a port range.
     def get_port_tests(start_port, port_dist=1):
-        # Single concurrent STUN req.
-        conf = dict_merge(NET_CONF, {
-            "packet_retry": 1,
-            "retry_no": 1,
-            "recv_timeout": 0.5,
-            "addr_retry": 1,
-            "dns_timeout": 0.5
-        })
-
         # Return task list for tests.
         tasks = []
         for i in range(0, test_no):
@@ -299,12 +290,20 @@ async def delta_test(stun_clients, test_no=8, threshold=5, concurrency=True):
                 route = iface.route(stun_client.af)
                 await route.bind(port=src_port)
 
+                """
+                Todo: manually chosen source ports
+                aren't guaranteed to succeed due to
+                conflicts and you're not checking for
+                failure.
+                """
+
                 ret = await stun_client.get_mapping(
                     pipe=route
                 )
 
                 if ret is None:
-                    raise Exception("No stun reply in delta map")
+                    log("No stun reply in delta map")
+                    return None
                 else:
                     local, mapped, s = ret
 
@@ -325,45 +324,52 @@ async def delta_test(stun_clients, test_no=8, threshold=5, concurrency=True):
 
     def get_delta_value(delta_no, dist_no, local_dist, preserv_dist, results):
         for i in range(0, len(results)):
-            # Unpack result.
-            local, mapped, s = results[i]
-            socks.append(s)
-            if mapped is None:
-                continue
-
-            # Set previous result if available.
-            prev_result = None
-            if i != 0:
-                if results[i - 1][MAPPED_INDEX] is not None:
-                    prev_result = results[i - 1]
-
-            # Preserving NAT.
-            if local == mapped:
-                delta_no[EQUAL_DELTA] = delta_no.get(EQUAL_DELTA, 0) + 1
-
-            # Comparison tests.
-            if prev_result is not None:
-                # Skip invalid results.
-                prev_local = prev_result[LOCAL_INDEX]
-                prev_mapped = prev_result[MAPPED_INDEX]
-                if not prev_local or not prev_mapped:
+            try:
+                # Skip invalid results
+                if results[i] is None:
+                    continue
+                
+                # Unpack result.
+                local, mapped, s = results[i]
+                socks.append(s)
+                if mapped is None:
                     continue
 
-                # Preserving delta if true.
-                _local_dist = abs(field_dist(local, prev_local, MAX_PORT))
-                mapped_dist = abs(field_dist(mapped, prev_mapped, MAX_PORT))
-                if mapped_dist == _local_dist:
-                    # Otherwise its preserving.
-                    if mapped != local:
-                        preserv_dist[mapped_dist] = 1
-                        delta_no[PRESERV_DELTA] = delta_no.get(PRESERV_DELTA, 0) + 1
-                else:
-                    # Delta mapping dist.
-                    # Plus one NAT type now here.
-                    if _local_dist != 1:
-                        dist_no[mapped_dist] = dist_no.get(mapped_dist, 0) + 1
+                # Set previous result if available.
+                prev_result = None
+                if i != 0:
+                    if results[i - 1][MAPPED_INDEX] is not None:
+                        prev_result = results[i - 1]
+
+                # Preserving NAT.
+                if local == mapped:
+                    delta_no[EQUAL_DELTA] = delta_no.get(EQUAL_DELTA, 0) + 1
+
+                # Comparison tests.
+                if prev_result is not None:
+                    # Skip invalid results.
+                    prev_local = prev_result[LOCAL_INDEX]
+                    prev_mapped = prev_result[MAPPED_INDEX]
+                    if not prev_local or not prev_mapped:
+                        continue
+
+                    # Preserving delta if true.
+                    _local_dist = abs(field_dist(local, prev_local, MAX_PORT))
+                    mapped_dist = abs(field_dist(mapped, prev_mapped, MAX_PORT))
+                    if mapped_dist == _local_dist:
+                        # Otherwise its preserving.
+                        if mapped != local:
+                            preserv_dist[mapped_dist] = 1
+                            delta_no[PRESERV_DELTA] = delta_no.get(PRESERV_DELTA, 0) + 1
                     else:
-                        local_dist[mapped_dist] = local_dist.get(mapped_dist, 0) + 1
+                        # Delta mapping dist.
+                        # Plus one NAT type now here.
+                        if _local_dist != 1:
+                            dist_no[mapped_dist] = dist_no.get(mapped_dist, 0) + 1
+                        else:
+                            local_dist[mapped_dist] = local_dist.get(mapped_dist, 0) + 1
+            except:
+                log_exception()
 
     # Offset names for port test results.
     LOCAL_INDEX = 0 # Source port.

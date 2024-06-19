@@ -51,8 +51,8 @@ NAT_TEST_SCHEMA = [
     [STUN_CHANGE_PORT, "secondary", "primary", "secondary", "secondary"],
 ]
 
-async def nat_test_exec(dest_addr, reply_addr, payload, pipe, q, test_coro):
-    stun_client = STUNClient(dest_addr)
+async def nat_test_exec(dest_addr, reply_addr, payload, mode, pipe, q, test_coro):
+    stun_client = STUNClient(dest_addr, mode=mode)
     if payload == STUN_CHANGE_NONE:
         reply = await stun_client.get_stun_reply(pipe)
     if payload == STUN_CHANGE_PORT:
@@ -106,6 +106,9 @@ async def nat_test_workers(pipe, q, test_index, test_coro, servers):
 
                     # Type of STUN request to send.
                     payload,
+
+                    # Mode to use for stun server.
+                    servers[server_no]["mode"],
 
                     # Pipe to reuse for UDP.
                     pipe,

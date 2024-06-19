@@ -38,7 +38,7 @@ if platform.system() == "Windows":
     asyncio.set_event_loop(loop)
 
 
-TASK_TIMEOUT = 10
+TASK_TIMEOUT = 60
 ENABLE_PROTOS = [TCP, UDP]
 ENABLE_AFS = [IP4, IP6]
 
@@ -50,11 +50,11 @@ STUN_CONF = dict_child({
     "addr_retry": 2,
 
     # Seconds to use for a DNS request before timeout exception.
-    "dns_timeout": 8, # 2
+    "dns_timeout": 20, # 2
 
     "recv_config": 5,
 
-    "con_timeout": 8,
+    "con_timeout": 10,
 
     # Retry no -- if an individual call fails how
     # many times to retry the whole thing.
@@ -75,17 +75,18 @@ def dns_get_ip(r):
 
 def get_existing_stun_servers(serv_path="stun_servers.txt"):
     serv_addr_set = set()
-    for serv_dict in [STUNT_SERVERS, STUND_SERVERS]:
-        for af in VALID_AFS:
-            for serv_info in serv_dict[af]:
-                host = serv_info["host"]
-                for ip_type in ["primary", "secondary"]:
-                    port = serv_info[ip_type]["port"]
-                    if port is not None:
-                        serv_tup = (host, port)
-                        serv_addr_set.add(serv_tup)
+    for serv_dict in [STUN_CHANGE_SERVERS, STUN_MAP_SERVERS]:
+        for proto in [UDP, TCP]:
+            for af in VALID_AFS:
+                for serv_info in serv_dict[proto][af]:
+                    host = serv_info["host"]
+                    for ip_type in ["primary", "secondary"]:
+                        port = serv_info[ip_type]["port"]
+                        if port is not None:
+                            serv_tup = (host, port)
+                            serv_addr_set.add(serv_tup)
 
-                    break
+                        break
 
     # Add in details from the 
     fp = open(serv_path, 'r')
@@ -182,6 +183,9 @@ async def validate_stun_server(af, host, port, proto, interface, mode, timeout, 
     if reply is None:
         log(f"{af} {host} valid stun reply is none")
         return
+    # Cleanup.
+    if hasattr(reply, "pipe"):
+        await reply.pipe.close()  
 
     # Validate change server reply.
     ctup = (None, None)
@@ -217,10 +221,6 @@ async def validate_stun_server(af, host, port, proto, interface, mode, timeout, 
                 ctup = reply.ctup
             else:
                 log(f"{af} {host} {reply.ctup} ctup get reply {recurse} none")
-    
-    # Cleanup.
-    if hasattr(reply, "pipe"):
-        await reply.pipe.close()  
 
     # Return all the gathered data.
     return [
@@ -289,26 +289,30 @@ async def workspace():
     # 2 * 2 * 2 per server
     # maybe do all these tests for each server in a batch
     results = []
-    #tasks = []
-    task_timeout = 10    
+    tasks = []
+    task_timeout = 10   
     for serv_addr in existing_addrs:
-        tasks = []
+        #tasks = []
         for mode in [RFC3489, RFC5389]:
             for proto in ENABLE_PROTOS:
                 for af in ENABLE_AFS:
                     host, port = serv_addr
 
-                    task = async_wrap_errors(
-                        validate_stun_server(af, host, port, proto, i, mode, task_timeout-2),
-                        timeout=10
+                    task = asyncio.ensure_future(
+                        async_wrap_errors(
+                            validate_stun_server(af, host, port, proto, i, mode, task_timeout-2),
+                            timeout=10
+                        )
                     )
                     
 
                     tasks.append(task)
 
-        out = await asyncio.gather(*tasks)
-        print(out)
-        results += out
+        #out = await asyncio.gather(*tasks)
+        #print(out)
+        #results += out
+
+    results = await asyncio.gather(*tasks)
 
     """
     todo: why doesn't concurrency work? Is it a problem with getaddrinfo?
@@ -368,6 +372,13 @@ async def workspace():
         }
 
         serv_list[proto][af].append(entry)
+
+        """
+        All change servers are also map servers but
+        map servers aren't all change servers.
+        """
+        if serv_list == stun_change_servers:
+            stun_map_servers[proto][af].append(entry)
 
     # Filter alias domains.
     for serv_index in [stun_map_servers, stun_change_servers]:

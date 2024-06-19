@@ -352,7 +352,7 @@ class Interface():
             for af in af_list:
                 log(f"Attempting to resolve {af}")
                 # Copy random STUN servers to use.
-                serv_list = STUND_SERVERS[af][:]
+                serv_list = STUN_CHANGE_SERVERS[UDP][af][:]
                 random.shuffle(serv_list)
                 serv_list = serv_list[:max_agree]
 
@@ -429,8 +429,8 @@ class Interface():
         else:
             # STUN is used to get the delta type.
             af = IP4
-            nat_test_no = 8
-            stun_servs = STUND_SERVERS[af][:]
+            nat_test_no = 12
+            stun_servs = STUN_CHANGE_SERVERS[UDP][af][:]
             random.shuffle(stun_servs)
             stun_clients = await get_stun_clients(
                 af,
@@ -446,7 +446,7 @@ class Interface():
             nat_type, delta = await asyncio.wait_for(
                 asyncio.gather(*[
                     async_wrap_errors(
-                        fast_nat_test(pipe, STUND_SERVERS[af])
+                        fast_nat_test(pipe, stun_servs)
                     ),
                     async_wrap_errors(
                         delta_test(stun_clients)
