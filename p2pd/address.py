@@ -21,8 +21,6 @@ class Address():
         log("> Address: %s:%d" % (self.host, self.port))
 
     async def res(self):
-        print("res")
-
         # Lookup IPs for domain.
         route = self.route
         loop = asyncio.get_event_loop()

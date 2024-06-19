@@ -155,7 +155,12 @@ class STUNAddrTup:
             ip_buf = xor_bufs(ip_buf, mask)
 
         # XORed starting from the port to the IP.
-        if code == STUNAttrs.XorMappedAddress:
+        codes = [
+            STUNAttrs.XorMappedAddress,
+            STUNAttrs.XorPeerAddress,
+            STUNAttrs.XorRelayedAddress,
+        ]
+        if code in codes:
             mask = b'\x00\x00\x21\x12' + self.magic_cookie + self.txid
             data = xor_bufs(data, mask)
 
@@ -320,7 +325,6 @@ class STUNMsg:
         # bit scheme is used for the message type.
         if self.mode != RFC3489:
             msg_type = b_and(b_or(self.msg_type, self.msg_code), b"\x3F\xFF")
-            print("rfc 555")
         else:
             #print("rfc34553")
             msg_type = self.msg_type

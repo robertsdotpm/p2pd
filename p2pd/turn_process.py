@@ -5,12 +5,13 @@ from hashlib import md5
 from .utils import *
 from .address import *
 from .turn_defs import *
+from .stun_utils import *
 
 # Parse a TURN message.
 # Use bitwise OPs to get valid method and status codes.
 def turn_parse_msg(buf):
     try:
-        turn_msg, _ = TurnMessage.unpack(buf)
+        turn_msg, _ = STUNMsg.unpack(buf, mode=RFC5389)
         turn_method = b_and(turn_msg.msg_type, b"\x00\x0f")
         turn_status = b_and(turn_msg.msg_type, b"\x01\x10")
         return turn_msg, turn_method, turn_status
@@ -32,19 +33,20 @@ def turn_get_data_attr(msg, af):
         attr_code, _, attr_data = msg.read_attr()
 
         # The message segment.
-        if attr_code == TurnAttribute.Data:
+        if attr_code == STUNAttrs.Data:
             if isinstance(attr_data, memoryview):
                 data = attr_data.tobytes()
             else:
                 data = attr_data
 
         # The sender of the message.
-        if attr_code == TurnAttribute.XorPeerAddress:
-            peer_tup = turn_peer_attr_to_tup(
-                attr_data,
-                msg.txn_id,
-                af
+        if attr_code == STUNAttrs.XorPeerAddress:
+            stun_addr = STUNAddrTup(
+                af=af,
+                txid=msg.txn_id,
             )
+            stun_addr.decode(attr_code, attr_data)
+            peer_tup = stun_addr.tup
 
     # Reset attribute pointer to start.
     msg.attr_cursor = 0
@@ -61,73 +63,70 @@ def is_auth_ready(self):
         return True
     else:
         return False
-
-# Processes attributes from a TURN message.
-async def process_attributes(self, msg):
-    # Unpack attributes from message.
+    
+def turn_proc_attrs(af, attr_code, attr_data, msg, self):
     error_code = 0
     error_msg = b''
-    while not msg.eof():
-        attr_code, _, attr_data = msg.read_attr()
-        print(attr_code)
-        print(attr_data)
 
-        # Src port of UDP packet + external IP.
-        # These details are XORed based on whether its IPv4 or IPv6.
-        if attr_code == TurnAttribute.XorMappedAddress:
-            if self.mapped != []:
-                continue
-
-            self.mapped = turn_peer_attr_to_tup(
-                attr_data,
-                msg.txn_id,
-                self.turn_addr.af
-            )
-            log("> Turn setting mapped address = {}".format(self.mapped))
-            self.client_tup_future.set_result(self.mapped)
-
-        # Server address given back for relaying messages.
-        if attr_code == TurnAttribute.XorRelayedAddress:
-            if self.relay_tup is not None:
-                continue
-
+    # Server address given back for relaying messages.
+    if attr_code == STUNAttrs.XorRelayedAddress:
+        if self.relay_tup is None:
             # Extract the relay address info to a tup.
-            self.relay_tup = turn_peer_attr_to_tup(
-                attr_data,
-                msg.txn_id,
-                self.turn_addr.af
+            stun_addr = STUNAddrTup(
+                af=af,
+                txid=msg.txn_id,
             )
+            stun_addr.decode(attr_code, attr_data)
+            self.relay_tup = stun_addr.tup
 
             # Indicate the tup has been set.
             self.relay_tup_future.set_result(self.relay_tup)
             log(f"> Turn setting relay addr = {self.relay_tup}")
             self.relay_event.set()
 
-        # Handle authentication.
-        if attr_code == TurnAttribute.Realm:
-            self.realm = attr_data
-            if self.turn_user is not None and self.turn_pw is not None:
-                self.key = md5(self.turn_user + b':' + self.realm + b':' + self.turn_pw).digest()
-                log("> Turn setting key = %s" % ( to_s(to_h(self.key)) ) )
+    # Handle authentication.
+    if attr_code == STUNAttrs.Realm:
+        self.realm = attr_data
+        if self.turn_user is not None and self.turn_pw is not None:
+            self.key = md5(self.turn_user + b':' + self.realm + b':' + self.turn_pw).digest()
+            log("> Turn setting key = %s" % ( to_s(to_h(self.key)) ) )
 
-        # Nonce is used for reply protection.
-        # As our client uses a state-machine the impact of this is minimal.
-        elif attr_code == TurnAttribute.Nonce:
-            self.nonce = attr_data
-            if IS_DEBUG:
-                log("> Turn setting nonce = %s" % ( to_s(to_h(self.nonce.tobytes()))  ) )
+    # Nonce is used for reply protection.
+    # As our client uses a state-machine the impact of this is minimal.
+    elif attr_code == STUNAttrs.Nonce:
+        self.nonce = attr_data
+        if IS_DEBUG:
+            log("> Turn setting nonce = %s" % ( to_s(to_h(self.nonce.tobytes()))  ) )
 
-        elif attr_code == TurnAttribute.Lifetime:
-            self.lifetime, = unpack("!I", attr_data)
-            if IS_DEBUG:
-                log("> Turn setting lifetime = %d" % ( self.lifetime ))
+    elif attr_code == STUNAttrs.Lifetime:
+        self.lifetime, = unpack("!I", attr_data)
+        if IS_DEBUG:
+            log("> Turn setting lifetime = %d" % ( self.lifetime ))
 
-        # Return any error codes.
-        elif attr_code == TurnAttribute.ErrorCode:
-            b2 = io.BytesIO(attr_data)
-            d = b2.read(4)
-            error_code = (d[2] & 0x7) * 100 + d[3]
-            error_msg = b2.read()
+    # Return any error codes.
+    elif attr_code == STUNAttrs.ErrorCode:
+        b2 = io.BytesIO(attr_data)
+        d = b2.read(4)
+        error_code = (d[2] & 0x7) * 100 + d[3]
+        error_msg = b2.read()
+
+
+    return [error_code, error_msg]
+
+# Processes attributes from a TURN message.
+async def process_attributes(af, self, msg):
+    # Unpack attributes from message.
+    error_code = 0
+    error_msg = b''
+    while not msg.eof():
+        attr_code, _, attr_data = msg.read_attr()
+        turn_proc_attrs(af, attr_code, attr_data, msg, self)
+        stun_proc_attrs(af, attr_code, attr_data, msg)
+        if hasattr(msg, "rtup"):
+            if not len(self.mapped):
+                self.mapped = msg.rtup
+                self.client_tup_future.set_result(self.mapped)
+
 
     # Trigger auth ready event.
     if is_auth_ready(self):
@@ -226,13 +225,13 @@ async def process_replies(self):
         # A few important attributes are saved into the client for future use.
         # Mostly details for relaying and authentication.
         try:
-            error_code, error_msg = await process_attributes(self, turn_msg)
+            error_code, error_msg = await process_attributes(self.turn_addr.af, self, turn_msg)
         except Exception:
             log_exception()
             continue
 
         # Log any error messages.
-        if turn_status == TurnMessageCode.ErrorResp:
+        if turn_status == STUNMsgCodes.ErrorResp:
             log('Turn error {}: {}'.format(error_code, error_msg))
 
             # Stale nonce.
@@ -252,12 +251,12 @@ async def process_replies(self):
                 continue
 
         # Attempt to authenticate or create a relay address or refresh one.
-        if turn_method == TurnMessageMethod.Allocate:
+        if turn_method == STUNMsgTypes.Allocate:
             log("got alloc")
 
             # Notify sender that message was received.
             self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
-            if turn_status == TurnMessageCode.SuccessResp:
+            if turn_status == STUNMsgCodes.SuccessResp:
                 if self.state != TURN_TRY_ALLOCATE:
                     #self.txid = txid
                     #self.requires_auth = False
@@ -270,7 +269,7 @@ async def process_replies(self):
             needed to authenticate and sign all future messages.
             Hence failing once is expected.
             """
-            if turn_status == TurnMessageCode.ErrorResp:
+            if turn_status == STUNMsgCodes.ErrorResp:
                 # Avoid infinite loop of allocations.
                 if self.state != TURN_TRY_ALLOCATE:
                     self.set_state(TURN_TRY_ALLOCATE)
@@ -287,14 +286,14 @@ async def process_replies(self):
             continue
 
         # White list a particular peer to send replies to our relay address.
-        if turn_method == TurnMessageMethod.CreatePermission:
-            if turn_status == TurnMessageCode.SuccessResp:
+        if turn_method == STUNMsgTypes.CreatePermission:
+            if turn_status == STUNMsgCodes.SuccessResp:
                 # Notify sender that message was received.
                 self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
 
             continue
 
-        if turn_method == TurnMessageMethod.Refresh:
+        if turn_method == STUNMsgTypes.Refresh:
             self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
             continue
 

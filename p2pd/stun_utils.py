@@ -34,6 +34,32 @@ def sub_to_stun_reply(tran_id, dest_tup):
 
     return [b_msg_p, b_addr_p]
 
+def stun_proc_attrs(af, attr_code, attr_data, msg):
+    # Set our remote IP and port.
+    if not hasattr(msg, "rtup"):
+        xor_addr_attrs = [STUNAttrs.XorMappedAddressX, STUNAttrs.XorMappedAddress]
+        if attr_code in xor_addr_attrs:
+            stun_addr_field = STUNAddrTup(
+                af=af,
+                txid=msg.txn_id,
+                magic_cookie=msg.magic_cookie,
+            ).unpack(attr_code, attr_data)
+            msg.rtup = stun_addr_field.tup
+
+        if attr_code == STUNAttrs.MappedAddress:
+            stun_addr_field = STUNAddrTup(
+                af=af
+            ).unpack(attr_code, attr_data)
+            msg.rtup = stun_addr_field.tup
+
+    # Set the additional IP and port for this server.
+    if not hasattr(msg, "ctup"):
+        if attr_code == STUNAttrs.ChangedAddress:
+            stun_addr_field = STUNAddrTup(
+                af=af
+            ).unpack(attr_code, attr_data)
+            msg.ctup = stun_addr_field.tup
+
 def stun_proto(buf, af):
     msg, buf = STUNMsg.unpack(buf)
     msg.af = af
@@ -46,33 +72,15 @@ def stun_proto(buf, af):
         print(bytes(attr_data))
         print()
         """
+
+        stun_proc_attrs(af, attr_code, attr_data, msg)
         
-        # Set our remote IP and port.
-        if not hasattr(msg, "rtup"):
-            xor_addr_attrs = [STUNAttrs.XorMappedAddressX, STUNAttrs.XorMappedAddress]
-            if attr_code in xor_addr_attrs:
-                stun_addr_field = STUNAddrTup(
-                    af=af,
-                    txid=msg.txn_id,
-                    magic_cookie=msg.magic_cookie,
-                ).unpack(attr_code, attr_data)
-                msg.rtup = stun_addr_field.tup
 
-            if attr_code == STUNAttrs.MappedAddress:
-                stun_addr_field = STUNAddrTup(
-                    af=af
-                ).unpack(attr_code, attr_data)
-                msg.rtup = stun_addr_field.tup
-
-        # Set the additional IP and port for this server.
-        if not hasattr(msg, "ctup"):
-            if attr_code == STUNAttrs.ChangedAddress:
-                stun_addr_field = STUNAddrTup(
-                    af=af
-                ).unpack(attr_code, attr_data)
-                msg.ctup = stun_addr_field.tup
         
     return msg, buf
+
+
+
 
 # Handles making a STUN request to a server.
 # Pipe also accepts route and its upgraded to a pipe.
