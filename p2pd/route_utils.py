@@ -326,6 +326,7 @@ async def get_routes_with_res(af, min_agree, interface, stun_clients, netifaces,
 
     # Resolve interface addresses CFAB.
     results = await asyncio.gather(*tasks)
+    results = [r for r in results if r is not None]
 
     # Find default route.
     default_route = get_route_by_src(any_ip, results)

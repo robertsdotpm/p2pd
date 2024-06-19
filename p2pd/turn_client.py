@@ -28,8 +28,9 @@ import asyncio
 from struct import pack
 from .address import *
 from .interface import *
-from .turn_defs import *
 from .turn_process import *
+from .stun_defs import *
+from .turn_defs import *
 from .base_stream import *
 
 # Main class for handling TURN sessions with a server.
@@ -175,14 +176,19 @@ class TURNClient(BaseProto):
 
         # expect 'Unauthorized'.
         await async_retry(lambda: self.allocate_relay(sign=False), count=5)
+        log(f"Turn expect unauth success")
 
         # Wait for client to be ready.
         await self.auth_event.wait() # Authentication success.
+        log(f"Turn auth success")
         await self.relay_event.wait() # Our relay address available.
+        log(f"Turn relay event success")
 
         # Return our relay tup.
         relay_tup = await self.relay_tup_future
+        log(f"Turn tup future success")
         client_tup = await self.client_tup_future
+        log(f"Turn client tup success")
 
         # White list ourselves.
         #await self.accept_peer(client_tup, relay_tup)
@@ -264,14 +270,14 @@ class TURNClient(BaseProto):
 
     # Handles writing TURN messages to self.udp_stream.
     # Will write credential and HMAC if a message needs 'signing.'
-    async def send_turn_msg(self, msg: TurnMessage, do_sign=False):
-        buf, _ = TurnMessage.unpack(msg.encode())
+    async def send_turn_msg(self, msg: STUNMsg, do_sign=False):
+        buf, _ = STUNMsg.unpack(msg.pack(), mode=RFC5389)
         if self.requires_auth:
             if do_sign and self.key:
                 buf.write_credential(self.turn_user, self.realm, self.nonce)
                 buf.write_hmac(self.key)
 
-        buf = buf.encode()
+        buf = buf.pack()
         await self.turn_pipe.send(buf, self.turn_addr.tup)
 
     # Record TURN protocol messages by TXID.
@@ -356,9 +362,12 @@ class TURNClient(BaseProto):
         
     # Main step 1 -- allocate a relay address msg.
     async def allocate_msg(self):
-        reply = TurnMessage(msg_type=TurnMessageMethod.Allocate)
+        reply = STUNMsg(
+            msg_type=STUNMsgTypes.Allocate,
+            mode=RFC5389
+        )
         reply.write_attr(
-            TurnAttribute.RequestedTransport,
+            STUNAttrs.RequestedTransport,
             TURN_RPOTOCOL_UDP
         )
 
@@ -370,7 +379,11 @@ class TURNClient(BaseProto):
     # Permissions are made per IP.
     async def white_list_msg(self, src_tup):        
         # Try write the peer address.
-        reply = TurnMessage(msg_type=TurnMessageMethod.CreatePermission)
+        reply = STUNMsg(
+            msg_type=STUNMsgTypes.CreatePermission,
+            mode=RFC5389
+        )
+
         try:
             turn_write_peer_addr(
                 reply,
@@ -385,9 +398,12 @@ class TURNClient(BaseProto):
     # Step 3 - refresh allocation to avoid lifetime timeouts.
     async def refresh_msg(self):
         # 32 bit unsigned int
-        reply = TurnMessage(msg_type=TurnMessageMethod.Refresh)
+        reply = STUNMsg(
+            msg_type=STUNMsgTypes.Refresh,
+            mode=RFC5389
+        )
         reply.write_attr(
-            TurnAttribute.Lifetime,
+            STUNAttrs.Lifetime,
             pack("!I", TURN_REFRESH_EXPIRY)
         )
 

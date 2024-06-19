@@ -274,7 +274,7 @@ class TurnMessage:
         ])
 
         self.msg_len += len(buf)
-        self.msg.extend(buf)
+        self.msg += buf
 
     def write_credential(self, username: str, realm: str, nonce: bytes = b''):
         self.write_attr(TurnAttribute.Username, username)

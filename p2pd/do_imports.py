@@ -12,7 +12,7 @@ if __name__ != '__main__':
     from .ip_range import IPRange
     from .upnp import port_forward
     from .route_defs import Route, RoutePool
-    from .route_utils import get_routes, Routes, get_routes_with_res
+    from .route_utils import Routes, get_routes_with_res
     from .base_stream import pipe_open, SUB_ALL
     from .interface import Interface, Interfaces, init_p2pd
     from .clock_skew import SysClock

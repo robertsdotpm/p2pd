@@ -69,6 +69,8 @@ async def process_attributes(self, msg):
     error_msg = b''
     while not msg.eof():
         attr_code, _, attr_data = msg.read_attr()
+        print(attr_code)
+        print(attr_data)
 
         # Src port of UDP packet + external IP.
         # These details are XORed based on whether its IPv4 or IPv6.

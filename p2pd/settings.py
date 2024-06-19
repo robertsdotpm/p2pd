@@ -179,15 +179,18 @@ NATs, unfortunately. So they've been removed from the server list for now.
         "realm": b"p2pd.net"
     },
 """
+"""
+todo: update this
+{
+    "host": b"us0.turn.peerjs.com",
+    "port": 3478,
+    "afs": [IP4, IP6],
+    "user": b"peerjs",
+    "pass": b"peerjsp",
+    "realm": None
+},
+"""
 TURN_SERVERS = [
-    {
-        "host": b"peerjs.com",
-        "port": 3478,
-        "afs": [IP4, IP6],
-        "user": b"peerjs",
-        "pass": b"peerjsp",
-        "realm": None
-    },
     {
         "host": b"turn.obs.ninja",
         "port": 443,

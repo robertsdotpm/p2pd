@@ -260,7 +260,7 @@ class STUNMsg:
         ])
 
         self.msg_len += len(buf)
-        self.msg.extend(buf)
+        self.msg += buf
 
     def write_credential(self, username: str, realm: str, nonce: bytes = b''):
         self.write_attr(STUNAttrs.Username, username)
@@ -273,7 +273,7 @@ class STUNMsg:
     
     def write_hmac(self, key: bytes):
         self.msg_len += 24
-        msg_hmac = self.encode()
+        msg_hmac = self.pack()
         self.msg_len -= 24
         self.write_attr(STUNAttrs.MessageIntegrity, self._hmac(key, msg_hmac))
 
@@ -320,7 +320,9 @@ class STUNMsg:
         # bit scheme is used for the message type.
         if self.mode != RFC3489:
             msg_type = b_and(b_or(self.msg_type, self.msg_code), b"\x3F\xFF")
+            print("rfc 555")
         else:
+            #print("rfc34553")
             msg_type = self.msg_type
 
         return bytes().join([
@@ -358,8 +360,8 @@ class STUNMsg:
         return inst.encode()
     """
     
-    @classmethod
-    def unpack(cls, msg: memoryview) -> tuple:
-        inst = cls()
+
+    def unpack(msg, mode=RFC3489):
+        inst = STUNMsg(mode=mode)
         buf = inst.decode(msg)
         return inst, buf
