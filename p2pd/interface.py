@@ -345,7 +345,7 @@ class Interface():
 
         # Get routes for AF.
         log(f"Starting resolve with stack type = {self.stack}")
-        max_agree = 5
+        max_agree = 6
         if rp == None:
             af_list = self.supported(skip_resolve=True)
             tasks = []
@@ -361,9 +361,11 @@ class Interface():
 
                 async def helper(af, stun_clients):
                     try:
+                        # First to reach agree
+                        # OR timeout and most numerous.
                         routes, link_locals = await get_routes_with_res(
                             af,
-                            2,
+                            3,
                             self,
                             stun_clients,
                             netifaces,
@@ -429,7 +431,7 @@ class Interface():
         else:
             # STUN is used to get the delta type.
             af = IP4
-            nat_test_no = 12
+            nat_test_no = 15
             stun_servs = STUN_CHANGE_SERVERS[UDP][af][:]
             random.shuffle(stun_servs)
             stun_clients = await get_stun_clients(
@@ -445,11 +447,23 @@ class Interface():
             # Run delta test.
             nat_type, delta = await asyncio.wait_for(
                 asyncio.gather(*[
+                    # Fastest fit wins.
                     async_wrap_errors(
-                        fast_nat_test(pipe, stun_servs)
+                        fast_nat_test(
+                            pipe,
+                            stun_servs,
+                            test_no=5,
+                        )
                     ),
+
+                    # Concurrent -- 12 different hosts
+                    # Threshold of 5 for consensus.
                     async_wrap_errors(
-                        delta_test(stun_clients)
+                        delta_test(
+                            stun_clients,
+                            test_no=12,
+                            threshold=5
+                        )
                     )
                 ]),
                 timeout=4

@@ -73,10 +73,10 @@ async def nat_test_exec(dest_addr, reply_addr, payload, mode, pipe, q, test_coro
 
     return None
 
-async def nat_test_workers(pipe, q, test_index, test_coro, servers):
+async def nat_test_workers(pipe, q, test_index, test_coro, servers, test_no):
     # Make list of coroutines to do this NAT tests.
     workers = []
-    for server_no in range(0, min(NAT_TEST_NO, len(servers))):
+    for server_no in range(0, min(test_no, len(servers))):
         async def worker(server_no):
             # Packets will go to this destination.
             # Send to, expect from.
@@ -161,7 +161,7 @@ def no_stun_resp_check(q_list):
         
     return True
 
-async def fast_nat_test(pipe, test_servers, timeout=NAT_TEST_TIMEOUT):
+async def fast_nat_test(pipe, test_servers, test_no=NAT_TEST_NO, timeout=NAT_TEST_TIMEOUT):
     # Store STUN request results here.
     # n = index of test e.g. [0] = test 1.
     q_list = [[], [], [], []]
@@ -205,7 +205,8 @@ async def fast_nat_test(pipe, test_servers, timeout=NAT_TEST_TIMEOUT):
                 q_list[test_index],
                 test_index,
                 test_coro,
-                test_servers, 
+                test_servers,
+                test_no
             )
 
             # Keep track of test offset.
