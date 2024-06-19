@@ -1,4 +1,5 @@
 from decimal import Decimal as Dec
+import random
 from p2pd import *
 
 
@@ -57,7 +58,11 @@ class TestTCPPunch(unittest.IsolatedAsyncioTestCase):
             # await interface.load_nat()
 
         # Used to get external mappings (not needed for self-test.)
-        stun_client = STUNClient(interface, af)
+        serv_list = STUN_MAP_SERVERS[TCP][af][:]
+        random.shuffle(serv_list)
+        serv_list = serv_list[:1]
+        
+        stun_client = (await get_stun_clients(af, serv_list, interface))[0]
         
         # Initiator client -- starts the protocol.
         # Sends the first mapping details.

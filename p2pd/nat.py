@@ -599,7 +599,7 @@ async def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, stun_c
     # If we're port restricted then set our reply port to the STUN port.
     if our_nat["type"] in PREDICTABLE_NATS:
         # Get a mapping to use.
-        _, s, local_port, remote_port, _, _ = await stun_client.get_mapping(
+        local_port, remote_port, s = await stun_client.get_mapping(
             proto=STREAM
         )
 
@@ -724,6 +724,8 @@ async def get_nat_predictions(mode, stun_client, our_nat, their_nat, their_maps=
     last_mapped = [None, None]
     if our_nat["delta"]["type"] in DELTA_N:
         # NOTE: if local < 1024 it may not be possible to reuse.
+        iface = stun_client.iface
+        af = stun_client.af
         r = stun_client.interface.route(stun_client.af)
         s = None
         for i in range(0, 5):
@@ -733,10 +735,10 @@ async def get_nat_predictions(mode, stun_client, our_nat, their_nat, their_maps=
                 reserved_sock, high_port = await get_high_port_socket(r, sock_type=TCP)
                 #reserved_sock.close()
 
-                
-                _, s, local_port, remote_port, _, _ = await stun_client.get_mapping(
-                    proto=STREAM,
-                    source_port=high_port
+                manual_route = await iface.route(af).bind(port=high_port)
+                local_port, remote_port, s = await stun_client.get_mapping(
+                    # Upgraded to a pipe.
+                    pipe=manual_route
                 )
 
                 #socket.setsockopt(s, socket.SO_REUSEPORT)
