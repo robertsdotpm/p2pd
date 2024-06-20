@@ -331,7 +331,9 @@ class Interface():
         o = self.from_dict(state)
         self.__dict__ = o.__dict__
 
-    async def do_start(self, rp=None, skip_resolve=False, netifaces=None):
+    async def do_start(self, netifaces=None, min_agree=3, max_agree=6, timeout=2):
+        log(f"Starting resolve with stack type = {self.stack}")
+
         # Load internal interface details.
         if Interface.get_netifaces() is None:
             self.netifaces = await init_p2pd()
@@ -344,56 +346,37 @@ class Interface():
         netifaces = netifaces or self.netifaces
 
         # Get routes for AF.
-        log(f"Starting resolve with stack type = {self.stack}")
-        max_agree = 6
-        if rp == None:
-            af_list = self.supported(skip_resolve=True)
-            tasks = []
-            for af in af_list:
-                log(f"Attempting to resolve {af}")
-                # Copy random STUN servers to use.
-                serv_list = STUN_CHANGE_SERVERS[UDP][af][:]
-                random.shuffle(serv_list)
-                serv_list = serv_list[:max_agree]
+        tasks = []
+        for af in VALID_AFS:
+            log(f"Attempting to resolve {af}")
 
-                # Used to resolve nic addresses.
-                stun_clients = await get_stun_clients(af, serv_list, self)
+            # Initialize with blank RP.
+            self.rp[af] = RoutePool()
 
-                async def helper(af, stun_clients):
-                    try:
-                        # First to reach agree
-                        # OR timeout and most numerous.
-                        routes, link_locals = await get_routes_with_res(
-                            af,
-                            3,
-                            self,
-                            stun_clients,
-                            netifaces,
-                            2
-                        )
+            # Copy random STUN servers to use.
+            stun_servs = STUN_CHANGE_SERVERS[UDP][af]
+            serv_list = list_clone_rand(stun_servs, max_agree)
 
-                        self.rp[af] = RoutePool(routes, link_locals)
-                    except NoGatewayForAF:
-                        # Empty route pool.
-                        self.rp[af] = RoutePool()
-                        log(f"No route for gw {af}")
-                
-                tasks.append(
-                    asyncio.wait_for(
-                        async_wrap_errors(
-                            helper(af, stun_clients)
-                        ),
-                        15
+            # Used to resolve nic addresses.
+            stun_clients = await get_stun_clients(af, serv_list, self)
+            tasks.append(
+                async_wrap_errors(
+                    get_routes_with_res(
+                        af,
+                        min_agree,
+                        self,
+                        stun_clients,
+                        netifaces,
+                        timeout=timeout,
                     )
                 )
+            )
 
-            # Get all the routes concurrently.
-            try:
-                await asyncio.gather(*tasks)
-            except asyncio.TimeoutError:
-                raise Exception("Could not start iface in 15s.")
-        else:
-            self.rp = rp
+        # Get all the routes concurrently.
+        results = await asyncio.gather(*tasks)
+        results = [r for r in results if r is not None]
+        for af, routes, link_locals in results:
+            self.rp[af] = RoutePool(routes, link_locals)
 
         # Update stack type based on routable.
         self.stack = get_interface_stack(self.rp)
@@ -407,8 +390,13 @@ class Interface():
 
         return self
 
-    async def start(self, rp=None, skip_resolve=False, netifaces=None):
-        return await self.do_start(rp=rp, skip_resolve=skip_resolve, netifaces=netifaces)
+    async def start(self, netifaces=None, min_agree=3, max_agree=6, timeout=2):
+        return await self.do_start(
+            netifaces=netifaces,
+            min_agree=min_agree,
+            max_agree=max_agree,
+            timeout=timeout,
+        )
 
     def __await__(self):
         return self.start().__await__()
@@ -417,62 +405,71 @@ class Interface():
         assert(isinstance(nat, dict))
         assert(nat.keys() == nat_info().keys())
         self.nat = nat
+        return nat
 
-    async def load_nat(self):
+    async def load_nat(self, nat_tests=5, delta_tests=12, timeout=4):
         # Try to avoid circular imports.
         from .base_stream import pipe_open
         
         # IPv6 only has no NAT!
         if IP4 not in self.supported():
+            af = IP6
             nat = nat_info(OPEN_INTERNET, EQUAL_DELTA)
+            return self.set_nat(nat)
         else:
-            # STUN is used to get the delta type.
             af = IP4
-            nat_test_no = 15
-            stun_servs = STUN_CHANGE_SERVERS[UDP][af][:]
-            random.shuffle(stun_servs)
-            stun_clients = await get_stun_clients(
-                af,
-                stun_servs[:nat_test_no],
-                self
+
+        # Copy random STUN servers to use.
+        stun_servs = STUN_CHANGE_SERVERS[UDP][af]
+        test_no = max(nat_tests, delta_tests)
+        serv_list = list_clone_rand(stun_servs, test_no)
+        stun_clients = await get_stun_clients(
+            af,
+            serv_list,
+            self
+        )
+
+        # Pipe is used for NAT tests using multiplexing.
+        # Same socket, different dests, TXID ordered.
+        route = await self.route(af).bind()
+        pipe = await pipe_open(UDP, route=route)
+
+        # Run delta test.
+        nat_type, delta = await asyncio.gather(*[
+            # Fastest fit wins.
+            async_wrap_errors(
+                fast_nat_test(
+                    pipe,
+                    stun_servs,
+                    test_no=nat_tests,
+                ),
+                timeout=timeout
+            ),
+
+            # Concurrent -- 12 different hosts
+            # Threshold of 5 for consensus.
+            async_wrap_errors(
+                delta_test(
+                    stun_clients,
+                    test_no=delta_tests,
+                    threshold=int(delta_tests / 2) - 1
+                ),
+                timeout=timeout
             )
+        ])
 
-            # Get the NAT type.
-            route = await self.route(af).bind()
-            pipe = await pipe_open(UDP, route=route)
-
-            # Run delta test.
-            nat_type, delta = await asyncio.wait_for(
-                asyncio.gather(*[
-                    # Fastest fit wins.
-                    async_wrap_errors(
-                        fast_nat_test(
-                            pipe,
-                            stun_servs,
-                            test_no=5,
-                        )
-                    ),
-
-                    # Concurrent -- 12 different hosts
-                    # Threshold of 5 for consensus.
-                    async_wrap_errors(
-                        delta_test(
-                            stun_clients,
-                            test_no=12,
-                            threshold=5
-                        )
-                    )
-                ]),
-                timeout=4
-            )
-
-            nat = nat_info(nat_type, delta)
+        # Cleanup NAT test pipe.
+        if pipe is not None:
             await pipe.close()
+
+        # Sanity check nat / delta details.
+        if None in [nat_type, delta]:
+            raise ErrorCantLoadNATInfo("Unable to load nat.")
 
         # Load NAT type and delta info.
         # On a server should be open.
-        self.set_nat(nat)
-        return nat
+        nat = nat_info(nat_type, delta)
+        return self.set_nat(nat)
 
     def get_scope_id(self):
         assert(self.resolved)

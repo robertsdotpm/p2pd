@@ -353,7 +353,7 @@ async def get_routes_with_res(af, min_agree, interface, stun_clients, netifaces,
     [r.set_link_locals(link_locals) for r in routes]
 
     # Return results back to caller.
-    return [routes, link_locals]
+    return [af, routes, link_locals]
 
 async def Routes(interface_list, af, netifaces, skip_resolve=False):
     # Optimization: check if an AF has a default gateway first.

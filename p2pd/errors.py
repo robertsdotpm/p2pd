@@ -18,3 +18,6 @@ class ErrorPipeOpen(Exception):
 
 class ErrorFeatureDeprecated(Exception):
     pass
+
+class ErrorCantLoadNATInfo(Exception):
+    pass

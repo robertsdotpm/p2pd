@@ -38,3 +38,10 @@ problem -- you have to correctly close them in such
 a way that they're immediately available for use.
 So failure to clean up properly is just as bad.
 
+# Something?
+
+Determining potential bottlenecks and how to maximize
+concurrent pipes for the library is complex. It needs
+to be approached systematically with a test designed
+for the purpose. Probably using echo servers.
+

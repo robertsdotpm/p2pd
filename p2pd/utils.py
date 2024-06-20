@@ -138,6 +138,11 @@ hash160 = lambda x: hashlib.new('ripemd160', to_b(x)).digest()
 sha3_256 = lambda x: to_s(hashlib.sha3_256(to_b(x)).hexdigest())
 b_sha3_256 = lambda x: hashlib.sha3_256(to_b(x)).digest()
 
+def list_clone_rand(the_list, n):
+    the_clone = the_list[:]
+    random.shuffle(the_clone)
+    return the_clone[:n]
+
 def list_exclude_dict(key_name, exclusion, entry_list):
     sub_list = []
     for entry in entry_list:
