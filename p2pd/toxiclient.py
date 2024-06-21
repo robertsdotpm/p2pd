@@ -206,7 +206,7 @@ class ToxiTunnel():
         await route.bind()
 
         # Connect to the listen server for this tunnel.
-        dest = await Address("localhost", self.port, route)
+        dest = Address("localhost", self.port)
         pipe = await pipe_open(TCP, route, dest, conf=conf)
         return pipe, dest.tup
     

@@ -62,6 +62,7 @@ class P2PDServer(Daemon):
             named = ["con_name", "dest_addr"]
             p = req.api("/p2p/open/([^/]*)/([^/]*)", named)
             if p:
+                print("in matched p2p open")
                 # Need a unique name per con.
                 if p["con_name"] in self.cons:
                     return {
@@ -73,13 +74,21 @@ class P2PDServer(Daemon):
                 if p["dest_addr"] == "self":
                     p["dest_addr"] = self.node.addr_bytes
 
-                # Attempt to make the connection.
-                con, strat = await self.node.connect(
-                    to_b(p["dest_addr"]),
+                print(p["dest_addr"])
 
-                    # All connection strats except TURN by default.
-                    P2P_STRATEGIES
+                # Attempt to make the connection.
+                con, strat = await asyncio.ensure_future(
+                    self.node.connect(
+                        to_b(p["dest_addr"]),
+
+                        # All connection strats except TURN by default.
+                        P2P_STRATEGIES
+                    )
                 )
+
+                print("p2pd got con")
+                print(con)
+                print(strat)
 
                 # Success -- store pipe.
                 if con is not None:
@@ -363,6 +372,8 @@ async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=
 
     # Start node server.
     ifs = ifs or await load_interfaces(netifaces=netifaces)
+    print(ifs)
+
     #port = get_port_by_ip
     node = await start_p2p_node(
         # Attempt deterministic port allocation based on NICs.
@@ -373,10 +384,11 @@ async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=
     )
 
     # Specify listen port details.
-    if route is not None and port is not None:
-        route = await route.bind(port=port)
-    else:
-        route = await ifs[0].route().bind(ips="127.0.0.1")
+    if route is None:
+        print("here 1")
+        route = await ifs[0].route(IP4).bind(ips="127.0.0.1")
+
+    print(route)
 
     # Start P2PD server.
     p2p_server = P2PDServer(ifs, node)
@@ -387,6 +399,7 @@ async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=
     )
 
     # Stop this thread exiting.
+    print(p2p_server.servers)
     bind_tup = p2p_server.servers[0][2].sock.getsockname()
     print(f"Started server on http://{bind_tup[0]}:{bind_tup[1]}")
     if do_loop:

@@ -3,12 +3,12 @@ from p2pd import *
 
 class TestRUDP(unittest.IsolatedAsyncioTestCase):
     async def test_rudp(self):
-        i = await Interface().start_local()
+        i = await Interface()
         af = i.supported()[0]
         port = 40000
         r = await i.route(af).bind(port)
         dest_tup = (r.nic(), port)
-        dest = await Address(*dest_tup, r).res()
+        dest = Address(*dest_tup)
         pipe = (await pipe_open(
             route=r,
             proto=RUDP,

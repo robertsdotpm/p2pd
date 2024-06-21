@@ -39,23 +39,23 @@ class TestInterface(unittest.IsolatedAsyncioTestCase):
 
     # Should find at least a valid iface on whatever OS.
     async def test_default_interface(self):
-        i = await Interface().start_local()
+        i = await Interface()
         self.assertTrue(i.name)
 
-        i = await Interface("").start_local()
+        i = await Interface("")
         self.assertTrue(i.name)
 
-        i = await Interface(AF_ANY).start_local()
+        i = await Interface(AF_ANY)
         self.assertTrue(i.name)
 
-        i = await Interface().start_local()
+        i = await Interface()
         d_list = if_list_to_dict([i])
         if_list = dict_to_if_list(d_list)
 
     async def test_invalid_interface_name(self):
         test_passes = False
         try:
-            await Interface("meow").start_local()
+            await Interface("meow")
         except InterfaceNotFound:
             test_passes = True
 

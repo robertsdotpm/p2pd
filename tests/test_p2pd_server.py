@@ -4,9 +4,20 @@ from p2pd import *
 class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
     async def test_p2pd_server(self):
         # Start the P2PD server.
+        af = IP4
         i = await Interface().start()
-        r = await i.route().bind()
+        nic_ip = i.route(af).nic()
+        r = await i.route(af).bind(ips=nic_ip, port=P2PD_PORT)
         server = await start_p2pd_server([i], r, port=P2PD_PORT, do_loop=False, do_init=False, enable_upnp=False)
+        conf = dict_child({
+            # N seconds before a registering recv timeout.
+            "recv_timeout": 100,
+
+            # Only applies to TCP.
+            "con_timeout": 100,
+        }, NET_CONF)
+
+
 
         # Make server implement a custom ping protocol extension.
         async def proto_extension(msg, client_tup, pipe):
@@ -15,7 +26,7 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
         server.node.add_msg_cb(proto_extension)
 
         # Server address.
-        dest = await Address(r.nic(), P2PD_PORT, r).res()
+        dest = await Address(nic_ip, P2PD_PORT, r).res()
 
         # List of API end points to check.
         en = lambda x: to_s(urlencode(x))
@@ -43,11 +54,17 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
         # Not the best unit test but over it.
         for url in urls:
             # Convert HTTP response to JSON.
-            r = i.route()
+            r = i.route(af)
+            print(url)
+
             _, resp = await http_req(
                 route=r, dest=dest, path=url,
-                do_close=True
+                do_close=True,
+                conf=conf
+
             )
+
+
             out = resp.out()
             j = json.loads(out)
 
@@ -56,12 +73,12 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
 
         # Make a new con.
         c2 = "pipe_test"
-        r = i.route()
+        r = i.route(af)
         await http_req(r, dest, "/p2p/open/" + c2 + "/self", do_close=True)
 
         # Request a new pipe to a named p2p con.
         # This is a cool feature.
-        r = i.route()
+        r = i.route(af)
         p, out = await http_req(r, dest, "/p2p/pipe/" + c2, do_close=0)
         msg = b"this is a test"
         await p.send(b"ECHO " + msg)

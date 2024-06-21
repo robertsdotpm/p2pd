@@ -83,14 +83,13 @@ def node_name(x, i):
     return to_b(node_name)[:10]
 
 class FakeSTUNClient():
-    def __init__(self, interface=None, af=IP4):
-        self.interface = interface
+    def __init__(self, dest=None, proto=UDP, mode=RFC3489, conf=NET_CONF):
         self.rip = "1.3.3.7"
         self.sock = None
         self.mappings = [] # [local, mapped] ...
         self.p = 0
         self.wan_ip = None
-        self.af = af
+        self.interface = None
 
     def rand_server(self):
         return None
@@ -102,13 +101,13 @@ class FakeSTUNClient():
     def set_wan_ip(self, wan_ip):
         self.wan_ip = wan_ip
 
-    async def get_wan_ip(self, af=None, interface=None, fast_fail=0, servers=None, local_addr=None, conf=NET_CONF):
+    async def get_wan_ip(self, pipe=None):
         return ip_norm(self.wan_ip)
 
-    async def get_mapping(self, proto, af=None, source_port=0, group="map", alt_port=0, do_close=0, fast_fail=0, servers=None, conf=NET_CONF):
+    async def get_mapping(self, pipe=None):
         run_time = time.time()
         local, mapped = self.mappings[self.p]
-        out = [self.interface, self.sock, local, mapped, self.rip, run_time]
+        out = [local, mapped, self.sock]
         self.p = (self.p + 1) % len(self.mappings)
 
         return out

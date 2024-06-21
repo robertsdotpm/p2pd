@@ -13,6 +13,7 @@ class TestP2PAddr(unittest.IsolatedAsyncioTestCase):
         signal_offsets = [1, 2, 3]
         if_list = await load_interfaces()
 
+
         print(if_list)
 
         addr_buf = pack_peer_addr(
@@ -22,7 +23,6 @@ class TestP2PAddr(unittest.IsolatedAsyncioTestCase):
         )
 
         out = unpack_peer_addr(addr_buf)
-        print(out)
 
 if __name__ == '__main__':
     main()

@@ -37,7 +37,7 @@ async def pnp_clear_tables():
     db_con.close()
 
 async def pnp_get_test_client_serv(v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION, v6_serv_ips="::1", v6_addr_expiry=V6_ADDR_EXPIRY):
-    i = await Interface().start_local()
+    i = await Interface()
     serv_v4 = await i.route(IP4).bind(PNP_TEST_PORT, ips="127.0.0.1")
     serv_v6 = await i.route(IP6).bind(PNP_TEST_PORT, ips=v6_serv_ips)
 
@@ -315,7 +315,7 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
             await serv.close()
 
     async def test_pnp_respect_owner_access(self):
-        i = await Interface().start_local()
+        i = await Interface()
         _, serv = await pnp_get_test_client_serv()
 
         alice = {}

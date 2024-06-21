@@ -3,7 +3,7 @@ from p2pd import *
 
 class TestClockSkew(unittest.IsolatedAsyncioTestCase):
     async def test_get_ntp_pool_ntp(self):
-        i = await Interface().start_local()
+        i = await Interface()
         ntp = None
 
         for _ in range(0, 5):
@@ -15,7 +15,7 @@ class TestClockSkew(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(ntp)
 
     async def test_get_clock_skew(self):
-        i = await Interface().start_local()
+        i = await Interface()
         sys_clock = await SysClock(i).start()
         self.assertTrue(sys_clock.clock_skew)
 

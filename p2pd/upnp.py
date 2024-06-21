@@ -282,7 +282,7 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
         sock.setsockopt(socket.IPPROTO_IPV6, socket.IP_MULTICAST_TTL, 2)
 
     # Create async pipe wrapper for multicast socket.
-    dest = await Address(UPNP_IP[af], UPNP_PORT, route).res()
+    dest = Address(UPNP_IP[af], UPNP_PORT)
     pipe = await pipe_open(UDP, route, dest, sock, conf=sock_conf)
     pipe.subscribe()
 
@@ -427,7 +427,7 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
 if __name__ == "__main__":
     async def upnp_main():
         from .interface import Interfaces, init_p2pd
-        i = await Interface().start_local()
+        i = await Interface()
         port = 31375
         desc = b"test 10003"
 

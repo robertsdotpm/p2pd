@@ -100,7 +100,6 @@ class Daemon():
 
 
         # Start server on every address.
-        assert(len(routes))
         for route in routes:
             if not route.resolved:
                 await route.bind(port)

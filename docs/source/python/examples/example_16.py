@@ -28,7 +28,7 @@ class CustomServer(RESTD):
         return b""
 
 async def example():
-    i = await Interface().start_local()
+    i = await Interface()
     server = CustomServer()
     await server.listen_all(
         [

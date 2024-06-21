@@ -116,12 +116,12 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
             [
                 "Windows",
                 [IP6, "fe80::6c00:b217:18ca:e365", 80, 3],
-                ('fe80::6c00:b217:18ca:e365', 80, 0, 3)
+                ('fe80::6c00:b217:18ca:e365%3', 80, 0, 3)
             ],
             [
                 "Windows",
                 [IP6, "fd12:3456:789a:1::1", 80, 3],
-                ('fd12:3456:789a:1::1', 80, 0, 3)
+                ('fd12:3456:789a:1::1%3', 80, 0, 3)
             ],
             [
                 "Windows",
@@ -186,7 +186,7 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
     async def test_bind_closure(self):
         pass
 
-        i = await Interface().start_local()
+        i = await Interface()
         b = Bind(i, None, leave_none=1)
 
         b.af = IP4
@@ -225,12 +225,12 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
         #out = (await bind_closure(b)(80, ""))._bind_tups
         
     async def test_bind(self):
-        i = await Interface().start_local()
+        i = await Interface()
         af = i.stack if i.stack != DUEL_STACK else IP4
         b = Bind(i, af)
 
     async def test_ip_val_v6_bind_types(self):
-        i = await Interface().start_local()
+        i = await Interface()
         try:
             # Test global tuples set.
             ip = ip_norm("2402:1f00:8101:83f::1")
@@ -254,7 +254,7 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
             return
 
     async def test_ip_val_v4_bind_types(self):
-        i = await Interface().start_local()
+        i = await Interface()
 
         # Test nic bind occurs.
         tests = ["192.168.0.1", "8.8.8.8"]
@@ -264,14 +264,14 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(b.bind_tup(flag=NIC_BIND)[0], ip)
 
     async def test_route_v4_bind_types(self):
-        i = await Interface().start_local()
+        i = await Interface()
         r = i.route(IP4)
         b = await r.bind()
         tup = b.bind_tup(flag=NIC_BIND)
         self.assertTrue(tup[0])
 
     async def test_route_v6_bind_types(self):
-        i = await Interface().start_local()
+        i = await Interface()
 
         try:
             af = IP6
@@ -294,7 +294,7 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
     async def test_bind_start_v4_all_addr(self):
         af = IP4
         try:
-            i = await Interface(af).start_local()
+            i = await Interface(af)
         except:
             # If not supported.
             return
@@ -308,7 +308,7 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
             s.close()
 
     async def test_bind_start_v6_all_addr(self):
-        i = await Interface().start_local()
+        i = await Interface()
         try:
             af = IP6
             route = await i.route(af).bind(13453, "*")

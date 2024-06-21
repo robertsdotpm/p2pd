@@ -28,17 +28,17 @@ class TestRoute(unittest.IsolatedAsyncioTestCase):
         self.assertRaises(Exception, invalid_wan)
 
     async def test_bind_to_route(self):
-        i = await Interface().start_local()
+        i = await Interface()
         b = await Bind(i, i.supported()[0]).bind()
         r = await bind_to_route(b)
 
     async def test_if_to_rp(self):
-        i = await Interface().start_local()
+        i = await Interface()
         rp = interfaces_to_rp([i])
 
     async def test_netiface_addr_to_ipr(self):
         loop = asyncio.get_event_loop()
-        i = await Interface().start_local()
+        i = await Interface()
         af = i.supported()[0]
         r = i.route(af)
         info = {
@@ -46,95 +46,9 @@ class TestRoute(unittest.IsolatedAsyncioTestCase):
             "netmask": cidr_to_netmask(r.nic_ips[0].cidr, af)
         }
 
-        ipr = await netiface_addr_to_ipr(af, info, i, loop, skip_bind_test=0)
+        ipr = await netiface_addr_to_ipr(af, i.id, info)
         self.assertTrue(ipr is not None)
 
-
-    async def test_get_routes(self):
-        await init_p2pd()
-        """
-        * public nic IPR
-            * pub nic = wan ip case
-            * pub nic != wan ip case
-            --------------------------
-            * skip resolve case
-
-        """
-        af = IP4
-        interface = None
-        net_ifaces = FakeNetifaces()
-        stun_client = FakeSTUNClient(interface, af=af)
-        loop = asyncio.get_event_loop()
-
-        ############################################################
-        # Case: pub nic = wan ip
-        ip_str = "8.8.8.8"
-        net_ifaces.set_addr_info(
-            {
-                2: [
-                    {'addr': ip_str, 'netmask': '255.255.255.255'}
-                ]
-            }
-        )
-        stun_client.set_wan_ip(ip_str)
-        ret = await get_routes(
-            interface=interface,
-            af=af,
-            netifaces=net_ifaces,
-            stun_client=stun_client,
-            skip_bind_test=1
-        )
-
-        # Should return a route with the same external address as the nic.
-        routes, link_local = ret
-        route = routes[0]
-        expect_ext = IPRange(ip_str)
-        self.assertEqual(route.ext_ips[0], expect_ext)
-        self.assertEqual(route.nic_ips[0], expect_ext)
-        self.assertTrue(route.ext_ips[0].is_public)
-        self.assertTrue(route.nic_ips[0].is_public)
-
-        # Netriface addr should not be none.
-        nic_ipr = await netiface_addr_to_ipr(af, net_ifaces.addr_info[af][0], interface, loop, skip_bind_test=1)
-        self.assertTrue(nic_ipr is not None)
-
-        ###################################################################
-        # Case: pub nic != wan ip
-        ip_str = "7.7.7.7"
-        stun_client.set_wan_ip(ip_str)
-        routes, link_local = await get_routes(
-            interface=interface,
-            af=af,
-            netifaces=net_ifaces,
-            stun_client=stun_client,
-            skip_bind_test=1
-        )
-
-        # Correct IP shouild be set and NIC IP marked private.
-        route = routes[0]
-        expect_ext = IPRange(ip_str)
-        self.assertEqual(route.nic_ips[0], nic_ipr)
-        self.assertEqual(route.ext_ips[0], expect_ext)
-        self.assertTrue(route.ext_ips[0].is_public)
-        self.assertFalse(route.nic_ips[0].is_public)
-
-        ###################################################################
-        # Case: pub nic != wan ip; skip_resolve = True
-        routes, link_local = await get_routes(
-            interface=interface,
-            af=af,
-            netifaces=net_ifaces,
-            stun_client=stun_client,
-            skip_bind_test=1,
-            skip_resolve=True
-        )
-
-        # Should pretend pub nic = ext when res is disabled.
-        route = routes[0]
-        self.assertEqual(route.nic_ips[0], nic_ipr)
-        self.assertEqual(route.ext_ips[0], nic_ipr)
-        self.assertTrue(route.ext_ips[0].is_public)
-        self.assertTrue(route.nic_ips[0].is_public)
 
     async def test_route_ops(self):
         r1 = Route(

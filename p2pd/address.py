@@ -66,7 +66,7 @@ class Address():
                 target = ip6_patch_bind_ip(
                     self.ip_obj,
                     target,
-                    route.interface
+                    route.interface.id
                 )
         else:
             # Target is a domain name.

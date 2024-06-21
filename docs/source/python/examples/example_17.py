@@ -5,7 +5,7 @@ TOXID_PORT = 8867
 
 async def example():
     # Start the Toxiproxy server.
-    i = await Interface().start_local()
+    i = await Interface()
     toxid = ToxiMainServer([i])
     route = await i.route().bind(port=TOXID_PORT, ips=TOXID_HOST)
     await toxid.listen_specific(

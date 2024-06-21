@@ -286,9 +286,11 @@ async def delta_test(stun_clients, test_no=8, threshold=5, concurrency=True):
                 stun_client = random.choice(stun_clients)
                 
                 # Get mapping using specific source port.
-                iface = stun_client.interface
-                route = iface.route(stun_client.af)
-                await route.bind(port=src_port)
+                route = None
+                if stun_client.interface is not None:
+                    iface = stun_client.interface
+                    route = iface.route(stun_client.af)
+                    await route.bind(port=src_port)
 
                 """
                 Todo: manually chosen source ports
@@ -599,9 +601,7 @@ async def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, stun_c
     # If we're port restricted then set our reply port to the STUN port.
     if our_nat["type"] in PREDICTABLE_NATS:
         # Get a mapping to use.
-        local_port, remote_port, s = await stun_client.get_mapping(
-            proto=STREAM
-        )
+        local_port, remote_port, s = await stun_client.get_mapping()
 
         # Calculate reply port.
         our_reply = 3478 if our_nat["type"] == RESTRICT_PORT_NAT else 0

@@ -27,7 +27,7 @@ class TestSock(unittest.IsolatedAsyncioTestCase):
 
     async def test_socket_factory_connect(self):
         loop = asyncio.get_event_loop()
-        i = await Interface().start_local()
+        i = await Interface()
         af = i.supported()[0]
         r = await i.route(af).bind(0)
         d = await Address("8.8.8.8", 53, r)
@@ -49,7 +49,7 @@ class TestSock(unittest.IsolatedAsyncioTestCase):
         conf["reuse_addr"] = True
 
         # Load default interface.
-        i = await Interface().start_local()
+        i = await Interface()
         r = i.route()
 
         # Make a new socket bound to a high order port.

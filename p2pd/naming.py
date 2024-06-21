@@ -105,7 +105,7 @@ async def workspace():
     TEST_SK = b'\xfe\xb1w~v\xfe\xc4:\x83\xa6C\x19\xde\x11\xc2\xc8\xc4A\xdaEC\x01\xc2\x9d'
     TEST_SK = (b"12345" * 100)[:24]
     test_sk_hex = to_h(TEST_SK)
-    i = await Interface().start_local()
+    i = await Interface()
     print(i)
 
     name = "my_test_name3"

@@ -1,4 +1,4 @@
-# python -m pip install -U pytest
-# python -m pip install pytest-asyncio
-# python -m pip install pytest-xdist
+python3 -m pip install -U pytest
+python3-m pip install pytest-asyncio
+python3 -m pip install pytest-xdist
 pytest -n 8

@@ -442,7 +442,7 @@ class ToxiMainServer(RESTD):
 
         # Resolve upstream address.
         up_route = await use_if.route().bind()
-        dest = await Address(dest_ip, dest_port, up_route)
+        dest = Address(dest_ip, dest_port)
 
         # Connect to upstream.
         upstream = await pipe_open(

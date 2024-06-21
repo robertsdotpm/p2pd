@@ -228,7 +228,7 @@ async def test_stun_client():
     from .interface import Interface
 
 
-    i = await Interface().start_local()
+    i = await Interface()
     a = await Address("stunserver.stunprotocol.org", 3478, i.route(IP4))
     s = STUNClientRef(a)
     r = await s.get_stun_reply()
@@ -256,7 +256,7 @@ async def test_stun_client():
 async def test_con_stun_client():
     from .interface import Interface
     af = IP4; proto = UDP;
-    i = await Interface().start_local()
+    i = await Interface()
     stun_clients = []
     tasks = []
     for n in range(0, 5):

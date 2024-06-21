@@ -60,11 +60,10 @@ class TestAFsWork(unittest.IsolatedAsyncioTestCase):
                         continue
 
                     # Set destination of echo server.
-                    echo_dest = await Address(
+                    echo_dest = Address(
                         addr[proto][af]["host"],
-                        addr[proto][af]["port"],
-                        route
-                    ).res()
+                        addr[proto][af]["port"]
+                    )
 
                     # Open pipe to echo server.
                     pipe = await pipe_open(proto, route, echo_dest)

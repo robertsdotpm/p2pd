@@ -8,7 +8,7 @@ async def example():
     #
     # Echo server address.
     route = await i.route().bind()
-    echo_dest = await Address("tcpbin.com", 4242, route).res()
+    echo_dest = Address("tcpbin.com", 4242)
     #
     # Open a connection to the echo server.
     pipe = await pipe_open(TCP, route, echo_dest)

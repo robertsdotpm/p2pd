@@ -170,7 +170,8 @@ class P2PPipe():
         
     # Implements the p2p connection techniques.
     async def open_pipe(self, pipe_id, dest_bytes, strategies=P2P_STRATEGIES):
-        log(f"> Pipe open = {pipe_id}; {dest_bytes}; {strategies}")
+        print(f"> Pipe open = {pipe_id}; {dest_bytes}; {strategies}")
+
 
         # Setup events for waiting on the pipe.
         pipe = None
@@ -180,6 +181,7 @@ class P2PPipe():
         # See if a matching signal pipe exists.
         signal_pipe = self.node.find_signal_pipe(p2p_dest)
         if signal_pipe is None:
+            log("Signal pipe is none")
             for offset in p2p_dest["signal"]:
                 # Build a channel used to relay signal messages to peer.
                 mqtt_server = MQTT_SERVERS[offset]
@@ -206,11 +208,13 @@ class P2PPipe():
 
         # Patch dest address if it's behind same router.
         dest_patch = work_behind_same_router(self.node.p2p_addr, p2p_dest)
+        print(f"{dest_patch} dest_patch")
         timeout = 0
         for strategy in strategies:
             # Try connect directly to peer.
             if strategy == P2P_DIRECT:
                 timeout = 4
+                print("try p2p direct")
                 open_task = self.direct_connect(dest_patch, pipe_id)
 
             # Tell the peer to try connect to us.
@@ -260,10 +264,15 @@ class P2PPipe():
 
             # Got valid pipe so return it.
             pipe = await async_wrap_errors(open_task, timeout)
+            print("output from open task = ")
+            print(pipe)
             if pipe is not None:
-                log(f"> Got pipe = {pipe.sock} from {repr(pipe.route)} using {strategy}.")
+                print(f"> Got pipe = {pipe.sock} from {pipe.route} using {strategy}.")
                 return [pipe, strategy]
 
+
+        print("Got pipe = ")
+        print(pipe)
         log(f"> Uh oh, pipe was None.")
         return [pipe, None]
 
@@ -278,6 +287,7 @@ class P2PPipe():
         task = asyncio.create_task(
             async_wrap_errors(
                 self.open_pipe(pipe_id, dest_bytes, strategies)
+
             )
         )
 
@@ -290,7 +300,13 @@ class P2PPipe():
             )
             p2p_pipe, strategy = task.result()
         except Exception:
+            print("in pipe")
+            what_exception()
             log_exception()
+
+        print("in pipe")
+        print(p2p_pipe)
+        print(strategy)
 
         # When it's done delete the pending reference.
         if pipe_id in self.node.pending_pipes:
@@ -326,11 +342,10 @@ class P2PPipe():
                 route = await self.node.ifs.get(af).route(af).bind()
 
                 # Connect to this address.
-                dest = await Address(
+                dest = Address(
                     str(info["ext"]),
                     info["port"],
-                    route
-                ).res()
+                )
 
                 return await pipe_open(
                     route=route,
@@ -344,7 +359,8 @@ class P2PPipe():
                 # Schedule the coroutine.
                 tasks.append(
                     async_wrap_errors(
-                        attempt_con(af, info)
+                        attempt_con(af, info),
+                        timeout=2
                     )
                 )
 
@@ -354,6 +370,9 @@ class P2PPipe():
             pipes = await asyncio.gather(*tasks)
             pipes = strip_none(pipes)
 
+        print("get pipes direct")
+        print(pipes)
+
         # Only keep the first connection.
         if len(pipes) > 1:
             log("Closing unneeded pipes in direct connect.")
@@ -362,18 +381,22 @@ class P2PPipe():
 
         # On same host recipient needs time to setup con handlers.
         # This prevents race conditions in receiving the con ID.
-        await asyncio.sleep(0.1)
+        #await asyncio.sleep(0.1)
 
         # Send con ID -- used to tell peer which request this relates to.
-        if len(pipes):
-            log(f"Got pipe in p2p direct {pipes[0].sock}")
-            log(f"pipes[0].stream.dest.tup = {pipes[0].stream.dest_tup}")
-            log(f"data to send {out}")
-            r = await pipes[0].send(out, pipes[0].stream.dest_tup)
-            log(f"sending pipe id ret = {r} where 0 is failure.")
-            return pipes[0]
-        else:
-            log("all pipes in direct con returned none.")
+        try:
+            if len(pipes):
+                log(f"Got pipe in p2p direct {pipes[0].sock}")
+                log(f"pipes[0].stream.dest.tup = {pipes[0].stream.dest_tup}")
+                log(f"data to send {out}")
+                r = await pipes[0].send(out, pipes[0].stream.dest_tup)
+                log(f"sending pipe id ret = {r} where 0 is failure.")
+                print(pipes)
+                return pipes[0]
+            else:
+                log("all pipes in direct con returned none.")
+        except:
+            log_exception()
 
         # No cons = failure.
         return None

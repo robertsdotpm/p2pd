@@ -291,7 +291,7 @@ class NTPClient:
         """
         # lookup server address
         route = await self.interface.route().bind()
-        dest = await Address(host, port, route).res()
+        dest = Address(host, port)
 
         # create the socket
         pipe = await pipe_open(UDP, route, dest)

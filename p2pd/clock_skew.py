@@ -252,7 +252,7 @@ class SysClock:
 
 async def test_clock_skew(): # pragma: no cover
     from p2pd.interface import init_p2pd, Interface
-    interface = await Interface().start_local()
+    interface = await Interface()
     s = await SysClock(interface=interface)
     print(repr(s))
 

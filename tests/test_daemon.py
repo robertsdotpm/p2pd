@@ -4,7 +4,7 @@ from p2pd import *
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestDaemon(unittest.IsolatedAsyncioTestCase):
     async def test_listen_all_interface_target(self):
-        i = await Interface().start_local()
+        i = await Interface()
         i.rp[IP6].routes = []
 
         # Daemon instance.
@@ -20,7 +20,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
     async def test_bind_target(self):
         d = Daemon()
-        i = await Interface().start_local()
+        i = await Interface()
         i.rp[IP6].routes = []
 
         p = 10233
@@ -35,7 +35,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
     async def test_listen_specific(self):
         d = Daemon()
-        i = await Interface().start_local()
+        i = await Interface()
         i.rp[IP6].routes = []
 
         p = 10233
@@ -109,7 +109,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                     if addr == "*":
                         addr = "localhost"
 
-                    dest = await Address(addr, server_port, echo_route).res()
+                    dest = Address(addr, server_port)
 
                     # Spawn a pipe to the echo server.
                     test_route = await interface.route(af).bind(ips=addr)

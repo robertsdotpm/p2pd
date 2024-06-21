@@ -268,12 +268,6 @@ class P2PNode(Daemon, P2PUtils):
 
     # Connect to a remote P2P node using a number of techniques.
     async def connect(self, addr_bytes, strategies=P2P_STRATEGIES, timeout=60):
-        # Assume that its a IRCDNS name.
-        if isinstance(addr_bytes, list):
-            addr_bytes.append("") # Optional that may have been forgotten.
-            ret = await self.irc_dns.name_lookup(*addr_bytes[:3])
-            addr_bytes = ret["msg"]
-
         # Create a TCP connection to the peer using the strategies
         # defined in the strategies list.
         p2p_pipe = P2PPipe(self)

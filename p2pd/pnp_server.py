@@ -526,7 +526,7 @@ class PNPServer(Daemon):
                 db_con.close()
 
 async def start_pnp_server(bind_port):
-    i = await Interface().start_local()
+    i = await Interface()
     serv_v4 = await i.route(IP4).bind(bind_port)
     serv_v6 = await i.route(IP6).bind(bind_port)
 

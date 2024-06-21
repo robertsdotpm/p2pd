@@ -184,7 +184,18 @@ class IPRange():
         return self.i_nw + self.i_host
 
     def __bytes__(self):
-        return i_to_b(int(self))
+        if self.af == IP4:
+            return int.to_bytes(
+                int(self),
+                4,
+                'big',
+            )
+        if self.af == IP6:
+            return int.to_bytes(
+                int(self),
+                16,
+                'big',
+            )
 
     def __len__(self):
         return self.host_no

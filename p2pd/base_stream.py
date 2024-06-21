@@ -817,7 +817,7 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None,
     # If no route is set assume default interface route 0.
     if route is None:
         # Load internal addresses.
-        i = await Interface().start_local()
+        i = await Interface()
 
         # Bind to route 0.
         route = await i.route()
@@ -1049,7 +1049,7 @@ if __name__ == "__main__": # pragma: no cover
         )
         """
 
-        dest_addr = await Address("127.0.0.1", 12344, route).res()
+        dest_addr = Address("127.0.0.1", 12344)
         base_proto = await pipe_open(
             route=route,
             proto=proto,

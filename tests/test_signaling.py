@@ -7,7 +7,7 @@ class TestSignaling(unittest.IsolatedAsyncioTestCase):
             return
 
         # Channel that the test node subs to.
-        i = await Interface().start_local()
+        i = await Interface()
         dest_id = "p2pd_test_node"
         msg = "msggg"
         f = asyncio.Future()

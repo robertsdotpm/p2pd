@@ -11,7 +11,7 @@ servers = u
 
 
 async def main(servers):
-    i = await Interface().start_local()
+    i = await Interface()
     loop = asyncio.get_event_loop()
 
     #servers = [["jump.chat", 3478]]

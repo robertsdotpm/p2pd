@@ -958,10 +958,9 @@ class TCPPunch():
             pipe = await pipe_open(
                 route=route,
                 proto=TCP,
-                dest=await Address(
+                dest=Address(
                     *sock.getpeername(),
-                    route
-                ).res(),
+                ),
                 sock=sock,
                 msg_cb=msg_cb
             )

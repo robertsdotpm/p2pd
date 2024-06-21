@@ -13,7 +13,7 @@ async def example():
     pipe = await pipe_open(
         UDP,
         route,
-        await Address("stunserver.stunprotocol.org", 3478, route).res()
+        Address("stunserver.stunprotocol.org", 3478)
     )
     #
     # Build a STUN request and send it.

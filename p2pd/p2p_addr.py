@@ -149,11 +149,23 @@ def pack_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=N
                 delta_type,
                 delta_value
             )
+            assert(len(nat_packed) == 8)
             buf += nat_packed
 
             # Convert IPs to bytes.
-            buf += bytes(IPRange(ip or r.nic()))
-            buf += bytes(IPRange(ip or r.ext()))
+            cidr = af_to_cidr(af)
+            nic_ip = bytes(IPRange(ip or r.nic(), cidr=cidr))
+            ext_ip = bytes(IPRange(ip or r.ext(), cidr=cidr))
+            print(nic_ip)
+            if af == IP4:
+                assert(len(nic_ip) == 4)
+                assert(len(ext_ip) == 4)
+            else:
+                assert(len(nic_ip) == 16)
+                assert(len(ext_ip) == 16)
+
+            buf += nic_ip
+            buf += ext_ip
 
     return buf
 
@@ -209,6 +221,8 @@ def unpack_peer_addr(addr):
         "signal": signal_offsets
     }
 
+    print(if_no)
+
     # Unpack if list.
     p += signal_no;
     for _ in range(0, if_no):
@@ -216,8 +230,6 @@ def unpack_peer_addr(addr):
         for _ in range(0, 2):
             # Get AF at pointer.
             af = addr[p]; p += 1
-            if isinstance(af, bytes):
-                af = b_to_i(af)
 
             # Address type for IF unsupported.
             if addr[p] == 0:

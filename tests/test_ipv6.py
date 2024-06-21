@@ -9,7 +9,7 @@ from p2pd import *
 class TestIPv6(unittest.IsolatedAsyncioTestCase):
     async def test_ipv6(self):
         """
-        i = await Interface().start_local()
+        i = await Interface()
         s = STUNClient(interface=i, proto=UDP, af=IP6)
         x = await s.get_wan_ip()
         print(x)

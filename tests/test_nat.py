@@ -1,10 +1,18 @@
 from p2pd import *
 
 
+async def get_test_stun_clients(n=8):
+    stun_clients = []
+    fake_stun = FakeSTUNClient()
+    for _ in range(0, n):
+        stun_clients.append(fake_stun)
+    return stun_clients
+
 class TestNAT(unittest.IsolatedAsyncioTestCase):
     async def test_preserving_delta(self):
-        fake_stun = FakeSTUNClient(interface=None)
-        fake_stun.set_mappings([
+        n = 8
+        stun_clients = await get_test_stun_clients(n)
+        stun_clients[0].set_mappings([
             [ 4000, 50000 ],
             [ 10000, 56000 ],
             [ 10200, 56200 ],
@@ -16,12 +24,15 @@ class TestNAT(unittest.IsolatedAsyncioTestCase):
         ])
 
         expected = delta_info(PRESERV_DELTA, 0)
-        got = await delta_test(fake_stun, concurrency=False)
+        got = await delta_test(stun_clients, concurrency=False)
+
+        out = await stun_clients[0].get_mapping()
         self.assertEqual(expected, got)
 
     async def test_equal_delta(self):
-        fake_stun = FakeSTUNClient(interface=None)
-        fake_stun.set_mappings([
+        n = 8
+        stun_clients = await get_test_stun_clients(n)
+        stun_clients[0].set_mappings([
             [ 4567, 4567 ],
             [ 48234, 48234 ],
             [ 6823, 6823 ],
@@ -33,12 +44,13 @@ class TestNAT(unittest.IsolatedAsyncioTestCase):
         ])
 
         expected = delta_info(EQUAL_DELTA, 0)
-        got = await delta_test(fake_stun, concurrency=False)
+        got = await delta_test(stun_clients, concurrency=False)
         self.assertEqual(expected, got)
 
     async def test_independent_delta(self):
-        fake_stun = FakeSTUNClient(interface=None)
-        fake_stun.set_mappings([
+        n = 8
+        stun_clients = await get_test_stun_clients(n)
+        stun_clients[0].set_mappings([
             [ 5000, 50000 ],
             [ 23412, 50010 ],
             [ 55421, 50020 ],
@@ -50,12 +62,13 @@ class TestNAT(unittest.IsolatedAsyncioTestCase):
         ])
 
         expected = delta_info(INDEPENDENT_DELTA, 10)
-        got = await delta_test(fake_stun, concurrency=False)
+        got = await delta_test(stun_clients, concurrency=False)
         self.assertEqual(expected, got)
 
     async def test_dependent_delta(self):
-        fake_stun = FakeSTUNClient(interface=None)
-        fake_stun.set_mappings([
+        n = 8
+        stun_clients = await get_test_stun_clients(n)
+        stun_clients[0].set_mappings([
             [ 4560, 50000 ],
             [ 4561, 50020 ],
             [ 4562, 50040 ],
@@ -67,12 +80,13 @@ class TestNAT(unittest.IsolatedAsyncioTestCase):
         ])
 
         expected = delta_info(DEPENDENT_DELTA, 20)
-        got = await delta_test(fake_stun, concurrency=False)
+        got = await delta_test(stun_clients, concurrency=False)
         self.assertEqual(expected, got)
 
     async def test_random_delta(self):
-        fake_stun = FakeSTUNClient(interface=None)
-        fake_stun.set_mappings([
+        n = 8
+        stun_clients = await get_test_stun_clients(n)
+        stun_clients[0].set_mappings([
             [ 4560, 4443 ],
             [ 4561, 50001 ],
             [ 4562, 63813 ],
@@ -84,7 +98,7 @@ class TestNAT(unittest.IsolatedAsyncioTestCase):
         ])
 
         expected = delta_info(RANDOM_DELTA, 0)
-        got = await delta_test(fake_stun, concurrency=False)
+        got = await delta_test(stun_clients, concurrency=False)
         self.assertEqual(expected, got)
 
     async def test_nat_intersect_range(self):
@@ -139,7 +153,7 @@ class TestNAT(unittest.IsolatedAsyncioTestCase):
 
         # Fake STUN client used to test logic paths.
         i = None; af = IP4; our_nat = None;
-        stun_client = FakeSTUNClient(interface=i, af=af)
+        stun_client = FakeSTUNClient()
 
         # All params to pass to func.
         params = [ mode, rmap, last_mapped, use_range, our_nat, stun_client ]

@@ -138,7 +138,7 @@ async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, h
         )
 
         await p.send(buf, dest.tup)
-        out = await p.recv(SUB_ALL)
+        out = await p.recv(SUB_ALL, timeout=conf["recv_timeout"])
     except Exception:
         log_exception()
         await p.close()

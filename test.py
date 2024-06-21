@@ -10,10 +10,10 @@ async def main():
     sk = SigningKey.from_string(TEST_SK)
     
 
-    i = await Interface().start_local()
+    i = await Interface()
 
     route = i.route(IP6)
-    dest = await Address("2607:5300:0060:80b0:0000:0000:0000:0001", PNP_PORT, route)
+    dest = await "2607:5300:0060:80b0:0000:0000:0000:0001", PNP_PORT, route)
     dest_pk = "03f20b5dcfa5d319635a34f18cb47b339c34f515515a5be733cd7a7f8494e97136"
     client = PNPClient(sk, dest, dest_pk)
 
