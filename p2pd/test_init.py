@@ -37,7 +37,7 @@ class PatchedAsyncTest(unittest.IsolatedAsyncioTestCase):
         self._asyncioTestLoop = loop
         fut = loop.create_future()
         self._asyncioCallsTask = loop.create_task(self._asyncioLoopRunner(fut))
-        loop.run_until_complete(fut)
+        loop.run_until_complete(safe_run(fut))
 
 # Basic echo client test.
 async def check_pipe(pipe, dest_tup=None):

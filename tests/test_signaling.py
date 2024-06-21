@@ -33,7 +33,7 @@ class TestSignaling(unittest.IsolatedAsyncioTestCase):
                 )
                 break
             except Exception:
-                what_exception()
+                log_exception()
                 continue
 
         # Check client set.

@@ -1,4 +1,5 @@
 import asyncio
+from .utils import *
 from .p2p_node import *
 from .p2p_utils import *
 from .var_names import *
@@ -6,10 +7,10 @@ from .http_server_lib import *
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 
-def con_info(self, p, con):
+def con_info(self, con_name, con):
     return {
         "error": 0,
-        "name": p["con_name"],
+        "name": con_name,
         "strategy": con.strat,
         "fd": con.sock.fileno(),
         "laddr": con.sock.getsockname(),
@@ -23,339 +24,271 @@ def con_info(self, p, con):
         }
     }
 
-class P2PDServer(Daemon):
-    def __init__(self, if_list, node):
-        super().__init__(if_list)
+def get_sub_params(v):
+    # Messages are put into buckets.
+    sub = SUB_ALL[:]
+    if hasattr(v["name"], "msg_p"):
+        sub[0] = v["name"]["msg_p"]
+    if hasattr(v["name"], "addr_p"):
+        sub[1] = v["name"]["addr_p"]
+
+    timeout = 2
+    if hasattr(v["name"], "timeout"):
+        timeout = to_n(v["name"]["timeout"])
+
+    return sub, timeout
+
+class P2PDServer(RESTD):
+    def __init__(self, interfaces=[], node=None):
+        super().__init__()
+        self.interfaces = interfaces
         self.node = node
         self.cons = {}
 
-    async def msg_cb(self, msg, client_tup, pipe):
-        # Parse HTTP message and handle CORS.
-        req = await rest_service(msg, client_tup, pipe)
+    @RESTD.GET(["version"])
+    async def get_version(self, v, pipe):
+        return {
+            "title": "P2PD",
+            "author": "Matthew@Roberts.PM", 
+            "version": "0.1.0",
+            "error": 0
+        }
+    
+    @RESTD.GET(["ifs"])
+    async def get_interfaces(self, v, pipe):
+        return {
+            "ifs": if_list_to_dict(self.interfaces),
+            "error": 0
+        }
+    
+    @RESTD.GET(["p2p"], ["addr"])
+    async def get_peer_addr(self, v, pipe):
+        return {
+            "addr": to_s(self.node.addr_bytes),
+            "error": 0
+        }
+    
+    @RESTD.GET(["p2p"], ["open"])
+    async def open_p2p_pipe(self, v, pipe):
+        print("in matched p2p open")
+        con_name = v["name"]["open"]
+        dest_addr = v["pos"][0]
 
-        # Output JSON response for the API.
-        async def get_response():
-            # Show version information.
-            if req.api("/version"):
+        # Need a unique name per con.
+        if con_name in self.cons:
+            print("con name already exists?")
+            return {
+                "msg": "Con name already exists.",
+                "error": 2
+            }
+
+        # Connect to ourself for tests.
+        if dest_addr == "self":
+            dest_addr = self.node.addr_bytes
+
+        print(dest_addr)
+
+        # Attempt to make the connection.
+        con, strat = await asyncio.ensure_future(
+            self.node.connect(
+                to_b(dest_addr),
+
+                # All connection strats except TURN by default.
+                P2P_STRATEGIES
+            )
+        )
+
+        print("p2pd got con")
+        print(con)
+        print(strat)
+
+        # Success -- store pipe.
+        if con is not None:
+            # Subscribe to any message.
+            con.subscribe(SUB_ALL)
+
+            # Remove con from table.
+            def build_do_cleanup():
+                def do_cleanup(msg, client_tup, pipe):
+                    del self.cons[con_name]
+                
+                return do_cleanup
+
+            # Add cleanup handler.
+            con.add_end_cb(build_do_cleanup())
+
+            # Return the results.
+            con.strat = TXT["p2p_strat"][strat]
+            self.cons[con_name] = con
+            return con_info(self, con_name, con)
+
+        # Failed to connect.
+        if con is None:
+            return {
+                "msg": f"Con {con_name} failed connect.",
+                "error": 3
+            }
+
+    @RESTD.GET(["p2p"], ["con"])
+    async def get_con_info(self, v, pipe):
+        con_name = v["name"]["con"]
+
+        # Check con exists.
+        con = self.cons[con_name]
+        return con_info(self, con_name, con)
+    
+    @RESTD.GET(["p2p"], ["send"])
+    async def pipe_send_text(self, v, pipe):
+        con_name = v["name"]["send"]
+        en_msg = urldecode(v["pos"][0])
+
+        # Connection to send to.
+        con = self.cons[con_name]
+
+        # Send data.
+        await con.send(
+            data=to_b(en_msg),
+            dest_tup=con.stream.dest_tup
+        )
+
+        # Return success.
+        return {
+            "name": con_name,
+            "sent": len(en_msg),
+            "error": 0
+        }
+    
+    @RESTD.GET(["p2p"], ["recv"])
+    async def pipe_recv_text(self, v, pipe):
+        con_name = v["name"]["recv"]
+
+        # Get something from recv buffer.
+        con = self.cons[con_name]
+        try:
+            sub, timeout = get_sub_params(v)
+            out = await con.recv(sub, timeout=timeout, full=True)
+            if out is None:
                 return {
-                    "title": "P2PD",
-                    "author": "Matthew@Roberts.PM", 
-                    "version": "0.1.0",
-                    "error": 0
-                }
-
-            # All interface details.
-            if req.api("(/ifs)"):
-                return {
-                    "ifs": if_list_to_dict(self.interfaces),
-                    "error": 0
-                }
-
-            # Node's own 'p2p address.'
-            if req.api("/p2p/addr"):
-                return {
-                    "addr": to_s(self.node.addr_bytes),
-                    "error": 0
-                }
-
-            # Create a new connection and name it.
-            named = ["con_name", "dest_addr"]
-            p = req.api("/p2p/open/([^/]*)/([^/]*)", named)
-            if p:
-                print("in matched p2p open")
-                # Need a unique name per con.
-                if p["con_name"] in self.cons:
-                    return {
-                        "msg": "Con name already exists.",
-                        "error": 2
-                    }
-
-                # Connect to ourself for tests.
-                if p["dest_addr"] == "self":
-                    p["dest_addr"] = self.node.addr_bytes
-
-                print(p["dest_addr"])
-
-                # Attempt to make the connection.
-                con, strat = await asyncio.ensure_future(
-                    self.node.connect(
-                        to_b(p["dest_addr"]),
-
-                        # All connection strats except TURN by default.
-                        P2P_STRATEGIES
-                    )
-                )
-
-                print("p2pd got con")
-                print(con)
-                print(strat)
-
-                # Success -- store pipe.
-                if con is not None:
-                    # Subscribe to any message.
-                    con.subscribe(SUB_ALL)
-
-                    # Remove con from table.
-                    def build_do_cleanup():
-                        def do_cleanup(msg, client_tup, pipe):
-                            del self.cons[ p["con_name"] ]
-                        
-                        return do_cleanup
-
-                    # Add cleanup handler.
-                    con.add_end_cb(build_do_cleanup())
-
-                    # Return the results.
-                    con.strat = TXT["p2p_strat"][strat]
-                    self.cons[ p["con_name"] ] = con
-                    return con_info(self, p, con)
-
-                # Failed to connect.
-                if con is None:
-                    return {
-                        "msg": f"Con {p['con_name']} failed connect.",
-                        "error": 3
-                    }
-
-            # Return con info.
-            p = req.api("/p2p/con/([^/]*)", ["con_name"])
-            if p:
-                # Check con exists.
-                if p["con_name"] not in self.cons:
-                    return {
-                        "msg": f"Con name {p['con_name']} not found.",
-                        "error": 4,
-                    }
-
-                con = self.cons[ p["con_name"] ]
-                return con_info(self, p, con)
-
-            # Subscribe to certain message patterns.
-            named = ["con_name"]
-            params = ["msg_p", "addr_p"]
-            defaults = [b"", b""]
-            p = req.api("/p2p/sub/([^/]*)", named, params)
-            if p:
-                # Check con exists.
-                if p["con_name"] not in self.cons:
-                    return {
-                        "msg": f"Con name {p['con_name']} not found.",
-                        "error": 4,
-                    }
-
-                # Set default values for $_GET.
-                set_defaults(p, params, defaults)
-                sub = [ to_b(p["msg_p"]), to_b(p["addr_p"]) ]
-                con = self.cons[ p["con_name" ] ]
-
-                # Subscribe.
-                if req.command == "GET":
-                    con.subscribe(sub)
-
-                    # Return results.
-                    return {
-                        "name": p["con_name"],
-                        "sub": f"{sub}",
-                        "error": 0
-                    }
-
-                # Unsubscribe.
-                if req.command == "DELETE":
-                    con.unsubscribe(sub)
-
-                    # Return results.
-                    return {
-                        "name": p["con_name"],
-                        "unsub": f"{sub}",
-                        "error": 0
-                    }
-            
-            # Send a text-based message to a named con.
-            named = ["con_name", "txt"]
-            p = req.api("/p2p/send/([^/]*)/([\s\S]+)", named)
-            if p:
-                # Check con exists.
-                if p["con_name"] not in self.cons:
-                    return {
-                        "msg": f"Con name {p['con_name']} not found.",
-                        "error": 4,
-                    }
-
-                # Connection to send to.
-                con = self.cons[ p["con_name"] ]
-
-                # Send data.
-                await con.send(
-                    data=to_b(p["txt"]),
-                    dest_tup=con.stream.dest_tup
-                )
-
-                # Return success.
-                return {
-                    "name": p["con_name"],
-                    "sent": len(p["txt"]),
-                    "error": 0
-                }
-
-            # Send a text-based message to a named con.
-            optional = ["timeout", "msg_p", "addr_p"]
-            defaults = [0, b"", b""]
-            named = ["con_name"]
-            p = req.api("/p2p/recv/([^/]*)", named, optional)
-            if p:
-                # Check con exists.
-                if p["con_name"] not in self.cons:
-                    return {
-                        "msg": f"Con name {p['con_name']} not found.",
-                        "error": 4,
-                    }
-
-                # Set default values for $_GET.
-                set_defaults(p, optional, defaults)
-
-                # Get something from recv buffer.
-                con = self.cons[ p["con_name"] ]
-                try:
-                    sub = [ to_b(p["msg_p"]), to_b(p["addr_p"]) ]
-                    timeout = to_n(p["timeout"])
-                    out = await con.recv(sub, timeout=timeout, full=True)
-                    if out is None:
-                        return {
-                            "msg": f"recv buffer {sub} empty.",
-                            "error": 6
-                        }
-
-                    return {
-                        "client_tup": out[0],
-                        "data": to_s(out[1]),
-                        "error": 0
-                    }
-                except asyncio.TimeoutError:
-                    return {
-                        "msg": "recv timeout",
-                        "error": 5
-                    }
-
-            # Chain together connections -- fully async.
-            p = req.api("/p2p/pipe/([^/]*)", named)
-            if p:
-                # Check con exists.
-                if p["con_name"] not in self.cons:
-                    await pipe.close()
-                    return None
-
-                con = self.cons[ p["con_name"] ]
-
-                # Remove this server handler from con.
-                # This pipe is no longer for HTTP!
-                pipe.del_msg_cb(self.msg_cb)
-
-                # Forward messages from pipe to con.
-                # pipe -> con
-                pipe.add_pipe(con)
-
-                # Forward messages from con to pipe.
-                # con  -> pipe
-                con.add_pipe(pipe)
-
-                # con <-----> pipe 
-                return None
-
-            # Binary send / recv methods.
-            p = req.api("/p2p/binary/([^/]*)", named, optional)
-            if p:
-                # Check con exists.
-                if p["con_name"] not in self.cons:
-                    return {
-                        "msg": f"Con name {p['con_name']} not found.",
-                        "error": 4,
-                    }
-
-                # Send binary data from octet-stream POST.
-                con = self.cons[ p["con_name"] ]
-                if req.command == "POST":
-                    # Content len header must exist.
-                    if "Content-Length" not in req.hdrs:
-                        return {
-                            "msg": "content len header in binary POST",
-                            "error": 6
-                        }
-
-                    # Content len must not exceed msg len.
-                    payload_len = to_n(req.hdrs["Content-Length"])
-                    if not in_range(payload_len, [1, len(msg)]):
-                        return {
-                            "msg": "invalid content len for bin POST",
-                            "error": 7
-                        }
-
-                    # Last content-len bytes == payload.
-                    data = msg[-payload_len:]
-                    await con.send(data, con.stream.dest_tup)
-
-                    # Return status.
-                    return {
-                        "name": p["con_name"],
-                        "sent": payload_len,
-                        "error": 0
-                    }
-
-                # Get buffer and send as binary stream.
-                if req.command == "GET":
-                    set_defaults(p, optional, defaults)
-                    timeout = to_n(p["timeout"])
-                    sub = [ p["msg_p"], p["addr_p"] ]
-
-                    # Get binary from matching buffer.
-                    out = await con.recv(sub, timeout=timeout, full=True)
-                    if out is None:
-                        return {
-                            "msg": f"recv buffer {sub} empty.",
-                            "error": 6
-                        }
-
-                    # Send it if any.
-                    if out is not None:
-                        await send_binary(out, req, client_tup, pipe)
-                        return None
-
-            # Close a connection.
-            p = req.api("/p2p/close/([^/]*)", named)
-            if p:
-                # Check con exists.
-                if p["con_name"] not in self.cons:
-                    return {
-                        "msg": f"Con name {p['con_name']} not found.",
-                        "error": 4,
-                    }
-
-                # Close the con -- fires cleanup handler.
-                con = self.cons[ p["con_name"] ]
-                await con.close()
-
-                # Indicate closed.
-                return {
-                    "closed": p["con_name"],
-                    "error": 0
+                    "msg": f"recv buffer {sub} empty.",
+                    "error": 6
                 }
 
             return {
-                "msg": "No API method found.",
-                "error": 1
+                "client_tup": out[0],
+                "data": to_s(out[1]),
+                "error": 0
+            }
+        except asyncio.TimeoutError:
+            return {
+                "msg": "recv timeout",
+                "error": 5
             }
 
-        resp = await async_wrap_errors(get_response())
-        if resp is not None:
-            await send_json(
-                resp,
-                req,
-                client_tup,
-                pipe
-            )
+    @RESTD.GET(["p2p"], ["close"])
+    async def pipe_close(self, v, pipe):
+        con_name = v["name"]["close"]
 
-    async def close(self):
-        await self.node.close()
-        await super().close()
+        # Close the con -- fires cleanup handler.
+        con = self.cons[con_name]
+        await con.close()
+
+        # Indicate closed.
+        return {
+            "closed": con_name,
+            "error": 0
+        }
+    
+    @RESTD.POST(["p2p"], ["binary"])
+    async def pipe_send_binary(self, v, pipe):
+        con_name = v["name"]["binary"]
+
+        # Send binary data from octet-stream POST.
+        con = self.cons[con_name]
+
+        # Last content-len bytes == payload.
+        await con.send(v["body"], con.stream.dest_tup)
+
+        # Return status.
+        return {
+            "name": con_name,
+            "sent": len(v["body"]),
+            "error": 0
+        }
+
+    @RESTD.GET(["p2p"], ["binary"])
+    async def pipe_get_binary(self, v, pipe):
+        con_name = v["name"]["binary"]
+
+        # Send binary data from octet-stream POST.
+        con = self.cons[con_name]
+
+        # Messages are put into buckets.
+        sub, timeout = get_sub_params(v)
+
+        # Get binary from matching buffer.
+        out = await con.recv(sub, timeout=timeout, full=True)
+        if out is None:
+            return {
+                "msg": f"recv buffer {sub} empty.",
+                "error": 6
+            }
+
+        # Send it if any.
+        return out
+
+    @RESTD.GET(["p2p"], ["pipe"])
+    async def http_tunnel_trick(self, v, pipe):
+        con_name = v["name"]["pipe"]
+
+        # Send binary data from octet-stream POST.
+        con = self.cons[con_name]
+
+        # Remove this server handler from con.
+        # This pipe is no longer for HTTP!
+        pipe.del_msg_cb(self.msg_cb)
+
+        # Forward messages from pipe to con.
+        # pipe -> con
+        pipe.add_pipe(con)
+
+        # Forward messages from con to pipe.
+        # con  -> pipe
+        con.add_pipe(pipe)
+
+        # con <-----> pipe 
+        return None
+
+    @RESTD.GET(["p2p"], ["sub"])
+    async def pipe_do_sub(self, v, pipe):
+        con_name = v["name"]["sub"]
+
+        # Send binary data from octet-stream POST.
+        con = self.cons[con_name]
+
+        # Messages are put into buckets.
+        sub, _ = get_sub_params(v)
+        con.subscribe(sub)
+
+        # Return results.
+        return {
+            "name": con_name,
+            "sub": f"{sub}",
+            "error": 0
+        }
+
+    @RESTD.DELETE(["p2p"], ["sub"])
+    async def pipe_do_unsub(self, v, pipe):
+        con_name = v["name"]["sub"]
+        con = self.cons[con_name]
+        sub, _ = get_sub_params(v)
+        con.unsubscribe(sub)
+
+        # Return results.
+        return {
+            "name": con_name,
+            "unsub": f"{sub}",
+            "error": 0
+        }
 
 # pragma: no cover
 async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=True, enable_upnp=True):
@@ -384,9 +317,7 @@ async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=
     )
 
     # Specify listen port details.
-    if route is None:
-        print("here 1")
-        route = await ifs[0].route(IP4).bind(ips="127.0.0.1")
+    #route = await ifs[0].route(IP4).bind(ips="127.0.0.1")
 
     print(route)
 
@@ -408,5 +339,21 @@ async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=
 
     return p2p_server
 
+async def p2pd_workspace():
+    node = await start_p2pd_server(enable_upnp=False)
+
+    return
+
+    i = await Interface()
+    route = await i.route().bind(ips="127.0.0.1", port=8475)
+    node = await start_p2pd_server()
+    server = P2PDServer2([i])
+    await server.listen_all([route], [8475], [TCP])
+
+    while 1:
+        await asyncio.sleep(1)
+
 if __name__ == "__main__":
-    async_test(start_p2pd_server)
+
+
+    async_test(p2pd_workspace)

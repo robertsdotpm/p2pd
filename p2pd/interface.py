@@ -128,7 +128,6 @@ async def init_p2pd():
         now I don't have time. It's better to show a clear reason
         why the library won't work then to silently fail.
         """
-        what_exception()
         raise Exception("Error this library needs UDP support to work.")
     
 
@@ -359,11 +358,19 @@ class Interface():
 
             # Used to resolve nic addresses.
             stun_clients = await get_stun_clients(af, serv_list, self)
+
+            # Is this default iface for this AF?
+            if self.is_default(af):
+                enable_default = True
+            else:
+                enable_default = False
+
             tasks.append(
                 async_wrap_errors(
                     get_routes_with_res(
                         af,
                         min_agree,
+                        enable_default,
                         self,
                         stun_clients,
                         netifaces,

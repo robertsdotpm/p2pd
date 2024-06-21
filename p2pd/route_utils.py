@@ -210,9 +210,11 @@ async def get_wan_ip_cfab(src_ip, min_agree, stun_clients, timeout):
         ).res()
 
         # Get external IP and compare to bind IP.
-        task = stun_client.get_wan_ip(
-            # Will be upgraded to a pipe.
-            pipe=local_addr
+        task = async_wrap_errors(
+            stun_client.get_wan_ip(
+                # Will be upgraded to a pipe.
+                pipe=local_addr
+            )
         )
         tasks.append(task)
 
@@ -292,7 +294,7 @@ def exclude_routes_by_src(src_ips, results):
 
     return new_list
 
-async def get_routes_with_res(af, min_agree, interface, stun_clients, netifaces, timeout):
+async def get_routes_with_res(af, min_agree, enable_default, interface, stun_clients, netifaces, timeout):
     # Get a list of tasks to resolve NIC addresses.
     tasks = []
     link_locals = []
@@ -328,9 +330,17 @@ async def get_routes_with_res(af, min_agree, interface, stun_clients, netifaces,
     results = await asyncio.gather(*tasks)
     results = [r for r in results if r is not None]
 
-    # Find default route.
-    default_route = get_route_by_src(any_ip, results)
+    # Only the default iface will have
+    # a default route enabled for the af.
+    if enable_default:
+        default_route = get_route_by_src(any_ip, results)
+    else:
+        default_route = None
+
+    # Load route used for priv nics.
     priv_route = get_route_by_src(priv_src, results)
+
+    # Exclude priv_route and default.
     routes = exclude_routes_by_src([any_ip, priv_src], results)
 
     # Add a single route for all private IPs.

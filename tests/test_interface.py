@@ -6,6 +6,7 @@ class TestInterface(unittest.IsolatedAsyncioTestCase):
         print(i)
         loop = asyncio.get_event_loop()
         print(loop)
+        await asyncio.sleep(5)
 
 
     async def test_fallback_zero_bind(self):
@@ -36,6 +37,7 @@ class TestInterface(unittest.IsolatedAsyncioTestCase):
 
         # While its ext IP should be public.
         assert(route.ext_ips[0].is_public)
+        
 
     # Should find at least a valid iface on whatever OS.
     async def test_default_interface(self):

@@ -300,8 +300,6 @@ class P2PPipe():
             )
             p2p_pipe, strategy = task.result()
         except Exception:
-            print("in pipe")
-            what_exception()
             log_exception()
 
         print("in pipe")

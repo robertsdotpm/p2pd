@@ -1,0 +1,36 @@
+The Python event loop is designed to keep running and
+while it is its a lot easier to maintain consistency.
+However, things get complicated fast because often
+there is a need to either run a quick script to get
+an answer or a set of isolated unit tests where the
+event loop will be torn down and restarted many times.
+
+In this instance: any unclosed socket will probably
+throw a warning. Code that looks 'right' will return
+'success' yet still spit out walls of errors. The
+first part of solving this is to ensure resources
+are properly closed. Don't just use catch-all exception
+handlers as an excuse to be lazy (like I do.) Close
+those sockets if they're set then return None (pipe_open
+now does this correctly.)
+
+But the final part is you'll want to allow enough time
+for the event loop to finish its tasks. You can test
+if your code works properly by adding a sleep statement
+at the end (e.g. await asyncio.sleep(5). If the warnings
+are still there then its not an issue with interrupted
+background tasks and you'll have to do more digging.
+There are more comprehensive solutions to allowing tasks
+to finish but its hard to make it work across Python
+versions, platforms, and testing harnesses.
+
+The best approach is to keep things simple and double-check.
+
+# Other problems
+
+It should also be noted that older versions of Python had
+less robust code for asyncio. For example -- I can tell you
+that errors are thrown for tests on Python 3.6 (windows)
+related to interrupted tasks that aren't thrown on 3.8.
+The software is tested to run on >= 3.6 but may still spit
+out errors on older versions if a task ends aggressively.

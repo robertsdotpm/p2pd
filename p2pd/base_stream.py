@@ -1016,19 +1016,15 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None,
         return base_proto
     except Exception as e:
         log_exception()
-        if conf["no_close"] == False:
-            log("no close is false so trying to clean up.")
-            try:
-                if sock is not None:
-                    log(f"closing socket. {sock.getsockname()}")
-                    sock.close()
-                
 
-                if base_proto is not None:
-                    log("closing bas proto")
-                    await base_proto.close()
-            except:
-                log_exception()
+        if sock is not None:
+            log(f"closing socket. {sock.getsockname()}")
+            sock.close()
+        
+        if base_proto is not None:
+            log("closing bas proto")
+            await base_proto.close()
+
 
 if __name__ == "__main__": # pragma: no cover
     from .interface import Interface

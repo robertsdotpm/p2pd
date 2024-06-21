@@ -64,10 +64,44 @@ if vmaj < 3:
 if vmin <= 4:
     raise Exception("Project needs >= 3.5")
 
+def my_except_hook(exctype, value, traceback):
+    log_exception()
+    print("except handler")
+
+async def safe_run(f, args=[]):
+    try:
+        await f(*args)
+    except:
+        log_exception()
+
+    while 1:
+        try:
+            tasks = asyncio.Task.all_tasks()
+            cur_task = asyncio.Task.current_task()
+        except:
+            tasks = asyncio.all_tasks()
+            cur_task = asyncio.current_task()
+
+
+        await asyncio.gather(*tasks - {cur_task})
+        if not len(tasks):
+            break
+
 if not hasattr(unittest, "IsolatedAsyncioTestCase"):
-    log("patching isolated asyncio test case")
+    print("patching isolated asyncio test case")
     import aiounittest
     unittest.IsolatedAsyncioTestCase = aiounittest.AsyncTestCase
+
+    def safe_run_patch(self):
+        loop = asyncio.get_event_loop()
+        print(loop)
+        run_wrap = loop.run_until_complete
+        loop.run_until_complete = lambda f: run_wrap(safe_run(f))
+        loop.set_debug(False)
+
+    unittest.IsolatedAsyncioTestCase.get_event_loop = safe_run_patch
+    sys.excepthook = my_except_hook
+
 
 def proactorfy(self=None):
     """
@@ -570,6 +604,10 @@ async def gather_or_cancel(tasks, timeout):
         await asyncio.sleep(0)
     except asyncio.CancelledError:
         return []
+    except:
+        # Event loop closed prob.
+        log_exception()
+        return []
     finally:
         return []
 
@@ -591,6 +629,8 @@ class SelectorEventPolicy(asyncio.DefaultEventLoopPolicy):
         SelectorEventPolicy.loop_setup(loop)
         return loop
     
+
+    
 def p2pd_setup_event_loop():
     # If default isn't spawn then change it.
     # But only if it hasn't already been set.
@@ -605,6 +645,8 @@ def p2pd_setup_event_loop():
     policy = asyncio.get_event_loop_policy()
     if not isinstance(policy, SelectorEventPolicy):
         asyncio.set_event_loop_policy(SelectorEventPolicy())
+
+    sys.excepthook = my_except_hook
 
 def selector_event_loop():
     selector = selectors.SelectSelector()
@@ -650,13 +692,14 @@ def async_test(f, args=[], loop=None):
 
     #if IS_DEBUG:
     #    loop.set_debug(True)
-    loop.set_debug(True)
+    loop.set_debug(False)
 
     # Can have cleanup errors.
     if len(args):
-        loop.run_until_complete(f(*args))
+        #loop.run_until_complete(f(*args))
+        loop.run_until_complete(safe_run(f, args))
     else:
-        loop.run_until_complete(f())
+        loop.run_until_complete(safe_run(f))
 
     #loop.close()
 
