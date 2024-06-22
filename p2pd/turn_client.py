@@ -31,10 +31,10 @@ from .interface import *
 from .turn_process import *
 from .stun_defs import *
 from .turn_defs import *
-from .base_stream import *
+from .pipe_utils import *
 
 # Main class for handling TURN sessions with a server.
-class TURNClient(BaseProto):
+class TURNClient(PipeEvents):
     def __init__(
         self,
         route: any,

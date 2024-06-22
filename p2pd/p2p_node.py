@@ -7,7 +7,7 @@ from .p2p_pipe import *
 from .daemon import *
 from .p2p_protocol import *
 from .signaling import *
-from .irc_dns import IRCDNS, IRCRefresher, IRC_SERVERS, IRC_REGISTER_FAILURE
+
 
 NODE_CONF = dict_child({
     # Reusing address can hide errors for the socket state.
@@ -112,15 +112,12 @@ class P2PNode(Daemon, P2PUtils):
     def __init__(self, if_list, port=NODE_PORT, node_id=None, ip=None, signal_offsets=None, enable_upnp=False, conf=NODE_CONF, seed=None):
         super().__init__()
         self.seed = seed or secrets.token_bytes(24)
-        self.irc_dns = IRCDNS(if_list[0], self.seed, IRC_SERVERS)
-        self.irc_refresher = IRCRefresher(self.irc_dns)
         self.conf = conf
         self.signal_offsets = signal_offsets
         self.port = port
         self.enable_upnp = enable_upnp
         self.ip = ip
         self.if_list = if_list
-        self.ifs = Interfaces(if_list)
         self.node_id = node_id or rand_plain(15)
         self.signal_pipes = {} # offset into MQTT_SERVERS
         self.expected_addrs = {} # by [pipe_id]
@@ -282,16 +279,7 @@ class P2PNode(Daemon, P2PUtils):
     Then set the value at that name to this nodes address
     """
     async def register(self, name_field):
-        name_field.append("") # Optional that they may have forgotten.
-        out, status = await self.irc_dns.name_register(*name_field[:3])
-        if status != IRC_REGISTER_FAILURE:
-            name_field.insert(0, self.address)
-            await self.irc_dns.store_value(*name_field[:4])
-        
-        return out, status
-    
-    async def refresh_names(self):
-        await self.irc_refresher.refresher()
+        pass
 
     # Get our node server's address.
     def address(self):

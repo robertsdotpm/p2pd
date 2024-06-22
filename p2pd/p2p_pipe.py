@@ -467,8 +467,13 @@ class P2PPipe():
                 # Load info for hole punching.
                 if_index = our_info["if_index"]
                 interface = self.node.if_list[if_index]
-                stun_client = STUNClient(interface=interface, af=af)
                 initiator = self.node.tcp_punch_clients[if_index]
+                stun_client = (await get_stun_clients(
+                    af,
+                    1,
+                    interface=interface,
+                    proto=TCP
+                ))[0]
 
                 # Calculate punch mode
                 route = interface.route(af)
@@ -495,6 +500,9 @@ class P2PPipe():
                     stun_client,
                     mode=punch_mode
                 )
+
+                print("punch ret = ")
+                print(punch_ret)
 
                 # Build first (required) punch message for peer.
                 out = build_punch_response(

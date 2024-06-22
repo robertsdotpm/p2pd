@@ -1,6 +1,6 @@
 from .address import *
 from .interface import *
-from .base_stream import *
+from .pipe_utils import *
 
 DAEMON_CONF = dict_child({
     "reuse_addr": True

@@ -8,13 +8,14 @@ if __name__ != '__main__':
 
     from .cmd_tools import *
     from .net import *
+    from .bind import *
     from .address import Address
     from .ip_range import IPRange
     from .upnp import port_forward
     from .route_defs import Route, RoutePool
-    from .route_utils import Routes, get_routes_with_res
-    from .base_stream import pipe_open, SUB_ALL
-    from .interface import Interface, Interfaces, init_p2pd
+    from .route_utils import get_routes_with_res
+    from .pipe_utils import *
+    from .interface import Interface, init_p2pd
     from .clock_skew import SysClock
     from .stun_client import STUNClient, get_stun_clients
     from .turn_client import TURNClient
@@ -34,7 +35,6 @@ if __name__ != '__main__':
     from .toxiclient import ToxiToxic, ToxiTunnel, ToxiClient
     from .toxiserver import ToxiMainServer
     from .sqlite_kvs import SqliteKVS
-    from .irc_dns import *
     from .pnp_server import *
     from .pnp_client import *
     from .test_init import *

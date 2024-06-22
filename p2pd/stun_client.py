@@ -45,7 +45,7 @@ from .errors import *
 from .utils import *
 from .net import *
 from .address import Address
-from .base_stream import pipe_open, BaseProto
+from .pipe_utils import *
 from .stun_defs import *
 from .stun_utils import *
 from .pattern_factory import *
@@ -65,10 +65,11 @@ class STUNClient():
     # Boilerplate to get a pipe to the STUN server.
     async def _get_dest_pipe(self, unknown):
         # Already open pipe.
-        if isinstance(unknown, BaseProto):
+        if isinstance(unknown, PipeEvents):
             return unknown
 
         # Open a new con to STUN server.
+        route = unknown
         if unknown is None:
             route = self.interface.route(self.af)
             await route.bind()
@@ -186,11 +187,19 @@ class STUNClient():
         if hasattr(reply, "rtup"):
             return (ltup[1], reply.rtup[1], reply.pipe)
 
-async def get_stun_clients(af, serv_list, interface, proto=UDP):
+async def get_stun_clients(af, max_agree, interface, proto=UDP):
     class MockRoute:
         def __init__(self):
             self.af = af
             self.interface = interface
+
+    # Copy random STUN servers to use.
+    if proto == UDP:
+        stun_servs = STUN_CHANGE_SERVERS[proto][af]
+    else:
+        stun_servs = STUN_MAP_SERVERS[proto][af]
+        
+    serv_list = list_clone_rand(stun_servs, max_agree)
 
     mock_route = MockRoute()
     stun_clients = []

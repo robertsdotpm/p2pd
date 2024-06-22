@@ -3,13 +3,15 @@ from p2pd import *
 async def example():
     i = await Interface().start()
     nat = await i.load_nat()
+    print(i)
     #
     # Test echo server with AF.
     af = i.supported()[0]
-    stun_servs = list_clone_rand(STUN_CHANGE_SERVERS[TCP][af], 1)
-    stun_client = (await get_stun_clients(af, stun_servs, i, TCP))[0]
+    stun_client = (await get_stun_clients(af, 1, i, TCP))[0]
     wan_ip = await stun_client.get_wan_ip()
-    ret = await stun_client.get_mapping(TCP)
+    ret = await stun_client.get_mapping()
+    print(wan_ip)
+    print(ret)
     pipe = ret[-1]
     await pipe.close()
 

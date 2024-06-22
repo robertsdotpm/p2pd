@@ -2,6 +2,7 @@ import re
 from .net import *
 from .ip_range import *
 from .cmd_tools import *
+from .bind import *
 
 async def get_mac_mixed(if_name):
     mac_p = r"((?:[0-9a-fA-F]{2}[\s:-]*){6})"

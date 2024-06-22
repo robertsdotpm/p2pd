@@ -17,7 +17,7 @@ from .interface import *
 
 # Loads interface info on Windows.
 # Make it available for all tests.
-from .base_stream import *
+from .pipe_utils import *
 from .stun_client import *
 
 

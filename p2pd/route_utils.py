@@ -365,40 +365,6 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
     # Return results back to caller.
     return [af, routes, link_locals]
 
-async def Routes(interface_list, af, netifaces, skip_resolve=False):
-    # Optimization: check if an AF has a default gateway first.
-    # If it doesn't return an empty route pool for AF.
-    if not is_af_routable(af, netifaces):
-        log("> af {} has no default route".format(af))
-        return RoutePool([])
-
-    # Hold results.
-    results = []
-    tasks = []
-
-    # Copy route pool from Interface if it already exists.
-    # Otherwise schedule task to get list of routes.
-    for iface in interface_list:
-        log(f"Routes task += {af} {skip_resolve} {netifaces}")
-        tasks.append(
-            get_routes(iface, af, skip_resolve, netifaces=netifaces)
-        )
-
-    # Tasks that need to be run.
-    # Cmbine with results -- if any.
-    link_locals = []
-    if len(tasks):
-        ret_lists = await asyncio.gather(*tasks)
-        for ret_list in ret_lists:
-            if len(ret_list) != 2:
-                continue
-
-            results = results + ret_list[0]
-            link_locals = link_locals + ret_list[1]
-
-    # Wrap all routes in a RoutePool and return the result.
-    return RoutePool(results, link_locals)
-
 # Combine all routes from interface into RoutePool.
 def interfaces_to_rp(interface_list):
     rp = {}

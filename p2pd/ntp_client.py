@@ -33,7 +33,7 @@ import struct
 import time
 import asyncio
 from .address import *
-from .base_stream import *
+from .pipe_utils import *
 
 class NTPException(Exception):
     """Exception raised by this module."""

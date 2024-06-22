@@ -54,6 +54,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         }
 
         at_least_one = False
+        i = 0
         for af in [IP4, IP6]:
             log(f"Test daemon af = {af}")
             try:
@@ -89,18 +90,20 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                 msg = b"hello world ay lmaoo"
                 for proto in [UDP, TCP]:
                     log(f"test daemon proto = {proto}")
+                    #print()
+                    #print(proto)
+                    #print(addr)
 
                     # Fresh route per server.
-                    echo_route = await interface.route(af).bind(ips=addr, port=server_port)
-                    #print()
+                    i += 1
+                    echo_route = await interface.route(af).bind(ips=addr, port=server_port + i)
                     #print(echo_route)
-                    #print(echo_route.nic_bind)
                     #print(echo_route._bind_tups)
 
                     # Daemon instance.
                     echod = await EchoServer().listen_all(
                         [echo_route],
-                        [server_port],
+                        [server_port + i],
                         [proto]
                     )
                     #print(echod.servers[0][2].sock)
@@ -124,7 +127,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                     pipe.subscribe(SUB_ALL)
 
                     # Send message to server.
-                    #print(dest.tup in pipe.stream.handle)
+                    #print(dest.tup)
                     send_ret = await pipe.send(msg, dest.tup)
 
                     # Receive data back.

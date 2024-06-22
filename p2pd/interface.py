@@ -352,12 +352,8 @@ class Interface():
             # Initialize with blank RP.
             self.rp[af] = RoutePool()
 
-            # Copy random STUN servers to use.
-            stun_servs = STUN_CHANGE_SERVERS[UDP][af]
-            serv_list = list_clone_rand(stun_servs, max_agree)
-
             # Used to resolve nic addresses.
-            stun_clients = await get_stun_clients(af, serv_list, self)
+            stun_clients = await get_stun_clients(af, max_agree, self)
 
             # Is this default iface for this AF?
             if self.is_default(af):
@@ -416,7 +412,7 @@ class Interface():
 
     async def load_nat(self, nat_tests=5, delta_tests=12, timeout=4):
         # Try to avoid circular imports.
-        from .base_stream import pipe_open
+        from .pipe_utils import pipe_open
         
         # IPv6 only has no NAT!
         if IP4 not in self.supported():
@@ -427,12 +423,10 @@ class Interface():
             af = IP4
 
         # Copy random STUN servers to use.
-        stun_servs = STUN_CHANGE_SERVERS[UDP][af]
         test_no = max(nat_tests, delta_tests)
-        serv_list = list_clone_rand(stun_servs, test_no)
         stun_clients = await get_stun_clients(
             af,
-            serv_list,
+            test_no,
             self
         )
 
@@ -447,7 +441,6 @@ class Interface():
             async_wrap_errors(
                 fast_nat_test(
                     pipe,
-                    stun_servs,
                     test_no=nat_tests,
                 ),
                 timeout=timeout
@@ -724,74 +717,7 @@ def dict_to_if_list(dict_list):
         if_list.append(interface)
 
     return if_list
-            
-# Stores a list of interfaces for the machine.
-class Interfaces():
-    def __init__(self, interfaces=[]):
-        self.started = False
-        self.by_name = {}
-        self.by_af = {
-            AF_INET: [],
-            AF_INET6: []
-        }
 
-        # Interfaces are added once we know their stack type.
-        # which is know after they are 'started' to tell
-        # which address family is routable to the Internet.
-        for interface in interfaces:
-            self.add(interface)
-
-        if len(interfaces):
-            self.started = True
-
-    def add(self, interface):
-        duel_stack = 1 if interface.stack == DUEL_STACK else 0
-        if interface.stack == AF_INET or duel_stack:
-            self.by_af[AF_INET].append(interface)
-
-        if interface.stack == AF_INET6 or duel_stack:
-            self.by_af[AF_INET6].append(interface)
-
-        self.by_name[interface.name] = interface
-        return interface
-
-    def get(self, af):
-        return self.by_af[af][0]
-
-    # Load default interfaces.
-    async def start(self, do_start=1): # pragma: no cover
-        tasks = []
-
-        # Load default interfaces.
-        netifaces = Interface.get_netifaces()
-        if self.names == {}:
-            gws = netifaces.gateways()["default"]
-            interface_one = None
-            name_index = {}
-            for af in [netifaces.AF_INET, netifaces.AF_INET6]:
-                if af in gws:
-                    name = gws["default"][af][1]
-                    if name not in name_index:
-                        interface = Interface(name)
-                        if do_start:
-                            tasks.append(
-                                interface.start()
-                            )
-
-                        self.names[name] = interface
-                        name_index[name] = 1
-
-        # Get WAN IPs for interfaces concurrently.
-        if len(tasks):
-            await asyncio.gather(*tasks)
-
-        # Add interfaces to address family index.
-        for name in self.names:
-            interface = self.names[name]
-            self.add(interface)
-
-        self.started = True
-        return self
 
 if __name__ == "__main__": # pragma: no cover
     async def test_interface():

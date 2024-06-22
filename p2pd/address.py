@@ -3,6 +3,7 @@ import socket
 import ipaddress
 import pprint
 from .net import *
+from .bind import *
 
 # TODO: address doesn't support domain resolution
 # from a specific interface. This may not matter though.

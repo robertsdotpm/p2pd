@@ -105,7 +105,13 @@ async def signal_protocol(self, msg, signal_pipe):
 
         # Create hole punching client.
         interface = self.if_list[r["if"]["us"]]
-        stun_client = STUNClient(interface=interface, af=r["af"])
+        stun_client = (await get_stun_clients(
+            r["af"],
+            1,
+            interface=interface,
+            proto=TCP
+        ))[0]
+
         recipient = self.tcp_punch_clients[r["if"]["us"]]
 
         # Calculate punch mode.
@@ -182,7 +188,12 @@ async def signal_protocol(self, msg, signal_pipe):
         dest_s = str(their_if_info["ext"])
         af = af_from_ip_s(dest_s)
         interface = self.if_list[r["if"]["us"]]
-        stun_client = STUNClient(interface, af)
+        stun_client = (await get_stun_clients(
+            af,
+            1,
+            interface=interface,
+            proto=TCP
+        ))[0]
 
         # Update received mappings.
         # This is an optional step that can improve connect success.

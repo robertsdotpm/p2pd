@@ -65,8 +65,8 @@ if vmin <= 4:
     raise Exception("Project needs >= 3.5")
 
 def my_except_hook(exctype, value, traceback):
+    log("Global except handler called.")
     log_exception()
-    print("except handler")
 
 async def safe_run(f, args=[]):
     try:
@@ -74,18 +74,16 @@ async def safe_run(f, args=[]):
     except:
         log_exception()
 
-    while 1:
-        try:
-            tasks = asyncio.Task.all_tasks()
-            cur_task = asyncio.Task.current_task()
-        except:
-            tasks = asyncio.all_tasks()
-            cur_task = asyncio.current_task()
+
+    try:
+        tasks = asyncio.Task.all_tasks()
+        cur_task = asyncio.Task.current_task()
+    except:
+        tasks = asyncio.all_tasks()
+        cur_task = asyncio.current_task()
 
 
-        await asyncio.gather(*tasks - {cur_task})
-        if not len(tasks):
-            break
+    await asyncio.gather(*tasks - {cur_task})
 
 if not hasattr(unittest, "IsolatedAsyncioTestCase"):
     print("patching isolated asyncio test case")

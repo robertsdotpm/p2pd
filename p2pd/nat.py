@@ -325,6 +325,9 @@ async def delta_test(stun_clients, test_no=8, threshold=5, concurrency=True):
         return tasks
 
     def get_delta_value(delta_no, dist_no, local_dist, preserv_dist, results):
+        if results is None:
+            return
+
         for i in range(0, len(results)):
             try:
                 # Skip invalid results

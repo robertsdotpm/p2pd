@@ -81,7 +81,7 @@ from .nat import *
 from .ip_range import *
 from .stun_client import *
 from .clock_skew import *
-from .base_stream import *
+from .pipe_utils import *
 from .interface import *
 
 #nest_asyncio.apply()
