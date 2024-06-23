@@ -207,7 +207,7 @@ class ToxiTunnel():
 
         # Connect to the listen server for this tunnel.
         dest = Address("localhost", self.port)
-        pipe = await pipe_open(TCP, route, dest, conf=conf)
+        pipe = await pipe_open(TCP, dest, route, conf=conf)
         return pipe, dest.tup
     
     async def get_curl(self):

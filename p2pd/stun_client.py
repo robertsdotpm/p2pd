@@ -84,8 +84,8 @@ class STUNClient():
         # Otherwise use details to make a new pipe.
         return await pipe_open(
             self.proto,
-            route,
             self.dest,
+            route,
             conf=self.conf
         )
     

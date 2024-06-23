@@ -35,6 +35,23 @@ class Daemon():
             self.iface_lookup[iface.name] = iface
         self.rp = None
 
+    async def dev(self):
+        from .interface import Interface
+        from .http_client_lib import WebCurl
+        from .address import Address
+
+        iface = await Interface()
+        route = await iface.route()
+        await self.listen_all(
+            [route],
+            [0],
+            [TCP]
+        )
+        port = self.get_listen_port()
+        dest = await Address(route.nic(), port, route)
+        print(f"Dev server started on {dest.tup}")
+        return WebCurl(dest)
+
     def get_listen_port(self):
         return get_listen_port(self.servers[0])
 

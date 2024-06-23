@@ -11,7 +11,7 @@ async def example():
     echo_dest = Address("tcpbin.com", 4242)
     #
     # Open a connection to the echo server.
-    pipe = await pipe_open(TCP, route, echo_dest)
+    pipe = await pipe_open(TCP, echo_dest, route)
     # No need to call pipe.subscribe(SUB_ALL).
     # This is done automatically if a destination is provided.
     # Call pipe.unsubscribe(SUB_ALL) to turn this off.

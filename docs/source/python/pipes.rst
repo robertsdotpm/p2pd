@@ -234,8 +234,8 @@ options look like this:
         # Return the sock instead of the base proto.
         "sock_only": False,
 
-        # Disable closing sock on error.
-        "no_close": False,
+        # Enable closing sock on error.
+        "do_close": True,
 
         # Whether to set SO_LINGER. None = off.
         # Non-none = linger value.

@@ -447,8 +447,8 @@ class ToxiMainServer(RESTD):
         # Connect to upstream.
         upstream = await pipe_open(
             TCP,
+            dest,
             up_route,
-            dest
         )
 
         # Add upstream to tunnel server.

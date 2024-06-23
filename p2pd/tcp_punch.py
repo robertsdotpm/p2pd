@@ -94,7 +94,7 @@ NTP_MEET_STEP = 3
 
 ################################################################
 TCP_PUNCH_MAP_NO = 5
-TCP_PUNCH_SEND_INITIAL_MAPPINGS = 1
+TCP_PUNCH_IN_MAP = 1
 TCP_PUNCH_RECV_INITIAL_MAPPINGS = 2
 TCP_PUNCH_UPDATE_RECIPIENT_MAPPINGS = 3
 TCP_PUNCH_IN_PROGRESS = 4
@@ -112,7 +112,7 @@ PUNCH_CONF = dict_child({
     "sock_only": True,
 
     # Disable closing sock on error.
-    "no_close": True,
+    "do_close": False,
 
     # Ref to async event loop func.
     "loop": lambda: selector_event_loop()
@@ -353,10 +353,12 @@ class TCPPunch():
         assert(stun_client.interface == self.interface)
 
         # Log warning if dest_addr is our ext address.
+        """
         af = af_from_ip_s(dest_addr)
         ext = self.interface.route(af).ext()
         if dest_addr == ext:
             log("> TCP punch warning: step 1 dest matches our dest.")
+        """
 
         # Session id is simple len of existing sessions.
         map_info = await get_nat_predictions(
@@ -432,7 +434,7 @@ class TCPPunch():
         self.set_state(
             dest_node_id,
             pipe_id,
-            TCP_PUNCH_SEND_INITIAL_MAPPINGS,
+            TCP_PUNCH_IN_MAP,
             data
         )
 
@@ -560,7 +562,7 @@ class TCPPunch():
         test_no = len(their_maps)
         use_range = nats_intersect_range(self.interface.nat, data["their_nat"], test_no)
         bad_delta = [INDEPENDENT_DELTA, DEPENDENT_DELTA, RANDOM_DELTA]
-        if state_info["state"] == TCP_PUNCH_SEND_INITIAL_MAPPINGS:
+        if state_info["state"] == TCP_PUNCH_IN_MAP:
             # Update our local ports if needed.
             for i in range(0, test_no):
                 _, reply_port, _ = their_maps[i]

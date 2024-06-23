@@ -12,8 +12,8 @@ async def example():
     # Subscribe to all messages.
     pipe = await pipe_open(
         UDP,
-        route,
-        Address("stunserver.stunprotocol.org", 3478)
+        Address("stunserver.stunprotocol.org", 3478),
+        route
     )
     #
     # Build a STUN request and send it.

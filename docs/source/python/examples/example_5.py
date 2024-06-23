@@ -11,12 +11,12 @@ async def example():
     route = await i.route().bind() # Port 0 = any unused port.
     #
     # Start the server and use msg_cb to process messages.
-    server = await pipe_open(TCP, route, msg_cb=msg_cb)
+    server = await pipe_open(TCP, route=route, msg_cb=msg_cb)
     #
     # Connect to the server.
     # Use the IP of the route and unused port for the destination.
     dest = Address(*server.sock.getsockname()[0:2])
-    client = await pipe_open(TCP, route, dest)
+    client = await pipe_open(TCP, dest, route)
     #
     # Send data to the server and check receipt.
     msg = b"test msg."

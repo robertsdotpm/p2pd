@@ -182,8 +182,8 @@ NET_CONF = {
     # Return the sock instead of the base proto.
     "sock_only": False,
 
-    # Disable closing sock on error.
-    "no_close": True,
+    # Enable closing sock on error.
+    "do_close": True,
 
     # Whether to set SO_LINGER. None = off.
     # Non-none = linger value.
@@ -199,6 +199,7 @@ NET_CONF = {
 af_to_v = lambda af: 4 if af == IP4 else 6
 v_to_af = lambda v: IP4 if v == 4 else IP6
 af_to_cidr = max_cidr = lambda af: 32 if af == IP4 else 128
+i_to_af = lambda x: IP4 if x == 2 else IP6
 
 class FakeSocket():
     def __init__(self, response_bytes):

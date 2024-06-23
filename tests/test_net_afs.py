@@ -66,7 +66,7 @@ class TestAFsWork(unittest.IsolatedAsyncioTestCase):
                     )
 
                     # Open pipe to echo server.
-                    pipe = await pipe_open(proto, route, echo_dest)
+                    pipe = await pipe_open(proto, echo_dest, route)
                     
                     # Interested in any message.
                     pipe.subscribe(SUB_ALL)

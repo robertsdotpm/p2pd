@@ -727,9 +727,9 @@ async def get_nat_predictions(mode, stun_client, our_nat, their_nat, their_maps=
     last_mapped = [None, None]
     if our_nat["delta"]["type"] in DELTA_N:
         # NOTE: if local < 1024 it may not be possible to reuse.
-        iface = stun_client.iface
+        iface = stun_client.interface
         af = stun_client.af
-        r = stun_client.interface.route(stun_client.af)
+        r = iface.route(stun_client.af)
         s = None
         for i in range(0, 5):
             try:

@@ -164,7 +164,7 @@ def no_stun_resp_check(q_list):
 async def fast_nat_test(pipe, test_no=NAT_TEST_NO, timeout=NAT_TEST_TIMEOUT):
     # Use a random portion of change servers for
     # the NAT test.
-    serv_list = STUN_CHANGE_SERVERS[UDP][pipe.af]
+    serv_list = STUN_CHANGE_SERVERS[UDP][pipe.route.af]
     serv_list = list_clone_rand(serv_list, test_no)
     test_servers = serv_list
 

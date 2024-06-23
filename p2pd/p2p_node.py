@@ -99,17 +99,17 @@ class P2PUtils():
         self.tcp_punch_clients = [
             TCPPunch(
                 interface,
-                self.if_list,
+                self.ifs,
                 self.sys_clock,
                 self.pp_executor,
                 self.mp_manager
             )
-            for interface in self.if_list
+            for interface in self.ifs
         ]
 
 # Main class for the P2P node server.
 class P2PNode(Daemon, P2PUtils):
-    def __init__(self, if_list, port=NODE_PORT, node_id=None, ip=None, signal_offsets=None, enable_upnp=False, conf=NODE_CONF, seed=None):
+    def __init__(self, ifs, port=NODE_PORT, node_id=None, ip=None, signal_offsets=None, enable_upnp=False, conf=NODE_CONF, seed=None):
         super().__init__()
         self.seed = seed or secrets.token_bytes(24)
         self.conf = conf
@@ -117,7 +117,14 @@ class P2PNode(Daemon, P2PUtils):
         self.port = port
         self.enable_upnp = enable_upnp
         self.ip = ip
-        self.if_list = if_list
+        self.ifs = ifs
+        self.ifs_by_af = {IP4: [], IP6: []}
+        for af in VALID_AFS:
+            for interface in ifs:
+                if af in interface.supported():
+                    self.ifs_by_af[af].append(interface)
+
+
         self.node_id = node_id or rand_plain(15)
         self.signal_pipes = {} # offset into MQTT_SERVERS
         self.expected_addrs = {} # by [pipe_id]
@@ -126,7 +133,7 @@ class P2PNode(Daemon, P2PUtils):
         self.sys_clock = None
         self.pp_executor = None
         self.mp_manager = None
-        self.tcp_punch_clients = None # [...]
+        self.tcp_punch_clients = [] # [...]
         self.turn_clients = []
 
         # Handlers for the node's custom protocol functions.
@@ -157,6 +164,64 @@ class P2PNode(Daemon, P2PUtils):
     def del_msg_cb(self, msg_cb):
         if msg_cb in self.msg_cbs:
             self.msg_cbs.remove(msg_cb)
+
+    async def dev(self, protos=[TCP]):
+        # MQTT server offsets to try.
+        if self.signal_offsets is None:
+            offsets = [0] + shuffle([i for i in range(1, len(MQTT_SERVERS))])
+        else:
+            offsets = self.signal_offsets
+
+        # Get list of N signal pipes.
+        for offset in range(0, SIGNAL_PIPE_NO):
+            self.signal_pipes[offset] = None
+
+        # Make a list of routes based on supported address families.
+        routes = []
+        if_names = []
+        for interface in self.ifs:
+            for af in interface.supported():
+                route = await interface.route(af).bind()
+                routes.append(route)
+
+            if_names.append(interface.name)
+
+        # Do deterministic bind to port by NIC IPs.
+        if self.port == -1:
+            self.port = get_port_by_ips(if_names)
+            for _ in range(0, 2):
+                try:
+                    self.listen_all_task = await self.listen_all(
+                        routes,
+                        [self.port],
+                        protos
+                    )
+                    break
+                except Exception:
+                    # Use any port.
+                    log(f"Deterministic bind for node server failed.")
+                    log(f"Port {self.port} was not available.")
+                    self.port = 0
+                    log_exception()
+        else:
+            # Start handling messages for self.msg_cb.
+            # Bind to all ifs provided to class on route[0].
+            self.listen_all_task = await self.listen_all(
+                routes,
+                [self.port],
+                protos
+            )
+
+        # Translate any port 0 to actual assigned port.
+        # First server, field 3 == base_proto.
+        # sock = listen sock, getsocketname = (bind_ip, bind_port, ...)
+        port = self.servers[0][2].sock.getsockname()[1]
+        self.addr_bytes = make_peer_addr(self.node_id, self.ifs, list(self.signal_pipes), port=port, ip=self.ip)
+        self.p2p_addr = parse_peer_addr(self.addr_bytes)
+        print(f"> P2P node = {self.addr_bytes}")
+        print(self.p2p_addr)
+            
+        return self
 
     # Start the node -- must have been setup properly first.
     async def start(self, protos=[TCP]):
@@ -212,7 +277,7 @@ class P2PNode(Daemon, P2PUtils):
         # Make a list of routes based on supported address families.
         routes = []
         if_names = []
-        for interface in self.if_list:
+        for interface in self.ifs:
             for af in interface.supported():
                 route = await interface.route(af).bind()
                 routes.append(route)
@@ -249,7 +314,7 @@ class P2PNode(Daemon, P2PUtils):
         # First server, field 3 == base_proto.
         # sock = listen sock, getsocketname = (bind_ip, bind_port, ...)
         port = self.servers[0][2].sock.getsockname()[1]
-        self.addr_bytes = make_peer_addr(self.node_id, self.if_list, list(self.signal_pipes), port=port, ip=self.ip)
+        self.addr_bytes = make_peer_addr(self.node_id, self.ifs, list(self.signal_pipes), port=port, ip=self.ip)
         self.p2p_addr = parse_peer_addr(self.addr_bytes)
         log(f"> P2P node = {self.addr_bytes}")
 
@@ -294,10 +359,16 @@ class P2PNode(Daemon, P2PUtils):
         # Close the MQTT client.
         for offset in list(self.signal_pipes):
             signal_pipe = self.signal_pipes[offset]
+            if signal_pipe is None:
+                continue
+
             await signal_pipe.close()
 
         # Close TCP punch clients.
         for punch_client in self.tcp_punch_clients:
+            if punch_client is None:
+                continue
+
             # Sets close event.
             # Waits for stop event.
             await punch_client.close()

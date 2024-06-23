@@ -118,8 +118,8 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                     test_route = await interface.route(af).bind(ips=addr)
                     pipe = await pipe_open(
                         proto,
+                        dest,
                         test_route,
-                        dest
                     )
                     self.assertTrue(pipe is not None)
 

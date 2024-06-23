@@ -41,7 +41,7 @@ class PNPClient():
     async def get_dest_pipe(self):
         route = self.dest.route.interface.route(self.dest.route.af)
         route = await route.bind()
-        pipe = await pipe_open(self.proto, route, self.dest)
+        pipe = await pipe_open(self.proto, self.dest, route)
         return pipe
 
     async def return_resp(self, pipe):

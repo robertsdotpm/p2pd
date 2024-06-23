@@ -64,8 +64,8 @@ class TestStunClient(unittest.IsolatedAsyncioTestCase):
                         # Test change port request.
                         pipe = (await pipe_open(
                             UDP,
+                            dest,
                             route,
-                            dest
                         )).subscribe(SUB_ALL)
 
                         # Used for matching the TXID for the stun reply.

@@ -275,6 +275,7 @@ def unpack_peer_addr(addr):
     return validate_peer_addr(out)
 
 def parse_peer_addr(addr):
+    addr = to_b(addr)
     af_parts = addr.split(b'-')
     if len(af_parts) != 4:
         log("p2p addr invalid parts")

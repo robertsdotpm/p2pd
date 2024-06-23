@@ -439,8 +439,8 @@ ip address add fe80:3456:7890:3333:0000:0000:0000:0001/128 dev enp3s0
                 # Return a pipe to the PNP server.
                 return await pipe_open(
                     client.proto,
-                    route,
-                    client.dest
+                    client.dest,
+                    route
                 )
 
             # Patch the client to use specific src ip.

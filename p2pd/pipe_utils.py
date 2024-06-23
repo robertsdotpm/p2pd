@@ -154,7 +154,7 @@ It supports using IPv4 and IPv6 destination addresses.
 You can pull data from it based on a regex pattern.
 You can execute code on new messages or connection disconnects.
 """
-async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None, conf=NET_CONF):
+async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=None, conf=NET_CONF):
     # If no route is set assume default interface route 0.
     if route is None:
         from .interface import Interface
@@ -321,13 +321,19 @@ async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, up_cb=None,
     except Exception as e:
         log_exception()
 
-        if sock is not None:
-            log(f"closing socket. {sock.getsockname()}")
-            sock.close()
-        
-        if pipe_events is not None:
-            log("closing bas proto")
-            await pipe_events.close()
+        """
+        Enables closing the socket if an error occurs.
+        Don't remove this conditional code as it's
+        needed to support TCP hole punching.
+        """
+        if conf["do_close"]:
+            if sock is not None:
+                log(f"closing socket. {sock.getsockname()}")
+                sock.close()
+            
+            if pipe_events is not None:
+                log("closing bas proto")
+                await pipe_events.close()
 
 async def pipe_utils_workspace():
     from .address import Address
@@ -336,7 +342,7 @@ async def pipe_utils_workspace():
     i = await Interface()
     dest = Address("google.com", 80)
     r = await i.route()
-    p = await pipe_open(TCP, r, dest)
+    p = await pipe_open(TCP, dest, r)
     print(p.sock)
     await p.close()
 

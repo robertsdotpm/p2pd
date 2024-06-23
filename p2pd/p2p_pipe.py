@@ -323,21 +323,24 @@ class P2PPipe():
     """
     async def direct_connect(self, p2p_dest, pipe_id, signal_pipe=None, proto=TCP):
         tasks = []
+        pipe_id = to_b(pipe_id)
         out = b"ID %s" % (pipe_id)
-        for af in VALID_AFS:
-            # Check an interface exists for that AF.
-            if not len(self.node.ifs.by_af[af]):
-                continue
 
+        for af in VALID_AFS:
             # Peer doesn't support af type.
             if not len(p2p_dest[af]):
+                continue
+
+            # Check an interface exists for that AF.
+            if not len(self.node.ifs_by_af[af]):
                 continue
 
             async def attempt_con(af, info):
                 # (1) Get first interface for AF.
                 # (2) Build a 'route' from it with it's main NIC IP.
                 # (3) Bind to the route at port 0. Return itself.
-                route = await self.node.ifs.get(af).route(af).bind()
+                interface = self.node.ifs_by_af[af][0]
+                route = await interface.route(af).bind()
 
                 # Connect to this address.
                 dest = Address(

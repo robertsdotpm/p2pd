@@ -69,10 +69,7 @@ def my_except_hook(exctype, value, traceback):
     log_exception()
 
 async def safe_run(f, args=[]):
-    try:
-        await f(*args)
-    except:
-        log_exception()
+    await f(*args)
 
 
     try:
@@ -98,7 +95,7 @@ if not hasattr(unittest, "IsolatedAsyncioTestCase"):
         loop.set_debug(False)
 
     unittest.IsolatedAsyncioTestCase.get_event_loop = safe_run_patch
-    sys.excepthook = my_except_hook
+    #sys.excepthook = my_except_hook
 
 
 def proactorfy(self=None):
@@ -644,7 +641,7 @@ def p2pd_setup_event_loop():
     if not isinstance(policy, SelectorEventPolicy):
         asyncio.set_event_loop_policy(SelectorEventPolicy())
 
-    sys.excepthook = my_except_hook
+    #sys.excepthook = my_except_hook
 
 def selector_event_loop():
     selector = selectors.SelectSelector()

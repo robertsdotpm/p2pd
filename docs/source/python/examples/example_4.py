@@ -22,7 +22,7 @@ async def example():
     dest = Address("8.8.8.8", 53)
     #
     # Now open a TCP connection to that the destination.
-    pipe = await pipe_open(TCP, route, dest)
+    pipe = await pipe_open(TCP, dest, route)
     #
     # Send it a malformed HTTP request.
     buf = b"Test\r\n\r\n"
