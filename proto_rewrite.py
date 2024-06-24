@@ -1,3 +1,4 @@
+import json
 from p2pd import *
 
 SIG_P2P_CON = 1
@@ -112,12 +113,16 @@ class SigMsg():
                 self.src_index,
             )
 
+            # Reference to the network info.
+            info = self.src[self.af]
+            self.src_info = info[self.src_index]
+
         def to_dict(self):
             return {
                 "pipe_id": self.pipe_id,
                 "af": int(self.af),
                 "src_buf": self.src_buf,
-                "src_index": self.src_if_index,
+                "src_index": self.src_index,
             }
         
         @staticmethod
@@ -139,6 +144,10 @@ class SigMsg():
                 self.dest_buf,
                 self.dest_index,
             )
+
+            # Reference to the network info.
+            info = self.dest[self.af]
+            self.dest_info = info[self.dest_index]
 
         def to_dict(self):
             return {
@@ -164,7 +173,7 @@ class SigMsg():
             data["routing"]
         )
 
-class TCPPunchMsg2(SigMsg):
+class TCPPunchMsg(SigMsg):
     # The main contents of this message.
     class Payload():
         def __init__(self, ntp, mappings):
@@ -179,7 +188,7 @@ class TCPPunchMsg2(SigMsg):
         
         @staticmethod
         def from_dict(d):
-            return TCPPunchMsg2.Payload(
+            return TCPPunchMsg.Payload(
                 d["ntp"],
                 d["mappings"],
             )
@@ -190,63 +199,27 @@ class TCPPunchMsg2(SigMsg):
             data["payload"]
         )
 
+    def to_dict(self):
+        d = {
+            "meta": self.meta.to_dict(),
+            "routing": self.routing.to_dict(),
+            "payload": self.payload.to_dict(),
+        }
 
-    
-    pass
+        return d
 
-
-
-class TCPPunchMsg():
-    def __init__(self, p_node_buf, af, pipe_id, ntp, predict, p_dest_buf, p_reply_buf, our_index, their_index):
-        # Parse af for punching.
-        self.af = to_n(af)
-        self.af = i_to_af(self.af)        
-
-        # Other params have minimal conversion.
-        self.pipe_id = to_s(pipe_id)
-        self.ntp = Dec(ntp)
-        self.predict = predict
-        self.our_index = to_n(our_index)
-        self.their_index = to_n(their_index)
-
-        # Convert to peer addr dicts.
-        self.p_node_buf = to_s(p_node_buf)
-        self.p_dest_buf = to_s(p_dest_buf)
-        self.p_reply_buf = to_s(p_reply_buf)
-        self.p_reply = parse_peer_addr(p_reply_buf)
-        self.p_node = parse_peer_addr(p_node_buf)
-        self.p_dest = parse_peer_addr(p_dest_buf)
-        self.p_dest = work_behind_same_router(
-            self.p_node,
-            self.p_dest,
-        )
-
-        # Sanity check on their if index.
-        r = [0, len(self.p_reply[self.af]) - 1]
-        if not in_range(self.their_index, r):
-            raise Exception("dest if offset of")
-        
-        # Reference to their network info.
-        info = self.p_reply[self.af]
-        self.their_info = info[self.their_index]
+    def pack(self):
+        return bytes([SIG_TCP_PUNCH]) + \
+            to_b(
+                json.dumps(
+                    self.to_dict()
+                )
+            )
 
     @staticmethod
-    def unpack(buf, p_node_buf):
-        # Extract serialized fields.
-        fields = to_s(buf).split(" ")
-        print(fields)
-        fields[3] = PredictField.unpack(fields[3])
-
-        return TCPPunchMsg(p_node_buf, *fields)
-    
-    def pack(self):
-        predict = to_s(self.predict.pack())
-        return bytes([SIG_TCP_PUNCH]) + to_b(
-            f"{self.af} {self.pipe_id} "
-            f"{self.ntp} {predict} "
-            f"{self.p_dest_buf} {self.p_node_buf} "
-            f"{self.our_index} {self.their_index}"
-        )
+    def unpack(buf):
+        d = json.loads(to_s(buf))
+        return TCPPunchMsg(d)
 
 class SigProtoHandlers():
     def __init__(self, node):
@@ -281,17 +254,21 @@ class SigProtoHandlers():
         return pipe
     
     async def handle_punch_msg(self, msg):
+        # AFs must match for this type of message.
+        if msg.meta.af != msg.routing.af:
+            raise Exception("tcp punch afs differ.")
+
         # Select our interface.
-        iface = self.node.ifs[msg.our_index]
+        iface = self.node.ifs[msg.routing.dest_index]
         punch = self.node.tcp_punch_clients
-        punch = punch[msg.our_index]
+        punch = punch[msg.routing.dest_index]
         stun  = self.node.stun_clients[0]
 
         # Wrap their external address.
         dest = await Address(
-            str(msg.their_info["ext"]),
+            str(msg.meta.src_info["ext"]),
             80,
-            iface.route(msg.af)
+            iface.route(msg.routing.af)
         )
 
         # Calculate punch mode.
@@ -300,49 +277,62 @@ class SigProtoHandlers():
         print(punch_mode)
 
         if punch_mode == TCP_PUNCH_REMOTE:
-            dest = str(msg.their_info["ext"])
+            dest = str(msg.meta.src_info["ext"])
         else:
-            dest = str(msg.their_info["nic"])
+            dest = str(msg.meta.src_info["nic"])
 
         print(f"dest = {dest}")
 
         # Is it initial mappings or updated?
         info = punch.get_state_info(
-            msg.p_reply["node_id"],
-            msg.pipe_id,
+            msg.meta.src["node_id"],
+            msg.meta.pipe_id,
         )
         if info is None:
             print("in recv init mappings")
             punch_ret = await punch.proto_recv_initial_mappings(
                 dest,
-                msg.their_info["nat"],
-                msg.p_reply["node_id"],
-                msg.pipe_id,
-                msg.predict.mappings,
+                msg.meta.src_info["nat"],
+                msg.meta.src["node_id"],
+                msg.meta.pipe_id,
+                msg.payload.mappings,
                 stun,
-                msg.ntp,
+                msg.payload.ntp,
                 mode=punch_mode
             )
 
-            # Send them our mappings.
-            return TCPPunchMsg(
-                to_s(self.node.addr_bytes),
-                msg.af,
-                msg.pipe_id,
-                msg.ntp,
-                PredictField(punch_ret[0]),
-                msg.p_reply_buf,
-                to_s(self.node.addr_bytes),
-                msg.their_index,
-                msg.our_index
-            ).pack()
+            return TCPPunchMsg({
+                # Reuse same pipe and desired AF.
+                # Pass our details here.
+                "meta": {
+                    "pipe_id": msg.meta.pipe_id,
+                    "af": msg.routing.af,
+                    "src_buf": self.node.addr_bytes,
+                    "src_index": msg.routing.dest_index,
+                },
+
+                # The message sender is now the dest.
+                "routing": {
+                    "af": msg.routing.af,
+                    "dest_buf": msg.meta.src_buf,
+                    "dest_index": msg.meta.src_index,
+                },
+
+                # Reuse the same NTP but pass our mappings.
+                "payload": {
+                    "ntp": msg.payload.ntp,
+                    "mappings": punch_ret[0],
+                },
+            }).pack()
+
+
         else:
             if info["state"] == TCP_PUNCH_IN_MAP:
                 print("in update rec maps")
                 punch_ret = await punch.proto_update_recipient_mappings(
-                    msg.p_reply["node_id"],
-                    msg.pipe_id,
-                    msg.predict.mappings,
+                    msg.meta.src["node_id"],
+                    msg.meta.pipe_id,
+                    msg.payload.mappings,
                     stun
                 )
 
@@ -357,10 +347,10 @@ class SigProtoHandlers():
         
         if buf[0] == SIG_TCP_PUNCH:
             print("got punch msg")
-            msg = TCPPunchMsg.unpack(buf[1:], p_node)
-            r = [0, len(self.node.ifs) - 1]
-            if not in_range(msg.our_index, r):
-                raise Exception("bad if index")
+            msg = TCPPunchMsg.unpack(buf[1:])
+            if msg.routing.dest_buf != to_s(p_node):
+                print("Received message not intended for us.")
+                return
             
             return self.handle_punch_msg(msg)
             print(msg.predict)
@@ -412,22 +402,6 @@ async def test_proto_rewrite():
     dest_addr = await Address(dest, 80, route).res()
 
 
-    """
-    Send initial maps from alice to bob:
-        msg:
-            meta:
-                - sender
-                - pipe_id
-
-            routing: # dest
-                - dest_node_id
-
-            payload:
-                - punch_ret
-
-
-    """
-
     af = IP4
     punch_ret = await alice_initiator.proto_send_initial_mappings(
         dest,
@@ -440,7 +414,7 @@ async def test_proto_rewrite():
 
     print(punch_ret)
 
-    msg = TCPPunchMsg2({
+    msg = TCPPunchMsg({
         "meta": {
             "pipe_id": pipe_id,
             "af": af,
@@ -461,28 +435,15 @@ async def test_proto_rewrite():
     print(msg)
 
 
-    """
 
 
-
-    msg = TCPPunchMsg(
-        to_s(alice_node.addr_bytes),
-        IP4,
-        pipe_id,
-        punch_ret[1],
-        PredictField(punch_ret[0]),
-        to_s(bob_node.addr_bytes),
-        to_s(alice_node.addr_bytes),
-        0,
-        0,
-    )
 
     buf = msg.pack()
     print(buf)
 
-    print(msg.ntp)
-    print(msg.p_reply_buf)
-    print(alice_node.addr_bytes)
+    #print(msg.ntp)
+    #print(msg.p_reply_buf)
+    #print(alice_node.addr_bytes)
 
 
 
@@ -521,7 +482,7 @@ async def test_proto_rewrite():
 
     print("Got results = ")
     print(results)
-    """
+    
 
     await alice_node.close()
     await bob_node.close()
