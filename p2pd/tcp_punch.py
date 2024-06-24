@@ -90,7 +90,7 @@ asyncio.set_event_loop_policy(SelectorEventPolicy())
 # Config #######################################################
 # Number of seconds in the future from an NTP time
 # for hole punching to occur.
-NTP_MEET_STEP = 3
+NTP_MEET_STEP = 5
 
 ################################################################
 TCP_PUNCH_MAP_NO = 5

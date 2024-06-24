@@ -146,6 +146,34 @@ class P2PNode(Daemon, P2PUtils):
         self.signal_worker_task = None
         self.signal_worker_tasks = {} # offset into MQTT_SERVERS
 
+        self.punch_queue = asyncio.Queue()
+
+    def pipe_future(self, pipe_id):
+        if pipe_id in self.pipes:
+            raise Exception("pipe future exists.")
+        
+        self.pipes[pipe_id] = asyncio.Future()
+
+    def pipe_ready(self, pipe_id, pipe):
+        if not self.pipes[pipe_id].done():
+            self.pipes[pipe_id].set_result(pipe)
+
+    def add_punch_meeting(self, params):
+        # Allow pipe to be awaited by pipe_id.
+        self.pipe_future(params[-1])
+
+        # Schedule the TCP punching.
+        self.punch_queue.put_nowait(params)
+
+    async def punch_queue_worker(self):
+        while 1:
+            params = await self.punch_queue.get()
+            punch_offset = params.pop(0)
+            punch = self.tcp_punch_clients[punch_offset]
+            pipe = await punch.proto_do_punching(*params)
+            if pipe is not None:
+                self.pipe_ready(params[-1], pipe)
+
     # Used by the MQTT clients.
     async def signal_protocol(self, msg, signal_pipe):
         return await async_wrap_errors(
@@ -220,6 +248,10 @@ class P2PNode(Daemon, P2PUtils):
         self.p2p_addr = parse_peer_addr(self.addr_bytes)
         print(f"> P2P node = {self.addr_bytes}")
         print(self.p2p_addr)
+
+        self.punch_worker = asyncio.ensure_future(
+            self.punch_queue_worker()
+        )
             
         return self
 
@@ -325,6 +357,10 @@ class P2PNode(Daemon, P2PUtils):
             await async_wrap_errors(
                 self.forward(port)
             )
+
+        self.punch_worker = asyncio.ensure_future(
+            self.punch_queue_worker()
+        )
             
         return self
 

@@ -253,6 +253,12 @@ class SigProtoHandlers():
 
         return pipe
     
+    """
+    Supports both receiving initial mappings and
+    receiving updated mappings by checking state.
+    The same message type is used for both which
+    avoids code duplication and keeps it simple.
+    """
     async def handle_punch_msg(self, msg):
         # AFs must match for this type of message.
         if msg.meta.af != msg.routing.af:
@@ -273,23 +279,20 @@ class SigProtoHandlers():
 
         # Calculate punch mode.
         punch_mode = punch.get_punch_mode(dest)
-        print("punch_mode = ")
-        print(punch_mode)
-
         if punch_mode == TCP_PUNCH_REMOTE:
             dest = str(msg.meta.src_info["ext"])
         else:
             dest = str(msg.meta.src_info["nic"])
-
-        print(f"dest = {dest}")
 
         # Is it initial mappings or updated?
         info = punch.get_state_info(
             msg.meta.src["node_id"],
             msg.meta.pipe_id,
         )
+
+        # Then this is step 2: recipient get mappings.
         if info is None:
-            print("in recv init mappings")
+            # Get updated mappings for initiator.
             punch_ret = await punch.proto_recv_initial_mappings(
                 dest,
                 msg.meta.src_info["nat"],
@@ -301,6 +304,15 @@ class SigProtoHandlers():
                 mode=punch_mode
             )
 
+            # Schedule the punching meeting.
+            self.node.add_punch_meeting([
+                msg.routing.dest_index,
+                PUNCH_RECIPIENT,
+                msg.meta.src["node_id"],
+                msg.meta.pipe_id,
+            ])
+
+            # Return mappings in a new message.
             return TCPPunchMsg({
                 # Reuse same pipe and desired AF.
                 # Pass our details here.
@@ -324,18 +336,20 @@ class SigProtoHandlers():
                     "mappings": punch_ret[0],
                 },
             }).pack()
-
-
-        else:
-            if info["state"] == TCP_PUNCH_IN_MAP:
-                print("in update rec maps")
-                punch_ret = await punch.proto_update_recipient_mappings(
-                    msg.meta.src["node_id"],
-                    msg.meta.pipe_id,
-                    msg.payload.mappings,
-                    stun
-                )
-
+        
+        # Then this is optional step 3: update initiator.
+        if info is not None:
+            # State checks to prevent protocol loops.
+            if info["state"] != TCP_PUNCH_IN_MAP:
+                return
+            
+            # Otherwise update the initiator.
+            punch_ret = await punch.proto_update_recipient_mappings(
+                msg.meta.src["node_id"],
+                msg.meta.pipe_id,
+                msg.payload.mappings,
+                stun
+            )
 
     def proto(self, buf):
         p_node = self.node.addr_bytes
@@ -357,6 +371,24 @@ class SigProtoHandlers():
             
             print(msg)
 
+"""
+Index cons by pipe_id -> future and then
+set the future when the con is made.
+Then you can await any pipe even if its
+made by a more complex process (like punching.)
+
+Maybe a pipe_open improvement.
+Then maybe have a queue to process hole punching
+meetings in the background.
+So you would just do:
+    - push to queue
+    - await pipe_id
+
+and the background process:
+    await queue ...
+    do punching
+    set pipe future
+"""
 async def test_proto_rewrite():
     pe = await get_pp_executors()
     #pe2 = await get_pp_executors(workers=2)
@@ -434,9 +466,23 @@ async def test_proto_rewrite():
 
     print(msg)
 
+    """
+    Allows enough time for the optional updated
+    mappings.
+    """
 
+    async def schedule_punching_with_delay(n):
+        await asyncio.sleep(n)
+        alice_node.add_punch_meeting([
+            0,
+            PUNCH_INITIATOR,
+            bob_node.p2p_addr["node_id"],
+            pipe_id,
+        ])
 
-
+    task_sche = asyncio.ensure_future(
+        schedule_punching_with_delay(2)
+    )
 
     buf = msg.pack()
     print(buf)
@@ -465,6 +511,13 @@ async def test_proto_rewrite():
     print(bob_recp.state)
 
 
+    bob_hole = await bob_node.pipes[pipe_id]
+    alice_hole = await alice_node.pipes[pipe_id]
+
+    print(f"alice hole = {alice_hole}")
+    print(f"bob hole = {bob_hole}")
+
+    """
     try:
         results = await asyncio.wait_for(
             asyncio.gather(
@@ -482,6 +535,9 @@ async def test_proto_rewrite():
 
     print("Got results = ")
     print(results)
+    """
+
+
     
 
     await alice_node.close()
