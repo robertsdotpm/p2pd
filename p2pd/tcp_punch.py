@@ -349,7 +349,7 @@ class TCPPunch():
         self.tcp_punch_stopped.set()
 
     # Initiator: Step 1 -- send Initiators predicted mappings to Recipient.
-    async def proto_send_initial_mappings(self, dest_addr, dest_nat, dest_node_id, pipe_id, stun_client, process_replies=None, con_list=None, mode=TCP_PUNCH_REMOTE):
+    async def proto_send_initial_mappings(self, dest_ip, dest_nat, dest_node_id, pipe_id, stun_client, process_replies=None, con_list=None, mode=TCP_PUNCH_REMOTE):
         assert(stun_client.interface == self.interface)
 
         # Log warning if dest_addr is our ext address.
@@ -408,7 +408,7 @@ class TCPPunch():
             "their_nat": dest_nat,
 
             # Their dest.
-            "their_dest": dest_addr,
+            "their_dest": dest_ip,
 
             # Their node id.
             "their_node_id": dest_node_id,
