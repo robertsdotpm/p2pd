@@ -1,8 +1,15 @@
+"""
+Using offsets for servers is a bad idea as server
+lists need to be updated. Use short, unique IDs or
+index by host name even if its longer.
+"""
+
 import json
 from p2pd import *
 
 SIG_P2P_CON = 1
 SIG_TCP_PUNCH = 2
+SIG_TURN = 3
 
 class P2PConMsg():
     def __init__(self, p_node_buf, pipe_id, proto, p_dest_buf):
@@ -184,7 +191,11 @@ class SigMsg():
                 d["dest_index"],
             )
 
-    def __init__(self, data):
+    # Abstract kinda feel.
+    class Payload():
+        pass
+
+    def __init__(self, data, enum):
         self.meta = SigMsg.Meta.from_dict(
             data["meta"]
         )
@@ -192,6 +203,34 @@ class SigMsg():
         self.routing = SigMsg.Routing.from_dict(
             data["routing"]
         )
+
+        self.payload = self.Payload.from_dict(
+            data["payload"]
+        )
+
+        self.enum = enum
+
+    def to_dict(self):
+        d = {
+            "meta": self.meta.to_dict(),
+            "routing": self.routing.to_dict(),
+            "payload": self.payload.to_dict(),
+        }
+
+        return d
+
+    def pack(self):
+        return bytes([self.enum]) + \
+            to_b(
+                json.dumps(
+                    self.to_dict()
+                )
+            )
+    
+    @classmethod
+    def unpack(cls, buf):
+        d = json.loads(to_s(buf))
+        return cls(d)
 
     def set_cur_addr(self, cur_addr_buf):
         self.routing.set_cur_dest(cur_addr_buf)
@@ -222,38 +261,45 @@ class TCPPunchMsg(SigMsg):
                 d["ntp"],
                 d["mappings"],
             )
-
-    def __init__(self, data):
-        super().__init__(data)
-        self.payload = self.Payload.from_dict(
-            data["payload"]
-        )
-
-    def to_dict(self):
-        d = {
-            "meta": self.meta.to_dict(),
-            "routing": self.routing.to_dict(),
-            "payload": self.payload.to_dict(),
-        }
-
-        return d
-
-    def pack(self):
-        return bytes([SIG_TCP_PUNCH]) + \
-            to_b(
-                json.dumps(
-                    self.to_dict()
-                )
-            )
-
-    @staticmethod
-    def unpack(buf):
-        d = json.loads(to_s(buf))
-        return TCPPunchMsg(d)
+        
+    def __init__(self, data, enum=SIG_TCP_PUNCH):
+        super().__init__(data, enum)
 
 class TURNMsg(SigMsg):
-    pass
+    class Payload():
+        def __init__(self, peer_tup, relay_tup, serv_id, client_index=-1):
+            self.peer_tup = peer_tup
+            self.relay_tup = relay_tup
+            self.serv_id = serv_id
+            self.client_index = client_index
 
+        def to_dict(self):
+            return {
+                "peer_tup": self.peer_tup,
+                "relay_tup": self.relay_tup,
+                "serv_id": self.serv_id,
+                "client_index": self.client_index,
+            }
+        
+        @staticmethod
+        def from_dict(d):
+            return TURNMsg.Payload(
+                d["peer_tup"],
+                d["relay_tup"],
+                d["serv_id"],
+                d["client_index"]
+            )
+        
+        def pack(self):
+            return bytes([SIG_TCP_PUNCH]) + \
+                to_b(
+                    json.dumps(
+                        self.to_dict()
+                    )
+                )
+        
+    def __init__(self, data, enum=SIG_TURN):
+        super().__init__(data, enum)
 
 class SigProtoHandlers():
     def __init__(self, node):
@@ -616,20 +662,106 @@ async def test_proto_rewrite2():
     iface = await Interface()
     alice_node = P2PNode([iface])
     bob_node = P2PNode([iface], port=NODE_PORT + 1)
+    af = IP4
     stun_client = (await get_stun_clients(
-        IP4,
+        af,
         1,
         iface
     ))[0]
 
+
+    pipe_id = "turn_pipe_id"
     for node in [alice_node, bob_node]:
         await node.dev()
 
     # TODO: work on TURN message here.
 
+    async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=None):
+        # TODO: index by id and not offset.
+        turn_server = TURN_SERVERS[serv_id]
+
+
+        # Resolve the TURN address.
+        route = await interface.route(af).bind()
+        turn_addr = await Address(
+            turn_server["host"],
+            turn_server["port"],
+            route
+        ).res()
+
+        # Make a TURN client instance to whitelist them.
+        turn_client = TURNClient(
+            route=route,
+            turn_addr=turn_addr,
+            turn_user=turn_server["user"],
+            turn_pw=turn_server["pass"],
+            turn_realm=turn_server["realm"]
+        )
+
+        # Start the TURN client.
+        try:
+            await asyncio.wait_for(
+                turn_client.start(),
+                10
+            )
+        except asyncio.TimeoutError:
+            log("Turn client start timeout in node.")
+            return
+        
+        # Wait for our details.
+        peer_tup  = await turn_client.client_tup_future
+        relay_tup = await turn_client.relay_tup_future
+
+        # Whitelist a peer if desired.
+        if None not in [dest_peer, dest_relay]:
+            await asyncio.wait_for(
+                turn_client.accept_peer(
+                    dest_peer,
+                    dest_relay
+                ),
+                6
+            )
+
+        return peer_tup, relay_tup, turn_client
+
+
+    alice_peer, alice_relay, alice_turn = await get_turn_client(
+        af,
+        0,
+        iface
+    )
+
+    print(alice_peer)
+    print(alice_relay)
+    print(alice_turn)
+
+    msg = TURNMsg({
+        "meta": {
+            "pipe_id": pipe_id,
+            "af": af,
+            "src_buf": alice_node.addr_bytes,
+            "src_index": 0,
+        },
+        "routing": {
+            "af": af,
+            "dest_buf": bob_node.addr_bytes,
+            "dest_index": 0,
+        },
+        "payload": {
+            "peer_tup": alice_peer,
+            "relay_tup": alice_relay,
+            "serv_id": 0,
+            "client_index": 0,
+        },
+    })
+
+    print(msg)
 
 
 
+
+
+    await alice_turn.close()
     await alice_node.close()
     await bob_node.close()
 
