@@ -2,6 +2,11 @@
 Using offsets for servers is a bad idea as server
 lists need to be updated. Use short, unique IDs or
 index by host name even if its longer.
+
+- we're not always interested in crafting an entirely
+new package e.g. the turn response only switches the
+src and dest, and changes the payload
+it might make sense to take this into account
 """
 
 import json
@@ -158,6 +163,7 @@ class SigMsg():
             self.dest_index = to_n(dest_index)
             self.af = af
             self.set_cur_dest(dest_buf)
+            self.cur_dest_buf = None # set later.
 
         """
         Peers usually have dynamic addresses.
@@ -241,6 +247,27 @@ class SigMsg():
         the same router.
         """
         self.meta.patch_source(self.routing.dest)
+
+    @classmethod
+    def switch_src_and_dest(cls, self):
+        # Copy all current fields into new object.
+        # So that changes don't mutate self.
+        x = cls.unpack(self.pack()[1:])
+
+        # Swap interface indexes in that object.
+        x.meta.src_index,
+        x.routing.dest_index = \
+        x.routing.dest_index,
+        x.meta.src_index
+
+        # Swap src and dest p2p addr in that object.
+        x.meta.src_buf
+        x.routing.dest_buf = \
+        x.routing.cur_dest_buf,
+        x.meta.src_buf
+
+        # Return new object with init on changes.
+        return cls.unpack(x.pack()[1:])
 
 class TCPPunchMsg(SigMsg):
     # The main contents of this message.
@@ -393,29 +420,9 @@ class SigProtoHandlers():
             ])
 
             # Return mappings in a new message.
-            return TCPPunchMsg({
-                # Reuse same pipe and desired AF.
-                # Pass our details here.
-                "meta": {
-                    "pipe_id": msg.meta.pipe_id,
-                    "af": msg.routing.af,
-                    "src_buf": self.node.addr_bytes,
-                    "src_index": msg.routing.dest_index,
-                },
-
-                # The message sender is now the dest.
-                "routing": {
-                    "af": msg.routing.af,
-                    "dest_buf": msg.meta.src_buf,
-                    "dest_index": msg.meta.src_index,
-                },
-
-                # Reuse the same NTP but pass our mappings.
-                "payload": {
-                    "ntp": msg.payload.ntp,
-                    "mappings": punch_ret[0],
-                },
-            }).pack()
+            reply = msg.switch_src_and_dest()
+            reply.payload.mappings = punch_ret[0]
+            return reply.pack()
         
         # Then this is optional step 3: update initiator.
         if info is not None:
@@ -431,10 +438,18 @@ class SigProtoHandlers():
                 stun
             )
 
+    async def handle_turn_msg(self, msg):
+        pass
+        # by turn_clients[pipe_id] (optional make)
+        # but then accept needs to keep a list of accepted peers in the turn client
+        # and i prob need to switch to a laptop with ethernet and wifi...
+
+
     def proto(self, buf):
         p_node = self.node.addr_bytes
         p_addr = self.node.p2p_addr
         node_id = to_s(p_addr["node_id"])
+        handler = None
         if buf[0] == SIG_P2P_CON:
             msg = P2PConMsg.unpack(buf[1:], p_node)
             print("got sig p2p dir")
@@ -444,17 +459,24 @@ class SigProtoHandlers():
         if buf[0] == SIG_TCP_PUNCH:
             print("got punch msg")
             msg = TCPPunchMsg.unpack(buf[1:])
-            dest = msg.routing.dest
-            if to_s(dest["node_id"]) != node_id:
-                print(f"Received message not intended for us. {dest['node_id']} {node_id}")
-                return
-            
-            # Updating routing dest with current addr.
-            msg.set_cur_addr(p_node)
-            return self.handle_punch_msg(msg)
-            print(msg.predict)
-            
-            print(msg)
+            handler = self.handle_punch_msg
+
+        if buf[0] == SIG_TURN:
+            print("Got turn msg")
+            msg = TURNMsg.unpack(buf[1:])
+            handler = self.handle_turn_msg
+
+        if handler is None:
+            return
+
+        dest = msg.routing.dest
+        if to_s(dest["node_id"]) != node_id:
+            print(f"Received message not intended for us. {dest['node_id']} {node_id}")
+            return
+        
+        # Updating routing dest with current addr.
+        msg.set_cur_addr(p_node)
+        return handler(msg)
 
 """
 Index cons by pipe_id -> future and then
