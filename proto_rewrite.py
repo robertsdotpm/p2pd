@@ -106,11 +106,21 @@ class SigMsg():
             self.pipe_id = to_s(pipe_id)
             self.src_buf = to_s(src_buf)
             self.src_index = to_n(src_index)
+            self.af = af
+
+        def patch_source(self, cur_addr):
+            # Parse src_buf to addr.
             self.af, self.src = \
             SigMsg.load_addr(
-                af,
+                self.af,
                 self.src_buf,
                 self.src_index,
+            )
+
+            # Patch addr if needed.
+            self.src = work_behind_same_router(
+                cur_addr,
+                self.src
             )
 
             # Reference to the network info.
@@ -139,9 +149,19 @@ class SigMsg():
         def __init__(self, af, dest_buf, dest_index):
             self.dest_buf = to_s(dest_buf)
             self.dest_index = to_n(dest_index)
+            self.af = af
+            self.set_cur_dest(dest_buf)
+
+        """
+        Peers usually have dynamic addresses.
+        The parsed dest will reflect the updated /
+        current address of the node that receives this.
+        """
+        def set_cur_dest(self, cur_dest_buf):
+            self.cur_dest_buf = cur_dest_buf
             self.af, self.dest = SigMsg.load_addr(
-                af,
-                self.dest_buf,
+                self.af,
+                cur_dest_buf,
                 self.dest_index,
             )
 
@@ -172,6 +192,16 @@ class SigMsg():
         self.routing = SigMsg.Routing.from_dict(
             data["routing"]
         )
+
+    def set_cur_addr(self, cur_addr_buf):
+        self.routing.set_cur_dest(cur_addr_buf)
+
+        """
+        Update the parsed source addresses to
+        point to internal addresses if behind
+        the same router.
+        """
+        self.meta.patch_source(self.routing.dest)
 
 class TCPPunchMsg(SigMsg):
     # The main contents of this message.
@@ -220,6 +250,10 @@ class TCPPunchMsg(SigMsg):
     def unpack(buf):
         d = json.loads(to_s(buf))
         return TCPPunchMsg(d)
+
+class TURNMsg(SigMsg):
+    pass
+
 
 class SigProtoHandlers():
     def __init__(self, node):
@@ -353,6 +387,8 @@ class SigProtoHandlers():
 
     def proto(self, buf):
         p_node = self.node.addr_bytes
+        p_addr = self.node.p2p_addr
+        node_id = to_s(p_addr["node_id"])
         if buf[0] == SIG_P2P_CON:
             msg = P2PConMsg.unpack(buf[1:], p_node)
             print("got sig p2p dir")
@@ -362,10 +398,13 @@ class SigProtoHandlers():
         if buf[0] == SIG_TCP_PUNCH:
             print("got punch msg")
             msg = TCPPunchMsg.unpack(buf[1:])
-            if msg.routing.dest_buf != to_s(p_node):
-                print("Received message not intended for us.")
+            dest = msg.routing.dest
+            if to_s(dest["node_id"]) != node_id:
+                print(f"Received message not intended for us. {dest['node_id']} {node_id}")
                 return
             
+            # Updating routing dest with current addr.
+            msg.set_cur_addr(p_node)
             return self.handle_punch_msg(msg)
             print(msg.predict)
             
@@ -433,7 +472,7 @@ async def test_proto_rewrite():
     dest = iface.rp[IP4].routes[0].nic()
     dest_addr = await Address(dest, 80, route).res()
 
-
+    
     af = IP4
     punch_ret = await alice_initiator.proto_send_initial_mappings(
         dest,
@@ -572,9 +611,33 @@ async def test_proto_rewrite():
 
     await node.close()
 
+async def test_proto_rewrite2():
+    sys_clock = SysClock(Dec("-0.02839018452552057081653225806"))
+    iface = await Interface()
+    alice_node = P2PNode([iface])
+    bob_node = P2PNode([iface], port=NODE_PORT + 1)
+    stun_client = (await get_stun_clients(
+        IP4,
+        1,
+        iface
+    ))[0]
+
+    for node in [alice_node, bob_node]:
+        await node.dev()
+
+    # TODO: work on TURN message here.
+
+
+
+
+    await alice_node.close()
+    await bob_node.close()
+
+
+    return
 
 if __name__ == '__main__':
-    async_test(test_proto_rewrite)
+    async_test(test_proto_rewrite2)
 
 """
     Signal proto:
