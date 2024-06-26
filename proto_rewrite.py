@@ -680,11 +680,21 @@ async def test_proto_rewrite():
     await node.close()
 
 async def test_proto_rewrite2():
+    # Internode (ethernet)
+    alice_iface = await Interface("enp0s25")
+    print(alice_iface)
+
+    # Aussie broadband NBN (wifi)
+    bob_iface = await Interface("wlx00c0cab5760d")
+    print(bob_iface)
+
+
     sys_clock = SysClock(Dec("-0.02839018452552057081653225806"))
-    iface = await Interface()
-    alice_node = P2PNode([iface])
-    bob_node = P2PNode([iface], port=NODE_PORT + 1)
+    alice_node = P2PNode([alice_iface])
+    bob_node = P2PNode([bob_iface], port=NODE_PORT + 1)
     af = IP4
+
+    return
     stun_client = (await get_stun_clients(
         af,
         1,
