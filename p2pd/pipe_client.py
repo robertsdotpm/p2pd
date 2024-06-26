@@ -3,6 +3,15 @@ import re
 from .ack_udp import *
 from .net import *
 
+def tup_to_sub(dest_tup):
+    return [
+        b"", # Any message.
+        re.escape(b'%s:%d' % ( # Specific IP:port.
+            to_b(dest_tup[0]), 
+            dest_tup[1]
+        ))
+    ]
+
 """
 The code in this class supports a pull / fetch style use-case.
 More suitable for some apps whereas the parent class allows
@@ -70,15 +79,6 @@ class PipeClient(ACKUDP):
             del self.subs[offset]
 
         return self
-    
-    def tup_to_sub(self, dest_tup):
-        return [
-            b"", # Any message.
-            re.escape(b'%s:%d' % ( # Specific IP:port.
-                to_b(dest_tup[0]), 
-                dest_tup[1]
-            ))
-        ]
 
     # Adds a message to the first valid bucket.
     """

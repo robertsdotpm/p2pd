@@ -338,7 +338,7 @@ class TURNClient(PipeEvents):
         # Prevent garbage collection.
         if not already_accepted:
             # Allow messages to be queued.
-            sub = self.tup_to_sub(peer_relay_tup)
+            sub = tup_to_sub(peer_relay_tup)
             self.subscribe(sub)
 
             # White list the peer if needed.
@@ -384,14 +384,20 @@ class TURNClient(PipeEvents):
             mode=RFC5389
         )
 
-        try:
-            turn_write_peer_addr(
-                reply,
-                src_tup
-            )
-        except:
-            log_exception()
-            return None
+        af = af_from_ip_s(src_tup[0])
+        print(af)
+        print("create perm for ")
+        print(src_tup)
+
+        attr_code = STUNAttrs.XorPeerAddress
+        attr_data = STUNAddrTup(
+            ip=src_tup[0],
+            port=src_tup[1],
+            af=af,
+            txid=reply.txn_id,
+            magic_cookie=reply.magic_cookie,
+        )
+        reply.write_attr(attr_code, attr_data)
 
         return reply
 

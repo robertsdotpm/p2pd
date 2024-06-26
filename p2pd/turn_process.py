@@ -44,6 +44,7 @@ def turn_get_data_attr(msg, af):
             stun_addr = STUNAddrTup(
                 af=af,
                 txid=msg.txn_id,
+                magic_cookie=msg.magic_cookie,
             )
             stun_addr.decode(attr_code, attr_data)
             peer_tup = stun_addr.tup
@@ -75,9 +76,11 @@ def turn_proc_attrs(af, attr_code, attr_data, msg, self):
             stun_addr = STUNAddrTup(
                 af=af,
                 txid=msg.txn_id,
+                magic_cookie=msg.magic_cookie,
             )
             stun_addr.decode(attr_code, attr_data)
             self.relay_tup = stun_addr.tup
+            print("relay tup here.")
 
             # Indicate the tup has been set.
             self.relay_tup_future.set_result(self.relay_tup)
@@ -170,6 +173,7 @@ async def process_replies(self):
         Attempt to look for these attributes and process them if found.
         """
         msg_data, peer_tup = turn_get_data_attr(turn_msg, self.turn_addr.af)
+        print(peer_tup)
         if msg_data is not None and peer_tup is not None:
             # Not a peer we white listed.
             peer_ip = peer_tup[0]
@@ -179,6 +183,9 @@ async def process_replies(self):
 
             # Get relay address to route to sender of the message.
             peer_relay_tup = self.peers[peer_ip]
+
+            print("Got a turn data msg")
+            print(msg_data)
 
             # Tell the sender that we got the message.
             _, payload = self.stream.handle_ack(
@@ -287,7 +294,9 @@ async def process_replies(self):
 
         # White list a particular peer to send replies to our relay address.
         if turn_method == STUNMsgTypes.CreatePermission:
+            print("create perm resp")
             if turn_status == STUNMsgCodes.SuccessResp:
+                print("resp success")
                 # Notify sender that message was received.
                 self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
 

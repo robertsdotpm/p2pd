@@ -162,7 +162,8 @@ class STUNAddrTup:
         ]
         if code in codes:
             mask = b'\x00\x00\x21\x12' + self.magic_cookie + self.txid
-            data = xor_bufs(data, mask)
+            if len(self.txid):
+                data = xor_bufs(data, mask)
 
             # Get field bufs.
             ip_buf, port_buf = STUNAddrTup.get_addr_bufs(self.af, data)
@@ -175,6 +176,7 @@ class STUNAddrTup:
         # Convert IP address to binary.
         family = self.get_family_buf()
         if family == b"\0\1":
+            print("ip4")
             ip_b = socket.inet_pton(
                 socket.AF_INET,
                 self.ip
@@ -196,6 +198,7 @@ class STUNAddrTup:
 
         # Decode moved to XOR across whole buffer so use that.
         if dec_buf != buf:
+            print("xor triggered")
             return dec_buf
         else:
             # Decode moved to encode IP and port segments manually.
@@ -249,7 +252,7 @@ class STUNMsg:
         else:
             data = data[0]
             if isinstance(data, STUNAddrTup):
-                data = data.encode()
+                data = data.encode(STUNAttrs.XorMappedAddress)
 
         # Rule of 4:
         # https://tools.ietf.org/html/rfc5766#section-14

@@ -134,7 +134,7 @@ class P2PNode(Daemon, P2PUtils):
         self.pp_executor = None
         self.mp_manager = None
         self.tcp_punch_clients = [] # [...]
-        self.turn_clients = []
+        self.turn_clients = {}
 
         # Handlers for the node's custom protocol functions.
         self.msg_cbs = []

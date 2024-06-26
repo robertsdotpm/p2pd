@@ -16,6 +16,58 @@ SIG_P2P_CON = 1
 SIG_TCP_PUNCH = 2
 SIG_TURN = 3
 
+# TODO: move this somewhere else.
+async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=None):
+    # TODO: index by id and not offset.
+    turn_server = TURN_SERVERS[serv_id]
+
+
+    # Resolve the TURN address.
+    route = await interface.route(af).bind()
+    turn_addr = await Address(
+        turn_server["host"],
+        turn_server["port"],
+        route
+    ).res()
+
+    # Make a TURN client instance to whitelist them.
+    turn_client = TURNClient(
+        route=route,
+        turn_addr=turn_addr,
+        turn_user=turn_server["user"],
+        turn_pw=turn_server["pass"],
+        turn_realm=turn_server["realm"]
+    )
+
+    # Start the TURN client.
+    try:
+        await asyncio.wait_for(
+            turn_client.start(),
+            10
+        )
+    except asyncio.TimeoutError:
+        log("Turn client start timeout in node.")
+        return
+    
+    # Wait for our details.
+    peer_tup  = await turn_client.client_tup_future
+    relay_tup = await turn_client.relay_tup_future
+
+    # Whitelist a peer if desired.
+    if None not in [dest_peer, dest_relay]:
+        print("Bob accepting alice.")
+        await asyncio.wait_for(
+            turn_client.accept_peer(
+                dest_peer,
+                dest_relay
+            ),
+            6
+        )
+
+
+
+    return peer_tup, relay_tup, turn_client
+
 class P2PConMsg():
     def __init__(self, p_node_buf, pipe_id, proto, p_dest_buf):
         # Load fields.
@@ -159,6 +211,7 @@ class SigMsg():
     # The destination node for this msg.
     class Routing():
         def __init__(self, af, dest_buf, dest_index):
+            print(dest_buf)
             self.dest_buf = to_s(dest_buf)
             self.dest_index = to_n(dest_index)
             self.af = af
@@ -171,7 +224,7 @@ class SigMsg():
         current address of the node that receives this.
         """
         def set_cur_dest(self, cur_dest_buf):
-            self.cur_dest_buf = cur_dest_buf
+            self.cur_dest_buf = to_s(cur_dest_buf)
             self.af, self.dest = SigMsg.load_addr(
                 self.af,
                 cur_dest_buf,
@@ -248,26 +301,28 @@ class SigMsg():
         """
         self.meta.patch_source(self.routing.dest)
 
-    @classmethod
-    def switch_src_and_dest(cls, self):
+    def switch_src_and_dest(self):
         # Copy all current fields into new object.
         # So that changes don't mutate self.
-        x = cls.unpack(self.pack()[1:])
+        x = self.unpack(self.pack()[1:])
+
 
         # Swap interface indexes in that object.
-        x.meta.src_index,
-        x.routing.dest_index = \
-        x.routing.dest_index,
-        x.meta.src_index
+        x.meta.src_index = self.routing.dest_index
+        x.routing.dest_index = self.meta.src_index
 
         # Swap src and dest p2p addr in that object.
-        x.meta.src_buf
-        x.routing.dest_buf = \
-        x.routing.cur_dest_buf,
-        x.meta.src_buf
+        x.meta.src_buf = self.routing.cur_dest_buf
+        x.routing.dest_buf = self.meta.src_buf
+
+        print(self.routing.cur_dest_buf)
+        print(self.meta.src_buf)
+
+        print('x pack = ')
+        print(x.pack())
 
         # Return new object with init on changes.
-        return cls.unpack(x.pack()[1:])
+        return self.unpack(x.pack()[1:])
 
 class TCPPunchMsg(SigMsg):
     # The main contents of this message.
@@ -316,14 +371,6 @@ class TURNMsg(SigMsg):
                 d["serv_id"],
                 d["client_index"]
             )
-        
-        def pack(self):
-            return bytes([SIG_TCP_PUNCH]) + \
-                to_b(
-                    json.dumps(
-                        self.to_dict()
-                    )
-                )
         
     def __init__(self, data, enum=SIG_TURN):
         super().__init__(data, enum)
@@ -444,6 +491,37 @@ class SigProtoHandlers():
         # but then accept needs to keep a list of accepted peers in the turn client
         # and i prob need to switch to a laptop with ethernet and wifi...
 
+        # Select our interface.
+        iface = self.node.ifs[msg.routing.dest_index]
+
+        # Receive a TURN request.
+        if msg.meta.pipe_id not in self.node.turn_clients:
+            print("bob recv turn req")
+            print(f"{msg.payload.peer_tup} {msg.payload.relay_tup}")
+            ret = await get_turn_client(
+                msg.routing.af,
+                msg.payload.serv_id,
+                iface,
+                dest_peer=msg.payload.peer_tup,
+                dest_relay=msg.payload.relay_tup,
+            )
+            peer_tup, relay_tup, turn_client = ret
+            self.node.turn_clients[msg.meta.pipe_id] = turn_client
+
+            reply = msg.switch_src_and_dest()
+            reply.payload.peer_tup = peer_tup
+            reply.payload.relay_tup = relay_tup
+
+            return reply
+
+        # Receive a TURN response.
+        if msg.meta.pipe_id in self.node.turn_clients:
+            # Accept their peer details.
+            turn_client = self.node.turn_clients[msg.meta.pipe_id]
+            await turn_client.accept_peer(
+                msg.payload.peer_tup,
+                msg.payload.relay_tup,
+            )
 
     def proto(self, buf):
         p_node = self.node.addr_bytes
@@ -693,13 +771,8 @@ async def test_proto_rewrite2():
     alice_node = P2PNode([alice_iface])
     bob_node = P2PNode([bob_iface], port=NODE_PORT + 1)
     af = IP4
-
-    return
-    stun_client = (await get_stun_clients(
-        af,
-        1,
-        iface
-    ))[0]
+    pa = SigProtoHandlers(alice_node)
+    pb = SigProtoHandlers(bob_node)
 
 
     pipe_id = "turn_pipe_id"
@@ -707,65 +780,26 @@ async def test_proto_rewrite2():
         await node.dev()
 
     # TODO: work on TURN message here.
+    # 51.195.101.185
 
-    async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=None):
-        # TODO: index by id and not offset.
-        turn_server = TURN_SERVERS[serv_id]
+    """
+    Todo add sanity check -- is relay addr different to domain ip
+    """
 
 
-        # Resolve the TURN address.
-        route = await interface.route(af).bind()
-        turn_addr = await Address(
-            turn_server["host"],
-            turn_server["port"],
-            route
-        ).res()
-
-        # Make a TURN client instance to whitelist them.
-        turn_client = TURNClient(
-            route=route,
-            turn_addr=turn_addr,
-            turn_user=turn_server["user"],
-            turn_pw=turn_server["pass"],
-            turn_realm=turn_server["realm"]
-        )
-
-        # Start the TURN client.
-        try:
-            await asyncio.wait_for(
-                turn_client.start(),
-                10
-            )
-        except asyncio.TimeoutError:
-            log("Turn client start timeout in node.")
-            return
-        
-        # Wait for our details.
-        peer_tup  = await turn_client.client_tup_future
-        relay_tup = await turn_client.relay_tup_future
-
-        # Whitelist a peer if desired.
-        if None not in [dest_peer, dest_relay]:
-            await asyncio.wait_for(
-                turn_client.accept_peer(
-                    dest_peer,
-                    dest_relay
-                ),
-                6
-            )
-
-        return peer_tup, relay_tup, turn_client
 
 
     alice_peer, alice_relay, alice_turn = await get_turn_client(
         af,
         0,
-        iface
+        alice_iface
     )
+    alice_node.turn_clients[pipe_id] = alice_turn
 
     print(alice_peer)
     print(alice_relay)
     print(alice_turn)
+
 
     msg = TURNMsg({
         "meta": {
@@ -785,15 +819,43 @@ async def test_proto_rewrite2():
             "serv_id": 0,
             "client_index": 0,
         },
-    })
+    }).pack()
 
     print(msg)
 
+    # Bob gets a turn request.
+    coro = pb.proto(msg)
+    bob_resp = await coro
+
+
+    # Alice gets bobs turn response.
+    coro = pa.proto(bob_resp.pack())
+    resp = await coro
+
+    # Both turn clients ready.
+
+    # Alice sends a msg to bob via their turn client
+    msg = b"alice to bob via turn"
+    print(f"send to bob relay tup = {bob_resp.payload.relay_tup}")
+    print(f"bob client tup {bob_resp.payload.peer_tup}")
+
+
+    for i in range(0, 5):
+        await alice_turn.turn_pipe.send(msg, bob_resp.payload.relay_tup)
+        await asyncio.sleep(1)
+    print(alice_turn)
+
+
+    bob_turn = bob_node.turn_clients[pipe_id]
+    recv_msg = await bob_turn.turn_pipe.recv(SUB_ALL, 2)
+    print(bob_turn)
+    print(recv_msg)
 
 
 
 
     await alice_turn.close()
+    await bob_turn.close()
     await alice_node.close()
     await bob_node.close()
 
