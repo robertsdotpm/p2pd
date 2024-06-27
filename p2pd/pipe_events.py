@@ -415,6 +415,10 @@ class PipeEvents(BaseACKProto):
 
     # Return a matching message, async, non-blocking.
     async def recv(self, sub=SUB_ALL, timeout=2, full=False):
+        # Receive any message from a given addr.
+        if isinstance(sub, tuple):
+            sub = tup_to_sub(sub)
+
         return await self.stream.recv(sub, timeout, full)
 
     async def send(self, data, dest_tup=None):

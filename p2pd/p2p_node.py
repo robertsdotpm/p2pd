@@ -410,9 +410,10 @@ class P2PNode(Daemon, P2PUtils):
             await punch_client.close()
 
         # Close TURN clients.
-        for turn_client in self.turn_clients:
+        for pipe_id in self.turn_clients:
             # Sets state transition to error state to end msg check loop.
             # Closes the open TURN client handle.
+            turn_client = self.turn_clients[pipe_id]
             if turn_client is not None:
                 await turn_client.close()
 

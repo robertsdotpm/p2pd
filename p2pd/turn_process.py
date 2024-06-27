@@ -51,11 +51,12 @@ def turn_get_data_attr(msg, af, client):
 
             # Validate the peer addr.
             ext = client.turn_pipe.route.ext()
-            if peer_tup[0] != ext:
-                error = \
-                f"Our XorPeerAddr was indicated as "
-                f"{peer_tup[0]} instead of {ext} "
-                f"which may indicate a decoding error."
+            if peer_tup[0] == ext:
+                error = f"""
+                We received a TURN message from ourselves
+                this might indicate bad logic
+                msg peer_tup 0 == {ext}
+                """
                 log(error)
 
     # Reset attribute pointer to start.
@@ -98,12 +99,13 @@ def turn_proc_attrs(af, attr_code, attr_data, msg, self):
 
             # Validate relay tup IP.
             if self.relay_tup[0] != self.turn_addr.tup[0]:
-                error = \
-                f"Our XOR relay tup IP was decoded as "
-                f"{self.relay_tup[0]} which is different "
-                f"from the address of the TURN server "
-                f"{self.turn_addr.tup[0]} which may "
-                f"indicate a XOR decoding error."
+                error = f"""
+                Our XOR relay tup IP was decoded as 
+                {self.relay_tup[0]} which is different 
+                from the address of the TURN server 
+                {self.turn_addr.tup[0]} which may 
+                indicate a XOR decoding error.
+                """
                 log(error)
 
     # Handle authentication.
@@ -200,10 +202,11 @@ async def process_replies(self):
 
             # Not a peer we white listed.
             if peer_tup not in self.peers:
-                error = \
-                f"Got a TURN data message from an "
-                f"unknown peer = {peer_tup} which "
-                f"may indicate a decoding error."
+                error = f"""
+                Got a TURN data message from an 
+                unknown peer = {peer_tup} which 
+                may indicate a decoding error.
+                """
                 log(error)
                 print(error)
                 continue
@@ -264,19 +267,10 @@ async def process_replies(self):
         # Log any error messages.
         if turn_status == STUNMsgCodes.ErrorResp:
             log('Turn error {}: {}'.format(error_code, error_msg))
+            log(f"turn hex msg: {to_h(turn_msg.pack())}")
 
             # Stale nonce.
             if error_code == 438:
-                """
-                The client looks for the MESSAGE-INTEGRITY attribute in the response
-                (either success or failure).  If present, the client computes the
-                message integrity over the response as defined in Section 15.4, using
-                the same password it utilized for the request.  If the resulting
-                value matches the contents of the MESSAGE-INTEGRITY attribute, the
-                response is considered authenticated.  If the value does not match,
-                or if MESSAGE-INTEGRITY was absent, the response MUST be discarded,
-                as if it was never received.
-                """
                 log(f"stole nonce. retransmit for {txid}")
                 self.msgs[txid]["status"].set_result(STATUS_RETRY)
                 continue
@@ -292,9 +286,9 @@ async def process_replies(self):
                     #self.txid = txid
                     #self.requires_auth = False
                     self.auth_event.set()
+            else:
+                log("Error in TURN allocate")
                 
-        
-
             """
             The first 'allocate' message makes the server return attributes
             needed to authenticate and sign all future messages.
@@ -323,6 +317,11 @@ async def process_replies(self):
                 print("resp success")
                 # Notify sender that message was received.
                 self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
+            else:
+                error = \
+                f"Error in TURN create permission = "
+                f"{to_h(turn_msg.pack())}"
+                log(error)
 
             continue
 

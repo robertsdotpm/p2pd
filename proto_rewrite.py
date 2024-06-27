@@ -500,7 +500,7 @@ class SigProtoHandlers():
         # Receive a TURN request.
         if msg.meta.pipe_id not in self.node.turn_clients:
             print("bob recv turn req")
-            print(f"{msg.payload.peer_tup} {msg.payload.relay_tup}")
+            print(f"{msg.payload.peer_tup} {msg.payload.relay_tup} {msg.payload.serv_id}")
             ret = await get_turn_client(
                 msg.routing.af,
                 msg.payload.serv_id,
@@ -761,6 +761,8 @@ async def test_proto_rewrite():
     await node.close()
 
 async def test_proto_rewrite2():
+    turn_serv_offset = 1
+
     # Internode (ethernet)
     alice_iface = await Interface("enp0s25")
     print(alice_iface)
@@ -795,7 +797,7 @@ async def test_proto_rewrite2():
 
     alice_peer, alice_relay, alice_turn = await get_turn_client(
         af,
-        0,
+        turn_serv_offset,
         alice_iface
     )
     alice_node.turn_clients[pipe_id] = alice_turn
@@ -820,7 +822,7 @@ async def test_proto_rewrite2():
         "payload": {
             "peer_tup": alice_peer,
             "relay_tup": alice_relay,
-            "serv_id": 0,
+            "serv_id": turn_serv_offset,
             "client_index": 0,
         },
     }).pack()

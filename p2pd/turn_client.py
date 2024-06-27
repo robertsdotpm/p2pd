@@ -275,14 +275,31 @@ class TURNClient(PipeEvents):
                 found_relay = True
                 break
         if not found_relay:
-            error = \
-            f"In TURN.send() the dest_tup does not "
-            f"correspond to any accepted peers "
-            f"this mind indicate an invalid send addr "
-            f"bad addr was {dest_tup} "
+            error = f"""
+            In TURN.send() the dest_tup does not 
+            correspond to any accepted peers 
+            this mind indicate an invalid send addr 
+            bad addr was {dest_tup} 
+            """
             log(error)
 
         assert(type(dest_tup) == tuple)
+
+        # Sanity checking on the dest IP.
+        # If dest IP doesn't match this TURN server IP
+        # it means maybe the wrong relay IP is used.
+        if dest_tup[0] != self.turn_addr.tup[0]:
+            error = f"""
+            The destination IP for TURN.send 
+            is different to the IP address of the current 
+            server {dest_tup[0]} !+ {self.turn_addr.tup[0]}
+            this could indicate that an incorrect 
+            address is being used for the send call 
+            (like a peer address) or it may mean 
+            different relay servers are being mixed 
+            (in which case disregard this error.
+            """
+            log(error)
 
         # Make sure the channel is setup before continuing.
         task = asyncio.create_task(
@@ -355,6 +372,17 @@ class TURNClient(PipeEvents):
     # Retry up to 3 times if no response to the packet.
     # Allows a peer to send messages to our relay address.
     async def accept_peer(self, peer_tup, peer_relay_tup):
+        # Basic validation for logging.
+        if peer_relay_tup[0] != self.turn_addr.tup[0]:
+            error = f"""
+            TURN accept peer has a relay tup different 
+            to the IP of the current server 
+            {peer_relay_tup[0]} != {self.turn_addr.tup[0]}
+            this may indicate an error or mean different 
+            TURN servers are being mixed.
+            """
+            log(error)
+
         #peer_tup = (peer_tup[0], 0)
         peer_tup = tuple(peer_tup)
         peer_relay_tup = tuple(peer_relay_tup)
@@ -444,11 +472,11 @@ class TURNClient(PipeEvents):
         attr_data.tup = None
         attr_data.decode(attr_code, attr_data.encode(attr_code))
         if attr_data.tup != src_tup:
-            error = \
-            f"The decode of the white listed "
-            f"peer addr in TURN did not match the src tup "
-            f"this might indicate an encoding error "
-            f"{src_tup} != {attr_data.tup}"
+            error = f"""
+            The decode of the white listed 
+            peer addr in TURN did not match the src tup 
+            this might indicate an encoding error 
+            {src_tup} != {attr_data.tup}"""
             log(error)
 
         return reply
