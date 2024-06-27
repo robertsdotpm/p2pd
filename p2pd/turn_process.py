@@ -26,7 +26,7 @@ B) Peer Address attribute (the sender)
 
 Return this information to the caller.
 """
-def turn_get_data_attr(msg, af):
+def turn_get_data_attr(msg, af, client):
     # Step through all attributes.
     data = peer_tup = None
     while not msg.eof():
@@ -48,6 +48,15 @@ def turn_get_data_attr(msg, af):
             )
             stun_addr.decode(attr_code, attr_data)
             peer_tup = stun_addr.tup
+
+            # Validate the peer addr.
+            ext = client.turn_pipe.route.ext()
+            if peer_tup[0] != ext:
+                error = \
+                f"Our XorPeerAddr was indicated as "
+                f"{peer_tup[0]} instead of {ext} "
+                f"which may indicate a decoding error."
+                log(error)
 
     # Reset attribute pointer to start.
     msg.attr_cursor = 0
@@ -86,6 +95,16 @@ def turn_proc_attrs(af, attr_code, attr_data, msg, self):
             self.relay_tup_future.set_result(self.relay_tup)
             log(f"> Turn setting relay addr = {self.relay_tup}")
             self.relay_event.set()
+
+            # Validate relay tup IP.
+            if self.relay_tup[0] != self.turn_addr.tup[0]:
+                error = \
+                f"Our XOR relay tup IP was decoded as "
+                f"{self.relay_tup[0]} which is different "
+                f"from the address of the TURN server "
+                f"{self.turn_addr.tup[0]} which may "
+                f"indicate a XOR decoding error."
+                log(error)
 
     # Handle authentication.
     if attr_code == STUNAttrs.Realm:
@@ -172,20 +191,26 @@ async def process_replies(self):
         These indicate a peer who sent data to our relay address.
         Attempt to look for these attributes and process them if found.
         """
-        msg_data, peer_tup = turn_get_data_attr(turn_msg, self.turn_addr.af)
-        print(peer_tup)
+        msg_data, peer_tup = turn_get_data_attr(turn_msg, self.turn_addr.af, self)
+
         if msg_data is not None and peer_tup is not None:
+            print("got turn data msg")
+            print(peer_tup)
+            print(msg_data)
+
             # Not a peer we white listed.
             peer_ip = peer_tup[0]
             if peer_ip not in self.peers:
-                log("Got a message from an unknown peer.")
+                error = \
+                f"Got a TURN data message from an "
+                f"unknown peer = {peer_ip} which "
+                f"may indicate a decoding error."
+                log(error)
+                print(error)
                 continue
 
             # Get relay address to route to sender of the message.
             peer_relay_tup = self.peers[peer_ip]
-
-            print("Got a turn data msg")
-            print(msg_data)
 
             # Tell the sender that we got the message.
             _, payload = self.stream.handle_ack(
@@ -206,7 +231,7 @@ async def process_replies(self):
                 if not self.blank_rudp_headers:
                     continue
                 else:
-                    self.handle_data(msg_data, peer_relay_tup)
+                    self.handle_data(msg_data, peer_tup)
                     continue
 
             """
@@ -216,7 +241,7 @@ async def process_replies(self):
             relay address is listed as the sender to make it
             easy to route replies transparently.
             """
-            self.handle_data(payload, peer_relay_tup)
+            self.handle_data(payload, peer_tup)
             continue
     
         """

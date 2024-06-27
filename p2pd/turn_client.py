@@ -251,11 +251,32 @@ class TURNClient(PipeEvents):
 
     # Overwrite the BaseProto send method and require ACKs.
     async def send(self, data, dest_tup):
+        assert(type(dest_tup) == tuple)
+
         # Detect invalid self-send.
         if self.relay_tup_future.done():
             relay_tup = await self.relay_tup_future
             if dest_tup == relay_tup:
                 raise Exception("Coturn doesn't support self-send.")
+            
+        # Use a peers relay to reach them instead.
+        if dest_tup[0] in self.peers:
+            dest_tup = tuple(self.peers[dest_tup[0]])
+            print(f"patched dest tup {dest_tup}")
+
+        # Sanity checking.
+        found_relay = False
+        for peer_ip in self.peers:
+            if self.peers[peer_ip] == dest_tup:
+                found_relay = True
+                break
+        if not found_relay:
+            error = \
+            f"In TURN.send() the dest_tup does not "
+            f"correspond to any accepted peers "
+            f"this mind indicate an invalid send addr "
+            f"bad addr was {dest_tup} "
+            log(error)
 
         # Make sure the channel is setup before continuing.
         task = asyncio.create_task(
@@ -338,7 +359,7 @@ class TURNClient(PipeEvents):
         # Prevent garbage collection.
         if not already_accepted:
             # Allow messages to be queued.
-            sub = tup_to_sub(peer_relay_tup)
+            sub = tup_to_sub(peer_tup)
             self.subscribe(sub)
 
             # White list the peer if needed.
@@ -398,6 +419,17 @@ class TURNClient(PipeEvents):
             magic_cookie=reply.magic_cookie,
         )
         reply.write_attr(attr_code, attr_data)
+
+        # Some validation on address encoding.
+        attr_data.tup = None
+        attr_data.decode(attr_code, attr_data.encode(attr_code))
+        if attr_data.tup != src_tup:
+            error = \
+            f"The decode of the white listed "
+            f"peer addr in TURN did not match the src tup "
+            f"this might indicate an encoding error "
+            f"{src_tup} != {attr_data.tup}"
+            log(error)
 
         return reply
 

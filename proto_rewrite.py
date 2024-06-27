@@ -783,7 +783,8 @@ async def test_proto_rewrite2():
     # 51.195.101.185
 
     """
-    Todo add sanity check -- is relay addr different to domain ip
+    Todo add sanity check -- is relay addr different to turn serv ip
+    is mapped different to our ext?
     """
 
 
@@ -839,23 +840,34 @@ async def test_proto_rewrite2():
     print(f"send to bob relay tup = {bob_resp.payload.relay_tup}")
     print(f"bob client tup {bob_resp.payload.peer_tup}")
 
-
-    for i in range(0, 5):
-        await alice_turn.turn_pipe.send(msg, bob_resp.payload.relay_tup)
-        await asyncio.sleep(1)
-    print(alice_turn)
-
+    """
+    Client will replace bob peer tup with their relay tup
+    if it detects that its an accepted client.
+    """
+    print(alice_turn.peers)
+    await alice_turn.send(msg, bob_resp.payload.peer_tup)
+    # Allow time for bob to receive the message.
+    await asyncio.sleep(2)
 
     bob_turn = bob_node.turn_clients[pipe_id]
-    recv_msg = await bob_turn.turn_pipe.recv(SUB_ALL, 2)
+    sub = tup_to_sub(alice_peer)
+
+
+
+    recv_msg = await bob_turn.recv(sub, 2)
+    print("bob recv msg = ")
     print(bob_turn)
     print(recv_msg)
 
+    """
+    if send(... x)
+        if x in ... clients, use their relay tup instead for send
+    """
 
 
 
-    await alice_turn.close()
-    await bob_turn.close()
+
+
     await alice_node.close()
     await bob_node.close()
 
