@@ -7,6 +7,9 @@ index by host name even if its longer.
 new package e.g. the turn response only switches the
 src and dest, and changes the payload
 it might make sense to take this into account
+
+TODO: Add node.msg_cb to pipes started part of 
+these methods.
 """
 
 import json
@@ -845,7 +848,7 @@ async def test_proto_rewrite2():
     if it detects that its an accepted client.
     """
     print(alice_turn.peers)
-    await alice_turn.send(msg, bob_resp.payload.peer_tup)
+    await alice_turn.send(msg)
     # Allow time for bob to receive the message.
     await asyncio.sleep(2)
 
@@ -854,7 +857,7 @@ async def test_proto_rewrite2():
 
 
 
-    recv_msg = await bob_turn.recv(sub, 2)
+    recv_msg = await bob_turn.recv()
     print("bob recv msg = ")
     print(bob_turn)
     print(recv_msg)
@@ -864,6 +867,10 @@ async def test_proto_rewrite2():
         if x in ... clients, use their relay tup instead for send
     """
 
+
+    await bob_turn.send(b"bob send turn msg to alice")
+    ret = await alice_turn.recv()
+    print(f"Alice get resp from bob: {ret}")
 
 
 

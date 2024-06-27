@@ -116,9 +116,9 @@ class TURNClient(PipeEvents):
             "realm": self.realm
         }
     
-    def get_relay_tup(self, peer_ip):
-        if peer_ip in self.peers:
-            return self.peers[peer_ip]
+    def get_relay_tup(self, peer_tup):
+        if peer_tup in self.peers:
+            return self.peers[peer_tup]
         else:
             return None
 
@@ -250,8 +250,12 @@ class TURNClient(PipeEvents):
         self.node_events[to_s(node_id)] = asyncio.Event()
 
     # Overwrite the BaseProto send method and require ACKs.
-    async def send(self, data, dest_tup):
-        assert(type(dest_tup) == tuple)
+    async def send(self, data, dest_tup=None):
+        # Attempt to use the first peer_tup.
+        if dest_tup is None:
+            for peer_tup in self.peers:
+                dest_tup = self.peers[peer_tup]
+                break
 
         # Detect invalid self-send.
         if self.relay_tup_future.done():
@@ -260,14 +264,14 @@ class TURNClient(PipeEvents):
                 raise Exception("Coturn doesn't support self-send.")
             
         # Use a peers relay to reach them instead.
-        if dest_tup[0] in self.peers:
-            dest_tup = tuple(self.peers[dest_tup[0]])
+        if dest_tup in self.peers:
+            dest_tup = tuple(self.peers[dest_tup])
             print(f"patched dest tup {dest_tup}")
 
         # Sanity checking.
         found_relay = False
-        for peer_ip in self.peers:
-            if self.peers[peer_ip] == dest_tup:
+        for peer_tup in self.peers:
+            if self.peers[peer_tup] == dest_tup:
                 found_relay = True
                 break
         if not found_relay:
@@ -277,6 +281,8 @@ class TURNClient(PipeEvents):
             f"this mind indicate an invalid send addr "
             f"bad addr was {dest_tup} "
             log(error)
+
+        assert(type(dest_tup) == tuple)
 
         # Make sure the channel is setup before continuing.
         task = asyncio.create_task(
@@ -288,6 +294,19 @@ class TURNClient(PipeEvents):
             )
         )
         self.tasks.append(task)
+
+    async def recv(self, sub=None, timeout=2):
+        # Build a sub from the first accepted peer.
+        print("bob turn recv ")
+        print(self.peers)
+        if sub is None:
+            for peer_tup in self.peers:
+                sub = tup_to_sub(peer_tup)
+                break
+
+        assert(sub is not None)
+        print(sub)
+        return await super().recv(sub, timeout)
 
     # Handles writing TURN messages to self.udp_stream.
     # Will write credential and HMAC if a message needs 'signing.'
@@ -337,12 +356,13 @@ class TURNClient(PipeEvents):
     # Allows a peer to send messages to our relay address.
     async def accept_peer(self, peer_tup, peer_relay_tup):
         #peer_tup = (peer_tup[0], 0)
-        peer_ip = peer_tup[0]
-        already_accepted = peer_ip in self.peers
+        peer_tup = tuple(peer_tup)
+        peer_relay_tup = tuple(peer_relay_tup)
+        already_accepted = peer_tup in self.peers
         async def handler(peer_tup, peer_relay_tup):
             # Generate message to send.
             msg = await self.white_list_msg(peer_tup)
-            self.peers[peer_ip] = peer_relay_tup
+            self.peers[peer_tup] = peer_relay_tup
 
             # Send message to turn server.
             f, retransmit, new_future = self.record_msg(msg)

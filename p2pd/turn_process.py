@@ -199,18 +199,17 @@ async def process_replies(self):
             print(msg_data)
 
             # Not a peer we white listed.
-            peer_ip = peer_tup[0]
-            if peer_ip not in self.peers:
+            if peer_tup not in self.peers:
                 error = \
                 f"Got a TURN data message from an "
-                f"unknown peer = {peer_ip} which "
+                f"unknown peer = {peer_tup} which "
                 f"may indicate a decoding error."
                 log(error)
                 print(error)
                 continue
 
             # Get relay address to route to sender of the message.
-            peer_relay_tup = self.peers[peer_ip]
+            peer_relay_tup = self.peers[peer_tup]
 
             # Tell the sender that we got the message.
             _, payload = self.stream.handle_ack(
