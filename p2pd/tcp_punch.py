@@ -118,6 +118,25 @@ PUNCH_CONF = dict_child({
     "loop": lambda: selector_event_loop()
 }, NET_CONF)
 
+async def get_punch_mode(af, if_info, interface, punch_client):
+    # Calculate punch mode
+    route = interface.route(af)
+    dest_addr = await Address(
+        str(if_info["ext"]),
+        80,
+        route
+    ).res()
+    punch_mode = punch_client.get_punch_mode(dest_addr)
+
+    log(f"Loaded punc mode = {punch_mode}")
+    if punch_mode == TCP_PUNCH_REMOTE:
+        use_addr = str(if_info["ext"])
+    else:
+        use_addr = str(if_info["nic"])
+    log(f"using addr = {use_addr}")
+        
+    return punch_mode, use_addr
+
 # Just merges two specific lists into slightly different format.
 def map_info_to_their_maps(map_info):
     their_maps = []

@@ -4,6 +4,8 @@ from .p2p_addr import *
 from .tcp_punch import *
 from .turn_client import *
 from .signaling import *
+from .p2p_utils import *
+from .p2p_protocol import *
 
 """
 TCP 
@@ -415,171 +417,78 @@ class P2PPipe():
     the lowest value pairs and runs through them until one
     succeeds.
     """
-    async def tcp_hole_punch(self, p2p_dest, pipe_id, signal_pipe):
-        log("In pipe pipe tcp hole punmch.")
-        # [af][addr_index] = [[nat_type, if_info], ...]
-        nat_pairs = {}
-
-        # Our address and their address will be sorted.
-        addr_list = [self.node.p2p_addr, p2p_dest]
-
-        # Check all valid addresses.
+    async def tcp_hole_punch(self, pipe_id, dest_bytes):
+        p2p_dest = parse_peer_addr(dest_bytes)
+        our_addr = self.node.p2p_addr
         for af in VALID_AFS:
-            # Determine if both sides support the AF.
-            skip_af = False
-            for addr in addr_list:
-                if not len(addr[af]):
-                    skip_af = True
-                    break
+            """
+            The iterator filters the addr info for both
+            P2P addresses by the best NAT.
+            The first addr info used for both is thus the
+            best possible pairing. Further iterations aren't
+            likely to be any more successful so to keep things
+            simple only the first iteration is tried.
+            """
+            if_info_iter = IFInfoIter(af, our_addr, p2p_dest)
+            for src_info, dest_info in if_info_iter:
+                # Select interface to use.
+                if_index = src_info["if_index"]
+                interface = self.node.if_list[if_index]
 
-            # Skip an AF if both sides don't support it.
-            if skip_af:
-                log(f"Skipping AF = {af}")
-                continue
+                # Punch clients indexed by interface offset.
+                initiator = self.node.tcp_punch_clients[if_index]
 
-            # Create a list of NAT types indexed by addr index.
-            nat_pairs[af] = {}
-            for addr_index, addr in enumerate(addr_list):
-                # Store subset of interface details.
-                nat_pairs[af][addr_index] = []
-
-                # Loop over all the interface details by address family.
-                for _, if_info in enumerate(addr[af]):
-                    # Save interface details we're interested in.
-                    nat_pairs[af][addr_index].append([
-                        if_info["nat"]["type"],
-                        if_info
-                    ])
-
-                # Sort the details list based on the first field (NAT type.)
-                nat_pairs[af][addr_index] = sorted(
-                    nat_pairs[af][addr_index],
-                    key=lambda x: x[0]
+                # Select [ext or nat] dest and punch mode
+                # (either local, self, remote)
+                use_addr, punch_mode = await get_punch_mode(
+                    af,
+                    dest_info,
+                    interface,
+                    initiator,
                 )
 
-            # Step through interface details for both addresses.
-            our_offset = 0
-            their_offset = 0
-            while 1:
-                # List of some interface details for our addr.
-                our_info = nat_pairs[af][0][our_offset][1]
-
-                # List of some interface details for their addr.
-                their_info = nat_pairs[af][1][their_offset][1]
-
-                # Load info for hole punching.
-                if_index = our_info["if_index"]
-                interface = self.node.if_list[if_index]
-                initiator = self.node.tcp_punch_clients[if_index]
-                stun_client = (await get_stun_clients(
-                    af,
-                    1,
-                    interface=interface,
-                    proto=TCP
-                ))[0]
-
-                # Calculate punch mode
-                route = interface.route(af)
-                their_addr = await Address(
-                    str(their_info["ext"]),
-                    80,
-                    route
-                ).res()
-                punch_mode = initiator.get_punch_mode(their_addr)
-
-                log(f"Loaded punc mode = {punch_mode}")
-                if punch_mode == TCP_PUNCH_REMOTE:
-                    use_addr = str(their_info["ext"])
-                else:
-                    use_addr = str(their_info["nic"])
-                log(f"using addr = {use_addr}")
-                
-                # Step 1 -- set initial mappings for initiator.
+                # Get initial NAT predictions using STUN.
+                stun_client = self.node.stun_clients[af][if_index]
                 punch_ret = await initiator.proto_send_initial_mappings(
                     use_addr,
-                    their_info["nat"],
+                    dest_info["nat"],
                     p2p_dest["node_id"],
                     pipe_id,
                     stun_client,
                     mode=punch_mode
                 )
 
-                print("punch ret = ")
-                print(punch_ret)
-
-                # Build first (required) punch message for peer.
-                out = build_punch_response(
-                    b"INITIAL_MAPPINGS",
-                    pipe_id,
-                    punch_ret,
-                    self.node.addr_bytes,
-                    af,
-
-                    # Which iface we're using from our addr.
-                    our_info["if_index"],
-
-                    # Which iface they should use.
-                    their_info["if_index"]
-                )
-                log(f"Sending {out}")
-
-                # Send first protocol signal message to peer.
-                send_task = asyncio.create_task(
-                    async_wrap_errors(
-                        signal_pipe.send_msg(
-                            out,
-                            to_s(p2p_dest["node_id"])
-                        )
+                """
+                Punching is delayed for a few seconds to
+                ensure there's enough time to receive any
+                updated mappings for the dest peer (if any.)
+                """
+                asyncio.ensure_future(
+                    self.node.schedule_punching_with_delay(
+                        if_index,
+                        pipe_id,
+                        p2p_dest["node_id"],
                     )
                 )
 
-                # Allow for time to receive updated mappings.
-                # Peer checks every 2 seconds.
-                try:
-                    await asyncio.wait_for(
-                        punch_ret[2].wait(),
-                        4
-                    )
-                    log("punch: updated mappings received.")
-                except asyncio.TimeoutError:
-                    # Updated mappings are not always required.
-                    log("punch: timed out getting updated mappings.")
-                    pass
-
-                # Start task to get a TCP hole.
-                pipe = await get_tcp_hole(
-                    PUNCH_INITIATOR,
-                    pipe_id,
-                    p2p_dest["node_id"],
-                    initiator,
-                    self.node
-                )
-
-                # Exit loops if success.
-                if pipe is not None:
-                    return pipe
-
-                """
-                The next pairing is done by increasing their index by 1.
-                If it doesn't point to a new element for them then we're done.
-                On the other hand if there is a new element the code
-                decides whether to increase our offset indicating there
-                are more interfaces to try on our side too.
-
-                It may make sense for every one of their interfaces to
-                try punch through to every one of our best interfaces.
-                But for now they are only tried once.
-                    E.g. m vs m * n
-                """
-                their_offset += 1
-
-                # Don't increase this if there's no new entry.
-                if our_offset < len(nat_pairs[af][0]) - 1:
-                    our_offset += 1
-
-                # Exit if their offset exceeds the end.
-                if their_offset >= len(nat_pairs[af][1]) - 1:
-                    break
+                # Initial step 1 punch message.
+                return TCPPunchMsg({
+                    "meta": {
+                        "pipe_id": pipe_id,
+                        "af": af,
+                        "src_buf": self.node.addr_bytes,
+                        "src_index": 0,
+                    },
+                    "routing": {
+                        "af": af,
+                        "dest_buf": dest_bytes,
+                        "dest_index": 0,
+                    },
+                    "payload": {
+                        "ntp": punch_ret[1],
+                        "mappings": punch_ret[0],
+                    },
+                })
 
     async def udp_relay(self, p2p_dest, pipe_id, signal_pipe):
         # Setup a new TURN client.

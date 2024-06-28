@@ -1,485 +1,945 @@
-import asyncio
-from .p2p_pipe import *
+"""
+Using offsets for servers is a bad idea as server
+lists need to be updated. Use short, unique IDs or
+index by host name even if its longer.
 
-def parse_mappings(self, parts):
-    if len(parts) != 9:
-        raise Exception("Invalid length for mappings msg.")
+- we're not always interested in crafting an entirely
+new package e.g. the turn response only switches the
+src and dest, and changes the payload
+it might make sense to take this into account
 
-    # Extract fields from message.
-    r = parse_punch_response(parts)
-    p2p_dest = work_behind_same_router(self.p2p_addr, r["src_addr"])
+TODO: Add node.msg_cb to pipes started part of 
+these methods.
+"""
 
-    # Check the address family is valid.
-    if r["af"] not in VALID_AFS:
-        raise Exception("Invalid af for mappings msg.")
-
-    # Check their chosen interface offset for ourselves is valid.
-    if r["if"]["us"] > (len(self.if_list) - 1):
-        raise Exception("Invalid if us offset for mappings.")
-
-    # Check their used interface offset is valid.
-    their_if_infos = r["src_addr"][r["af"]]
-    if r["if"]["them"] > (len(their_if_infos) - 1):
-        raise Exception("Invalid if them offset for mappings.")
-
-    # Return main fields.
-    their_if_info = their_if_infos[r["if"]["them"]]
-    return r, p2p_dest, their_if_infos, their_if_info
-
-async def signal_protocol(self, msg, signal_pipe):
-    # Convert to string because this is a plain-text protocol.
-    if isinstance(msg, memoryview):
-        msg = to_s(msg.tobytes())
-    else:
-        msg = to_s(msg)
-
-    # Split msg into parts.
-    log(f"> signal proto msg = {msg}")
-    parts = msg.split(" ")
-    cmd = parts[0]
-
-    # Basic echo protocol for testing.
-    if cmd == "ECHO":
-        if len(parts) >= 2:
-            if isinstance(parts[1], memoryview):
-                chan_dest = parts[1].tobytes()
-            else:
-                chan_dest = parts[1]
+import json
+import multiprocessing
+from .utils import *
+from .settings import *
+from .address import *
+from .pipe_events import *
 
 
-            # cmd sp node_id sp msg
-            offset = (6 + len(chan_dest))
-            out = msg[offset:]
-            if len(out):
-                if isinstance(out, memoryview):
-                    out = out.tobytes()
+SIG_P2P_CON = 1
+SIG_TCP_PUNCH = 2
+SIG_TURN = 3
 
-                await signal_pipe.send_msg(out, chan_dest)
+# TODO: move this somewhere else.
+async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=None):
+    # TODO: index by id and not offset.
+    turn_server = TURN_SERVERS[serv_id]
 
+
+    # Resolve the TURN address.
+    route = await interface.route(af).bind()
+    turn_addr = await Address(
+        turn_server["host"],
+        turn_server["port"],
+        route
+    ).res()
+
+    # Make a TURN client instance to whitelist them.
+    turn_client = TURNClient(
+        route=route,
+        turn_addr=turn_addr,
+        turn_user=turn_server["user"],
+        turn_pw=turn_server["pass"],
+        turn_realm=turn_server["realm"]
+    )
+
+    # Start the TURN client.
+    try:
+        await asyncio.wait_for(
+            turn_client.start(),
+            10
+        )
+    except asyncio.TimeoutError:
+        log("Turn client start timeout in node.")
         return
+    
+    # Wait for our details.
+    peer_tup  = await turn_client.client_tup_future
+    relay_tup = await turn_client.relay_tup_future
 
-    # Reverse connect signal.
-    if cmd == "P2P_DIRECT":
-        if len(parts) != 4:
-            log("> invalid p2p direct msg recv.")
-            return 1
+    # Whitelist a peer if desired.
+    if None not in [dest_peer, dest_relay]:
+        print("Bob accepting alice.")
+        await asyncio.wait_for(
+            turn_client.accept_peer(
+                dest_peer,
+                dest_relay
+            ),
+            6
+        )
 
-        # Process message fields.
-        pipe_id, proto, addr_bytes = parts[1], parts[2], parts[3]
-        proto = PROTO_LOOKUP[proto]
-        pipe_id = to_b(pipe_id)
-        addr_bytes = to_b(addr_bytes)
-        p2p_dest = parse_peer_addr(addr_bytes)
-        p2p_dest = work_behind_same_router(self.p2p_addr, p2p_dest)
-        log(f"p2p direct proto no = {proto}")
 
-        # Connect to chosen address.
-        p2p_pipe = P2PPipe(self)
-        try:
-            pipe = await asyncio.wait_for(
-                p2p_pipe.direct_connect(p2p_dest, pipe_id, proto=proto),
-                10
+
+    return peer_tup, relay_tup, turn_client
+
+class P2PConMsg():
+    def __init__(self, p_node_buf, pipe_id, proto, p_dest_buf):
+        # Load fields.
+        self.pipe_id = pipe_id
+        self.proto = TCP if proto == "TCP" else UDP
+        self.p_node_buf = p_node_buf
+        self.p_dest_buf = p_dest_buf
+
+        # Validation.
+        self.p_node = parse_peer_addr(p_node_buf)
+        self.p_dest = parse_peer_addr(p_dest_buf)
+        self.p_dest = work_behind_same_router(
+            self.p_node,
+            self.p_dest,
+        )
+
+    @staticmethod
+    def unpack(buf, p_node_buf):
+        buf = to_s(buf)
+        fields = buf.split(" ")
+        return P2PConMsg(p_node_buf, *fields)
+    
+    def pack(self):
+        return bytes([SIG_P2P_CON]) + to_b(
+            f"{self.pipe_id} {self.proto} "
+            f"{self.p_node_buf} {self.p_dest_buf}"
+        )
+    
+class PredictField():
+    def __init__(self, mappings):
+        self.mappings = mappings
+
+    def pack(self):
+        pairs = []
+        for pair in self.mappings:
+            # remote, reply, local.
+            pairs.append(
+                b"%d,%d,%d" % (
+                    pair[0],
+                    pair[1],
+                    pair[2]
+                )
             )
-        except Exception as e:
-            log("p2p direct timeout in node.")
-            log_exception()
-            return
+
+        return b"|".join(pairs)
+    
+    @staticmethod
+    def unpack(buf):
+        buf = to_s(buf)
+        predictions = []
+        prediction_strs = buf.split("|")
+        for prediction_str in prediction_strs:
+            remote_s, reply_s, local_s = prediction_str.split(",")
+            prediction = [to_n(remote_s), to_n(reply_s), to_n(local_s)]
+            if not in_range(prediction[0], [1, MAX_PORT]):
+                raise Exception(f"Invalid remote port {prediction[0]}")
+
+            if not in_range(prediction[-1], [1, MAX_PORT]):
+                raise Exception(f"Invalid remote port {prediction[-1]}")
+
+            predictions.append(prediction)
+
+        if not len(predictions):
+            raise Exception("No predictions received.")
+
+        return PredictField(predictions)
+
+
+# if p_sender_buf != our addr byte
+# ... dont proceed
+
+class SigMsg():
+    @staticmethod
+    def load_addr(af, addr_buf, if_index):
+        # Validate src address.
+        addr = parse_peer_addr(
+            addr_buf
+        )
+
+        # Parse af for punching.
+        af = to_n(af)
+        af = i_to_af(af) 
+
+        # Validate src if index.
+        if_len = len(addr[af])
+        r = [0, if_len - 1]
+        if not in_range(if_index, r):
+            raise Exception("bad if_i")
+        
+        return af, addr
+
+    # Todo: will eventually have sig here too.
+    class Integrity():
+        pass
+
+    # Information about the message sender.
+    class Meta():
+        def __init__(self, pipe_id, af, src_buf, src_index):
+            # Load meta data about message.
+            self.pipe_id = to_s(pipe_id)
+            self.src_buf = to_s(src_buf)
+            self.src_index = to_n(src_index)
+            self.af = af
+
+        def patch_source(self, cur_addr):
+            # Parse src_buf to addr.
+            self.af, self.src = \
+            SigMsg.load_addr(
+                self.af,
+                self.src_buf,
+                self.src_index,
+            )
+
+            # Patch addr if needed.
+            self.src = work_behind_same_router(
+                cur_addr,
+                self.src
+            )
+
+            # Reference to the network info.
+            info = self.src[self.af]
+            self.src_info = info[self.src_index]
+
+        def to_dict(self):
+            return {
+                "pipe_id": self.pipe_id,
+                "af": int(self.af),
+                "src_buf": self.src_buf,
+                "src_index": self.src_index,
+            }
+        
+        @staticmethod
+        def from_dict(d):
+            return SigMsg.Meta(
+                d["pipe_id"],
+                d["af"],
+                d["src_buf"],
+                d["src_index"],
+            )
+
+    # The destination node for this msg.
+    class Routing():
+        def __init__(self, af, dest_buf, dest_index):
+            print(dest_buf)
+            self.dest_buf = to_s(dest_buf)
+            self.dest_index = to_n(dest_index)
+            self.af = af
+            self.set_cur_dest(dest_buf)
+            self.cur_dest_buf = None # set later.
+
+        """
+        Peers usually have dynamic addresses.
+        The parsed dest will reflect the updated /
+        current address of the node that receives this.
+        """
+        def set_cur_dest(self, cur_dest_buf):
+            self.cur_dest_buf = to_s(cur_dest_buf)
+            self.af, self.dest = SigMsg.load_addr(
+                self.af,
+                cur_dest_buf,
+                self.dest_index,
+            )
+
+            # Reference to the network info.
+            info = self.dest[self.af]
+            self.dest_info = info[self.dest_index]
+
+        def to_dict(self):
+            return {
+                "af": int(self.af),
+                "dest_buf": self.dest_buf,
+                "dest_index": self.dest_index,
+            }
+        
+        @staticmethod
+        def from_dict(d):
+            return SigMsg.Routing(
+                d["af"],
+                d["dest_buf"],
+                d["dest_index"],
+            )
+
+    # Abstract kinda feel.
+    class Payload():
+        pass
+
+    def __init__(self, data, enum):
+        self.meta = SigMsg.Meta.from_dict(
+            data["meta"]
+        )
+
+        self.routing = SigMsg.Routing.from_dict(
+            data["routing"]
+        )
+
+        self.payload = self.Payload.from_dict(
+            data["payload"]
+        )
+
+        self.enum = enum
+
+    def to_dict(self):
+        d = {
+            "meta": self.meta.to_dict(),
+            "routing": self.routing.to_dict(),
+            "payload": self.payload.to_dict(),
+        }
+
+        return d
+
+    def pack(self):
+        return bytes([self.enum]) + \
+            to_b(
+                json.dumps(
+                    self.to_dict()
+                )
+            )
+    
+    @classmethod
+    def unpack(cls, buf):
+        d = json.loads(to_s(buf))
+        return cls(d)
+
+    def set_cur_addr(self, cur_addr_buf):
+        self.routing.set_cur_dest(cur_addr_buf)
+
+        """
+        Update the parsed source addresses to
+        point to internal addresses if behind
+        the same router.
+        """
+        self.meta.patch_source(self.routing.dest)
+
+    def switch_src_and_dest(self):
+        # Copy all current fields into new object.
+        # So that changes don't mutate self.
+        x = self.unpack(self.pack()[1:])
+
+
+        # Swap interface indexes in that object.
+        x.meta.src_index = self.routing.dest_index
+        x.routing.dest_index = self.meta.src_index
+
+        # Swap src and dest p2p addr in that object.
+        x.meta.src_buf = self.routing.cur_dest_buf
+        x.routing.dest_buf = self.meta.src_buf
+
+        print(self.routing.cur_dest_buf)
+        print(self.meta.src_buf)
+
+        print('x pack = ')
+        print(x.pack())
+
+        # Return new object with init on changes.
+        return self.unpack(x.pack()[1:])
+
+class TCPPunchMsg(SigMsg):
+    # The main contents of this message.
+    class Payload():
+        def __init__(self, ntp, mappings):
+            self.ntp = Dec(ntp)
+            self.mappings = mappings
+
+        def to_dict(self):
+            return {
+                "ntp": str(self.ntp),
+                "mappings": self.mappings,
+            }
+        
+        @staticmethod
+        def from_dict(d):
+            return TCPPunchMsg.Payload(
+                d["ntp"],
+                d["mappings"],
+            )
+        
+    def __init__(self, data, enum=SIG_TCP_PUNCH):
+        super().__init__(data, enum)
+
+class TURNMsg(SigMsg):
+    class Payload():
+        def __init__(self, peer_tup, relay_tup, serv_id, client_index=-1):
+            self.peer_tup = peer_tup
+            self.relay_tup = relay_tup
+            self.serv_id = serv_id
+            self.client_index = client_index
+
+        def to_dict(self):
+            return {
+                "peer_tup": self.peer_tup,
+                "relay_tup": self.relay_tup,
+                "serv_id": self.serv_id,
+                "client_index": self.client_index,
+            }
+        
+        @staticmethod
+        def from_dict(d):
+            return TURNMsg.Payload(
+                d["peer_tup"],
+                d["relay_tup"],
+                d["serv_id"],
+                d["client_index"]
+            )
+        
+    def __init__(self, data, enum=SIG_TURN):
+        super().__init__(data, enum)
+
+class SigProtoHandlers():
+    def __init__(self, node):
+        self.node = node
+
+    async def handle_con_msg(self, msg):
+        # Connect to chosen address.
+        p2p_pipe = P2PPipe(self.node)
+        pipe = await asyncio.wait_for(
+            p2p_pipe.direct_connect(
+                msg.p_dest,
+                msg.pipe_id,
+                proto=msg.proto
+            ),
+            10
+        )
         
         # Setup pipe reference.
         if pipe is not None:
             log("p2p direct in node got a valid pipe.")
 
             # Record pipe reference.
-            self.pipes[pipe_id] = pipe
+            self.node.pipes[msg.pipe_id] = pipe
 
             # Add cleanup callback.
-            pipe.add_end_cb(self.rm_pipe_id(pipe_id))
+            pipe.add_end_cb(
+                self.node.rm_pipe_id(
+                    msg.pipe_id
+                )
+            )
 
-        return
+        return pipe
+    
+    """
+    Supports both receiving initial mappings and
+    receiving updated mappings by checking state.
+    The same message type is used for both which
+    avoids code duplication and keeps it simple.
+    """
+    async def handle_punch_msg(self, msg):
+        # AFs must match for this type of message.
+        if msg.meta.af != msg.routing.af:
+            raise Exception("tcp punch afs differ.")
 
-    # Request to start TCP hole punching.
-    if cmd == "INITIAL_MAPPINGS":
-        # Parse mappings to dict.
-        ret = parse_mappings(self, parts)
-        r, p2p_dest, their_if_infos, their_if_info = ret
+        # Select our interface.
+        iface = self.node.ifs[msg.routing.dest_index]
+        punch = self.node.tcp_punch_clients
+        punch = punch[msg.routing.dest_index]
+        stun  = self.node.stun_clients[0]
 
-        # Create hole punching client.
-        interface = self.if_list[r["if"]["us"]]
-        stun_client = (await get_stun_clients(
-            r["af"],
-            1,
-            interface=interface,
-            proto=TCP
-        ))[0]
-
-        recipient = self.tcp_punch_clients[r["if"]["us"]]
+        # Wrap their external address.
+        dest = await Address(
+            str(msg.meta.src_info["ext"]),
+            80,
+            iface.route(msg.routing.af)
+        )
 
         # Calculate punch mode.
-        their_addr = await Address(
-            str(their_if_info["ext"]),
-            80,
-            interface.route(r["af"])
-            ).res()
-        punch_mode = recipient.get_punch_mode(their_addr)
+        punch_mode = punch.get_punch_mode(dest)
         if punch_mode == TCP_PUNCH_REMOTE:
-            use_addr = str(their_if_info["ext"])
+            dest = str(msg.meta.src_info["ext"])
         else:
-            use_addr = str(their_if_info["nic"])
+            dest = str(msg.meta.src_info["nic"])
+
+        # Is it initial mappings or updated?
+        info = punch.get_state_info(
+            msg.meta.src["node_id"],
+            msg.meta.pipe_id,
+        )
+
+        # Then this is step 2: recipient get mappings.
+        if info is None:
+            # Get updated mappings for initiator.
+            punch_ret = await punch.proto_recv_initial_mappings(
+                dest,
+                msg.meta.src_info["nat"],
+                msg.meta.src["node_id"],
+                msg.meta.pipe_id,
+                msg.payload.mappings,
+                stun,
+                msg.payload.ntp,
+                mode=punch_mode
+            )
+
+            # Schedule the punching meeting.
+            self.node.add_punch_meeting([
+                msg.routing.dest_index,
+                PUNCH_RECIPIENT,
+                msg.meta.src["node_id"],
+                msg.meta.pipe_id,
+            ])
+
+            # Return mappings in a new message.
+            reply = msg.switch_src_and_dest()
+            reply.payload.mappings = punch_ret[0]
+            return reply.pack()
         
-        # Step 2 -- exchange initiator mappings with recipient.
-        punch_ret = await recipient.proto_recv_initial_mappings(
-            use_addr,
-            their_if_info["nat"],
-            r["src_addr"]["node_id"],
-            r["pipe_id"],
-            r["predictions"],
-            stun_client,
-            r["ntp_time"],
-            mode=punch_mode
-        )
-
-        # Build second (optional) punch message for peer.
-        out = build_punch_response(
-            b"UPDATED_MAPPINGS",
-            r["pipe_id"],
-            punch_ret,
-            self.addr_bytes,
-            r["af"],
-            r["if"]["us"], # Which iface we're using from our addr.
-            r["if"]["them"] # Which iface they should use.
-        )
-
-        # Send first protocol signal message to peer.
-        send_task = asyncio.create_task(
-            async_wrap_errors(
-                signal_pipe.send_msg(
-                    out,
-                    to_s(r["src_addr"]["node_id"])
-                )
+        # Then this is optional step 3: update initiator.
+        if info is not None:
+            # State checks to prevent protocol loops.
+            if info["state"] != TCP_PUNCH_IN_MAP:
+                return
+            
+            # Otherwise update the initiator.
+            punch_ret = await punch.proto_update_recipient_mappings(
+                msg.meta.src["node_id"],
+                msg.meta.pipe_id,
+                msg.payload.mappings,
+                stun
             )
-        )
 
-        # Do the hole punching.
-        try:
-            pipe = await asyncio.wait_for(
-                get_tcp_hole(
-                    PUNCH_RECIPIENT,
-                    r["pipe_id"],
-                    r["src_addr"]["node_id"],
-                    recipient,
-                    self
-                ),
-                30
+    async def handle_turn_msg(self, msg):
+        pass
+        # by turn_clients[pipe_id] (optional make)
+        # but then accept needs to keep a list of accepted peers in the turn client
+        # and i prob need to switch to a laptop with ethernet and wifi...
+
+        # Select our interface.
+        iface = self.node.ifs[msg.routing.dest_index]
+
+        # Receive a TURN request.
+        if msg.meta.pipe_id not in self.node.turn_clients:
+            print("bob recv turn req")
+            print(f"{msg.payload.peer_tup} {msg.payload.relay_tup} {msg.payload.serv_id}")
+            ret = await get_turn_client(
+                msg.routing.af,
+                msg.payload.serv_id,
+                iface,
+                dest_peer=msg.payload.peer_tup,
+                dest_relay=msg.payload.relay_tup,
             )
-        except asyncio.TimeoutError:
-            log("node tcp punch timeout.")
+            peer_tup, relay_tup, turn_client = ret
+            self.node.turn_clients[msg.meta.pipe_id] = turn_client
+
+            reply = msg.switch_src_and_dest()
+            reply.payload.peer_tup = peer_tup
+            reply.payload.relay_tup = relay_tup
+
+            return reply
+
+        # Receive a TURN response.
+        if msg.meta.pipe_id in self.node.turn_clients:
+            # Accept their peer details.
+            turn_client = self.node.turn_clients[msg.meta.pipe_id]
+            await turn_client.accept_peer(
+                msg.payload.peer_tup,
+                msg.payload.relay_tup,
+            )
+
+    def proto(self, buf):
+        p_node = self.node.addr_bytes
+        p_addr = self.node.p2p_addr
+        node_id = to_s(p_addr["node_id"])
+        handler = None
+        if buf[0] == SIG_P2P_CON:
+            msg = P2PConMsg.unpack(buf[1:], p_node)
+            print("got sig p2p dir")
+            print(msg)
+            return self.handle_con_msg(msg)
+        
+        if buf[0] == SIG_TCP_PUNCH:
+            print("got punch msg")
+            msg = TCPPunchMsg.unpack(buf[1:])
+            handler = self.handle_punch_msg
+
+        if buf[0] == SIG_TURN:
+            print("Got turn msg")
+            msg = TURNMsg.unpack(buf[1:])
+            handler = self.handle_turn_msg
+
+        if handler is None:
             return
 
-        return
+        dest = msg.routing.dest
+        if to_s(dest["node_id"]) != node_id:
+            print(f"Received message not intended for us. {dest['node_id']} {node_id}")
+            return
+        
+        # Updating routing dest with current addr.
+        msg.set_cur_addr(p_node)
+        return handler(msg)
 
-    # Additional info for doing TCP hole punching.
-    if cmd == "UPDATED_MAPPINGS":
-        # Unpack mapping fields and parse.
-        ret = parse_mappings(self, parts)
-        r, p2p_dest, their_if_infos, their_if_info = ret
+"""
+Index cons by pipe_id -> future and then
+set the future when the con is made.
+Then you can await any pipe even if its
+made by a more complex process (like punching.)
 
-        # Make a STUN client that can get mappings.
-        # This actually shouldn't be needed.
-        dest_s = str(their_if_info["ext"])
-        af = af_from_ip_s(dest_s)
-        interface = self.if_list[r["if"]["us"]]
-        stun_client = (await get_stun_clients(
-            af,
-            1,
-            interface=interface,
-            proto=TCP
-        ))[0]
+Maybe a pipe_open improvement.
+Then maybe have a queue to process hole punching
+meetings in the background.
+So you would just do:
+    - push to queue
+    - await pipe_id
 
-        # Update received mappings.
-        # This is an optional step that can improve connect success.
-        initiator = self.tcp_punch_clients[r["if"]["us"]]
-        ret = await initiator.proto_update_recipient_mappings(
-            r["src_addr"]["node_id"],
-            r["pipe_id"],
-            r["predictions"],
-            stun_client
-        )
+and the background process:
+    await queue ...
+    do punching
+    set pipe future
+"""
+async def test_proto_rewrite():
+    pe = await get_pp_executors()
+    #pe2 = await get_pp_executors(workers=2)
+    
+    if pe is not None:
+        qm = multiprocessing.Manager()
+    else:
+        qm = None
 
-        return
+    sys_clock = SysClock(Dec("-0.02839018452552057081653225806"))
+    iface = await Interface()
+    alice_node = P2PNode([iface])
+    bob_node = P2PNode([iface], port=NODE_PORT + 1)
+    stun_client = (await get_stun_clients(
+        IP4,
+        1,
+        iface
+    ))[0]
+
+    for node in [alice_node, bob_node]:
+        node.setup_multiproc(pe, qm)
+        node.setup_coordination(sys_clock)
+        node.setup_tcp_punching()
+        await node.dev()
+        node.stun_clients = [stun_client]
+
+    pipe_id = "init_pipe_id"
+    delta = delta_info(EQUAL_DELTA, 0)
+    their_nat = nat_info(FULL_CONE, delta)
+    iface.set_nat(their_nat)
+
+    ##########################################
+
+    pa = SigProtoHandlers(alice_node)
+    pb = SigProtoHandlers(bob_node)
+
+    alice_initiator = alice_node.tcp_punch_clients[0]
+    bob_recp = bob_node.tcp_punch_clients[0]
+
+    
+    route = iface.route(IP4)
+    dest = iface.rp[IP4].routes[0].nic()
+    dest_addr = await Address(dest, 80, route).res()
+
+    
+    af = IP4
+    punch_ret = await alice_initiator.proto_send_initial_mappings(
+        dest,
+        their_nat,
+        bob_node.p2p_addr["node_id"],
+        pipe_id,
+        stun_client,
+        mode=TCP_PUNCH_SELF
+    )
+
+    print(punch_ret)
+
+    msg = TCPPunchMsg({
+        "meta": {
+            "pipe_id": pipe_id,
+            "af": af,
+            "src_buf": alice_node.addr_bytes,
+            "src_index": 0,
+        },
+        "routing": {
+            "af": af,
+            "dest_buf": bob_node.addr_bytes,
+            "dest_index": 0,
+        },
+        "payload": {
+            "ntp": punch_ret[1],
+            "mappings": punch_ret[0],
+        },
+    })
+
+    print(msg)
 
     """
-    Requests that a peer use a specified TURN server to connect
-    back to a source peer. The peer provides it's 'mapped address'
-    -- the external address of the peer seen from the TURN server's
-    perspective. They are expected to 'white list' this address.
-    A 'relay address' is also specified for sending messages back
-    to the source. Towards the end this node will exchange its own
-    mapped and relay address back to the source.
+    Allows enough time for the optional updated
+    mappings.
     """
-    if cmd == "TURN_REQUEST":
-        if len(parts) != 12:
-            log("> turn_req: invalid parts len")
-            return
-        
-        # Extract all fields from the signal msg.
-        pipe_id = to_b(parts[1])
-        af = int(parts[2])
-        their_if_index = int(parts[3])
-        our_if_index = int(parts[4])
-        src_addr_bytes = to_b(parts[5])
-        peer_ip = parts[6]
-        peer_port = int(parts[7])
-        relay_ip = parts[8]
-        relay_port = int(parts[9])
-        turn_server_index = int(parts[10])
-        turn_client_index = int(parts[11])
 
-        # Check turn server index.
-        if not in_range(turn_server_index, [0, len(TURN_SERVERS) - 1]):
-            log(f"> turn req: servers offset {turn_server_index}")
-            return
-        else:
-            turn_server = TURN_SERVERS[turn_server_index]
-
-        # Check address family is valid.
-        if af not in VALID_AFS or af not in turn_server["afs"]:
-            log("> turn_req: invalid af")
-            return
-        
-        # Check interface index is valid.
-        if not in_range(our_if_index, [0, len(self.if_list) - 1]):
-            log("> turn_req: invalid if_index")
-            return
-
-        # Check ports are valid.
-        for port in [relay_port]:
-            if not in_range(port, [1, MAX_PORT]):
-                log("> turn_req: invalid port")
-                return
-
-        # See if TURN server is already connected.
-        interface = self.if_list[our_if_index]
-        turn_client = self.find_turn_client(turn_server, interface=interface)
-        if turn_client is None:
-            # Resolve the TURN address.
-            route = await interface.route(af).bind()
-            turn_addr = await Address(
-                turn_server["host"],
-                turn_server["port"],
-                route
-            ).res()
-
-            # Make a TURN client instance to whitelist them.
-            turn_client = TURNClient(
-                route=route,
-                turn_addr=turn_addr,
-                turn_user=turn_server["user"],
-                turn_pw=turn_server["pass"],
-                turn_realm=turn_server["realm"],
-                msg_cb=self.msg_cb
-            )
-
-            # Start the TURN client.
-            try:
-                await asyncio.wait_for(
-                    turn_client.start(),
-                    10
-                )
-            except asyncio.TimeoutError:
-                log("Turn client start timeout in node.")
-                return
-
-            # Set new TURN client.
-            self.turn_clients.append(turn_client)
-
-        # Resolve the peer address.
-        # The address here is their XorMappedAddress.
-        # The external address of the peer from the TURN server's perspective.
-        route = interface.route(af)
-        peer_addr = await Address(
-            str(peer_ip),
-            peer_port,
-            route
-        ).res()
-
-        # Resolve relay address.
-        relay_addr = await Address(
-            relay_ip,
-            relay_port,
-            route
-        ).res()
-
-        # White list peer.
-        try:
-            await asyncio.wait_for(
-                turn_client.accept_peer(peer_addr.tup, relay_addr.tup),
-                6
-            )
-        except asyncio.TimeoutError:
-            log("node turn accept peer timeout.")
-            return
-
-        # Record the pipe internally.
-        client_tup = await turn_client.client_tup_future
-        our_relay_tup = await turn_client.relay_tup_future
-        self.pipes[pipe_id] = turn_client
-        log("> turn_req: our relay tup = {}:{}".format(
-            *our_relay_tup
-        ))
-
-        # Form response with our addressing info.
-        out = b"TURN_RESPONSE %s %s %d %d %s %d %s %d %d" % (
+    async def schedule_punching_with_delay(if_index, pipe_id, dest_node_id, node, n=2):
+        await asyncio.sleep(n)
+        node.add_punch_meeting([
+            if_index,
+            PUNCH_INITIATOR,
+            dest_node_id,
             pipe_id,
-            self.node_id,
-            af,
-            their_if_index,
+        ])
 
-            # Our own relay addr to route messages to us.
-            to_b(our_relay_tup[0]),
-            our_relay_tup[1],
+    task_sche = asyncio.ensure_future(
+        schedule_punching_with_delay(2)
+    )
 
-            # Our XorMappedAddress.
-            to_b(client_tup[0]),
-            client_tup[1],
+    buf = msg.pack()
+    print(buf)
 
-            # Their client to use.
-            turn_client_index
-        )
-        
-        # Send response to recipient.
-        p2p_src_addr = parse_peer_addr(src_addr_bytes)
-        await signal_pipe.send_msg(
-            out,
-            to_s(p2p_src_addr["node_id"])
-        )
+    #print(msg.ntp)
+    #print(msg.p_reply_buf)
+    #print(alice_node.addr_bytes)
+
+
+
+    # Simulate bob receiving initial mappings.
+    coro = pb.proto(buf)
+
+    # receive initial mappings msg:
+    buf = await coro
+
+    print(buf)
+
+
+    # simulate alice receive updated mappings msg
+    coro = pa.proto(buf)
+    await coro
+    #await buf
+
+    print(alice_initiator.state)
+    print(bob_recp.state)
+
+
+    bob_hole = await bob_node.pipes[pipe_id]
+    alice_hole = await alice_node.pipes[pipe_id]
+
+    print(f"alice hole = {alice_hole}")
+    print(f"bob hole = {bob_hole}")
 
     """
-    The peer that you requested to contact you back via TURN
-    has sent you back this response. The response includes their
-    mapped address and their relay address. With this info
-    both peers can now start sending messages via each others
-    relay addresses and the correct permissions are in place to
-    let the packets through. The peers will receive replies from
-    the TURN server on the TURN server's regular port. The replies
-    will be Send indications with a data attribute and a
-    XorPeerAddress attribute that specifies the peer address tuple
-    of the packet sender -- which we discard if it doesn't match.
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(
+                async_wrap_errors(
+                    alice_initiator.proto_do_punching(PUNCH_INITIATOR, bob_node.p2p_addr["node_id"], pipe_id)
+                ),
+                async_wrap_errors(
+                    bob_recp.proto_do_punching(PUNCH_RECIPIENT, alice_node.p2p_addr["node_id"], pipe_id)
+                )
+            ),
+            10
+        )
+    except Exception:
+        results = []
+
+    print("Got results = ")
+    print(results)
     """
-    if cmd == "TURN_RESPONSE":
-        # Invalid packet.
-        if len(parts) != 10:
-            log("> turn_res: invalid parts len")
-            return
 
-        # Name all the parts and type convert.
-        pipe_id = to_b(parts[1])
-        node_id = to_b(parts[2])
-        af = int(parts[3])
-        if_index = int(parts[4])
-        relay_ip = parts[5]
-        relay_port = int(parts[6])
-        client_ip = IPRange(parts[7])
-        client_port = int(parts[8])
-        turn_client_index = int(parts[9])
 
-        # Check pipe_id exists.
-        if pipe_id not in self.pipe_events:
-            log("> turn_res: pipe id not in events")
-            return
-        if pipe_id not in self.expected_addrs:
-            log("> turn_res: pipe id not in turn pending")
-            return
+    
 
-        # Check the IP matches what we expect.
-        found_exts = self.expected_addrs[pipe_id]
-        if client_ip not in found_exts:
-            log("> turn_res: client_ip != found ext")
-            return
+    await alice_node.close()
+    await bob_node.close()
 
-        # Validate ports.
-        for port in [relay_port, client_port]:
-            if not in_range(port, [1, MAX_PORT]):
-                log("> turn_res: invalid port")
-                return
 
-        # Validate address family.
-        if af not in VALID_AFS:
-            log("> turn_res: invalid af")
-            return
+    return
 
-        # Invalid if index.
-        if not in_range(if_index, [0, len(self.if_list) - 1]):
-            log("> turn_res: if index invalid.")
-            return
 
-        # Get turn client.
-        if not in_range(turn_client_index, [0, len(self.turn_clients) - 1]):
-            log("> turn_resp: invalid turn clietn index.")
-            return
 
-        # Get turn client reference.
-        turn_client = self.turn_clients[turn_client_index]
-        if turn_client is None:
-            log("> turn_res: turn client none")
-            return
+    msg = P2PConMsg(
+        "pipe_id",
+        "tcp",
+        to_s(node.addr_bytes),
+        to_s(node.addr_bytes),
+    )
 
-        # Notify waiters that we received the relay address.
-        client_tup = (str(client_ip), client_port)
-        relay_tup = (relay_ip, relay_port)
-        await turn_client.accept_peer(client_tup, relay_tup)
-        turn_client.node_events[to_s(node_id)].set()
-        return
+    buf = msg.pack()
+    coro = p.proto(buf)
+    pipe = await coro
+    print("reverse con pipe = ")
+    print(pipe)
+    if pipe is not None:
+        await pipe.close()
+    
+    print("\n\n\n")
+    patched = work_behind_same_router(
+        node.p2p_addr, node.p2p_addr
+    )
 
-async def node_protocol(self, msg, client_tup, pipe):
-    log(f"> node proto = {msg}, {client_tup}")
+    print(patched)
 
-    # Execute any custom msg handlers on the msg.
-    run_handlers(pipe, self.msg_cbs, client_tup, msg)
+    await node.close()
 
-    # Execute basic services of the node protocol.
-    parts = msg.split(b" ")
-    cmd = parts[0]
+async def test_proto_rewrite2():
+    turn_serv_offset = 1
 
-    # Basic echo server used for testing networking.
-    if cmd == b"ECHO":
-        if len(msg) > 5:
-            await pipe.send(memoryview(msg)[5:], client_tup)
+    # Internode (ethernet)
+    alice_iface = await Interface("enp0s25")
+    print(alice_iface)
 
-        return
+    # Aussie broadband NBN (wifi)
+    bob_iface = await Interface("wlx00c0cab5760d")
+    print(bob_iface)
 
-    # This connection was in regards to a request.
-    if cmd == b"ID":
-        # Invalid format.
-        if len(parts) != 2:
-            log("ID: Invalid parts len.")
-            return 1
 
-        # If no ones expecting this connection its a reverse connect.
-        pipe_id = parts[1]
-        pipe.add_end_cb(self.rm_pipe_id(pipe_id))
-        if pipe_id not in self.pipe_events:
-            assert(isinstance(pipe_id, bytes))
-            log(f"pipe = '{pipe_id}' not in pipe events. saving.")
-            self.pipes[pipe_id] = pipe
-        else:
-            # Is this IP expected?
-            if pipe_id not in self.expected_addrs:
-                log("ID: pipe_id not in expected_addrs.")
-                return 2
+    sys_clock = SysClock(Dec("-0.02839018452552057081653225806"))
+    alice_node = P2PNode([alice_iface])
+    bob_node = P2PNode([bob_iface], port=NODE_PORT + 1)
+    af = IP4
+    pa = SigProtoHandlers(alice_node)
+    pb = SigProtoHandlers(bob_node)
 
-            # Check remote address is right.
-            exts = self.expected_addrs[pipe_id]
-            ipr = IPRange(client_tup[0])
-            if ipr not in exts:
-                log("ID: ipr not in expected addrs.")
-                return 3
 
-            # Pipe already saved.
-            pipe_event = self.pipe_events[pipe_id]
-            if pipe_event.is_set():
-                log("ID: pipe event not set.")
-                return 4
+    pipe_id = "turn_pipe_id"
+    for node in [alice_node, bob_node]:
+        await node.dev()
 
-            # Save pipe and notify any waiters about it.
-            self.pipes[pipe_id] = pipe
-            pipe_event.set()
+    # TODO: work on TURN message here.
+    # 51.195.101.185
+
+    """
+    Todo add sanity check -- is relay addr different to turn serv ip
+    is mapped different to our ext?
+    """
+
+
+
+
+    alice_peer, alice_relay, alice_turn = await get_turn_client(
+        af,
+        turn_serv_offset,
+        alice_iface
+    )
+    alice_node.turn_clients[pipe_id] = alice_turn
+
+    print(alice_peer)
+    print(alice_relay)
+    print(alice_turn)
+
+
+    msg = TURNMsg({
+        "meta": {
+            "pipe_id": pipe_id,
+            "af": af,
+            "src_buf": alice_node.addr_bytes,
+            "src_index": 0,
+        },
+        "routing": {
+            "af": af,
+            "dest_buf": bob_node.addr_bytes,
+            "dest_index": 0,
+        },
+        "payload": {
+            "peer_tup": alice_peer,
+            "relay_tup": alice_relay,
+            "serv_id": turn_serv_offset,
+            "client_index": 0,
+        },
+    }).pack()
+
+    print(msg)
+
+    # Bob gets a turn request.
+    coro = pb.proto(msg)
+    bob_resp = await coro
+
+
+    # Alice gets bobs turn response.
+    coro = pa.proto(bob_resp.pack())
+    resp = await coro
+
+    # Both turn clients ready.
+
+    # Alice sends a msg to bob via their turn client
+    msg = b"alice to bob via turn"
+    print(f"send to bob relay tup = {bob_resp.payload.relay_tup}")
+    print(f"bob client tup {bob_resp.payload.peer_tup}")
+
+    """
+    Client will replace bob peer tup with their relay tup
+    if it detects that its an accepted client.
+    """
+    print(alice_turn.peers)
+    await alice_turn.send(msg)
+    # Allow time for bob to receive the message.
+    await asyncio.sleep(2)
+
+    bob_turn = bob_node.turn_clients[pipe_id]
+    sub = tup_to_sub(alice_peer)
+
+
+
+    recv_msg = await bob_turn.recv()
+    print("bob recv msg = ")
+    print(bob_turn)
+    print(recv_msg)
+
+    """
+    if send(... x)
+        if x in ... clients, use their relay tup instead for send
+    """
+
+
+    await bob_turn.send(b"bob send turn msg to alice")
+    ret = await alice_turn.recv()
+    print(f"Alice get resp from bob: {ret}")
+
+
+
+
+    await alice_node.close()
+    await bob_node.close()
+
+
+    return
+
+async def test_proto_rewrite3():
+    from .p2p_node import P2PNode
+    from .p2p_utils import get_pp_executors, Dec
+    from .clock_skew import SysClock
+    from .stun_client import get_stun_clients
+    from .nat import delta_info, nat_info, EQUAL_DELTA, FULL_CONE
+    from .p2p_pipe import P2PPipe
+    pe = await get_pp_executors()
+    qm = multiprocessing.Manager()
+    sys_clock = SysClock(Dec("-0.02839018452552057081653225806"))
+
+    delta = delta_info(EQUAL_DELTA, 0)
+    nat = nat_info(FULL_CONE, delta)
+
+    # Internode (ethernet)
+    alice_iface = await Interface("enp0s25")
+    alice_iface.set_nat(nat)
+    print(alice_iface)
+
+    # Aussie broadband NBN (wifi)
+    bob_iface = await Interface("wlx00c0cab5760d")
+    bob_iface.set_nat(nat)
+    print(bob_iface)
+
+    alice_node = P2PNode([alice_iface])
+    bob_node = P2PNode([bob_iface], port=NODE_PORT + 1)
+
+    for node in [alice_node, bob_node]:
+        node.setup_multiproc(pe, qm)
+        node.setup_coordination(sys_clock)
+        node.setup_tcp_punching()
+        await node.dev()
+
+    pipe_id = "init_pipe_id"
+
+    p = P2PPipe(alice_node)
+    msg = await p.tcp_hole_punch(pipe_id, bob_node.addr_bytes)
+    
+
+
+
+if __name__ == '__main__':
+    async_test(test_proto_rewrite3)
+
+"""
+    Signal proto:
+        - one big func
+        - a case for every 'cmd' ...
+        - i/o bound (does io in the func)
+        - no checks for bad addrs
+        - 
+
+    
+"""
+

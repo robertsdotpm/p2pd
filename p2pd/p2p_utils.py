@@ -1,6 +1,9 @@
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 from .p2p_node import *
+from .address import Address
+from .utils import *
+from .net import *
 
 def init_process_pool():
     # Make selector default event loop.
@@ -107,3 +110,68 @@ async def start_p2p_node(port=NODE_PORT, node_id=None, ifs=None, clock_skew=Dec(
 
     return node
 
+async def sort_if_info_by_best_nat(p2p_addr):
+    # [af] = [[nat_type, if_info], ...]
+    nat_pairs = {}
+
+    # Check all valid addresses.
+    for af in VALID_AFS:
+        if not len(p2p_addr[af]):
+            continue
+
+        # Store subset of interface details.
+        nat_pairs[af] = []
+
+        # Loop over all the interface details by address family.
+        for _, if_info in enumerate(p2p_addr[af]):
+            # Save interface details we're interested in.
+            nat_pairs[af].append([
+                if_info["nat"]["type"],
+                if_info
+            ])
+
+        # Sort the details list based on the first field (NAT type.)
+        nat_pairs[af] = sorted(
+            nat_pairs[af],
+            key=lambda x: x[0]
+            )
+
+    return nat_pairs
+
+class IFInfoIter():
+    def __init__(self, af, src_addr, dest_addr):
+        self.af = af
+        self.src_addr = sort_if_info_by_best_nat(src_addr)
+        self.dest_addr = sort_if_info_by_best_nat(dest_addr)
+        cond_one = af not in self.src_addr
+        cond_two = af not in self.dest_addr
+        if cond_one or cond_two:
+            self.dest_addr = self.src_addr = []
+
+        self.dest_addr = dest_addr[af]
+        self.src_addr = src_addr[af]
+        self.our_offset = 0
+        self.their_offset = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        # Stop when they have no new entries.
+        if self.their_offset >= len(self.dest_addr) - 1:
+            raise StopIteration
+        
+        # Load addr info to use.
+        src_info = self.src_addr[self.our_offset]
+        dest_info = self.dest_addr[self.their_offset]
+
+        # Don't increase our offset if no new entry.
+        if self.our_offset < len(self.src_addr) - 1:
+            self.our_offset += 1
+
+        # Increase their offset.
+        self.their_offset += 1
+
+        # Return the addr info.
+        return src_info, dest_info
+        

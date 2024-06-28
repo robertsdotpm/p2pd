@@ -5,7 +5,7 @@ import multiprocessing
 from decimal import Decimal as Dec
 from .p2p_pipe import *
 from .daemon import *
-from .p2p_protocol import *
+from .p2p_protocol_old import *
 from .signaling import *
 
 
@@ -149,9 +149,6 @@ class P2PNode(Daemon, P2PUtils):
         self.punch_queue = asyncio.Queue()
 
     def pipe_future(self, pipe_id):
-        if pipe_id in self.pipes:
-            raise Exception("pipe future exists.")
-        
         self.pipes[pipe_id] = asyncio.Future()
 
     def pipe_ready(self, pipe_id, pipe):
@@ -173,6 +170,15 @@ class P2PNode(Daemon, P2PUtils):
             pipe = await punch.proto_do_punching(*params)
             if pipe is not None:
                 self.pipe_ready(params[-1], pipe)
+
+    async def schedule_punching_with_delay(self, if_index, pipe_id, node_id, n=2):
+        await asyncio.sleep(n)
+        self.add_punch_meeting([
+            if_index,
+            PUNCH_INITIATOR,
+            node_id,
+            pipe_id,
+        ])
 
     # Used by the MQTT clients.
     async def signal_protocol(self, msg, signal_pipe):
@@ -252,6 +258,19 @@ class P2PNode(Daemon, P2PUtils):
         self.punch_worker = asyncio.ensure_future(
             self.punch_queue_worker()
         )
+
+        # TODO: placeholder.
+        self.stun_clients = {IP4: {}, IP6: {}}
+        for af in VALID_AFS:
+            for if_index in range(0, len(self.ifs)):
+                interface = self.ifs[if_index]
+                if af in interface.supported():
+                    self.stun_clients[af][if_index] = (await get_stun_clients(
+                        af,
+                        1,
+                        interface,
+                        TCP
+                    ))[0]
             
         return self
 
