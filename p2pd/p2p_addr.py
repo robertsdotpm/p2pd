@@ -291,7 +291,7 @@ def parse_peer_addr(addr):
     out = {
         IP4: [],
         IP6: [],
-        "node_id": af_parts[2],
+        "node_id": to_s(af_parts[2]),
         "signal": signal
     }
 

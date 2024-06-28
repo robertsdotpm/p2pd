@@ -187,7 +187,7 @@ class STUNClient():
         if hasattr(reply, "rtup"):
             return (ltup[1], reply.rtup[1], reply.pipe)
 
-async def get_stun_clients(af, max_agree, interface, proto=UDP):
+async def get_stun_clients(af, max_agree, interface, proto=UDP, conf=NET_CONF):
     class MockRoute:
         def __init__(self):
             self.af = af
@@ -214,6 +214,7 @@ async def get_stun_clients(af, max_agree, interface, proto=UDP):
                 dest,
                 proto=proto,
                 mode=serv_info["mode"],
+                conf=conf,
             )
         
         stun_clients.append(get_stun_client(serv_info))

@@ -48,33 +48,6 @@ async def get_tcp_hole(side, pipe_id, node_id, punch_client, node):
 
     return pipe
 
-"""
-If nodes are behind the same router they will have
-the same external address. Using this address for
-connections will fail because it will be the same
-address as ourself. The solution here is to replace
-that external address with a private, NIC address.
-For this reason the P2P address format includes
-a private address section that corrosponds to
-the address passed to bind() for the nodes listen().
-"""
-def work_behind_same_router(src_addr, dest_addr):
-    new_addr = copy.deepcopy(dest_addr)
-    for af in VALID_AFS:
-        for dest_info in new_addr[af]:
-            for src_info in src_addr[af]:
-                # Same external address as one of our own.
-                if dest_info["ext"] == src_info["ext"]:
-                    # Connect to its internal address instead.
-                    dest_info["ext"] = dest_info["nic"]
-
-                    # Disable NAT in LANs.
-                    delta = delta_info(NA_DELTA, 0)
-                    nat = nat_info(OPEN_INTERNET, delta)
-                    dest_info["nat"] = nat
-
-    return new_addr
-
 def build_reverse_msg(pipe_id, addr_bytes, b_proto=b"TCP"):
     out = b"P2P_DIRECT %s %s %s" % (pipe_id, b_proto, addr_bytes) 
     return out
@@ -420,7 +393,7 @@ class P2PPipe():
     async def tcp_hole_punch(self, pipe_id, dest_bytes):
         p2p_dest = parse_peer_addr(dest_bytes)
         our_addr = self.node.p2p_addr
-        for af in VALID_AFS:
+        for af in [IP4]: # TODO: VALID_AFS
             """
             The iterator filters the addr info for both
             P2P addresses by the best NAT.
@@ -433,14 +406,14 @@ class P2PPipe():
             for src_info, dest_info in if_info_iter:
                 # Select interface to use.
                 if_index = src_info["if_index"]
-                interface = self.node.if_list[if_index]
+                interface = self.node.ifs[if_index]
 
                 # Punch clients indexed by interface offset.
                 initiator = self.node.tcp_punch_clients[if_index]
 
                 # Select [ext or nat] dest and punch mode
                 # (either local, self, remote)
-                use_addr, punch_mode = await get_punch_mode(
+                punch_mode, use_addr = await get_punch_mode(
                     af,
                     dest_info,
                     interface,

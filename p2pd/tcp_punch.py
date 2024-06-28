@@ -109,13 +109,10 @@ PUNCH_CONF = dict_child({
     "reuse_addr": True,
 
     # Return the sock instead of the base proto.
-    "sock_only": True,
+    #"sock_only": True,
 
     # Disable closing sock on error.
     "do_close": False,
-
-    # Ref to async event loop func.
-    "loop": lambda: selector_event_loop()
 }, NET_CONF)
 
 async def get_punch_mode(af, if_info, interface, punch_client):
@@ -721,6 +718,7 @@ class TCPPunch():
             dest IP + dest port and it successfully gets
             connected. So successive calls might fail.
             """
+            print(sock)
             return [remote_port, sock]
 
 
@@ -745,7 +743,7 @@ class TCPPunch():
             start_time = timestamp(1)
             steps = int((secs * 1000) / ms_spacing)
             route = interface.route(af)
-            log(f"TCP PUNCH REMOTE local = {local}")
+            print(f"TCP PUNCH REMOTE {dest_addr} local = {local}")
             for i in range(0, len(local)):
                 dest = await Address(
                     dest_addr,

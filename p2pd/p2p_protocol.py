@@ -18,7 +18,10 @@ from .utils import *
 from .settings import *
 from .address import *
 from .pipe_events import *
-
+from .p2p_addr import *
+from .p2p_utils import *
+from .tcp_punch import PUNCH_RECIPIENT, PUNCH_INITIATOR
+from .tcp_punch import TCP_PUNCH_IN_MAP
 
 SIG_P2P_CON = 1
 SIG_TCP_PUNCH = 2
@@ -427,10 +430,11 @@ class SigProtoHandlers():
             raise Exception("tcp punch afs differ.")
 
         # Select our interface.
-        iface = self.node.ifs[msg.routing.dest_index]
+        if_index = msg.routing.dest_index
+        iface = self.node.ifs[if_index]
         punch = self.node.tcp_punch_clients
         punch = punch[msg.routing.dest_index]
-        stun  = self.node.stun_clients[0]
+        stun  = self.node.stun_clients[msg.routing.af][if_index]
 
         # Wrap their external address.
         dest = await Address(
@@ -447,6 +451,11 @@ class SigProtoHandlers():
             dest = str(msg.meta.src_info["nic"])
 
         # Is it initial mappings or updated?
+        print("msg meta")
+        print(msg.meta.src)
+        print(msg.meta.pipe_id)
+        print(punch.state)
+        print(f"using dest {dest}")
         info = punch.get_state_info(
             msg.meta.src["node_id"],
             msg.meta.pipe_id,
@@ -454,6 +463,7 @@ class SigProtoHandlers():
 
         # Then this is step 2: recipient get mappings.
         if info is None:
+            print("recv initial")
             # Get updated mappings for initiator.
             punch_ret = await punch.proto_recv_initial_mappings(
                 dest,
@@ -484,6 +494,9 @@ class SigProtoHandlers():
             # State checks to prevent protocol loops.
             if info["state"] != TCP_PUNCH_IN_MAP:
                 return
+            
+            print("update mappings")
+
             
             # Otherwise update the initiator.
             punch_ret = await punch.proto_update_recipient_mappings(
@@ -895,6 +908,7 @@ async def test_proto_rewrite3():
     from .stun_client import get_stun_clients
     from .nat import delta_info, nat_info, EQUAL_DELTA, FULL_CONE
     from .p2p_pipe import P2PPipe
+    from .interface import Interface
     pe = await get_pp_executors()
     qm = multiprocessing.Manager()
     sys_clock = SysClock(Dec("-0.02839018452552057081653225806"))
@@ -914,6 +928,8 @@ async def test_proto_rewrite3():
 
     alice_node = P2PNode([alice_iface])
     bob_node = P2PNode([bob_iface], port=NODE_PORT + 1)
+    pa = SigProtoHandlers(alice_node)
+    pb = SigProtoHandlers(bob_node)
 
     for node in [alice_node, bob_node]:
         node.setup_multiproc(pe, qm)
@@ -925,9 +941,25 @@ async def test_proto_rewrite3():
 
     p = P2PPipe(alice_node)
     msg = await p.tcp_hole_punch(pipe_id, bob_node.addr_bytes)
-    
+    print(msg)
+    print(msg.pack())
 
+    # That's alices side hooked up and working.
+    # havent been screwed to do anything else
 
+    # Simulate bob receiving initial mappings.
+    coro = pb.proto(msg.pack())
+    buf = await coro
+
+    # simulate alice receive updated mappings msg
+    coro = pa.proto(buf)
+    await coro
+
+    bob_hole = await bob_node.pipes[pipe_id]
+    alice_hole = await alice_node.pipes[pipe_id]
+
+    print(f"alice hole = {alice_hole}")
+    print(f"bob hole = {bob_hole}")
 
 if __name__ == '__main__':
     async_test(test_proto_rewrite3)

@@ -22,6 +22,7 @@ import unittest
 import ecdsa
 import multiprocessing
 from ecdsa.curves import NIST192p
+from decimal import Decimal as Dec
 
 if "P2PD_DEBUG" in os.environ: 
     IS_DEBUG = 1
