@@ -21,7 +21,7 @@ from .pipe_events import *
 from .p2p_addr import *
 from .p2p_utils import *
 from .tcp_punch import PUNCH_RECIPIENT, PUNCH_INITIATOR
-from .tcp_punch import TCP_PUNCH_IN_MAP
+from .tcp_punch import TCP_PUNCH_IN_MAP, get_punch_mode
 
 SIG_P2P_CON = 1
 SIG_TCP_PUNCH = 2
@@ -222,12 +222,17 @@ class SigMsg():
     # The destination node for this msg.
     class Routing():
         def __init__(self, af, dest_buf, dest_index):
-            print(dest_buf)
             self.dest_buf = to_s(dest_buf)
             self.dest_index = to_n(dest_index)
             self.af = af
             self.set_cur_dest(dest_buf)
             self.cur_dest_buf = None # set later.
+
+        def load_if_extra(self, node):
+            if_index = self.dest_index
+            self.interface = node.ifs[if_index]
+            self.stun = node.stun_clients[self.af][if_index]
+            self.punch = node.tcp_punch_clients[if_index]
 
         """
         Peers usually have dynamic addresses.
@@ -338,12 +343,14 @@ class SigMsg():
 class TCPPunchMsg(SigMsg):
     # The main contents of this message.
     class Payload():
-        def __init__(self, ntp, mappings):
+        def __init__(self, punch_mode, ntp, mappings):
             self.ntp = Dec(ntp)
             self.mappings = mappings
+            self.punch_mode = int(punch_mode)
 
         def to_dict(self):
             return {
+                "punch_mode": self.punch_mode,
                 "ntp": str(self.ntp),
                 "mappings": self.mappings,
             }
@@ -351,10 +358,50 @@ class TCPPunchMsg(SigMsg):
         @staticmethod
         def from_dict(d):
             return TCPPunchMsg.Payload(
+                d["punch_mode"],
                 d["ntp"],
                 d["mappings"],
             )
         
+    def validate_dest(self, af, punch_mode, dest_s):
+        # Check valid punch mode.
+        ext = self.routing.interface.route(af).ext()
+        nic = self.routing.interface.route(af).nic()
+        if punch_mode not in [1, 2, 3]:
+            raise Exception("Invalid punch mode")
+        
+        # Punch mode matches message.
+        if punch_mode != self.payload.punch_mode:
+            raise Exception("Loaded a different punch mode.")
+        
+        # Remote address checks.
+        cidr = af_to_cidr(af)
+        ipr = IPRange(dest_s, cidr=cidr)
+        if punch_mode == TCP_PUNCH_REMOTE:
+            # Private address indicate for remote punching?
+            if ipr.is_private:
+                raise Exception(f"{dest_s} is priv in punch remote")
+            
+            # Punching our own external address?
+            if dest_s == ext:
+                raise Exception(f"{dest_s} == ext in punch remote")
+            
+        # Private address sanity checks.
+        if punch_mode in [TCP_PUNCH_SELF, TCP_PUNCH_LAN]:
+            # Public address indicate for private?
+            if ipr.is_public:
+                raise Exception(f"{dest_s} is pub for punch $priv")
+            
+        # Should be another computer's IP.
+        if punch_mode == TCP_PUNCH_LAN:
+            if dest_s == nic:
+                raise Exception(f"{dest_s} is ourself for lan punch")
+            
+        # Should be ourself.
+        if punch_mode == TCP_PUNCH_SELF:
+            if dest_s != nic:
+                raise Exception(f"{dest_s} !ourself in punch self")
+
     def __init__(self, data, enum=SIG_TCP_PUNCH):
         super().__init__(data, enum)
 
@@ -429,32 +476,25 @@ class SigProtoHandlers():
         if msg.meta.af != msg.routing.af:
             raise Exception("tcp punch afs differ.")
 
-        # Select our interface.
-        if_index = msg.routing.dest_index
-        iface = self.node.ifs[if_index]
-        punch = self.node.tcp_punch_clients
-        punch = punch[msg.routing.dest_index]
-        stun  = self.node.stun_clients[msg.routing.af][if_index]
-
-        # Wrap their external address.
-        dest = await Address(
-            str(msg.meta.src_info["ext"]),
-            80,
-            iface.route(msg.routing.af)
+        # Select [ext or nat] dest and punch mode
+        # (either local, self, remote)
+        punch = msg.routing.punch
+        punch_mode, dest = await get_punch_mode(
+            msg.routing.af,
+            msg.meta.src_info,
+            msg.routing.interface,
+            punch,
         )
 
-        # Calculate punch mode.
-        punch_mode = punch.get_punch_mode(dest)
-        if punch_mode == TCP_PUNCH_REMOTE:
-            dest = str(msg.meta.src_info["ext"])
-        else:
-            dest = str(msg.meta.src_info["nic"])
+        # Basic sanity checks on dest.
+        # Throws exceptions on error.
+        msg.validate_dest(msg.routing.af, punch_mode, dest)
 
         # Is it initial mappings or updated?
         print("msg meta")
         print(msg.meta.src)
         print(msg.meta.pipe_id)
-        print(punch.state)
+        print(msg.routing.punch.state)
         print(f"using dest {dest}")
         info = punch.get_state_info(
             msg.meta.src["node_id"],
@@ -471,7 +511,7 @@ class SigProtoHandlers():
                 msg.meta.src["node_id"],
                 msg.meta.pipe_id,
                 msg.payload.mappings,
-                stun,
+                msg.routing.stun,
                 msg.payload.ntp,
                 mode=punch_mode
             )
@@ -503,7 +543,7 @@ class SigProtoHandlers():
                 msg.meta.src["node_id"],
                 msg.meta.pipe_id,
                 msg.payload.mappings,
-                stun
+                msg.routing.stun,
             )
 
     async def handle_turn_msg(self, msg):
@@ -575,6 +615,7 @@ class SigProtoHandlers():
         
         # Updating routing dest with current addr.
         msg.set_cur_addr(p_node)
+        msg.routing.load_if_extra(self.node)
         return handler(msg)
 
 """
@@ -596,6 +637,14 @@ and the background process:
     set pipe future
 """
 async def test_proto_rewrite():
+    from .p2p_node import P2PNode
+    from .p2p_utils import get_pp_executors, Dec
+    from .clock_skew import SysClock
+    from .stun_client import get_stun_clients
+    from .nat import delta_info, nat_info, EQUAL_DELTA, FULL_CONE
+    from .p2p_pipe import P2PPipe
+    from .interface import Interface
+
     pe = await get_pp_executors()
     #pe2 = await get_pp_executors(workers=2)
     
@@ -608,18 +657,11 @@ async def test_proto_rewrite():
     iface = await Interface()
     alice_node = P2PNode([iface])
     bob_node = P2PNode([iface], port=NODE_PORT + 1)
-    stun_client = (await get_stun_clients(
-        IP4,
-        1,
-        iface
-    ))[0]
-
     for node in [alice_node, bob_node]:
         node.setup_multiproc(pe, qm)
         node.setup_coordination(sys_clock)
         node.setup_tcp_punching()
         await node.dev()
-        node.stun_clients = [stun_client]
 
     pipe_id = "init_pipe_id"
     delta = delta_info(EQUAL_DELTA, 0)
@@ -646,11 +688,12 @@ async def test_proto_rewrite():
         their_nat,
         bob_node.p2p_addr["node_id"],
         pipe_id,
-        stun_client,
+        alice_node.stun_clients[af][0],
         mode=TCP_PUNCH_SELF
     )
 
     print(punch_ret)
+
 
     msg = TCPPunchMsg({
         "meta": {
@@ -665,6 +708,7 @@ async def test_proto_rewrite():
             "dest_index": 0,
         },
         "payload": {
+            "punch_mode": TCP_PUNCH_SELF,
             "ntp": punch_ret[1],
             "mappings": punch_ret[0],
         },
@@ -677,17 +721,12 @@ async def test_proto_rewrite():
     mappings.
     """
 
-    async def schedule_punching_with_delay(if_index, pipe_id, dest_node_id, node, n=2):
-        await asyncio.sleep(n)
-        node.add_punch_meeting([
-            if_index,
-            PUNCH_INITIATOR,
-            dest_node_id,
-            pipe_id,
-        ])
-
     task_sche = asyncio.ensure_future(
-        schedule_punching_with_delay(2)
+        alice_node.schedule_punching_with_delay(
+            0,
+            pipe_id,
+            bob_node.p2p_addr["node_id"],
+        )
     )
 
     buf = msg.pack()
@@ -952,8 +991,8 @@ async def test_proto_rewrite3():
     buf = await coro
 
     # simulate alice receive updated mappings msg
-    coro = pa.proto(buf)
-    await coro
+    #coro = pa.proto(buf)
+    #await coro
 
     bob_hole = await bob_node.pipes[pipe_id]
     alice_hole = await alice_node.pipes[pipe_id]

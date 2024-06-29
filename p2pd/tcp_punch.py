@@ -148,6 +148,18 @@ def map_info_to_their_maps(map_info):
 
     return their_maps
 
+def patch_map_info_for_self_punch(map_info, step=1000):
+    for i in range(0, len(map_info["remote"])):
+        map_info["remote"][i] = field_wrap(
+            map_info["remote"][i] + step,
+            [2001, MAX_PORT]
+        )
+
+        map_info["local"][i] = field_wrap(
+            map_info["local"][i] + step,
+            [2001, MAX_PORT]
+        )
+
 # Started in a new process.
 def proc_do_punching(args):
     # Create new event loop and run coroutine in it.
@@ -399,12 +411,27 @@ class TCPPunch():
         NAT types involved. But it's done when it's possible.
         Just another way I wanted to make this code more robust.
         """
+        rmaps = our_maps = map_info_to_their_maps(map_info)
 
         # Triggered on receiving updated mappings (if any.)
         update_event = asyncio.Event()
+
+        """
+        If the punch mode is to the self then they won't
+        be able to bind to the same local port.
+        In which case -- add N to all maps.
+        They will do the exact same.
+        """
+        if mode == TCP_PUNCH_SELF:
+            rmaps = copy.deepcopy(map_info)
+            patch_map_info_for_self_punch(rmaps)
+            rmaps = map_info_to_their_maps(rmaps)
+
+        print("initial r maps = ")
+        print(rmaps)
+        print(our_maps)
         
         # Save session data.
-        our_maps = map_info_to_their_maps(map_info)
         ntp_meet = self.get_ntp_meet_time()
         data = {
             # Defines the algorithm used for punching.
@@ -418,7 +445,7 @@ class TCPPunch():
 
             # By default assume their maps will be our maps.
             # Overwritten if we receive a reply.
-            "rmaps": our_maps,
+            "rmaps": rmaps,
 
             # Their NAT struct.
             "their_nat": dest_nat,
@@ -442,7 +469,7 @@ class TCPPunch():
             "con_list": con_list,
 
             # Future time for hole punching to occur.
-            "ntp_meet": ntp_meet
+            "ntp_meet": ntp_meet,
         }
 
         # First state progression -- no need to check existing.
@@ -494,6 +521,9 @@ class TCPPunch():
         # Sanity check.
         nat_check_for_low_ports(map_info)
 
+        print("recv patched their maps = ")
+        print(map_info)
+
         # Expect them to use our reply port if set.
         """
         It's possible that the Initiator has already chosen a remote
@@ -539,6 +569,12 @@ class TCPPunch():
             TCP_PUNCH_RECV_INITIAL_MAPPINGS,
             data
         )
+
+        if mode == TCP_PUNCH_SELF:
+            our_maps = copy.deepcopy(map_info)
+            patch_map_info_for_self_punch(our_maps)
+            our_maps = map_info_to_their_maps(map_info)
+
 
         # Sent update won't be important.
         # I just wanted the first two sides to have the same ret.

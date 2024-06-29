@@ -174,7 +174,24 @@ class P2PNode(Daemon, P2PUtils):
                 self.pipe_ready(params[-1], pipe)
 
     async def schedule_punching_with_delay(self, if_index, pipe_id, node_id, n=2):
-        await asyncio.sleep(n)
+        # Get reference to punch client and state.
+        punch = self.tcp_punch_clients[if_index]
+        state = punch.get_state_info(node_id, pipe_id)
+        if state is None:
+            log("State none in punch with delay.")
+            return
+
+        # Return on timeout or on update.
+        try:
+            asyncio.wait_for(
+                state["data"]["update_event"].wait(),
+                n
+            )
+        except asyncio.TimeoutError:
+            # Attempt punching with default ports.
+            log("Initiator punch update timeout.")
+
+        # Ready to do the punching process.
         self.add_punch_meeting([
             if_index,
             PUNCH_INITIATOR,

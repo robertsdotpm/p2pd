@@ -501,7 +501,7 @@ def nats_intersect_range(our_nat, their_nat, test_no):
 
 ###############################################################
 # [ [ local, remote, reply, sock ] ... ]
-async def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, stun_client):
+async def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, stun_client, step=1000):
     # Allow last mapped to be modified from inside func.
     last_local, last_remote = last_mapped
 
@@ -517,10 +517,20 @@ async def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, stun_c
     a non-conflicting port.
     """
     if mode == TCP_PUNCH_SELF:
-        for _ in range(0, 1000):
-            bind_port = random.randrange(2000, MAX_PORT)
-            if bind_port != remote_port:
-                break
+        remote = field_wrap(
+            remote_port + step, 
+            [2001, MAX_PORT]
+        )
+
+        return [
+            [
+                remote,
+                remote,
+                0,
+                None
+            ],
+            last_mapped
+        ]
 
     # If we're port restricted specify we're happy to use their mapping.
     # This may not be possible if our delta is random though.

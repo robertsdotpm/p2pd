@@ -420,6 +420,10 @@ class P2PPipe():
                     initiator,
                 )
 
+                print("alice punch mode")
+                print(punch_mode)
+                print(use_addr)
+
                 # Get initial NAT predictions using STUN.
                 stun_client = self.node.stun_clients[af][if_index]
                 punch_ret = await initiator.proto_send_initial_mappings(
@@ -445,7 +449,7 @@ class P2PPipe():
                 )
 
                 # Initial step 1 punch message.
-                return TCPPunchMsg({
+                msg = TCPPunchMsg({
                     "meta": {
                         "pipe_id": pipe_id,
                         "af": af,
@@ -458,10 +462,17 @@ class P2PPipe():
                         "dest_index": 0,
                     },
                     "payload": {
+                        "punch_mode": punch_mode,
                         "ntp": punch_ret[1],
                         "mappings": punch_ret[0],
                     },
                 })
+
+                # Basic dest addr validation.
+                msg.set_cur_addr(self.node.addr_bytes)
+                msg.routing.load_if_extra(self.node)
+                msg.validate_dest(af, punch_mode, use_addr)
+                return msg
 
     async def udp_relay(self, p2p_dest, pipe_id, signal_pipe):
         # Setup a new TURN client.
