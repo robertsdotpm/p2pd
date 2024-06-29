@@ -364,15 +364,24 @@ class TCPPunchMsg(SigMsg):
             )
         
     def validate_dest(self, af, punch_mode, dest_s):
+        # Do we support this af?
+        interface = self.routing.interface
+        if af not in interface.supported():
+            raise Exception("bad af 2 in punch")
+
+        # Does af match dest_s af.
+        if af_from_ip_s(dest_s) != af:
+            raise Exception("bad af in punch.")
+
         # Check valid punch mode.
-        ext = self.routing.interface.route(af).ext()
-        nic = self.routing.interface.route(af).nic()
+        ext = interface.route(af).ext()
+        nic = interface.route(af).nic()
         if punch_mode not in [1, 2, 3]:
             raise Exception("Invalid punch mode")
         
         # Punch mode matches message.
         if punch_mode != self.payload.punch_mode:
-            raise Exception("Loaded a different punch mode.")
+            raise Exception("bad punch mode.")
         
         # Remote address checks.
         cidr = af_to_cidr(af)

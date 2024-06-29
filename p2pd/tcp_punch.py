@@ -3,7 +3,7 @@ FIN and RST on close:
 
 Something important to note about TCP hole punching: suppose your NAT type is one that reuses mappings under certain conditions. You go ahead and use STUN to setup the mapping and then retrieve what it is. At this point if you were to go ahead and close() the socket used for the STUN transactions it would send out a 'FIN' packet. 
 
-Now, if the router saw that FIN it may decide to close the port mapping. We would hope that multiple outbound connections with the same local tuple to different destinations would mean that a single FIN wouldn't cause the NAT to disregard other packets. But in any cause the STUN connection ought to stay open at least until the TCP punching has been completed.
+Now, if the router saw that FIN it may decide to close the port mapping. We would hope that multiple outbound connections with the same local tuple to different destinations would mean that a single FIN wouldn't cause the NAT to disregard other packets. But in any case the STUN connection ought to stay open at least until the TCP punching has been completed.
 
 Synchronicity:
 
@@ -59,17 +59,18 @@ selector event loop is the only one that seems to make the code work.
 When running async code for the first time in an 'executor' / new process
 it will need to create a new event loop. Normally this would have quite
 a delay. In order to make async code run fast I pre-initialize all executors
-with a call to create an event looop. So when async code is run in them
+with a call to create an event loop. So when async code is run in them
 there is no startup penalty. This is important for timing-based code.
 
 Testing:
 
-When it comes to testing punching on the same machine it is necessary to run the punching code in separate processes (with their own event loops.) Otherwise,
-they will interfere with each other and the syns won't cross in time. Ideally
-each process should be running on its own core with a high priority. But this
-is hard to guarantee in practice.
+When it comes to testing punching on the same machine it is 
+sometimes necessary to run the punching code in separate processes (with their
+own event loops.) Otherwise, they will interfere with each other and the
+syns won't cross in time. Ideally each process should be running on its
+own core with a high priority. But this is hard to guarantee in practice.
 
-Edge-case: making another connection to the same STUN server, from the same local endpoint due to another TCP punch occuring.
+Edge-case: making another connection to the same STUN server, from the same local endpoint due to another TCP punch occurring.
 """
 
 import socket
@@ -111,7 +112,8 @@ PUNCH_CONF = dict_child({
     # Return the sock instead of the base proto.
     #"sock_only": True,
 
-    # Disable closing sock on error.
+    # Disable closing sock on error
+    # Applies to the pipe_open only (may not be needed.)
     "do_close": False,
 }, NET_CONF)
 
@@ -733,6 +735,23 @@ class TCPPunch():
             sock = await socket_factory(route=route, dest_addr=dest, conf=PUNCH_CONF)
             #sock_queue.put_nowait(sock)
             #sock.settimeout(0.1)
+
+            # Requires this special sock option:
+            reuse_set = sock.getsockopt(
+                socket.SOL_SOCKET,
+                socket.SO_REUSEADDR
+            )
+
+            # Sanity check for the sock option.
+            if not reuse_set:
+                log("Punch socket missing reuse addr opt.")
+                return
+            
+            # Require a non-blocking socket.
+            if sock.getblocking():
+                log("Punch sock is blocking.")
+                return
+
             try:
                 await loop.sock_connect(
                     sock,

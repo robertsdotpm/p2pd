@@ -281,15 +281,15 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
             if not dest_addr.port:
                 raise Exception("net: dest port is 0!")
 
-            # If dest_addr was a domain it will be AF_ANY.
-            # We need to specify a type for the socket though.
+            # If dest_addr was a domain = AF_ANY.
+            # Stills needs a sock type tho
             if route.af not in dest_addr.supported():
                 raise Exception("Route af not supported by dest addr")
 
     # Create socket.
     sock = socket.socket(route.af, sock_type, conf["sock_proto"])
 
-    # Useful to cleanup server sockets right away.
+    # Useful to cleanup sockets right away.
     if conf["linger"] is not None:
         # Enable linger and set it to its value.
         linger = struct.pack('ii', 1, conf["linger"])
@@ -301,7 +301,6 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
         try:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         except:
-            #log("> sock fac: cant set reuse port")
             pass
             # Doesn't work on Windows.
 
@@ -309,21 +308,22 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
     if conf["broadcast"]:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
-    # This may be set anyway by the async wrappers.
+    # This may be set by the async wrappers.
     sock.settimeout(0)
 
-    # Bind to specific interface if set.
-    # Assume Linux -- admin needed to bind on a certain interface.
-    # If the interface is default for address type then no need to
-    # specifically bind to it (which requires root.)
+    """
+    Bind to specific interface if set.
+    On linux root is sometimes needed to
+    bind to a non-default interface.
+    If the interface is default for
+    address type then no need to
+    specifically bind to it.
+    """
     try:
         if route.interface is not None:
-
             is_default = route.interface.is_default(route.af)
             if not is_default and NOT_WINDOWS:
-                #log("> attemping to bind to non default iface")
                 sock.setsockopt(socket.SOL_SOCKET, 25, to_b(route.interface.id))
-                #log("> success: bound to non default iface")
     except Exception:
         log_exception()
         log("> couldnt bind to specific iface.")
@@ -331,36 +331,32 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
             sock.close()
         return None 
 
-
     # Default = use any IPv4 NIC.
-    # For IPv4 -- bind address depends on destination type.
+    # For IPv4 -- bind address
+    # depends on destination type.
     bind_flag = NIC_BIND
-    bind_tup = None
     if dest_addr is not None:
         # Get loopback working.
         if dest_addr.is_loopback:
             bind_flag = LOOPBACK_BIND
 
-    """
-        else:
+    # Choose bind tup to use.
+    bind_tup = route.bind_tup(
+        flag=bind_flag
+    )
 
-            # Use global address on IPv6 global scopes.
-            # Otherwise use link local or private NIC addresses.
-            if dest_addr.is_public and dest_addr.chosen == IP6:
-                bind_flag = EXT_BIND
-    else:
-        # The assumption is they want their server to be reachable.
-        if route.af == IP6:
-            bind_flag = EXT_BIND
-    """
-
+    # Attempt to bind to the tup.
     try:
-        sock.bind(bind_tup or route.bind_tup(flag=bind_flag))
+        sock.bind(bind_tup)
         return sock
     except Exception:
-        log(f"Could not bind to interface af = {route.af}")
-        log(f"sock = {sock}")
-        log(bind_tup or route.bind_tup(flag=bind_flag))
+        error = """
+        Could not bind to interface
+        af = {route.af}
+        sock = {sock}"
+        bind_tup = {bind_tup}
+        """
+        log(error)
         log_exception()
         if sock is not None:
             sock.close()
