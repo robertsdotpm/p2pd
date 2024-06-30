@@ -454,6 +454,7 @@ class P2PPipe():
 
             if turn_client is not None:
                 self.node.pipe_future(pipe_id)
+                self.node.turn_clients[pipe_id] = turn_client
                 return TURNMsg({
                     "meta": {
                         "pipe_id": pipe_id,

@@ -182,7 +182,10 @@ class SigMsg():
             if_index = self.dest_index
             self.interface = node.ifs[if_index]
             self.stun = node.stun_clients[self.af][if_index]
-            self.punch = node.tcp_punch_clients[if_index]
+            if if_index in node.tcp_punch_clients:
+                self.punch = node.tcp_punch_clients[if_index]
+            else:
+                self.punch = None
 
         """
         Peers usually have dynamic addresses.
@@ -366,18 +369,16 @@ class TCPPunchMsg(SigMsg):
 
 class TURNMsg(SigMsg):
     class Payload():
-        def __init__(self, peer_tup, relay_tup, serv_id, client_index=-1):
+        def __init__(self, peer_tup, relay_tup, serv_id):
             self.peer_tup = peer_tup
             self.relay_tup = relay_tup
             self.serv_id = serv_id
-            self.client_index = client_index
 
         def to_dict(self):
             return {
                 "peer_tup": self.peer_tup,
                 "relay_tup": self.relay_tup,
                 "serv_id": self.serv_id,
-                "client_index": self.client_index,
             }
         
         @staticmethod
@@ -386,7 +387,6 @@ class TURNMsg(SigMsg):
                 d["peer_tup"],
                 d["relay_tup"],
                 d["serv_id"],
-                d["client_index"]
             )
         
     def __init__(self, data, enum=SIG_TURN):
@@ -506,7 +506,6 @@ class SigProtoHandlers():
             )
 
     async def handle_turn_msg(self, msg):
-        pass
         # by turn_clients[pipe_id] (optional make)
         # but then accept needs to keep a list of accepted peers in the turn client
         # and i prob need to switch to a laptop with ethernet and wifi...
@@ -1006,40 +1005,14 @@ async def test_proto_rewrite4():
     is mapped different to our ext?
     """
 
+    p = P2PPipe(alice_node)
+    msg = (await for_addr_infos(
+        pipe_id,
+        alice_node.addr_bytes,
+        bob_node.addr_bytes,
+        p.udp_relay
+    )).pack()
 
-
-
-    alice_peer, alice_relay, alice_turn = await get_turn_client(
-        af,
-        turn_serv_offset,
-        alice_iface
-    )
-    alice_node.turn_clients[pipe_id] = alice_turn
-
-    print(alice_peer)
-    print(alice_relay)
-    print(alice_turn)
-
-
-    msg = TURNMsg({
-        "meta": {
-            "pipe_id": pipe_id,
-            "af": af,
-            "src_buf": alice_node.addr_bytes,
-            "src_index": 0,
-        },
-        "routing": {
-            "af": af,
-            "dest_buf": bob_node.addr_bytes,
-            "dest_index": 0,
-        },
-        "payload": {
-            "peer_tup": alice_peer,
-            "relay_tup": alice_relay,
-            "serv_id": turn_serv_offset,
-            "client_index": 0,
-        },
-    }).pack()
 
     print(msg)
 
@@ -1063,13 +1036,13 @@ async def test_proto_rewrite4():
     Client will replace bob peer tup with their relay tup
     if it detects that its an accepted client.
     """
+    alice_turn = alice_node.turn_clients[pipe_id]
     print(alice_turn.peers)
     await alice_turn.send(msg)
     # Allow time for bob to receive the message.
     await asyncio.sleep(2)
 
     bob_turn = bob_node.turn_clients[pipe_id]
-    sub = tup_to_sub(alice_peer)
 
 
 
