@@ -23,31 +23,6 @@ P2P_RELAY = 4
 # SOCKS might be a better protocol for relaying in the future.
 P2P_STRATEGIES = [P2P_DIRECT, P2P_REVERSE, P2P_PUNCH]
 
-async def get_tcp_hole(side, pipe_id, node_id, punch_client, node):
-    pipe = None
-    try:
-        pipe = await punch_client.proto_do_punching(
-            side,
-            node_id,
-            pipe_id,
-            node.msg_cb
-        )
-    except:
-        log_exception()
-
-    if pipe is not None:
-        # Save pipe reference.
-        node.pipes[pipe_id] = pipe
-
-        # Notify any waiters.
-        if pipe_id in node.pipe_events:
-            node.pipe_events[pipe_id].set()
-
-        # Add cleanup callback.
-        pipe.add_end_cb(node.rm_pipe_id(pipe_id))
-
-    return pipe
-
 def build_reverse_msg(pipe_id, addr_bytes, b_proto=b"TCP"):
     out = b"P2P_DIRECT %s %s %s" % (pipe_id, b_proto, addr_bytes) 
     return out
@@ -390,268 +365,113 @@ class P2PPipe():
     the lowest value pairs and runs through them until one
     succeeds.
     """
-    async def tcp_hole_punch(self, pipe_id, dest_bytes):
-        p2p_dest = parse_peer_addr(dest_bytes)
-        our_addr = self.node.p2p_addr
-        for af in [IP4]: # TODO: VALID_AFS
-            """
-            The iterator filters the addr info for both
-            P2P addresses by the best NAT.
-            The first addr info used for both is thus the
-            best possible pairing. Further iterations aren't
-            likely to be any more successful so to keep things
-            simple only the first iteration is tried.
-            """
-            if_info_iter = IFInfoIter(af, our_addr, p2p_dest)
-            for src_info, dest_info in if_info_iter:
-                # Select interface to use.
-                if_index = src_info["if_index"]
-                interface = self.node.ifs[if_index]
+    async def tcp_hole_punch(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes):
+        # Punch clients indexed by interface offset.
+        if_index = src_info["if_index"]
+        interface = self.node.ifs[if_index]
+        initiator = self.node.tcp_punch_clients[if_index]
 
-                # Punch clients indexed by interface offset.
-                initiator = self.node.tcp_punch_clients[if_index]
+        # Select [ext or nat] dest and punch mode
+        # (either local, self, remote)
+        punch_mode, use_addr = await get_punch_mode(
+            af,
+            dest_info,
+            interface,
+            initiator,
+        )
 
-                # Select [ext or nat] dest and punch mode
-                # (either local, self, remote)
-                punch_mode, use_addr = await get_punch_mode(
+        print("alice punch mode")
+        print(punch_mode)
+        print(use_addr)
+
+        # Get initial NAT predictions using STUN.
+        stun_client = self.node.stun_clients[af][if_index]
+        punch_ret = await initiator.proto_send_initial_mappings(
+            use_addr,
+            dest_info["nat"],
+            node_id,
+            pipe_id,
+            stun_client,
+            mode=punch_mode
+        )
+
+        """
+        Punching is delayed for a few seconds to
+        ensure there's enough time to receive any
+        updated mappings for the dest peer (if any.)
+        """
+        asyncio.ensure_future(
+            self.node.schedule_punching_with_delay(
+                if_index,
+                pipe_id,
+                node_id,
+            )
+        )
+
+        # Initial step 1 punch message.
+        msg = TCPPunchMsg({
+            "meta": {
+                "pipe_id": pipe_id,
+                "af": af,
+                "src_buf": self.node.addr_bytes,
+                "src_index": 0,
+            },
+            "routing": {
+                "af": af,
+                "dest_buf": dest_bytes,
+                "dest_index": 0,
+            },
+            "payload": {
+                "punch_mode": punch_mode,
+                "ntp": punch_ret[1],
+                "mappings": punch_ret[0],
+            },
+        })
+
+        # Basic dest addr validation.
+        msg.set_cur_addr(self.node.addr_bytes)
+        msg.routing.load_if_extra(self.node)
+        msg.validate_dest(af, punch_mode, use_addr)
+        return msg
+
+    async def udp_relay(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes):
+        # Try TURN servers in random order.
+        offsets = list(range(0, len(TURN_SERVERS)))
+        random.shuffle(offsets)
+
+        # Attempt to connect to TURN server.
+        peer_tup = relay_tup = turn_client = None
+        for offset in offsets:
+            try:
+                peer_tup, relay_tup, turn_client = await get_turn_client(
                     af,
-                    dest_info,
-                    interface,
-                    initiator,
+                    offset,
+                    self.node.ifs[src_info["if_index"]]
                 )
+            except:
+                log_exception()
+                continue
 
-                print("alice punch mode")
-                print(punch_mode)
-                print(use_addr)
-
-                # Get initial NAT predictions using STUN.
-                stun_client = self.node.stun_clients[af][if_index]
-                punch_ret = await initiator.proto_send_initial_mappings(
-                    use_addr,
-                    dest_info["nat"],
-                    p2p_dest["node_id"],
-                    pipe_id,
-                    stun_client,
-                    mode=punch_mode
-                )
-
-                """
-                Punching is delayed for a few seconds to
-                ensure there's enough time to receive any
-                updated mappings for the dest peer (if any.)
-                """
-                asyncio.ensure_future(
-                    self.node.schedule_punching_with_delay(
-                        if_index,
-                        pipe_id,
-                        p2p_dest["node_id"],
-                    )
-                )
-
-                # Initial step 1 punch message.
-                msg = TCPPunchMsg({
+            if turn_client is not None:
+                self.node.pipe_future(pipe_id)
+                return TURNMsg({
                     "meta": {
                         "pipe_id": pipe_id,
                         "af": af,
                         "src_buf": self.node.addr_bytes,
-                        "src_index": 0,
+                        "src_index": src_info["if_index"],
                     },
                     "routing": {
                         "af": af,
                         "dest_buf": dest_bytes,
-                        "dest_index": 0,
+                        "dest_index": dest_info["if_index"],
                     },
                     "payload": {
-                        "punch_mode": punch_mode,
-                        "ntp": punch_ret[1],
-                        "mappings": punch_ret[0],
+                        "peer_tup": peer_tup,
+                        "relay_tup": relay_tup,
+                        "serv_id": offset,
                     },
                 })
-
-                # Basic dest addr validation.
-                msg.set_cur_addr(self.node.addr_bytes)
-                msg.routing.load_if_extra(self.node)
-                msg.validate_dest(af, punch_mode, use_addr)
-                return msg
-
-    async def udp_relay(self, p2p_dest, pipe_id, signal_pipe):
-        # Setup a new TURN client.
-        # Save it to the list of turn clients.
-        async def setup_turn_client(turn_server, interface, af):
-            # Resolve TURN domain.
-            route = await interface.route(af).bind()
-            turn_addr = await Address(
-                turn_server["host"],
-                turn_server["port"],
-                route
-            ).res()
-
-            # Build TURN client.
-            turn_client = TURNClient(
-                route=route,
-                turn_addr=turn_addr,
-                turn_user=turn_server["user"],
-                turn_pw=turn_server["pass"],
-                turn_realm=turn_server["realm"],
-                msg_cb=self.node.msg_cb
-            )
-
-            # Start TURN client.
-            await turn_client.start()
-            self.node.turn_clients.append(turn_client)
-            return turn_client
-
-        # Notify peer to use a TURN server.
-        # Returns the turn client on success.
-        async def send_turn_request(af, turn_server, turn_client):
-            # Save the external address to ensure replies are valid.
-            self.node.expected_addrs[pipe_id] = [p2p_dest[af][0]["ext"]]
-
-            # Get our tups to send.
-            client_tup = await turn_client.client_tup_future
-            relay_tup = await turn_client.relay_tup_future
-
-            # Make a source address to send.
-            af = turn_client.turn_addr.af
-            interface = turn_client.turn_pipe.route.interface
-            if_index = self.node.if_list.index(interface)
-            turn_server_index = TURN_SERVERS.index(turn_server)
-            turn_client_index = self.node.turn_clients.index(turn_client)
-            src_addr_bytes = make_peer_addr(
-                self.node.node_id,
-                [interface],
-                list(self.node.signal_pipes),
-                ip=to_b(client_tup[0]),
-                port=client_tup[1],
-                if_index=if_index
-            )
-
-            # Send relay message to peer.
-            turn_server = turn_client.get_turn_server()
-            out = b"TURN_REQUEST %s %d %d %d %s %s %d %s %d %d %d" % (
-                pipe_id,
-                af,
-                if_index,
-                p2p_dest[af][0]["if_index"],
-                src_addr_bytes,
-                to_b(client_tup[0]),
-                int(client_tup[1]),
-                to_b(relay_tup[0]),
-                int(relay_tup[1]),
-                int(turn_server_index),
-                int(turn_client_index)
-            )
-            
-            # Send out direct con msg using the above addr.
-            node_id = to_s(p2p_dest["node_id"])
-            turn_client.new_node_event(node_id)
-            await signal_pipe.send_msg(
-                to_s(out),
-                node_id
-            )
-
-            # Return TURN client if it's setup successfully.
-            try:
-                await asyncio.wait_for(
-                    turn_client.node_events[node_id].wait(),
-                    10
-                )
-
-                self.node.pipes[pipe_id] = turn_client
-                return turn_client
-            except asyncio.TimeoutError:
-                log("> pipe turn req timed out.")
-                return None
-
-        # See if a compatible TURN client already exists.
-        async def reuse_turn_client(turn_servers, retry_no):
-            i = 0
-            for turn_client in self.node.turn_clients:
-                # Find related setting for turn_client.
-                turn_info = None
-                for turn_server in turn_servers:
-                    found_client = self.node.find_turn_client(turn_server)
-                    if found_client == turn_client:
-                        turn_info = turn_server
-                        break
-
-                # Could not find the server's settings.
-                if turn_info is None:
-                    break
-
-                # Find a supported AF.
-                for af in turn_info["afs"]:
-                    # Other peer can't handle this address family.
-                    if not len(p2p_dest[af]):
-                        continue
-
-                    # Use this TURN client.
-                    out = await send_turn_request(af, turn_info, turn_client)
-                    if out is None:
-                        i += 1
-                        continue
-
-                    return out
-
-                # Existing clients failed.
-                if i >= retry_no:
-                    break
-
-        # Create a new TURN client for use with a peer.
-        # Ensure the chosen TURN server supports the AF of ourself + peer.
-        async def use_new_turn_client(turn_servers, retry_no):
-            i = 0
-            for turn_server in turn_servers:
-                for interface in self.node.if_list:
-                    for af in turn_server["afs"]:
-                        # Too many attempts.
-                        if i >= retry_no:
-                            return None
-                        
-                        # Other peer can't handle this address family.
-                        if not len(p2p_dest[af]):
-                            continue
-
-                        # Interface supports AF.
-                        if af not in interface.supported():
-                            continue
-
-                        # Make a new TURN client.
-                        turn_client = await async_wrap_errors(
-                            setup_turn_client(
-                                turn_server=turn_server, 
-                                interface=interface,
-                                af=af
-                            ),
-                            timeout=5
-                        )
-                        
-                        # Exception occured.
-                        if turn_client is None:
-                            i += 1
-                            continue
-
-                        # Notify the peer of the client.
-                        out = await send_turn_request(af, turn_server, turn_client)
-                        if out is None:
-                            i += 1
-                            continue
-
-                        return out
-
-        # Shuffle the list of TURN servers for load balancing.
-        # Prioritize using p2pd as the first attempt.
-        retry_no = 3
-        turn_servers = [TURN_SERVERS[0]] + shuffle(TURN_SERVERS[1:])
-
-        # Try reuse an existing TURN client if one is already compatible.
-        out = await reuse_turn_client(turn_servers, retry_no)
-        if out is None:
-            # Create a new TURN client and use that.
-            return await use_new_turn_client(turn_servers, retry_no)
-        else:
-            # Got a valid client -- return reference.
-            return out
 
 if __name__ == "__main__": # pragma: no cover
     async def test_p2p_con():

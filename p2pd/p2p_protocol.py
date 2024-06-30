@@ -27,57 +27,7 @@ SIG_P2P_CON = 1
 SIG_TCP_PUNCH = 2
 SIG_TURN = 3
 
-# TODO: move this somewhere else.
-async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=None):
-    # TODO: index by id and not offset.
-    turn_server = TURN_SERVERS[serv_id]
 
-
-    # Resolve the TURN address.
-    route = await interface.route(af).bind()
-    turn_addr = await Address(
-        turn_server["host"],
-        turn_server["port"],
-        route
-    ).res()
-
-    # Make a TURN client instance to whitelist them.
-    turn_client = TURNClient(
-        route=route,
-        turn_addr=turn_addr,
-        turn_user=turn_server["user"],
-        turn_pw=turn_server["pass"],
-        turn_realm=turn_server["realm"]
-    )
-
-    # Start the TURN client.
-    try:
-        await asyncio.wait_for(
-            turn_client.start(),
-            10
-        )
-    except asyncio.TimeoutError:
-        log("Turn client start timeout in node.")
-        return
-    
-    # Wait for our details.
-    peer_tup  = await turn_client.client_tup_future
-    relay_tup = await turn_client.relay_tup_future
-
-    # Whitelist a peer if desired.
-    if None not in [dest_peer, dest_relay]:
-        print("Bob accepting alice.")
-        await asyncio.wait_for(
-            turn_client.accept_peer(
-                dest_peer,
-                dest_relay
-            ),
-            6
-        )
-
-
-
-    return peer_tup, relay_tup, turn_client
 
 class P2PConMsg():
     def __init__(self, p_node_buf, pipe_id, proto, p_dest_buf):
@@ -827,6 +777,13 @@ async def test_proto_rewrite():
     await node.close()
 
 async def test_proto_rewrite2():
+    from .p2p_node import P2PNode
+    from .p2p_utils import get_pp_executors, Dec
+    from .clock_skew import SysClock
+    from .stun_client import get_stun_clients
+    from .nat import delta_info, nat_info, EQUAL_DELTA, FULL_CONE
+    from .p2p_pipe import P2PPipe
+    from .interface import Interface
     turn_serv_offset = 1
 
     # Internode (ethernet)
@@ -1009,8 +966,140 @@ async def test_proto_rewrite3():
     print(f"alice hole = {alice_hole}")
     print(f"bob hole = {bob_hole}")
 
+
+async def test_proto_rewrite4():
+    from .p2p_node import P2PNode
+    from .p2p_utils import get_pp_executors, Dec
+    from .clock_skew import SysClock
+    from .stun_client import get_stun_clients
+    from .nat import delta_info, nat_info, EQUAL_DELTA, FULL_CONE
+    from .p2p_pipe import P2PPipe
+    from .interface import Interface
+    turn_serv_offset = 1
+
+    # Internode (ethernet)
+    alice_iface = await Interface("enp0s25")
+    print(alice_iface)
+
+    # Aussie broadband NBN (wifi)
+    bob_iface = await Interface("wlx00c0cab5760d")
+    print(bob_iface)
+
+
+    sys_clock = SysClock(Dec("-0.02839018452552057081653225806"))
+    alice_node = P2PNode([alice_iface])
+    bob_node = P2PNode([bob_iface], port=NODE_PORT + 1)
+    af = IP4
+    pa = SigProtoHandlers(alice_node)
+    pb = SigProtoHandlers(bob_node)
+
+
+    pipe_id = "turn_pipe_id"
+    for node in [alice_node, bob_node]:
+        await node.dev()
+
+    # TODO: work on TURN message here.
+    # 51.195.101.185
+
+    """
+    Todo add sanity check -- is relay addr different to turn serv ip
+    is mapped different to our ext?
+    """
+
+
+
+
+    alice_peer, alice_relay, alice_turn = await get_turn_client(
+        af,
+        turn_serv_offset,
+        alice_iface
+    )
+    alice_node.turn_clients[pipe_id] = alice_turn
+
+    print(alice_peer)
+    print(alice_relay)
+    print(alice_turn)
+
+
+    msg = TURNMsg({
+        "meta": {
+            "pipe_id": pipe_id,
+            "af": af,
+            "src_buf": alice_node.addr_bytes,
+            "src_index": 0,
+        },
+        "routing": {
+            "af": af,
+            "dest_buf": bob_node.addr_bytes,
+            "dest_index": 0,
+        },
+        "payload": {
+            "peer_tup": alice_peer,
+            "relay_tup": alice_relay,
+            "serv_id": turn_serv_offset,
+            "client_index": 0,
+        },
+    }).pack()
+
+    print(msg)
+
+    # Bob gets a turn request.
+    coro = pb.proto(msg)
+    bob_resp = await coro
+
+
+    # Alice gets bobs turn response.
+    coro = pa.proto(bob_resp.pack())
+    resp = await coro
+
+    # Both turn clients ready.
+
+    # Alice sends a msg to bob via their turn client
+    msg = b"alice to bob via turn"
+    print(f"send to bob relay tup = {bob_resp.payload.relay_tup}")
+    print(f"bob client tup {bob_resp.payload.peer_tup}")
+
+    """
+    Client will replace bob peer tup with their relay tup
+    if it detects that its an accepted client.
+    """
+    print(alice_turn.peers)
+    await alice_turn.send(msg)
+    # Allow time for bob to receive the message.
+    await asyncio.sleep(2)
+
+    bob_turn = bob_node.turn_clients[pipe_id]
+    sub = tup_to_sub(alice_peer)
+
+
+
+    recv_msg = await bob_turn.recv()
+    print("bob recv msg = ")
+    print(bob_turn)
+    print(recv_msg)
+
+    """
+    if send(... x)
+        if x in ... clients, use their relay tup instead for send
+    """
+
+
+    await bob_turn.send(b"bob send turn msg to alice")
+    ret = await alice_turn.recv()
+    print(f"Alice get resp from bob: {ret}")
+
+
+
+
+    await alice_node.close()
+    await bob_node.close()
+
+
+    return
+
+
 if __name__ == '__main__':
-    async_test(test_proto_rewrite3)
+    async_test(test_proto_rewrite4)
 
 """
     Signal proto:

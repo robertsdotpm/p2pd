@@ -4,6 +4,9 @@ from .address import Address
 from .utils import *
 from .net import *
 from .nat import *
+from .turn_client import TURNClient
+from .settings import *
+from .p2p_addr import parse_peer_addr
 
 def init_process_pool():
     # Make selector default event loop.
@@ -102,6 +105,9 @@ class IFInfoIter():
 
         # Return the addr info.
         return src_info, dest_info
+    
+    def __len__(self):
+        return len(self.dest_addr)
         
 """
 If nodes are behind the same router they will have
@@ -129,3 +135,84 @@ def work_behind_same_router(src_addr, dest_addr):
                     dest_info["nat"] = nat
 
     return new_addr
+
+# TODO: move this somewhere else.
+async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=None):
+    # TODO: index by id and not offset.
+    turn_server = TURN_SERVERS[serv_id]
+
+
+    # Resolve the TURN address.
+    route = await interface.route(af).bind()
+    turn_addr = await Address(
+        turn_server["host"],
+        turn_server["port"],
+        route
+    ).res()
+
+    # Make a TURN client instance to whitelist them.
+    turn_client = TURNClient(
+        route=route,
+        turn_addr=turn_addr,
+        turn_user=turn_server["user"],
+        turn_pw=turn_server["pass"],
+        turn_realm=turn_server["realm"]
+    )
+
+    # Start the TURN client.
+    try:
+        await asyncio.wait_for(
+            turn_client.start(),
+            10
+        )
+    except asyncio.TimeoutError:
+        log("Turn client start timeout in node.")
+        return
+    
+    # Wait for our details.
+    peer_tup  = await turn_client.client_tup_future
+    relay_tup = await turn_client.relay_tup_future
+
+    # Whitelist a peer if desired.
+    if None not in [dest_peer, dest_relay]:
+        await asyncio.wait_for(
+            turn_client.accept_peer(
+                dest_peer,
+                dest_relay
+            ),
+            6
+        )
+
+    return peer_tup, relay_tup, turn_client
+
+
+"""
+The iterator filters the addr info for both
+P2P addresses by the best NAT.
+The first addr info used for both is thus the
+best possible pairing. Further iterations aren't
+likely to be any more successful so to keep things
+simple only the first iteration is tried.
+"""
+async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func):
+    # Use an AF supported by both.
+    p2p_dest = parse_peer_addr(dest_bytes)
+    our_addr = parse_peer_addr(src_bytes)
+    for af in VALID_AFS:
+        if_info_iter = IFInfoIter(af, our_addr, p2p_dest)
+        if not len(if_info_iter):
+            continue
+
+        # Get interface offset that supports this af.
+        for src_info, dest_info in if_info_iter:
+            ret = await func(
+                af,
+                pipe_id,
+                p2p_dest["node_id"],
+                src_info,
+                dest_info,
+                dest_bytes,    
+            )
+
+            if ret is not None:
+                return ret
