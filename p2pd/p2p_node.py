@@ -148,6 +148,29 @@ class P2PNode(Daemon, P2PUtils):
 
         self.punch_queue = asyncio.Queue()
 
+    async def make_connection(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes):
+        # (1) Get first interface for AF.
+        # (2) Build a 'route' from it with it's main NIC IP.
+        # (3) Bind to the route at port 0. Return itself.
+        if_index = src_info["if_index"]
+        interface = self.ifs[if_index]
+        route = await interface.route(af).bind()
+
+        # Connect to this address.
+        dest = Address(
+            str(dest_info["ext"]),
+            dest_info["port"],
+        )
+
+        print(src_info["ext"])
+
+        return await pipe_open(
+            route=route,
+            proto=TCP,
+            dest=dest,
+            msg_cb=self.msg_cb
+        )
+
     def pipe_future(self, pipe_id):
         self.pipes[pipe_id] = asyncio.Future()
 

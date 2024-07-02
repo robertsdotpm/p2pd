@@ -263,102 +263,12 @@ class P2PPipe():
         return [p2p_pipe, strategy]
 
     """
-    (1) Connects to every available remote address concurrently.
-    (2) Chooses the first connection that succeeds.
-    (3) Closes any unneeded connections.
-    (4) Only connections to an address if the AF is supported.
-
-                 (currently 3) * (valid af no = ip4, ip6)
-    max cons = PEER_ADDR_MAX_INTERFACES * 2 
-    """
-    async def direct_connect(self, p2p_dest, pipe_id, signal_pipe=None, proto=TCP):
-        tasks = []
-        pipe_id = to_b(pipe_id)
-        out = b"ID %s" % (pipe_id)
-
-        for af in VALID_AFS:
-            # Peer doesn't support af type.
-            if not len(p2p_dest[af]):
-                continue
-
-            # Check an interface exists for that AF.
-            if not len(self.node.ifs_by_af[af]):
-                continue
-
-            async def attempt_con(af, info):
-                # (1) Get first interface for AF.
-                # (2) Build a 'route' from it with it's main NIC IP.
-                # (3) Bind to the route at port 0. Return itself.
-                interface = self.node.ifs_by_af[af][0]
-                route = await interface.route(af).bind()
-
-                # Connect to this address.
-                dest = Address(
-                    str(info["ext"]),
-                    info["port"],
-                )
-
-                return await pipe_open(
-                    route=route,
-                    proto=proto,
-                    dest=dest,
-                    msg_cb=self.node.msg_cb
-                )
-
-            # Similar to 'happy eyeballs.'
-            for info in p2p_dest[af]:
-                # Schedule the coroutine.
-                tasks.append(
-                    async_wrap_errors(
-                        attempt_con(af, info),
-                        timeout=2
-                    )
-                )
-
-        # Do all connections concurrently.
-        pipes = []
-        if len(tasks):
-            pipes = await asyncio.gather(*tasks)
-            pipes = strip_none(pipes)
-
-        print("get pipes direct")
-        print(pipes)
-
-        # Only keep the first connection.
-        if len(pipes) > 1:
-            log("Closing unneeded pipes in direct connect.")
-            for i in range(1, len(pipes)):
-                await pipes[i].close()
-
-        # On same host recipient needs time to setup con handlers.
-        # This prevents race conditions in receiving the con ID.
-        #await asyncio.sleep(0.1)
-
-        # Send con ID -- used to tell peer which request this relates to.
-        try:
-            if len(pipes):
-                log(f"Got pipe in p2p direct {pipes[0].sock}")
-                log(f"pipes[0].stream.dest.tup = {pipes[0].stream.dest_tup}")
-                log(f"data to send {out}")
-                r = await pipes[0].send(out, pipes[0].stream.dest_tup)
-                log(f"sending pipe id ret = {r} where 0 is failure.")
-                print(pipes)
-                return pipes[0]
-            else:
-                log("all pipes in direct con returned none.")
-        except:
-            log_exception()
-
-        # No cons = failure.
-        return None
-
-    """
     Peer A and peer B both have a list of interface info
     for each address family. Each interface connected to
     a unique gateway will have its own NAT characteristics.
     The challenge is to prioritize which combination of
-    peer interfaces is most favourable given the interplay
-    between their corrosponding NAT qualities.
+    peer interfaces is most favorable given the interplay
+    between their corresponding NAT qualities.
 
     The least restrictive NATs are assigned a lower
     value. So the start of the algorithm just groups together

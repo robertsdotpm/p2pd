@@ -23,40 +23,11 @@ from .p2p_utils import *
 from .tcp_punch import PUNCH_RECIPIENT, PUNCH_INITIATOR
 from .tcp_punch import TCP_PUNCH_IN_MAP, get_punch_mode
 
-SIG_P2P_CON = 1
+SIG_CON = 1
 SIG_TCP_PUNCH = 2
 SIG_TURN = 3
 
 
-
-class P2PConMsg():
-    def __init__(self, p_node_buf, pipe_id, proto, p_dest_buf):
-        # Load fields.
-        self.pipe_id = pipe_id
-        self.proto = TCP if proto == "TCP" else UDP
-        self.p_node_buf = p_node_buf
-        self.p_dest_buf = p_dest_buf
-
-        # Validation.
-        self.p_node = parse_peer_addr(p_node_buf)
-        self.p_dest = parse_peer_addr(p_dest_buf)
-        self.p_dest = work_behind_same_router(
-            self.p_node,
-            self.p_dest,
-        )
-
-    @staticmethod
-    def unpack(buf, p_node_buf):
-        buf = to_s(buf)
-        fields = buf.split(" ")
-        return P2PConMsg(p_node_buf, *fields)
-    
-    def pack(self):
-        return bytes([SIG_P2P_CON]) + to_b(
-            f"{self.pipe_id} {self.proto} "
-            f"{self.p_node_buf} {self.p_dest_buf}"
-        )
-    
 class PredictField():
     def __init__(self, mappings):
         self.mappings = mappings
@@ -97,9 +68,6 @@ class PredictField():
         return PredictField(predictions)
 
 
-# if p_sender_buf != our addr byte
-# ... dont proceed
-
 class SigMsg():
     @staticmethod
     def load_addr(af, addr_buf, if_index):
@@ -126,7 +94,7 @@ class SigMsg():
 
     # Information about the message sender.
     class Meta():
-        def __init__(self, pipe_id, af, src_buf, src_index):
+        def __init__(self, pipe_id, af, src_buf, src_index=0):
             # Load meta data about message.
             self.pipe_id = to_s(pipe_id)
             self.src_buf = to_s(src_buf)
@@ -163,15 +131,15 @@ class SigMsg():
         @staticmethod
         def from_dict(d):
             return SigMsg.Meta(
-                d["pipe_id"],
-                d["af"],
+                d.get("pipe_id", rand_plain(15)),
+                d.get("af", IP4),
                 d["src_buf"],
-                d["src_index"],
+                d.get("src_index", 0),
             )
 
     # The destination node for this msg.
     class Routing():
-        def __init__(self, af, dest_buf, dest_index):
+        def __init__(self, af, dest_buf, dest_index=0):
             self.dest_buf = to_s(dest_buf)
             self.dest_index = to_n(dest_index)
             self.af = af
@@ -214,14 +182,22 @@ class SigMsg():
         @staticmethod
         def from_dict(d):
             return SigMsg.Routing(
-                d["af"],
+                d.get("af", IP4),
                 d["dest_buf"],
-                d["dest_index"],
+                d.get("dest_index", 0),
             )
 
     # Abstract kinda feel.
     class Payload():
-        pass
+        def __init__(self):
+            pass
+
+        def to_dict(self):
+            return {}
+        
+        @staticmethod
+        def from_dict(d):
+            return SigMsg.Payload()
 
     def __init__(self, data, enum):
         self.meta = SigMsg.Meta.from_dict(
@@ -233,7 +209,7 @@ class SigMsg():
         )
 
         self.payload = self.Payload.from_dict(
-            data["payload"]
+            data.get("payload", {})
         )
 
         self.enum = enum
@@ -311,8 +287,8 @@ class TCPPunchMsg(SigMsg):
         @staticmethod
         def from_dict(d):
             return TCPPunchMsg.Payload(
-                d["punch_mode"],
-                d["ntp"],
+                d.get("punch_mode", TCP_PUNCH_REMOTE),
+                d.get("ntp", 0),
                 d["mappings"],
             )
         
@@ -392,21 +368,29 @@ class TURNMsg(SigMsg):
     def __init__(self, data, enum=SIG_TURN):
         super().__init__(data, enum)
 
+class ConMsg(SigMsg):        
+    def __init__(self, data, enum=SIG_CON):
+        super().__init__(data, enum)
+
 class SigProtoHandlers():
     def __init__(self, node):
         self.node = node
 
     async def handle_con_msg(self, msg):
         # Connect to chosen address.
-        p2p_pipe = P2PPipe(self.node)
+
         pipe = await asyncio.wait_for(
-            p2p_pipe.direct_connect(
-                msg.p_dest,
-                msg.pipe_id,
-                proto=msg.proto
+            direct_connect(
+                msg.meta.pipe_id,
+                msg.meta.src,
+                self.node,
             ),
             10
         )
+
+        print("Reverse con pipe = ")
+        print(pipe)
+        print(pipe.sock)
         
         # Setup pipe reference.
         if pipe is not None:
@@ -414,13 +398,6 @@ class SigProtoHandlers():
 
             # Record pipe reference.
             self.node.pipes[msg.pipe_id] = pipe
-
-            # Add cleanup callback.
-            pipe.add_end_cb(
-                self.node.rm_pipe_id(
-                    msg.pipe_id
-                )
-            )
 
         return pipe
     
@@ -547,11 +524,11 @@ class SigProtoHandlers():
         p_addr = self.node.p2p_addr
         node_id = to_s(p_addr["node_id"])
         handler = None
-        if buf[0] == SIG_P2P_CON:
-            msg = P2PConMsg.unpack(buf[1:], p_node)
+        if buf[0] == SIG_CON:
+            msg = ConMsg.unpack(buf[1:])
             print("got sig p2p dir")
             print(msg)
-            return self.handle_con_msg(msg)
+            handler = self.handle_con_msg
         
         if buf[0] == SIG_TCP_PUNCH:
             print("got punch msg")
@@ -583,16 +560,7 @@ Then you can await any pipe even if its
 made by a more complex process (like punching.)
 
 Maybe a pipe_open improvement.
-Then maybe have a queue to process hole punching
-meetings in the background.
-So you would just do:
-    - push to queue
-    - await pipe_id
 
-and the background process:
-    await queue ...
-    do punching
-    set pipe future
 """
 async def test_proto_rewrite():
     from .p2p_node import P2PNode
@@ -829,26 +797,6 @@ async def test_proto_rewrite2():
     print(alice_turn)
 
 
-    msg = TURNMsg({
-        "meta": {
-            "pipe_id": pipe_id,
-            "af": af,
-            "src_buf": alice_node.addr_bytes,
-            "src_index": 0,
-        },
-        "routing": {
-            "af": af,
-            "dest_buf": bob_node.addr_bytes,
-            "dest_index": 0,
-        },
-        "payload": {
-            "peer_tup": alice_peer,
-            "relay_tup": alice_relay,
-            "serv_id": turn_serv_offset,
-            "client_index": 0,
-        },
-    }).pack()
-
     print(msg)
 
     # Bob gets a turn request.
@@ -1070,9 +1018,73 @@ async def test_proto_rewrite4():
 
     return
 
+async def test_proto_rewrite5():
+    from .p2p_node import P2PNode
+    from .p2p_utils import get_pp_executors, Dec
+    from .clock_skew import SysClock
+    from .stun_client import get_stun_clients
+    from .nat import delta_info, nat_info, EQUAL_DELTA, FULL_CONE
+    from .p2p_pipe import P2PPipe
+    from .interface import Interface
+    turn_serv_offset = 1
+
+    # Internode (ethernet)
+    alice_iface = await Interface("enp0s25")
+    print(alice_iface)
+
+    # Aussie broadband NBN (wifi)
+    bob_iface = await Interface("wlx00c0cab5760d")
+    print(bob_iface)
+
+
+    sys_clock = SysClock(Dec("-0.02839018452552057081653225806"))
+    alice_node = P2PNode([alice_iface])
+    bob_node = P2PNode([bob_iface], port=NODE_PORT + 1)
+    af = IP4
+    pa = SigProtoHandlers(alice_node)
+    pb = SigProtoHandlers(bob_node)
+
+    pipe_id = "turn_pipe_id"
+    for node in [alice_node, bob_node]:
+        await node.dev()
+
+    # TODO: work on TURN message here.
+    # 51.195.101.185
+
+    """
+    Todo add sanity check -- is relay addr different to turn serv ip
+    is mapped different to our ext?
+    """
+
+    p = P2PPipe(alice_node)
+
+
+    msg = ConMsg({
+        "meta": {
+            "pipe_id": pipe_id,
+            "src_buf": alice_node.addr_bytes,
+        },
+        "routing": {
+            "dest_buf": alice_node.addr_bytes,
+        },
+    })
+
+    bp = SigProtoHandlers(alice_node)
+    coro = bp.proto(msg.pack())
+    out = await coro
+
+    print(msg)
+
+    await alice_node.close()
+    await bob_node.close()
+
+
+    return
+
+
 
 if __name__ == '__main__':
-    async_test(test_proto_rewrite4)
+    async_test(test_proto_rewrite5)
 
 """
     Signal proto:

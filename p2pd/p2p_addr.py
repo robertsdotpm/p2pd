@@ -275,6 +275,10 @@ def unpack_peer_addr(addr):
     return validate_peer_addr(out)
 
 def parse_peer_addr(addr):
+    # Already passed.
+    if isinstance(addr, dict):
+        return addr
+
     addr = to_b(addr)
     af_parts = addr.split(b'-')
     if len(af_parts) != 4:

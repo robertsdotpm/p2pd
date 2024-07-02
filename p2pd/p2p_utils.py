@@ -61,11 +61,11 @@ def sort_if_info_by_best_nat(p2p_addr):
                 if_info
             ])
 
-        # Sort the details list based on the first field (NAT type.)
+        # Sort based on NAT enum (lower = better)
         nat_pairs[af] = sorted(
             nat_pairs[af],
             key=lambda x: x[0]
-            )
+        )
 
     return nat_pairs
 
@@ -193,19 +193,32 @@ The first addr info used for both is thus the
 best possible pairing. Further iterations aren't
 likely to be any more successful so to keep things
 simple only the first iteration is tried.
+
+Note: that parse_peer_addr doesn't covert the input
+if it detects its a dict so that pre-patched
+addresses from messages can be parsed in.
+
+proto: direct_connect(... msg.meta.src)
+
+Is the only function that does this so far.
 """
-async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func):
+async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, concurrent=False):
+    # For concurrent tasks.
+    tasks = []
+
     # Use an AF supported by both.
     p2p_dest = parse_peer_addr(dest_bytes)
     our_addr = parse_peer_addr(src_bytes)
     for af in VALID_AFS:
+        # Iterates by shared AFs, filtered by best NAT pair.
         if_info_iter = IFInfoIter(af, our_addr, p2p_dest)
         if not len(if_info_iter):
             continue
 
         # Get interface offset that supports this af.
         for src_info, dest_info in if_info_iter:
-            ret = await func(
+            # Coroutine to run.
+            coro = func(
                 af,
                 pipe_id,
                 p2p_dest["node_id"],
@@ -214,5 +227,41 @@ async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func):
                 dest_bytes,    
             )
 
-            if ret is not None:
-                return ret
+            # Build a list of tasks if concurrent.
+            if concurrent:
+                tasks.append(coro)
+            else:
+                return await coro
+            
+    # Run multiple coroutines at once.
+    if len(tasks):
+        results = await asyncio.gather(*tasks)
+        results = [r for r in results if r is not None]
+        return results
+    
+"""
+(1) Connects to every available remote address concurrently.
+(2) Chooses the first connection that succeeds.
+(3) Closes any unneeded connections.
+(4) Only connections to an address if the AF is supported.
+
+                (currently 3) * (valid af no = ip4, ip6)
+max cons = PEER_ADDR_MAX_INTERFACES * 2 
+"""
+async def direct_connect(pipe_id, dest_bytes, node):
+    cons = await for_addr_infos(
+        pipe_id,
+        node.addr_bytes,
+        dest_bytes,
+        node.make_connection,
+        concurrent=True
+    )
+
+    if not len(cons):
+        return None
+
+    if len(cons) > 1:
+        for con in cons[1:]:
+            await con.close()
+
+    return cons[0]
