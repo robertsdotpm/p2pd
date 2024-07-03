@@ -72,25 +72,26 @@ def sort_if_info_by_best_nat(p2p_addr):
 
 class IFInfoIter():
     def __init__(self, af, src_addr, dest_addr):
+        self.our_offset = 0
+        self.their_offset = 0
         self.af = af
         self.src_addr = sort_if_info_by_best_nat(src_addr)
         self.dest_addr = sort_if_info_by_best_nat(dest_addr)
-        cond_one = af not in self.src_addr
-        cond_two = af not in self.dest_addr
+        cond_one = not len(self.src_addr.get(af, []))
+        cond_two = not len(self.dest_addr.get(af, [])   )
         if cond_one or cond_two:
             self.dest_addr = self.src_addr = []
+            return
 
         self.dest_addr = dest_addr[af]
         self.src_addr = src_addr[af]
-        self.our_offset = 0
-        self.their_offset = 0
 
     def __iter__(self):
         return self
 
     def __next__(self):
         # Stop when they have no new entries.
-        if self.their_offset >= len(self.dest_addr):
+        if self.their_offset > (len(self.dest_addr) - 1):
             raise StopIteration
         
         # Load addr info to use.

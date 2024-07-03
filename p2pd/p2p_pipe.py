@@ -35,6 +35,7 @@ class P2PPipe():
         # Attempt direct connection first.
         # The only method not to need signal messages.
         if P2P_DIRECT in strategies:
+            # TODO: patch dest 
             pipe = await direct_connect(
                 pipe_id,
                 dest_bytes,

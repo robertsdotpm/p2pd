@@ -147,6 +147,7 @@ class P2PNode(Daemon, P2PUtils):
         self.signal_worker_tasks = {} # offset into MQTT_SERVERS
 
         self.punch_queue = asyncio.Queue()
+        self.sig_proto_handlers = SigProtoHandlers(self)
 
     async def await_peer_con(self, msg, signal_pipe, timeout=10):
         await signal_pipe.send_msg(
@@ -176,6 +177,7 @@ class P2PNode(Daemon, P2PUtils):
             dest_info["port"],
         )
 
+        # TODO patch this if it matches same route rules.
         print(src_info["ext"])
 
         return await pipe_open(
@@ -205,6 +207,9 @@ class P2PNode(Daemon, P2PUtils):
     async def punch_queue_worker(self):
         while 1:
             params = await self.punch_queue.get()
+            if not len(params):
+                return
+
             print("do punch ")
             print(params)
             punch_offset = params.pop(0)
@@ -241,9 +246,15 @@ class P2PNode(Daemon, P2PUtils):
 
     # Used by the MQTT clients.
     async def signal_protocol(self, msg, signal_pipe):
-        return await async_wrap_errors(
-            signal_protocol(self, msg, signal_pipe)
+        out = await async_wrap_errors(
+            self.sig_proto_handlers.proto(msg)
         )
+
+        if out is not None:
+            await signal_pipe.send_msg(
+                out,
+                out.routing.dest["node_id"]
+            )
 
     # Used by the node servers.
     async def msg_cb(self, msg, client_tup, pipe):
@@ -470,6 +481,9 @@ class P2PNode(Daemon, P2PUtils):
         # Stop node server.
         await super().close()
         self.is_running = False
+
+        # Make the worker thread for punching end.
+        self.punch_queue.put_nowait([])
 
         # Close the MQTT client.
         for offset in list(self.signal_pipes):

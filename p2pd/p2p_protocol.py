@@ -378,7 +378,6 @@ class SigProtoHandlers():
 
     async def handle_con_msg(self, msg):
         # Connect to chosen address.
-
         pipe = await asyncio.wait_for(
             direct_connect(
                 msg.meta.pipe_id,
@@ -463,7 +462,7 @@ class SigProtoHandlers():
             # Return mappings in a new message.
             reply = msg.switch_src_and_dest()
             reply.payload.mappings = punch_ret[0]
-            return reply.pack()
+            return reply
         
         # Then this is optional step 3: update initiator.
         if info is not None:
