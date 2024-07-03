@@ -7,6 +7,7 @@ from .nat import *
 from .turn_client import TURNClient
 from .settings import *
 from .p2p_addr import parse_peer_addr
+from .signaling import SignalMock
 
 def init_process_pool():
     # Make selector default event loop.
@@ -265,3 +266,25 @@ async def direct_connect(pipe_id, dest_bytes, node):
             await con.close()
 
     return cons[0]
+
+async def new_peer_signal_pipe(p2p_dest, node):
+    for offset in p2p_dest["signal"]:
+        # Build a channel used to relay signal messages to peer.
+        mqtt_server = MQTT_SERVERS[offset]
+        signal_pipe = SignalMock(
+            peer_id=to_s(node.node_id),
+            f_proto=node.signal_protocol,
+            mqtt_server=mqtt_server
+        )
+
+        # If it fails unset the client.
+        try:
+            # If it's successful exit server offset attempts.
+            await signal_pipe.start()
+            node.signal_pipes[offset] = signal_pipe
+            break
+        except asyncio.TimeoutError:
+            # Cleanup and make sure it's unset.
+            await signal_pipe.close()
+
+        return signal_pipe

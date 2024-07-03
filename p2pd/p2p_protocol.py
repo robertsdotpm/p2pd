@@ -1069,6 +1069,8 @@ async def test_proto_rewrite5():
         },
     })
 
+    # Todo test using different ifaces.
+    # improve that logic with the host id idea
     bp = SigProtoHandlers(alice_node)
     coro = bp.proto(msg.pack())
     out = await coro

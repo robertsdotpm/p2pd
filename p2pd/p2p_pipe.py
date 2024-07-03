@@ -1,5 +1,4 @@
 import asyncio
-import copy
 from .p2p_addr import *
 from .tcp_punch import *
 from .turn_client import *
@@ -23,244 +22,84 @@ P2P_RELAY = 4
 # SOCKS might be a better protocol for relaying in the future.
 P2P_STRATEGIES = [P2P_DIRECT, P2P_REVERSE, P2P_PUNCH]
 
-def build_reverse_msg(pipe_id, addr_bytes, b_proto=b"TCP"):
-    out = b"P2P_DIRECT %s %s %s" % (pipe_id, b_proto, addr_bytes) 
-    return out
-
-def build_punch_response(cmd, pipe_id, punch_ret, src_addr_bytes, af, our_if_index, their_if_index):
-    def mappings_to_bytes(mappings):
-        pairs = []
-        for pair in mappings:
-            # remote, reply, local.
-            pairs.append( b"%d,%d,%d" % (pair[0], pair[1], pair[2]) )
-
-        return b"|".join(pairs)
-
-    #      cm pip se nt pr ad af (if indexs)
-    out = b"%s %s %d %s %s %s %d %d %d" % (
-        cmd,
-        pipe_id,
-        0, # session id.
-        to_b(str(punch_ret[1])), # ntp
-        mappings_to_bytes(punch_ret[0]), # predictions
-        src_addr_bytes,
-        af,
-        our_if_index,
-        their_if_index
-    )
-
-    return out
-
-def parse_prediction_str(s_predictions):
-    predictions = []
-    prediction_strs = s_predictions.split("|")
-    for prediction_str in prediction_strs:
-        remote_s, reply_s, local_s = prediction_str.split(",")
-        prediction = [to_n(remote_s), to_n(reply_s), to_n(local_s)]
-        if not in_range(prediction[0], [1, MAX_PORT]):
-            raise Exception(f"Invalid remote port {prediction[0]}")
-
-        if not in_range(prediction[-1], [1, MAX_PORT]):
-            raise Exception(f"Invalid remote port {prediction[-1]}")
-
-        predictions.append(prediction)
-
-    if not len(predictions):
-        raise Exception("No predictions received.")
-
-    return predictions
-
-def parse_punch_response(parts):
-    return {
-        "cmd": parts[0],
-        "pipe_id": to_b(parts[1]),
-        "session_id": to_n(parts[2]),
-        "ntp_time": Dec(parts[3]),
-        "predictions": parse_prediction_str(parts[4]),
-        "src_addr": parse_peer_addr(to_b(parts[5])),
-        "src_addr_bytes": to_b(parts[5]),
-        "af": to_n(parts[6]),
-        "if": {
-            "them": to_n(parts[7]),
-            "us": to_n(parts[8])
-        }
-    }
-
-f_punch_index = lambda ses, addr, pipe: b"%d %b %b" % (ses, addr, pipe)
 class P2PPipe():
     def __init__(self, node):
         self.node = node
         self.tasks = []
+    
+    async def connect(self, dest_bytes, strategies=P2P_STRATEGIES):
+        # Create a future for pending pipes.
+        pipe_id = self.node.pipe_future(pipe_id)
+        pipe = None
 
-    # Minor data structure cleanup.
-    def cleanup_pipe(self, pipe_id):
-        def closure():
-            if pipe_id in self.node.pipes:
-                del self.node.pipes[pipe_id]
+        # Attempt direct connection first.
+        # The only method not to need signal messages.
+        if P2P_DIRECT in strategies:
+            pipe = await direct_connect(
+                pipe_id,
+                dest_bytes,
+                self.node
+            )
 
-        return closure
+            if pipe is not None:
+                return self.node.pipe_ready(pipe_id, pipe)
 
-    # Waits for a pipe event to fire.
-    # Returns the corrosponding pipe.
-    async def pipe_waiter(self, pipe_id, timeout=0):
-        try:
-            pipe_event = self.node.pipe_events[pipe_id]
-            if timeout:
-                await asyncio.wait_for(
-                    pipe_event.wait(),
-                    timeout
-                )
-            else:
-                await pipe_event.wait()
-            pipe = self.node.pipes[pipe_id]
-            return pipe
-        except asyncio.TimeoutError:
-            log(f"> Pipe waiter timeout {pipe_id} {timeout}")
+        # Proceed only if they need signal messages.
+        if strategies == [P2P_DIRECT]:
             return None
         
-    # Implements the p2p connection techniques.
-    async def open_pipe(self, pipe_id, dest_bytes, strategies=P2P_STRATEGIES):
-        print(f"> Pipe open = {pipe_id}; {dest_bytes}; {strategies}")
-
-
-        # Setup events for waiting on the pipe.
-        pipe = None
-        p2p_dest = parse_peer_addr(dest_bytes)
-        self.node.pipe_events[pipe_id] = asyncio.Event()
-
-        # See if a matching signal pipe exists.
-        signal_pipe = self.node.find_signal_pipe(p2p_dest)
+        # Used to relay signal proto messages.
+        peer_dest = parse_peer_addr(dest_bytes)
+        signal_pipe = self.node.find_signal_pipe(peer_dest)
         if signal_pipe is None:
-            log("Signal pipe is none")
-            for offset in p2p_dest["signal"]:
-                # Build a channel used to relay signal messages to peer.
-                mqtt_server = MQTT_SERVERS[offset]
-                signal_pipe = SignalMock(
-                    peer_id=to_s(self.node.node_id),
-                    f_proto=self.node.signal_protocol,
-                    mqtt_server=mqtt_server
-                )
+            signal_pipe = await new_peer_signal_pipe(
+                peer_dest,
+                self.node
+            )
+            assert(signal_pipe is not None)
 
-                # If it fails unset the client.
-                try:
-                    # If it's successful exit server offset attempts.
-                    await signal_pipe.start()
-                    self.node.signal_pipes[offset] = signal_pipe
-                    break
-                except asyncio.TimeoutError:
-                    # Cleanup and make sure it's unset.
-                    await signal_pipe.close()
-                    signal_pipe = None
+        # Try reverse connect.
+        msg = self.reverse_connect(pipe_id, dest_bytes)
+        pipe = await self.node.await_peer_con(msg, signal_pipe, 5)
 
-        # Check if a signal pipe was found.
-        if signal_pipe is None:
-            raise Exception("Unable to open same signal pipe as peer.")
+        # Successful reverse connect.
+        if pipe is not None:
+            return self.node.pipe_ready(pipe_id, pipe)
 
-        # Patch dest address if it's behind same router.
-        dest_patch = work_behind_same_router(self.node.p2p_addr, p2p_dest)
-        print(f"{dest_patch} dest_patch")
-        timeout = 0
-        for strategy in strategies:
-            # Try connect directly to peer.
-            if strategy == P2P_DIRECT:
-                timeout = 4
-                print("try p2p direct")
-                open_task = self.direct_connect(dest_patch, pipe_id)
+        # Mapping for funcs over addr infos.
+        # Loop over the most likely strategies left.
+        func_table = [self.tcp_hole_punch, self.udp_relay],
+        for i, strategy in enumerate([P2P_PUNCH, P2P_RELAY]):
+            # ... But still need to respect their choices.
+            if strategy not in strategies:
+                continue
 
-            # Tell the peer to try connect to us.
-            if strategy == P2P_REVERSE:
-                # Associate the pending pipe with external IP(s).
-                exts = peer_addr_extract_exts(p2p_dest)
-                self.node.expected_addrs[pipe_id] = exts
+            # Returns a message from func given a comp addr info pair.
+            msg = await for_addr_infos(
+                pipe_id,
+                self.node.addr_bytes,
+                dest_bytes,
+                func_table[i],
+            )
 
-                # Instruct the peer to do the reverse connect.
-                out = build_reverse_msg(pipe_id, self.node.addr_bytes)
-                await signal_pipe.send_msg(
-                    out,
-                    to_s(p2p_dest["node_id"])
-                )
+            # If no signal message returned then skip.
+            if msg is not None:
+                pipe = await self.node.await_peer_con(msg, signal_pipe)
 
-                # Wait for the new pipe to appear.
-                timeout = 10
-                open_task = self.pipe_waiter(pipe_id)
-
-            # Do TCP hole punching to try connect.
-            if strategy == P2P_PUNCH:
-                # Start TCP hole punching.
-                self.tasks.append(
-                    asyncio.create_task(
-                        async_wrap_errors(
-                            self.tcp_hole_punch(dest_patch, pipe_id, signal_pipe)
-                        )
-                    )
-                )
-
-                # Wait for the hole to appear.
-                """
-                Meet delay = 3
-                Punch duration = 3
-                Update wait = 4
-                Init wait = 4
-                Padding = 6
-                """
-                timeout = 30
-                open_task = self.pipe_waiter(pipe_id)
-
-            # Use a TURN server to connect to a peer.
-            if strategy == P2P_RELAY:
-                # 3 retries, up to 10 secs for each attempt.
-                timeout = 45
-                open_task = self.udp_relay(p2p_dest, pipe_id, signal_pipe)
-
-            # Got valid pipe so return it.
-            pipe = await async_wrap_errors(open_task, timeout)
-            print("output from open task = ")
-            print(pipe)
+            # Success so return
             if pipe is not None:
-                print(f"> Got pipe = {pipe.sock} from {pipe.route} using {strategy}.")
-                return [pipe, strategy]
+                return pipe
 
-
-        print("Got pipe = ")
-        print(pipe)
-        log(f"> Uh oh, pipe was None.")
-        return [pipe, None]
-
-    # Main function for scheduling p2p connections.
-    async def pipe(self, dest_bytes, timeout=60, strategies=P2P_STRATEGIES):
-        # Identify a pipe.
-        strategy = p2p_pipe = None
-        pipe_id = rand_plain(15)
-        assert(isinstance(pipe_id, bytes))
-
-        # Wrap open pipe in a task so it can be cancelled.
-        task = asyncio.create_task(
-            async_wrap_errors(
-                self.open_pipe(pipe_id, dest_bytes, strategies)
-
-            )
-        )
-
-        # Record the task in a pending state.
-        self.node.pending_pipes[pipe_id] = task
-        try:
-            await asyncio.wait_for(
-                task,
-                timeout
-            )
-            p2p_pipe, strategy = task.result()
-        except Exception:
-            log_exception()
-
-        print("in pipe")
-        print(p2p_pipe)
-        print(strategy)
-
-        # When it's done delete the pending reference.
-        if pipe_id in self.node.pending_pipes:
-            del self.node.pending_pipes[pipe_id]
-            
-        return [p2p_pipe, strategy]
+    async def reverse_connect(self, pipe_id, dest_bytes):
+        return ConMsg({
+            "meta": {
+                "pipe_id": pipe_id,
+                "src_buf": self.node.addr_bytes,
+            },
+            "routing": {
+                "dest_buf": dest_bytes,
+            },
+        })
 
     """
     Peer A and peer B both have a list of interface info

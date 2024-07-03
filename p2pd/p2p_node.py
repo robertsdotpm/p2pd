@@ -148,6 +148,20 @@ class P2PNode(Daemon, P2PUtils):
 
         self.punch_queue = asyncio.Queue()
 
+    async def await_peer_con(self, msg, signal_pipe, timeout=10):
+        await signal_pipe.send_msg(
+            msg.pack(),
+            to_s(msg.routing.dest["node_id"])
+        )
+
+        try:
+            return await asyncio.wait_for(
+                self.pipes[msg.meta.pipe_id],
+                timeout
+            )
+        except asyncio.TimeoutError:
+            return None
+
     async def make_connection(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes):
         # (1) Get first interface for AF.
         # (2) Build a 'route' from it with it's main NIC IP.
@@ -171,12 +185,15 @@ class P2PNode(Daemon, P2PUtils):
             msg_cb=self.msg_cb
         )
 
-    def pipe_future(self, pipe_id):
+    def pipe_future(self, pipe_id=None):
+        pipe_id = pipe_id or rand_plain(15)
         self.pipes[pipe_id] = asyncio.Future()
+        return pipe_id
 
     def pipe_ready(self, pipe_id, pipe):
         if not self.pipes[pipe_id].done():
             self.pipes[pipe_id].set_result(pipe)
+        return pipe
 
     def add_punch_meeting(self, params):
         # Allow pipe to be awaited by pipe_id.
