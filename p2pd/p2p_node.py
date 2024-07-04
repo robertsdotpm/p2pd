@@ -7,7 +7,8 @@ from .p2p_pipe import *
 from .daemon import *
 from .p2p_protocol_old import *
 from .signaling import *
-
+from .machine_id import get_machine_id
+from .p2p_utils import *
 
 NODE_CONF = dict_child({
     # Reusing address can hide errors for the socket state.
@@ -270,6 +271,14 @@ class P2PNode(Daemon, P2PUtils):
             self.msg_cbs.remove(msg_cb)
 
     async def dev(self, protos=[TCP]):
+        # Set machine id.
+        try:
+            self.machine_id = get_machine_id()
+        except:
+            self.machine_id = await fallback_machine_id(
+                self.ifs[0].netifaces
+            )
+
         # MQTT server offsets to try.
         if self.signal_offsets is None:
             offsets = [0] + shuffle([i for i in range(1, len(MQTT_SERVERS))])
@@ -320,7 +329,7 @@ class P2PNode(Daemon, P2PUtils):
         # First server, field 3 == base_proto.
         # sock = listen sock, getsocketname = (bind_ip, bind_port, ...)
         port = self.servers[0][2].sock.getsockname()[1]
-        self.addr_bytes = make_peer_addr(self.node_id, self.ifs, list(self.signal_pipes), port=port, ip=self.ip)
+        self.addr_bytes = make_peer_addr(self.node_id, self.machine_id, self.ifs, list(self.signal_pipes), port=port, ip=self.ip)
         self.p2p_addr = parse_peer_addr(self.addr_bytes)
         print(f"> P2P node = {self.addr_bytes}")
         print(self.p2p_addr)
@@ -436,7 +445,7 @@ class P2PNode(Daemon, P2PUtils):
         # First server, field 3 == base_proto.
         # sock = listen sock, getsocketname = (bind_ip, bind_port, ...)
         port = self.servers[0][2].sock.getsockname()[1]
-        self.addr_bytes = make_peer_addr(self.node_id, self.ifs, list(self.signal_pipes), port=port, ip=self.ip)
+        self.addr_bytes = make_peer_addr(self.node_id, self.machine_id, self.ifs, list(self.signal_pipes), port=port, ip=self.ip)
         self.p2p_addr = parse_peer_addr(self.addr_bytes)
         log(f"> P2P node = {self.addr_bytes}")
 

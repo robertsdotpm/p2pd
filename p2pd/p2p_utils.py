@@ -1,5 +1,7 @@
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
+import hashlib
+import socket
 from .address import Address
 from .utils import *
 from .net import *
@@ -8,6 +10,7 @@ from .turn_client import TURNClient
 from .settings import *
 from .p2p_addr import parse_peer_addr
 from .signaling import SignalMock
+from .interface import get_default_iface, get_mac_address
 
 def init_process_pool():
     # Make selector default event loop.
@@ -121,28 +124,29 @@ For this reason the P2P address format includes
 a private address section that corrosponds to
 the address passed to bind() for the nodes listen().
 """
-def work_behind_same_router(src_addr, dest_addr):
-    new_addr = copy.deepcopy(dest_addr)
-    for af in VALID_AFS:
-        for dest_info in new_addr[af]:
-            for src_info in src_addr[af]:
-                # Same external address as one of our own.
-                if dest_info["ext"] == src_info["ext"]:
-                    # Connect to its internal address instead.
-                    dest_info["ext"] = dest_info["nic"]
+def work_behind_same_router(src, dest):
+    # Disable NAT behind router.
+    # Or connecting to interfaces on same PC.
+    delta = delta_info(NA_DELTA, 0)
+    nat = nat_info(OPEN_INTERNET, delta)
+    new_addr = copy.deepcopy(dest)
 
-                    # Disable NAT in LANs.
-                    delta = delta_info(NA_DELTA, 0)
-                    nat = nat_info(OPEN_INTERNET, delta)
-                    dest_info["nat"] = nat
+    # All interfaces on the same machine.
+    same_pc = src["machine_id"] == dest["machine_id"]
+    for af in VALID_AFS:
+        for d_info in new_addr[af]:
+            for s_info in src[af]:
+                # This interface is on the same LAN.
+                same_lan = d_info["ext"] == s_info["ext"]
+                if same_pc or same_lan:
+                    d_info["ext"] = d_info["nic"]
+                    d_info["nat"] = nat
 
     return new_addr
 
-# TODO: move this somewhere else.
 async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=None):
     # TODO: index by id and not offset.
     turn_server = TURN_SERVERS[serv_id]
-
 
     # Resolve the TURN address.
     route = await interface.route(af).bind()
@@ -240,16 +244,7 @@ async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, concurrent=False)
         results = await asyncio.gather(*tasks)
         results = [r for r in results if r is not None]
         return results
-    
-"""
-(1) Connects to every available remote address concurrently.
-(2) Chooses the first connection that succeeds.
-(3) Closes any unneeded connections.
-(4) Only connections to an address if the AF is supported.
 
-                (currently 3) * (valid af no = ip4, ip6)
-max cons = PEER_ADDR_MAX_INTERFACES * 2 
-"""
 async def direct_connect(pipe_id, dest_bytes, node):
     cons = await for_addr_infos(
         pipe_id,
@@ -270,7 +265,7 @@ async def direct_connect(pipe_id, dest_bytes, node):
 
 async def new_peer_signal_pipe(p2p_dest, node):
     for offset in p2p_dest["signal"]:
-        # Build a channel used to relay signal messages to peer.
+        # Build a channel to relay signal messages to peer.
         mqtt_server = MQTT_SERVERS[offset]
         signal_pipe = SignalMock(
             peer_id=to_s(node.node_id),
@@ -289,3 +284,10 @@ async def new_peer_signal_pipe(p2p_dest, node):
             await signal_pipe.close()
 
         return signal_pipe
+    
+async def fallback_machine_id(netifaces, app_id="p2pd"):
+    host = socket.gethostname()
+    if_name = get_default_iface(netifaces)
+    mac = await get_mac_address(if_name, netifaces)
+    buf = f"{app_id} {host} {if_name} {mac}"
+    return to_s(hashlib.sha256(to_b(buf)).digest())

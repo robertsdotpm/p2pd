@@ -10,3 +10,5 @@ pyroute2; platform_system != "Windows" and platform_system != "Darwin" # Fallbac
 # These are the dependencies for ECIES.
 coincurve >=13,<20
 aiosqlite
+
+winregistry; platform_system == "Windows"

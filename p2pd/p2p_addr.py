@@ -25,7 +25,7 @@ SIGNAL_PIPE_NO = 3
     ,... more interfaces for AF family
 ],[IP6 nics ...],node_id
 """
-def make_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=None, nat=None, if_index=None):
+def make_peer_addr(node_id, machine_id, interface_list, signal_offsets, port=NODE_PORT, ip=None, nat=None, if_index=None):
     ensure_resolved(interface_list)
     signal_offsets_as_str = [to_b(str((x))) for x in signal_offsets]
     bufs = [
@@ -73,6 +73,7 @@ def make_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=N
         bufs.append(af_bufs or b"0")
     
     bufs.append(node_id)
+    bufs.append(machine_id)
     return b'-'.join(bufs)
 
 """
@@ -281,7 +282,7 @@ def parse_peer_addr(addr):
 
     addr = to_b(addr)
     af_parts = addr.split(b'-')
-    if len(af_parts) != 4:
+    if len(af_parts) != 5:
         log("p2p addr invalid parts")
         return None
 
@@ -296,7 +297,8 @@ def parse_peer_addr(addr):
         IP4: [],
         IP6: [],
         "node_id": to_s(af_parts[2]),
-        "signal": signal
+        "signal": signal,
+        "machine_id": to_s(af_parts[3]),
     }
 
     for af_index, af_part in enumerate(af_parts[:2]):
