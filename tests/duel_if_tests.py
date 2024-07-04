@@ -61,8 +61,6 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
             )
 
             print(msg)
-            return
-
             buf = msg.pack()
             coro = nodes.bob.sig_proto_handlers.proto(buf)
             assert(coro is not None)

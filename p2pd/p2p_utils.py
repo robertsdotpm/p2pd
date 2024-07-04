@@ -209,6 +209,8 @@ proto: direct_connect(... msg.meta.src)
 Is the only function that does this so far.
 """
 async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, concurrent=False):
+    found_valid_af_pair = False
+
     # For concurrent tasks.
     tasks = []
 
@@ -216,12 +218,15 @@ async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, concurrent=False)
     dest = parse_peer_addr(dest_bytes)
     src = parse_peer_addr(src_bytes)
     same_machine = dest["machine_id"] == src["machine_id"]
+    found_one = False
     for af in VALID_AFS:
         # Iterates by shared AFs, filtered by best NAT pair.
         if_info_iter = IFInfoIter(af, src, dest)
         print(len(if_info_iter))
         if not len(if_info_iter):
             continue
+        else:
+            found_valid_af_pair = True
 
         # Get interface offset that supports this af.
         for src_info, dest_info in if_info_iter:
@@ -242,11 +247,24 @@ async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, concurrent=False)
             else:
                 return await coro
             
+    # No compatible addresses found.
+    if not found_valid_af_pair:
+        error = \
+        f"""
+        Found no compat addresses between 
+        {src_bytes} and
+        {dest_bytes}
+        """
+        log(error)
+        return
+            
     # Run multiple coroutines at once.
     if len(tasks):
         results = await asyncio.gather(*tasks)
         results = [r for r in results if r is not None]
         return results
+    
+    
 
 async def direct_connect(pipe_id, dest_bytes, node):
     dest = parse_peer_addr(dest_bytes)

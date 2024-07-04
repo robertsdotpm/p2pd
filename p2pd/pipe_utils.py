@@ -189,6 +189,9 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
                 conf=conf
             )
 
+            print(sock)
+        
+
             # Check if sock succeeded.
             if sock is None:
                 log("Could not allocate socket.")
@@ -196,6 +199,8 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
 
             # Connect socket if TCP.
             if proto == TCP and dest is not None:
+                print(dest.tup)
+
                 # Set non-blocking.
                 sock.settimeout(0)
                 sock.setblocking(0)
@@ -210,6 +215,7 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
                 
                 # Wait for connection, async style.
                 await asyncio.wait_for(con_task, conf["con_timeout"])
+                print(sock)
                     
         # Make sure bind port is set (and not zero.)
         route.bind_port = sock.getsockname()[1]

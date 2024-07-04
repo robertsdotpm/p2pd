@@ -200,6 +200,20 @@ class P2PNode(Daemon, P2PUtils):
                     ips=str(dest_info["nic"])
                 )
 
+                route.interface = get_if_name_by_nic_ipr(
+                    dest_info["nic"],
+                    interface.netifaces,
+                )
+                #print(route.interface)
+                # need to load correct iface with id
+                # if its not the current iface
+                # get iface by bind ip
+                # get call interface
+                # call load_if_info on it
+                # replace route if
+                # has only load a temp interface with its id
+                # so it can be bound to if its non default
+
         print(route._bind_tups)
         print(dest.host)
 

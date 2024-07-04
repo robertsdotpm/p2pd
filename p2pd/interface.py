@@ -249,6 +249,8 @@ class Interface():
             else:
                 self.id = self.name
 
+        return self
+
     def to_dict(self):
         from .var_names import TXT
         return {
@@ -717,6 +719,27 @@ def dict_to_if_list(dict_list):
         if_list.append(interface)
 
     return if_list
+
+def get_if_name_by_nic_ipr(nic_ipr, netifaces):
+    for if_name in netifaces.interfaces():
+        valid_afs = [netifaces.AF_INET, netifaces.AF_INET6]
+        addr_infos = netifaces.ifaddresses(if_name)
+        for af in valid_afs:
+            if af not in addr_infos:
+                continue
+
+            for info in addr_infos[af]:
+                cidr = af_to_cidr(
+                    netiface_to_af(af, netifaces)
+                )
+                
+                needle_ipr = IPRange(info["addr"], cidr=cidr)
+                if needle_ipr == nic_ipr:
+                    i = Interface(if_name)
+                    i.netifaces = netifaces
+                    i.load_if_info()
+                    return i
+            
 
 
 if __name__ == "__main__": # pragma: no cover
