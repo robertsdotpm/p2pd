@@ -319,6 +319,7 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
     address type then no need to
     specifically bind to it.
     """
+
     try:
         if route.interface is not None:
             is_default = route.interface.is_default(route.af)

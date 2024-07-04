@@ -38,19 +38,39 @@ class TestNodes():
         await self.bob.close()
 
 class DuelIFTests(unittest.IsolatedAsyncioTestCase):
-    async def test_something(self):
-
-
-
+    async def test_direct_connect(self):
         async with TestNodes() as nodes:
-            print(nodes.bob.p2p_addr)
-            print(nodes.bob.servers)
             pipe = await direct_connect(
                 nodes.pipe_id,
                 nodes.bob.addr_bytes,
-                nodes.alice
+                nodes.alice,
             )
-            print(pipe)
+            assert(pipe is not None)
+            await pipe.close()
+
+    async def test_reverse_connect(self):
+        async with TestNodes() as nodes:
+            pp = P2PPipe(nodes.alice)
+
+            print("before addr infos")
+            msg = await for_addr_infos(
+                nodes.pipe_id,
+                nodes.alice.addr_bytes,
+                nodes.bob.addr_bytes,
+                pp.reverse_connect,
+            )
+
+            print(msg)
+            return
+
+            buf = msg.pack()
+            coro = nodes.bob.sig_proto_handlers.proto(buf)
+            assert(coro is not None)
+
+            out = await coro
+            print(out)
+
+            # Setup the id stuff.
 
 if __name__ == '__main__':
     main()

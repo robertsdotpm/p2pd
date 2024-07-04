@@ -84,7 +84,7 @@ class SigMsg():
         if_len = len(addr[af])
         r = [0, if_len - 1]
         if not in_range(if_index, r):
-            raise Exception("bad if_i")
+            raise Exception("bad if_i {if_index}")
         
         return af, addr
 
@@ -214,10 +214,6 @@ class SigMsg():
         )
 
         self.enum = enum
-        sid = self.meta.src["machine_id"]
-        did = self.routing.dest["machine_id"]
-        if sid == did:
-            self.meta.same_machine = True
             
 
     def to_dict(self):
@@ -251,6 +247,12 @@ class SigMsg():
         the same router.
         """
         self.meta.patch_source(self.routing.dest)
+
+        # Set same machine flag.
+        sid = self.meta.src["machine_id"]
+        did = self.routing.dest["machine_id"]
+        if sid == did:
+            self.meta.same_machine = True
 
     def switch_src_and_dest(self):
         # Copy all current fields into new object.
@@ -398,11 +400,11 @@ class SigProtoHandlers():
         print(pipe.sock)
         
         # Setup pipe reference.
-        if pipe is not None:
-            log("p2p direct in node got a valid pipe.")
+        #if pipe is not None:
+        #   log("p2p direct in node got a valid pipe.")
 
             # Record pipe reference.
-            self.node.pipes[msg.pipe_id] = pipe
+            #self.node.pipes[msg.pipe_id].set_result(pipe)
 
         return pipe
     

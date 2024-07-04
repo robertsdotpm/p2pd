@@ -171,7 +171,16 @@ class P2PNode(Daemon, P2PUtils):
         if_index = src_info["if_index"]
         interface = self.ifs[if_index]
         route = await interface.route(af).bind()
+        print("in make con")
         print(route)
+        print(dest_info["ext"])
+        print(dest_info["port"])
+
+        # Connect to this address.
+        dest = Address(
+            str(dest_info["ext"]),
+            dest_info["port"],
+        )
 
         """
         If connecting to a different interface on the same
@@ -182,20 +191,17 @@ class P2PNode(Daemon, P2PUtils):
         if same_machine:
             if dest_info["nic"] != src_info["nic"]:
                 print("yes replace route")
+                dest = Address(
+                    str(dest_info["nic"]),
+                    dest_info["port"]
+                )
+
                 route = await interface.route(af).bind(
                     ips=str(dest_info["nic"])
                 )
 
-        print(route)
-
-        # Connect to this address.
-        dest = Address(
-            str(dest_info["ext"]),
-            dest_info["port"],
-        )
-
-        print("in make con")
-        print(dest_info)
+        print(route._bind_tups)
+        print(dest.host)
 
         pipe = await pipe_open(
             route=route,

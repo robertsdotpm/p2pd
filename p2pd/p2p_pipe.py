@@ -91,14 +91,19 @@ class P2PPipe():
             if pipe is not None:
                 return pipe
 
-    async def reverse_connect(self, pipe_id, dest_bytes):
+    async def reverse_connect(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, same_machine=False):
+        print("in reverse connect")
         return ConMsg({
             "meta": {
+                "af": af,
                 "pipe_id": pipe_id,
                 "src_buf": self.node.addr_bytes,
+                "src_index": src_info["if_index"],
             },
             "routing": {
+                "af": af,
                 "dest_buf": dest_bytes,
+                "dest_index": dest_info["if_index"],
             },
         })
 
