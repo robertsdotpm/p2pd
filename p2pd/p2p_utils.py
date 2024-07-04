@@ -215,6 +215,7 @@ async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, concurrent=False)
     # Use an AF supported by both.
     p2p_dest = parse_peer_addr(dest_bytes)
     our_addr = parse_peer_addr(src_bytes)
+    same_machine = p2p_dest["machine_id"] == our_addr["machine_id"]
     for af in VALID_AFS:
         # Iterates by shared AFs, filtered by best NAT pair.
         if_info_iter = IFInfoIter(af, our_addr, p2p_dest)
@@ -230,7 +231,8 @@ async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, concurrent=False)
                 p2p_dest["node_id"],
                 src_info,
                 dest_info,
-                dest_bytes,    
+                dest_bytes,
+                same_machine,
             )
 
             # Build a list of tasks if concurrent.
@@ -246,13 +248,27 @@ async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, concurrent=False)
         return results
 
 async def direct_connect(pipe_id, dest_bytes, node):
+    dest = parse_peer_addr(dest_bytes)
+    dest = work_behind_same_router(
+        node.p2p_addr,
+        dest
+    )
+
+    print("in direct con after patch")
+    print(dest)
+
+
+
     cons = await for_addr_infos(
         pipe_id,
         node.addr_bytes,
-        dest_bytes,
+        dest,
         node.make_connection,
         concurrent=True
     )
+
+    print("cons output")
+    print(cons)
 
     if not len(cons):
         return None

@@ -111,10 +111,6 @@ def get_machine_id(winregistry=True):
 
     return __sanitize__(x)
 
-
-
-
-
 def hashed_machine_id(app_id="", **kwargs):
     """
     hashed_id returns the device's native GUID, hashed using HMAC-SHA256 with an optional application ID.

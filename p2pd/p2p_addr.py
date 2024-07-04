@@ -72,8 +72,8 @@ def make_peer_addr(node_id, machine_id, interface_list, signal_offsets, port=NOD
         # Expected and okay.
         bufs.append(af_bufs or b"0")
     
-    bufs.append(node_id)
-    bufs.append(machine_id)
+    bufs.append(to_b(node_id))
+    bufs.append(to_b(machine_id))
     return b'-'.join(bufs)
 
 """

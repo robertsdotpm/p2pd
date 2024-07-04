@@ -7,7 +7,7 @@ from .p2p_pipe import *
 from .daemon import *
 from .p2p_protocol_old import *
 from .signaling import *
-from .machine_id import get_machine_id
+from .machine_id import get_machine_id, hashed_machine_id
 from .p2p_utils import *
 
 NODE_CONF = dict_child({
@@ -164,13 +164,29 @@ class P2PNode(Daemon, P2PUtils):
         except asyncio.TimeoutError:
             return None
 
-    async def make_connection(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes):
+    async def make_connection(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, same_machine=False):
         # (1) Get first interface for AF.
         # (2) Build a 'route' from it with it's main NIC IP.
         # (3) Bind to the route at port 0. Return itself.
         if_index = src_info["if_index"]
         interface = self.ifs[if_index]
         route = await interface.route(af).bind()
+        print(route)
+
+        """
+        If connecting to a different interface on the same
+        machine the connection will only work if the
+        interfaces are bridged or there's route table
+        rules between them so we instead bind to the dest
+        """
+        if same_machine:
+            if dest_info["nic"] != src_info["nic"]:
+                print("yes replace route")
+                route = await interface.route(af).bind(
+                    ips=str(dest_info["nic"])
+                )
+
+        print(route)
 
         # Connect to this address.
         dest = Address(
@@ -178,15 +194,18 @@ class P2PNode(Daemon, P2PUtils):
             dest_info["port"],
         )
 
-        # TODO patch this if it matches same route rules.
-        print(src_info["ext"])
+        print("in make con")
+        print(dest_info)
 
-        return await pipe_open(
+        pipe = await pipe_open(
             route=route,
             proto=TCP,
             dest=dest,
             msg_cb=self.msg_cb
         )
+
+        print(pipe)
+        return pipe
 
     def pipe_future(self, pipe_id=None):
         pipe_id = pipe_id or rand_plain(15)
@@ -273,10 +292,11 @@ class P2PNode(Daemon, P2PUtils):
     async def dev(self, protos=[TCP]):
         # Set machine id.
         try:
-            self.machine_id = get_machine_id()
+            self.machine_id = hashed_machine_id("p2pd")
         except:
             self.machine_id = await fallback_machine_id(
-                self.ifs[0].netifaces
+                self.ifs[0].netifaces,
+                "p2pd"
             )
 
         # MQTT server offsets to try.
@@ -329,6 +349,8 @@ class P2PNode(Daemon, P2PUtils):
         # First server, field 3 == base_proto.
         # sock = listen sock, getsocketname = (bind_ip, bind_port, ...)
         port = self.servers[0][2].sock.getsockname()[1]
+        print(f"Server port = {port}")
+
         self.addr_bytes = make_peer_addr(self.node_id, self.machine_id, self.ifs, list(self.signal_pipes), port=port, ip=self.ip)
         self.p2p_addr = parse_peer_addr(self.addr_bytes)
         print(f"> P2P node = {self.addr_bytes}")
@@ -557,7 +579,8 @@ class P2PNode(Daemon, P2PUtils):
         await asyncio.sleep(.25)
 
 # delay with sys clock and get_pp_executors.
-async def start_p2p_node(port=NODE_PORT, node_id=None, ifs=None, clock_skew=Dec(0), ip=None, pp_executors=False, enable_upnp=False, signal_offsets=None, netifaces=None):
+async def start_p2p_node(port=NODE_PORT, node_id=None, ifs=None, 
+                         clock_skew=Dec(0), ip=None, pp_executors=False, enable_upnp=False, signal_offsets=None, netifaces=None):
     netifaces = netifaces or Interface.get_netifaces()
     if netifaces is None:
         netifaces = await init_p2pd()

@@ -100,6 +100,7 @@ class SigMsg():
             self.src_buf = to_s(src_buf)
             self.src_index = to_n(src_index)
             self.af = af
+            self.same_machine = False
 
         def patch_source(self, cur_addr):
             # Parse src_buf to addr.
@@ -213,6 +214,11 @@ class SigMsg():
         )
 
         self.enum = enum
+        sid = self.meta.src["machine_id"]
+        did = self.routing.dest["machine_id"]
+        if sid == did:
+            self.meta.same_machine = True
+            
 
     def to_dict(self):
         d = {
@@ -381,7 +387,7 @@ class SigProtoHandlers():
         pipe = await asyncio.wait_for(
             direct_connect(
                 msg.meta.pipe_id,
-                msg.meta.src,
+                msg.meta.src_buf,
                 self.node,
             ),
             10
@@ -448,7 +454,8 @@ class SigProtoHandlers():
                 msg.payload.mappings,
                 msg.routing.stun,
                 msg.payload.ntp,
-                mode=punch_mode
+                mode=punch_mode,
+                same_machine=msg.meta.same_machine,
             )
 
             # Schedule the punching meeting.

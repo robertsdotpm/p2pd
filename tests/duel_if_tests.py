@@ -39,8 +39,12 @@ class TestNodes():
 
 class DuelIFTests(unittest.IsolatedAsyncioTestCase):
     async def test_something(self):
+
+
+
         async with TestNodes() as nodes:
             print(nodes.bob.p2p_addr)
+            print(nodes.bob.servers)
             pipe = await direct_connect(
                 nodes.pipe_id,
                 nodes.bob.addr_bytes,

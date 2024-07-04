@@ -115,7 +115,7 @@ class P2PPipe():
     the lowest value pairs and runs through them until one
     succeeds.
     """
-    async def tcp_hole_punch(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes):
+    async def tcp_hole_punch(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, same_machine=False):
         # Punch clients indexed by interface offset.
         if_index = src_info["if_index"]
         interface = self.node.ifs[if_index]
@@ -142,7 +142,8 @@ class P2PPipe():
             node_id,
             pipe_id,
             stun_client,
-            mode=punch_mode
+            mode=punch_mode,
+            same_machine=same_machine,
         )
 
         """
@@ -184,7 +185,7 @@ class P2PPipe():
         msg.validate_dest(af, punch_mode, use_addr)
         return msg
 
-    async def udp_relay(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes):
+    async def udp_relay(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, same_machine=False):
         # Try TURN servers in random order.
         offsets = list(range(0, len(TURN_SERVERS)))
         random.shuffle(offsets)

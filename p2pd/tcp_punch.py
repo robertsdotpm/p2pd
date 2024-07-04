@@ -173,6 +173,7 @@ def proc_do_punching(args):
     my command execution code on Windows -- test this.
     """
     asyncio.set_event_loop_policy(SelectorEventPolicy())
+    same_machine = args.pop()
     side = args.pop()
     sq = args.pop()
     q = args.pop()
@@ -180,7 +181,7 @@ def proc_do_punching(args):
     loop = asyncio.get_event_loop()
     f = asyncio.ensure_future(
         async_wrap_errors(
-            TCPPunch.do_punching(side, *args, sq)
+            TCPPunch.do_punching(side, same_machine, *args, sq)
         ),
         loop=loop
     )
@@ -379,7 +380,7 @@ class TCPPunch():
         self.tcp_punch_stopped.set()
 
     # Initiator: Step 1 -- send Initiators predicted mappings to Recipient.
-    async def proto_send_initial_mappings(self, dest_ip, dest_nat, dest_node_id, pipe_id, stun_client, process_replies=None, con_list=None, mode=TCP_PUNCH_REMOTE):
+    async def proto_send_initial_mappings(self, dest_ip, dest_nat, dest_node_id, pipe_id, stun_client, process_replies=None, con_list=None, mode=TCP_PUNCH_REMOTE, same_machine=False):
         assert(stun_client.interface == self.interface)
 
         # Log warning if dest_addr is our ext address.
@@ -472,6 +473,9 @@ class TCPPunch():
 
             # Future time for hole punching to occur.
             "ntp_meet": ntp_meet,
+
+            # Is destination addr on same machine?
+            "same_machine": same_machine,
         }
 
         # First state progression -- no need to check existing.
@@ -486,7 +490,7 @@ class TCPPunch():
         return our_maps, ntp_meet, update_event
 
     # Recipient: Step 2 -- get Initiators mappings. Generate our own.
-    async def proto_recv_initial_mappings(self, recv_addr, recv_nat, recv_node_id, pipe_id, their_maps, stun_client, ntp_meet=0, process_replies=None, con_list=None, mode=TCP_PUNCH_REMOTE):
+    async def proto_recv_initial_mappings(self, recv_addr, recv_nat, recv_node_id, pipe_id, their_maps, stun_client, ntp_meet=0, process_replies=None, con_list=None, mode=TCP_PUNCH_REMOTE, same_machine=False):
         assert(stun_client.interface == self.interface)
 
         # Invalid len.
@@ -559,7 +563,8 @@ class TCPPunch():
             "their_nat": recv_nat,
             "their_dest": recv_addr,
             "their_node_id": recv_node_id,
-            "pipe_id": pipe_id
+            "pipe_id": pipe_id,
+            "same_machine": same_machine,
         }
 
         # Update state.
@@ -667,7 +672,7 @@ class TCPPunch():
     socket and keep the other STUN sockets open.
     """
     @staticmethod
-    async def do_punching(side, interface, our_wan, dest_addr, af, local, remote, rmaps, current_ntp, ntp_meet, mode, sock_queue):
+    async def do_punching(side, same_machine, interface, our_wan, dest_addr, af, local, remote, rmaps, current_ntp, ntp_meet, mode, sock_queue):
         """
         Punching is done in its own process.
         The process returns an open socket and Python
@@ -729,6 +734,11 @@ class TCPPunch():
 
             # Bind to a specific port and interface.
             route = await interface.route(af).bind(local_port)
+            if same_machine and dest_addr[0] != route.nic():
+                route = await interface.route(af).bind(
+                    ips=dest_addr[0],
+                    port=local_port,
+                )
 
             # Open connection -- return only sock.
             #sock = await pipe_open(TCP, dest, route=route, conf=PUNCH_CONF) 
@@ -995,6 +1005,7 @@ class TCPPunch():
             args.append(queue)
             args.append(self.sock_queue)
             args.append(side)
+            args.append(state_info["data"]["same_machine"])
             
             # Schedule TCP punching in process pool executor.
             loop.run_in_executor(
