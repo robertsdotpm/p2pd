@@ -149,11 +149,15 @@ class SigMsg():
 
         def load_if_extra(self, node):
             if_index = self.dest_index
+            print(type(if_index))
+            print(node.tcp_punch_clients)
+            print(if_index in node.tcp_punch_clients)
+            print(f"if index {if_index}")
             self.interface = node.ifs[if_index]
             self.stun = node.stun_clients[self.af][if_index]
-            if if_index in node.tcp_punch_clients:
+            try:
                 self.punch = node.tcp_punch_clients[if_index]
-            else:
+            except IndexError:
                 self.punch = None
 
         """
@@ -345,8 +349,9 @@ class TCPPunchMsg(SigMsg):
             
         # Should be ourself.
         if punch_mode == TCP_PUNCH_SELF:
+            # May be another nic ip.
             if dest_s != nic:
-                raise Exception(f"{dest_s} !ourself in punch self")
+                log(f"{dest_s} !ourself {nic} in punch self")
 
     def __init__(self, data, enum=SIG_TCP_PUNCH):
         super().__init__(data, enum)
@@ -418,15 +423,29 @@ class SigProtoHandlers():
         # AFs must match for this type of message.
         if msg.meta.af != msg.routing.af:
             raise Exception("tcp punch afs differ.")
+        
+        # Build dest address for the punching.
+        af = msg.routing.af
+        src_info = msg.meta.src_info
+        patched_p2p = work_behind_same_router(
+            msg.routing.dest,
+            msg.meta.src
+        )
+
+        print("in handle punch")
+        print(msg.routing.punch)
+        print(self.node.tcp_punch_clients)
+        print(msg.routing.dest_index)
 
         # Select [ext or nat] dest and punch mode
         # (either local, self, remote)
         punch = msg.routing.punch
         punch_mode, dest = await get_punch_mode(
             msg.routing.af,
-            msg.meta.src_info,
+            patched_p2p[af][src_info["if_index"]],
             msg.routing.interface,
             punch,
+            msg.meta.same_machine,
         )
 
         # Basic sanity checks on dest.
@@ -437,8 +456,8 @@ class SigProtoHandlers():
         print("msg meta")
         print(msg.meta.src)
         print(msg.meta.pipe_id)
-        print(msg.routing.punch.state)
         print(f"using dest {dest}")
+        print(f"recv {msg.meta.same_machine}")
         info = punch.get_state_info(
             msg.meta.src["node_id"],
             msg.meta.pipe_id,
@@ -557,8 +576,10 @@ class SigProtoHandlers():
             return
         
         # Updating routing dest with current addr.
+        assert(msg is not None)
         msg.set_cur_addr(p_node)
         msg.routing.load_if_extra(self.node)
+        
         return await handler(msg)
 
 """

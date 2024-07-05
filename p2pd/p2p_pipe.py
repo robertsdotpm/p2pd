@@ -125,19 +125,25 @@ class P2PPipe():
         if_index = src_info["if_index"]
         interface = self.node.ifs[if_index]
         initiator = self.node.tcp_punch_clients[if_index]
+        patched_p2p = work_behind_same_router(
+            self.node.p2p_addr,
+            parse_peer_addr(dest_bytes),
+        )
 
         # Select [ext or nat] dest and punch mode
         # (either local, self, remote)
         punch_mode, use_addr = await get_punch_mode(
             af,
-            dest_info,
+            patched_p2p[af][dest_info["if_index"]],
             interface,
             initiator,
+            same_machine,
         )
 
         print("alice punch mode")
         print(punch_mode)
         print(use_addr)
+        print(f"open pipe same = {same_machine}")
 
         # Get initial NAT predictions using STUN.
         stun_client = self.node.stun_clients[af][if_index]

@@ -268,11 +268,11 @@ class P2PNode(Daemon, P2PUtils):
 
         # Return on timeout or on update.
         try:
-            asyncio.wait_for(
+            await asyncio.wait_for(
                 state["data"]["update_event"].wait(),
                 n
             )
-        except asyncio.TimeoutError:
+        except:
             # Attempt punching with default ports.
             log("Initiator punch update timeout.")
 

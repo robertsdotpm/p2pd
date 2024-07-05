@@ -113,8 +113,14 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
                 pp.tcp_hole_punch,
             )
 
+            print(punch_req_msg)
+            print(punch_req_msg.pack())
+
+            print(nodes.bob.tcp_punch_clients)
+
+
             # Get punch meeting details.
-            await nodes.bob.sig_proto_handlers.proto(
+            resp = await nodes.bob.sig_proto_handlers.proto(
                 punch_req_msg.pack()
             )
 

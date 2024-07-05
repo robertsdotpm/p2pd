@@ -117,24 +117,15 @@ PUNCH_CONF = dict_child({
     "do_close": False,
 }, NET_CONF)
 
-async def get_punch_mode(af, if_info, interface, punch_client):
+async def get_punch_mode(af, if_info, interface, punch_client, same_machine):
     # Calculate punch mode
-    route = interface.route(af)
-    dest_addr = await Address(
-        str(if_info["ext"]),
-        80,
-        route
-    ).res()
-    punch_mode = punch_client.get_punch_mode(dest_addr)
-
-    log(f"Loaded punc mode = {punch_mode}")
-    if punch_mode == TCP_PUNCH_REMOTE:
-        use_addr = str(if_info["ext"])
+    if same_machine:
+        return TCP_PUNCH_SELF, str(if_info["ext"])
     else:
-        use_addr = str(if_info["nic"])
-    log(f"using addr = {use_addr}")
-        
-    return punch_mode, use_addr
+        if if_info["ext"].is_private:
+            return TCP_PUNCH_LAN, str(if_info["ext"])
+        else:
+            return TCP_PUNCH_REMOTE, str(if_info["ext"])
 
 # Just merges two specific lists into slightly different format.
 def map_info_to_their_maps(map_info):
@@ -739,6 +730,7 @@ class TCPPunch():
                     ips=dest_addr[0],
                     port=local_port,
                 )
+                route.interface = None
 
             # Open connection -- return only sock.
             #sock = await pipe_open(TCP, dest, route=route, conf=PUNCH_CONF) 

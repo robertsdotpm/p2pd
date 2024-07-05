@@ -351,7 +351,7 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
         sock.bind(bind_tup)
         return sock
     except Exception:
-        error = """
+        error = f"""
         Could not bind to interface
         af = {route.af}
         sock = {sock}"
