@@ -561,18 +561,6 @@ class P2PNode(Daemon, P2PUtils):
             if turn_client is not None:
                 await turn_client.close()
 
-        # Cancel all pending p2p_pipes from this node.
-        for pipe_task in self.pending_pipes.values():
-            pipe_task.cancel()
-
-        """
-        Close all open pipes. These may be a mixture of
-        inbound cons, outbound cons, servers, or various
-        clients. Anything already closed will return.
-        """
-        for pipe in self.pipes.values():
-            await pipe.close()
-
         # Try close the multiprocess manager.
         try:
             if self.mp_manager is not None:

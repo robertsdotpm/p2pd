@@ -527,7 +527,7 @@ class SigProtoHandlers():
                 msg.payload.relay_tup,
             )
 
-    def proto(self, buf):
+    async def proto(self, buf):
         p_node = self.node.addr_bytes
         p_addr = self.node.p2p_addr
         node_id = to_s(p_addr["node_id"])
@@ -559,7 +559,7 @@ class SigProtoHandlers():
         # Updating routing dest with current addr.
         msg.set_cur_addr(p_node)
         msg.routing.load_if_extra(self.node)
-        return handler(msg)
+        return await handler(msg)
 
 """
 Index cons by pipe_id -> future and then
