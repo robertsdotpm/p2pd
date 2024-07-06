@@ -204,6 +204,7 @@ class P2PNode(Daemon, P2PUtils):
                     dest_info["nic"],
                     interface.netifaces,
                 )
+                route.interface.is_default = lambda x: False
                 #print(route.interface)
                 # need to load correct iface with id
                 # if its not the current iface
@@ -253,6 +254,7 @@ class P2PNode(Daemon, P2PUtils):
             print("do punch ")
             print(params)
             punch_offset = params.pop(0)
+
             punch = self.tcp_punch_clients[punch_offset]
             pipe = await punch.proto_do_punching(*params)
             if pipe is not None:

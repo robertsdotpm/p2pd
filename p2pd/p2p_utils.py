@@ -138,7 +138,14 @@ def work_behind_same_router(src, dest):
             for s_info in src[af]:
                 # This interface is on the same LAN.
                 same_lan = d_info["ext"] == s_info["ext"]
-                if same_pc or same_lan:
+                if same_pc:
+                    d_info["ext"] = sorted([
+                        d_info["nic"],
+                        s_info["nic"]
+                    ])[0]
+                    d_info["nat"] = nat
+
+                if same_lan:
                     d_info["ext"] = d_info["nic"]
                     d_info["nat"] = nat
 

@@ -164,15 +164,20 @@ def proc_do_punching(args):
     my command execution code on Windows -- test this.
     """
     asyncio.set_event_loop_policy(SelectorEventPolicy())
+    
+    print(args)
     same_machine = args.pop()
     side = args.pop()
     sq = args.pop()
     q = args.pop()
 
+
+
     loop = asyncio.get_event_loop()
     f = asyncio.ensure_future(
         async_wrap_errors(
-            TCPPunch.do_punching(side, same_machine, *args, sq)
+            TCPPunch.do_punching(
+                side, same_machine, *args, sq)
         ),
         loop=loop
     )
@@ -469,6 +474,8 @@ class TCPPunch():
             "same_machine": same_machine,
         }
 
+        print(data)
+
         # First state progression -- no need to check existing.
         self.active_no += 1
         self.set_state(
@@ -557,6 +564,8 @@ class TCPPunch():
             "pipe_id": pipe_id,
             "same_machine": same_machine,
         }
+
+        print(data)
 
         # Update state.
         self.active_no += 1
@@ -673,6 +682,7 @@ class TCPPunch():
         """
         warnings.filterwarnings('ignore', message="unclosed", category=ResourceWarning)
 
+        print(f"do punch dest = {dest_addr}")
         # Init.
         log(f"> TCP punch interface rp pool")
         log_interface_rp(interface)
@@ -701,6 +711,19 @@ class TCPPunch():
             else:
                 log("TCP punch behind current meeting time!")
 
+        # Bind to a specific port and interface.
+        route = await interface.route(af).bind()
+        if_patch = None
+        if same_machine and dest_addr != route.nic():
+            # Both  sides need to use same nic ip
+            # so its the same interface.
+            cidr = af_to_cidr(af)
+            nic_ipr = IPRange(dest_addr, cidr=cidr)
+            if_patch = get_if_name_by_nic_ipr(
+                nic_ipr,
+                interface.netifaces,
+            )
+
         """
         We can keep trying until success without the mappings
         changing. However, unpredictable nats that use
@@ -724,13 +747,17 @@ class TCPPunch():
                 await asyncio.sleep(ms_delay / 1000)
 
             # Bind to a specific port and interface.
-            route = await interface.route(af).bind(local_port)
-            if same_machine and dest_addr[0] != route.nic():
+            if if_patch is not None:
                 route = await interface.route(af).bind(
-                    ips=dest_addr[0],
                     port=local_port,
+                    ips=dest.tup[0],
                 )
-                route.interface = None
+
+                route.interface = if_patch
+                route.interface.is_default = lambda x: False
+            else:
+                route = await interface.route(af).bind(local_port)
+
 
             # Open connection -- return only sock.
             #sock = await pipe_open(TCP, dest, route=route, conf=PUNCH_CONF) 
@@ -989,15 +1016,17 @@ class TCPPunch():
         # The executor pool is used to start processes.
         loop = asyncio.get_event_loop()
         sock = None
+        same_machine = state_info["data"]["same_machine"]
         
         # Multiprocessing pool is enabled.
         if self.executors is not None:
+            print("executors enabled")
             # Setup args list for executor.
             args.append(state_info["data"]["mode"])
             args.append(queue)
             args.append(self.sock_queue)
             args.append(side)
-            args.append(state_info["data"]["same_machine"])
+            args.append(same_machine)
             
             # Schedule TCP punching in process pool executor.
             loop.run_in_executor(
@@ -1021,7 +1050,7 @@ class TCPPunch():
         # Otherwise do the punching in this event loop.
         if self.executors is None:
             sock = await async_wrap_errors(
-                TCPPunch.do_punching(side, *args, state_info["data"]["mode"], self.sock_queue)
+                TCPPunch.do_punching(side, same_machine, *args, state_info["data"]["mode"], self.sock_queue)
             )
 
         # Wrap returned socket in a pipe.
