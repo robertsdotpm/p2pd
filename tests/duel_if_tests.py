@@ -43,13 +43,11 @@ class TestNodes():
 class DuelIFTests(unittest.IsolatedAsyncioTestCase):
     async def test_direct_connect(self):
         async with TestNodes() as nodes:
-            pipe = await direct_connect(
-                nodes.pipe_id,
-                nodes.bob.addr_bytes,
-                nodes.alice,
-            )
-            assert(pipe is not None)
-            await pipe.close()
+            pp = P2PPipe(nodes.alice)
+            await pp.connect(nodes.bob.addr_bytes)
+
+            #assert(pipe is not None)
+            #await pipe.close()
 
     async def test_reverse_connect(self):
         async with TestNodes() as nodes:

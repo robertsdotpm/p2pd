@@ -495,3 +495,42 @@ async def send_recv_loop(dest, pipe, buf, sub=SUB_ALL):
         except Exception:
             log_exception()
             return
+        
+"""
+If trying to reach a destination that uses a private address
+and its a machine in the LA, then binding() a local socket
+to the wrong interface address means being unable to reach
+that destination host. The machines routing table knows
+what interface to use to reach such an address and most
+of the addressing info is supported in P2PD (subnet info
+currently hasn't been added.) So for now -- this is a hack.
+
+It means try to connect to that address and let the machine
+decide on the right interface to use. Then the socket
+bind IP is looked up and the interface that matches that
+address is loaded directly for use with the software.
+It's a work-around until I properly add in subnet fields.
+
+This code will be used to make the p2p connect code more
+robust -- so that it works to hosts in the LAN and to
+services on interfaces on the same machine.
+"""
+def determine_if_path(af, dest, sock_type=TCP):
+    # Setup socket for connection.
+    src_ip = None
+    s = socket.socket(af, sock_type)
+
+    # We don't care about connection success.
+    # But avoiding delays is important.
+    s.settimeout(0)
+    try:
+        # Large port avoids perm errors.
+        # Doesn't matter if it exists or not.
+        s.connect((dest, 12345))
+    except BlockingIOError:
+        # Get the interface bind address.
+        src_ip = s.getsockname()[0]
+    finally:
+        s.close()
+
+    return src_ip

@@ -22,6 +22,7 @@ from .p2p_addr import *
 from .p2p_utils import *
 from .tcp_punch import PUNCH_RECIPIENT, PUNCH_INITIATOR
 from .tcp_punch import TCP_PUNCH_IN_MAP, get_punch_mode
+from .p2p_pipe import *
 
 SIG_CON = 1
 SIG_TCP_PUNCH = 2
@@ -388,14 +389,15 @@ class ConMsg(SigMsg):
 class SigProtoHandlers():
     def __init__(self, node):
         self.node = node
+        self.pp = P2PPipe(node)
 
     async def handle_con_msg(self, msg):
         # Connect to chosen address.
+
         pipe = await asyncio.wait_for(
-            direct_connect(
-                msg.meta.pipe_id,
+            self.pp.connect(
                 msg.meta.src_buf,
-                self.node,
+                [P2P_DIRECT]
             ),
             10
         )

@@ -11,6 +11,8 @@ from .settings import *
 from .p2p_addr import parse_peer_addr
 from .signaling import SignalMock
 from .interface import get_default_iface, get_mac_address
+from .interface import get_if_by_nic_ipr
+from .ip_range import IPRange
 
 def init_process_pool():
     # Make selector default event loop.
@@ -123,6 +125,9 @@ that external address with a private, NIC address.
 For this reason the P2P address format includes
 a private address section that corrosponds to
 the address passed to bind() for the nodes listen().
+
+also addr compares arent the best idea since ifaces can have
+multiple addresses. think on this more.
 """
 def work_behind_same_router(src, dest):
     # Disable NAT behind router.
@@ -144,10 +149,12 @@ def work_behind_same_router(src, dest):
                         s_info["nic"]
                     ])[0]
                     d_info["nat"] = nat
+                    continue
 
                 if same_lan:
                     d_info["ext"] = d_info["nic"]
                     d_info["nat"] = nat
+                    continue
 
     return new_addr
 
@@ -336,3 +343,4 @@ async def fallback_machine_id(netifaces, app_id="p2pd"):
     mac = await get_mac_address(if_name, netifaces)
     buf = f"{app_id} {host} {if_name} {mac}"
     return to_s(hashlib.sha256(to_b(buf)).digest())
+

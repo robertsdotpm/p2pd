@@ -720,7 +720,7 @@ def dict_to_if_list(dict_list):
 
     return if_list
 
-def get_if_name_by_nic_ipr(nic_ipr, netifaces):
+def get_if_by_nic_ipr(nic_ipr, netifaces):
     for if_name in netifaces.interfaces():
         valid_afs = [netifaces.AF_INET, netifaces.AF_INET6]
         addr_infos = netifaces.ifaddresses(if_name)
@@ -732,7 +732,7 @@ def get_if_name_by_nic_ipr(nic_ipr, netifaces):
                 cidr = af_to_cidr(
                     netiface_to_af(af, netifaces)
                 )
-                
+
                 needle_ipr = IPRange(info["addr"], cidr=cidr)
                 if needle_ipr == nic_ipr:
                     i = Interface(if_name)
@@ -740,7 +740,69 @@ def get_if_name_by_nic_ipr(nic_ipr, netifaces):
                     i.load_if_info()
                     return i
             
+"""
+On a computer that has multiple network interfaces
+the right interface needs to be selected depending
+on the target destination. The easiest way to do
+this is to try connect to the destination without
+binding the socket beforehand and checking what
+local IP is used for the bind address. The IP will
+correspond to a certain network interface which
+can be double-checked against what interface is
+intended as the source for a connection.
+"""
+async def select_if_by_dest(af, dest_ip, interface):
+    """
+    All valid interfaces for the software can reach
+    internet -- use original interface if the dest_ip
+    is a public address.
+    """
+    cidr = af_to_cidr(af)
+    dest_ipr = IPRange(dest_ip, cidr=cidr)
+    if dest_ipr.is_public:
+        return interface
+    
+    # Simply connects a non-blocking socket to the dest_ip
+    # and checks the local IP used to select an Interface.
+    bind_ip = determine_if_path(af, dest_ip)
+    bind_ipr = IPRange(bind_ip, cidr=cidr)
+    bind_interface = get_if_by_nic_ipr(
+        bind_ipr,
+        interface.netifaces,
+    )
 
+    # Auto-selected interface matches chosen interface.
+    # Return the chosen interface with no changes.
+    if bind_interface.name == interface.name:
+        return interface
+        
+    """
+    If the interface that was auto-chosen by the OS
+    was different to the one that the caller
+    chose then the correct interface is returned.
+
+    Not default is set to force manually choosing
+    the interface for sockets as we don't want to
+    load all addressing info just to determine
+    if its a default interface for the address family.
+    """    
+    bind_interface.is_default = lambda x: False
+
+    """
+    Patches the partially loaded interface to have
+    a route function that will return a route
+    that binds to the correct bind IP. The
+    external address is set from the other
+    interfaces primary route.
+    """
+    route = await interface.route(af)
+    route = Route(af, [bind_ipr], route.ext_ips)
+    route.interface = bind_interface
+    def route_patch(af):
+        return route
+    
+    bind_interface.route = route_patch
+    return bind_interface
 
 if __name__ == "__main__": # pragma: no cover
     async def test_interface():

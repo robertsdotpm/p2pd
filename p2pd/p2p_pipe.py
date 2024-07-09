@@ -29,12 +29,32 @@ class P2PPipe():
     
     async def connect(self, dest_bytes, strategies=P2P_STRATEGIES):
         # Create a future for pending pipes.
-        pipe_id = self.node.pipe_future(pipe_id)
+        pipe_id = to_s(rand_plain(15))
         pipe = None
+
+        """
+        The code bellow patches the destination address to
+        use the internal private address if its behind
+        the same LAN for the connection.
+        """
+        dest = parse_peer_addr(dest_bytes)
+        dest = work_behind_same_router(self.node.p2p_addr, dest)
 
         # Attempt direct connection first.
         # The only method not to need signal messages.
         if P2P_DIRECT in strategies:
+            # Returns a message from func given a comp addr info pair.
+            msg = await for_addr_infos(
+                pipe_id,
+                self.node.p2p_addr,
+                dest,
+                self.direct_connect,
+            )
+
+            print("dest p2p out")
+            print(msg)
+
+
             # TODO: patch dest 
             pipe = await direct_connect(
                 pipe_id,
@@ -43,7 +63,7 @@ class P2PPipe():
             )
 
             if pipe is not None:
-                return self.node.pipe_ready(pipe_id, pipe)
+                return pipe
 
         # Proceed only if they need signal messages.
         if strategies == [P2P_DIRECT]:
@@ -90,6 +110,45 @@ class P2PPipe():
             # Success so return
             if pipe is not None:
                 return pipe
+            
+    async def direct_connect(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, same_machine=False):
+        # Connect to this address.
+        dest_ip = str(dest_info["ext"])
+        dest = Address(
+            dest_ip,
+            dest_info["port"],
+        )
+
+        # (1) Get first interface for AF.
+        # (2) Build a 'route' from it with it's main NIC IP.
+        # (3) Bind to the route at port 0. Return itself.
+        if_index = src_info["if_index"]
+        interface = self.node.ifs[if_index]
+        interface = await select_if_by_dest(af, dest_ip, interface)
+        route = await interface.route(af).bind()
+        print("in make con")
+        print(route)
+        print(dest_info["ext"])
+        print(dest_info["port"])
+
+        # Connect to this address.
+        dest = Address(
+            str(dest_info["ext"]),
+            dest_info["port"],
+        )
+
+        print(route._bind_tups)
+        print(dest.host)
+
+        pipe = await pipe_open(
+            route=route,
+            proto=TCP,
+            dest=dest,
+            msg_cb=self.node.msg_cb
+        )
+
+        print(pipe)
+        return pipe
 
     async def reverse_connect(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, same_machine=False):
         print("in reverse connect")
