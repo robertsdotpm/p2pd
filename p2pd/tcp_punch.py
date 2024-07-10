@@ -746,6 +746,10 @@ class TCPPunch():
         is_connected = [False]
         socks = []
 
+
+        print(f"interface is resolved {interface.resolved} {interface.name} {interface.route}")
+        #interface = await select_if_by_dest(af, dest_addr, interface)
+
         # If NTP meet is defined then wait for it to occur.
         if ntp_meet:
             # NTP meet time is too large -- set to max.

@@ -766,10 +766,16 @@ async def select_if_by_dest(af, dest_ip, interface):
     # and checks the local IP used to select an Interface.
     bind_ip = determine_if_path(af, dest_ip)
     bind_ipr = IPRange(bind_ip, cidr=cidr)
+
+    print("Bind ip = ")
+    print(bind_ip)
     bind_interface = get_if_by_nic_ipr(
         bind_ipr,
         interface.netifaces,
     )
+
+    print("bind interface = ")
+    print(bind_interface)
 
     # Unable to find associated interface.
     if bind_interface is None:
@@ -778,7 +784,12 @@ async def select_if_by_dest(af, dest_ip, interface):
     # Auto-selected interface matches chosen interface.
     # Return the chosen interface with no changes.
     if bind_interface.name == interface.name:
+        print("using original interface")
         return interface
+
+    print("patching original funcs")
+
+    return await bind_interface
         
     """
     If the interface that was auto-chosen by the OS
@@ -799,14 +810,13 @@ async def select_if_by_dest(af, dest_ip, interface):
     external address is set from the other
     interfaces primary route.
     """
-    route = await interface.route(af)
+    route = interface.route(af)
     route = Route(af, [bind_ipr], route.ext_ips)
     route.interface = bind_interface
     def route_patch(af):
         return route
     
     bind_interface.route = route_patch
-    bind_interface.supported = lambda: [af]
     return bind_interface
 
 if __name__ == "__main__": # pragma: no cover

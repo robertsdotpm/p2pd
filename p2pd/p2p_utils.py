@@ -259,11 +259,16 @@ async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, node, concurrent=
             # Select interface to use.
             if_index = src_info["if_index"]
             interface = node.ifs[if_index]
+
+            print("if before = ")
+            print(interface)
             interface = await select_if_by_dest(
                 af,
                 str(dest_info["ext"]),
                 interface,
             )
+            print("if after")
+            print(interface)
 
             # Coroutine to run.
             print(func)
