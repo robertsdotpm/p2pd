@@ -182,7 +182,7 @@ class Interface():
     def __init__(self, name=None, stack=DUEL_STACK, nat=None, netifaces=None):
         super().__init__()
         self.resolved = False
-        self.id = None
+        self.id = self.mac = self.nic_no = None
         self.nat = nat or nat_info()
         self.name = name
         self.rp = {IP4: RoutePool(), IP6: RoutePool()}
@@ -806,6 +806,7 @@ async def select_if_by_dest(af, dest_ip, interface):
         return route
     
     bind_interface.route = route_patch
+    bind_interface.supported = lambda: [af]
     return bind_interface
 
 if __name__ == "__main__": # pragma: no cover

@@ -234,7 +234,7 @@ proto: direct_connect(... msg.meta.src)
 
 Is the only function that does this so far.
 """
-async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, node, concurrent=False):
+async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, node, concurrent=False, reply=None):
     found_valid_af_pair = False
 
     # For concurrent tasks.
@@ -266,15 +266,17 @@ async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, node, concurrent=
             )
 
             # Coroutine to run.
+            print(func)
             coro = func(
                 af,
                 pipe_id,
                 dest["node_id"],
                 src_info,
                 dest_info,
-                dest_bytes,
+                dest["bytes"],
                 interface,
                 same_machine,
+                reply=reply,
             )
 
             # Build a list of tasks if concurrent.

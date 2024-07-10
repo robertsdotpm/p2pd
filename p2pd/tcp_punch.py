@@ -167,8 +167,6 @@ def proc_do_punching(args):
     my command execution code on Windows -- test this.
     """
     asyncio.set_event_loop_policy(SelectorEventPolicy())
-    
-    print(args)
     same_machine = args.pop()
     side = args.pop()
     sq = args.pop()
@@ -428,10 +426,6 @@ class TCPPunch():
             rmaps = copy.deepcopy(map_info)
             patch_map_info_for_self_punch(rmaps)
             rmaps = map_info_to_their_maps(rmaps)
-
-        print("initial r maps = ")
-        print(rmaps)
-        print(our_maps)
         
         # Save session data.
         ntp_meet = self.get_ntp_meet_time()
@@ -480,7 +474,6 @@ class TCPPunch():
             "same_machine": same_machine,
         }
 
-        print(data)
 
         # First state progression -- no need to check existing.
         self.active_no += 1
@@ -531,9 +524,6 @@ class TCPPunch():
         # Sanity check.
         nat_check_for_low_ports(map_info)
 
-        print("recv patched their maps = ")
-        print(map_info)
-
         # Expect them to use our reply port if set.
         """
         It's possible that the Initiator has already chosen a remote
@@ -571,8 +561,6 @@ class TCPPunch():
             "pipe_id": pipe_id,
             "same_machine": same_machine,
         }
-
-        print(data)
 
         # Update state.
         self.active_no += 1
@@ -673,21 +661,25 @@ class TCPPunch():
             log("> update map -- invalid state")
             data["update_event"].set()
 
-    async def proto_states(self, recv_addr, recv_nat, recv_node_id, pipe_id, stun_client, interface, payload=None, process_replies=None, con_list=None, mode=TCP_PUNCH_REMOTE, same_machine=False):
+    async def proto_update(self, af, recv_addr, recv_nat, recv_node_id, pipe_id, stun_client, interface, same_machine=False, reply=None):
+        punch_ret = None
         info = self.get_state_info(
             recv_node_id,
             pipe_id,
         )        
 
+        print(recv_addr)
+
         punch_mode = await get_punch_mode(
+            af,
             recv_addr,
             same_machine,
         )
 
         if info is None:
             # Step 1 -- initial mappings.
-            if payload is None:
-                return await self.proto_send_initial_mappings(
+            if reply is None:
+                punch_ret = await self.proto_send_initial_mappings(
                     recv_addr,
                     recv_nat,
                     recv_node_id,
@@ -697,33 +689,37 @@ class TCPPunch():
                     mode=punch_mode,
                     same_machine=same_machine,
                 )
+                state = TCP_PUNCH_IN_MAP
 
             # Step 2 -- get mappings.
-            if payload is not None:
-                return await self.proto_recv_initial_mappings(
+            if reply is not None:
+                punch_ret = await self.proto_recv_initial_mappings(
                     recv_addr,
                     recv_nat,
                     recv_node_id,
                     pipe_id,
-                    payload.mappings,
+                    reply.payload.mappings,
                     stun_client,
                     interface,
-                    payload.ntp,
+                    reply.payload.ntp,
                     mode=punch_mode,
                     same_machine=same_machine,
                 )
-        else:
-            if info["state"] != TCP_PUNCH_IN_MAP:
-                return
-            
-            # Otherwise update the initiator.
-            return await self.proto_update_recipient_mappings(
-                recv_node_id,
-                pipe_id,
-                payload.mappings,
-                stun_client,
-            )
+                state = TCP_PUNCH_RECV_INITIAL_MAPPINGS
 
+        else:
+            if info["state"] == TCP_PUNCH_IN_MAP:
+                # Otherwise update the initiator.
+                punch_ret = await self.proto_update_recipient_mappings(
+                    recv_node_id,
+                    pipe_id,
+                    reply.payload.mappings,
+                    stun_client,
+                )
+
+            state = info["state"]
+
+        return punch_mode, state, punch_ret
 
 
 
@@ -746,7 +742,7 @@ class TCPPunch():
         print(f"do punch dest = {dest_addr}")
         # Init.
         log(f"> TCP punch interface rp pool")
-        log_interface_rp(interface)
+        #log_interface_rp(interface)
         is_connected = [False]
         socks = []
 

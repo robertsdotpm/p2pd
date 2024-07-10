@@ -189,7 +189,6 @@ class P2PNode(Daemon, P2PUtils):
                 return
 
             print("do punch ")
-            print(params)
             punch_offset = params.pop(0)
 
             punch = self.tcp_punch_clients[punch_offset]

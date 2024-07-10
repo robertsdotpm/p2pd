@@ -58,6 +58,7 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
                 nodes.alice.addr_bytes,
                 nodes.bob.addr_bytes,
                 pp.reverse_connect,
+                None,
                 nodes.alice,
             )
 
@@ -78,6 +79,7 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
                 nodes.alice.addr_bytes,
                 nodes.bob.addr_bytes,
                 pp.udp_relay,
+                None,
             )
 
             print(turn_req_msg.pack())
@@ -104,12 +106,9 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
     async def test_tcp_punch(self):
         async with TestNodes() as nodes:
             pp = P2PPipe(nodes.alice)
-            punch_req_msg = await for_addr_infos(
-                nodes.pipe_id,
-                nodes.alice.addr_bytes,
+            punch_req_msg = await pp.connect(
                 nodes.bob.addr_bytes,
-                pp.tcp_hole_punch,
-                nodes.alice,
+                strategies=[P2P_PUNCH],
             )
 
             print(punch_req_msg)
@@ -125,8 +124,13 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
             )
 
             pipe_id = nodes.pipe_id
-            bob_hole = await nodes.bob.pipes[pipe_id]
-            alice_hole = await nodes.alice.pipes[pipe_id]
+
+            print("Bob pipes")
+            for pipe_id in nodes.bob.pipes:
+                bob_hole = await nodes.bob.pipes[pipe_id]
+
+            for pipe_id in nodes.alice.pipes:
+                alice_hole = await nodes.alice.pipes[pipe_id]
 
             print(f"alice hole = {alice_hole}")
             print(f"bob hole = {bob_hole}")

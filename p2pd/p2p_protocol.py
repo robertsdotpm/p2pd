@@ -392,7 +392,6 @@ class SigProtoHandlers():
 
     async def handle_con_msg(self, msg):
         # Connect to chosen address.
-
         pipe = await asyncio.wait_for(
             self.pp.connect(
                 msg.meta.src_buf,
@@ -421,6 +420,23 @@ class SigProtoHandlers():
     avoids code duplication and keeps it simple.
     """
     async def handle_punch_msg(self, msg):
+        # Connect to chosen address.
+        pipe = await asyncio.wait_for(
+            self.pp.connect(
+                msg.meta.src_buf,
+                strategies=[P2P_PUNCH],
+                reply=msg,
+            ),
+            5
+        )
+
+        print("handle punch pipe = ")
+        print(pipe)
+        return
+
+
+
+
         # AFs must match for this type of message.
         if msg.meta.af != msg.routing.af:
             raise Exception("tcp punch afs differ.")
