@@ -771,6 +771,10 @@ async def select_if_by_dest(af, dest_ip, interface):
         interface.netifaces,
     )
 
+    # Unable to find associated interface.
+    if bind_interface is None:
+        return interface
+
     # Auto-selected interface matches chosen interface.
     # Return the chosen interface with no changes.
     if bind_interface.name == interface.name:

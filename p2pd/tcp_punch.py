@@ -117,15 +117,18 @@ PUNCH_CONF = dict_child({
     "do_close": False,
 }, NET_CONF)
 
-async def get_punch_mode(af, if_info, interface, punch_client, same_machine):
+async def get_punch_mode(af, dest_ip, same_machine):
+    cidr = af_to_cidr(af)
+    dest_ipr = IPRange(dest_ip, cidr=cidr)
+
     # Calculate punch mode
     if same_machine:
-        return TCP_PUNCH_SELF, str(if_info["ext"])
+        return TCP_PUNCH_SELF
     else:
-        if if_info["ext"].is_private:
-            return TCP_PUNCH_LAN, str(if_info["ext"])
+        if dest_ipr.is_private:
+            return TCP_PUNCH_LAN
         else:
-            return TCP_PUNCH_REMOTE, str(if_info["ext"])
+            return TCP_PUNCH_REMOTE
 
 # Just merges two specific lists into slightly different format.
 def map_info_to_their_maps(map_info):
@@ -376,7 +379,7 @@ class TCPPunch():
         self.tcp_punch_stopped.set()
 
     # Initiator: Step 1 -- send Initiators predicted mappings to Recipient.
-    async def proto_send_initial_mappings(self, dest_ip, dest_nat, dest_node_id, pipe_id, stun_client, process_replies=None, con_list=None, mode=TCP_PUNCH_REMOTE, same_machine=False):
+    async def proto_send_initial_mappings(self, dest_ip, dest_nat, dest_node_id, pipe_id, stun_client, interface, process_replies=None, con_list=None, mode=TCP_PUNCH_REMOTE, same_machine=False):
         assert(stun_client.interface == self.interface)
 
         # Log warning if dest_addr is our ext address.
@@ -436,6 +439,9 @@ class TCPPunch():
             # Defines the algorithm used for punching.
             "mode": mode,
 
+            # Used for punching.
+            "interface": interface,
+
             # Event for step 3.
             "update_event": update_event,
 
@@ -488,7 +494,7 @@ class TCPPunch():
         return our_maps, ntp_meet, update_event
 
     # Recipient: Step 2 -- get Initiators mappings. Generate our own.
-    async def proto_recv_initial_mappings(self, recv_addr, recv_nat, recv_node_id, pipe_id, their_maps, stun_client, ntp_meet=0, process_replies=None, con_list=None, mode=TCP_PUNCH_REMOTE, same_machine=False):
+    async def proto_recv_initial_mappings(self, recv_addr, recv_nat, recv_node_id, pipe_id, their_maps, stun_client, interface, ntp_meet=0, process_replies=None, con_list=None, mode=TCP_PUNCH_REMOTE, same_machine=False):
         assert(stun_client.interface == self.interface)
 
         # Invalid len.
@@ -553,6 +559,7 @@ class TCPPunch():
         # State data to change.
         data = {
             "mode": mode,
+            "interface": interface,
             "lmaps": map_info,
             "rmaps": their_maps,
             "process_replies": process_replies,
@@ -666,6 +673,60 @@ class TCPPunch():
             log("> update map -- invalid state")
             data["update_event"].set()
 
+    async def proto_states(self, recv_addr, recv_nat, recv_node_id, pipe_id, stun_client, interface, payload=None, process_replies=None, con_list=None, mode=TCP_PUNCH_REMOTE, same_machine=False):
+        info = self.get_state_info(
+            recv_node_id,
+            pipe_id,
+        )        
+
+        punch_mode = await get_punch_mode(
+            recv_addr,
+            same_machine,
+        )
+
+        if info is None:
+            # Step 1 -- initial mappings.
+            if payload is None:
+                return await self.proto_send_initial_mappings(
+                    recv_addr,
+                    recv_nat,
+                    recv_node_id,
+                    pipe_id,
+                    stun_client,
+                    interface,
+                    mode=punch_mode,
+                    same_machine=same_machine,
+                )
+
+            # Step 2 -- get mappings.
+            if payload is not None:
+                return await self.proto_recv_initial_mappings(
+                    recv_addr,
+                    recv_nat,
+                    recv_node_id,
+                    pipe_id,
+                    payload.mappings,
+                    stun_client,
+                    interface,
+                    payload.ntp,
+                    mode=punch_mode,
+                    same_machine=same_machine,
+                )
+        else:
+            if info["state"] != TCP_PUNCH_IN_MAP:
+                return
+            
+            # Otherwise update the initiator.
+            return await self.proto_update_recipient_mappings(
+                recv_node_id,
+                pipe_id,
+                payload.mappings,
+                stun_client,
+            )
+
+
+
+
     # Both sides: step 3.
     """
     I use 'SO_REUSEPORT' to open another connect
@@ -711,19 +772,6 @@ class TCPPunch():
             else:
                 log("TCP punch behind current meeting time!")
 
-        # Bind to a specific port and interface.
-        route = await interface.route(af).bind()
-        if_patch = None
-        if same_machine and dest_addr != route.nic():
-            # Both  sides need to use same nic ip
-            # so its the same interface.
-            cidr = af_to_cidr(af)
-            nic_ipr = IPRange(dest_addr, cidr=cidr)
-            if_patch = get_if_name_by_nic_ipr(
-                nic_ipr,
-                interface.netifaces,
-            )
-
         """
         We can keep trying until success without the mappings
         changing. However, unpredictable nats that use
@@ -747,17 +795,7 @@ class TCPPunch():
                 await asyncio.sleep(ms_delay / 1000)
 
             # Bind to a specific port and interface.
-            if if_patch is not None:
-                route = await interface.route(af).bind(
-                    port=local_port,
-                    ips=dest.tup[0],
-                )
-
-                route.interface = if_patch
-                route.interface.is_default = lambda x: False
-            else:
-                route = await interface.route(af).bind(local_port)
-
+            route = await interface.route(af).bind(local_port)
 
             # Open connection -- return only sock.
             #sock = await pipe_open(TCP, dest, route=route, conf=PUNCH_CONF) 
@@ -971,7 +1009,7 @@ class TCPPunch():
         af = af_from_ip_s(dest_addr)
         lmaps = state_info["data"]["lmaps"]
         rmaps = state_info["data"]["rmaps"]
-        interface = self.interface
+        interface = state_info["data"]["interface"]
         current_ntp = 0
         if self.sys_clock is not None:
             current_ntp = self.sys_clock.time()

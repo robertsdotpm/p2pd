@@ -11,8 +11,18 @@ from .settings import *
 from .p2p_addr import parse_peer_addr
 from .signaling import SignalMock
 from .interface import get_default_iface, get_mac_address
-from .interface import get_if_by_nic_ipr
+from .interface import get_if_by_nic_ipr, select_if_by_dest
 from .ip_range import IPRange
+
+P2P_DIRECT = 1
+P2P_REVERSE = 2
+P2P_PUNCH = 3
+P2P_RELAY = 4
+
+# TURN is not included as a default strategy because it uses UDP.
+# It will need a special explanation for the developer.
+# SOCKS might be a better protocol for relaying in the future.
+P2P_STRATEGIES = [P2P_DIRECT, P2P_REVERSE, P2P_PUNCH]
 
 def init_process_pool():
     # Make selector default event loop.
@@ -129,7 +139,7 @@ the address passed to bind() for the nodes listen().
 also addr compares arent the best idea since ifaces can have
 multiple addresses. think on this more.
 """
-def work_behind_same_router(src, dest):
+def work_behind_same_router(src, dest, same_if=False):
     # Disable NAT behind router.
     # Or connecting to interfaces on same PC.
     delta = delta_info(NA_DELTA, 0)
@@ -143,18 +153,20 @@ def work_behind_same_router(src, dest):
             for s_info in src[af]:
                 # This interface is on the same LAN.
                 same_lan = d_info["ext"] == s_info["ext"]
-                if same_pc:
-                    d_info["ext"] = sorted([
+
+                if same_if:
+                    # this only needs to be done for tcp
+                    # punch -- they use the same iface!
+                    new_ext = sorted([
                         d_info["nic"],
                         s_info["nic"]
                     ])[0]
-                    d_info["nat"] = nat
-                    continue
+                else:
+                    new_ext = d_info["nic"]
 
-                if same_lan:
-                    d_info["ext"] = d_info["nic"]
+                if same_pc or same_lan:
+                    d_info["ext"] = new_ext
                     d_info["nat"] = nat
-                    continue
 
     return new_addr
 
@@ -222,7 +234,7 @@ proto: direct_connect(... msg.meta.src)
 
 Is the only function that does this so far.
 """
-async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, concurrent=False):
+async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, node, concurrent=False):
     found_valid_af_pair = False
 
     # For concurrent tasks.
@@ -244,6 +256,15 @@ async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, concurrent=False)
 
         # Get interface offset that supports this af.
         for src_info, dest_info in if_info_iter:
+            # Select interface to use.
+            if_index = src_info["if_index"]
+            interface = node.ifs[if_index]
+            interface = await select_if_by_dest(
+                af,
+                str(dest_info["ext"]),
+                interface,
+            )
+
             # Coroutine to run.
             coro = func(
                 af,
@@ -252,6 +273,7 @@ async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, concurrent=False)
                 src_info,
                 dest_info,
                 dest_bytes,
+                interface,
                 same_machine,
             )
 
@@ -277,43 +299,6 @@ async def for_addr_infos(pipe_id, src_bytes, dest_bytes, func, concurrent=False)
         results = await asyncio.gather(*tasks)
         results = [r for r in results if r is not None]
         return results
-    
-    
-
-async def direct_connect(pipe_id, dest_bytes, node):
-    dest = parse_peer_addr(dest_bytes)
-    print("before patch ")
-    print(dest_bytes)
-
-    
-    dest = work_behind_same_router(
-        node.p2p_addr,
-        dest
-    )
-
-    print("in direct con after patch")
-    print(dest)
-    
-
-    cons = await for_addr_infos(
-        pipe_id,
-        node.addr_bytes,
-        dest,
-        node.make_connection,
-        concurrent=True
-    )
-
-    print("cons output")
-    print(cons)
-
-    if not len(cons):
-        return None
-
-    if len(cons) > 1:
-        for con in cons[1:]:
-            await con.close()
-
-    return cons[0]
 
 async def new_peer_signal_pipe(p2p_dest, node):
     for offset in p2p_dest["signal"]:

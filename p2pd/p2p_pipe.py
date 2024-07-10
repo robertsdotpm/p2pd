@@ -12,16 +12,6 @@ nc -4 -l 127.0.0.1 10001 -k
 nc -6 -l ::1 10001 -k
 """
 
-P2P_DIRECT = 1
-P2P_REVERSE = 2
-P2P_PUNCH = 3
-P2P_RELAY = 4
-
-# TURN is not included as a default strategy because it uses UDP.
-# It will need a special explanation for the developer.
-# SOCKS might be a better protocol for relaying in the future.
-P2P_STRATEGIES = [P2P_DIRECT, P2P_REVERSE, P2P_PUNCH]
-
 class P2PPipe():
     def __init__(self, node):
         self.node = node
@@ -30,36 +20,20 @@ class P2PPipe():
     async def connect(self, dest_bytes, strategies=P2P_STRATEGIES):
         # Create a future for pending pipes.
         pipe_id = to_s(rand_plain(15))
-        pipe = None
-
-        """
-        The code bellow patches the destination address to
-        use the internal private address if its behind
-        the same LAN for the connection.
-        """
+        src  = self.node.p2p_addr
         dest = parse_peer_addr(dest_bytes)
-        dest = work_behind_same_router(self.node.p2p_addr, dest)
 
         # Attempt direct connection first.
         # The only method not to need signal messages.
         if P2P_DIRECT in strategies:
             # Returns a message from func given a comp addr info pair.
-            msg = await for_addr_infos(
+            patched_dest = work_behind_same_router(src, dest)
+            pipe = await for_addr_infos(
                 pipe_id,
-                self.node.p2p_addr,
-                dest,
+                src,
+                patched_dest,
                 self.direct_connect,
-            )
-
-            print("dest p2p out")
-            print(msg)
-
-
-            # TODO: patch dest 
-            pipe = await direct_connect(
-                pipe_id,
-                dest_bytes,
-                self.node
+                self.node,
             )
 
             if pipe is not None:
@@ -70,11 +44,10 @@ class P2PPipe():
             return None
         
         # Used to relay signal proto messages.
-        peer_dest = parse_peer_addr(dest_bytes)
-        signal_pipe = self.node.find_signal_pipe(peer_dest)
+        signal_pipe = self.node.find_signal_pipe(dest)
         if signal_pipe is None:
             signal_pipe = await new_peer_signal_pipe(
-                peer_dest,
+                dest,
                 self.node
             )
             assert(signal_pipe is not None)
@@ -95,23 +68,33 @@ class P2PPipe():
             if strategy not in strategies:
                 continue
 
+            # On same machine TCP punching needs to use
+            # a single interface for self-punch.
+            patched_dest = dest
+            if strategy == P2P_PUNCH:
+                patched_dest = work_behind_same_router(
+                    src,
+                    dest,
+                    same_if=True,
+                )
+
             # Returns a message from func given a comp addr info pair.
             msg = await for_addr_infos(
                 pipe_id,
-                self.node.addr_bytes,
-                dest_bytes,
+                src,
+                patched_dest,
                 func_table[i],
+                self.node,
             )
 
             # If no signal message returned then skip.
             if msg is not None:
                 pipe = await self.node.await_peer_con(msg, signal_pipe)
 
-            # Success so return
-            if pipe is not None:
-                return pipe
+                if pipe is not None:
+                    return pipe
             
-    async def direct_connect(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, same_machine=False):
+    async def direct_connect(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, interface, same_machine=False):
         # Connect to this address.
         dest_ip = str(dest_info["ext"])
         dest = Address(
@@ -122,9 +105,6 @@ class P2PPipe():
         # (1) Get first interface for AF.
         # (2) Build a 'route' from it with it's main NIC IP.
         # (3) Bind to the route at port 0. Return itself.
-        if_index = src_info["if_index"]
-        interface = self.node.ifs[if_index]
-        interface = await select_if_by_dest(af, dest_ip, interface)
         route = await interface.route(af).bind()
         print("in make con")
         print(route)
@@ -150,7 +130,7 @@ class P2PPipe():
         print(pipe)
         return pipe
 
-    async def reverse_connect(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, same_machine=False):
+    async def reverse_connect(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, interface, same_machine=False):
         print("in reverse connect")
         return ConMsg({
             "meta": {
@@ -179,23 +159,16 @@ class P2PPipe():
     the lowest value pairs and runs through them until one
     succeeds.
     """
-    async def tcp_hole_punch(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, same_machine=False):
+    async def tcp_hole_punch(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, interface, payload=None, same_machine=False):
         # Punch clients indexed by interface offset.
         if_index = src_info["if_index"]
-        interface = self.node.ifs[if_index]
         initiator = self.node.tcp_punch_clients[if_index]
-        patched_p2p = work_behind_same_router(
-            self.node.p2p_addr,
-            parse_peer_addr(dest_bytes),
-        )
+
 
         # Select [ext or nat] dest and punch mode
         # (either local, self, remote)
         punch_mode, use_addr = await get_punch_mode(
-            af,
-            patched_p2p[af][dest_info["if_index"]],
-            interface,
-            initiator,
+            dest_info[dest_info["if_index"]],
             same_machine,
         )
 
@@ -255,7 +228,7 @@ class P2PPipe():
         msg.validate_dest(af, punch_mode, use_addr)
         return msg
 
-    async def udp_relay(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, same_machine=False):
+    async def udp_relay(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, interface, same_machine=False):
         # Try TURN servers in random order.
         offsets = list(range(0, len(TURN_SERVERS)))
         random.shuffle(offsets)

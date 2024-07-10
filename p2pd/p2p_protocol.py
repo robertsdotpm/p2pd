@@ -22,12 +22,11 @@ from .p2p_addr import *
 from .p2p_utils import *
 from .tcp_punch import PUNCH_RECIPIENT, PUNCH_INITIATOR
 from .tcp_punch import TCP_PUNCH_IN_MAP, get_punch_mode
-from .p2p_pipe import *
+from .interface import select_if_by_dest
 
 SIG_CON = 1
 SIG_TCP_PUNCH = 2
 SIG_TURN = 3
-
 
 class PredictField():
     def __init__(self, mappings):
@@ -387,9 +386,9 @@ class ConMsg(SigMsg):
         super().__init__(data, enum)
 
 class SigProtoHandlers():
-    def __init__(self, node):
+    def __init__(self, pp, node):
+        self.pp = pp
         self.node = node
-        self.pp = P2PPipe(node)
 
     async def handle_con_msg(self, msg):
         # Connect to chosen address.
@@ -399,7 +398,7 @@ class SigProtoHandlers():
                 msg.meta.src_buf,
                 [P2P_DIRECT]
             ),
-            10
+            5
         )
 
         print("Reverse con pipe = ")
@@ -431,7 +430,8 @@ class SigProtoHandlers():
         src_info = msg.meta.src_info
         patched_p2p = work_behind_same_router(
             msg.routing.dest,
-            msg.meta.src
+            msg.meta.src,
+            same_if=True
         )
 
         print("in handle punch")
@@ -443,10 +443,7 @@ class SigProtoHandlers():
         # (either local, self, remote)
         punch = msg.routing.punch
         punch_mode, dest = await get_punch_mode(
-            msg.routing.af,
             patched_p2p[af][src_info["if_index"]],
-            msg.routing.interface,
-            punch,
             msg.meta.same_machine,
         )
 
@@ -469,6 +466,11 @@ class SigProtoHandlers():
         if info is None:
             print("recv initial")
             # Get updated mappings for initiator.
+            interface = await select_if_by_dest(
+                msg.routing.af,
+                dest,
+                msg.routing.interface,
+            )
             punch_ret = await punch.proto_recv_initial_mappings(
                 dest,
                 msg.meta.src_info["nat"],
@@ -476,6 +478,7 @@ class SigProtoHandlers():
                 msg.meta.pipe_id,
                 msg.payload.mappings,
                 msg.routing.stun,
+                interface,
                 msg.payload.ntp,
                 mode=punch_mode,
                 same_machine=msg.meta.same_machine,

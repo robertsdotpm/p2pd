@@ -148,7 +148,8 @@ class P2PNode(Daemon, P2PUtils):
         self.signal_worker_tasks = {} # offset into MQTT_SERVERS
 
         self.punch_queue = asyncio.Queue()
-        self.sig_proto_handlers = SigProtoHandlers(self)
+        pp = P2PPipe(self)
+        self.sig_proto_handlers = SigProtoHandlers(pp, self)
 
     async def await_peer_con(self, msg, signal_pipe, timeout=10):
         await signal_pipe.send_msg(
@@ -163,70 +164,6 @@ class P2PNode(Daemon, P2PUtils):
             )
         except asyncio.TimeoutError:
             return None
-
-    async def make_connection(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, same_machine=False):
-        # (1) Get first interface for AF.
-        # (2) Build a 'route' from it with it's main NIC IP.
-        # (3) Bind to the route at port 0. Return itself.
-        if_index = src_info["if_index"]
-        interface = self.ifs[if_index]
-        route = await interface.route(af).bind()
-        print("in make con")
-        print(route)
-        print(dest_info["ext"])
-        print(dest_info["port"])
-
-        # Connect to this address.
-        dest = Address(
-            str(dest_info["ext"]),
-            dest_info["port"],
-        )
-
-        """
-        If connecting to a different interface on the same
-        machine the connection will only work if the
-        interfaces are bridged or there's route table
-        rules between them so we instead bind to the dest
-        """
-        if same_machine:
-            if dest_info["nic"] != src_info["nic"]:
-                print("yes replace route")
-                dest = Address(
-                    str(dest_info["nic"]),
-                    dest_info["port"]
-                )
-
-                route = await interface.route(af).bind(
-                    ips=str(dest_info["nic"])
-                )
-
-                route.interface = get_if_name_by_nic_ipr(
-                    dest_info["nic"],
-                    interface.netifaces,
-                )
-                route.interface.is_default = lambda x: False
-                #print(route.interface)
-                # need to load correct iface with id
-                # if its not the current iface
-                # get iface by bind ip
-                # get call interface
-                # call load_if_info on it
-                # replace route if
-                # has only load a temp interface with its id
-                # so it can be bound to if its non default
-
-        print(route._bind_tups)
-        print(dest.host)
-
-        pipe = await pipe_open(
-            route=route,
-            proto=TCP,
-            dest=dest,
-            msg_cb=self.msg_cb
-        )
-
-        print(pipe)
-        return pipe
 
     def pipe_future(self, pipe_id=None):
         pipe_id = pipe_id or rand_plain(15)
