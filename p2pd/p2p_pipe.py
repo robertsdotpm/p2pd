@@ -12,12 +12,17 @@ nc -4 -l 127.0.0.1 10001 -k
 nc -6 -l ::1 10001 -k
 """
 
+P2P_PIPE_CONF = {
+    "addr_types": [EXT_BIND, NIC_BIND]
+}
+
 class P2PPipe():
-    def __init__(self, dest_bytes, node, strategies=P2P_STRATEGIES, reply=None):
+    def __init__(self, dest_bytes, node, strategies=P2P_STRATEGIES, reply=None, conf=P2P_PIPE_CONF):
         self.strategies = strategies
         self.node = node
         self.tasks = []
         self.reply = reply
+        self.conf = conf
 
 
         self.dest_bytes = dest_bytes
@@ -47,7 +52,7 @@ class P2PPipe():
                 self.src,
                 patched_dest,
                 self.direct_connect,
-                self.node,
+                self,
             )
 
             if pipe is not None:
@@ -105,7 +110,7 @@ class P2PPipe():
                 self.src,
                 patched_dest,
                 func_table[i],
-                self.node,
+                self,
             )
 
             return msg

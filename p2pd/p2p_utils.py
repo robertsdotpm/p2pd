@@ -139,7 +139,7 @@ the address passed to bind() for the nodes listen().
 also addr compares arent the best idea since ifaces can have
 multiple addresses. think on this more.
 """
-def work_behind_same_router(src, dest, same_if=False):
+def work_behind_same_router(src, dest, same_if=False, ifs=[]):
     # Disable NAT behind router.
     # Or connecting to interfaces on same PC.
     delta = delta_info(NA_DELTA, 0)
@@ -234,7 +234,7 @@ proto: direct_connect(... msg.meta.src)
 
 Is the only function that does this so far.
 """
-async def for_addr_infos(src_bytes, dest_bytes, func, node, concurrent=False):
+async def for_addr_infos(src_bytes, dest_bytes, func, pp, concurrent=False):
     found_valid_af_pair = False
 
     # For concurrent tasks.
@@ -256,7 +256,13 @@ async def for_addr_infos(src_bytes, dest_bytes, func, node, concurrent=False):
         for src_info, dest_info in if_info_iter:
             # Select interface to use.
             if_index = src_info["if_index"]
-            interface = node.ifs[if_index]
+            interface = pp.node.ifs[if_index]
+
+            # Select a specific if index.
+            if pp.reply is not None:
+                if pp.reply.routing.dest["if_index"] != if_index:
+                    continue
+
 
             print("if before = ")
             print(interface)

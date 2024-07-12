@@ -57,7 +57,7 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
                 nodes.alice.addr_bytes,
                 nodes.bob.addr_bytes,
                 pp.reverse_connect,
-                nodes.alice,
+                pp,
             )
 
             print(msg)
@@ -76,7 +76,7 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
                 nodes.alice.addr_bytes,
                 nodes.bob.addr_bytes,
                 pp.udp_relay,
-                nodes.alice,
+                pp,
             )
 
             print(turn_req_msg.pack())
