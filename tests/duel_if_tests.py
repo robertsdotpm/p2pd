@@ -54,11 +54,9 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
 
             print("before addr infos")
             msg = await for_addr_infos(
-                nodes.pipe_id,
                 nodes.alice.addr_bytes,
                 nodes.bob.addr_bytes,
                 pp.reverse_connect,
-                None,
                 nodes.alice,
             )
 
@@ -75,11 +73,10 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
         async with TestNodes() as nodes:
             pp = P2PPipe(nodes.alice)
             turn_req_msg = await for_addr_infos(
-                nodes.pipe_id,
                 nodes.alice.addr_bytes,
                 nodes.bob.addr_bytes,
                 pp.udp_relay,
-                None,
+                nodes.alice,
             )
 
             print(turn_req_msg.pack())
@@ -105,11 +102,11 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_tcp_punch(self):
         async with TestNodes() as nodes:
-            pp = P2PPipe(nodes.alice)
-            punch_req_msg = await pp.connect(
+            pp = nodes.alice.p2p_pipe(
                 nodes.bob.addr_bytes,
                 strategies=[P2P_PUNCH],
             )
+            punch_req_msg = await pp.connect()
 
             print(punch_req_msg)
             print(punch_req_msg.pack())

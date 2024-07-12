@@ -386,8 +386,7 @@ class ConMsg(SigMsg):
         super().__init__(data, enum)
 
 class SigProtoHandlers():
-    def __init__(self, pp, node):
-        self.pp = pp
+    def __init__(self, node):
         self.node = node
 
     async def handle_con_msg(self, msg):
@@ -420,13 +419,15 @@ class SigProtoHandlers():
     avoids code duplication and keeps it simple.
     """
     async def handle_punch_msg(self, msg):
+        pp = self.node.p2p_pipe(
+            msg.meta.src_buf,
+            strategies=[P2P_PUNCH],
+            reply=msg,
+        )
+
         # Connect to chosen address.
         pipe = await asyncio.wait_for(
-            self.pp.connect(
-                msg.meta.src_buf,
-                strategies=[P2P_PUNCH],
-                reply=msg,
-            ),
+            pp.connect(),
             5
         )
 

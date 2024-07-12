@@ -13,39 +13,48 @@ nc -6 -l ::1 10001 -k
 """
 
 class P2PPipe():
-    def __init__(self, node):
+    def __init__(self, dest_bytes, node, strategies=P2P_STRATEGIES, reply=None):
+        self.strategies = strategies
         self.node = node
         self.tasks = []
-    
-    async def connect(self, dest_bytes, strategies=P2P_STRATEGIES, reply=None):
+        self.reply = reply
+
+
+        self.dest_bytes = dest_bytes
+        self.dest = parse_peer_addr(dest_bytes)
+        self.src  = self.node.p2p_addr
+        self.src_bytes = self.node.addr_bytes
+        
+        if self.dest["machine_id"] == self.src["machine_id"]:
+            self.same_machine = True
+        else:
+            self.same_machine = False
+
         # Create a future for pending pipes.
         if reply is None:
-            pipe_id = to_s(rand_plain(15))
+            self.pipe_id = to_s(rand_plain(15))
         else:
-            pipe_id = to_s(reply.meta.pipe_id)
+            self.pipe_id = to_s(reply.meta.pipe_id)
 
-        src  = self.node.p2p_addr
-        dest = parse_peer_addr(dest_bytes)
-
+    
+    async def connect(self):
         # Attempt direct connection first.
         # The only method not to need signal messages.
-        if P2P_DIRECT in strategies:
+        if P2P_DIRECT in self.strategies:
             # Returns a message from func given a comp addr info pair.
-            patched_dest = work_behind_same_router(src, dest)
+            patched_dest = work_behind_same_router(self.src, self.dest)
             pipe = await for_addr_infos(
-                pipe_id,
-                src,
+                self.src,
                 patched_dest,
                 self.direct_connect,
                 self.node,
-                reply=reply,
             )
 
             if pipe is not None:
                 return pipe
 
         # Proceed only if they need signal messages.
-        if strategies == [P2P_DIRECT]:
+        if self.strategies == [P2P_DIRECT]:
             return None
         
         """
@@ -58,47 +67,48 @@ class P2PPipe():
             )
             assert(signal_pipe is not None)
         """
+        signal_pipe = None
             
-        """
-        # Try reverse connect.
-        msg = self.reverse_connect(pipe_id, dest_bytes)
-        pipe = await self.node.await_peer_con(msg, signal_pipe, 5)
 
-        # Successful reverse connect.
-        if pipe is not None:
-            return self.node.pipe_ready(pipe_id, pipe)
-        """
+        # Try reverse connect.
+        if P2P_REVERSE in self.strategies:
+            msg = self.reverse_connect(self.pipe_id, self.dest_bytes)
+            pipe = await self.node.await_peer_con(msg, signal_pipe, 5)
+
+            # Successful reverse connect.
+            if pipe is not None:
+                return self.node.pipe_ready(self.pipe_id, pipe)
+
             
         # Mapping for funcs over addr infos.
         # Loop over the most likely strategies left.
         func_table = [self.tcp_hole_punch, self.udp_relay]
         for i, strategy in enumerate([P2P_PUNCH, P2P_RELAY]):
             # ... But still need to respect their choices.
-            if strategy not in strategies:
+            if strategy not in self.strategies:
                 continue
 
             # On same machine TCP punching needs to use
             # a single interface for self-punch.
-            patched_dest = dest
+            patched_dest = self.dest
             if strategy == P2P_PUNCH:
                 print("patching dest for punch")
                 patched_dest = work_behind_same_router(
-                    src,
-                    dest,
+                    self.src,
+                    self.dest,
                     same_if=True,
                 )
 
             # Returns a message from func given a comp addr info pair.
             print(func_table[i])
             msg = await for_addr_infos(
-                pipe_id,
-                src,
+                self.src,
                 patched_dest,
                 func_table[i],
                 self.node,
-                reply=reply,
             )
 
+            return msg
             if msg is not None:
                 return msg
 
@@ -110,7 +120,7 @@ class P2PPipe():
                 if pipe is not None:
                     return pipe
             
-    async def direct_connect(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, interface, same_machine=False, reply=None):
+    async def direct_connect(self, af, src_info, dest_info, interface):
         # Connect to this address.
         dest_ip = str(dest_info["ext"])
         dest = Address(
@@ -146,18 +156,18 @@ class P2PPipe():
         print(pipe)
         return pipe
 
-    async def reverse_connect(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, interface, same_machine=False, reply=None):
+    async def reverse_connect(self, af, src_info, dest_info, interface):
         print("in reverse connect")
         return ConMsg({
             "meta": {
                 "af": af,
-                "pipe_id": pipe_id,
-                "src_buf": self.node.addr_bytes,
+                "pipe_id": self.pipe_id,
+                "src_buf": self.src_bytes,
                 "src_index": src_info["if_index"],
             },
             "routing": {
                 "af": af,
-                "dest_buf": dest_bytes,
+                "dest_buf": self.dest_bytes,
                 "dest_index": dest_info["if_index"],
             },
         })
@@ -175,21 +185,21 @@ class P2PPipe():
     the lowest value pairs and runs through them until one
     succeeds.
     """
-    async def tcp_hole_punch(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, interface, same_machine=False, reply=None):
+    async def tcp_hole_punch(self, af, src_info, dest_info, interface):
         # Punch clients indexed by interface offset.
         if_index = src_info["if_index"]
         punch = self.node.tcp_punch_clients[if_index]
         stun_client = self.node.stun_clients[af][if_index]
         punch_mode, punch_state, punch_ret = await punch.proto_update(
-            af=af,
-            recv_addr=str(dest_info["ext"]),
-            recv_nat=dest_info["nat"],
-            recv_node_id=node_id,
-            pipe_id=pipe_id,
-            stun_client=stun_client,
-            interface=interface,
-            reply=reply,
-            same_machine=same_machine,
+            af,
+            str(dest_info["ext"]),
+            dest_info["nat"],
+            self.dest["node_id"],
+            self.pipe_id,
+            stun_client,
+            interface,
+            self.reply,
+            self.same_machine,
         )
 
         if punch_ret is None:
@@ -205,8 +215,8 @@ class P2PPipe():
             asyncio.ensure_future(
                 self.node.schedule_punching_with_delay(
                     if_index,
-                    pipe_id,
-                    node_id,
+                    self.pipe_id,
+                    self.dest["node_id"],
                 )
             )
         if punch_state == TCP_PUNCH_RECV_INITIAL_MAPPINGS:
@@ -215,21 +225,20 @@ class P2PPipe():
             self.node.add_punch_meeting([
                 dest_info["if_index"],
                 PUNCH_RECIPIENT,
-                node_id,
-                pipe_id,
+                self.dest["node_id"],
+                self.pipe_id,
             ])
 
-        print(dest_bytes)
         msg = TCPPunchMsg({
             "meta": {
-                "pipe_id": pipe_id,
+                "pipe_id": self.pipe_id,
                 "af": af,
-                "src_buf": self.node.addr_bytes,
+                "src_buf": self.src_bytes,
                 "src_index": src_info["if_index"],
             },
             "routing": {
                 "af": af,
-                "dest_buf": dest_bytes,
+                "dest_buf": self.dest_bytes,
                 "dest_index": dest_info["if_index"],
             },
             "payload": {
@@ -240,12 +249,12 @@ class P2PPipe():
         })
 
         # Basic dest addr validation.
-        msg.set_cur_addr(self.node.addr_bytes)
+        msg.set_cur_addr(self.src_bytes)
         msg.routing.load_if_extra(self.node)
         msg.validate_dest(af, punch_mode, str(dest_info["ext"]))
         return msg
 
-    async def udp_relay(self, af, pipe_id, node_id, src_info, dest_info, dest_bytes, interface, same_machine=False, reply=None):
+    async def udp_relay(self, af, src_info, dest_info, interface):
         # Try TURN servers in random order.
         offsets = list(range(0, len(TURN_SERVERS)))
         random.shuffle(offsets)
@@ -257,25 +266,25 @@ class P2PPipe():
                 peer_tup, relay_tup, turn_client = await get_turn_client(
                     af,
                     offset,
-                    self.node.ifs[src_info["if_index"]]
+                    interface,
                 )
             except:
                 log_exception()
                 continue
 
             if turn_client is not None:
-                self.node.pipe_future(pipe_id)
-                self.node.turn_clients[pipe_id] = turn_client
+                self.node.pipe_future(self.pipe_id)
+                self.node.turn_clients[self.pipe_id] = turn_client
                 return TURNMsg({
                     "meta": {
-                        "pipe_id": pipe_id,
+                        "pipe_id": self.pipe_id,
                         "af": af,
-                        "src_buf": self.node.addr_bytes,
+                        "src_buf": self.src_bytes,
                         "src_index": src_info["if_index"],
                     },
                     "routing": {
                         "af": af,
-                        "dest_buf": dest_bytes,
+                        "dest_buf": self.dest_bytes,
                         "dest_index": dest_info["if_index"],
                     },
                     "payload": {

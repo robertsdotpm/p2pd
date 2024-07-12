@@ -747,8 +747,13 @@ class TCPPunch():
         socks = []
 
 
+        """
+        Any patched interface stuff won't work because it
+        gets pickled and unpickled into a dict and reloaded
+        into the standard interface class.
+        """
         print(f"interface is resolved {interface.resolved} {interface.name} {interface.route}")
-        #interface = await select_if_by_dest(af, dest_addr, interface)
+        interface = await select_if_by_dest(af, dest_addr, interface)
 
         # If NTP meet is defined then wait for it to occur.
         if ntp_meet:
