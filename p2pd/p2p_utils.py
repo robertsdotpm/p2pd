@@ -139,36 +139,47 @@ the address passed to bind() for the nodes listen().
 also addr compares arent the best idea since ifaces can have
 multiple addresses. think on this more.
 """
-def work_behind_same_router(src, dest, same_if=False, ifs=[]):
-    # Disable NAT behind router.
-    # Or connecting to interfaces on same PC.
-    delta = delta_info(NA_DELTA, 0)
-    nat = nat_info(OPEN_INTERNET, delta)
-    new_addr = copy.deepcopy(dest)
+def select_dest_ipr(same_pc, src_info, dest_info, addr_types, is_tcp_punch=False):
+    # Shorten these for expressions.
+    src_nid = src_info["netiface_index"]
+    dest_nid = dest_info["netiface_index"]
 
-    # All interfaces on the same machine.
-    same_pc = src["machine_id"] == dest["machine_id"]
-    for af in VALID_AFS:
-        for d_info in new_addr[af]:
-            for s_info in src[af]:
-                # This interface is on the same LAN.
-                same_lan = d_info["ext"] == s_info["ext"]
+    # Makes long conditions slightly more readable.
+    same_if = src_nid == dest_nid
+    same_if_on_host = same_pc and same_if
+    different_ifs_on_host = same_pc and not same_if
 
-                if same_if:
-                    # this only needs to be done for tcp
-                    # punch -- they use the same iface!
-                    new_ext = sorted([
-                        d_info["nic"],
-                        s_info["nic"]
+    # There may be multiple compatible addresses per info.
+    for addr_type in addr_types:
+        # Prefer using remote addresses.
+        if addr_type == EXT_BIND:
+            # Will have only one listed external address.
+            if same_if_on_host:
+                continue
+
+            # Behind same router -- this won't work.
+            if src_info["ext"] == dest_info["ext"]:
+                continue
+
+            # Different reachable address.
+            return dest_info["ext"]
+        
+        # Prefer using local addresses.
+        if addr_type == NIC_BIND:
+            # The server / client is the same IP
+            # It needs to pick the same IF so its reachable.
+            if is_tcp_punch:
+                if different_ifs_on_host:
+                    return sorted([
+                        dest_info["nic"],
+                        src_info["nic"]
                     ])[0]
-                else:
-                    new_ext = d_info["nic"]
+                
+            # Otherwise the NIC IP is fine to use.
+            return dest_info["nic"]
 
-                if same_pc or same_lan:
-                    d_info["ext"] = new_ext
-                    d_info["nat"] = nat
-
-    return new_addr
+    # No compatible addresses. 
+    return None
 
 async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=None):
     # TODO: index by id and not offset.
@@ -234,15 +245,13 @@ proto: direct_connect(... msg.meta.src)
 
 Is the only function that does this so far.
 """
-async def for_addr_infos(src_bytes, dest_bytes, func, pp, concurrent=False):
+async def for_addr_infos(src, dest, func, pp, concurrent=False):
     found_valid_af_pair = False
 
     # For concurrent tasks.
     tasks = []
 
     # Use an AF supported by both.
-    dest = parse_peer_addr(dest_bytes)
-    src = parse_peer_addr(src_bytes)
     for af in VALID_AFS:
         # Iterates by shared AFs, filtered by best NAT pair.
         if_info_iter = IFInfoIter(af, src, dest)
@@ -260,15 +269,24 @@ async def for_addr_infos(src_bytes, dest_bytes, func, pp, concurrent=False):
 
             # Select a specific if index.
             if pp.reply is not None:
-                if pp.reply.routing.dest["if_index"] != if_index:
+                if pp.reply.routing.dest_index != if_index:
                     continue
 
+            dest_info["ip"] = str(
+                select_dest_ipr(
+                    pp.same_machine,
+                    src_info,
+                    dest_info,
+                    pp.conf["addr_types"],
+                    func == pp.tcp_hole_punch
+                )
+            )
 
             print("if before = ")
             print(interface)
             interface = await select_if_by_dest(
                 af,
-                str(dest_info["ext"]),
+                dest_info["ip"],
                 interface,
             )
             print("if after")
@@ -294,8 +312,8 @@ async def for_addr_infos(src_bytes, dest_bytes, func, pp, concurrent=False):
         error = \
         f"""
         Found no compat addresses between 
-        {src_bytes} and
-        {dest_bytes}
+        {src["bytes"]} and
+        {dest["bytes"]}
         """
         log(error)
         return

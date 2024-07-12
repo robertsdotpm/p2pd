@@ -53,7 +53,8 @@ def make_peer_addr(node_id, machine_id, interface_list, signal_offsets, port=NOD
                 delta_type = interface.nat["delta"]["type"]
                 delta_value = interface.nat["delta"]["value"]
 
-            af_bufs.append(b"[%d,%b,%b,%d,%d,%d,%d]" % (
+            af_bufs.append(b"[%d,%d,%b,%b,%d,%d,%d,%d]" % (
+                interface.netiface_index,
                 if_index or i,
                 ip or to_b(r.ext()),
                 ip or to_b(r.nic()),
@@ -291,8 +292,8 @@ def parse_peer_addr(addr):
     signal = [int(n) for n in p if in_range(int(n), [0, len(MQTT_SERVERS) - 1])]
 
     # Parsed dict.
-    schema = [is_no, is_b, is_b, is_no,  is_no, is_no, is_no]
-    translate = [to_n, to_b, to_b, to_n, to_n, to_n, to_n]
+    schema = [is_no, is_no, is_b, is_b, is_no,  is_no, is_no, is_no]
+    translate = [to_n, to_n, to_b, to_b, to_n, to_n, to_n, to_n]
     out = {
         IP4: [],
         IP6: [],
@@ -312,7 +313,7 @@ def parse_peer_addr(addr):
 
             # Split into components.
             parts = inner.split(b',')
-            if len(parts) != 7:
+            if len(parts) != 8:
                 log("p2p addr: invalid parts no.")
                 continue
 
@@ -329,27 +330,28 @@ def parse_peer_addr(addr):
 
             # Is it a valid IP?
             try:
-                IPRange(to_s(parts[1]))
+                IPRange(to_s(parts[2]))
             except Exception:
                 log("p2p addr: ip invalid.")
                 continue
 
             # Is it a valid IP?
             try:
-                IPRange(to_s(parts[2]))
+                IPRange(to_s(parts[3]))
             except Exception:
                 log("p2p addr: ip invalid.")
                 continue
                     
             # Build dictionary of results.
-            delta = delta_info(parts[5], parts[6])
-            nat = nat_info(parts[4], delta)
+            delta = delta_info(parts[6], parts[7])
+            nat = nat_info(parts[5], delta)
             as_dict = {
-                "if_index": parts[0],
-                "ext": IPRange(to_s(parts[1])),
-                "nic": IPRange(to_s(parts[2])),
+                "netiface_index": parts[0],
+                "if_index": parts[1],
+                "ext": IPRange(to_s(parts[2])),
+                "nic": IPRange(to_s(parts[3])),
                 "nat": nat,
-                "port": parts[3]
+                "port": parts[4]
             }
 
             # Save results.

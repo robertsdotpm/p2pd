@@ -111,11 +111,7 @@ class SigMsg():
                 self.src_index,
             )
 
-            # Patch addr if needed.
-            self.src = work_behind_same_router(
-                cur_addr,
-                self.src
-            )
+            self.cur_addr = cur_addr
 
             # Reference to the network info.
             info = self.src[self.af]

@@ -182,6 +182,7 @@ class Interface():
     def __init__(self, name=None, stack=DUEL_STACK, nat=None, netifaces=None):
         super().__init__()
         self.resolved = False
+        self.netiface_index = None
         self.id = self.mac = self.nic_no = None
         self.nat = nat or nat_info()
         self.name = name
@@ -238,8 +239,9 @@ class Interface():
 
         # Check ID exists.
         if self.netifaces is not None:
-            if self.name not in self.netifaces.interfaces():
-                log(f"interface name {self.name} not in {self.netifaces.interfaces()}")
+            if_names = self.netifaces.interfaces()
+            if self.name not in if_names:
+                log(f"interface name {self.name} not in {if_names}")
                 raise InterfaceNotFound
             self.type = get_interface_type(self.name)
             self.nic_no = 0
@@ -249,11 +251,14 @@ class Interface():
             else:
                 self.id = self.name
 
+            self.netiface_index = if_names.index(self.name)
+
         return self
 
     def to_dict(self):
         from .var_names import TXT
         return {
+            "netiface_index": self.netiface_index,
             "name": self.name,
             "nic_no": self.nic_no,
             "id": self.id,
@@ -285,6 +290,7 @@ class Interface():
     @staticmethod
     def from_dict(d):
         i = Interface(d["name"])
+        i.netiface_index = d["netiface_index"]
         i.nic_no = d["nic_no"]
         i.id = d["id"]
         i.mac = d["mac"]

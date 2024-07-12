@@ -122,13 +122,13 @@ async def get_punch_mode(af, dest_ip, same_machine):
     dest_ipr = IPRange(dest_ip, cidr=cidr)
 
     # Calculate punch mode
-    if same_machine:
-        return TCP_PUNCH_SELF
+    if dest_ipr.is_public:
+        return TCP_PUNCH_REMOTE
     else:
-        if dest_ipr.is_private:
-            return TCP_PUNCH_LAN
+        if same_machine:
+            return TCP_PUNCH_SELF
         else:
-            return TCP_PUNCH_REMOTE
+            return TCP_PUNCH_LAN
 
 # Just merges two specific lists into slightly different format.
 def map_info_to_their_maps(map_info):
@@ -845,6 +845,7 @@ class TCPPunch():
             dest IP + dest port and it successfully gets
             connected. So successive calls might fail.
             """
+            print("Got punch sock = ")
             print(sock)
             return [remote_port, sock]
 
@@ -881,30 +882,33 @@ class TCPPunch():
                 #print(f"connect to {dest.tup}")
                 for sleep_time in range(0, steps):
                     tasks.append(
-                        delay_con(
-                            # Record start time for logging.
-                            start_time,
+                        async_wrap_errors(
+                            delay_con(
+                                # Record start time for logging.
+                                start_time,
 
-                            # Wait until ms to do punching.
-                            # Punches are split up over time
-                            # to increase chances of success.
-                            sleep_time * ms_spacing,
+                                # Wait until ms to do punching.
+                                # Punches are split up over time
+                                # to increase chances of success.
+                                sleep_time * ms_spacing,
 
-                            # Local ports to bind to.
-                            local[i],
+                                # Local ports to bind to.
+                                local[i],
 
-                            # Used to choose a single con.
-                            remote[i],
+                                # Used to choose a single con.
+                                remote[i],
 
-                            # Destination addr to connect to.
-                            dest,
+                                # Destination addr to connect to.
+                                dest,
 
-                            # This prevents cons
-                            # from being scheduled later
-                            # on and exceeding total secs
-                            2,
-                            is_connected,
-                            asyncio.get_event_loop()
+                                # This prevents cons
+                                # from being scheduled later
+                                # on and exceeding total secs
+                                2,
+                                is_connected,
+                                asyncio.get_event_loop()
+                            ),
+                            timeout=2
                         )
                     )
             
@@ -920,6 +924,8 @@ class TCPPunch():
         # Use local punching algorithm.
         
         if mode in [TCP_PUNCH_SELF, TCP_PUNCH_LAN]:
+            print("punch 0")
+
             # Updated mapping error occured.
             # Cannot bind to same port as other side on same host.
             if mode == TCP_PUNCH_SELF and remote[0] == rmaps[0][0]:
@@ -942,6 +948,8 @@ class TCPPunch():
 
         # Use remote punching algorithm.
         if mode == TCP_PUNCH_REMOTE:
+            print("punch 1")
+
             outs = await remote_mode(
                 dest_addr=dest_addr,
                 af=af,
@@ -951,6 +959,9 @@ class TCPPunch():
                 rmaps=rmaps,
                 is_connected=is_connected
             )
+
+        print("punch outs = ")
+        print(outs)
 
         # Make both sides choose the same socket.
         #print(outs)
@@ -990,6 +1001,9 @@ class TCPPunch():
         except Exception as e:
             log_exception()
             log("unknown exception occured")
+
+        print("after some kind of sort")
+        print(outs)
 
         # Close all other sockets that aren't needed.
         for _, sock in outs:

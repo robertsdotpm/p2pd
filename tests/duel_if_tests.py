@@ -122,12 +122,14 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
 
             pipe_id = nodes.pipe_id
 
+            
             print("Bob pipes")
             for pipe_id in nodes.bob.pipes:
                 bob_hole = await nodes.bob.pipes[pipe_id]
 
             for pipe_id in nodes.alice.pipes:
                 alice_hole = await nodes.alice.pipes[pipe_id]
+                
 
             print(f"alice hole = {alice_hole}")
             print(f"bob hole = {bob_hole}")
