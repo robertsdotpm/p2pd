@@ -757,7 +757,7 @@ correspond to a certain network interface which
 can be double-checked against what interface is
 intended as the source for a connection.
 """
-async def select_if_by_dest(af, dest_ip, interface):
+async def select_if_by_dest(af, dest_ip, interface, ifs=[]):
     """
     All valid interfaces for the software can reach
     internet -- use original interface if the dest_ip
@@ -792,6 +792,11 @@ async def select_if_by_dest(af, dest_ip, interface):
     if bind_interface.name == interface.name:
         print("using original interface")
         return interface
+    
+    # If already exists return it instead.
+    for needle_if in ifs:
+        if needle_if.name == bind_interface.name:
+            return needle_if
 
     print("patching original funcs")
 

@@ -783,11 +783,8 @@ class TCPPunch():
         delta N will be timing sensitive. If timing info
         is available the protocol should try use that.
         """
-        async def delay_con(start_time, ms_delay, local_port, remote_port, dest, sock_timeout, is_connected, loop):
+        async def delay_con(ms_delay, local_port, remote_port, dest, is_connected, loop):
             # Used for making new cons.
-            conf = copy.deepcopy(PUNCH_CONF)
-            conf["con_timeout"] = sock_timeout 
-
             """
             Schedule connection to run across time.
 
@@ -804,7 +801,11 @@ class TCPPunch():
 
             # Open connection -- return only sock.
             #sock = await pipe_open(TCP, dest, route=route, conf=PUNCH_CONF) 
-            sock = await socket_factory(route=route, dest_addr=dest, conf=PUNCH_CONF)
+            sock = await socket_factory(
+                route=route,
+                dest_addr=dest, 
+                conf=PUNCH_CONF
+            )
             #sock_queue.put_nowait(sock)
             #sock.settimeout(0.1)
 
@@ -884,9 +885,6 @@ class TCPPunch():
                     tasks.append(
                         async_wrap_errors(
                             delay_con(
-                                # Record start time for logging.
-                                start_time,
-
                                 # Wait until ms to do punching.
                                 # Punches are split up over time
                                 # to increase chances of success.
@@ -904,7 +902,6 @@ class TCPPunch():
                                 # This prevents cons
                                 # from being scheduled later
                                 # on and exceeding total secs
-                                2,
                                 is_connected,
                                 asyncio.get_event_loop()
                             ),

@@ -145,6 +145,7 @@ def select_dest_ipr(same_pc, src_info, dest_info, addr_types, is_tcp_punch=False
     dest_nid = dest_info["netiface_index"]
 
     # Makes long conditions slightly more readable.
+    same_lan = True # TODO
     same_if = src_nid == dest_nid
     same_if_on_host = same_pc and same_if
     different_ifs_on_host = same_pc and not same_if
@@ -175,6 +176,10 @@ def select_dest_ipr(same_pc, src_info, dest_info, addr_types, is_tcp_punch=False
                         src_info["nic"]
                     ])[0]
                 
+            # Only if LAN or same machine.
+            if not (same_pc or same_lan):
+                continue
+
             # Otherwise the NIC IP is fine to use.
             return dest_info["nic"]
 
@@ -288,6 +293,7 @@ async def for_addr_infos(src, dest, func, pp, concurrent=False):
                 af,
                 dest_info["ip"],
                 interface,
+                pp.node.ifs,
             )
             print("if after")
             print(interface)

@@ -200,24 +200,15 @@ class P2PPipe():
         ensure there's enough time to receive any
         updated mappings for the dest peer (if any.)
         """
-        if punch_state == TCP_PUNCH_IN_MAP:
-            print("do init mappings")
-            asyncio.ensure_future(
-                self.node.schedule_punching_with_delay(
-                    if_index,
-                    self.pipe_id,
-                    self.dest["node_id"],
-                )
-            )
-        if punch_state == TCP_PUNCH_RECV_INITIAL_MAPPINGS:
-            print("recv init mappings")
-            # Schedule the punching meeting.
-            self.node.add_punch_meeting([
-                dest_info["if_index"],
-                PUNCH_RECIPIENT,
-                self.dest["node_id"],
+        asyncio.ensure_future(
+            self.node.schedule_punching_with_delay(
+                if_index,
                 self.pipe_id,
-            ])
+                self.dest["node_id"],
+                2 if punch_state == TCP_PUNCH_IN_MAP else 0
+            )
+        )
+
 
         msg = TCPPunchMsg({
             "meta": {
