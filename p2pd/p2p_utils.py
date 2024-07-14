@@ -260,7 +260,6 @@ async def for_addr_infos(src, dest, func, pp, concurrent=False):
     for af in VALID_AFS:
         # Iterates by shared AFs, filtered by best NAT pair.
         if_info_iter = IFInfoIter(af, src, dest)
-        print(len(if_info_iter))
         if not len(if_info_iter):
             continue
         else:
@@ -268,50 +267,53 @@ async def for_addr_infos(src, dest, func, pp, concurrent=False):
 
         # Get interface offset that supports this af.
         for src_info, dest_info in if_info_iter:
-            # Select interface to use.
-            if_index = src_info["if_index"]
-            interface = pp.node.ifs[if_index]
+            for addr_type in pp.conf["addr_types"]:
+                # Select interface to use.
+                if_index = src_info["if_index"]
+                interface = pp.node.ifs[if_index]
 
-            # Select a specific if index.
-            if pp.reply is not None:
-                if pp.reply.routing.dest_index != if_index:
-                    continue
+                # Select a specific if index.
+                if pp.reply is not None:
+                    if pp.reply.routing.dest_index != if_index:
+                        continue
 
-            dest_info["ip"] = str(
-                select_dest_ipr(
-                    pp.same_machine,
+                dest_info["ip"] = str(
+                    select_dest_ipr(
+                        pp.same_machine,
+                        src_info,
+                        dest_info,
+                        [addr_type],
+                        func == pp.tcp_hole_punch
+                    )
+                )
+
+                print("if before = ")
+                print(interface)
+                interface = await select_if_by_dest(
+                    af,
+                    dest_info["ip"],
+                    interface,
+                    pp.node.ifs,
+                )
+                print("if after")
+                print(interface)
+
+                # Coroutine to run.
+                print(func)
+                coro = func(
+                    af,
                     src_info,
                     dest_info,
-                    pp.conf["addr_types"],
-                    func == pp.tcp_hole_punch
+                    interface,
                 )
-            )
 
-            print("if before = ")
-            print(interface)
-            interface = await select_if_by_dest(
-                af,
-                dest_info["ip"],
-                interface,
-                pp.node.ifs,
-            )
-            print("if after")
-            print(interface)
-
-            # Coroutine to run.
-            print(func)
-            coro = func(
-                af,
-                src_info,
-                dest_info,
-                interface,
-            )
-
-            # Build a list of tasks if concurrent.
-            if concurrent:
-                tasks.append(coro)
-            else:
-                return await coro
+                # Build a list of tasks if concurrent.
+                if concurrent:
+                    tasks.append(coro)
+                else:
+                    result = await coro
+                    if result is not None:
+                        return result
             
     # No compatible addresses found.
     if not found_valid_af_pair:

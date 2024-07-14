@@ -27,6 +27,10 @@ from .interface import select_if_by_dest
 SIG_CON = 1
 SIG_TCP_PUNCH = 2
 SIG_TURN = 3
+P2P_PIPE_CONF = {
+    "addr_types": [EXT_BIND, NIC_BIND],
+    "return_msg": False,
+}
 
 class PredictField():
     def __init__(self, mappings):
@@ -382,8 +386,10 @@ class ConMsg(SigMsg):
         super().__init__(data, enum)
 
 class SigProtoHandlers():
-    def __init__(self, node):
+    def __init__(self, node, conf=P2P_PIPE_CONF):
         self.node = node
+        self.seen = {}
+        self.conf = conf
 
     async def handle_con_msg(self, msg):
         # Connect to chosen address.
@@ -394,17 +400,6 @@ class SigProtoHandlers():
             ),
             5
         )
-
-        print("Reverse con pipe = ")
-        print(pipe)
-        print(pipe.sock)
-        
-        # Setup pipe reference.
-        #if pipe is not None:
-        #   log("p2p direct in node got a valid pipe.")
-
-            # Record pipe reference.
-            #self.node.pipes[msg.pipe_id].set_result(pipe)
 
         return pipe
     
@@ -419,6 +414,7 @@ class SigProtoHandlers():
             msg.meta.src_buf,
             strategies=[P2P_PUNCH],
             reply=msg,
+            conf=self.conf,
         )
 
         # Connect to chosen address.
@@ -432,41 +428,19 @@ class SigProtoHandlers():
         return
 
     async def handle_turn_msg(self, msg):
-        # by turn_clients[pipe_id] (optional make)
-        # but then accept needs to keep a list of accepted peers in the turn client
-        # and i prob need to switch to a laptop with ethernet and wifi...
+        pp = self.node.p2p_pipe(
+            msg.meta.src_buf,
+            reply=msg,
+            conf=self.conf,
+        )
 
-        # Select our interface.
-        iface = self.node.ifs[msg.routing.dest_index]
+        # Connect to chosen address.
+        msg = await asyncio.wait_for(
+            pp.connect(strategies=[P2P_RELAY]),
+            5
+        )
 
-        # Receive a TURN request.
-        if msg.meta.pipe_id not in self.node.turn_clients:
-            print("bob recv turn req")
-            print(f"{msg.payload.peer_tup} {msg.payload.relay_tup} {msg.payload.serv_id}")
-            ret = await get_turn_client(
-                msg.routing.af,
-                msg.payload.serv_id,
-                iface,
-                dest_peer=msg.payload.peer_tup,
-                dest_relay=msg.payload.relay_tup,
-            )
-            peer_tup, relay_tup, turn_client = ret
-            self.node.turn_clients[msg.meta.pipe_id] = turn_client
-
-            reply = msg.switch_src_and_dest()
-            reply.payload.peer_tup = peer_tup
-            reply.payload.relay_tup = relay_tup
-
-            return reply
-
-        # Receive a TURN response.
-        if msg.meta.pipe_id in self.node.turn_clients:
-            # Accept their peer details.
-            turn_client = self.node.turn_clients[msg.meta.pipe_id]
-            await turn_client.accept_peer(
-                msg.payload.peer_tup,
-                msg.payload.relay_tup,
-            )
+        return msg
 
     async def proto(self, buf):
         p_node = self.node.addr_bytes
@@ -496,6 +470,12 @@ class SigProtoHandlers():
         if to_s(dest["node_id"]) != node_id:
             print(f"Received message not intended for us. {dest['node_id']} {node_id}")
             return
+        
+        # Reject already processed.
+        if msg.meta.pipe_id in self.seen:
+            return
+        else:
+            self.seen[msg.meta.pipe_id] = 1
         
         # Updating routing dest with current addr.
         assert(msg is not None)

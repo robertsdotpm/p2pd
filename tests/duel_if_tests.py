@@ -1,6 +1,11 @@
 from p2pd import *
 import multiprocessing
 
+TEST_P2P_PIPE_CONF = {
+    "addr_types": [EXT_BIND, NIC_BIND],
+    "return_msg": True,
+}
+
 """
 They should be on different Internet connections so
 there are at least different IP4 routes. This is
@@ -34,6 +39,19 @@ class TestNodes():
         self.pipe_id = to_s(rand_plain(15))
         self.alice = await get_node(IF_ALICE_NAME)
         self.bob = await get_node(IF_BOB_NAME, NODE_PORT + 1)
+        self.pp_alice = self.alice.p2p_pipe(
+            self.bob.addr_bytes,
+            conf=TEST_P2P_PIPE_CONF
+        )
+        self.pp_bob = self.alice.p2p_pipe(
+            self.alice.addr_bytes,
+            conf=TEST_P2P_PIPE_CONF
+        )
+
+        
+        self.alice.sig_proto_handlers.conf = TEST_P2P_PIPE_CONF
+        self.bob.sig_proto_handlers.conf = TEST_P2P_PIPE_CONF
+
         return self
 
     async def __aexit__(self, exc_t, exc_v, exc_tb):
@@ -43,62 +61,36 @@ class TestNodes():
 class DuelIFTests(unittest.IsolatedAsyncioTestCase):
     async def test_direct_connect(self):
         async with TestNodes() as nodes:
-            pp = P2PPipe(nodes.alice)
-            pipe = await pp.connect(nodes.bob.addr_bytes)
+            pipe = await nodes.pp_alice.connect(
+                strategies=[P2P_DIRECT]
+            )
             assert(pipe is not None)
             await pipe.close()
 
     async def test_reverse_connect(self):
         async with TestNodes() as nodes:
-            pp = P2PPipe(nodes.alice)
-
-            print("before addr infos")
-            msg = await for_addr_infos(
-                nodes.alice.addr_bytes,
-                nodes.bob.addr_bytes,
-                pp.reverse_connect,
-                pp,
+            pipe = await nodes.pp_alice.connect(
+                strategies=[P2P_REVERSE]
             )
-
-            print(msg)
-            buf = msg.pack()
-            pipe = await nodes.bob.sig_proto_handlers.proto(buf)
+            
             assert(pipe is not None)
-            print(pipe)
             await pipe.close()
-
-            # Setup the id stuff.
 
     async def test_turn(self):
         async with TestNodes() as nodes:
-            pp = P2PPipe(nodes.alice)
-            turn_req_msg = await for_addr_infos(
-                nodes.alice.addr_bytes,
-                nodes.bob.addr_bytes,
-                pp.udp_relay,
-                pp,
+            pipe = await nodes.pp_alice.connect(
+                strategies=[P2P_RELAY]
             )
-
-            print(turn_req_msg.pack())
-
-
-            turn_resp_msg = await nodes.bob.sig_proto_handlers.proto(
-                turn_req_msg.pack()
-            )
-
-            # Get Bob's peer_tup and relay_tup.
-            await nodes.alice.sig_proto_handlers.proto(
-                turn_resp_msg.pack()
-            )
+            assert(pipe is not None)
 
             pipe_id = nodes.pipe_id
             alice_turn = nodes.alice.turn_clients[pipe_id]
             bob_turn = nodes.bob.turn_clients[pipe_id]
+
             assert(alice_turn is not None)
             assert(bob_turn is not None)
-
-            print(alice_turn)
-            print(bob_turn)
+            await alice_turn.close()
+            await bob_turn.close()
 
     async def test_tcp_punch(self):
         async with TestNodes() as nodes:

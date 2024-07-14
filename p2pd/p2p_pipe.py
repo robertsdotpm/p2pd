@@ -12,17 +12,12 @@ nc -4 -l 127.0.0.1 10001 -k
 nc -6 -l ::1 10001 -k
 """
 
-P2P_PIPE_CONF = {
-    "addr_types": [EXT_BIND, NIC_BIND]
-}
-
 class P2PPipe():
-    def __init__(self, dest_bytes, node, strategies=P2P_STRATEGIES, reply=None, conf=P2P_PIPE_CONF):
+    def __init__(self, dest_bytes, node, reply=None, conf=P2P_PIPE_CONF):
         # Record main references.
         self.conf = conf
         self.node = node
         self.reply = reply
-        self.strategies = strategies
 
         # Parse address bytes to dicts.
         self.dest_bytes = dest_bytes
@@ -39,13 +34,14 @@ class P2PPipe():
         # Create a future for pending pipes.
         if reply is None:
             self.pipe_id = to_s(rand_plain(15))
+            self.node.sig_proto_handlers.seen[self.pipe_id] = 1
         else:
             self.pipe_id = to_s(reply.meta.pipe_id)
 
-    async def connect(self):
+    async def connect(self, strategies=P2P_STRATEGIES):
         # Attempt direct connection first.
         # The only method not to need signal messages.
-        if P2P_DIRECT in self.strategies:
+        if P2P_DIRECT in strategies:
             # Returns a message from func given a comp addr info pair.
             pipe = await for_addr_infos(
                 self.src,
@@ -58,7 +54,7 @@ class P2PPipe():
                 return pipe
 
         # Proceed only if they need signal messages.
-        if self.strategies == [P2P_DIRECT]:
+        if strategies == [P2P_DIRECT]:
             return None
         
         """
@@ -74,8 +70,10 @@ class P2PPipe():
         signal_pipe = None
 
         # Try reverse connect.
-        if P2P_REVERSE in self.strategies:
-            msg = self.reverse_connect(self.pipe_id, self.dest_bytes)
+        if P2P_REVERSE in strategies:
+            msg = self.reverse_connect(self.pipe_id, self.dest_bytes) 
+            if self.conf["return_msg"]: return msg
+
             pipe = await self.node.await_peer_con(msg, signal_pipe, 5)
 
             # Successful reverse connect.
@@ -87,11 +85,10 @@ class P2PPipe():
         func_table = [self.tcp_hole_punch, self.udp_relay]
         for i, strategy in enumerate([P2P_PUNCH, P2P_RELAY]):
             # ... But still need to respect their choices.
-            if strategy not in self.strategies:
+            if strategy not in strategies:
                 continue
 
             # Returns a message from func given a comp addr info pair.
-            print(func_table[i])
             msg = await for_addr_infos(
                 self.src,
                 self.dest,
@@ -99,15 +96,11 @@ class P2PPipe():
                 self,
             )
 
-            return msg
-            if msg is not None:
-                return msg
-
-
             # If no signal message returned then skip.
             if msg is not None:
-                pipe = await self.node.await_peer_con(msg, signal_pipe)
+                if self.conf["return_msg"]: return msg
 
+                pipe = await self.node.await_peer_con(msg, signal_pipe)
                 if pipe is not None:
                     return pipe
             
@@ -123,7 +116,6 @@ class P2PPipe():
         # (3) Bind to the route at port 0. Return itself.
         route = await interface.route(af).bind()
         print("in make con")
-        print(route)
         print(dest_info["ip"])
         print(dest_info["port"])
 
@@ -236,18 +228,25 @@ class P2PPipe():
         return msg
 
     async def udp_relay(self, af, src_info, dest_info, interface):
+        peer_tup = relay_tup = turn_client = None
+
         # Try TURN servers in random order.
         offsets = list(range(0, len(TURN_SERVERS)))
         random.shuffle(offsets)
+        if self.reply is not None:
+            offsets = [self.reply.payload.serv_id]
+            peer_tup = self.reply.payload.peer_tup
+            relay_tup = self.reply.payload.relay_tup
 
         # Attempt to connect to TURN server.
-        peer_tup = relay_tup = turn_client = None
         for offset in offsets:
             try:
                 peer_tup, relay_tup, turn_client = await get_turn_client(
                     af,
                     offset,
                     interface,
+                    dest_peer=peer_tup,
+                    dest_relay=relay_tup,
                 )
             except:
                 log_exception()

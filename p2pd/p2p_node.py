@@ -150,8 +150,8 @@ class P2PNode(Daemon, P2PUtils):
         self.punch_queue = asyncio.Queue()
         self.sig_proto_handlers = SigProtoHandlers(self)
 
-    def p2p_pipe(self, dest_bytes, strategies, reply=None):
-        return P2PPipe(dest_bytes, self, strategies, reply)
+    def p2p_pipe(self, dest_bytes, reply=None, conf=P2P_PIPE_CONF):
+        return P2PPipe(dest_bytes, self, reply, conf=conf)
 
     async def await_peer_con(self, msg, signal_pipe, timeout=10):
         await signal_pipe.send_msg(
