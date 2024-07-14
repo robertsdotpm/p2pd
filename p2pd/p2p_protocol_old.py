@@ -456,30 +456,7 @@ async def node_protocol(self, msg, client_tup, pipe):
 
         # If no ones expecting this connection its a reverse connect.
         pipe_id = parts[1]
-        pipe.add_end_cb(self.rm_pipe_id(pipe_id))
-        if pipe_id not in self.pipe_events:
+        if pipe_id not in self.pipes:
             assert(isinstance(pipe_id, bytes))
             log(f"pipe = '{pipe_id}' not in pipe events. saving.")
-            self.pipes[pipe_id] = pipe
-        else:
-            # Is this IP expected?
-            if pipe_id not in self.expected_addrs:
-                log("ID: pipe_id not in expected_addrs.")
-                return 2
-
-            # Check remote address is right.
-            exts = self.expected_addrs[pipe_id]
-            ipr = IPRange(client_tup[0])
-            if ipr not in exts:
-                log("ID: ipr not in expected addrs.")
-                return 3
-
-            # Pipe already saved.
-            pipe_event = self.pipe_events[pipe_id]
-            if pipe_event.is_set():
-                log("ID: pipe event not set.")
-                return 4
-
-            # Save pipe and notify any waiters about it.
-            self.pipes[pipe_id] = pipe
-            pipe_event.set()
+            self.pipe_ready(pipe_id, pipe)

@@ -5,7 +5,6 @@ import multiprocessing
 from decimal import Decimal as Dec
 from .p2p_pipe import *
 from .daemon import *
-from .p2p_protocol_old import *
 from .signaling import *
 from .machine_id import get_machine_id, hashed_machine_id
 from .p2p_utils import *

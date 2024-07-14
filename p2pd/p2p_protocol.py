@@ -393,15 +393,17 @@ class SigProtoHandlers():
 
     async def handle_con_msg(self, msg):
         # Connect to chosen address.
-        pipe = await asyncio.wait_for(
-            self.pp.connect(
-                msg.meta.src_buf,
-                [P2P_DIRECT]
-            ),
-            5
+        pp = self.node.p2p_pipe(
+            msg.meta.src_buf,
+            reply=msg,
+            conf=self.conf,
         )
 
-        return pipe
+        # Connect to chosen address.
+        await asyncio.wait_for(
+            pp.connect(strategies=[P2P_DIRECT]),
+            5
+        )
     
     """
     Supports both receiving initial mappings and
@@ -412,14 +414,13 @@ class SigProtoHandlers():
     async def handle_punch_msg(self, msg):
         pp = self.node.p2p_pipe(
             msg.meta.src_buf,
-            strategies=[P2P_PUNCH],
             reply=msg,
             conf=self.conf,
         )
 
         # Connect to chosen address.
         pipe = await asyncio.wait_for(
-            pp.connect(),
+            pp.connect(strategies=[P2P_PUNCH]),
             5
         )
 
@@ -483,6 +484,41 @@ class SigProtoHandlers():
         msg.routing.load_if_extra(self.node)
         
         return await handler(msg)
+    
+async def node_protocol(self, msg, client_tup, pipe):
+    log(f"> node proto = {msg}, {client_tup}")
+
+    # Execute any custom msg handlers on the msg.
+    run_handlers(pipe, self.msg_cbs, client_tup, msg)
+
+    # Execute basic services of the node protocol.
+    parts = msg.split(b" ")
+    cmd = parts[0]
+
+    # Basic echo server used for testing networking.
+    if cmd == b"ECHO":
+        if len(msg) > 5:
+            await pipe.send(memoryview(msg)[5:], client_tup)
+
+        return
+
+    # This connection was in regards to a request.
+    if cmd == b"ID":
+        # Invalid format.
+        if len(parts) != 2:
+            log("ID: Invalid parts len.")
+            return 1
+
+        # If no ones expecting this connection its a reverse connect.
+        pipe_id = to_s(parts[1])
+        if pipe_id not in self.pipes:
+            self.pipe_future(self.pipe_id)
+
+
+        if pipe_id in self.pipes:
+            log(f"pipe = '{pipe_id}' not in pipe events. saving.")
+            self.pipe_ready(pipe_id, pipe)
+
 
 """
 Index cons by pipe_id -> future and then

@@ -38,6 +38,8 @@ class P2PPipe():
         else:
             self.pipe_id = to_s(reply.meta.pipe_id)
 
+        self.node.pipe_future(self.pipe_id)
+
     async def connect(self, strategies=P2P_STRATEGIES):
         # Attempt direct connection first.
         # The only method not to need signal messages.
@@ -71,9 +73,14 @@ class P2PPipe():
 
         # Try reverse connect.
         if P2P_REVERSE in strategies:
-            msg = self.reverse_connect(self.pipe_id, self.dest_bytes) 
-            if self.conf["return_msg"]: return msg
+            msg = await for_addr_infos(
+                self.src,
+                self.dest,
+                self.reverse_connect,
+                self,
+            )
 
+            if self.conf["return_msg"]: return msg
             pipe = await self.node.await_peer_con(msg, signal_pipe, 5)
 
             # Successful reverse connect.
@@ -134,6 +141,11 @@ class P2PPipe():
             dest=dest,
             msg_cb=self.node.msg_cb
         )
+
+        if pipe is None:
+            return
+
+        await pipe.send(to_b(f"ID {self.pipe_id}"))
 
         print(pipe)
         return pipe

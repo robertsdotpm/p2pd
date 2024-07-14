@@ -36,13 +36,13 @@ async def get_node(if_name, node_port=NODE_PORT):
 
 class TestNodes():
     async def __aenter__(self):
-        self.pipe_id = to_s(rand_plain(15))
         self.alice = await get_node(IF_ALICE_NAME)
         self.bob = await get_node(IF_BOB_NAME, NODE_PORT + 1)
         self.pp_alice = self.alice.p2p_pipe(
             self.bob.addr_bytes,
             conf=TEST_P2P_PIPE_CONF
         )
+        self.pipe_id = self.pp_alice.pipe_id
         self.pp_bob = self.alice.p2p_pipe(
             self.alice.addr_bytes,
             conf=TEST_P2P_PIPE_CONF
@@ -69,10 +69,13 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_reverse_connect(self):
         async with TestNodes() as nodes:
-            pipe = await nodes.pp_alice.connect(
+            msg = (await nodes.pp_alice.connect(
                 strategies=[P2P_REVERSE]
-            )
+            )).pack()
+
+            await nodes.bob.sig_proto_handlers.proto(msg)
             
+            pipe = await nodes.alice.pipes[nodes.pipe_id]
             assert(pipe is not None)
             await pipe.close()
 
