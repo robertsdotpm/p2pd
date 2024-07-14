@@ -192,8 +192,9 @@ def proc_do_punching(args):
 
 state_info_index = lambda x, y: repr(x) + "@" + str(y)
 class TCPPunch():
-    def __init__(self, interface, if_list, sys_clock=None, executors=None, queue_manager=None, conf=PUNCH_CONF):
+    def __init__(self, interface, if_list, node, sys_clock=None, executors=None, queue_manager=None, conf=PUNCH_CONF):
         self.conf = PUNCH_CONF
+        self.node = node
         self.if_list = if_list
         self.interface = interface
         self.sys_clock = sys_clock
@@ -784,71 +785,73 @@ class TCPPunch():
         is available the protocol should try use that.
         """
         async def delay_con(ms_delay, local_port, remote_port, dest, is_connected, loop):
-            # Used for making new cons.
-            """
-            Schedule connection to run across time.
-
-            How long it takes the event loop to start a
-            routine is outside of our control. This
-            code adjusts the delay based on any amount
-            of time already passed.
-            """
-            if ms_delay:
-                await asyncio.sleep(ms_delay / 1000)
-
-            # Bind to a specific port and interface.
-            route = await interface.route(af).bind(local_port)
-
-            # Open connection -- return only sock.
-            #sock = await pipe_open(TCP, dest, route=route, conf=PUNCH_CONF) 
-            sock = await socket_factory(
-                route=route,
-                dest_addr=dest, 
-                conf=PUNCH_CONF
-            )
-            #sock_queue.put_nowait(sock)
-            #sock.settimeout(0.1)
-
-            # Requires this special sock option:
-            reuse_set = sock.getsockopt(
-                socket.SOL_SOCKET,
-                socket.SO_REUSEADDR
-            )
-
-            # Sanity check for the sock option.
-            if not reuse_set:
-                log("Punch socket missing reuse addr opt.")
-                return
-            
-            # Require a non-blocking socket.
-            if sock.getblocking():
-                log("Punch sock is blocking.")
-                return
-
             try:
+                # Used for making new cons.
+                """
+                Schedule connection to run across time.
+
+                How long it takes the event loop to start a
+                routine is outside of our control. This
+                code adjusts the delay based on any amount
+                of time already passed.
+                """
+                if ms_delay:
+                    await asyncio.sleep(ms_delay / 1000)
+
+                # Bind to a specific port and interface.
+                route = await interface.route(af).bind(local_port)
+
+                # Open connection -- return only sock.
+                #sock = await pipe_open(TCP, dest, route=route, conf=PUNCH_CONF) 
+                sock = await socket_factory(
+                    route=route,
+                    dest_addr=dest, 
+                    conf=PUNCH_CONF
+                )
+                #sock_queue.put_nowait(sock)
+                #sock.settimeout(0.1)
+
+                # Requires this special sock option:
+                reuse_set = sock.getsockopt(
+                    socket.SOL_SOCKET,
+                    socket.SO_REUSEADDR
+                )
+
+                # Sanity check for the sock option.
+                if not reuse_set:
+                    log("Punch socket missing reuse addr opt.")
+                    return
+                
+                # Require a non-blocking socket.
+                if sock.getblocking():
+                    log("Punch sock is blocking.")
+                    return
+
+        
                 await loop.sock_connect(
                     sock,
                     dest.tup
                 )
+
+
+                # Failure.
+                # We strip None responses out.
+                if sock is None:
+                    return None
+                else:
+                    is_connected[0] = True
+
+                """
+                At some point I expect errors to be made if a
+                local IP + local port is reused for the same
+                dest IP + dest port and it successfully gets
+                connected. So successive calls might fail.
+                """
+                print("Got punch sock = ")
+                print(sock)
+                return [remote_port, sock]
             except:
                 return None
-
-            # Failure.
-            # We strip None responses out.
-            if sock is None:
-                return None
-            else:
-                is_connected[0] = True
-
-            """
-            At some point I expect errors to be made if a
-            local IP + local port is reused for the same
-            dest IP + dest port and it successfully gets
-            connected. So successive calls might fail.
-            """
-            print("Got punch sock = ")
-            print(sock)
-            return [remote_port, sock]
 
 
         """
@@ -883,7 +886,7 @@ class TCPPunch():
                 #print(f"connect to {dest.tup}")
                 for sleep_time in range(0, steps):
                     tasks.append(
-                        async_wrap_errors(
+                        asyncio.wait_for(
                             delay_con(
                                 # Wait until ms to do punching.
                                 # Punches are split up over time
@@ -905,12 +908,15 @@ class TCPPunch():
                                 is_connected,
                                 asyncio.get_event_loop()
                             ),
-                            timeout=2
+                            2
                         )
                     )
             
             # Start running tasks.
-            all_tasks = asyncio.gather(*tasks)
+            all_tasks = asyncio.gather(
+                *tasks,
+                return_exceptions=False
+            )
             outs = await all_tasks
             outs = strip_none(outs)
             return outs
@@ -1109,25 +1115,34 @@ class TCPPunch():
 
         # Wrap returned socket in a pipe.
         pipe = None
-        if sock is not None: 
-            log(f"> TCP hole made {sock}.")
-            route = await self.interface.route(af).bind(
-                sock.getsockname()[1]
-            )
+        try:
+            if sock is not None: 
+                log(f"> TCP hole made {sock}.")
+                route = await self.interface.route(af).bind(
+                    sock.getsockname()[1]
+                )
 
-            pipe = await pipe_open(
-                route=route,
-                proto=TCP,
-                dest=Address(
-                    *sock.getpeername(),
-                ),
-                sock=sock,
-                msg_cb=msg_cb
-            )
+                pipe = await pipe_open(
+                    route=route,
+                    proto=TCP,
+                    dest=Address(
+                        *sock.getpeername(),
+                    ),
+                    sock=sock,
+                    msg_cb=msg_cb
+                )
 
-        # Cleanup state.
-        if self.do_state_cleanup:
-            await self.cleanup_state(node_id, pipe_id)
+                self.node.pipe_ready(pipe_id, pipe)
+                print(pipe_id)
+                print("after pipe ready")
+
+            # Cleanup state.
+            if self.do_state_cleanup:
+                await self.cleanup_state(node_id, pipe_id)
+
+            print("after do cleanup in punch.")
+        except:
+            log_exception()
 
         return pipe
     

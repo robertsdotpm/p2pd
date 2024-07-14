@@ -100,6 +100,7 @@ class P2PUtils():
             TCPPunch(
                 interface,
                 self.ifs,
+                self,
                 self.sys_clock,
                 self.pp_executor,
                 self.mp_manager
@@ -174,6 +175,9 @@ class P2PNode(Daemon, P2PUtils):
     def pipe_ready(self, pipe_id, pipe):
         if not self.pipes[pipe_id].done():
             self.pipes[pipe_id].set_result(pipe)
+        else:
+            raise Exception(f"Pipe future {pipe_id} set.")
+        
         return pipe
 
     def add_punch_meeting(self, params):
@@ -185,17 +189,20 @@ class P2PNode(Daemon, P2PUtils):
 
     async def punch_queue_worker(self):
         while 1:
-            params = await self.punch_queue.get()
-            if not len(params):
-                return
+            try:
+                params = await self.punch_queue.get()
+                if not len(params):
+                    return
 
-            print("do punch ")
-            punch_offset = params.pop(0)
+                print("do punch ")
+                punch_offset = params.pop(0)
 
-            punch = self.tcp_punch_clients[punch_offset]
-            pipe = await punch.proto_do_punching(*params)
-            if pipe is not None:
-                self.pipe_ready(params[-1], pipe)
+                punch = self.tcp_punch_clients[punch_offset]
+                await punch.proto_do_punching(*params)
+                print("punch done")
+            except:
+                log_exception()
+
 
     async def schedule_punching_with_delay(self, if_index, pipe_id, node_id, n=0):
         # Get reference to punch client and state.

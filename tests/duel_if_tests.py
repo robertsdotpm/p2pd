@@ -43,7 +43,7 @@ class TestNodes():
             conf=TEST_P2P_PIPE_CONF
         )
         self.pipe_id = self.pp_alice.pipe_id
-        self.pp_bob = self.alice.p2p_pipe(
+        self.pp_bob = self.bob.p2p_pipe(
             self.alice.addr_bytes,
             conf=TEST_P2P_PIPE_CONF
         )
@@ -81,14 +81,27 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_turn(self):
         async with TestNodes() as nodes:
-            pipe = await nodes.pp_alice.connect(
+            msg = (await nodes.pp_alice.connect(
                 strategies=[P2P_RELAY]
-            )
-            assert(pipe is not None)
+            )).pack()
+
+            print("msg1")
+            print(msg)
+
+            msg = (await nodes.bob.sig_proto_handlers.proto(msg)).pack()
+            print("msg2")
+            print(msg)
+            
+            print(nodes.alice.turn_clients)
+
+            msg = await nodes.alice.sig_proto_handlers.proto(msg)
+
+
 
             pipe_id = nodes.pipe_id
-            alice_turn = nodes.alice.turn_clients[pipe_id]
-            bob_turn = nodes.bob.turn_clients[pipe_id]
+            alice_turn = await nodes.alice.pipes[pipe_id]
+            bob_turn = await nodes.bob.pipes[pipe_id]
+
 
             assert(alice_turn is not None)
             assert(bob_turn is not None)
@@ -97,11 +110,10 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_tcp_punch(self):
         async with TestNodes() as nodes:
-            pp = nodes.alice.p2p_pipe(
-                nodes.bob.addr_bytes,
-                strategies=[P2P_PUNCH],
+            punch_req_msg = await nodes.pp_alice.connect(
+                strategies=[P2P_PUNCH]
             )
-            punch_req_msg = await pp.connect()
+
 
             print(punch_req_msg)
             print(punch_req_msg.pack())
@@ -117,13 +129,16 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
 
             pipe_id = nodes.pipe_id
 
+            print(nodes.bob.pipes.keys())
+            print(nodes.alice.pipes.keys())
+
             
             print("Bob pipes")
-            for pipe_id in nodes.bob.pipes:
-                bob_hole = await nodes.bob.pipes[pipe_id]
 
-            for pipe_id in nodes.alice.pipes:
-                alice_hole = await nodes.alice.pipes[pipe_id]
+
+
+            bob_hole = await nodes.bob.pipes[pipe_id]
+            alice_hole = await nodes.alice.pipes[pipe_id]
                 
 
             print(f"alice hole = {alice_hole}")

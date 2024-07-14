@@ -34,7 +34,6 @@ class P2PPipe():
         # Create a future for pending pipes.
         if reply is None:
             self.pipe_id = to_s(rand_plain(15))
-            self.node.sig_proto_handlers.seen[self.pipe_id] = 1
         else:
             self.pipe_id = to_s(reply.meta.pipe_id)
 
@@ -158,6 +157,7 @@ class P2PPipe():
                 "pipe_id": self.pipe_id,
                 "src_buf": self.src_bytes,
                 "src_index": src_info["if_index"],
+                "addr_types": self.conf["addr_types"],
             },
             "routing": {
                 "af": af,
@@ -197,6 +197,7 @@ class P2PPipe():
         )
 
         if punch_ret is None:
+            print("punch ret is none")
             return
 
         """
@@ -213,6 +214,8 @@ class P2PPipe():
             )
         )
 
+        print("after schedule punch")
+
 
         msg = TCPPunchMsg({
             "meta": {
@@ -220,6 +223,7 @@ class P2PPipe():
                 "af": af,
                 "src_buf": self.src_bytes,
                 "src_index": src_info["if_index"],
+                "addr_types": self.conf["addr_types"],
             },
             "routing": {
                 "af": af,
@@ -240,6 +244,8 @@ class P2PPipe():
         return msg
 
     async def udp_relay(self, af, src_info, dest_info, interface):
+        print("in p2p pipe udp relay")
+        print(f"{self.reply is not None}")
         peer_tup = relay_tup = turn_client = None
 
         # Try TURN servers in random order.
@@ -250,22 +256,38 @@ class P2PPipe():
             peer_tup = self.reply.payload.peer_tup
             relay_tup = self.reply.payload.relay_tup
 
+        print(self.node.turn_clients)
+        print(self.pipe_id)
+
         # Attempt to connect to TURN server.
         for offset in offsets:
             try:
-                peer_tup, relay_tup, turn_client = await get_turn_client(
-                    af,
-                    offset,
-                    interface,
-                    dest_peer=peer_tup,
-                    dest_relay=relay_tup,
-                )
+                if self.pipe_id in self.node.turn_clients:
+                    turn_client = self.node.turn_clients[self.pipe_id]
+                    print("in turn client accept peer")
+                    print(peer_tup)
+                    print(relay_tup)
+                    if peer_tup is not None:
+                        await turn_client.accept_peer(
+                            peer_tup,
+                            relay_tup,
+                        )
+                else:
+                    peer_tup, relay_tup, turn_client = await get_turn_client(
+                        af,
+                        offset,
+                        interface,
+                        dest_peer=peer_tup,
+                        dest_relay=relay_tup,
+                    )
+
+                if self.reply is not None:
+                    self.node.pipe_ready(self.pipe_id, turn_client)
             except:
                 log_exception()
                 continue
 
             if turn_client is not None:
-                self.node.pipe_future(self.pipe_id)
                 self.node.turn_clients[self.pipe_id] = turn_client
                 return TURNMsg({
                     "meta": {
@@ -273,6 +295,7 @@ class P2PPipe():
                         "af": af,
                         "src_buf": self.src_bytes,
                         "src_index": src_info["if_index"],
+                        "addr_types": self.conf["addr_types"],
                     },
                     "routing": {
                         "af": af,

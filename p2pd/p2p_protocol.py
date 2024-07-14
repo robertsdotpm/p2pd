@@ -98,13 +98,14 @@ class SigMsg():
 
     # Information about the message sender.
     class Meta():
-        def __init__(self, pipe_id, af, src_buf, src_index=0):
+        def __init__(self, pipe_id, af, src_buf, src_index=0, addr_types=[EXT_BIND, NIC_BIND]):
             # Load meta data about message.
             self.pipe_id = to_s(pipe_id)
             self.src_buf = to_s(src_buf)
             self.src_index = to_n(src_index)
             self.af = af
             self.same_machine = False
+            self.addr_types = addr_types
 
         def patch_source(self, cur_addr):
             # Parse src_buf to addr.
@@ -127,6 +128,7 @@ class SigMsg():
                 "af": int(self.af),
                 "src_buf": self.src_buf,
                 "src_index": self.src_index,
+                "addr_types": self.addr_types,
             }
         
         @staticmethod
@@ -136,6 +138,7 @@ class SigMsg():
                 d.get("af", IP4),
                 d["src_buf"],
                 d.get("src_index", 0),
+                d.get("addr_types", [EXT_BIND, NIC_BIND]),
             )
 
     # The destination node for this msg.
@@ -391,12 +394,12 @@ class SigProtoHandlers():
         self.seen = {}
         self.conf = conf
 
-    async def handle_con_msg(self, msg):
+    async def handle_con_msg(self, msg, conf):
         # Connect to chosen address.
         pp = self.node.p2p_pipe(
             msg.meta.src_buf,
             reply=msg,
-            conf=self.conf,
+            conf=conf,
         )
 
         # Connect to chosen address.
@@ -411,34 +414,35 @@ class SigProtoHandlers():
     The same message type is used for both which
     avoids code duplication and keeps it simple.
     """
-    async def handle_punch_msg(self, msg):
+    async def handle_punch_msg(self, msg, conf):
         pp = self.node.p2p_pipe(
             msg.meta.src_buf,
             reply=msg,
-            conf=self.conf,
+            conf=conf,
         )
 
         # Connect to chosen address.
         pipe = await asyncio.wait_for(
             pp.connect(strategies=[P2P_PUNCH]),
-            5
+            10
         )
 
         print("handle punch pipe = ")
         print(pipe)
         return
 
-    async def handle_turn_msg(self, msg):
+    async def handle_turn_msg(self, msg, conf):
+        print("in handle turn msg")
         pp = self.node.p2p_pipe(
             msg.meta.src_buf,
             reply=msg,
-            conf=self.conf,
+            conf=conf,
         )
 
         # Connect to chosen address.
         msg = await asyncio.wait_for(
             pp.connect(strategies=[P2P_RELAY]),
-            5
+            10
         )
 
         return msg
@@ -474,16 +478,22 @@ class SigProtoHandlers():
         
         # Reject already processed.
         if msg.meta.pipe_id in self.seen:
+            print("in seen")
             return
         else:
             self.seen[msg.meta.pipe_id] = 1
+
+        conf = dict_child({
+            "addr_types": msg.meta.addr_types
+        }, self.conf)
+
         
         # Updating routing dest with current addr.
         assert(msg is not None)
         msg.set_cur_addr(p_node)
         msg.routing.load_if_extra(self.node)
         
-        return await handler(msg)
+        return await handler(msg, conf)
     
 async def node_protocol(self, msg, client_tup, pipe):
     log(f"> node proto = {msg}, {client_tup}")

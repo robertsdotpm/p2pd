@@ -300,11 +300,14 @@ async def for_addr_infos(src, dest, func, pp, concurrent=False):
 
                 # Coroutine to run.
                 print(func)
-                coro = func(
-                    af,
-                    src_info,
-                    dest_info,
-                    interface,
+                coro = async_wrap_errors(
+                    func(
+                        af,
+                        src_info,
+                        dest_info,
+                        interface,
+                    ),
+                    10
                 )
 
                 # Build a list of tasks if concurrent.
