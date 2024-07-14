@@ -167,12 +167,14 @@ class P2PNode(Daemon, P2PUtils):
         except asyncio.TimeoutError:
             return None
 
-    def pipe_future(self, pipe_id=None):
-        pipe_id = pipe_id or rand_plain(15)
+    def pipe_future(self, pipe_id):
+        print(f"pipe future {pipe_id}")
+        pipe_id = pipe_id
         self.pipes[pipe_id] = asyncio.Future()
         return pipe_id
 
     def pipe_ready(self, pipe_id, pipe):
+        print(f"pipe ready {pipe_id}")
         if not self.pipes[pipe_id].done():
             self.pipes[pipe_id].set_result(pipe)
         else:
@@ -181,9 +183,6 @@ class P2PNode(Daemon, P2PUtils):
         return pipe
 
     def add_punch_meeting(self, params):
-        # Allow pipe to be awaited by pipe_id.
-        self.pipe_future(params[-1])
-
         # Schedule the TCP punching.
         self.punch_queue.put_nowait(params)
 
@@ -198,6 +197,8 @@ class P2PNode(Daemon, P2PUtils):
                 punch_offset = params.pop(0)
 
                 punch = self.tcp_punch_clients[punch_offset]
+
+                print(params)
                 await punch.proto_do_punching(*params)
                 print("punch done")
             except:

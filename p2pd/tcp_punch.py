@@ -669,8 +669,6 @@ class TCPPunch():
             pipe_id,
         )        
 
-        print(recv_addr)
-
         punch_mode = await get_punch_mode(
             af,
             recv_addr,
@@ -740,7 +738,7 @@ class TCPPunch():
         """
         warnings.filterwarnings('ignore', message="unclosed", category=ResourceWarning)
 
-        print(f"do punch dest = {dest_addr}")
+
         # Init.
         log(f"> TCP punch interface rp pool")
         #log_interface_rp(interface)
@@ -753,7 +751,6 @@ class TCPPunch():
         gets pickled and unpickled into a dict and reloaded
         into the standard interface class.
         """
-        print(f"interface is resolved {interface.resolved} {interface.name} {interface.route}")
         interface = await select_if_by_dest(af, dest_addr, interface)
 
         # If NTP meet is defined then wait for it to occur.
@@ -875,7 +872,6 @@ class TCPPunch():
             start_time = timestamp(1)
             steps = int((secs * 1000) / ms_spacing)
             route = interface.route(af)
-            print(f"TCP PUNCH REMOTE {dest_addr} local = {local}")
             for i in range(0, len(local)):
                 dest = await Address(
                     dest_addr,
@@ -1257,14 +1253,6 @@ async def test_tcp_punch(): # pragma: no cover
         internode_stun_client
     )
 
-    
-    print("I punch details:")
-    print(i_session)
-    print(i_their_maps)
-    print(i_ntp_meet)
-    print(initiator.state)
-    print()
-
     # Step 2 -- exchange initiator mappings with recipient.
     # Details would be exchanged over another data channel.
     # In our protocol the SIP client is designed for that.
@@ -1276,10 +1264,6 @@ async def test_tcp_punch(): # pragma: no cover
         starlink_stun_client,
         i_ntp_meet
     )
-
-    print("R punch details:")
-    print(recipient.state)
-    print()
 
     # Optional step -- update mappings of recipient.
     i_state_info = await initiator.proto_update_recipient_mappings(starlink_dest, i_session, r_their_maps, internode_stun_client)

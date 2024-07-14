@@ -772,16 +772,10 @@ async def select_if_by_dest(af, dest_ip, interface, ifs=[]):
     # and checks the local IP used to select an Interface.
     bind_ip = determine_if_path(af, dest_ip)
     bind_ipr = IPRange(bind_ip, cidr=cidr)
-
-    print("Bind ip = ")
-    print(bind_ip)
     bind_interface = get_if_by_nic_ipr(
         bind_ipr,
         interface.netifaces,
     )
-
-    print("bind interface = ")
-    print(bind_interface)
 
     # Unable to find associated interface.
     if bind_interface is None:
@@ -790,15 +784,12 @@ async def select_if_by_dest(af, dest_ip, interface, ifs=[]):
     # Auto-selected interface matches chosen interface.
     # Return the chosen interface with no changes.
     if bind_interface.name == interface.name:
-        print("using original interface")
         return interface
     
     # If already exists return it instead.
     for needle_if in ifs:
         if needle_if.name == bind_interface.name:
             return needle_if
-
-    print("patching original funcs")
 
     return await bind_interface
         

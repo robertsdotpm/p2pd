@@ -33,10 +33,13 @@ class P2PPipe():
 
         # Create a future for pending pipes.
         if reply is None:
+            print("reply is none")
             self.pipe_id = to_s(rand_plain(15))
         else:
+            print("reply is not none")
             self.pipe_id = to_s(reply.meta.pipe_id)
 
+        print(f"using {self.pipe_id}")
         self.node.pipe_future(self.pipe_id)
 
     async def connect(self, strategies=P2P_STRATEGIES):

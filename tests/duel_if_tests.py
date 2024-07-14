@@ -43,10 +43,7 @@ class TestNodes():
             conf=TEST_P2P_PIPE_CONF
         )
         self.pipe_id = self.pp_alice.pipe_id
-        self.pp_bob = self.bob.p2p_pipe(
-            self.alice.addr_bytes,
-            conf=TEST_P2P_PIPE_CONF
-        )
+
 
         
         self.alice.sig_proto_handlers.conf = TEST_P2P_PIPE_CONF
@@ -115,12 +112,19 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
             )
 
 
+
+
             print(punch_req_msg)
             print(punch_req_msg.pack())
 
-            print(nodes.bob.tcp_punch_clients)
+            print(nodes.alice.pipes.keys())
 
-            
+            print(nodes.pipe_id)
+
+
+
+
+
 
             # Get punch meeting details.
             resp = await nodes.bob.sig_proto_handlers.proto(
@@ -129,8 +133,8 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
 
             pipe_id = nodes.pipe_id
 
-            print(nodes.bob.pipes.keys())
-            print(nodes.alice.pipes.keys())
+            print(nodes.bob.pipes)
+            print(nodes.alice.pipes)
 
             
             print("Bob pipes")

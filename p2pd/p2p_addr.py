@@ -158,7 +158,6 @@ def pack_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=N
             cidr = af_to_cidr(af)
             nic_ip = bytes(IPRange(ip or r.nic(), cidr=cidr))
             ext_ip = bytes(IPRange(ip or r.ext(), cidr=cidr))
-            print(nic_ip)
             if af == IP4:
                 assert(len(nic_ip) == 4)
                 assert(len(ext_ip) == 4)
@@ -222,8 +221,6 @@ def unpack_peer_addr(addr):
         "node_id": node_id,
         "signal": signal_offsets
     }
-
-    print(if_no)
 
     # Unpack if list.
     p += signal_no;

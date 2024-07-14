@@ -287,19 +287,14 @@ async def for_addr_infos(src, dest, func, pp, concurrent=False):
                     )
                 )
 
-                print("if before = ")
-                print(interface)
                 interface = await select_if_by_dest(
                     af,
                     dest_info["ip"],
                     interface,
                     pp.node.ifs,
                 )
-                print("if after")
-                print(interface)
 
                 # Coroutine to run.
-                print(func)
                 coro = async_wrap_errors(
                     func(
                         af,

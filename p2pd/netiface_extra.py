@@ -106,8 +106,6 @@ async def netiface_addr_to_ipr(af, nic_id, info):
     if "netmask" not in info:
         return None
     
-    print("in netiface_addr_to_ipr")
-    print(info["netmask"])
     nic_ipr = IPRange(info["addr"], info["netmask"])
 
     """

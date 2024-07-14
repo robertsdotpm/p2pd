@@ -176,7 +176,6 @@ class STUNAddrTup:
         # Convert IP address to binary.
         family = self.get_family_buf()
         if family == b"\0\1":
-            print("ip4")
             ip_b = socket.inet_pton(
                 socket.AF_INET,
                 self.ip
@@ -198,7 +197,6 @@ class STUNAddrTup:
 
         # Decode moved to XOR across whole buffer so use that.
         if dec_buf != buf:
-            print("xor triggered")
             return dec_buf
         else:
             # Decode moved to encode IP and port segments manually.
