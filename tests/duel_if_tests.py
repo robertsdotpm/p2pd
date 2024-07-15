@@ -35,19 +35,36 @@ async def get_node(if_name, node_port=NODE_PORT):
     return await node.dev()
 
 class TestNodes():
+    def __init__(self, same_if=False, addr_types=[EXT_BIND, NIC_BIND], return_msg=True):
+        self.same_if = same_if
+        self.addr_types = addr_types
+        self.return_msg = return_msg
+
     async def __aenter__(self):
-        self.alice = await get_node(IF_ALICE_NAME)
-        self.bob = await get_node(IF_BOB_NAME, NODE_PORT + 1)
+        # Setup node on specific interfaces.
+        if self.same_if:
+            self.alice = await get_node(IF_ALICE_NAME)
+            self.bob = await get_node(IF_ALICE_NAME, NODE_PORT + 1)
+        else:
+            self.alice = await get_node(IF_ALICE_NAME)
+            self.bob = await get_node(IF_BOB_NAME, NODE_PORT + 1)
+
+        # Build p2p con pipe config.
+        conf = {
+            "addr_types": self.addr_types,
+            "return_msg": self.return_msg,
+        }
+
+        # Set pipe conf.
         self.pp_alice = self.alice.p2p_pipe(
             self.bob.addr_bytes,
-            conf=TEST_P2P_PIPE_CONF
+            conf=conf
         )
+        self.alice.sig_proto_handlers.conf = conf
+        self.bob.sig_proto_handlers.conf = conf
+
+        # Short reference var.
         self.pipe_id = self.pp_alice.pipe_id
-
-
-        
-        self.alice.sig_proto_handlers.conf = TEST_P2P_PIPE_CONF
-        self.bob.sig_proto_handlers.conf = TEST_P2P_PIPE_CONF
 
         return self
 

@@ -514,7 +514,7 @@ async def node_protocol(self, msg, client_tup, pipe):
         pipe_id = to_s(parts[1])
         if pipe_id not in self.pipes:
             pass
-            #self.pipe_future(self.pipe_id)
+            self.pipe_future(self.pipe_id)
 
 
         if pipe_id in self.pipes:

@@ -42,25 +42,7 @@ class P2PPipe():
         print(f"using {self.pipe_id}")
         self.node.pipe_future(self.pipe_id)
 
-    async def connect(self, strategies=P2P_STRATEGIES):
-        # Attempt direct connection first.
-        # The only method not to need signal messages.
-        if P2P_DIRECT in strategies:
-            # Returns a message from func given a comp addr info pair.
-            pipe = await for_addr_infos(
-                self.src,
-                self.dest,
-                self.direct_connect,
-                self,
-            )
-
-            if pipe is not None:
-                return pipe
-
-        # Proceed only if they need signal messages.
-        if strategies == [P2P_DIRECT]:
-            return None
-        
+    async def connect(self, strategies=P2P_STRATEGIES):        
         """
         # Used to relay signal proto messages.
         signal_pipe = self.node.find_signal_pipe(dest)
@@ -72,46 +54,52 @@ class P2PPipe():
             assert(signal_pipe is not None)
         """
         signal_pipe = None
-
-        # Try reverse connect.
-        if P2P_REVERSE in strategies:
-            msg = await for_addr_infos(
-                self.src,
-                self.dest,
-                self.reverse_connect,
-                self,
-            )
-
-            if self.conf["return_msg"]: return msg
-            pipe = await self.node.await_peer_con(msg, signal_pipe, 5)
-
-            # Successful reverse connect.
-            if pipe is not None:
-                return self.node.pipe_ready(self.pipe_id, pipe)
             
         # Mapping for funcs over addr infos.
         # Loop over the most likely strategies left.
-        func_table = [self.tcp_hole_punch, self.udp_relay]
-        for i, strategy in enumerate([P2P_PUNCH, P2P_RELAY]):
+        func_table = [
+            self.direct_connect,
+            self.reverse_connect,
+            self.tcp_hole_punch,
+            self.udp_relay
+        ]
+
+        # Try strategies to achieve a connection.
+        valid_strats = [P2P_DIRECT, P2P_REVERSE, P2P_PUNCH, P2P_RELAY]
+        for i, strategy in enumerate(valid_strats):
             # ... But still need to respect their choices.
             if strategy not in strategies:
                 continue
 
             # Returns a message from func given a comp addr info pair.
-            msg = await for_addr_infos(
+            out = await for_addr_infos(
                 self.src,
                 self.dest,
                 func_table[i],
                 self,
             )
 
-            # If no signal message returned then skip.
-            if msg is not None:
-                if self.conf["return_msg"]: return msg
+            # Strategy failed so continue.
+            if out is None:
+                continue
 
-                pipe = await self.node.await_peer_con(msg, signal_pipe)
-                if pipe is not None:
-                    return pipe
+            # Strategy returned a pipe directly.
+            if isinstance(out, PipeEvents):
+                pipe = self.node.pipe_ready(self.pipe_id, out)
+            else:
+                # Used to test the protocol.
+                if self.conf["return_msg"]: return out
+
+                # Relay any signal messages.
+                pipe = await self.node.await_peer_con(out, signal_pipe)
+                if pipe is None:
+                    continue
+
+            # Ensure node protocol handler setup on pipe.
+            if node_protocol not in pipe.msg_cbs:
+                pipe.add_msg_cb(node_protocol)
+
+            return pipe
             
     async def direct_connect(self, af, src_info, dest_info, interface):
         # Connect to this address.
