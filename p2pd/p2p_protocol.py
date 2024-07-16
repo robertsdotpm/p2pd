@@ -405,7 +405,7 @@ class SigProtoHandlers():
     avoids code duplication and keeps it simple.
     """
     async def handle_punch_msg(self, msg, conf):
-        print(self.node)
+        print(msg.pack())
         pp = self.node.p2p_pipe(
             msg.meta.src_buf,
             reply=msg,

@@ -340,15 +340,18 @@ async def new_peer_signal_pipe(p2p_dest, node):
             mqtt_server=mqtt_server
         )
 
+        print(signal_pipe)
+
         # If it fails unset the client.
         try:
             # If it's successful exit server offset attempts.
             await signal_pipe.start()
             node.signal_pipes[offset] = signal_pipe
-            break
         except asyncio.TimeoutError:
+            print("sig pipe timeout")
             # Cleanup and make sure it's unset.
             await signal_pipe.close()
+            continue
 
         return signal_pipe
     

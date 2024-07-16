@@ -168,5 +168,51 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
             # Get punch mode code needs to be updated
             # Or rewritten maybe replaced with work behind..
 
+    async def test_reverse_connect_with_sig(self):
+        async with TestNodes(return_msg=False) as nodes:
+            print(nodes.alice.signal_pipes)
+            await nodes.pp_alice.connect(
+                strategies=[P2P_REVERSE]
+            )
+
+
+            pipe = await nodes.alice.pipes[nodes.pipe_id]
+            assert(pipe is not None)
+            await pipe.close()
+
+    async def test_turn_with_sig(self):
+        async with TestNodes(return_msg=False) as nodes:
+            await nodes.pp_alice.connect(
+                strategies=[P2P_RELAY]
+            )
+
+            pipe_id = nodes.pipe_id
+            alice_turn = await nodes.alice.pipes[pipe_id]
+            bob_turn = await nodes.bob.pipes[pipe_id]
+    
+            assert(alice_turn is not None)
+            assert(bob_turn is not None)
+            await alice_turn.close()
+            await bob_turn.close()
+
+    async def test_tcp_punch_with_sig(self):
+        async with TestNodes(return_msg=False) as nodes:
+            await nodes.pp_alice.connect(
+                strategies=[P2P_PUNCH]
+            )
+
+            pipe_id = nodes.pipe_id
+            while 1:
+                for node in [nodes.alice, nodes.bob]:
+                    if pipe_id not in node.pipes:
+                        await asyncio.sleep(1)
+                break
+
+            alice_hole = await nodes.alice.pipes[pipe_id]
+            bob_hole = await nodes.bob.pipes[pipe_id]
+
+            print(f"alice hole = {alice_hole}")
+            print(f"bob hole = {bob_hole}")
+
 if __name__ == '__main__':
     main()

@@ -43,18 +43,6 @@ class P2PPipe():
         self.node.pipe_future(self.pipe_id)
 
     async def connect(self, strategies=P2P_STRATEGIES):        
-        """
-        # Used to relay signal proto messages.
-        signal_pipe = self.node.find_signal_pipe(dest)
-        if signal_pipe is None:
-            signal_pipe = await new_peer_signal_pipe(
-                dest,
-                self.node
-            )
-            assert(signal_pipe is not None)
-        """
-        signal_pipe = None
-            
         # Mapping for funcs over addr infos.
         # Loop over the most likely strategies left.
         func_table = [
@@ -83,21 +71,33 @@ class P2PPipe():
             if out is None:
                 continue
 
-            # Strategy returned a pipe directly.
-            if isinstance(out, PipeEvents):
-                pipe = self.node.pipe_ready(self.pipe_id, out)
-            else:
+            # NOP -- don't process this result.
+            if out == 1:
+                return
+
+            # Strategy returned a signal message to send.
+            if isinstance(out, SigMsg):
                 # Used to test the protocol.
                 if self.conf["return_msg"]: return out
 
                 # Relay any signal messages.
-                pipe = await self.node.await_peer_con(out, signal_pipe)
+                pipe = await self.node.await_peer_con(
+                    out,
+                    self.dest,
+                )
+
                 if pipe is None:
                     continue
+            else:
+                pipe = out
 
             # Ensure node protocol handler setup on pipe.
             if node_protocol not in pipe.msg_cbs:
                 pipe.add_msg_cb(node_protocol)
+
+            # Ensure ready set.
+            # todo: get working for all
+            self.node.pipe_ready(self.pipe_id, pipe)
 
             return pipe
             
@@ -187,9 +187,14 @@ class P2PPipe():
             reply=self.reply,
         )
 
+        print(punch_state)
+
         if punch_ret is None:
             print("punch ret is none")
             return
+        
+        if punch_state == TCP_PUNCH_UPDATE_RECIPIENT_MAPPINGS:
+            return 1
 
         """
         Punching is delayed for a few seconds to
@@ -229,9 +234,11 @@ class P2PPipe():
         })
 
         # Basic dest addr validation.
-        msg.set_cur_addr(self.src_bytes)
+        #msg.set_cur_addr(self.src_bytes)
         msg.routing.load_if_extra(self.node)
         msg.validate_dest(af, punch_mode, str(dest_info["ip"]))
+
+        # Prevent protocol loop.
         return msg
 
     async def udp_relay(self, af, src_info, dest_info, interface):
@@ -253,17 +260,22 @@ class P2PPipe():
         # Attempt to connect to TURN server.
         for offset in offsets:
             try:
+                # Use pre-existing TURN client.
                 if self.pipe_id in self.node.turn_clients:
                     turn_client = self.node.turn_clients[self.pipe_id]
                     print("in turn client accept peer")
                     print(peer_tup)
                     print(relay_tup)
-                    if peer_tup is not None:
-                        await turn_client.accept_peer(
-                            peer_tup,
-                            relay_tup,
-                        )
-                else:
+                    await turn_client.accept_peer(
+                        peer_tup,
+                        relay_tup,
+                    )
+
+                    self.node.pipe_ready(self.pipe_id, turn_client)
+                    return turn_client
+                
+                # Load a new TURN client.
+                if self.pipe_id not in self.node.turn_clients:
                     peer_tup, relay_tup, turn_client = await get_turn_client(
                         af,
                         offset,
@@ -272,14 +284,18 @@ class P2PPipe():
                         dest_relay=relay_tup,
                     )
 
+                    # Load TURN client failed.
+                    if turn_client is None:
+                        continue
+
+                    # Save reference to TURN client.
+                    self.node.turn_clients[self.pipe_id] = turn_client
+
+                # Indicate the TURN client is ready to be used.
                 if self.reply is not None:
                     self.node.pipe_ready(self.pipe_id, turn_client)
-            except:
-                log_exception()
-                continue
 
-            if turn_client is not None:
-                self.node.turn_clients[self.pipe_id] = turn_client
+                # Return a new TURN request.
                 return TURNMsg({
                     "meta": {
                         "pipe_id": self.pipe_id,
@@ -299,6 +315,9 @@ class P2PPipe():
                         "serv_id": offset,
                     },
                 })
+            except:
+                log_exception()
+                continue
 
 if __name__ == "__main__": # pragma: no cover
     async def test_p2p_con():
