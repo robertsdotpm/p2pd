@@ -10,9 +10,10 @@ from .turn_client import TURNClient
 from .settings import *
 from .p2p_addr import parse_peer_addr
 from .signaling import SignalMock
-from .interface import get_default_iface, get_mac_address
-from .interface import get_if_by_nic_ipr, select_if_by_dest
+from .interface import *
 from .ip_range import IPRange
+from .clock_skew import SysClock
+from .machine_id import hashed_machine_id
 
 P2P_DIRECT = 1
 P2P_REVERSE = 2
@@ -329,31 +330,6 @@ async def for_addr_infos(src, dest, func, pp, concurrent=False):
         results = await asyncio.gather(*tasks)
         results = [r for r in results if r is not None]
         return results
-
-async def new_peer_signal_pipe(p2p_dest, node):
-    for offset in p2p_dest["signal"]:
-        # Build a channel to relay signal messages to peer.
-        mqtt_server = MQTT_SERVERS[offset]
-        signal_pipe = SignalMock(
-            peer_id=to_s(node.node_id),
-            f_proto=node.signal_protocol,
-            mqtt_server=mqtt_server
-        )
-
-        print(signal_pipe)
-
-        # If it fails unset the client.
-        try:
-            # If it's successful exit server offset attempts.
-            await signal_pipe.start()
-            node.signal_pipes[offset] = signal_pipe
-        except asyncio.TimeoutError:
-            print("sig pipe timeout")
-            # Cleanup and make sure it's unset.
-            await signal_pipe.close()
-            continue
-
-        return signal_pipe
     
 async def fallback_machine_id(netifaces, app_id="p2pd"):
     host = socket.gethostname()
@@ -362,3 +338,12 @@ async def fallback_machine_id(netifaces, app_id="p2pd"):
     buf = f"{app_id} {host} {if_name} {mac}"
     return to_s(hashlib.sha256(to_b(buf)).digest())
 
+async def get_machine_id(app_id, netifaces):
+    # Set machine id.
+    try:
+        return hashed_machine_id(app_id)
+    except:
+        return await fallback_machine_id(
+            netifaces,
+            app_id
+        )

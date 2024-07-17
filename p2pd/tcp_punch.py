@@ -234,7 +234,10 @@ class TCPPunch():
             return
 
         self.stop_running.set()
-        await self.tcp_punch_stopped.wait()
+        await asyncio.wait_for(
+            self.tcp_punch_stopped.wait(),
+            30
+        )
 
     def get_punch_mode(self, dest_addr):
         # Loopback so use local punching.

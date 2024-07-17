@@ -96,7 +96,6 @@ class P2PPipe():
                 pipe.add_msg_cb(node_protocol)
 
             # Ensure ready set.
-            # todo: get working for all
             self.node.pipe_ready(self.pipe_id, pipe)
 
             return pipe
@@ -193,6 +192,7 @@ class P2PPipe():
             print("punch ret is none")
             return
         
+        # Prevent infinite protocol loops.
         if punch_state == TCP_PUNCH_UPDATE_RECIPIENT_MAPPINGS:
             return 1
 
@@ -234,6 +234,7 @@ class P2PPipe():
         })
 
         # Basic dest addr validation.
+        # TODO: why did this break things?
         #msg.set_cur_addr(self.src_bytes)
         msg.routing.load_if_extra(self.node)
         msg.validate_dest(af, punch_mode, str(dest_info["ip"]))
