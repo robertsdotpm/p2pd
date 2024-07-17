@@ -234,8 +234,6 @@ class P2PPipe():
         })
 
         # Basic dest addr validation.
-        # TODO: why did this break things?
-        #msg.set_cur_addr(self.src_bytes)
         msg.routing.load_if_extra(self.node)
         msg.validate_dest(af, punch_mode, str(dest_info["ip"]))
 

@@ -32,45 +32,6 @@ P2P_PIPE_CONF = {
     "return_msg": False,
 }
 
-class PredictField():
-    def __init__(self, mappings):
-        self.mappings = mappings
-
-    def pack(self):
-        pairs = []
-        for pair in self.mappings:
-            # remote, reply, local.
-            pairs.append(
-                b"%d,%d,%d" % (
-                    pair[0],
-                    pair[1],
-                    pair[2]
-                )
-            )
-
-        return b"|".join(pairs)
-    
-    @staticmethod
-    def unpack(buf):
-        buf = to_s(buf)
-        predictions = []
-        prediction_strs = buf.split("|")
-        for prediction_str in prediction_strs:
-            remote_s, reply_s, local_s = prediction_str.split(",")
-            prediction = [to_n(remote_s), to_n(reply_s), to_n(local_s)]
-            if not in_range(prediction[0], [1, MAX_PORT]):
-                raise Exception(f"Invalid remote port {prediction[0]}")
-
-            if not in_range(prediction[-1], [1, MAX_PORT]):
-                raise Exception(f"Invalid remote port {prediction[-1]}")
-
-            predictions.append(prediction)
-
-        if not len(predictions):
-            raise Exception("No predictions received.")
-
-        return PredictField(predictions)
-
 
 class SigMsg():
     @staticmethod
@@ -217,7 +178,6 @@ class SigMsg():
         )
 
         self.enum = enum
-            
 
     def to_dict(self):
         d = {
@@ -256,23 +216,6 @@ class SigMsg():
         did = self.routing.dest["machine_id"]
         if sid == did:
             self.meta.same_machine = True
-
-    def switch_src_and_dest(self):
-        # Copy all current fields into new object.
-        # So that changes don't mutate self.
-        x = self.unpack(self.pack()[1:])
-
-
-        # Swap interface indexes in that object.
-        x.meta.src_index = self.routing.dest_index
-        x.routing.dest_index = self.meta.src_index
-
-        # Swap src and dest p2p addr in that object.
-        x.meta.src_buf = self.routing.cur_dest_buf
-        x.routing.dest_buf = self.meta.src_buf
-
-        # Return new object with init on changes.
-        return self.unpack(x.pack()[1:])
 
 class TCPPunchMsg(SigMsg):
     # The main contents of this message.
