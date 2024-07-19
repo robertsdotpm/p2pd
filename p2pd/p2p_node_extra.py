@@ -1,5 +1,6 @@
 import asyncio
 from .settings import *
+from .machine_id import get_machine_id, hashed_machine_id
 from .tcp_punch import *
 from .signaling import *
 from .p2p_addr import *
@@ -8,6 +9,16 @@ from .p2p_utils import *
 from .p2p_defs import *
 
 class P2PUtils():
+    async def load_machine_id(self, app_id, netifaces):
+        # Set machine id.
+        try:
+            return hashed_machine_id(app_id)
+        except:
+            return await fallback_machine_id(
+                netifaces,
+                app_id
+            )
+
     # Accomplishes port forwarding and pin hole rules.
     async def forward(self, port):
         tasks = []

@@ -171,13 +171,10 @@ class P2PNode(Daemon, P2PUtils):
 
     async def dev(self, protos=[TCP]):
         # Set machine id.
-        try:
-            self.machine_id = hashed_machine_id("p2pd")
-        except:
-            self.machine_id = await fallback_machine_id(
-                self.ifs[0].netifaces,
-                "p2pd"
-            )
+        self.machine_id = await self.load_machine_id(
+            "p2pd",
+            self.ifs[0].netifaces
+        )
 
         # MQTT server offsets to try.
         offsets = shuffle([i for i in range(0, len(MQTT_SERVERS))])
