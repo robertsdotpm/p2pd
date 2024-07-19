@@ -177,47 +177,7 @@ class P2PNode(Daemon, P2PUtils):
         )
 
         # MQTT server offsets to try.
-        offsets = shuffle([i for i in range(0, len(MQTT_SERVERS))])
-
-
-        # Get list of N signal pipes.
-        for _ in range(0, SIGNAL_PIPE_NO):
-            async def set_signal_pipe(offset):
-                mqtt_server = MQTT_SERVERS[offset]
-                signal_pipe = SignalMock(
-                    peer_id=to_s(self.node_id),
-                    f_proto=self.signal_protocol,
-                    mqtt_server=mqtt_server
-                )
-
-                try:
-                    await signal_pipe.start()
-                    self.signal_pipes[offset] = signal_pipe
-                    return signal_pipe
-                except Exception:
-                    if signal_pipe.is_connected:
-                        await signal_pipe.close()
-                    return None
-            
-            # Traverse list of shuffled server indexes.
-            while 1:
-                # If tried all then we're done.
-                if not len(offsets):
-                    break
-
-                # Get the next offset to try.
-                offset = offsets.pop(0)
-
-                # Try to use the server at the offset for a signal pipe.
-                signal_pipe = await async_wrap_errors(
-                    set_signal_pipe(offset)
-                )
-
-                # The connection failed so keep trying.
-                if signal_pipe is None:
-                    continue
-                else:
-                    break
+        await self.load_signal_pipes()
 
         # Check at least one signal pipe was set.
         if not len(self.signal_pipes):

@@ -18,6 +18,54 @@ class P2PUtils():
                 netifaces,
                 app_id
             )
+        
+    async def load_signal_pipe(self, offsets, attempts=2):
+        count = 0
+        while not offsets.empty():
+            count += 1
+            if count >= attempts:
+                return
+            
+            offset = await offsets.get()
+            mqtt_server = MQTT_SERVERS[offset]
+            signal_pipe = SignalMock(
+                peer_id=to_s(self.node_id),
+                f_proto=self.signal_protocol,
+                mqtt_server=mqtt_server
+            )
+
+            try:
+                await signal_pipe.start()
+                self.signal_pipes[offset] = signal_pipe
+                return
+            except Exception:
+                if signal_pipe.is_connected:
+                    await signal_pipe.close()
+
+                return None
+        
+    """
+    There's a massive problem with the MQTT client
+    library. Starting it must use threading or do
+    something funky with the event loop.
+    It seems that starting the MQTT clients
+    sequentially prevents errors with queues being
+    bound to the wrong event loop.
+    
+    TODO: investigate this.
+    """
+    async def load_signal_pipes(self):
+        q = asyncio.Queue()
+        serv_len = len(MQTT_SERVERS)
+        offsets = shuffle(list(range(serv_len)))
+        [q.put_nowait(o) for o in offsets]
+
+        tasks = []
+        for _ in range(SIGNAL_PIPE_NO):
+            task = await self.load_signal_pipe(q)
+            #tasks.append(task)
+
+        #await asyncio.gather(*tasks)
 
     # Accomplishes port forwarding and pin hole rules.
     async def forward(self, port):
