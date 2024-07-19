@@ -14,35 +14,31 @@ NODE_CONF = dict_child({
     # Reusing address can hide errors for the socket state.
     # This can make servers appear to be broken when they're not.
     "reuse_addr": False,
+    "node_id": None,
+    "listen_ip": None,
+    "seed": None,
+    "enable_upnp": False,
 }, NET_CONF)
 
 
 # Main class for the P2P node server.
 class P2PNode(Daemon, P2PUtils):
-    def __init__(self, ifs, port=NODE_PORT, node_id=None, ip=None, signal_offsets=None, enable_upnp=False, conf=NODE_CONF, seed=None):
+    def __init__(self, ifs, port=NODE_PORT, conf=NODE_CONF):
         super().__init__()
-        self.seed = seed or secrets.token_bytes(24)
         self.conf = conf
-        self.signal_offsets = signal_offsets
+        self.node_id = conf["node_id"] or rand_plain(15)
         self.port = port
-        self.enable_upnp = enable_upnp
-        self.ip = ip
         self.ifs = ifs
-        self.ifs_by_af = {IP4: [], IP6: []}
-        for af in VALID_AFS:
-            for interface in ifs:
-                if af in interface.supported():
-                    self.ifs_by_af[af].append(interface)
 
 
-        self.node_id = node_id or rand_plain(15)
+
         self.signal_pipes = {} # offset into MQTT_SERVERS
-        self.expected_addrs = {} # by [pipe_id]
-        self.pipe_events = {} # by [pipe_id]
+
         self.pipes = {} # by [pipe_id]
         self.sys_clock = None
         self.pp_executor = None
         self.mp_manager = None
+
         self.tcp_punch_clients = [] # [...]
         self.turn_clients = {}
 
@@ -50,8 +46,7 @@ class P2PNode(Daemon, P2PUtils):
         self.msg_cbs = []
 
         # Maps p2p's ext to pipe_id.
-        self.pending_pipes = {} # by [pipe_id]
-        self.is_running = True
+
         self.listen_all_task = None
         self.signal_worker_task = None
         self.signal_worker_tasks = {} # offset into MQTT_SERVERS
@@ -185,10 +180,8 @@ class P2PNode(Daemon, P2PUtils):
             )
 
         # MQTT server offsets to try.
-        if self.signal_offsets is None:
-            offsets = [0] + shuffle([i for i in range(1, len(MQTT_SERVERS))])
-        else:
-            offsets = self.signal_offsets
+        offsets = shuffle([i for i in range(0, len(MQTT_SERVERS))])
+
 
         # Get list of N signal pipes.
         for _ in range(0, SIGNAL_PIPE_NO):
@@ -275,7 +268,7 @@ class P2PNode(Daemon, P2PUtils):
         port = self.servers[0][2].sock.getsockname()[1]
         print(f"Server port = {port}")
 
-        self.addr_bytes = make_peer_addr(self.node_id, self.machine_id, self.ifs, list(self.signal_pipes), port=port, ip=self.ip)
+        self.addr_bytes = make_peer_addr(self.node_id, self.machine_id, self.ifs, list(self.signal_pipes), port=port, ip=self.conf["listen_ip"])
         self.p2p_addr = parse_peer_addr(self.addr_bytes)
         print(f"> P2P node = {self.addr_bytes}")
         print(self.p2p_addr)
