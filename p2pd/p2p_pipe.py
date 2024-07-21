@@ -4,7 +4,7 @@ from .pipe_utils import pipe_open
 from .p2p_addr import *
 from .tcp_punch import TCP_PUNCH_UPDATE_RECIPIENT_MAPPINGS
 from .tcp_punch import TCP_PUNCH_IN_MAP
-from .p2p_utils import for_addr_infos
+from .p2p_utils import for_addr_infos, get_turn_client
 from .p2p_protocol import *
 
 """

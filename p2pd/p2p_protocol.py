@@ -4,7 +4,6 @@ lists need to be updated. Use short, unique IDs or
 index by host name even if its longer.
 """
 
-from .settings import *
 from .utils import *
 from .p2p_defs import *
 
@@ -21,6 +20,7 @@ class SigProtoHandlers():
         self.seen = {}
         self.conf = conf
 
+    # Take an action based on a protocol message.
     async def handle_msg(self, info, msg, conf):
         # Unpack info.
         _, strategy, timeout = info
@@ -38,6 +38,7 @@ class SigProtoHandlers():
             timeout
         )
     
+    # Receive a protocol message and validate it.
     async def proto(self, buf):
         if buf[0] not in SIG_PROTO:
             return
