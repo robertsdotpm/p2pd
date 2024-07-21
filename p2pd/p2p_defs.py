@@ -1,8 +1,10 @@
+import json
 from .utils import *
 from .net import *
 from .ip_range import IPRange
-from .tcp_punch import *
-from .p2p_utils import *
+from .tcp_punch import TCP_PUNCH_REMOTE, TCP_PUNCH_LAN
+from .tcp_punch import TCP_PUNCH_SELF
+from .p2p_addr import *
 
 SIG_CON = 1
 SIG_TCP_PUNCH = 2
