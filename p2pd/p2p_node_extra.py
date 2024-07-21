@@ -1,14 +1,17 @@
 import asyncio
 from .settings import *
-from .machine_id import get_machine_id, hashed_machine_id
+from .machine_id import hashed_machine_id
 from .tcp_punch import *
 from .signaling import *
 from .p2p_addr import *
 from .p2p_utils import *
-#from .p2p_pipe import *
 from .p2p_defs import *
+from .p2p_pipe import *
 
 class P2PUtils():
+    def p2p_pipe(self, dest_bytes, reply=None, conf=P2P_PIPE_CONF):
+        return P2PPipe(dest_bytes, self, reply, conf=conf)
+
     def cleanup_multiproc(self):
         targets = [self.mp_manager, self.pp_executor]
         for target in targets:
@@ -275,15 +278,6 @@ class P2PUtils():
                 return self.signal_pipes[offset]
 
         return None
-
-    def rm_pipe_id(self, pipe_id):
-        def closure(data, client_tup, pipe):
-            # Delete reference to pipe.
-            log(f"Running rm pipe id {pipe_id}")
-            if pipe_id in self.pipes:
-                del self.pipes[pipe_id]
-
-        return closure
 
     def setup_multiproc(self, pp_executor, mp_manager):
         # Process pools are disabled.

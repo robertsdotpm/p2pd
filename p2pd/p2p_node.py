@@ -1,12 +1,6 @@
-import secrets
+
 import asyncio
-from concurrent.futures import ProcessPoolExecutor
-import multiprocessing
-from decimal import Decimal as Dec
-from .p2p_pipe import *
 from .daemon import *
-from .signaling import *
-from .machine_id import get_machine_id, hashed_machine_id
 from .p2p_utils import *
 from .p2p_node_extra import *
 
@@ -20,35 +14,39 @@ NODE_CONF = dict_child({
     "enable_upnp": False,
 }, NET_CONF)
 
-
 # Main class for the P2P node server.
 class P2PNode(Daemon, P2PUtils):
     def __init__(self, ifs, port=NODE_PORT, conf=NODE_CONF):
         super().__init__()
+        
+        # Main variables for the class.
         self.conf = conf
         self.node_id = conf["node_id"] or rand_plain(15)
         self.port = port
         self.ifs = ifs
 
-
-
-        self.signal_pipes = {} # offset into MQTT_SERVERS
-        self.pipes = {} # by [pipe_id]
-        self.tcp_punch_clients = [] # [...]
-        self.turn_clients = {}
-
         # Handlers for the node's custom protocol functions.
         self.msg_cbs = []
 
+        # Main pipe connections.
+        self.signal_pipes = {} # offsets into MQTT_SERVERS
+        self.pipes = {} # by [pipe_id]
+        self.tcp_punch_clients = {} # by if_index
+        self.turn_clients = {}
 
+        # Pending TCP punch queue.
         self.punch_queue = asyncio.Queue()
+
+        # Signal protocol class instance.
         self.sig_proto_handlers = SigProtoHandlers(self)
 
+        # Fixed reference for long-running tasks.
         self.tasks = []
 
-    def p2p_pipe(self, dest_bytes, reply=None, conf=P2P_PIPE_CONF):
-        return P2PPipe(dest_bytes, self, reply, conf=conf)
-
+    # Used by the node servers.
+    async def msg_cb(self, msg, client_tup, pipe):
+        return await node_protocol(self, msg, client_tup, pipe)
+    
     # Used by the MQTT clients.
     async def signal_protocol(self, msg, signal_pipe):
         out = await async_wrap_errors(
@@ -60,10 +58,6 @@ class P2PNode(Daemon, P2PUtils):
                 out,
                 out.routing.dest["node_id"]
             )
-
-    # Used by the node servers.
-    async def msg_cb(self, msg, client_tup, pipe):
-        return await node_protocol(self, msg, client_tup, pipe)
 
     async def dev(self, protos=[TCP]):
         # Set machine id.
@@ -101,6 +95,10 @@ class P2PNode(Daemon, P2PUtils):
     # Connect to a remote P2P node using a number of techniques.
     async def connect(self, addr_bytes, strategies=P2P_STRATEGIES, timeout=60):
         pass
+
+    # Get our node server's address.
+    def address(self):
+        return self.addr_bytes
     
     """
     Register this name on up to N IRC servers if needed.
@@ -108,10 +106,6 @@ class P2PNode(Daemon, P2PUtils):
     """
     async def register(self, name_field):
         pass
-
-    # Get our node server's address.
-    def address(self):
-        return self.addr_bytes
 
 
 
