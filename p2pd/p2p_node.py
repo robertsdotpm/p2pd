@@ -47,102 +47,15 @@ class P2PNode(Daemon, P2PUtils):
 
         # Maps p2p's ext to pipe_id.
 
-        self.listen_all_task = None
-        self.signal_worker_task = None
-        self.signal_worker_tasks = {} # offset into MQTT_SERVERS
+
 
         self.punch_queue = asyncio.Queue()
         self.sig_proto_handlers = SigProtoHandlers(self)
 
+        self.tasks = []
+
     def p2p_pipe(self, dest_bytes, reply=None, conf=P2P_PIPE_CONF):
         return P2PPipe(dest_bytes, self, reply, conf=conf)
-
-    async def await_peer_con(self, msg, dest, timeout=10):
-        # Used to relay signal proto messages.
-        signal_pipe = self.find_signal_pipe(dest)
-        if signal_pipe is None:
-            signal_pipe = await new_peer_signal_pipe(
-                dest,
-                self
-            )
-            assert(signal_pipe is not None)
-
-
-        await signal_pipe.send_msg(
-            msg.pack(),
-            to_s(msg.routing.dest["node_id"])
-        )
-
-        try:
-            return await asyncio.wait_for(
-                self.pipes[msg.meta.pipe_id],
-                timeout
-            )
-        except asyncio.TimeoutError:
-            return None
-
-    def pipe_future(self, pipe_id):
-        print(f"pipe future {pipe_id}")
-        pipe_id = pipe_id
-        self.pipes[pipe_id] = asyncio.Future()
-        return pipe_id
-
-    def pipe_ready(self, pipe_id, pipe):
-        print(f"pipe ready {pipe_id}")
-        if not self.pipes[pipe_id].done():
-            self.pipes[pipe_id].set_result(pipe)
-        
-        return pipe
-
-    def add_punch_meeting(self, params):
-        # Schedule the TCP punching.
-        self.punch_queue.put_nowait(params)
-
-    async def punch_queue_worker(self):
-        while 1:
-            try:
-                params = await self.punch_queue.get()
-                if not len(params):
-                    return
-
-                print("do punch ")
-                punch_offset = params.pop(0)
-
-                punch = self.tcp_punch_clients[punch_offset]
-
-                print(params)
-                await punch.proto_do_punching(*params)
-                print("punch done")
-            except:
-                log_exception()
-
-
-    async def schedule_punching_with_delay(self, if_index, pipe_id, node_id, n=0):
-        # Get reference to punch client and state.
-        punch = self.tcp_punch_clients[if_index]
-        state = punch.get_state_info(node_id, pipe_id)
-        if state is None:
-            log("State none in punch with delay.")
-            return
-
-        # Return on timeout or on update.
-        if n:
-            try:
-                await asyncio.wait_for(
-                    state["data"]["update_event"].wait(),
-                    n
-                )
-            except:
-                # Attempt punching with default ports.
-                log("Initiator punch update timeout.")
-
-        # Ready to do the punching process.
-        self.add_punch_meeting([
-            if_index,
-            PUNCH_INITIATOR,
-            node_id,
-            pipe_id,
-        ])
 
     # Used by the MQTT clients.
     async def signal_protocol(self, msg, signal_pipe):
@@ -183,41 +96,7 @@ class P2PNode(Daemon, P2PUtils):
         if not len(self.signal_pipes):
             raise Exception("Unable to get any signal pipes.")
 
-        # Make a list of routes based on supported address families.
-        routes = []
-        if_names = []
-        for interface in self.ifs:
-            for af in interface.supported():
-                route = await interface.route(af).bind()
-                routes.append(route)
-
-            if_names.append(interface.name)
-
-        # Do deterministic bind to port by NIC IPs.
-        if self.port == -1:
-            self.port = get_port_by_ips(if_names)
-            for _ in range(0, 2):
-                try:
-                    self.listen_all_task = await self.listen_all(
-                        routes,
-                        [self.port],
-                        protos
-                    )
-                    break
-                except Exception:
-                    # Use any port.
-                    log(f"Deterministic bind for node server failed.")
-                    log(f"Port {self.port} was not available.")
-                    self.port = 0
-                    log_exception()
-        else:
-            # Start handling messages for self.msg_cb.
-            # Bind to all ifs provided to class on route[0].
-            self.listen_all_task = await self.listen_all(
-                routes,
-                [self.port],
-                protos
-            )
+        await self.listen_on_ifs()
 
         # Translate any port 0 to actual assigned port.
         # First server, field 3 == base_proto.
@@ -230,23 +109,8 @@ class P2PNode(Daemon, P2PUtils):
         print(f"> P2P node = {self.addr_bytes}")
         print(self.p2p_addr)
 
-        self.punch_worker = asyncio.ensure_future(
-            self.punch_queue_worker()
-        )
-
         # TODO: placeholder.
-        self.stun_clients = {IP4: {}, IP6: {}}
-        for af in VALID_AFS:
-            for if_index in range(0, len(self.ifs)):
-                interface = self.ifs[if_index]
-                if af in interface.supported():
-                    self.stun_clients[af][if_index] = (await get_stun_clients(
-                        af,
-                        1,
-                        interface,
-                        TCP,
-                        conf=PUNCH_CONF
-                    ))[0]
+        await self.load_stun_clients()
             
         return self
 
