@@ -33,12 +33,7 @@ class P2PNode(Daemon, P2PUtils):
 
 
         self.signal_pipes = {} # offset into MQTT_SERVERS
-
         self.pipes = {} # by [pipe_id]
-        self.sys_clock = None
-        self.pp_executor = None
-        self.mp_manager = None
-
         self.tcp_punch_clients = [] # [...]
         self.turn_clients = {}
 
@@ -73,15 +68,6 @@ class P2PNode(Daemon, P2PUtils):
     async def msg_cb(self, msg, client_tup, pipe):
         return await node_protocol(self, msg, client_tup, pipe)
 
-    # Add custom protocol handlers to node server.
-    def add_msg_cb(self, msg_cb):
-        self.msg_cbs.append(msg_cb)
-
-    # Del custom protocol handlers from node server.
-    def del_msg_cb(self, msg_cb):
-        if msg_cb in self.msg_cbs:
-            self.msg_cbs.remove(msg_cb)
-
     async def dev(self, protos=[TCP]):
         # Set machine id.
         self.machine_id = await self.load_machine_id(
@@ -114,125 +100,10 @@ class P2PNode(Daemon, P2PUtils):
             
         return self
 
-    # Start the node -- must have been setup properly first.
-    async def start(self, protos=[TCP]):
-        # MQTT server offsets to try.
-        if self.signal_offsets is None:
-            offsets = [0] + shuffle([i for i in range(1, len(MQTT_SERVERS))])
-        else:
-            offsets = self.signal_offsets
-
-        # Get list of N signal pipes.
-        for _ in range(0, SIGNAL_PIPE_NO):
-            async def set_signal_pipe(offset):
-                mqtt_server = MQTT_SERVERS[offset]
-                signal_pipe = SignalMock(
-                    peer_id=to_s(self.node_id),
-                    f_proto=self.signal_protocol,
-                    mqtt_server=mqtt_server
-                )
-
-                try:
-                    await signal_pipe.start()
-                    self.signal_pipes[offset] = signal_pipe
-                    return signal_pipe
-                except Exception:
-                    if signal_pipe.is_connected:
-                        await signal_pipe.close()
-                    return None
-            
-            # Traverse list of shuffled server indexes.
-            while 1:
-                # If tried all then we're done.
-                if not len(offsets):
-                    break
-
-                # Get the next offset to try.
-                offset = offsets.pop(0)
-
-                # Try to use the server at the offset for a signal pipe.
-                signal_pipe = await async_wrap_errors(
-                    set_signal_pipe(offset)
-                )
-
-                # The connection failed so keep trying.
-                if signal_pipe is None:
-                    continue
-                else:
-                    break
-
-        # Check at least one signal pipe was set.
-        if not len(self.signal_pipes):
-            raise Exception("Unable to get any signal pipes.")
-
-        # Make a list of routes based on supported address families.
-        routes = []
-        if_names = []
-        for interface in self.ifs:
-            for af in interface.supported():
-                route = await interface.route(af).bind()
-                routes.append(route)
-
-            if_names.append(interface.name)
-
-        # Do deterministic bind to port by NIC IPs.
-        if self.port == -1:
-            self.port = get_port_by_ips(if_names)
-            for _ in range(0, 2):
-                try:
-                    self.listen_all_task = await self.listen_all(
-                        routes,
-                        [self.port],
-                        protos
-                    )
-                    break
-                except Exception:
-                    # Use any port.
-                    log(f"Deterministic bind for node server failed.")
-                    log(f"Port {self.port} was not available.")
-                    self.port = 0
-                    log_exception()
-        else:
-            # Start handling messages for self.msg_cb.
-            # Bind to all ifs provided to class on route[0].
-            self.listen_all_task = await self.listen_all(
-                routes,
-                [self.port],
-                protos
-            )
-
-        # Translate any port 0 to actual assigned port.
-        # First server, field 3 == base_proto.
-        # sock = listen sock, getsocketname = (bind_ip, bind_port, ...)
-        port = self.servers[0][2].sock.getsockname()[1]
-        self.addr_bytes = make_peer_addr(self.node_id, self.machine_id, self.ifs, list(self.signal_pipes), port=port, ip=self.ip)
-        self.p2p_addr = parse_peer_addr(self.addr_bytes)
-        log(f"> P2P node = {self.addr_bytes}")
-
-        # Do port forwarding if enabled.
-        # Maybe this should go in the route class?
-        if self.enable_upnp:
-            # UPnP has no unit tests so wrap all errors for now.
-            await async_wrap_errors(
-                self.forward(port)
-            )
-
-        self.punch_worker = asyncio.ensure_future(
-            self.punch_queue_worker()
-        )
-            
-        return self
 
     # Connect to a remote P2P node using a number of techniques.
     async def connect(self, addr_bytes, strategies=P2P_STRATEGIES, timeout=60):
-        # Create a TCP connection to the peer using the strategies
-        # defined in the strategies list.
-        p2p_pipe = P2PPipe(self)
-        return await p2p_pipe.pipe(
-            addr_bytes,
-            strategies=strategies,
-            timeout=timeout
-        )
+        pass
     
     """
     Register this name on up to N IRC servers if needed.
@@ -244,65 +115,6 @@ class P2PNode(Daemon, P2PUtils):
     # Get our node server's address.
     def address(self):
         return self.addr_bytes
-
-    # Shutdown the node server and do cleanup.
-    async def close(self):
-        # Stop node server.
-        await super().close()
-        self.is_running = False
-
-        # Make the worker thread for punching end.
-        self.punch_queue.put_nowait([])
-
-        # Close the MQTT client.
-        for offset in list(self.signal_pipes):
-            signal_pipe = self.signal_pipes[offset]
-            if signal_pipe is None:
-                continue
-
-            await signal_pipe.close()
-
-        # Close TCP punch clients.
-        for punch_client in self.tcp_punch_clients:
-            if punch_client is None:
-                continue
-
-            # Sets close event.
-            # Waits for stop event.
-            await punch_client.close()
-
-        # Close TURN clients.
-        for pipe_id in self.turn_clients:
-            # Sets state transition to error state to end msg check loop.
-            # Closes the open TURN client handle.
-            turn_client = self.turn_clients[pipe_id]
-            if turn_client is not None:
-                await turn_client.close()
-
-        # Try close the multiprocess manager.
-        try:
-            if self.mp_manager is not None:
-                self.mp_manager.shutdown()
-        except Exception:
-            pass
-
-        # Try close the process pool executor.
-        try:
-            if self.pp_executor is not None:
-                self.pp_executor.shutdown()
-        except Exception:
-            pass
-
-        """
-        Node close will throw: 
-        Exception ignored in: <function BaseEventLoop.__del__
-        with socket error -1
-
-        So you need to make sure to wrap coroutines for exceptions.
-        """
-        self.mp_manager = None
-        self.pp_executor = None
-        await asyncio.sleep(.25)
 
 # delay with sys clock and get_pp_executors.
 async def start_p2p_node(port=NODE_PORT, node_id=None, ifs=None, 

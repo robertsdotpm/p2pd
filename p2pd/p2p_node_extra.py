@@ -9,6 +9,54 @@ from .p2p_utils import *
 from .p2p_defs import *
 
 class P2PUtils():
+    def cleanup_multiproc(self):
+        targets = [self.mp_manager, self.pp_executor]
+        for target in targets:
+            if target is None:
+                continue
+
+            try:
+                target.shutdown()
+            except:
+                continue
+
+        self.mp_manager = None
+        self.pp_executor = None
+
+    # Shutdown the node server and do cleanup.
+    async def close(self):
+        # Stop node server.
+        await super().close()
+
+        # Make the worker thread for punching end.
+        self.punch_queue.put_nowait([])
+
+        pipe_lists = [
+            self.signal_pipes,
+            self.tcp_punch_clients,
+            self.turn_clients,
+            self.pipes,
+        ]
+
+        for pipe_list in pipe_lists:
+            for pipe in pipe_list.values():
+                if pipe is None:
+                    continue
+
+                await pipe.close()
+
+        # Try close the multiprocess manager.
+        self.cleanup_multiproc()
+
+        """
+        Node close will throw: 
+        Exception ignored in: <function BaseEventLoop.__del__
+        with socket error -1
+
+        So you need to make sure to wrap coroutines for exceptions.
+        """
+        await asyncio.sleep(.25)
+
     async def await_peer_con(self, msg, dest, timeout=10):
         # Used to relay signal proto messages.
         signal_pipe = self.find_signal_pipe(dest)
@@ -67,7 +115,6 @@ class P2PUtils():
                 print("punch done")
             except:
                 log_exception()
-
 
     async def schedule_punching_with_delay(self, if_index, pipe_id, node_id, n=0):
         # Get reference to punch client and state.
