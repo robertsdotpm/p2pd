@@ -2,22 +2,17 @@
 Using offsets for servers is a bad idea as server
 lists need to be updated. Use short, unique IDs or
 index by host name even if its longer.
-
-- we're not always interested in crafting an entirely
-new package e.g. the turn response only switches the
-src and dest, and changes the payload
-it might make sense to take this into account
-
-TODO: Add node.msg_cb to pipes started part of 
-these methods.
 """
 
-
-from .utils import *
 from .settings import *
-from .address import *
-from .p2p_addr import *
+from .utils import *
 from .p2p_defs import *
+
+SIG_PROTO = {
+    SIG_CON: [ConMsg, P2P_DIRECT, 5],
+    SIG_TCP_PUNCH: [TCPPunchMsg, P2P_PUNCH, 10],
+    SIG_TURN: [TURNMsg, P2P_RELAY, 10],
+}
 
 
 class SigProtoHandlers():
@@ -26,7 +21,10 @@ class SigProtoHandlers():
         self.seen = {}
         self.conf = conf
 
-    async def handle_con_msg(self, msg, conf):
+    async def handle_msg(self, info, msg, conf):
+        # Unpack info.
+        _, strategy, timeout = info
+
         # Connect to chosen address.
         pp = self.node.p2p_pipe(
             msg.meta.src_buf,
@@ -35,76 +33,23 @@ class SigProtoHandlers():
         )
 
         # Connect to chosen address.
-        await asyncio.wait_for(
-            pp.connect(strategies=[P2P_DIRECT]),
-            5
+        return await asyncio.wait_for(
+            pp.connect(strategies=[strategy]),
+            timeout
         )
     
-    """
-    Supports both receiving initial mappings and
-    receiving updated mappings by checking state.
-    The same message type is used for both which
-    avoids code duplication and keeps it simple.
-    """
-    async def handle_punch_msg(self, msg, conf):
-        print(msg.pack())
-        pp = self.node.p2p_pipe(
-            msg.meta.src_buf,
-            reply=msg,
-            conf=conf,
-        )
-
-        # Connect to chosen address.
-        pipe = await asyncio.wait_for(
-            pp.connect(strategies=[P2P_PUNCH]),
-            10
-        )
-
-        print("handle punch pipe = ")
-        print(pipe)
-        return
-
-    async def handle_turn_msg(self, msg, conf):
-        print("in handle turn msg")
-        pp = self.node.p2p_pipe(
-            msg.meta.src_buf,
-            reply=msg,
-            conf=conf,
-        )
-
-        # Connect to chosen address.
-        msg = await asyncio.wait_for(
-            pp.connect(strategies=[P2P_RELAY]),
-            10
-        )
-
-        return msg
-
     async def proto(self, buf):
-        p_node = self.node.addr_bytes
-        p_addr = self.node.p2p_addr
-        node_id = to_s(p_addr["node_id"])
-        handler = None
-        if buf[0] == SIG_CON:
-            msg = ConMsg.unpack(buf[1:])
-            print("got sig p2p dir")
-            print(msg)
-            handler = self.handle_con_msg
-        
-        if buf[0] == SIG_TCP_PUNCH:
-            print("got punch msg")
-            msg = TCPPunchMsg.unpack(buf[1:])
-            handler = self.handle_punch_msg
-
-        if buf[0] == SIG_TURN:
-            print("Got turn msg")
-            msg = TURNMsg.unpack(buf[1:])
-            handler = self.handle_turn_msg
-
-        if handler is None:
+        if buf[0] not in SIG_PROTO:
             return
+        
+        # Unpack message into fields.
+        msg_info = SIG_PROTO[buf[0]]
+        msg_class = msg_info[0]
+        msg = msg_class.unpack(buf[1:])
 
+        # Is this message meant for us?
         dest = msg.routing.dest
+        node_id = to_s(self.node.p2p_addr["node_id"])
         if to_s(dest["node_id"]) != node_id:
             print(f"Received message not intended for us. {dest['node_id']} {node_id}")
             return
@@ -116,17 +61,18 @@ class SigProtoHandlers():
         else:
             self.seen[msg.meta.pipe_id] = 1
 
+        # Updating routing dest with current addr.
+        assert(msg is not None)
+        msg.set_cur_addr(self.node.addr_bytes)
+        msg.routing.load_if_extra(self.node)
+
+        # Toggle local and remote address support.
         conf = dict_child({
             "addr_types": msg.meta.addr_types
         }, self.conf)
 
-        
-        # Updating routing dest with current addr.
-        assert(msg is not None)
-        msg.set_cur_addr(p_node)
-        msg.routing.load_if_extra(self.node)
-        
-        return await handler(msg, conf)
+        # Take action based on message.
+        return await self.handle_msg(msg_info, msg, conf)
     
 async def node_protocol(self, msg, client_tup, pipe):
     log(f"> node proto = {msg}, {client_tup}")
@@ -163,30 +109,4 @@ async def node_protocol(self, msg, client_tup, pipe):
             log(f"pipe = '{pipe_id}' not in pipe events. saving.")
             self.pipe_ready(pipe_id, pipe)
 
-
-"""
-Index cons by pipe_id -> future and then
-set the future when the con is made.
-Then you can await any pipe even if its
-made by a more complex process (like punching.)
-
-Maybe a pipe_open improvement.
-
-"""
-
-
-if __name__ == '__main__':
-    pass
-    #async_test(test_proto_rewrite5)
-
-"""
-    Signal proto:
-        - one big func
-        - a case for every 'cmd' ...
-        - i/o bound (does io in the func)
-        - no checks for bad addrs
-        - 
-
-    
-"""
 
