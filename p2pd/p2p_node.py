@@ -1,6 +1,7 @@
 
 import asyncio
 from .daemon import *
+from .p2p_addr import *
 from .p2p_utils import *
 from .p2p_node_extra import *
 

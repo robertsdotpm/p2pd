@@ -14,6 +14,16 @@ P2P_PIPE_CONF = {
     "return_msg": False,
 }
 
+P2P_DIRECT = 1
+P2P_REVERSE = 2
+P2P_PUNCH = 3
+P2P_RELAY = 4
+
+# TURN is not included as a default strategy because it uses UDP.
+# It will need a special explanation for the developer.
+# SOCKS might be a better protocol for relaying in the future.
+P2P_STRATEGIES = [P2P_DIRECT, P2P_REVERSE, P2P_PUNCH]
+
 class PredictField():
     def __init__(self, mappings):
         self.mappings = mappings

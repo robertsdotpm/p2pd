@@ -12,17 +12,11 @@ TODO: Add node.msg_cb to pipes started part of
 these methods.
 """
 
-import json
-import multiprocessing
+
 from .utils import *
 from .settings import *
 from .address import *
-from .pipe_events import *
 from .p2p_addr import *
-from .p2p_utils import *
-from .tcp_punch import PUNCH_RECIPIENT, PUNCH_INITIATOR
-from .tcp_punch import TCP_PUNCH_IN_MAP, get_punch_mode
-from .interface import select_if_by_dest
 from .p2p_defs import *
 
 

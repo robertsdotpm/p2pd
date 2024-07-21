@@ -1,12 +1,11 @@
 import asyncio
 from .settings import *
 from .machine_id import hashed_machine_id
-from .tcp_punch import *
-from .signaling import *
-from .p2p_addr import *
+from .tcp_punch import TCPPunch, PUNCH_CONF
 from .p2p_utils import *
-from .p2p_defs import *
 from .p2p_pipe import *
+from .signaling import *
+from .stun_client import get_stun_clients
 
 class P2PUtils():
     def p2p_pipe(self, dest_bytes, reply=None, conf=P2P_PIPE_CONF):

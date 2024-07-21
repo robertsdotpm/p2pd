@@ -2,27 +2,14 @@ import asyncio
 from concurrent.futures import ProcessPoolExecutor
 import hashlib
 import socket
-from .address import Address
-from .utils import *
-from .net import *
-from .nat import *
-from .turn_client import TURNClient
 from .settings import *
-from .p2p_addr import parse_peer_addr
-from .signaling import SignalMock
+from .utils import *
+from .address import Address
+from .net import *
 from .interface import get_default_iface, get_mac_address
-from .interface import get_if_by_nic_ipr, select_if_by_dest
-from .ip_range import IPRange
-
-P2P_DIRECT = 1
-P2P_REVERSE = 2
-P2P_PUNCH = 3
-P2P_RELAY = 4
-
-# TURN is not included as a default strategy because it uses UDP.
-# It will need a special explanation for the developer.
-# SOCKS might be a better protocol for relaying in the future.
-P2P_STRATEGIES = [P2P_DIRECT, P2P_REVERSE, P2P_PUNCH]
+from .interface import select_if_by_dest
+from .turn_client import TURNClient
+from .signaling import SignalMock
 
 def init_process_pool():
     # Make selector default event loop.
