@@ -17,7 +17,7 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
         await toxid.listen_specific(
             [[route, TCP]]
         )
-
+        
         # Create a Toxi client.
         listen_port = toxid.get_listen_port()
         toxid_addr = await Address("127.0.0.1", listen_port, route)

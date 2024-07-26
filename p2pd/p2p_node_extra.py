@@ -8,7 +8,7 @@ from .p2p_pipe import *
 from .signaling import *
 from .stun_client import get_stun_clients
 
-class P2PUtils():
+class P2PNodeExtra():
     async def load_stun_clients(self):
         self.stun_clients = {IP4: {}, IP6: {}}
         for af in VALID_AFS:
@@ -51,27 +51,35 @@ class P2PUtils():
         ]
 
     async def punch_queue_worker(self):
-        while 1:
-            try:
-                params = await self.punch_queue.get()
-                if not len(params):
-                    return
+        try:
+            while 1:
+                if not len(self.punch_queue):
+                    await asyncio.sleep(0.1)
+                    continue
 
-                print("do punch ")
-                punch_offset = params.pop(0)
+                try:
+                    params = await self.punch_queue.get()
+                    if not len(params):
+                        return
+                    
+                    print("do punch ")
+                    punch_offset = params.pop(0)
 
-                punch = self.tcp_punch_clients[punch_offset]
+                    punch = self.tcp_punch_clients[punch_offset]
 
-                print(params)
-                await punch.proto_do_punching(*params)
-                print("punch done")
-            except:
-                log_exception()
+                    print(params)
+                    await punch.proto_do_punching(*params)
+                    print("punch done")
+                except:
+                    log_exception()
+        except RuntimeError:
+            return
 
     def start_punch_worker(self):
         task = asyncio.ensure_future(
             self.punch_queue_worker()
         )
+        
         self.tasks.append(task)
 
     def add_punch_meeting(self, params):
@@ -147,7 +155,7 @@ class P2PUtils():
         [q.put_nowait(o) for o in offsets]
 
         tasks = []
-        for _ in range(SIGNAL_PIPE_NO):
+        for _ in range(1):
             task = await self.load_signal_pipe(q)
             #tasks.append(task)
 
@@ -163,11 +171,16 @@ class P2PUtils():
 
     async def listen_on_ifs(self, protos=[TCP]):
         # Make a list of routes based on supported address families.
+        # TODO: change this to use the port specified
         routes = []
         if_names = []
         for interface in self.ifs:
             for af in interface.supported():
-                route = await interface.route(af).bind()
+                route = interface.route(af)
+                route = await route.bind(
+                    port=self.listen_port,
+                    ips=self.conf["listen_ip"]
+                )
                 routes.append(route)
 
             if_names.append(interface.name)
@@ -176,7 +189,7 @@ class P2PUtils():
         # Bind to all ifs provided to class on route[0].
         task = await self.listen_all(
             routes,
-            [self.port],
+            [self.listen_port],
             protos
         )
         self.tasks.append(task)
@@ -274,12 +287,12 @@ class P2PUtils():
 
     # Shutdown the node server and do cleanup.
     async def close(self):
-        # Stop node server.
-        await super().close()
-
         # Make the worker thread for punching end.
         self.punch_queue.put_nowait([])
+        self.punch_queue = None
+        await asyncio.sleep(0.5)
 
+        # Close other pipes.
         pipe_lists = [
             self.signal_pipes,
             self.tcp_punch_clients,
@@ -292,6 +305,9 @@ class P2PUtils():
                 if pipe is None:
                     continue
 
+                if isinstance(pipe, asyncio.Future):
+                    pipe = await pipe
+
                 await pipe.close()
 
         # Try close the multiprocess manager.
@@ -303,5 +319,10 @@ class P2PUtils():
         with socket error -1
 
         So you need to make sure to wrap coroutines for exceptions.
+        
         """
+
+        # Stop node server.
+        await super().close()
+
         await asyncio.sleep(.25)

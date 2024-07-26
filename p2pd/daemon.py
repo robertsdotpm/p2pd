@@ -1,3 +1,4 @@
+import struct
 from .address import *
 from .interface import *
 from .pipe_utils import *
@@ -51,6 +52,16 @@ class Daemon():
         dest = await Address(route.nic(), port, route)
         print(f"Dev server started on {dest.tup}")
         return WebCurl(dest)
+    
+    def avoid_time_wait(self):
+        for serv in self.servers:
+            sock = serv[2].sock
+            linger = struct.pack('ii', 1, 0)
+            sock.setsockopt(
+                socket.SOL_SOCKET,
+                socket.SO_LINGER,
+                linger
+            )
 
     def get_listen_port(self):
         return get_listen_port(self.servers[0])
@@ -161,6 +172,8 @@ class Daemon():
                 up_cb=up_cb
             )
 
+        self.avoid_time_wait()
+
     # Start all the servers listening.
     # All targets are started on the same list of ports and protocols.
     # A more general version of the above function.
@@ -242,6 +255,7 @@ class Daemon():
                                 pass
                                 # May already be started -- ignore.
 
+        self.avoid_time_wait()
         return self
 
     async def close(self):

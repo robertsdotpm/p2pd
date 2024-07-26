@@ -188,7 +188,7 @@ class P2PPipe():
             reply=self.reply,
         )
 
-        print(punch_state)
+        print(f"punch state = {punch_state}")
 
         if punch_ret is None:
             print("punch ret is none")

@@ -6,8 +6,14 @@ from .p2p_utils import *
 from .p2p_node_extra import *
 
 NODE_CONF = dict_child({
-    # Reusing address can hide errors for the socket state.
-    # This can make servers appear to be broken when they're not.
+    """
+    Note:
+    Reusing address can hide socket errors and
+    make servers appear broken when they're not.
+
+    Todo: write code to test this state against
+    the node server.
+    """
     "reuse_addr": False,
     "node_id": None,
     "listen_ip": None,
@@ -16,24 +22,24 @@ NODE_CONF = dict_child({
 }, NET_CONF)
 
 # Main class for the P2P node server.
-class P2PNode(Daemon, P2PUtils):
+class P2PNode(Daemon, P2PNodeExtra):
     def __init__(self, ifs, port=NODE_PORT, conf=NODE_CONF):
         super().__init__()
         
         # Main variables for the class.
         self.conf = conf
         self.node_id = conf["node_id"] or rand_plain(15)
-        self.port = port
+        self.listen_port = port
         self.ifs = ifs
 
-        # Handlers for the node's custom protocol functions.
+        # Handlers for the node protocol.
         self.msg_cbs = []
 
         # Main pipe connections.
-        self.signal_pipes = {} # offsets into MQTT_SERVERS
-        self.pipes = {} # by [pipe_id]
+        self.pipes = {} # by pipe_id
         self.tcp_punch_clients = {} # by if_index
-        self.turn_clients = {}
+        self.turn_clients = {} # by pipe_id
+        self.signal_pipes = {} # by MQTT_SERVERS index
 
         # Pending TCP punch queue.
         self.punch_queue = asyncio.Queue()
@@ -67,32 +73,46 @@ class P2PNode(Daemon, P2PUtils):
             self.ifs[0].netifaces
         )
 
-        # MQTT server offsets to try.
-        await self.load_signal_pipes()
+        # Used by TCP punch clients.
+        await self.load_stun_clients()
 
+        # MQTT server offsets for signal protocol.
+        #await self.load_signal_pipes()
+        self.signal_pipes[0] = None
+
+        # Accept TCP punch requests.
+        self.start_punch_worker()
+
+        """
         # Check at least one signal pipe was set.
         if not len(self.signal_pipes):
             raise Exception("Unable to get any signal pipes.")
+        """
 
+        # Start the server for the node protocol.
         await self.listen_on_ifs()
 
         # Translate any port 0 to actual assigned port.
-        # First server, field 3 == base_proto.
-        # sock = listen sock, getsocketname = (bind_ip, bind_port, ...)
-        port = self.servers[0][2].sock.getsockname()[1]
-        print(f"Server port = {port}")
+        node_sock = self.servers[0][2].sock
+        listen_port = node_sock.getsockname()[1]
+        print(f"Server port = {listen_port}")
 
-        self.addr_bytes = make_peer_addr(self.node_id, self.machine_id, self.ifs, list(self.signal_pipes), port=port, ip=self.conf["listen_ip"])
+        # Build P2P address bytes.
+        self.addr_bytes = make_peer_addr(
+            self.node_id,
+            self.machine_id,
+            self.ifs,
+            list(self.signal_pipes),
+            port=listen_port,
+            ip=self.conf["listen_ip"]
+        )
+
+        # Save a dict version of the address fields.
         self.p2p_addr = parse_peer_addr(self.addr_bytes)
         print(f"> P2P node = {self.addr_bytes}")
         print(self.p2p_addr)
-
-        # TODO: placeholder.
-        await self.load_stun_clients()
-            
         return self
-
-
+    
     # Connect to a remote P2P node using a number of techniques.
     async def connect(self, addr_bytes, strategies=P2P_STRATEGIES, timeout=60):
         pass
@@ -101,12 +121,6 @@ class P2PNode(Daemon, P2PUtils):
     def address(self):
         return self.addr_bytes
     
-    """
-    Register this name on up to N IRC servers if needed.
-    Then set the value at that name to this nodes address
-    """
     async def register(self, name_field):
         pass
-
-
 

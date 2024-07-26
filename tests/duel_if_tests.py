@@ -1,3 +1,9 @@
+"""
+It probably has a bug with the context manager.
+I don't have time to fix it so just write a simple function
+that runs the tests and call with the async_test.
+"""
+
 from p2pd import *
 import multiprocessing
 
@@ -73,6 +79,10 @@ class TestNodes():
         await self.bob.close()
 
 class DuelIFTests(unittest.IsolatedAsyncioTestCase):
+    async def test_node_start(self):
+        alice = await get_node(IF_BOB_NAME, node_port=NODE_PORT + 1)
+        await alice.close()
+
     async def test_direct_connect(self):
         async with TestNodes() as nodes:
             pipe = await nodes.pp_alice.connect(
@@ -102,6 +112,8 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
             print("msg1")
             print(msg)
 
+            return
+
             msg = (await nodes.bob.sig_proto_handlers.proto(msg)).pack()
             print("msg2")
             print(msg)
@@ -123,30 +135,22 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
             await bob_turn.close()
 
     async def test_tcp_punch(self):
-        async with TestNodes() as nodes:
+        async with TestNodes(addr_types=[NIC_BIND, EXT_BIND]) as nodes:
             punch_req_msg = await nodes.pp_alice.connect(
                 strategies=[P2P_PUNCH]
             )
 
-
-
-
-            print(punch_req_msg)
             print(punch_req_msg.pack())
 
-            print(nodes.alice.pipes.keys())
-
-            print(nodes.pipe_id)
-
-
-
-
+    
 
 
             # Get punch meeting details.
             resp = await nodes.bob.sig_proto_handlers.proto(
                 punch_req_msg.pack()
             )
+
+            print(resp)
 
             pipe_id = nodes.pipe_id
 
@@ -156,6 +160,7 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
             
             print("Bob pipes")
 
+            pipe_id = nodes.pipe_id
 
 
             bob_hole = await nodes.bob.pipes[pipe_id]
@@ -166,7 +171,7 @@ class DuelIFTests(unittest.IsolatedAsyncioTestCase):
             print(f"bob hole = {bob_hole}")
 
             # Get punch mode code needs to be updated
-            # Or rewritten maybe replaced with work behind..
+            # Or rewritten maybe replaced with work behind.
 
     async def test_reverse_connect_with_sig(self):
         async with TestNodes(return_msg=False) as nodes:

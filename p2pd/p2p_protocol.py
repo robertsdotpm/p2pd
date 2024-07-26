@@ -41,6 +41,7 @@ class SigProtoHandlers():
     # Receive a protocol message and validate it.
     async def proto(self, buf):
         if buf[0] not in SIG_PROTO:
+            print(f"proto got unsupported msg {buf[0]}")
             return
         
         # Unpack message into fields.

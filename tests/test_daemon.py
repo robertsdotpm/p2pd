@@ -3,6 +3,19 @@ from p2pd import *
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestDaemon(unittest.IsolatedAsyncioTestCase):
+    async def test_close_serv_sock_with_listen_after(self):
+        i = await Interface()
+
+        for _ in range(3):
+            # Daemon instance.
+            echod = await EchoServer().listen_all(
+                [i],
+                [10126],
+                [TCP]
+            )
+
+            await echod.close()
+
     async def test_listen_all_interface_target(self):
         i = await Interface()
         i.rp[IP6].routes = []
