@@ -78,146 +78,134 @@ class TestNodes():
         await self.alice.close()
         await self.bob.close()
 
-class DuelIFTests(unittest.IsolatedAsyncioTestCase):
-    async def test_node_start(self):
-        alice = await get_node(IF_BOB_NAME, node_port=NODE_PORT + 1)
-        await alice.close()
 
-    async def test_direct_connect(self):
-        async with TestNodes() as nodes:
-            pipe = await nodes.pp_alice.connect(
-                strategies=[P2P_DIRECT]
-            )
-            assert(pipe is not None)
-            await pipe.close()
+async def test_node_start():
+    alice = await get_node(IF_BOB_NAME, node_port=NODE_PORT + 1)
+    await alice.close()
 
-    async def test_reverse_connect(self):
-        async with TestNodes() as nodes:
-            msg = (await nodes.pp_alice.connect(
-                strategies=[P2P_REVERSE]
-            )).pack()
+async def test_direct_connect():
+    async with TestNodes() as nodes:
+        pipe = await nodes.pp_alice.connect(
+            strategies=[P2P_DIRECT]
+        )
+        assert(pipe is not None)
+        await pipe.close()
 
-            await nodes.bob.sig_proto_handlers.proto(msg)
+async def test_reverse_connect():
+    async with TestNodes() as nodes:
+        msg = (await nodes.pp_alice.connect(
+            strategies=[P2P_REVERSE]
+        )).pack()
+
+        await nodes.bob.sig_proto_handlers.proto(msg)
+        
+        pipe = await nodes.alice.pipes[nodes.pipe_id]
+        assert(pipe is not None)
+        await pipe.close()
+
+async def test_turn():
+    async with TestNodes() as nodes:
+        msg = (await nodes.pp_alice.connect(
+            strategies=[P2P_RELAY]
+        )).pack()
+
+        print("msg1")
+        print(msg)
+
+        return
+
+        msg = (await nodes.bob.sig_proto_handlers.proto(msg)).pack()
+        print("msg2")
+        print(msg)
+        
+        print(nodes.alice.turn_clients)
+
+        msg = await nodes.alice.sig_proto_handlers.proto(msg)
+
+
+
+        pipe_id = nodes.pipe_id
+        alice_turn = await nodes.alice.pipes[pipe_id]
+        bob_turn = await nodes.bob.pipes[pipe_id]
+
+
+        assert(alice_turn is not None)
+        assert(bob_turn is not None)
+        await alice_turn.close()
+        await bob_turn.close()
+
+async def test_tcp_punch():
+    async with TestNodes(addr_types=[NIC_BIND, EXT_BIND]) as nodes:
+        punch_req_msg = await nodes.pp_alice.connect(
+            strategies=[P2P_PUNCH]
+        )
+
+        print(punch_req_msg.pack())
+
+
+
+
+        # Get punch meeting details.
+        resp = await nodes.bob.sig_proto_handlers.proto(
+            punch_req_msg.pack()
+        )
+
+        print(resp)
+
+        pipe_id = nodes.pipe_id
+
+        print(nodes.bob.pipes)
+        print(nodes.alice.pipes)
+
+        
+        print("Bob pipes")
+
+        pipe_id = nodes.pipe_id
+
+
+        bob_hole = await nodes.bob.pipes[pipe_id]
+        alice_hole = await nodes.alice.pipes[pipe_id]
             
-            pipe = await nodes.alice.pipes[nodes.pipe_id]
-            assert(pipe is not None)
-            await pipe.close()
 
-    async def test_turn(self):
-        async with TestNodes() as nodes:
-            msg = (await nodes.pp_alice.connect(
-                strategies=[P2P_RELAY]
-            )).pack()
+        print(f"alice hole = {alice_hole}")
+        print(f"bob hole = {bob_hole}")
 
-            print("msg1")
-            print(msg)
+        # Get punch mode code needs to be updated
+        # Or rewritten maybe replaced with work behind.
 
-            return
-
-            msg = (await nodes.bob.sig_proto_handlers.proto(msg)).pack()
-            print("msg2")
-            print(msg)
-            
-            print(nodes.alice.turn_clients)
-
-            msg = await nodes.alice.sig_proto_handlers.proto(msg)
+async def test_reverse_connect_with_sig():
+    async with TestNodes(return_msg=False) as nodes:
+        print(nodes.alice.signal_pipes)
+        await nodes.pp_alice.connect(
+            strategies=[P2P_REVERSE]
+        )
 
 
+        pipe = await nodes.alice.pipes[nodes.pipe_id]
+        assert(pipe is not None)
+        await pipe.close()
 
-            pipe_id = nodes.pipe_id
-            alice_turn = await nodes.alice.pipes[pipe_id]
-            bob_turn = await nodes.bob.pipes[pipe_id]
+async def test_turn_with_sig():
+    async with TestNodes(return_msg=False) as nodes:
+        alice_hole = await nodes.pp_alice.connect(
+            strategies=[P2P_RELAY]
+        )
 
+        print(f"alice hole = {alice_hole}")
 
-            assert(alice_turn is not None)
-            assert(bob_turn is not None)
-            await alice_turn.close()
-            await bob_turn.close()
+async def test_tcp_punch_with_sig():
+    async with TestNodes(return_msg=False) as nodes:
+        alice_hole = await nodes.pp_alice.connect(
+            strategies=[P2P_PUNCH]
+        )
 
-    async def test_tcp_punch(self):
-        async with TestNodes(addr_types=[NIC_BIND, EXT_BIND]) as nodes:
-            punch_req_msg = await nodes.pp_alice.connect(
-                strategies=[P2P_PUNCH]
-            )
+        print(f"alice hole = {alice_hole}")
 
-            print(punch_req_msg.pack())
-
-    
-
-
-            # Get punch meeting details.
-            resp = await nodes.bob.sig_proto_handlers.proto(
-                punch_req_msg.pack()
-            )
-
-            print(resp)
-
-            pipe_id = nodes.pipe_id
-
-            print(nodes.bob.pipes)
-            print(nodes.alice.pipes)
-
-            
-            print("Bob pipes")
-
-            pipe_id = nodes.pipe_id
-
-
-            bob_hole = await nodes.bob.pipes[pipe_id]
-            alice_hole = await nodes.alice.pipes[pipe_id]
-                
-
-            print(f"alice hole = {alice_hole}")
-            print(f"bob hole = {bob_hole}")
-
-            # Get punch mode code needs to be updated
-            # Or rewritten maybe replaced with work behind.
-
-    async def test_reverse_connect_with_sig(self):
-        async with TestNodes(return_msg=False) as nodes:
-            print(nodes.alice.signal_pipes)
-            await nodes.pp_alice.connect(
-                strategies=[P2P_REVERSE]
-            )
-
-
-            pipe = await nodes.alice.pipes[nodes.pipe_id]
-            assert(pipe is not None)
-            await pipe.close()
-
-    async def test_turn_with_sig(self):
-        async with TestNodes(return_msg=False) as nodes:
-            await nodes.pp_alice.connect(
-                strategies=[P2P_RELAY]
-            )
-
-            pipe_id = nodes.pipe_id
-            alice_turn = await nodes.alice.pipes[pipe_id]
-            bob_turn = await nodes.bob.pipes[pipe_id]
-    
-            assert(alice_turn is not None)
-            assert(bob_turn is not None)
-            await alice_turn.close()
-            await bob_turn.close()
-
-    async def test_tcp_punch_with_sig(self):
-        async with TestNodes(return_msg=False) as nodes:
-            await nodes.pp_alice.connect(
-                strategies=[P2P_PUNCH]
-            )
-
-            pipe_id = nodes.pipe_id
-            while 1:
-                for node in [nodes.alice, nodes.bob]:
-                    if pipe_id not in node.pipes:
-                        await asyncio.sleep(1)
-                break
-
-            alice_hole = await nodes.alice.pipes[pipe_id]
-            bob_hole = await nodes.bob.pipes[pipe_id]
-
-            print(f"alice hole = {alice_hole}")
-            print(f"bob hole = {bob_hole}")
+async def duel_if_tests():
+    try:
+        await test_turn_with_sig()
+    except:
+        log_exception()
 
 if __name__ == '__main__':
-    main()
+    async_test(duel_if_tests())

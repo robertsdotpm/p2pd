@@ -51,29 +51,23 @@ class P2PNodeExtra():
         ]
 
     async def punch_queue_worker(self):
-        try:
-            while 1:
-                if not len(self.punch_queue):
-                    await asyncio.sleep(0.1)
-                    continue
+        while self.punch_queue is not None:
+            try:
+                params = await self.punch_queue.get()
+                if not len(params):
+                    return
+                
+                print("do punch ")
+                punch_offset = params.pop(0)
 
-                try:
-                    params = await self.punch_queue.get()
-                    if not len(params):
-                        return
-                    
-                    print("do punch ")
-                    punch_offset = params.pop(0)
+                punch = self.tcp_punch_clients[punch_offset]
 
-                    punch = self.tcp_punch_clients[punch_offset]
-
-                    print(params)
-                    await punch.proto_do_punching(*params)
-                    print("punch done")
-                except:
-                    log_exception()
-        except RuntimeError:
-            return
+                print(params)
+                await punch.proto_do_punching(*params)
+                print("punch done")
+            except:
+                await asyncio.sleep(0.1)
+                continue
 
     def start_punch_worker(self):
         task = asyncio.ensure_future(
@@ -155,7 +149,7 @@ class P2PNodeExtra():
         [q.put_nowait(o) for o in offsets]
 
         tasks = []
-        for _ in range(1):
+        for _ in range(SIGNAL_PIPE_NO):
             task = await self.load_signal_pipe(q)
             #tasks.append(task)
 
@@ -196,8 +190,9 @@ class P2PNodeExtra():
 
     def pipe_future(self, pipe_id):
         print(f"pipe future {pipe_id}")
-        pipe_id = pipe_id
-        self.pipes[pipe_id] = asyncio.Future()
+        if pipe_id not in self.pipes:
+            self.pipes[pipe_id] = asyncio.Future()
+            
         return pipe_id
 
     def pipe_ready(self, pipe_id, pipe):

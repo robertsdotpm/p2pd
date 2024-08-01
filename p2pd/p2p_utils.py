@@ -289,7 +289,7 @@ async def for_addr_infos(src, dest, func, pp, concurrent=False):
                         dest_info,
                         interface,
                     ),
-                    10
+                    20
                 )
 
                 # Build a list of tasks if concurrent.

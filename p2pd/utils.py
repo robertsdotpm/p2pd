@@ -693,9 +693,9 @@ def async_test(f, args=[], loop=None):
     # Can have cleanup errors.
     if len(args):
         #loop.run_until_complete(f(*args))
-        loop.run_until_complete(safe_run(f, args))
+        loop.run_until_complete(f(*args))
     else:
-        loop.run_until_complete(safe_run(f))
+        loop.run_until_complete(f)
 
     #loop.close()
 

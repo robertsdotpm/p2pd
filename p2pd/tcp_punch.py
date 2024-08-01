@@ -678,6 +678,7 @@ class TCPPunch():
         if info is None:
             # Step 1 -- initial mappings.
             if reply is None:
+                print("step 1 reply is none")
                 punch_ret = await self.proto_send_initial_mappings(
                     recv_addr,
                     recv_nat,
@@ -692,6 +693,7 @@ class TCPPunch():
 
             # Step 2 -- get mappings.
             if reply is not None:
+                print("reply is not none")
                 punch_ret = await self.proto_recv_initial_mappings(
                     recv_addr,
                     recv_nat,
@@ -716,7 +718,8 @@ class TCPPunch():
                     stun_client,
                 )
 
-            state = info["state"]
+            # End protocol.
+            state = None
 
         return punch_mode, state, punch_ret
 

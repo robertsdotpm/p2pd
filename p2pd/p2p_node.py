@@ -60,7 +60,8 @@ class P2PNode(Daemon, P2PNodeExtra):
             self.sig_proto_handlers.proto(msg)
         )
 
-        if out is not None:
+        
+        if isinstance(out, SigMsg):
             await signal_pipe.send_msg(
                 out,
                 out.routing.dest["node_id"]
@@ -77,8 +78,8 @@ class P2PNode(Daemon, P2PNodeExtra):
         await self.load_stun_clients()
 
         # MQTT server offsets for signal protocol.
-        #await self.load_signal_pipes()
-        self.signal_pipes[0] = None
+        await self.load_signal_pipes()
+        #self.signal_pipes[0] = None
 
         # Accept TCP punch requests.
         self.start_punch_worker()

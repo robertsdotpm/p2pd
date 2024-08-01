@@ -43,6 +43,8 @@ class SigProtoHandlers():
         if buf[0] not in SIG_PROTO:
             print(f"proto got unsupported msg {buf[0]}")
             return
+
+        print(f"sig msg got {buf}")
         
         # Unpack message into fields.
         msg_info = SIG_PROTO[buf[0]]
