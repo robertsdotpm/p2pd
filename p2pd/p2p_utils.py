@@ -237,7 +237,7 @@ proto: direct_connect(... msg.meta.src)
 
 Is the only function that does this so far.
 """
-async def for_addr_infos(src, dest, func, timeout, cleanup, addr_types, pp, concurrent=False):
+async def for_addr_infos(src, dest, func, timeout, cleanup, pp, concurrent=False):
     found_valid_af_pair = False
 
     # For concurrent tasks.
@@ -254,7 +254,7 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, addr_types, pp, conc
 
         # Get interface offset that supports this af.
         for src_info, dest_info in if_info_iter:
-            for addr_type in addr_types:
+            for addr_type in pp.conf["addr_types"]:
                 # Select interface to use.
                 if_index = src_info["if_index"]
                 interface = pp.node.ifs[if_index]
@@ -288,6 +288,7 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, addr_types, pp, conc
                         src_info,
                         dest_info,
                         interface,
+                        addr_type,
                     ),
                     timeout
                 )
@@ -306,8 +307,11 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, addr_types, pp, conc
                                 src_info,
                                 dest_info,
                                 interface,
+                                addr_type,
                             )
             
+            break
+
     # No compatible addresses found.
     if not found_valid_af_pair:
         error = \

@@ -76,10 +76,15 @@ class P2PPipe():
         # Mapping for funcs over addr infos.
         # Loop over the most likely strategies left.
         func_table = [
-            [self.direct_connect, 5, None, []],
-            [self.reverse_connect, 5, None, []],
-            [self.tcp_hole_punch, 20, self.tcp_punch_cleanup, []],
-            [self.udp_turn_relay, 20, self.turn_cleanup, [NIC_BIND]],
+            # Short timeouts for direct TCP cons.
+            [self.direct_connect, 5, None],
+            [self.reverse_connect, 5, None],
+
+            # Large timeout for meetings with a state cleanup.
+            [self.tcp_hole_punch, 20, self.tcp_punch_cleanup],
+
+            # Large timeout, end refreshers, disable LAN cons.
+            [self.udp_turn_relay, 20, self.turn_cleanup],
         ]
 
         # Try strategies to achieve a connection.
@@ -90,16 +95,13 @@ class P2PPipe():
                 continue
 
             # Returns a message from func given a comp addr info pair.
-            func, timeout, cleanup, exclude = func_table[i]
-            addr_types = self.config["addr_types"][:]
-            addr_types = [x for x in addr_types if x not in exclude]
+            func, timeout, cleanup = func_table[i]
             pipe = await for_addr_infos(
                 self.src,
                 self.dest,
                 func,
                 timeout,
                 cleanup,
-                addr_types,
                 self,
             )
 
@@ -129,7 +131,7 @@ class P2PPipe():
 
         await self.cleanup()
             
-    async def direct_connect(self, af, src_info, dest_info, iface):
+    async def direct_connect(self, af, src_info, dest_info, iface, addr_type):
         # Connect to this address.
         dest = Address(
             dest_info["ip"],
@@ -168,7 +170,7 @@ class P2PPipe():
         print(pipe)
         return pipe
 
-    async def reverse_connect(self, af, src_info, dest_info, iface):
+    async def reverse_connect(self, af, src_info, dest_info, iface, addr_type):
         print("in reverse connect")
         msg = ConMsg({
             "meta": {
@@ -176,7 +178,7 @@ class P2PPipe():
                 "pipe_id": self.pipe_id,
                 "src_buf": self.src_bytes,
                 "src_index": src_info["if_index"],
-                "addr_types": self.conf["addr_types"],
+                "addr_types": [addr_type],
             },
             "routing": {
                 "af": af,
@@ -201,7 +203,7 @@ class P2PPipe():
     the lowest value pairs and runs through them until one
     succeeds.
     """
-    async def tcp_hole_punch(self, af, src_info, dest_info, iface):
+    async def tcp_hole_punch(self, af, src_info, dest_info, iface, addr_type):
         # Punch clients indexed by interface offset.
         if_index = src_info["if_index"]
         punch = self.node.tcp_punch_clients[if_index]
@@ -250,7 +252,7 @@ class P2PPipe():
                 "af": af,
                 "src_buf": self.src_bytes,
                 "src_index": src_info["if_index"],
-                "addr_types": self.conf["addr_types"],
+                "addr_types": [addr_type],
             },
             "routing": {
                 "af": af,
@@ -274,7 +276,10 @@ class P2PPipe():
         return await self.node.pipes[self.pipe_id]
 
     # TODO improve this code?
-    async def udp_turn_relay(self, af, src_info, dest_info, iface):
+    async def udp_turn_relay(self, af, src_info, dest_info, iface, addr_type):
+        if addr_type == NIC_BIND:
+            return None
+
         print("in p2p pipe udp relay")
         print(f"{self.reply is not None}")
         peer_tup = relay_tup = None
@@ -341,7 +346,7 @@ class P2PPipe():
                         "af": af,
                         "src_buf": self.src_bytes,
                         "src_index": src_info["if_index"],
-                        "addr_types": self.conf["addr_types"],
+                        "addr_types": [addr_type],
                     },
                     "routing": {
                         "af": af,
@@ -361,13 +366,13 @@ class P2PPipe():
                 log_exception()
                 continue
 
-    async def tcp_punch_cleanup(self, af, src_info, dest_info, iface):
+    async def tcp_punch_cleanup(self, af, src_info, dest_info, iface, addr_type):
         node_id = self.dest["node_id"]
         if_index = src_info["if_index"]
         client = self.node.tcp_punch_clients[if_index]
         await client.cleanup_state(node_id, self.pipe_id)
 
-    async def turn_cleanup(self, af, src_info, dest_info, iface):
+    async def turn_cleanup(self, af, src_info, dest_info, iface, addr_type):
         if self.pipe_id not in self.node.turn_clients:
             return
         
