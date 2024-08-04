@@ -237,7 +237,7 @@ proto: direct_connect(... msg.meta.src)
 
 Is the only function that does this so far.
 """
-async def for_addr_infos(src, dest, func, pp, concurrent=False):
+async def for_addr_infos(src, dest, func, timeout, cleanup, addr_types, pp, concurrent=False):
     found_valid_af_pair = False
 
     # For concurrent tasks.
@@ -254,7 +254,7 @@ async def for_addr_infos(src, dest, func, pp, concurrent=False):
 
         # Get interface offset that supports this af.
         for src_info, dest_info in if_info_iter:
-            for addr_type in pp.conf["addr_types"]:
+            for addr_type in addr_types:
                 # Select interface to use.
                 if_index = src_info["if_index"]
                 interface = pp.node.ifs[if_index]
@@ -289,7 +289,7 @@ async def for_addr_infos(src, dest, func, pp, concurrent=False):
                         dest_info,
                         interface,
                     ),
-                    20
+                    timeout
                 )
 
                 # Build a list of tasks if concurrent.
@@ -299,6 +299,14 @@ async def for_addr_infos(src, dest, func, pp, concurrent=False):
                     result = await coro
                     if result is not None:
                         return result
+                    else:
+                        if cleanup is not None:
+                            await cleanup(
+                                af,
+                                src_info,
+                                dest_info,
+                                interface,
+                            )
             
     # No compatible addresses found.
     if not found_valid_af_pair:

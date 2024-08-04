@@ -312,18 +312,10 @@ class TCPPunch():
         if state_info is None:
             return 0
 
-        # Close any open STUN sockets.
-        if "data" in state_info:
-            data = state_info["data"]
-            if "lmaps" in data:
-                for sock in data["lmaps"]["stun_socks"]:
-                    if sock is not None:
-                        await sock.close()
-
         # Delete dest@session = session.
         del self.state[node_id][pipe_id]
 
-        # If it was the last pipe delete the whole struct.
+        # If it was the last pipe delete whole struct.
         if not len(self.state[node_id]):
             del self.state[node_id]
 

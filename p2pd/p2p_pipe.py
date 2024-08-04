@@ -47,7 +47,6 @@ class P2PPipe():
         self.msg_dispatcher_done = asyncio.Event()
 
     async def cleanup(self):
-
         self.msg_queue.put_nowait(None)
         await self.msg_dispatcher_done.wait()
 
@@ -77,10 +76,10 @@ class P2PPipe():
         # Mapping for funcs over addr infos.
         # Loop over the most likely strategies left.
         func_table = [
-            self.direct_connect,
-            self.reverse_connect,
-            self.tcp_hole_punch,
-            self.udp_relay
+            [self.direct_connect, 5, None, []],
+            [self.reverse_connect, 5, None, []],
+            [self.tcp_hole_punch, 20, self.tcp_punch_cleanup, []],
+            [self.udp_turn_relay, 20, self.turn_cleanup, [NIC_BIND]],
         ]
 
         # Try strategies to achieve a connection.
@@ -91,10 +90,16 @@ class P2PPipe():
                 continue
 
             # Returns a message from func given a comp addr info pair.
+            func, timeout, cleanup, exclude = func_table[i]
+            addr_types = self.config["addr_types"][:]
+            addr_types = [x for x in addr_types if x not in exclude]
             pipe = await for_addr_infos(
                 self.src,
                 self.dest,
-                func_table[i],
+                func,
+                timeout,
+                cleanup,
+                addr_types,
                 self,
             )
 
@@ -123,10 +128,8 @@ class P2PPipe():
             return pipe
 
         await self.cleanup()
-        
-
             
-    async def direct_connect(self, af, src_info, dest_info, interface):
+    async def direct_connect(self, af, src_info, dest_info, iface):
         # Connect to this address.
         dest = Address(
             dest_info["ip"],
@@ -136,7 +139,7 @@ class P2PPipe():
         # (1) Get first interface for AF.
         # (2) Build a 'route' from it with it's main NIC IP.
         # (3) Bind to the route at port 0. Return itself.
-        route = await interface.route(af).bind()
+        route = await iface.route(af).bind()
         print("in make con")
         print(dest_info["ip"])
         print(dest_info["port"])
@@ -165,7 +168,7 @@ class P2PPipe():
         print(pipe)
         return pipe
 
-    async def reverse_connect(self, af, src_info, dest_info, interface):
+    async def reverse_connect(self, af, src_info, dest_info, iface):
         print("in reverse connect")
         msg = ConMsg({
             "meta": {
@@ -198,7 +201,7 @@ class P2PPipe():
     the lowest value pairs and runs through them until one
     succeeds.
     """
-    async def tcp_hole_punch(self, af, src_info, dest_info, interface):
+    async def tcp_hole_punch(self, af, src_info, dest_info, iface):
         # Punch clients indexed by interface offset.
         if_index = src_info["if_index"]
         punch = self.node.tcp_punch_clients[if_index]
@@ -214,7 +217,7 @@ class P2PPipe():
             self.dest["node_id"],
             self.pipe_id,
             stun_client,
-            interface,
+            iface,
             same_machine=self.same_machine,
             reply=self.reply,
         )
@@ -271,7 +274,7 @@ class P2PPipe():
         return await self.node.pipes[self.pipe_id]
 
     # TODO improve this code?
-    async def udp_relay(self, af, src_info, dest_info, interface):
+    async def udp_turn_relay(self, af, src_info, dest_info, iface):
         print("in p2p pipe udp relay")
         print(f"{self.reply is not None}")
         peer_tup = relay_tup = None
@@ -297,7 +300,7 @@ class P2PPipe():
                     peer_tup, relay_tup, turn_client = await get_turn_client(
                         af,
                         offset,
-                        interface,
+                        iface,
                         dest_peer=dest_peer,
                         dest_relay=dest_relay,
                     )
@@ -357,6 +360,20 @@ class P2PPipe():
             except:
                 log_exception()
                 continue
+
+    async def tcp_punch_cleanup(self, af, src_info, dest_info, iface):
+        node_id = self.dest["node_id"]
+        if_index = src_info["if_index"]
+        client = self.node.tcp_punch_clients[if_index]
+        await client.cleanup_state(node_id, self.pipe_id)
+
+    async def turn_cleanup(self, af, src_info, dest_info, iface):
+        if self.pipe_id not in self.node.turn_clients:
+            return
+        
+        turn_client = self.node.turn_clients[self.pipe_id]
+        await turn_client.close()
+        del self.node.turn_clients[self.pipe_id]
 
 
 if __name__ == "__main__": # pragma: no cover
