@@ -156,12 +156,12 @@ def select_dest_ipr(same_pc, src_info, dest_info, addr_types, is_tcp_punch=False
         if addr_type == NIC_BIND:
             # The server / client is the same IP
             # It needs to pick the same IF so its reachable.
-            if is_tcp_punch:
-                if different_ifs_on_host:
-                    return sorted([
-                        dest_info["nic"],
-                        src_info["nic"]
-                    ])[0]
+            #if is_tcp_punch:
+            if different_ifs_on_host:
+                return sorted([
+                    dest_info["nic"],
+                    src_info["nic"]
+                ])[0]
                 
             # Only if LAN or same machine.
             if not (same_pc or same_lan):
@@ -270,7 +270,11 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp, concurrent=False
                         src_info,
                         dest_info,
                         [addr_type],
-                        func == pp.tcp_hole_punch
+
+                        # can you make this case
+                        # run for all
+                        # try it
+                        #func == pp.tcp_hole_punch
                     )
                 )
 
