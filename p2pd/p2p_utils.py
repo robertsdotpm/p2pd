@@ -92,6 +92,10 @@ class IFInfoIter():
         return self
 
     def __next__(self):
+        # No matched address types.
+        if not len(self):
+            raise StopIteration
+
         # Stop when they have no new entries.
         if self.their_offset > (len(self.dest_addr) - 1):
             raise StopIteration
@@ -237,20 +241,13 @@ proto: direct_connect(... msg.meta.src)
 
 Is the only function that does this so far.
 """
-async def for_addr_infos(src, dest, func, timeout, cleanup, pp, concurrent=False):
-    found_valid_af_pair = False
-
-    # For concurrent tasks.
-    tasks = []
-
+async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
     # Use an AF supported by both.
     for af in VALID_AFS:
-        # Iterates by shared AFs, filtered by best NAT pair.
+        # Iterates by shared AFs, filtered by best NAT.
         if_info_iter = IFInfoIter(af, src, dest)
         if not len(if_info_iter):
             continue
-        else:
-            found_valid_af_pair = True
 
         # Get interface offset that supports this af.
         for src_info, dest_info in if_info_iter:
@@ -297,41 +294,36 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp, concurrent=False
                     timeout
                 )
 
-                # Build a list of tasks if concurrent.
-                if concurrent:
-                    tasks.append(coro)
-                else:
+                # Used for testing.
+                if addr_type == SIM_FAIL:
+                    result = None
+
+                # Pass addressing details to coroutine.
+                if addr_type != SIM_FAIL:
                     result = await coro
-                    if result is not None:
-                        return result
-                    else:
-                        if cleanup is not None:
-                            await cleanup(
-                                af,
-                                src_info,
-                                dest_info,
-                                interface,
-                                addr_type,
-                            )
+
+                # Success result from function.
+                if result is not None:
+                    return result
+                
+                msg = f"FAIL: {func} {addr_type}"
+                print(msg)
+                
+                # Optional cleanup on failure.
+                if cleanup is not None:
+                    await cleanup(
+                        af,
+                        src_info,
+                        dest_info,
+                        interface,
+                        addr_type,
+                    )
             
+            # Only use iter to order by NAT.
             break
 
-    # No compatible addresses found.
-    if not found_valid_af_pair:
-        error = \
-        f"""
-        Found no compat addresses between 
-        {src["bytes"]} and
-        {dest["bytes"]}
-        """
-        log(error)
-        return
-            
-    # Run multiple coroutines at once.
-    if len(tasks):
-        results = await asyncio.gather(*tasks)
-        results = [r for r in results if r is not None]
-        return results
+    # Failure.
+    return None
 
 async def new_peer_signal_pipe(p2p_dest, node):
     for offset in p2p_dest["signal"]:

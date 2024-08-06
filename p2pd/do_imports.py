@@ -29,7 +29,7 @@ if __name__ != '__main__':
     from .rest_api import P2PDServer, start_p2pd_server, P2PD_PORT
     from .p2p_addr import *
     from .p2p_pipe import *
-    from .p2p_node import P2PNode
+    from .p2p_node import P2PNode, NODE_CONF, NODE_PORT
     from .p2p_utils import get_pp_executors
     from .entry_point import start_p2p_node
     from .install import *

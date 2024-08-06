@@ -19,6 +19,7 @@ NODE_CONF = dict_child({
     "listen_ip": None,
     "seed": None,
     "enable_upnp": False,
+    "sig_pipe_no": SIGNAL_PIPE_NO,
 }, NET_CONF)
 
 # Main class for the P2P node server.
@@ -78,7 +79,8 @@ class P2PNode(Daemon, P2PNodeExtra):
         await self.load_stun_clients()
 
         # MQTT server offsets for signal protocol.
-        await self.load_signal_pipes()
+        if self.conf["sig_pipe_no"]:
+            await self.load_signal_pipes()
         #self.signal_pipes[0] = None
 
         # Accept TCP punch requests.

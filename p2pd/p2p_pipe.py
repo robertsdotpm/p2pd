@@ -51,6 +51,11 @@ class P2PPipe():
         await self.msg_dispatcher_done.wait()
 
     async def msg_dispatcher(self):
+        if self.conf["return_msg"]:
+            if not self.msg_dispatcher_done.is_set():
+                self.msg_dispatcher_done.set()
+            return
+        
         msg = await self.msg_queue.get()
         if msg is None:
             self.msg_dispatcher_done.set()

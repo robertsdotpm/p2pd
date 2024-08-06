@@ -149,11 +149,12 @@ class P2PNodeExtra():
         [q.put_nowait(o) for o in offsets]
 
         tasks = []
-        for _ in range(SIGNAL_PIPE_NO):
-            task = await self.load_signal_pipe(q)
-            #tasks.append(task)
+        sig_pipe_no = self.conf["sig_pipe_no"]
+        for _ in range(sig_pipe_no):
+            task = self.load_signal_pipe(q)
+            tasks.append(task)
 
-        #await asyncio.gather(*tasks)
+        await asyncio.gather(*tasks)
     
     def find_signal_pipe(self, addr):
         our_offsets = list(self.signal_pipes)
@@ -175,6 +176,9 @@ class P2PNodeExtra():
                     port=self.listen_port,
                     ips=self.conf["listen_ip"]
                 )
+                print(route.nic_ips)
+                print(route.ext_ips)
+                print(route)
                 routes.append(route)
 
             if_names.append(interface.name)
@@ -192,7 +196,7 @@ class P2PNodeExtra():
         print(f"pipe future {pipe_id}")
         if pipe_id not in self.pipes:
             self.pipes[pipe_id] = asyncio.Future()
-            
+
         return pipe_id
 
     def pipe_ready(self, pipe_id, pipe):

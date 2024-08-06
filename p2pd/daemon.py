@@ -99,33 +99,7 @@ class Daemon():
         routes = []
 
         # Target is already a route - record.
-        if isinstance(target, Route):
-            routes.append(target)
-        else:
-            # Route inherits Bind so this would also be True for
-            # a Route object. Check Route first to avoid this.
-            if isinstance(target, Bind):
-                if target.af == AF_ANY:
-                    af_list = VALID_AFS
-                else:
-                    af_list = [target.af]
-
-                # Make a route for each AF.
-                for af_val in af_list:
-                    # Interface does not support AF.
-                    # None Interface if using loopback.
-                    if target.interface is not None:
-                        if af_val not in target.interface.what_afs():
-                            log("> bind inst: af_val not in iface afs")
-                            continue
-
-
-                        # Gets the route associated with the bind IP.
-                        route = await bind_to_route(target)
-
-                        # Record route.
-                        routes.append(route)
-
+        routes.append(target)
 
         # Start server on every address.
         for route in routes:
@@ -177,6 +151,7 @@ class Daemon():
     # Start all the servers listening.
     # All targets are started on the same list of ports and protocols.
     # A more general version of the above function.
+    #
     async def listen_all(self, targets, ports, protos, af=AF_ANY, msg_cb=None, up_cb=None, error_on_af=0):
         up_cb = up_cb or self.up_cb
         msg_cb = msg_cb or self.msg_cb
@@ -264,6 +239,15 @@ class Daemon():
             await server.close()
 
         self.servers = []
+
+
+"""
+    Route * Proto = 
+
+    [proto, route]
+
+"""
+
 
 if __name__ == "__main__": # pragma: no cover
     pass
