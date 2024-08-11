@@ -674,15 +674,17 @@ def get_running_loop():
 
 # Will be used in sample code to avoid boilerplate.
 def async_test(f, args=[], loop=None):
+    """
     try:
         loop = asyncio.get_event_loop()
         if loop is None:
             raise Exception("Creating event loop.")
     except:
         #uvloop.install()
+    """
 
         # Create an event loop if one isn't running.
-        loop = get_loop(loop)
+    loop = get_loop(loop)
 
     #if IS_DEBUG:
     #    loop.set_debug(True)
