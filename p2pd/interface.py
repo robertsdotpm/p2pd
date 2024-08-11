@@ -368,6 +368,7 @@ class Interface():
                 enable_default = True
             else:
                 enable_default = False
+            log(f"{self.name} {af} {enable_default}")
 
             tasks.append(
                 async_wrap_errors(

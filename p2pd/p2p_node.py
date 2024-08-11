@@ -99,6 +99,7 @@ class P2PNode(Daemon, P2PNodeExtra):
         node_sock = self.servers[0][2].sock
         listen_port = node_sock.getsockname()[1]
         print(f"Server port = {listen_port}")
+        print(self.ifs)
 
         # Build P2P address bytes.
         self.addr_bytes = make_peer_addr(
@@ -113,7 +114,6 @@ class P2PNode(Daemon, P2PNodeExtra):
         # Save a dict version of the address fields.
         self.p2p_addr = parse_peer_addr(self.addr_bytes)
         print(f"> P2P node = {self.addr_bytes}")
-        print(self.p2p_addr)
         return self
     
     # Connect to a remote P2P node using a number of techniques.

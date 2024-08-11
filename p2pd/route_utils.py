@@ -301,6 +301,7 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
     priv_iprs = []
     nic_iprs = await get_nic_iprs(af, interface, netifaces)
     for nic_ipr in nic_iprs:
+        assert(int(nic_ipr[0]))
         if ip_norm(nic_ipr[0])[:4] == "fe80":
             link_locals.append(nic_ipr)
             log(f"Addr is link local so skipping")
@@ -315,25 +316,39 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
             tasks.append(task)
 
     # Append task for get default route.
-    any_ip = ANY_ADDR_LOOKUP[af]
-    task = get_wan_ip_cfab(any_ip, min_agree, stun_clients, timeout)
-    tasks.append(task)
+    # todo: if machine has 1 nic or is default for af
+    af_default_nic_ip = determine_if_path(af, "google.com")
+    if enable_default:
+        tasks.append(
+            get_wan_ip_cfab(
+                af_default_nic_ip,
+                min_agree,
+                stun_clients,
+                timeout
+            )
+        )
 
     # Append task to get route using priv nic.
     priv_src = ""
     if len(priv_iprs):
         priv_src = ip_norm(str(priv_iprs[0]))
-        task = get_wan_ip_cfab(priv_src, min_agree, stun_clients, timeout)
-        tasks.append(task)
+        tasks.append(
+            get_wan_ip_cfab(
+                priv_src,
+                min_agree,
+                stun_clients,
+                timeout
+            )
+        )
 
     # Resolve interface addresses CFAB.
     results = await asyncio.gather(*tasks)
     results = [r for r in results if r is not None]
 
-    # Only the default iface will have
+    # Only the default NIC will have
     # a default route enabled for the af.
     if enable_default:
-        default_route = get_route_by_src(any_ip, results)
+        default_route = get_route_by_src(af_default_nic_ip, results)
     else:
         default_route = None
 
@@ -341,9 +356,13 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
     priv_route = get_route_by_src(priv_src, results)
 
     # Exclude priv_route and default.
-    routes = exclude_routes_by_src([any_ip, priv_src], results)
+    routes = exclude_routes_by_src(
+        [af_default_nic_ip, priv_src],
+        results
+    )
 
-    # Add a single route for all private IPs.
+    # Add a single route for all private IPs (if exists)
+    # Use default routes external address (if exists)
     if len(priv_iprs):
         priv_ext = None
         if default_route is not None:

@@ -107,6 +107,7 @@ async def netiface_addr_to_ipr(af, nic_id, info):
         return None
     
     nic_ipr = IPRange(info["addr"], info["netmask"])
+    log(f"Netiface loaded nic ipr {af} {nic_id} {info['addr']}")
 
     """
     Some operating systems incorrectly list the netmask for

@@ -141,12 +141,18 @@ def select_dest_ipr(same_pc, src_info, dest_info, addr_types, is_tcp_punch=False
     same_if_on_host = same_pc and same_if
     different_ifs_on_host = same_pc and not same_if
 
+    print(f"{same_if} {same_if_on_host} {different_ifs_on_host}")
+
     # There may be multiple compatible addresses per info.
     for addr_type in addr_types:
+        if addr_type == SIM_FAIL:
+            return src_info["nic"]
+
         # Prefer using remote addresses.
         if addr_type == EXT_BIND:
             # Will have only one listed external address.
             if same_if_on_host:
+                
                 continue
 
             # Behind same router -- this won't work.
@@ -261,6 +267,18 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
                     if pp.reply.routing.dest_index != if_index:
                         continue
 
+                # Used for testing.
+                if addr_type == SIM_FAIL:
+                    if cleanup is not None:
+                        await cleanup(
+                            af,
+                            src_info,
+                            dest_info,
+                            interface,
+                            addr_type,
+                        )
+                    continue
+
                 dest_info["ip"] = str(
                     select_dest_ipr(
                         pp.same_machine,
@@ -275,6 +293,14 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
                     )
                 )
 
+                if dest_info["ip"] == "None":
+                    print(src_info)
+                    print(dest_info)
+                    print("invalid matched af")
+                    continue
+
+                print(dest_info["ip"])
+
                 interface = await select_if_by_dest(
                     af,
                     dest_info["ip"],
@@ -283,7 +309,7 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
                 )
 
                 # Coroutine to run.
-                coro = async_wrap_errors(
+                result = await async_wrap_errors(
                     func(
                         af,
                         src_info,
@@ -293,14 +319,6 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
                     ),
                     timeout
                 )
-
-                # Used for testing.
-                if addr_type == SIM_FAIL:
-                    result = None
-
-                # Pass addressing details to coroutine.
-                if addr_type != SIM_FAIL:
-                    result = await coro
 
                 # Success result from function.
                 if result is not None:

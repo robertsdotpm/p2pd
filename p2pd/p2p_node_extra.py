@@ -165,8 +165,7 @@ class P2PNodeExtra():
         return None
 
     async def listen_on_ifs(self, protos=[TCP]):
-        # Make a list of routes based on supported address families.
-        # TODO: change this to use the port specified
+        # Make a list of routes by supported AF.
         routes = []
         if_names = []
         for interface in self.ifs:
@@ -176,12 +175,12 @@ class P2PNodeExtra():
                     port=self.listen_port,
                     ips=self.conf["listen_ip"]
                 )
-                print(route.nic_ips)
-                print(route.ext_ips)
-                print(route)
+                assert(route is not None)
+
                 routes.append(route)
 
             if_names.append(interface.name)
+            print(interface.rp[IP6].routes)
 
         # Start handling messages for self.msg_cb.
         # Bind to all ifs provided to class on route[0].

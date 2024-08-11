@@ -30,7 +30,7 @@ def make_peer_addr(node_id, machine_id, interface_list, signal_offsets, port=NOD
 
     # Signal offsets to load.
     if len(signal_offsets):
-        signal_offsets_as_str = [to_b(str((x))) for x in signal_offsets]
+        signal_offsets_as_str = [to_b(str(x)) for x in signal_offsets]
         bufs = [
             # Make signal pipe buf.
             b','.join(signal_offsets_as_str)
@@ -292,10 +292,11 @@ def parse_peer_addr(addr):
 
     # Parse signal server offsets.
     sig_part = af_parts.pop(0)
+    print(sig_part)
     if sig_part == b"None":
         signal = []
     else:
-        p = af_parts.pop(0).split(b",")
+        p = sig_part.split(b",")
         signal = [int(n) for n in p if in_range(int(n), [0, len(MQTT_SERVERS) - 1])]
 
     # Parsed dict.

@@ -695,7 +695,7 @@ def async_test(f, args=[], loop=None):
         #loop.run_until_complete(f(*args))
         loop.run_until_complete(f(*args))
     else:
-        loop.run_until_complete(f)
+        loop.run_until_complete(f())
 
     #loop.close()
 

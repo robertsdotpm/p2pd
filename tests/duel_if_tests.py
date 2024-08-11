@@ -24,7 +24,7 @@ perspective (though the code supports self-route.)
 IF_ALICE_NAME = "enp0s25"
 IF_BOB_NAME = "wlx00c0cab5760d"
 
-async def get_node(if_name, node_port=NODE_PORT, sig_pipe_no=1):
+async def get_node(if_name, node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     delta = delta_info(NA_DELTA, 0)
     nat = nat_info(OPEN_INTERNET, delta)
     iface = await Interface(if_name)
@@ -43,7 +43,7 @@ async def get_node(if_name, node_port=NODE_PORT, sig_pipe_no=1):
     return await node.dev()
 
 class TestNodes():
-    def __init__(self, same_if=False, addr_types=[EXT_BIND, NIC_BIND], return_msg=True, sig_pipe_no=1):
+    def __init__(self, same_if=False, addr_types=[EXT_BIND, NIC_BIND], return_msg=True, sig_pipe_no=SIGNAL_PIPE_NO):
         self.same_if = same_if
         self.addr_types = addr_types
         self.return_msg = return_msg
@@ -115,7 +115,7 @@ async def test_dir_direct_con_lan_ext():
 async def test_dir_direct_con_fail_lan():
     params = {
         "return_msg": True,
-        "sig_pipe_no": 0,
+        "sig_pipe_no": 1,
         "addr_types": [SIM_FAIL, NIC_BIND],
     }
 
@@ -129,10 +129,26 @@ async def test_dir_direct_con_fail_lan():
 
 
 async def test_node_start():
-    alice = await get_node(IF_BOB_NAME, node_port=NODE_PORT + 1)
-    await alice.close()
+    """
+    node = await get_node(
+        IF_ALICE_NAME,
+        node_port=NODE_PORT + 1
+    )
+
+
+    node = await get_node(
+        IF_BOB_NAME
+    )
+    """
+
+
+    async with TestNodes() as nodes:
+        #print(nodes.alice.p2p_addr)
+        pass
+    
 
 async def test_direct_connect():
+
     async with TestNodes() as nodes:
         pipe = await nodes.pp_alice.connect(
             strategies=[P2P_DIRECT]
@@ -252,6 +268,7 @@ async def test_tcp_punch_with_sig():
 
 async def duel_if_tests():
     try:
+        #await test_node_start()
         await test_dir_direct_con_fail_lan()
         #await test_dir_direct_con()
         #await test_turn_with_sig()
@@ -259,4 +276,4 @@ async def duel_if_tests():
         log_exception()
 
 if __name__ == '__main__':
-    async_test(duel_if_tests())
+    async_test(duel_if_tests)

@@ -219,6 +219,7 @@ class Daemon():
                         await route.bind(port=port, ips=route.ips)
                         await self._listen(route, port, proto, msg_cb)
 
+                        """
                         # Bind to additional link-local for IPv6.
                         if route.af == IP6:
                             try:
@@ -229,7 +230,8 @@ class Daemon():
                                 log_exception()
                                 pass
                                 # May already be started -- ignore.
-
+                        """
+                                
         self.avoid_time_wait()
         return self
 
@@ -246,9 +248,31 @@ class Daemon():
 
     [proto, route]
 
+    Endpoint(
+        route
+    ) * 
+    Endpoint(
+        1000...
+    ) * 
+    (
+        PROTO
+    )
+
 """
+
+"""
+class Listen():
+    def __init__(self, *args):
+        self.args = args
+
+
+
+async def workspace():
+    x = Listen(1, 2, 3)
+    print(x.args)
 
 
 if __name__ == "__main__": # pragma: no cover
-    pass
+    async_test(workspace())
     #async_test(test_tcp_punch)
+"""
