@@ -59,6 +59,31 @@ If this means 'online' and 'reachable' it would be
 really useful to check this to determine if a stack
 supported IPv6 or IPv4 rather than trying to test it
 first using STUN and waiting for a long time out.
+
+Other:
+When it comes to IPs assigned to a NIC its possible
+to assign 'public' IPs to it directly. You often
+see this setup on servers. In this case you know
+that not only can you use the public addresses
+directly in bind() calls -- but you know that
+the server's corresponding external IP will be
+what was used in the bind() call. Very useful.
+
+The trouble is that network interfaces happily
+accept 'external IPs' or IPs outside of the
+typical 'private IP' range for use on a NIC or
+LAN network. Obviously this is a very bad idea
+but in the software it has the result of
+potentially assuming that an IP would end up
+resulting in a particular external IP being used.
+
+The situation is not desirable when building
+a picture of a network's basic routing makeup.
+I've thought about the problem and I don't see
+a way to solve it other than to measure how a
+route's external address is perceived from the
+outside world. Such a solution is not ideal but
+at least it only has to be done once.
 """
 
 import asyncio
@@ -109,74 +134,6 @@ def rp_from_fixed(fixed, interface, af): # pragma: no cover
         routes.append(route)
 
     return RoutePool(routes)
-
-"""
-When it comes to IPs assigned to a NIC its possible
-to assign 'public' IPs to it directly. You often
-see this setup on servers. In this case you know
-that not only can you use the public addresses
-directly in bind() calls -- but you know that
-the server's corrosponding external IP will be
-what was used in the bind() call. Very useful.
-
-The trouble is that network interfaces happily
-accept 'external IPs' or IPs outside of the
-typical 'private IP' range for use on a NIC or
-LAN network. Obviously this is a very bad idea
-but in the software it has the result of
-potentially assuming that an IP would end up
-resulting in a particular external IP being used.
-
-The situation is not desirable when building
-a picture of a network's basic routing makeup.
-I've thought about the problem and I don't see
-a way to solve it other than to measure how a
-route's external address is perceived from the
-outside world. Such a solution is not ideal but
-at least it only has to be done once.
-"""
-async def ipr_is_public(nic_ipr, stun_client, route_infos, stun_conf, is_default=False):
-    # Use this IP for bind call.
-    src_ip = ip_norm(str(nic_ipr[0]))
-    log(F"using src_ip = {src_ip}, af = {stun_client.af} for STUN bind!")
-    local_addr = await Bind(
-        stun_client.interface,
-        af=stun_client.af,
-        port=0,
-        ips=src_ip
-    ).res()
-    log(f"Bind obj = {local_addr}")
-
-    # Get external IP and compare to bind IP.
-    wan_ip = await stun_client.get_wan_ip(
-        local_addr=local_addr,
-        conf=stun_conf
-    )
-    log(f"Stun returned = {wan_ip}")
-    if wan_ip is None:
-        raise Exception("Unable to get wan IP.")
-
-    # Record this wan_ip.
-    ext_ipr = IPRange(wan_ip, cidr=CIDR_WAN)
-    if ext_ipr not in route_infos:
-        route_infos[ext_ipr] = []
-
-    # Determine if public address is assigned to interface.
-    if src_ip != wan_ip:
-        # In a 'public range' but used privately.
-        # Yes, this is silly but possible.
-        nic_ipr.is_private = True
-        nic_ipr.is_public = False
-        if "default" not in route_infos:
-            route_infos["default"] = ext_ipr
-    else:
-        # Otherwise routable, public IP used as a NIC address.
-        # ext_ipr == nic_ipr.
-        nic_ipr.is_private = False
-        nic_ipr.is_public = True
-
-    # Save details for this route.
-    route_infos[ext_ipr].append(nic_ipr)
 
 async def get_nic_iprs(af, interface, netifaces):
     tasks = []
@@ -295,6 +252,9 @@ def exclude_routes_by_src(src_ips, results):
     return new_list
 
 async def get_routes_with_res(af, min_agree, enable_default, interface, stun_clients, netifaces, timeout):
+
+    enable_default = False 
+
     # Get a list of tasks to resolve NIC addresses.
     tasks = []
     link_locals = []
@@ -312,13 +272,21 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
             continue
         else:
             src_ip = ip_norm(str(nic_ipr[0]))
-            task = get_wan_ip_cfab(src_ip, min_agree, stun_clients, timeout)
-            tasks.append(task)
+            tasks.append(
+                get_wan_ip_cfab(
+                    src_ip,
+                    min_agree,
+                    stun_clients,
+                    timeout
+                )
+            )
 
     # Append task for get default route.
-    # todo: if machine has 1 nic or is default for af
-    af_default_nic_ip = determine_if_path(af, "google.com")
+    cidr = af_to_cidr(af)
+    af_default_nic_ip = ""
     if enable_default:
+        print("enable default")
+        af_default_nic_ip = determine_if_path(af, "google.com")
         tasks.append(
             get_wan_ip_cfab(
                 af_default_nic_ip,
@@ -344,11 +312,25 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
     # Resolve interface addresses CFAB.
     results = await asyncio.gather(*tasks)
     results = [r for r in results if r is not None]
+    print(results)
 
     # Only the default NIC will have
     # a default route enabled for the af.
     if enable_default:
-        default_route = get_route_by_src(af_default_nic_ip, results)
+        default_route = get_route_by_src(
+            af_default_nic_ip,
+            results
+        )
+
+        """
+        If the main NIC IP for the default interface for AF
+        is not in the NIC IPs for this interface then
+        don't enable the use of the default route.
+        """
+        af_default_nic_ipr = IPRange(af_default_nic_ip, cidr=cidr)
+        if af_default_nic_ipr not in nic_iprs:
+            default_route = None
+            log(f"Route error {af} disabling default route.")
     else:
         default_route = None
 
@@ -356,10 +338,8 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
     priv_route = get_route_by_src(priv_src, results)
 
     # Exclude priv_route and default.
-    routes = exclude_routes_by_src(
-        [af_default_nic_ip, priv_src],
-        results
-    )
+    exclude = [priv_src, af_default_nic_ip]
+    routes = exclude_routes_by_src(exclude, results)
 
     # Add a single route for all private IPs (if exists)
     # Use default routes external address (if exists)
@@ -376,7 +356,8 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
             routes.append(priv_route)
 
     # Deterministic sort routes -- add default first.
-    routes = sort_routes(default_route, routes)
+    if default_route is not None:
+        routes = sort_routes(default_route, routes)
 
     # Set link locals in route list.
     [r.set_link_locals(link_locals) for r in routes]

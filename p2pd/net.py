@@ -516,7 +516,7 @@ This code will be used to make the p2p connect code more
 robust -- so that it works to hosts in the LAN and to
 services on interfaces on the same machine.
 """
-def determine_if_path(af, dest, sock_type=TCP):
+def determine_if_path(af, dest, sock_type=UDP):
     # Setup socket for connection.
     src_ip = None
     s = socket.socket(af, sock_type)
@@ -528,7 +528,7 @@ def determine_if_path(af, dest, sock_type=TCP):
         # Large port avoids perm errors.
         # Doesn't matter if it exists or not.
         s.connect((dest, 12345))
-    except BlockingIOError:
+
         # Get the interface bind address.
         src_ip = s.getsockname()[0]
     finally:

@@ -8,7 +8,8 @@ async def main():
     a = await Interface("enp0s25")
     #b = await Interface("enp0s25")
 
-    print(a.route(IP4))
+    input()
+
     #print(b.route(IP4))
 
     return

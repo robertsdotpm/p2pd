@@ -106,8 +106,10 @@ async def netiface_addr_to_ipr(af, nic_id, info):
     if "netmask" not in info:
         return None
     
-    nic_ipr = IPRange(info["addr"], info["netmask"])
-    log(f"Netiface loaded nic ipr {af} {nic_id} {info['addr']}")
+    #info["addr"] = ip_strip_if
+    log(f"Netiface loaded nic ipr {af} {nic_id} {info['addr']} {info['netmask']}")
+    cidr = netmask_to_cidr(info["netmask"])
+    nic_ipr = IPRange(info["addr"], cidr=cidr)
 
     """
     Some operating systems incorrectly list the netmask for
@@ -116,12 +118,17 @@ async def netiface_addr_to_ipr(af, nic_id, info):
     for the host portion.
     """
     if nic_ipr.i_host:
-        nic_ipr = IPRange(info["addr"])
+        nic_ipr = IPRange(
+            info["addr"],
+            cidr=max_cidr(af),
+        )
 
     """
     If a range is detected test that the range is valid by
     trying to bind on the first and last address.
     """
+    # Seg fault here?
+    return nic_ipr
     if not nic_ipr.i_host:
         invalid_subnet = False
         for host_index in [0, -1]:

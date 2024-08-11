@@ -625,8 +625,6 @@ class SelectorEventPolicy(asyncio.DefaultEventLoopPolicy):
         SelectorEventPolicy.loop_setup(loop)
         return loop
     
-
-    
 def p2pd_setup_event_loop():
     # If default isn't spawn then change it.
     # But only if it hasn't already been set.

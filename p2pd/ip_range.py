@@ -1,3 +1,8 @@
+"""
+Seg faults are possible here with invalid cidrs or netmasks.
+todo: Need to write better checks here.
+"""
+
 import ipaddress
 import copy
 from functools import total_ordering
