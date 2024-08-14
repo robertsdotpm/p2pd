@@ -47,29 +47,36 @@ class P2PPipe():
         self.msg_dispatcher_done = asyncio.Event()
 
     async def cleanup(self):
+        print("in p2p pipe cleanup")
         self.msg_queue.put_nowait(None)
-        await self.msg_dispatcher_done.wait()
+        try:
+            await asyncio.wait_for(
+                self.msg_dispatcher_done.wait(),
+                1
+            )
+        except:
+            return
+        print("p2p pipe cleanup done.")
 
     async def msg_dispatcher(self):
-        if self.conf["return_msg"]:
-            if not self.msg_dispatcher_done.is_set():
+        try:
+            msg = await self.msg_queue.get()
+            if msg is None:
                 self.msg_dispatcher_done.set()
-            return
-        
-        msg = await self.msg_queue.get()
-        if msg is None:
-            self.msg_dispatcher_done.set()
-            print("One connect finished.")
-            return
-        
-        await self.node.await_peer_con(
-            msg,
-            self.dest,
-        )
+                print("One connect finished.")
+                return
+            
+            await self.node.await_peer_con(
+                msg,
+                self.dest,
+            )
 
-        self.msg_dispatcher_task = asyncio.ensure_future(
-            self.msg_dispatcher()
-        )
+            self.msg_dispatcher_task = asyncio.ensure_future(
+                self.msg_dispatcher()
+            )
+        except RuntimeError:
+            print("msg dispatcher urntime error.")
+            return
 
     async def connect(self, strategies=P2P_STRATEGIES):
         # Start message dispatcher worker.
@@ -147,18 +154,12 @@ class P2PPipe():
         # (2) Build a 'route' from it with it's main NIC IP.
         # (3) Bind to the route at port 0. Return itself.
         route = await iface.route(af).bind()
-        print("in make con")
-        print(dest_info["ip"])
-        print(dest_info["port"])
 
         # Connect to this address.
         dest = Address(
             str(dest_info["ip"]),
             dest_info["port"],
         )
-
-        print(route._bind_tups)
-        print(dest.host)
 
         pipe = await pipe_open(
             route=route,
@@ -171,8 +172,6 @@ class P2PPipe():
             return
 
         await pipe.send(to_b(f"ID {self.pipe_id}"))
-
-        print(pipe)
         return pipe
 
     async def reverse_connect(self, af, src_info, dest_info, iface, addr_type):

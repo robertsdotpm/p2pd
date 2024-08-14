@@ -292,7 +292,6 @@ def parse_peer_addr(addr):
 
     # Parse signal server offsets.
     sig_part = af_parts.pop(0)
-    print(sig_part)
     if sig_part == b"None":
         signal = []
     else:

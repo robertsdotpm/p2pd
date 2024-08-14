@@ -285,7 +285,6 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
     cidr = af_to_cidr(af)
     af_default_nic_ip = ""
     if enable_default:
-        print("enable default")
         af_default_nic_ip = determine_if_path(af, "google.com")
         tasks.append(
             get_wan_ip_cfab(
@@ -312,7 +311,6 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
     # Resolve interface addresses CFAB.
     results = await asyncio.gather(*tasks)
     results = [r for r in results if r is not None]
-    print(results)
 
     # Only the default NIC will have
     # a default route enabled for the af.

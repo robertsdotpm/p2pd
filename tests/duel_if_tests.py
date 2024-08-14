@@ -24,6 +24,43 @@ perspective (though the code supports self-route.)
 IF_ALICE_NAME = "enp0s25"
 IF_BOB_NAME = "wlx00c0cab5760d"
 
+def patch_msg_dispatcher(src_pp, src_node, dest_node):
+    async def patch():
+        try:
+            print("in patch")
+            msg = await src_pp.msg_queue.get()
+            if msg is None:
+                src_pp.msg_dispatcher_done.set()
+                print("one con finished")
+                return
+            
+            print(msg)
+            
+            try:
+                await dest_node.sig_proto_handlers.proto(
+                    msg.pack()
+                )
+            except:
+                what_exception()
+
+            src_pp.msg_dispatcher_task = asyncio.ensure_future(
+                src_pp.msg_dispatcher_task()
+            )
+        except RuntimeError:
+            print("msg dispatcher runtime error.")
+            if not src_pp.msg_dispatcher_done.is_set():
+                src_pp.msg_dispatcher_done.set()
+            return
+
+    return patch
+
+def patch_p2p_pipe(src_pp):
+    def patch(dest_bytes, reply=None, conf=P2P_PIPE_CONF):
+        src_pp.reply = reply
+        return src_pp
+    
+    return patch
+
 async def get_node(if_name, node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     delta = delta_info(NA_DELTA, 0)
     nat = nat_info(OPEN_INTERNET, delta)
@@ -40,7 +77,7 @@ async def get_node(if_name, node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     node.setup_coordination(sys_clock)
     node.setup_tcp_punching()
 
-    return await node.dev()
+    return node
 
 class TestNodes():
     def __init__(self, same_if=False, addr_types=[EXT_BIND, NIC_BIND], return_msg=True, sig_pipe_no=SIGNAL_PIPE_NO):
@@ -74,6 +111,10 @@ class TestNodes():
                 sig_pipe_no=self.sig_pipe_no,
             )
 
+        # Start the nodes.
+        await self.alice.dev()
+        await self.bob.dev()
+
         # Build p2p con pipe config.
         conf = {
             "addr_types": self.addr_types,
@@ -85,15 +126,38 @@ class TestNodes():
             self.bob.addr_bytes,
             conf=conf
         )
+        self.pp_bob = self.bob.p2p_pipe(
+            self.alice.addr_bytes,
+            conf=conf
+        )
         self.alice.sig_proto_handlers.conf = conf
         self.bob.sig_proto_handlers.conf = conf
 
+        # Send directly to each other.
+        if self.return_msg:
+            self.pp_alice.msg_dispatcher = patch_msg_dispatcher(
+                self.pp_alice,
+                self.alice,
+                self.bob,
+            )
+
+            self.pp_bob.msg_dispatcher = patch_msg_dispatcher(
+                self.pp_bob,
+                self.bob,
+                self.alice,
+            )
+
+            # Return the same pp pipe with patched msg handler.
+            self.bob.p2p_pipe = patch_p2p_pipe(self.pp_bob)
+            self.alice.p2p_pipe = patch_p2p_pipe(self.pp_alice)
+            print("patches applied")
+
         # Short reference var.
         self.pipe_id = self.pp_alice.pipe_id
-
         return self
 
     async def __aexit__(self, exc_t, exc_v, exc_tb):
+        print("aexit")
         await self.alice.close()
         await self.bob.close()
 
@@ -110,12 +174,13 @@ async def test_dir_direct_con_lan_ext():
         )
         print(pipe)
         assert(pipe is not None)
+        assert(await check_pipe(pipe))
         await pipe.close()
 
 async def test_dir_direct_con_fail_lan():
     params = {
         "return_msg": True,
-        "sig_pipe_no": 1,
+        "sig_pipe_no": 0,
         "addr_types": [SIM_FAIL, NIC_BIND],
     }
 
@@ -125,6 +190,57 @@ async def test_dir_direct_con_fail_lan():
         )
         print(pipe)
         assert(pipe is not None)
+        assert(await check_pipe(pipe))
+        await pipe.close()
+
+async def test_reverse_direct_lan():
+    params = {
+        "return_msg": True,
+        "sig_pipe_no": 0,
+        "addr_types": [NIC_BIND],
+    }
+
+    async with TestNodes(**params) as nodes:
+        pipe = await nodes.pp_alice.connect(
+            strategies=[P2P_REVERSE]
+        )
+        print(pipe)
+        assert(pipe is not None)
+        assert(await check_pipe(pipe))
+        await pipe.close()
+
+async def test_turn_direct():
+    params = {
+        "return_msg": True,
+        "sig_pipe_no": 0,
+        "addr_types": [EXT_BIND],
+    }
+
+    async with TestNodes(**params) as nodes:
+        pipe = await nodes.pp_alice.connect(
+            strategies=[P2P_RELAY]
+        )
+
+        print(pipe)
+        assert(pipe is not None)
+        assert(await check_pipe(pipe))
+        await pipe.close()
+
+async def test_tcp_punch_direct_ext_lan():
+    params = {
+        "return_msg": True,
+        "sig_pipe_no": 0,
+        "addr_types": [EXT_BIND, NIC_BIND],
+    }
+
+    async with TestNodes(**params) as nodes:
+        pipe = await nodes.pp_alice.connect(
+            strategies=[P2P_PUNCH]
+        )
+
+        print(pipe)
+        assert(pipe is not None)
+        assert(await check_pipe(pipe))
         await pipe.close()
 
 
@@ -145,59 +261,6 @@ async def test_node_start():
     async with TestNodes() as nodes:
         #print(nodes.alice.p2p_addr)
         pass
-    
-
-async def test_direct_connect():
-
-    async with TestNodes() as nodes:
-        pipe = await nodes.pp_alice.connect(
-            strategies=[P2P_DIRECT]
-        )
-        assert(pipe is not None)
-        await pipe.close()
-
-async def test_reverse_connect():
-    async with TestNodes() as nodes:
-        msg = (await nodes.pp_alice.connect(
-            strategies=[P2P_REVERSE]
-        )).pack()
-
-        await nodes.bob.sig_proto_handlers.proto(msg)
-        
-        pipe = await nodes.alice.pipes[nodes.pipe_id]
-        assert(pipe is not None)
-        await pipe.close()
-
-async def test_turn():
-    async with TestNodes() as nodes:
-        msg = (await nodes.pp_alice.connect(
-            strategies=[P2P_RELAY]
-        )).pack()
-
-        print("msg1")
-        print(msg)
-
-        return
-
-        msg = (await nodes.bob.sig_proto_handlers.proto(msg)).pack()
-        print("msg2")
-        print(msg)
-        
-        print(nodes.alice.turn_clients)
-
-        msg = await nodes.alice.sig_proto_handlers.proto(msg)
-
-
-
-        pipe_id = nodes.pipe_id
-        alice_turn = await nodes.alice.pipes[pipe_id]
-        bob_turn = await nodes.bob.pipes[pipe_id]
-
-
-        assert(alice_turn is not None)
-        assert(bob_turn is not None)
-        await alice_turn.close()
-        await bob_turn.close()
 
 async def test_tcp_punch():
     async with TestNodes(addr_types=[NIC_BIND, EXT_BIND]) as nodes:
@@ -247,6 +310,7 @@ async def test_reverse_connect_with_sig():
 
 
         pipe = await nodes.alice.pipes[nodes.pipe_id]
+        
         assert(pipe is not None)
         await pipe.close()
 
@@ -269,7 +333,22 @@ async def test_tcp_punch_with_sig():
 async def duel_if_tests():
     try:
         #await test_node_start()
-        await test_dir_direct_con_fail_lan()
+
+        # Works.
+        #await test_dir_direct_con_lan_ext()
+
+        # Works.
+        #await test_dir_direct_con_fail_lan()
+
+        # Works.
+        #await test_reverse_direct_lan()
+
+        # Works.
+        #await test_turn_direct()
+
+        # Works.
+        #await test_tcp_punch_direct_ext_lan()
+
         #await test_dir_direct_con()
         #await test_turn_with_sig()
     except:

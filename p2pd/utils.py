@@ -690,12 +690,21 @@ def async_test(f, args=[], loop=None):
     #    loop.set_debug(True)
     loop.set_debug(False)
 
+    if hasattr(asyncio, "run"):
+        runner = asyncio.run
+    else:
+        runner = loop.run_until_complete
+
     # Can have cleanup errors.
     if len(args):
         #loop.run_until_complete(f(*args))
-        loop.run_until_complete(f(*args))
+        runner(f(*args))
+        #loop.run_until_complete(f(*args))
     else:
-        loop.run_until_complete(f())
+        runner(f())
+        #loop.run_until_complete(f())
+
+    #asyncio.run(main(), debug=False)
 
     #loop.close()
 

@@ -23,7 +23,7 @@ NODE_CONF = dict_child({
 }, NET_CONF)
 
 # Main class for the P2P node server.
-class P2PNode(Daemon, P2PNodeExtra):
+class P2PNode(P2PNodeExtra, Daemon):
     def __init__(self, ifs, port=NODE_PORT, conf=NODE_CONF):
         super().__init__()
         
@@ -44,6 +44,8 @@ class P2PNode(Daemon, P2PNodeExtra):
 
         # Pending TCP punch queue.
         self.punch_queue = asyncio.Queue()
+        self.punch_worker_task = None
+        self.punch_worker_done = asyncio.Event()
 
         # Signal protocol class instance.
         self.sig_proto_handlers = SigProtoHandlers(self)

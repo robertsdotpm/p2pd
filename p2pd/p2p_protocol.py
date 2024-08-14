@@ -66,9 +66,11 @@ class SigProtoHandlers():
             self.seen[msg.meta.pipe_id] = 1
 
         # Updating routing dest with current addr.
+        print(msg is not None)
         assert(msg is not None)
         msg.set_cur_addr(self.node.addr_bytes)
         msg.routing.load_if_extra(self.node)
+        
 
         # Toggle local and remote address support.
         conf = dict_child({
@@ -76,6 +78,7 @@ class SigProtoHandlers():
         }, self.conf)
 
         # Take action based on message.
+        print("calling handle msg")
         return await self.handle_msg(msg_info, msg, conf)
     
 async def node_protocol(self, msg, client_tup, pipe):
@@ -106,7 +109,7 @@ async def node_protocol(self, msg, client_tup, pipe):
         pipe_id = to_s(parts[1])
         if pipe_id not in self.pipes:
             pass
-            self.pipe_future(self.pipe_id)
+            self.pipe_future(pipe_id)
 
 
         if pipe_id in self.pipes:

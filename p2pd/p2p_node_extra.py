@@ -38,8 +38,9 @@ class P2PNodeExtra():
         self.sys_clock = sys_clock
 
     def setup_tcp_punching(self):
-        self.tcp_punch_clients = [
-            TCPPunch(
+        for index in range(len(self.ifs)):
+            interface = self.ifs[index]
+            self.tcp_punch_clients[index] = TCPPunch(
                 interface,
                 self.ifs,
                 self,
@@ -47,34 +48,37 @@ class P2PNodeExtra():
                 self.pp_executor,
                 self.mp_manager
             )
-            for interface in self.ifs
-        ]
 
     async def punch_queue_worker(self):
-        while self.punch_queue is not None:
-            try:
-                params = await self.punch_queue.get()
-                if not len(params):
-                    return
-                
-                print("do punch ")
-                punch_offset = params.pop(0)
+        try:
+            params = await self.punch_queue.get()
+            print(params)
+            if not len(params):
+                self.punch_worker_done.set()
+                print("closing punch queue worker")
+                return
+            
+            print("do punch ")
+            punch_offset = params.pop(0)
 
-                punch = self.tcp_punch_clients[punch_offset]
+            punch = self.tcp_punch_clients[punch_offset]
 
-                print(params)
-                await punch.proto_do_punching(*params)
-                print("punch done")
-            except:
-                await asyncio.sleep(0.1)
-                continue
+            print(params)
+            await punch.proto_do_punching(*params)
+            print("punch done")
+
+            self.punch_worker_task = asyncio.ensure_future(
+                self.punch_queue_worker()
+            )
+        except RuntimeError:
+            print("punch queue worker run time error")
+            return
 
     def start_punch_worker(self):
-        task = asyncio.ensure_future(
+        print("in start punch worker")
+        self.punch_worker_task = asyncio.ensure_future(
             self.punch_queue_worker()
         )
-        
-        self.tasks.append(task)
 
     def add_punch_meeting(self, params):
         # Schedule the TCP punching.
@@ -180,7 +184,6 @@ class P2PNodeExtra():
                 routes.append(route)
 
             if_names.append(interface.name)
-            print(interface.rp[IP6].routes)
 
         # Start handling messages for self.msg_cb.
         # Bind to all ifs provided to class on route[0].
@@ -192,14 +195,12 @@ class P2PNodeExtra():
         self.tasks.append(task)
 
     def pipe_future(self, pipe_id):
-        print(f"pipe future {pipe_id}")
         if pipe_id not in self.pipes:
             self.pipes[pipe_id] = asyncio.Future()
 
         return pipe_id
 
     def pipe_ready(self, pipe_id, pipe):
-        print(f"pipe ready {pipe_id}")
         if not self.pipes[pipe_id].done():
             self.pipes[pipe_id].set_result(pipe)
         
@@ -285,10 +286,10 @@ class P2PNodeExtra():
 
     # Shutdown the node server and do cleanup.
     async def close(self):
+        print("in close")
         # Make the worker thread for punching end.
         self.punch_queue.put_nowait([])
-        self.punch_queue = None
-        await asyncio.sleep(0.5)
+        await self.punch_worker_done.wait()
 
         # Close other pipes.
         pipe_lists = [
@@ -299,6 +300,7 @@ class P2PNodeExtra():
         ]
 
         for pipe_list in pipe_lists:
+            print(pipe_list)
             for pipe in pipe_list.values():
                 if pipe is None:
                     continue
