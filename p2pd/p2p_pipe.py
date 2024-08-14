@@ -43,19 +43,17 @@ class P2PPipe():
         print(f"using {self.pipe_id}")
         self.node.pipe_future(self.pipe_id)
         self.msg_queue = asyncio.Queue()
-        self.msg_dispatcher_task = None
         self.msg_dispatcher_done = asyncio.Event()
+        self.msg_dispatcher_task = None
 
     async def cleanup(self):
+        if self.msg_dispatcher_task is None:
+            return
+        
         print("in p2p pipe cleanup")
         self.msg_queue.put_nowait(None)
-        try:
-            await asyncio.wait_for(
-                self.msg_dispatcher_done.wait(),
-                1
-            )
-        except:
-            return
+        self.msg_dispatcher_task.cancel()
+        self.msg_dispatcher_task = None
         print("p2p pipe cleanup done.")
 
     async def msg_dispatcher(self):
@@ -75,11 +73,12 @@ class P2PPipe():
                 self.msg_dispatcher()
             )
         except RuntimeError:
+            what_exception()
             print("msg dispatcher urntime error.")
             return
 
     async def connect(self, strategies=P2P_STRATEGIES):
-        # Start message dispatcher worker.
+        # Route messages to destination.
         if self.msg_dispatcher_task is None:
             self.msg_dispatcher_task = asyncio.ensure_future(
                 self.msg_dispatcher()

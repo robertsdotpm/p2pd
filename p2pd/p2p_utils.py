@@ -145,9 +145,6 @@ def select_dest_ipr(same_pc, src_info, dest_info, addr_types, is_tcp_punch=False
 
     # There may be multiple compatible addresses per info.
     for addr_type in addr_types:
-        if addr_type == SIM_FAIL:
-            return src_info["nic"]
-
         # Prefer using remote addresses.
         if addr_type == EXT_BIND:
             # Will have only one listed external address.
@@ -267,24 +264,20 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
                     if pp.reply.routing.dest_index != if_index:
                         continue
 
-                # Used for testing.
-                if addr_type == SIM_FAIL:
-                    if cleanup is not None:
-                        await cleanup(
-                            af,
-                            src_info,
-                            dest_info,
-                            interface,
-                            addr_type,
-                        )
-                    continue
+                # Support testing addr type failures.
+                if addr_type in [NIC_FAIL, EXT_FAIL]:
+                    use_addr_type = addr_type - 2
+                    do_fail = True
+                else:
+                    use_addr_type = addr_type
+                    do_fail = False
 
                 dest_info["ip"] = str(
                     select_dest_ipr(
                         pp.same_machine,
                         src_info,
                         dest_info,
-                        [addr_type],
+                        [use_addr_type],
 
                         # can you make this case
                         # run for all
@@ -315,16 +308,20 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
                         src_info,
                         dest_info,
                         interface,
-                        addr_type,
+                        use_addr_type,
                     ),
                     timeout
                 )
+
+                # Support testing failures for an addr type.
+                if do_fail:
+                    result = None
 
                 # Success result from function.
                 if result is not None:
                     return result
                 
-                msg = f"FAIL: {func} {addr_type}"
+                msg = f"FAIL: {func} {use_addr_type}"
                 print(msg)
                 
                 # Optional cleanup on failure.
@@ -334,7 +331,7 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
                         src_info,
                         dest_info,
                         interface,
-                        addr_type,
+                        use_addr_type,
                     )
             
             # Only use iter to order by NAT.

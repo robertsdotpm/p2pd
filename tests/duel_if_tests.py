@@ -40,14 +40,16 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
                 await dest_node.sig_proto_handlers.proto(
                     msg.pack()
                 )
+            except asyncio.CancelledError:
+                raise Exception("cancelled")
             except:
                 what_exception()
+                raise Exception()
 
             src_pp.msg_dispatcher_task = asyncio.ensure_future(
                 src_pp.msg_dispatcher_task()
             )
-        except RuntimeError:
-            print("msg dispatcher runtime error.")
+        except:
             if not src_pp.msg_dispatcher_done.is_set():
                 src_pp.msg_dispatcher_done.set()
             return
@@ -177,11 +179,11 @@ async def test_dir_direct_con_lan_ext():
         assert(await check_pipe(pipe))
         await pipe.close()
 
-async def test_dir_direct_con_fail_lan():
+async def test_dir_direct_con_ext_fail_lan_suc():
     params = {
         "return_msg": True,
         "sig_pipe_no": 0,
-        "addr_types": [SIM_FAIL, NIC_BIND],
+        "addr_types": [EXT_FAIL, NIC_BIND],
     }
 
     async with TestNodes(**params) as nodes:
@@ -243,6 +245,23 @@ async def test_tcp_punch_direct_ext_lan():
         assert(await check_pipe(pipe))
         await pipe.close()
 
+async def test_tcp_punch_direct_lan_fail_ext_suc():
+    params = {
+        "return_msg": True,
+        "sig_pipe_no": 0,
+        "addr_types": [NIC_FAIL, EXT_BIND],
+    }
+
+    async with TestNodes(**params) as nodes:
+        pipe = await nodes.pp_alice.connect(
+            strategies=[P2P_PUNCH]
+        )
+
+        print(pipe)
+        assert(pipe is not None)
+        assert(await check_pipe(pipe))
+        await pipe.close()
+
 
 async def test_node_start():
     """
@@ -262,74 +281,6 @@ async def test_node_start():
         #print(nodes.alice.p2p_addr)
         pass
 
-async def test_tcp_punch():
-    async with TestNodes(addr_types=[NIC_BIND, EXT_BIND]) as nodes:
-        punch_req_msg = await nodes.pp_alice.connect(
-            strategies=[P2P_PUNCH]
-        )
-
-        print(punch_req_msg.pack())
-
-
-
-
-        # Get punch meeting details.
-        resp = await nodes.bob.sig_proto_handlers.proto(
-            punch_req_msg.pack()
-        )
-
-        print(resp)
-
-        pipe_id = nodes.pipe_id
-
-        print(nodes.bob.pipes)
-        print(nodes.alice.pipes)
-
-        
-        print("Bob pipes")
-
-        pipe_id = nodes.pipe_id
-
-
-        bob_hole = await nodes.bob.pipes[pipe_id]
-        alice_hole = await nodes.alice.pipes[pipe_id]
-            
-
-        print(f"alice hole = {alice_hole}")
-        print(f"bob hole = {bob_hole}")
-
-        # Get punch mode code needs to be updated
-        # Or rewritten maybe replaced with work behind.
-
-async def test_reverse_connect_with_sig():
-    async with TestNodes(return_msg=False) as nodes:
-        print(nodes.alice.signal_pipes)
-        await nodes.pp_alice.connect(
-            strategies=[P2P_REVERSE]
-        )
-
-
-        pipe = await nodes.alice.pipes[nodes.pipe_id]
-        
-        assert(pipe is not None)
-        await pipe.close()
-
-async def test_turn_with_sig():
-    async with TestNodes(return_msg=False) as nodes:
-        alice_hole = await nodes.pp_alice.connect(
-            strategies=[P2P_RELAY]
-        )
-
-        print(f"alice hole = {alice_hole}")
-
-async def test_tcp_punch_with_sig():
-    async with TestNodes(return_msg=False) as nodes:
-        alice_hole = await nodes.pp_alice.connect(
-            strategies=[P2P_PUNCH]
-        )
-
-        print(f"alice hole = {alice_hole}")
-
 async def duel_if_tests():
     try:
         #await test_node_start()
@@ -348,6 +299,14 @@ async def duel_if_tests():
 
         # Works.
         #await test_tcp_punch_direct_ext_lan()
+
+        await test_tcp_punch_direct_lan_fail_ext_suc()
+
+
+
+
+        # Multiple methods now with failures inbetween.
+        # 
 
         #await test_dir_direct_con()
         #await test_turn_with_sig()
