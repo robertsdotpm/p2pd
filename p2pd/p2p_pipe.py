@@ -47,6 +47,7 @@ class P2PPipe():
         self.msg_dispatcher_task = None
 
     async def cleanup(self):
+        return
         if self.msg_dispatcher_task is None:
             return
         
@@ -92,7 +93,7 @@ class P2PPipe():
             [self.reverse_connect, 5, None],
 
             # Large timeout for meetings with a state cleanup.
-            [self.tcp_hole_punch, 20, self.tcp_punch_cleanup],
+            [self.tcp_hole_punch, 40, self.tcp_punch_cleanup],
 
             # Large timeout, end refreshers, disable LAN cons.
             [self.udp_turn_relay, 20, self.turn_cleanup],
@@ -214,6 +215,7 @@ class P2PPipe():
 
         print(f"Punch pipe id = {self.pipe_id}")
         print(f'{self.dest["node_id"]}')
+        print("trying tcp punch method")
 
         punch_mode, punch_state, punch_ret = await punch.proto_update(
             af,
@@ -369,13 +371,23 @@ class P2PPipe():
                 log_exception()
                 continue
 
+    def general_cleanup(self):
+        self.reply = None
+        del self.node.pipes[self.pipe_id]
+        self.node.pipe_future(self.pipe_id)
+
     async def tcp_punch_cleanup(self, af, src_info, dest_info, iface, addr_type):
+        print("in tcp punch cleanup")
+        self.general_cleanup()
         node_id = self.dest["node_id"]
         if_index = src_info["if_index"]
         client = self.node.tcp_punch_clients[if_index]
         await client.cleanup_state(node_id, self.pipe_id)
+        print(client.state)
+        print(self.msg_dispatcher_task)
 
     async def turn_cleanup(self, af, src_info, dest_info, iface, addr_type):
+        self.general_cleanup()
         if self.pipe_id not in self.node.turn_clients:
             return
         

@@ -661,6 +661,9 @@ class TCPPunch():
             pipe_id,
         )        
 
+        print(f"info = {info}")
+
+
         punch_mode = await get_punch_mode(
             af,
             recv_addr,

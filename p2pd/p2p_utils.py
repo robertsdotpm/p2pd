@@ -141,8 +141,6 @@ def select_dest_ipr(same_pc, src_info, dest_info, addr_types, is_tcp_punch=False
     same_if_on_host = same_pc and same_if
     different_ifs_on_host = same_pc and not same_if
 
-    print(f"{same_if} {same_if_on_host} {different_ifs_on_host}")
-
     # There may be multiple compatible addresses per info.
     for addr_type in addr_types:
         # Prefer using remote addresses.

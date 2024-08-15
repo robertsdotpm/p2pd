@@ -44,12 +44,12 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
                 raise Exception("cancelled")
             except:
                 what_exception()
-                raise Exception()
 
             src_pp.msg_dispatcher_task = asyncio.ensure_future(
-                src_pp.msg_dispatcher_task()
+                src_pp.msg_dispatcher()
             )
         except:
+            what_exception()
             if not src_pp.msg_dispatcher_done.is_set():
                 src_pp.msg_dispatcher_done.set()
             return
@@ -59,6 +59,7 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
 def patch_p2p_pipe(src_pp):
     def patch(dest_bytes, reply=None, conf=P2P_PIPE_CONF):
         src_pp.reply = reply
+        src_pp.conf = conf
         return src_pp
     
     return patch
@@ -245,6 +246,7 @@ async def test_tcp_punch_direct_ext_lan():
         assert(await check_pipe(pipe))
         await pipe.close()
 
+# Last one doesnt result in sides using same addr type.
 async def test_tcp_punch_direct_lan_fail_ext_suc():
     params = {
         "return_msg": True,
@@ -265,6 +267,7 @@ async def test_tcp_punch_direct_lan_fail_ext_suc():
 
 async def test_node_start():
     """
+
     node = await get_node(
         IF_ALICE_NAME,
         node_port=NODE_PORT + 1

@@ -59,11 +59,13 @@ class SigProtoHandlers():
             return
         
         # Reject already processed.
+        """
         if msg.meta.pipe_id in self.seen:
             print("in seen")
             return
         else:
             self.seen[msg.meta.pipe_id] = 1
+        """
 
         # Updating routing dest with current addr.
         print(msg is not None)
