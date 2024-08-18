@@ -289,7 +289,9 @@ class P2PNodeExtra():
         print("in close")
         # Make the worker thread for punching end.
         self.punch_queue.put_nowait([])
-        await self.punch_worker_done.wait()
+        if self.punch_worker_task is not None:
+            self.punch_worker_task.cancel()
+            self.punch_worker_task = None
 
         # Close other pipes.
         pipe_lists = [
@@ -306,7 +308,10 @@ class P2PNodeExtra():
                     continue
 
                 if isinstance(pipe, asyncio.Future):
-                    pipe = await pipe
+                    if pipe.done():
+                        pipe = await pipe
+                    else:
+                        continue
 
                 await pipe.close()
 

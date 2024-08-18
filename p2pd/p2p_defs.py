@@ -18,6 +18,10 @@ P2P_DIRECT = 1
 P2P_REVERSE = 2
 P2P_PUNCH = 3
 P2P_RELAY = 4
+DIRECT_FAIL = 5
+REVERSE_FAIL = 6
+PUNCH_FAIL = 7
+RELAY_FAIL = 8
 
 # TURN is not included as a default strategy because it uses UDP.
 # It will need a special explanation for the developer.

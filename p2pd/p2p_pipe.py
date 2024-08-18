@@ -46,8 +46,21 @@ class P2PPipe():
         self.msg_dispatcher_done = asyncio.Event()
         self.msg_dispatcher_task = None
 
+        # Mapping for funcs over addr infos.
+        # Loop over the most likely strategies left.
+        self.func_table = [
+            # Short timeouts for direct TCP cons.
+            [self.direct_connect, 5, None],
+            [self.reverse_connect, 5, None],
+
+            # Large timeout for meetings with a state cleanup.
+            [self.tcp_hole_punch, 40, self.tcp_punch_cleanup],
+
+            # Large timeout, end refreshers, disable LAN cons.
+            [self.udp_turn_relay, 20, self.turn_cleanup],
+        ]
+
     async def cleanup(self):
-        return
         if self.msg_dispatcher_task is None:
             return
         
@@ -85,29 +98,15 @@ class P2PPipe():
                 self.msg_dispatcher()
             )
 
-        # Mapping for funcs over addr infos.
-        # Loop over the most likely strategies left.
-        func_table = [
-            # Short timeouts for direct TCP cons.
-            [self.direct_connect, 5, None],
-            [self.reverse_connect, 5, None],
-
-            # Large timeout for meetings with a state cleanup.
-            [self.tcp_hole_punch, 40, self.tcp_punch_cleanup],
-
-            # Large timeout, end refreshers, disable LAN cons.
-            [self.udp_turn_relay, 20, self.turn_cleanup],
-        ]
-
         # Try strategies to achieve a connection.
-        valid_strats = [P2P_DIRECT, P2P_REVERSE, P2P_PUNCH, P2P_RELAY]
-        for i, strategy in enumerate(valid_strats):
+        strats = [P2P_DIRECT, P2P_REVERSE, P2P_PUNCH, P2P_RELAY]
+        for i, strategy in enumerate(strats):
             # ... But still need to respect their choices.
             if strategy not in strategies:
                 continue
 
             # Returns a message from func given a comp addr info pair.
-            func, timeout, cleanup = func_table[i]
+            func, timeout, cleanup = self.func_table[i]
             pipe = await for_addr_infos(
                 self.src,
                 self.dest,
@@ -128,15 +127,9 @@ class P2PPipe():
                 await self.cleanup()
                 return
 
-            """
             # Ensure node protocol handler setup on pipe.
             if node_protocol not in pipe.msg_cbs:
                 pipe.add_msg_cb(node_protocol)
-
-            # Ensure ready set.
-            # todo: get working for all
-            self.node.pipe_ready(self.pipe_id, pipe)
-            """
 
             await self.cleanup()
             return pipe
@@ -165,13 +158,14 @@ class P2PPipe():
             route=route,
             proto=TCP,
             dest=dest,
-            msg_cb=self.node.msg_cb
         )
 
         if pipe is None:
             return
 
         await pipe.send(to_b(f"ID {self.pipe_id}"))
+        self.node.pipe_ready(self.pipe_id, pipe)
+
         return pipe
 
     async def reverse_connect(self, af, src_info, dest_info, iface, addr_type):

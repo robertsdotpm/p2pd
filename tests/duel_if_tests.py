@@ -64,6 +64,31 @@ def patch_p2p_pipe(src_pp):
     
     return patch
 
+def patch_p2p_stats(strategies, src_pp):
+    strat_len = len(src_pp.func_table)
+    for strategy in strategies:
+        if strategy > strat_len: # how many current stats.
+            offset = (strategy - strat_len) - 1
+            func_info = src_pp.func_table[offset]
+            func = func_info[0]
+
+            async def failure(self, af, src_info, dest_info, iface, addr_type):
+                # Func runs as usual making any state changes.
+                await func(
+                    af,
+                    src_info,
+                    dest_info,
+                    iface,
+                    addr_type
+                )
+
+                # But always fails.
+                return None
+            
+            code = f"src_pp.{func.__name__} = failure"
+            print(code)
+            eval(code)
+
 async def get_node(if_name, node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     delta = delta_info(NA_DELTA, 0)
     nat = nat_info(OPEN_INTERNET, delta)
@@ -163,6 +188,7 @@ class TestNodes():
         print("aexit")
         await self.alice.close()
         await self.bob.close()
+        print("nodes closed")
 
 async def test_dir_direct_con_lan_ext():
     params = {
@@ -264,6 +290,26 @@ async def test_tcp_punch_direct_lan_fail_ext_suc():
         assert(await check_pipe(pipe))
         await pipe.close()
 
+async def test_dir_reverse_fail_direct():
+    params = {
+        "return_msg": True,
+        "sig_pipe_no": 0,
+        "addr_types": [NIC_BIND],
+    }
+
+    strats = [P2P_REVERSE, P2P_DIRECT]
+    async with TestNodes(**params) as nodes:
+        #patch_p2p_stats(strats, nodes.pp_alice)
+        pipe = await nodes.pp_alice.connect(
+            strategies=strats
+        )
+
+        print(pipe)
+        assert(pipe is not None)
+        assert(await check_pipe(pipe))
+        await pipe.close()
+        print("pipe closed")
+
 
 async def test_node_start():
     """
@@ -303,9 +349,10 @@ async def duel_if_tests():
         # Works.
         #await test_tcp_punch_direct_ext_lan()
 
-        await test_tcp_punch_direct_lan_fail_ext_suc()
+        # Works
+        #await test_tcp_punch_direct_lan_fail_ext_suc()
 
-
+        await test_dir_reverse_fail_direct()
 
 
         # Multiple methods now with failures inbetween.
