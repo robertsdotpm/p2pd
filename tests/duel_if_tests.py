@@ -60,6 +60,9 @@ def patch_p2p_pipe(src_pp):
     def patch(dest_bytes, reply=None, conf=P2P_PIPE_CONF):
         src_pp.reply = reply
         src_pp.conf = conf
+        if reply is not None:
+            src_pp.pipe_id = reply.meta.pipe_id
+            src_pp.node.pipe_future(reply.meta.pipe_id)
         return src_pp
     
     return patch
@@ -302,11 +305,11 @@ async def test_dir_reverse_fail_direct():
     params = {
         "return_msg": True,
         "sig_pipe_no": 0,
-        "addr_types": [NIC_BIND],
+        "addr_types": [EXT_BIND],
     }
 
     patch_strats = [DIRECT_FAIL, P2P_REVERSE]
-    use_strats = [P2P_REVERSE]
+    use_strats = [P2P_RELAY]
     async with TestNodes(**params) as nodes:
         #patch_p2p_stats(patch_strats, nodes.pp_alice)
         #patch_p2p_stats(strats, nodes.pp_bob)
@@ -316,7 +319,10 @@ async def test_dir_reverse_fail_direct():
 
         print(pipe)
         assert(pipe is not None)
-        assert(await check_pipe(pipe))
+
+        print(f"turn {pipe}")
+        dest_tup = pipe.get_first_peer_tup()
+        assert(await check_pipe(pipe, dest_tup))
         await pipe.close()
         print("pipe closed")
 
@@ -375,3 +381,7 @@ async def duel_if_tests():
 
 if __name__ == '__main__':
     async_test(duel_if_tests)
+
+"""
+make sure msg_cb works for punch and turn
+"""

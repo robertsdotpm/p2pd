@@ -101,16 +101,14 @@ class P2PPipe():
         # Try strategies to achieve a connection.
         strats = [P2P_DIRECT, P2P_REVERSE, P2P_PUNCH, P2P_RELAY]
         for i, strategy in enumerate(strats):
-
-
             # ... But still need to respect their choices.
             if strategy not in strategies:
                 continue
 
-            # Returns a msg given a comp addr info pair.
-            index = strategy - 1
-            print(index)
-            func, timeout, cleanup = self.func_table[index]
+            # Returns a message from func given a comp addr info pair.
+            func, timeout, cleanup = self.func_table[i]
+            print(f"using func {func}")
+
             pipe = await for_addr_infos(
                 self.src,
                 self.dest,
@@ -121,10 +119,9 @@ class P2PPipe():
             )
 
             print(f"In connect pipe = {pipe}")
-            
+
             # Strategy failed so continue.
             if pipe is None:
-                print(f"strat {strategy} failed")
                 continue
 
             # NOP -- don't process this result.
@@ -134,8 +131,12 @@ class P2PPipe():
 
             """
             # Ensure node protocol handler setup on pipe.
-            if self.node.msg_cb not in pipe.msg_cbs:
-                pipe.add_msg_cb(self.node.msg_cb)
+            if node_protocol not in pipe.msg_cbs:
+                pipe.add_msg_cb(node_protocol)
+
+            # Ensure ready set.
+            # todo: get working for all
+            self.node.pipe_ready(self.pipe_id, pipe)
             """
 
             await self.cleanup()
@@ -165,15 +166,16 @@ class P2PPipe():
             route=route,
             proto=TCP,
             dest=dest,
-            msg_cb=node_protocol,
+            msg_cb=self.node.msg_cb
         )
 
         if pipe is None:
             return
 
         await pipe.send(to_b(f"ID {self.pipe_id}"))
-        self.node.pipe_ready(self.pipe_id, pipe)
 
+        print("self.pipe_ready = {self.pipe_id}")
+        self.node.pipe_ready(self.pipe_id, pipe)
         return pipe
 
     async def reverse_connect(self, af, src_info, dest_info, iface, addr_type):
@@ -315,6 +317,7 @@ class P2PPipe():
                         iface,
                         dest_peer=dest_peer,
                         dest_relay=dest_relay,
+                        msg_cb=self.node.msg_cb,
                     )
 
                     # Load TURN client failed.

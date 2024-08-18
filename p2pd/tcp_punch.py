@@ -1123,7 +1123,7 @@ class TCPPunch():
                         *sock.getpeername(),
                     ),
                     sock=sock,
-                    msg_cb=msg_cb
+                    msg_cb=self.node.msg_cb
                 )
 
                 self.node.pipe_ready(pipe_id, pipe)

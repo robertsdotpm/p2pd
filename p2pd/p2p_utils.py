@@ -147,7 +147,6 @@ def select_dest_ipr(same_pc, src_info, dest_info, addr_types, is_tcp_punch=False
         if addr_type == EXT_BIND:
             # Will have only one listed external address.
             if same_if_on_host:
-                
                 continue
 
             # Behind same router -- this won't work.
@@ -159,14 +158,21 @@ def select_dest_ipr(same_pc, src_info, dest_info, addr_types, is_tcp_punch=False
         
         # Prefer using local addresses.
         if addr_type == NIC_BIND:
-            # The server / client is the same IP
-            # It needs to pick the same IF so its reachable.
-            #if is_tcp_punch:
-            if different_ifs_on_host:
-                return sorted([
-                    dest_info["nic"],
-                    src_info["nic"]
-                ])[0]
+            """
+            When reaching a server its bound to a specific
+            interface and you choose that NIC to reach it.
+            But TCP punching has no defined server. However,
+            if they're not on the same NIC, on the same host,
+            different NICs can't interact (maybe unless
+            they're bridged.) Keep this edge-case here.
+            """
+            if is_tcp_punch:
+                # Designate 1 IP (and the NIC its on) master.
+                if different_ifs_on_host:
+                    return sorted([
+                        dest_info["nic"],
+                        src_info["nic"]
+                    ])[0]
                 
             # Only if LAN or same machine.
             if not (same_pc or same_lan):
@@ -178,7 +184,7 @@ def select_dest_ipr(same_pc, src_info, dest_info, addr_types, is_tcp_punch=False
     # No compatible addresses. 
     return None
 
-async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=None):
+async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=None, msg_cb=None):
     # TODO: index by id and not offset.
     turn_server = TURN_SERVERS[serv_id]
 
@@ -196,7 +202,8 @@ async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=Non
         turn_addr=turn_addr,
         turn_user=turn_server["user"],
         turn_pw=turn_server["pass"],
-        turn_realm=turn_server["realm"]
+        turn_realm=turn_server["realm"],
+        msg_cb=msg_cb,
     )
 
     # Start the TURN client.
@@ -263,6 +270,7 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
                         continue
 
                 # Support testing addr type failures.
+                print(f"Addr types = {addr_type}")
                 if addr_type in [NIC_FAIL, EXT_FAIL]:
                     use_addr_type = addr_type - 2
                     do_fail = True
@@ -280,7 +288,7 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
                         # can you make this case
                         # run for all
                         # try it
-                        #func == pp.tcp_hole_punch
+                        func == pp.tcp_hole_punch
                     )
                 )
 
@@ -298,6 +306,8 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
                     interface,
                     pp.node.ifs,
                 )
+
+                print(interface)
 
                 # Coroutine to run.
                 result = await async_wrap_errors(
@@ -319,7 +329,7 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
                 if result is not None:
                     return result
                 
-                msg = f"FAIL: {func} {use_addr_type}"
+                msg = f"FAIL: {func} {use_addr_type} {result}"
                 print(msg)
                 
                 # Optional cleanup on failure.

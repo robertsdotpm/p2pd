@@ -93,6 +93,10 @@ async def node_protocol(self, msg, client_tup, pipe):
     parts = msg.split(b" ")
     cmd = parts[0]
 
+    print(msg)
+    print(client_tup)
+    
+
     # Basic echo server used for testing networking.
     if cmd == b"ECHO":
         if len(msg) > 5:

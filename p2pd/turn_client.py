@@ -249,13 +249,17 @@ class TURNClient(PipeEvents):
     def new_node_event(self, node_id):
         self.node_events[to_s(node_id)] = asyncio.Event()
 
+    def get_first_peer_tup(self):
+        for peer_tup in self.peers:
+            return self.peers[peer_tup]
+
+        return None
+
     # Overwrite the BaseProto send method and require ACKs.
     async def send(self, data, dest_tup=None):
         # Attempt to use the first peer_tup.
         if dest_tup is None:
-            for peer_tup in self.peers:
-                dest_tup = self.peers[peer_tup]
-                break
+            dest_tup = self.get_first_peer_tup()
 
         # Detect invalid self-send.
         if self.relay_tup_future.done():
