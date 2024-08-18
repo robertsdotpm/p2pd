@@ -101,12 +101,16 @@ class P2PPipe():
         # Try strategies to achieve a connection.
         strats = [P2P_DIRECT, P2P_REVERSE, P2P_PUNCH, P2P_RELAY]
         for i, strategy in enumerate(strats):
+
+
             # ... But still need to respect their choices.
             if strategy not in strategies:
                 continue
 
-            # Returns a message from func given a comp addr info pair.
-            func, timeout, cleanup = self.func_table[i]
+            # Returns a msg given a comp addr info pair.
+            index = strategy - 1
+            print(index)
+            func, timeout, cleanup = self.func_table[index]
             pipe = await for_addr_infos(
                 self.src,
                 self.dest,
@@ -117,9 +121,10 @@ class P2PPipe():
             )
 
             print(f"In connect pipe = {pipe}")
-
+            
             # Strategy failed so continue.
             if pipe is None:
+                print(f"strat {strategy} failed")
                 continue
 
             # NOP -- don't process this result.
@@ -127,9 +132,11 @@ class P2PPipe():
                 await self.cleanup()
                 return
 
+            """
             # Ensure node protocol handler setup on pipe.
-            if node_protocol not in pipe.msg_cbs:
-                pipe.add_msg_cb(node_protocol)
+            if self.node.msg_cb not in pipe.msg_cbs:
+                pipe.add_msg_cb(self.node.msg_cb)
+            """
 
             await self.cleanup()
             return pipe
@@ -158,6 +165,7 @@ class P2PPipe():
             route=route,
             proto=TCP,
             dest=dest,
+            msg_cb=node_protocol,
         )
 
         if pipe is None:

@@ -72,7 +72,9 @@ def patch_p2p_stats(strategies, src_pp):
             func_info = src_pp.func_table[offset]
             func = func_info[0]
 
-            async def failure(self, af, src_info, dest_info, iface, addr_type):
+            async def failure(af, src_info, dest_info, iface, addr_type):
+                return None
+
                 # Func runs as usual making any state changes.
                 await func(
                     af,
@@ -82,12 +84,18 @@ def patch_p2p_stats(strategies, src_pp):
                     addr_type
                 )
 
+                print("in reverse fail.")
+                #src_pp.pipe_id = to_s(rand_plain(15))
+                #src_pp.node.pipe_future(src_pp.pipe_id)
+
                 # But always fails.
                 return None
             
-            code = f"src_pp.{func.__name__} = failure"
-            print(code)
-            eval(code)
+            #code = f"src_pp.{func.__name__} = failure"
+            print(func)
+            src_pp.func_table[offset][0] = failure
+            #setattr(src_pp.func_table[offset], f"{func.__name__}", failure)
+            #print(src_pp.reverse_connect)
 
 async def get_node(if_name, node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     delta = delta_info(NA_DELTA, 0)
@@ -297,11 +305,13 @@ async def test_dir_reverse_fail_direct():
         "addr_types": [NIC_BIND],
     }
 
-    strats = [P2P_REVERSE, P2P_DIRECT]
+    patch_strats = [DIRECT_FAIL, P2P_REVERSE]
+    use_strats = [P2P_REVERSE]
     async with TestNodes(**params) as nodes:
-        #patch_p2p_stats(strats, nodes.pp_alice)
+        #patch_p2p_stats(patch_strats, nodes.pp_alice)
+        #patch_p2p_stats(strats, nodes.pp_bob)
         pipe = await nodes.pp_alice.connect(
-            strategies=strats
+            strategies=use_strats
         )
 
         print(pipe)
