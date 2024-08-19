@@ -325,7 +325,7 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp, reply=None, conf
                         src_info,
                         dest_info,
                         interface,
-                        use_addr_type,
+                        addr_type,
                         reply,
                     ),
                     timeout

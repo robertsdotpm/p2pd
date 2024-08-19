@@ -25,6 +25,11 @@ IF_ALICE_NAME = "enp0s25"
 IF_BOB_NAME = "wlx00c0cab5760d"
 
 def patch_msg_dispatcher(src_pp, src_node, dest_node):
+    async def cleanup():
+        return
+    
+    src_pp.cleanup = cleanup
+
     async def patch():
         try:
             msg = await src_pp.msg_queue.get()

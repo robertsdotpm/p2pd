@@ -365,7 +365,8 @@ class P2PPipe():
         node_id = self.dest["node_id"]
         if_index = src_info["if_index"]
         client = self.node.tcp_punch_clients[if_index]
-        #await client.cleanup_state(node_id, pipe_id)
+        await client.cleanup_state(node_id, pipe_id)
+        print("Printing tcp state = ")
         print(client.state)
         print(self.msg_dispatcher_task)
 

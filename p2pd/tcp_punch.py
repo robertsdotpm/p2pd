@@ -661,9 +661,6 @@ class TCPPunch():
             pipe_id,
         )        
 
-        print(f"info = {info}")
-
-
         punch_mode = await get_punch_mode(
             af,
             recv_addr,
@@ -1133,8 +1130,7 @@ class TCPPunch():
             # Cleanup state.
             if self.do_state_cleanup:
                 await self.cleanup_state(node_id, pipe_id)
-
-            print("after do cleanup in punch.")
+                print("after do cleanup in punch.")
         except:
             log_exception()
 
