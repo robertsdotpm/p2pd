@@ -52,7 +52,10 @@ async def check_pipe(pipe, dest_tup=None):
 
     # Request peer to echo back the data sent.
     if dest_tup is None:
-        dest_tup = pipe.sock.getpeername()
+        if hasattr(pipe, "get_first_peer_tup"):
+            dest_tup = pipe.get_first_peer_tup()
+        else:
+            dest_tup = pipe.sock.getpeername()
 
     # Give any pipes time to add callback handlers.
     # This prevents race conditions in processing messages.

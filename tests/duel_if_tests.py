@@ -27,11 +27,9 @@ IF_BOB_NAME = "wlx00c0cab5760d"
 def patch_msg_dispatcher(src_pp, src_node, dest_node):
     async def patch():
         try:
-            print("in patch")
             msg = await src_pp.msg_queue.get()
             if msg is None:
                 src_pp.msg_dispatcher_done.set()
-                print("one con finished")
                 return
             
             print(msg)
@@ -59,10 +57,8 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
 def patch_p2p_pipe(src_pp):
     def patch(dest_bytes, reply=None, conf=P2P_PIPE_CONF):
         src_pp.reply = reply
-        src_pp.conf = conf
-        if reply is not None:
-            src_pp.pipe_id = reply.meta.pipe_id
-            src_pp.node.pipe_future(reply.meta.pipe_id)
+        #src_pp.conf = conf
+
         return src_pp
     
     return patch
@@ -71,25 +67,43 @@ def patch_p2p_stats(strategies, src_pp):
     strat_len = len(src_pp.func_table)
     for strategy in strategies:
         if strategy > strat_len: # how many current stats.
-            offset = (strategy - strat_len) - 1
+            offset = (strategy - strat_len)
             func_info = src_pp.func_table[offset]
             func = func_info[0]
 
-            async def failure(af, src_info, dest_info, iface, addr_type):
-                return None
+            async def failure(af, pipe_id, src_info, dest_info, iface, addr_type, reply):
+
+                #f = src_pp.node.pipe_ready
+                #src_pp.node.pipe_ready = lambda b, c: c
 
                 # Func runs as usual making any state changes.
-                await func(
-                    af,
-                    src_info,
-                    dest_info,
-                    iface,
-                    addr_type
-                )
+                print(f"before failure {func}")
+                """
+                try:
+                    pipe = await asyncio.wait_for(
+                        func(
+                            af,
+                            src_info,
+                            dest_info,
+                            iface,
+                            addr_type
+                        ),
+                        5
+                    )
 
-                print("in reverse fail.")
+                    if pipe is not None:
+                        await pipe.close()
+                except:
+                    log_exception()
+                """
+
+                print("in patched fail = None.")
                 #src_pp.pipe_id = to_s(rand_plain(15))
                 #src_pp.node.pipe_future(src_pp.pipe_id)
+
+                #src_pp.node.pipe_ready = f
+
+
 
                 # But always fails.
                 return None
@@ -155,22 +169,20 @@ class TestNodes():
         await self.bob.dev()
 
         # Build p2p con pipe config.
-        conf = {
+        self.pp_conf = {
             "addr_types": self.addr_types,
             "return_msg": self.return_msg,
         }
 
         # Set pipe conf.
         self.pp_alice = self.alice.p2p_pipe(
-            self.bob.addr_bytes,
-            conf=conf
+            self.bob.addr_bytes
         )
         self.pp_bob = self.bob.p2p_pipe(
-            self.alice.addr_bytes,
-            conf=conf
+            self.alice.addr_bytes
         )
-        self.alice.sig_proto_handlers.conf = conf
-        self.bob.sig_proto_handlers.conf = conf
+        self.alice.sig_proto_handlers.conf = self.pp_conf
+        self.bob.sig_proto_handlers.conf = self.pp_conf
 
         # Send directly to each other.
         if self.return_msg:
@@ -189,10 +201,8 @@ class TestNodes():
             # Return the same pp pipe with patched msg handler.
             self.bob.p2p_pipe = patch_p2p_pipe(self.pp_bob)
             self.alice.p2p_pipe = patch_p2p_pipe(self.pp_alice)
-            print("patches applied")
 
         # Short reference var.
-        self.pipe_id = self.pp_alice.pipe_id
         return self
 
     async def __aexit__(self, exc_t, exc_v, exc_tb):
@@ -305,26 +315,25 @@ async def test_dir_reverse_fail_direct():
     params = {
         "return_msg": True,
         "sig_pipe_no": 0,
-        "addr_types": [EXT_BIND],
+        "addr_types": [NIC_FAIL, EXT_BIND],
     }
 
-    patch_strats = [DIRECT_FAIL, P2P_REVERSE]
-    use_strats = [P2P_RELAY]
+    #patch_strats = [DIRECT_FAIL, RELAY_FAIL, REVERSE_FAIL, P2P_PUNCH]
+    #use_strats = [P2P_DIRECT, P2P_RELAY, P2P_REVERSE, P2P_PUNCH]
+    patch_strats = use_strats = [P2P_PUNCH]
     async with TestNodes(**params) as nodes:
-        #patch_p2p_stats(patch_strats, nodes.pp_alice)
-        #patch_p2p_stats(strats, nodes.pp_bob)
+        patch_p2p_stats(patch_strats, nodes.pp_alice)
+        #patch_p2p_stats(patch_strats, nodes.pp_bob)
         pipe = await nodes.pp_alice.connect(
-            strategies=use_strats
+            strategies=use_strats,
+            conf=nodes.pp_conf,
         )
 
-        print(pipe)
+        print(f"connect result = {pipe}")
         assert(pipe is not None)
-
-        print(f"turn {pipe}")
-        dest_tup = pipe.get_first_peer_tup()
-        assert(await check_pipe(pipe, dest_tup))
+        assert(await check_pipe(pipe))
         await pipe.close()
-        print("pipe closed")
+
 
 
 async def test_node_start():

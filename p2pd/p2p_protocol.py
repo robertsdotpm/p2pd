@@ -27,14 +27,16 @@ class SigProtoHandlers():
 
         # Connect to chosen address.
         pp = self.node.p2p_pipe(
-            msg.meta.src_buf,
-            reply=msg,
-            conf=conf,
+            msg.meta.src_buf
         )
 
         # Connect to chosen address.
         return await asyncio.wait_for(
-            pp.connect(strategies=[strategy]),
+            pp.connect(
+                strategies=[strategy],
+                reply=msg,
+                conf=conf,
+            ),
             timeout
         )
     
@@ -95,7 +97,7 @@ async def node_protocol(self, msg, client_tup, pipe):
 
     print(msg)
     print(client_tup)
-    
+
 
     # Basic echo server used for testing networking.
     if cmd == b"ECHO":
@@ -116,6 +118,9 @@ async def node_protocol(self, msg, client_tup, pipe):
         if pipe_id not in self.pipes:
             pass
             self.pipe_future(pipe_id)
+        #else:
+        #    # Invalid handshake.
+        #    await pipe.close()
 
 
         if pipe_id in self.pipes:

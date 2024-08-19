@@ -52,7 +52,6 @@ class P2PNodeExtra():
     async def punch_queue_worker(self):
         try:
             params = await self.punch_queue.get()
-            print(params)
             if not len(params):
                 self.punch_worker_done.set()
                 print("closing punch queue worker")
@@ -63,7 +62,6 @@ class P2PNodeExtra():
 
             punch = self.tcp_punch_clients[punch_offset]
 
-            print(params)
             await punch.proto_do_punching(*params)
             print("punch done")
 
@@ -267,8 +265,8 @@ class P2PNodeExtra():
         if len(tasks):
             await asyncio.gather(*tasks)
 
-    def p2p_pipe(self, dest_bytes, reply=None, conf=P2P_PIPE_CONF):
-        return P2PPipe(dest_bytes, self, reply, conf=conf)
+    def p2p_pipe(self, dest_bytes):
+        return P2PPipe(dest_bytes, self)
 
     def cleanup_multiproc(self):
         targets = [self.mp_manager, self.pp_executor]
@@ -302,14 +300,13 @@ class P2PNodeExtra():
         ]
 
         for pipe_list in pipe_lists:
-            print(pipe_list)
             for pipe in pipe_list.values():
                 if pipe is None:
                     continue
 
                 if isinstance(pipe, asyncio.Future):
                     if pipe.done():
-                        pipe = await pipe
+                        pipe = pipe.result()
                     else:
                         continue
 

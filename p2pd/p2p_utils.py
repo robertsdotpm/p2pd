@@ -249,7 +249,7 @@ proto: direct_connect(... msg.meta.src)
 
 Is the only function that does this so far.
 """
-async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
+async def for_addr_infos(src, dest, func, timeout, cleanup, pp, reply=None, conf=None):
     # Use an AF supported by both.
     for af in VALID_AFS:
         # Iterates by shared AFs, filtered by best NAT.
@@ -259,24 +259,34 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
 
         # Get interface offset that supports this af.
         for src_info, dest_info in if_info_iter:
-            for addr_type in pp.conf["addr_types"]:
+            for addr_type in conf["addr_types"]:
+                # Create a future for pending pipes.
+                if reply is None:
+                    pipe_id = to_s(rand_plain(15))
+                else:
+                    pipe_id = reply.meta.pipe_id
+
+                pp.node.pipe_future(pipe_id)
+
+
                 # Select interface to use.
                 if_index = src_info["if_index"]
                 interface = pp.node.ifs[if_index]
 
                 # Select a specific if index.
-                if pp.reply is not None:
-                    if pp.reply.routing.dest_index != if_index:
+                if reply is not None:
+                    if reply.routing.dest_index != if_index:
                         continue
 
                 # Support testing addr type failures.
-                print(f"Addr types = {addr_type}")
                 if addr_type in [NIC_FAIL, EXT_FAIL]:
                     use_addr_type = addr_type - 2
                     do_fail = True
                 else:
                     use_addr_type = addr_type
                     do_fail = False
+
+                print(f"Addr types = {use_addr_type} do fail = {do_fail}")
 
                 dest_info["ip"] = str(
                     select_dest_ipr(
@@ -307,16 +317,16 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
                     pp.node.ifs,
                 )
 
-                print(interface)
-
                 # Coroutine to run.
                 result = await async_wrap_errors(
                     func(
                         af,
+                        pipe_id,
                         src_info,
                         dest_info,
                         interface,
                         use_addr_type,
+                        reply,
                     ),
                     timeout
                 )
@@ -336,10 +346,12 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp):
                 if cleanup is not None:
                     await cleanup(
                         af,
+                        pipe_id,
                         src_info,
                         dest_info,
                         interface,
                         use_addr_type,
+                        reply,
                     )
             
             # Only use iter to order by NAT.
