@@ -25,16 +25,10 @@ IF_ALICE_NAME = "enp0s25"
 IF_BOB_NAME = "wlx00c0cab5760d"
 
 def patch_msg_dispatcher(src_pp, src_node, dest_node):
-    async def cleanup():
-        return
-    
-    src_pp.cleanup = cleanup
-
     async def patch():
         try:
-            msg = await src_pp.msg_queue.get()
+            msg = await src_node.sig_msg_queue.get()
             if msg is None:
-                src_pp.msg_dispatcher_done.set()
                 return
             
             print(msg)
@@ -48,13 +42,11 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
             except:
                 what_exception()
 
-            src_pp.msg_dispatcher_task = asyncio.ensure_future(
-                src_pp.msg_dispatcher()
+            src_node.sig_msg_dispatcher_task = asyncio.ensure_future(
+                src_node.sig_msg_dispatcher()
             )
         except:
             what_exception()
-            if not src_pp.msg_dispatcher_done.is_set():
-                src_pp.msg_dispatcher_done.set()
             return
 
     return patch
@@ -169,15 +161,21 @@ class TestNodes():
                 sig_pipe_no=self.sig_pipe_no,
             )
 
-        # Start the nodes.
-        await self.alice.dev()
-        await self.bob.dev()
-
         # Build p2p con pipe config.
         self.pp_conf = {
             "addr_types": self.addr_types,
             "return_msg": self.return_msg,
         }
+
+        alice_start_sig = self.alice.start_sig_msg_dispatcher
+        bob_start_sig = self.bob.start_sig_msg_dispatcher
+        self.alice.start_sig_msg_dispatcher = lambda: None
+        self.bob.start_sig_msg_dispatcher = lambda: None
+        
+
+        # Start the nodes.
+        await self.alice.dev()
+        await self.bob.dev()
 
         # Set pipe conf.
         self.pp_alice = self.alice.p2p_pipe(
@@ -191,13 +189,13 @@ class TestNodes():
 
         # Send directly to each other.
         if self.return_msg:
-            self.pp_alice.msg_dispatcher = patch_msg_dispatcher(
+            self.alice.sig_msg_dispatcher = patch_msg_dispatcher(
                 self.pp_alice,
                 self.alice,
                 self.bob,
             )
 
-            self.pp_bob.msg_dispatcher = patch_msg_dispatcher(
+            self.bob.sig_msg_dispatcher = patch_msg_dispatcher(
                 self.pp_bob,
                 self.bob,
                 self.alice,
@@ -206,6 +204,9 @@ class TestNodes():
             # Return the same pp pipe with patched msg handler.
             self.bob.p2p_pipe = patch_p2p_pipe(self.pp_bob)
             self.alice.p2p_pipe = patch_p2p_pipe(self.pp_alice)
+
+        alice_start_sig()
+        bob_start_sig()
 
         # Short reference var.
         return self
@@ -320,12 +321,12 @@ async def test_dir_reverse_fail_direct():
     params = {
         "return_msg": True,
         "sig_pipe_no": 0,
-        "addr_types": [NIC_FAIL, EXT_BIND],
+        "addr_types": [NIC_BIND, EXT_BIND],
     }
 
     #patch_strats = [DIRECT_FAIL, RELAY_FAIL, REVERSE_FAIL, P2P_PUNCH]
     #use_strats = [P2P_DIRECT, P2P_RELAY, P2P_REVERSE, P2P_PUNCH]
-    patch_strats = use_strats = [P2P_PUNCH]
+    patch_strats = use_strats = [P2P_RELAY]
     async with TestNodes(**params) as nodes:
         patch_p2p_stats(patch_strats, nodes.pp_alice)
         #patch_p2p_stats(patch_strats, nodes.pp_bob)

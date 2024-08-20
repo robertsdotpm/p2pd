@@ -45,10 +45,11 @@ class P2PNode(P2PNodeExtra, Daemon):
         # Pending TCP punch queue.
         self.punch_queue = asyncio.Queue()
         self.punch_worker_task = None
-        self.punch_worker_done = asyncio.Event()
 
         # Signal protocol class instance.
         self.sig_proto_handlers = SigProtoHandlers(self)
+        self.sig_msg_queue = asyncio.Queue()
+        self.sig_msg_dispatcher_task = None
 
         # Fixed reference for long-running tasks.
         self.tasks = []
@@ -87,6 +88,9 @@ class P2PNode(P2PNodeExtra, Daemon):
 
         # Accept TCP punch requests.
         self.start_punch_worker()
+
+        # Start worker that forwards sig proto messages.
+        self.start_sig_msg_dispatcher()
 
         """
         # Check at least one signal pipe was set.

@@ -52,8 +52,7 @@ class P2PNodeExtra():
     async def punch_queue_worker(self):
         try:
             params = await self.punch_queue.get()
-            if not len(params):
-                self.punch_worker_done.set()
+            if params is None:
                 print("closing punch queue worker")
                 return
             
@@ -204,12 +203,12 @@ class P2PNodeExtra():
         
         return pipe
 
-    async def await_peer_con(self, msg, dest, timeout=10):
+    async def await_peer_con(self, msg, timeout=10):
         # Used to relay signal proto messages.
-        signal_pipe = self.find_signal_pipe(dest)
+        signal_pipe = self.find_signal_pipe(msg.routing.dest)
         if signal_pipe is None:
             signal_pipe = await new_peer_signal_pipe(
-                dest,
+                msg.routing.dest,
                 self
             )
             assert(signal_pipe is not None)
@@ -227,6 +226,30 @@ class P2PNodeExtra():
             )
         except asyncio.TimeoutError:
             return None
+        
+    async def sig_msg_dispatcher(self):
+        try:
+            msg = await self.sig_msg_queue.get()
+            if msg is None:
+                return
+            
+            await self.await_peer_con(
+                msg
+            )
+
+            self.sig_msg_dispatcher_task = asyncio.ensure_future(
+                self.sig_msg_dispatcher()
+            )
+        except RuntimeError:
+            what_exception()
+            return
+        
+    def start_sig_msg_dispatcher(self):
+        # Route messages to destination.
+        if self.sig_msg_dispatcher_task is None:
+            self.sig_msg_dispatcher_task = asyncio.ensure_future(
+                self.sig_msg_dispatcher()
+            )
 
     async def load_machine_id(self, app_id, netifaces):
         # Set machine id.
@@ -286,10 +309,16 @@ class P2PNodeExtra():
     async def close(self):
         print("in close")
         # Make the worker thread for punching end.
-        self.punch_queue.put_nowait([])
+        self.punch_queue.put_nowait(None)
         if self.punch_worker_task is not None:
             self.punch_worker_task.cancel()
             self.punch_worker_task = None
+
+        # Stop sig message dispatcher.
+        self.sig_msg_queue.put_nowait(None)
+        if self.sig_msg_dispatcher_task is not None:
+            self.sig_msg_dispatcher_task.cancel()
+            self.sig_msg_dispatcher_task = None
 
         # Close other pipes.
         pipe_lists = [

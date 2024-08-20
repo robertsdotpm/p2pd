@@ -1,10 +1,11 @@
 import asyncio
 from .address import Address
-from .pipe_utils import pipe_open
+from .pipe_utils import pipe_open, PipeEvents
 from .p2p_addr import *
 from .tcp_punch import TCP_PUNCH_IN_MAP
 from .p2p_utils import for_addr_infos, get_turn_client
 from .p2p_protocol import *
+
 
 """
 TCP 
@@ -29,10 +30,6 @@ class P2PPipe():
         else:
             self.same_machine = False
 
-        self.msg_queue = asyncio.Queue()
-        self.msg_dispatcher_done = asyncio.Event()
-        self.msg_dispatcher_task = None
-
         # Mapping for funcs over addr infos.
         # Loop over the most likely strategies left.
         self.func_table = {
@@ -47,41 +44,12 @@ class P2PPipe():
             P2P_RELAY: [self.udp_turn_relay, 20, self.turn_cleanup],
         }
 
-    async def cleanup(self):
-        if self.msg_dispatcher_task is None:
-            return
-        
-        self.msg_queue.put_nowait(None)
-        self.msg_dispatcher_task.cancel()
-        self.msg_dispatcher_task = None
-
-    async def msg_dispatcher(self):
-        try:
-            msg = await self.msg_queue.get()
-            if msg is None:
-                self.msg_dispatcher_done.set()
-                return
-            
-            await self.node.await_peer_con(
-                msg,
-                self.dest,
-            )
-
-            self.msg_dispatcher_task = asyncio.ensure_future(
-                self.msg_dispatcher()
-            )
-        except RuntimeError:
-            what_exception()
-            return
+    def route_msg(self, msg):
+        self.node.sig_msg_queue.put_nowait(msg)
 
     async def connect(self, strategies=P2P_STRATEGIES, reply=None, conf=P2P_PIPE_CONF):
-        # Route messages to destination.
-        if self.msg_dispatcher_task is None:
-            self.msg_dispatcher_task = asyncio.ensure_future(
-                self.msg_dispatcher()
-            )
-
         # Try strategies to achieve a connection.
+        pipe = None
         for strategy in strategies:
             # Skip invalid strategy.
             if strategy not in self.func_table:
@@ -102,29 +70,11 @@ class P2PPipe():
                 conf,
             )
 
-            # Strategy failed so continue.
-            if pipe is None:
+            # Check return value.
+            if not isinstance(pipe, PipeEvents):
                 continue
 
-            # NOP -- don't process this result.
-            if pipe == 1:
-                await self.cleanup()
-                return
-
-            """
-            # Ensure node protocol handler setup on pipe.
-            if node_protocol not in pipe.msg_cbs:
-                pipe.add_msg_cb(node_protocol)
-
-            # Ensure ready set.
-            # todo: get working for all
-            self.node.pipe_ready(self.pipe_id, pipe)
-            """
-
-            await self.cleanup()
             return pipe
-
-        await self.cleanup()
             
     async def direct_connect(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
         # Connect to this address.
@@ -175,7 +125,7 @@ class P2PPipe():
             },
         })
 
-        self.msg_queue.put_nowait(msg)
+        self.route_msg(msg)
         return await self.node.pipes[pipe_id]
 
     """
@@ -218,7 +168,9 @@ class P2PPipe():
         # End protocol.
         if punch_state is None:
             print("punch ret is none")
-            return 1
+
+            # Make connect return as if it succeeded.
+            return PipeEvents(None)
         
         """
         Punching is delayed for a few seconds to
@@ -254,7 +206,7 @@ class P2PPipe():
                 "mappings": punch_ret[0],
             },
         })
-        self.msg_queue.put_nowait(msg)
+        self.route_msg(msg)
 
         # Basic dest addr validation.
         #msg.set_cur_addr(self.src_bytes)
@@ -324,7 +276,7 @@ class P2PPipe():
                         self.node.pipe_ready(pipe_id, turn_client)
 
                         # Protocol end.
-                        return 1
+                        return PipeEvents(None)
                     else:
                         self.node.pipe_ready(pipe_id, turn_client)
 
@@ -349,7 +301,7 @@ class P2PPipe():
                     },
                 })
                 print(msg)
-                self.msg_queue.put_nowait(msg)
+                self.route_msg(msg)
                 return await self.node.pipes[pipe_id]
             except:
                 log_exception()
@@ -368,7 +320,7 @@ class P2PPipe():
         await client.cleanup_state(node_id, pipe_id)
         print("Printing tcp state = ")
         print(client.state)
-        print(self.msg_dispatcher_task)
+        print(self.node.sig_msg_dispatcher_task)
 
     async def turn_cleanup(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
         self.general_cleanup(pipe_id)
