@@ -31,17 +31,17 @@ UPDATED_PREDICTIONS = 3
 INITIATOR = 1
 RECIPIENT = 2
 
-def tcp_puncher_states(role, state):
-    # Role, start state, to state.
+def tcp_puncher_states(dest_mappings, state):
+    # bool of dest_mappings, start state, to state.
     progressions = [
-        [INITIATOR, None, INITIATED_PREDICTIONS],
-        [RECIPIENT, None, RECEIVED_PREDICTIONS],
-        [INITIATOR, INITIATED_PREDICTIONS, UPDATED_PREDICTIONS]
+        [False, None, INITIATED_PREDICTIONS],
+        [True, None, RECEIVED_PREDICTIONS],
+        [True, INITIATED_PREDICTIONS, UPDATED_PREDICTIONS]
     ]
 
     for progression in progressions:
-        for_role, from_state, to_state = progression
-        if for_role != role:
+        from_recv, from_state, to_state = progression
+        if from_recv != bool(dest_mappings):
             continue
 
         if from_state != state:
@@ -89,15 +89,24 @@ class TCPPuncher():
     def set_punch_mode(self):
         self.punch_mode = 0
 
-    def proto_predict_mappings(self, stun_client, recv_mappings=None):
-        role = RECIPIENT if recv_mappings else INITIATOR
-        self.state = tcp_puncher_states(role, self.state)
-        mappings = get_nat_predictions(
+    def proto_predict_mappings(self, stun_client, dest_mappings=None):
+        # Change protocol state transition.
+        self.state = tcp_puncher_states(
+            dest_mappings,
+            self.state
+        
+        )
+
+        # Record NAT predictions.
+        self.dest_mappings = dest_mappings
+        self.src_mappings = get_nat_predictions(
             self.punch_mode,
             stun_client,
             self.interface.nat,
             self.dest_info["nat"]
         )
+
+        return self.src_mappings
 
         
 
@@ -134,4 +143,9 @@ bob_punch = TCPPuncher(src_info, dest_info, bob_node)
 print(alice_punch)
 print(bob_punch)
 
+n_map = NATMapping(1, 2, 3)
+recv_mappings = [n_map]
 alice_punch.proto_predict_mappings(stun_client)
+alice_punch.proto_predict_mappings(stun_client, recv_mappings)
+bob_punch.proto_predict_mappings(stun_client, recv_mappings)
+print(bob_punch.state)
