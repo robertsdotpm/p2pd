@@ -25,54 +25,14 @@ map_info is from 'get_nat_predictions'
 - 
 """
 
-INITIATED_PREDICTIONS = 1
-RECEIVED_PREDICTIONS = 2
-UPDATED_PREDICTIONS = 3
-INITIATOR = 1
-RECIPIENT = 2
-
-def tcp_puncher_states(dest_mappings, state):
-    # bool of dest_mappings, start state, to state.
-    progressions = [
-        [False, None, INITIATED_PREDICTIONS],
-        [True, None, RECEIVED_PREDICTIONS],
-        [True, INITIATED_PREDICTIONS, UPDATED_PREDICTIONS]
-    ]
-
-    for progression in progressions:
-        from_recv, from_state, to_state = progression
-        if from_recv != bool(dest_mappings):
-            continue
-
-        if from_state != state:
-            continue
-
-        return to_state
-    
-    raise Exception("Invalid puncher state progression.")
-
-def get_nat_predictions(mode, stun_client, src_nat, dest_nat):
-    return
+from .tcp_punch_defs import *
+from .tcp_punch_utils import *
 
 class TCPPunchFactory:
     def __init__(self):
         # by pipe_id, node_id
         self.clients = {}
 
-class NATMapping():
-    def __init__(self, local, reply, remote):
-        self.local = local
-        self.reply = reply
-        self.remote = remote
-
-"""
-States:
-    INITIATED_PREDICTIONS 
-    RECEIVED_PREDICTIONS
-
-    INITIATED_PREDICTIONS -> UPDATED_PREDICTIONS
-
-"""
 class TCPPuncher():
     def __init__(self, src_info, dest_info, node):
         self.node = node
@@ -108,7 +68,8 @@ class TCPPuncher():
 
         return self.src_mappings
 
-        
+##################################################
+# Workspace
 
 class MockInterface:
     def __init__(self):
