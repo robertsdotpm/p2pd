@@ -25,6 +25,32 @@ map_info is from 'get_nat_predictions'
 - 
 """
 
+INITIATED_PREDICTIONS = 1
+RECEIVED_PREDICTIONS = 2
+UPDATED_PREDICTIONS = 3
+INITIATOR = 1
+RECIPIENT = 2
+
+def tcp_puncher_states(role, state):
+    # Role, start state, to state.
+    progressions = [
+        [INITIATOR, None, INITIATED_PREDICTIONS],
+        [RECIPIENT, None, RECEIVED_PREDICTIONS],
+        [INITIATOR, INITIATED_PREDICTIONS, UPDATED_PREDICTIONS]
+    ]
+
+    for progression in progressions:
+        for_role, from_state, to_state = progression
+        if for_role != role:
+            continue
+
+        if from_state != state:
+            continue
+
+        return to_state
+    
+    raise Exception("Invalid puncher state progression.")
+
 def get_nat_predictions(mode, stun_client, src_nat, dest_nat):
     return
 
@@ -39,13 +65,22 @@ class NATMapping():
         self.reply = reply
         self.remote = remote
 
+"""
+States:
+    INITIATED_PREDICTIONS 
+    RECEIVED_PREDICTIONS
+
+    INITIATED_PREDICTIONS -> UPDATED_PREDICTIONS
+
+"""
 class TCPPuncher():
     def __init__(self, src_info, dest_info, node):
+        self.node = node
         self.src_info = src_info
         self.dest_info = dest_info
-        self.node = node
         self.set_interface()
         self.set_punch_mode()
+        self.state = None
 
     def set_interface(self):
         self.if_index = self.src_info["if_index"]
@@ -55,12 +90,16 @@ class TCPPuncher():
         self.punch_mode = 0
 
     def proto_predict_mappings(self, stun_client, recv_mappings=None):
+        role = RECIPIENT if recv_mappings else INITIATOR
+        self.state = tcp_puncher_states(role, self.state)
         mappings = get_nat_predictions(
             self.punch_mode,
             stun_client,
             self.interface.nat,
             self.dest_info["nat"]
         )
+
+        
 
 class MockInterface:
     def __init__(self):
