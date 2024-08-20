@@ -32,14 +32,17 @@ RECIPIENT = 2
 MAX_PREDICT_NO = 100
 
 def check_mapping(mapping):
-    for port in mapping:
-        # Means not applicable.
-        if port == -1:
-            continue
+    to_check = mapping[:]
 
+    # Don't bother checking reply port.
+    del to_check[1]
+
+    # Check rest of ports: local and remote.
+    for port in to_check:
         if not valid_port(port):
             raise Exception(f"invalid mapping {mapping}")
         
+    # These require root.
     if mapping[0] <= 1024:
         raise Exception(f"invalid low port for mapping")
         
@@ -85,7 +88,7 @@ class NATMappings():
         check_mappings_len(mappings)
         self.mappings = strip_duplicate_mappings(mappings)
 
-nat_map = NATMapping([32000, -1, 32000])
+nat_map = NATMapping([32000, 0, 32000])
 print(nat_map)
 
 def process_nat_predictions(results):
@@ -118,7 +121,7 @@ async def get_initial_mapping(stun_client):
 
             #socket.setsockopt(s, socket.SO_REUSEPORT)
             return NATMapping(
-                [local, -1, remote],
+                [local, 0, remote],
                 sock
             )
         except:
@@ -133,13 +136,13 @@ def get_mapping_templates(use_stun_port, use_range, test_no):
         # [port restrict, rand delta] NAT.
         if use_stun_port:
             mappings.append(
-                NATMappings([STUN_PORT, -1, -1])
+                NATMappings([STUN_PORT, 0, 1234])
             )
             break
         else:
             mappings.append(
                 NATMappings([
-                    from_range(use_range), -1, -1
+                    from_range(use_range), 0, 1234
                 ])
             )
 
@@ -182,6 +185,175 @@ def init_predictions(mode, src_nat, dest_nat, recv_mappings, test_no):
     recv_mappings.use_range = use_range
     return src_nat, dest_nat, recv_mappings
 
+async def preload_mappings(no, stun_client):
+    # Get a mapping to use.
+    tasks = []
+    mappings = []
+    for _ in range(0, no):
+        task = stun_client.get_mapping()
+        tasks.append(task)
+
+    results = await asyncio.gather(*tasks)
+    result = strip_none(results)
+    for result in results:
+        local, remote, s = result
+        mapping = NATMapping([local, 0, remote], s)
+        mappings.append(mapping)
+
+    return mappings
+
+def mock_get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, preloaded_mapping, step=1000):
+    # Allow last mapped to be modified from inside func.
+    last_local = last_mapped.local
+    last_remote = last_mapped.remote
+
+    # Need to bind to a specific port.
+    remote_port = rmap.remote
+    reply_port = rmap.reply
+    bind_port = reply_port or remote_port
+
+    """
+    Normally the code tries to use the same port as
+    the recipient to simplify the code and make things
+    more resilient. But if you're trying to punch yourself
+    using the same local port will be impossible. Choose
+    a non-conflicting port.
+    """
+    if mode == TCP_PUNCH_SELF:
+        remote = field_wrap(
+            remote_port + step, 
+            [2001, MAX_PORT]
+        )
+
+        return NATMapping([
+            remote,
+            0,
+            remote,
+        ])
+    
+    # If we're port restricted specify we're happy to use their mapping.
+    # This may not be possible if our delta is random though.
+    our_reply = bind_port if our_nat["type"] == RESTRICT_PORT_NAT else 0
+
+    # Use their mapping as-is.
+    if our_nat["is_open"]:
+        return NATMapping([
+            bind_port,
+            0,
+            bind_port
+        ])
+
+    # If preserving try use their mapping.
+    if our_nat["delta"]["type"] == EQUAL_DELTA:
+        if not in_range(bind_port, our_nat["range"]):
+            bind_port = from_range(use_range)
+
+        return NATMapping([
+            bind_port,
+            0,
+            bind_port
+        ])
+
+    # NAT preserves distance between local ports in remote ports.
+    if our_nat["delta"]["type"] == PRESERV_DELTA:
+        # Try use their port but make sure it fits in our range.
+        if not in_range(bind_port, our_nat["range"]):
+            bind_port = from_range(use_range)
+
+        # How far away is our last mapping from desired port.
+        # Delta dist will wrap inside any assumed range.
+        dist = abs(n_dist(last_remote, bind_port))
+        next_local = port_wrap(last_local + dist)
+
+        # Return results.
+        return NATMapping([
+            next_local,
+            our_reply,
+            bind_port
+        ])
+    
+    """
+    The routers NATs allocate mappings from a known range as
+    determined by doing an inital large number of STUN tests.
+    This means that when near the end of a range an
+    'independent' or 'dependent' type NAT will wrap around
+    back to the start of the range.
+
+    The problem with this is if the ranges provided to the
+    function aren't precise then when the ports 'wrap around'
+    they will land on ports before the provided range.
+    This means that the predicted port will be wrong and
+    the hole punching will fail.
+
+    The ranges need to be precise should they not be
+    from 1 - MAX_PORT and use these type of deltas.
+    Increasing the test_no and rounding to powers of 2
+    may help to increase accuracy of the ranges.
+    """
+
+    # Poor concurrency support.
+    if our_nat["delta"]["type"] == INDEPENDENT_DELTA:
+        # We can use anything for a local port.
+        # The remote mappings have a pattern regardless of local tuples.
+        next_local = from_range([2000, MAX_PORT])
+        next_remote = field_wrap(
+            last_remote + our_nat["delta"]["value"],
+            use_range
+        )
+
+        # Return port predictions.
+        # These allocations apply even if strict port NAT.
+        # But we tell other side to use a specific mapping for coordination.
+        last_mapped = [next_local, next_remote]
+        return NATMapping([
+            next_local,
+            our_reply,
+            next_remote
+        ])
+
+    # Poor concurrency support.
+    if our_nat["delta"]["type"] == DEPENDENT_DELTA:
+        next_local = port_wrap(last_local + 1)
+        next_remote = field_wrap(
+            last_remote + our_nat["delta"]["value"],
+            use_range
+        )
+
+        # Return port predictions.
+        # These allocations apply even if strict port NAT.
+        # But we tell other side to use a specific mapping for coordination.
+        last_mapped = [next_local, next_remote]
+        return NATMapping([
+            next_local, 
+            our_reply,
+            next_remote
+        ])
+
+    # Delta type is random -- get a mapping from STUN to reuse.
+    # If we're port restricted then set our reply port to the STUN port.
+    if our_nat["type"] in PREDICTABLE_NATS:
+        # Calculate reply port.
+        our_reply = 3478 if our_nat["type"] == RESTRICT_PORT_NAT else 0
+        # TODO: Could connect to STUN port in their range.
+
+        # Return results.
+        return NATMapping([
+            preloaded_mapping.local,
+            our_reply,
+            preloaded_mapping.remote
+        ])
+    
+    """
+    The hardest NATs to support are 'symmetric' type NATs that only
+    allow mappings to be used per [src ip, src port, dest ip, dest port].
+    The only way to support symmetric NATs is if they also have
+    a non-random delta. If this point is reached then they are likely
+    are heavily restricted NAT with a random delta.
+    """
+
+    raise Exception("Can't predict this NAT type.")
+
+
 async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mappings=None, test_no=8):
     # Setup nats and initial mapping templates.
     # The mappings will be filled in with details.
@@ -201,14 +373,27 @@ async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mapping
     else:
         last_mapped = None  
 
+    # Preload nat predictions then
+    # mock single mapping can be a function.
+    preloaded_mappings = await preload_mappings(
+        len(recv_mappings),
+        stun_client
+    )
+    assert(len(preloaded_mappings))
+
     # Use default ports for client if unknown
     # or try use their ports if known.
-    tasks = []
     results = []
     for i in range(0, len(recv_mappings)):
+        # Default to using last mapped.
+        try:
+            preloaded_mapping = preloaded_mappings[i]
+        except IndexError:
+            preloaded_mapping = preloaded_mappings[0]
+
         # Predict our mappings.
         # Try to match our ports to any provided mappings.
-        task = get_single_mapping(
+        result = mock_get_single_mapping(
             # Punching mode.
             mode,
 
@@ -219,13 +404,16 @@ async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mapping
             # Only set depending on certain NATs.
             last_mapped,
 
-            # Uses an range compatible with both NATs for mappings.
-            # Otherwise uses a range compatible with our_nat.
+            # Uses a range compatible with both NATs
+            # Otherwise uses our range.
             recv_mappings.use_range,
 
             # Info on our NAT type and delta.
             src_nat,
 
-            # Reference to do a STUN request to get a mapping.
-            stun_client
+            # Get a result instantly.
+            preloaded_mapping,
         )
+
+        # Save prediction.
+        results.append(result)

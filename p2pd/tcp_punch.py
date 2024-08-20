@@ -607,7 +607,7 @@ class TCPPunch():
 
         # Only possible after initial state update.
         test_no = len(their_maps)
-        use_range = nats_intersect_range(self.interface.nat, data["their_nat"], test_no)
+        use_range = nats_intersect(self.interface.nat, data["their_nat"], test_no)
         bad_delta = [INDEPENDENT_DELTA, DEPENDENT_DELTA, RANDOM_DELTA]
         if state_info["state"] == TCP_PUNCH_IN_MAP:
             # Update our local ports if needed.
