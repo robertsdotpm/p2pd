@@ -22,8 +22,35 @@ proto uses 'our maps' map info to their maps
 
 map_info is from 'get_nat_predictions'
     - so wrong format
-- 
+
+This code needs to be moved to the get_nat_predictions func.
+    - pass it a side parameter
+    # initiator
+    if mode == TCP_PUNCH_SELF:
+        rmaps = copy.deepcopy(map_info)
+        patch_map_info_for_self_punch(rmaps)
+        rmaps = map_info_to_their_maps(rmaps)
+
+    # recipient
+    if mode != TCP_PUNCH_SELF:
+        x = len(map_info["reply"])
+        y = len(their_maps)
+        for i in range(0, min(x, y)):
+            if map_info["reply"][i]:
+                # Overwrite their remote port.
+                their_maps[i][0] = map_info["reply"][i]
+
+    # recipient
+    if mode == TCP_PUNCH_SELF:
+    our_maps = copy.deepcopy(map_info)
+    patch_map_info_for_self_punch(our_maps)
+    our_maps = map_info_to_their_maps(map_info)
+
+- in that light:
+    - get nat predictions probably needs to be broken into funcs
+    - this function is ungodly
 """
+
 
 from .tcp_punch_defs import *
 from .tcp_punch_utils import *
@@ -51,9 +78,9 @@ class TCPPuncher():
 
     def proto_predict_mappings(self, stun_client, dest_mappings=None):
         # Change protocol state transition.
-        self.state = tcp_puncher_states(
+        self.state, side = tcp_puncher_states(
             dest_mappings,
-            self.state
+            self.state,
         
         )
 
@@ -61,9 +88,10 @@ class TCPPuncher():
         self.dest_mappings = dest_mappings
         self.src_mappings = get_nat_predictions(
             self.punch_mode,
+            side,
             stun_client,
             self.interface.nat,
-            self.dest_info["nat"]
+            self.dest_info["nat"],
         )
 
         return self.src_mappings
@@ -104,9 +132,8 @@ bob_punch = TCPPuncher(src_info, dest_info, bob_node)
 print(alice_punch)
 print(bob_punch)
 
-n_map = NATMapping(1, 2, 3)
+n_map = NATMapping([23000, -1, 23000])
 recv_mappings = [n_map]
 alice_punch.proto_predict_mappings(stun_client)
 alice_punch.proto_predict_mappings(stun_client, recv_mappings)
 bob_punch.proto_predict_mappings(stun_client, recv_mappings)
-print(bob_punch.state)

@@ -8,6 +8,14 @@ def tcp_puncher_states(dest_mappings, state):
         [True, INITIATED_PREDICTIONS, UPDATED_PREDICTIONS]
     ]
 
+    # What protocol 'side' corresponds to a state.
+    sides = {
+        INITIATED_PREDICTIONS: INITIATOR,
+        UPDATED_PREDICTIONS: INITIATOR,
+        RECEIVED_PREDICTIONS: RECIPIENT,
+    }
+
+    # Progress the state machine.
     for progression in progressions:
         from_recv, from_state, to_state = progression
         if from_recv != bool(dest_mappings):
@@ -16,9 +24,9 @@ def tcp_puncher_states(dest_mappings, state):
         if from_state != state:
             continue
 
-        return to_state
+        return to_state, sides[to_state]
     
     raise Exception("Invalid puncher state progression.")
 
-def get_nat_predictions(mode, stun_client, src_nat, dest_nat):
-    return
+def get_nat_predictions(a, b, c, d, e):
+    pass

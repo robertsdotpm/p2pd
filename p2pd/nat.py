@@ -471,7 +471,7 @@ E.g. most known services use low range ports. If it only
 uses higher range ports for mappings it won't show up
 for port scanners as much.
 """ 
-def nats_intersect_range(our_nat, their_nat, test_no):
+def nats_intersect(our_nat, their_nat, test_no):
     # Calculate intersection range.
     is_intersect = range_intersects(our_nat["range"], their_nat["range"])
     if is_intersect:
@@ -721,7 +721,7 @@ async def get_nat_predictions(mode, stun_client, our_nat, their_nat, their_maps=
     # Pretend we have a list of mappings from a peer
     # even if we don't -- used to simplify code.
     use_stun_port = nats_can_predict(our_nat, their_nat)
-    use_range = nats_intersect_range(our_nat, their_nat, test_no)
+    use_range = nats_intersect(our_nat, their_nat, test_no)
     if their_maps is None:
         their_maps = []
         for i in range(0, test_no):
