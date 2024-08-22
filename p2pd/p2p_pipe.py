@@ -5,7 +5,7 @@ from .p2p_addr import *
 from .tcp_punch import TCP_PUNCH_IN_MAP
 from .p2p_utils import for_addr_infos, get_turn_client
 from .p2p_protocol import *
-
+from .tcp_punch_rewrite import *
 
 """
 TCP 
@@ -75,6 +75,15 @@ class P2PPipe():
                 continue
 
             return pipe
+
+    async def punch_rewrite(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
+        if pipe_id in self.node.tcp_punch_clients:
+            client = self.node.tcp_punch_clients[pipe_id]
+        else:
+            client = TCPPuncher(src_info, dest_info, self.node)
+
+        
+
             
     async def direct_connect(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
         # Connect to this address.

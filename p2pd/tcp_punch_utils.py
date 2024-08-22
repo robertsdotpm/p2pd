@@ -1,4 +1,8 @@
-from .tcp_punch_defs import *
+INITIATED_PREDICTIONS = 1
+RECEIVED_PREDICTIONS = 2
+UPDATED_PREDICTIONS = 3
+INITIATOR = 1
+RECIPIENT = 2
 
 def tcp_puncher_states(dest_mappings, state):
     # bool of dest_mappings, start state, to state.

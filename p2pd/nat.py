@@ -492,8 +492,8 @@ def nats_intersect(our_nat, their_nat, test_no):
         use_range = our_nat["range"]
 
     # Ensure bind ports don't end up in low port ranges.
-    if use_range[0] < 1024:
-        use_range[0] = 1024
+    if use_range[0] <= 1024:
+        use_range[0] = 2000
         if use_range[0] >= use_range[1]:
             raise Exception("Can't find intersecting port range.")
         

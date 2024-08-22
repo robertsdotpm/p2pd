@@ -51,8 +51,7 @@ This code needs to be moved to the get_nat_predictions func.
     - this function is ungodly
 """
 
-
-from .tcp_punch_defs import *
+from .nat_rewrite import *
 from .tcp_punch_utils import *
 
 class TCPPunchFactory:

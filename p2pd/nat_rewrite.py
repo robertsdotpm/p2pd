@@ -19,28 +19,21 @@ current layout:
         - main data processing of results 
             - seems to just been for the same duplicate logic ?
 
+    move get initial map into the preload code
+
 """
 
 from .utils import *
 from .nat import *
+from .interface import *
+from .stun_client import *
 
-INITIATED_PREDICTIONS = 1
-RECEIVED_PREDICTIONS = 2
-UPDATED_PREDICTIONS = 3
-INITIATOR = 1
-RECIPIENT = 2
 MAX_PREDICT_NO = 100
 
 def check_mapping(mapping):
-    to_check = mapping[:]
-
-    # Don't bother checking reply port.
-    del to_check[1]
-
     # Check rest of ports: local and remote.
-    for port in to_check:
-        if not valid_port(port):
-            raise Exception(f"invalid mapping {mapping}")
+    if not valid_port(mapping[0]):
+        raise Exception(f"invalid mapping {mapping}")
         
     # These require root.
     if mapping[0] <= 1024:
@@ -91,15 +84,10 @@ class NATMappings():
 nat_map = NATMapping([32000, 0, 32000])
 print(nat_map)
 
-def process_nat_predictions(results):
-    mappings = NATMappings(
-        [NATMapping(r) for r in results]
-    )
-
-async def get_initial_mapping(stun_client):
+async def get_high_port_mapping(stun_client):
+    assert(stun_client.conf["reuse_addr"])
     nic = stun_client.interface
     af = stun_client.af
-    get_mapping = stun_client.get_mapping
     for _ in range(0, 5):
         try:
             # Reserve a sock for use.
@@ -109,46 +97,50 @@ async def get_initial_mapping(stun_client):
             )
 
             # Bind to a sock with that port.
-            route = await nic.route(af).bind(
+            route = nic.route(af)
+            await route.bind(
                 port=high_port
             )
 
+            print(route)
+
             # Determine associated remote port.
-            local, remote, sock = await get_mapping(
+            ret = await stun_client.get_mapping(
                 # Upgraded to a pipe.
                 pipe=route
             )
 
             #socket.setsockopt(s, socket.SO_REUSEPORT)
             return NATMapping(
-                [local, 0, remote],
-                sock
+                [ret[0], 0, ret[1]],
+                ret[2]
             )
         except:
+            what_exception()
             continue
 
     raise Exception("high port sock fail.")
 
-def get_mapping_templates(use_stun_port, use_range, test_no):
+def get_mapping_templates(use_stun_port=False, use_range=[2000, MAX_PORT], test_no=2):
     mappings = []
     for _ in range(0, test_no):
         # Default port for when there is a
         # [port restrict, rand delta] NAT.
         if use_stun_port:
             mappings.append(
-                NATMappings([STUN_PORT, 0, 1234])
+                NATMapping([STUN_PORT, 0, 0])
             )
             break
         else:
             mappings.append(
-                NATMappings([
-                    from_range(use_range), 0, 1234
+                NATMapping([
+                    from_range(use_range), 0, 0
                 ])
             )
 
     return mappings
 
-def init_predictions(mode, src_nat, dest_nat, recv_mappings, test_no):
+def init_predictions(mode, src_nat, dest_nat, recv_mappings=None, test_no=2):
     # Set test_no based on recipients test no.
     # [[remote port, required reply port], ...]
     if recv_mappings is not None:
@@ -182,24 +174,17 @@ def init_predictions(mode, src_nat, dest_nat, recv_mappings, test_no):
             test_no,
         )
 
-    recv_mappings.use_range = use_range
-    return src_nat, dest_nat, recv_mappings
+    return use_range, src_nat, dest_nat, recv_mappings
 
 async def preload_mappings(no, stun_client):
     # Get a mapping to use.
     tasks = []
-    mappings = []
     for _ in range(0, no):
-        task = stun_client.get_mapping()
+        task = get_high_port_mapping(stun_client)
         tasks.append(task)
 
-    results = await asyncio.gather(*tasks)
-    result = strip_none(results)
-    for result in results:
-        local, remote, s = result
-        mapping = NATMapping([local, 0, remote], s)
-        mappings.append(mapping)
-
+    mappings = await asyncio.gather(*tasks)
+    mappings = strip_none(mappings)
     return mappings
 
 def mock_get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, preloaded_mapping, step=1000):
@@ -353,25 +338,17 @@ def mock_get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, preload
 
     raise Exception("Can't predict this NAT type.")
 
-
-async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mappings=None, test_no=8):
+async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mappings=None, test_no=2):
     # Setup nats and initial mapping templates.
     # The mappings will be filled in with details.
-    src_nat, dest_nat, recv_mappings = init_predictions(
+    use_range, src_nat, dest_nat, recv_mappings = \
+    init_predictions(
         mode,
         src_nat,
         dest_nat,
         recv_mappings,
         test_no
     )
-
-    # Used to help traverse delta type NATs.
-    if src_nat["delta"]["type"] in DELTA_N:
-        last_mapped = await get_initial_mapping(
-            stun_client
-        )
-    else:
-        last_mapped = None  
 
     # Preload nat predictions then
     # mock single mapping can be a function.
@@ -385,7 +362,7 @@ async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mapping
     # or try use their ports if known.
     results = []
     for i in range(0, len(recv_mappings)):
-        # Default to using last mapped.
+        # Default to using first mapped.
         try:
             preloaded_mapping = preloaded_mappings[i]
         except IndexError:
@@ -402,11 +379,11 @@ async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mapping
 
             # A mapping fetch from STUN.
             # Only set depending on certain NATs.
-            last_mapped,
+            preloaded_mappings[-1],
 
             # Uses a range compatible with both NATs
             # Otherwise uses our range.
-            recv_mappings.use_range,
+            use_range,
 
             # Info on our NAT type and delta.
             src_nat,
@@ -417,3 +394,131 @@ async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mapping
 
         # Save prediction.
         results.append(result)
+
+    return results
+
+def update_nat_predictions(mode, src_nat, dest_nat, preloaded_mappings, send_mappings, recv_mappings):
+    test_no = min(len(send_mappings), len(recv_mappings))
+    use_range = nats_intersect(src_nat, dest_nat, test_no)
+    bad_delta = [
+        INDEPENDENT_DELTA,
+        DEPENDENT_DELTA,
+        RANDOM_DELTA
+    ]
+
+    # Update our local ports for port restricted NATs.
+    for i in range(0, test_no):
+        # No NAT so reply ports don't apply.
+        if mode == TCP_PUNCH_SELF:
+            break
+        
+        # The update is to satisfy a port restricted NAT.
+        # These NATs require a specific reply port.
+        if not recv_mappings[i].reply:
+            continue
+
+        # We can satisfy their requirements.
+        if src_nat["delta"]["type"] in bad_delta:
+            continue
+
+        # local, remote, reply, sock.
+        mapping = mock_get_single_mapping(
+            mode,
+            recv_mappings[i],
+            preloaded_mappings[-1],
+            use_range,
+            src_nat,
+            preloaded_mappings[i]
+        )
+
+        # Update our local port.
+        send_mappings[i].local = mapping.local
+        send_mappings[i].remote = recv_mappings[i].reply
+
+
+
+async def workspace():
+    # Fine tune various network settings.
+    PUNCH_CONF = dict_child({
+        # Reuse address tuple for bind() socket call.
+        "reuse_addr": True,
+
+        # Return the sock instead of the base proto.
+        #"sock_only": True,
+
+        # Disable closing sock on error
+        # Applies to the pipe_open only (may not be needed.)
+        "do_close": False,
+    }, NET_CONF)
+
+    af = IP4
+
+    map_templates = get_mapping_templates()
+    print(f"get mapping templates {map_templates}")
+
+    delta_alice = delta_info(EQUAL_DELTA, NA_DELTA)
+    nat_alice = nat_info(RESTRICT_PORT_NAT, delta_alice)
+    nat_bob = nat_alice
+
+    punch_mode = TCP_PUNCH_REMOTE
+    use_range, src_nat, dest_nat, recv_mappings = init_predictions(
+        punch_mode,
+        nat_alice,
+        nat_bob
+    )
+
+    print(f"alice init predict {use_range} {src_nat} {dest_nat} {recv_mappings}")
+
+
+    nic_alice = await Interface("wlx00c0cab5760d")
+    stun_alice = (await get_stun_clients(
+        af,
+        1,
+        nic_alice,
+        proto=TCP,
+        conf=PUNCH_CONF,
+    ))[0]
+
+    print(stun_alice)
+
+    print(stun_alice.proto)
+    print(stun_alice.dest)
+    print(stun_alice.conf)
+
+    
+    #out = await stun_alice.get_mapping()
+    #print(out)
+
+    
+    hp_mapping = await get_high_port_mapping(stun_alice)
+    print(f"high order mapping = {hp_mapping}")
+
+    pl_mappings = await preload_mappings(2, stun_alice)
+    print(f"preload mappings {pl_mappings}")
+    print(f"{pl_mappings[0].local} {pl_mappings[0].reply} {pl_mappings[0].remote} ")
+
+    mgsm = mock_get_single_mapping(
+        punch_mode, 
+        recv_mappings[0],
+        pl_mappings[-1],
+        use_range,
+        nat_alice,
+        pl_mappings[0]
+    )
+
+    print(f"mock get single map = {mgsm}")
+    print(f"{mgsm.local} {mgsm.reply} {mgsm.remote}")
+
+
+    mnp = await mock_nat_prediction(
+        punch_mode,
+        nat_alice,
+        nat_bob,
+        stun_alice
+    )
+
+    print(f"mock nat prediction = {mnp}")
+    print(f"{mnp[0].local} {mnp[0].reply} {mnp[0].remote} ")
+
+if __name__ == "__main__":
+    async_test(workspace)

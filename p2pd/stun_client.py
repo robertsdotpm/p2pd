@@ -176,6 +176,7 @@ class STUNClient():
     # The pipe is left open to be used with punch code.
     async def get_mapping(self, pipe=None):
         pipe = await self._get_dest_pipe(pipe)
+        print(pipe)
         reply = await get_stun_reply(
             self.mode,
             self.dest,
