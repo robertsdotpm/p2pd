@@ -77,12 +77,93 @@ class P2PPipe():
             return pipe
 
     async def punch_rewrite(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
+        # Load TCP punch client for this pipe ID.
         if pipe_id in self.node.tcp_punch_clients:
-            client = self.node.tcp_punch_clients[pipe_id]
+            puncher = self.node.tcp_punch_clients[pipe_id]
+            assert(src_info == puncher.src_info)
+            assert(dest_info == puncher.dest_info)
         else:
-            client = TCPPuncher(src_info, dest_info, self.node)
+            puncher = TCPPuncher(
+                src_info,
+                dest_info,
+                self.node,
+                self.same_machine,
+            )
 
-        
+
+        # Extract any received payload attributes.
+        if reply is not None:
+            recv_mappings = reply.payload.mappings
+            start_time = reply.payload.ntp
+        else:
+            recv_mappings = None
+            start_time = None
+
+        # Update details needed for TCP punching.
+        ret = await puncher.proto(
+            src_info["nat"],
+            dest_info["nat"],
+            recv_mappings,
+            start_time
+        )
+
+        print(f"punch rewrite ret = {ret} {puncher.state}")
+
+        # Protocol done -- return nothing.
+        if ret == 1:
+            return PipeEvents(None)
+
+        """
+        Punching is delayed for a few seconds to
+        ensure there's enough time to receive any
+        updated mappings for the dest peer (if any.)
+        """
+        """
+        asyncio.ensure_future(
+            self.node.schedule_punching_with_delay(
+                puncher.if_index,
+                pipe_id,
+                self.dest["node_id"],
+                puncher.side,
+            )
+        )
+        """
+
+        print("after schedule punch")
+        # Forward protocol details to peer.
+        msg = TCPPunchMsg({
+            "meta": {
+                "pipe_id": pipe_id,
+                "af": af,
+                "src_buf": self.src_bytes,
+                "src_index": src_info["if_index"],
+                "addr_types": [addr_type],
+            },
+            "routing": {
+                "af": af,
+                "dest_buf": self.dest_bytes,
+                "dest_index": dest_info["if_index"],
+            },
+            "payload": {
+                "punch_mode": puncher.mode,
+                "ntp": start_time,
+                "mappings": list(recv_mappings),
+            },
+        })
+        self.route_msg(msg)
+
+        # Basic dest addr validation.
+        #msg.set_cur_addr(self.src_bytes)
+        msg.routing.load_if_extra(self.node)
+        msg.validate_dest(
+            af,
+            puncher.mode,
+            str(dest_info["ip"])
+        )
+
+        # Prevent protocol loop.
+        return await self.node.pipes[pipe_id]
+
 
             
     async def direct_connect(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):

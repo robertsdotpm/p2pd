@@ -395,7 +395,7 @@ async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mapping
         # Save prediction.
         results.append(result)
 
-    return results
+    return results, preloaded_mappings
 
 def update_nat_predictions(mode, src_nat, dest_nat, preloaded_mappings, send_mappings, recv_mappings):
     test_no = min(len(send_mappings), len(recv_mappings))
