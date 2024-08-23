@@ -42,6 +42,8 @@ class P2PPipe():
 
             # Large timeout, end refreshers, disable LAN cons.
             P2P_RELAY: [self.udp_turn_relay, 20, self.turn_cleanup],
+
+            P2P_PUNCH_REWRITE: [self.punch_rewrite, 20, None],
         }
 
     def route_msg(self, msg):
@@ -83,30 +85,35 @@ class P2PPipe():
             assert(src_info == puncher.src_info)
             assert(dest_info == puncher.dest_info)
         else:
+            # Create a new puncher for this pipe ID.
+            if_index = src_info["if_index"]
+            stun = self.node.stun_clients[af][if_index]
             puncher = TCPPuncher(
+                af,
                 src_info,
                 dest_info,
-                self.node,
+                stun,
+                self.node.sys_clock,
                 self.same_machine,
             )
-
+            self.node.tcp_punch_clients[pipe_id] = puncher
 
         # Extract any received payload attributes.
         if reply is not None:
             recv_mappings = reply.payload.mappings
+            recv_mappings = [NATMapping(m) for m in recv_mappings]
             start_time = reply.payload.ntp
+            assert(recv_mappings)
         else:
             recv_mappings = None
             start_time = None
 
         # Update details needed for TCP punching.
         ret = await puncher.proto(
-            src_info["nat"],
-            dest_info["nat"],
             recv_mappings,
-            start_time
+            start_time,
         )
-
+        
         print(f"punch rewrite ret = {ret} {puncher.state}")
 
         # Protocol done -- return nothing.
@@ -118,7 +125,6 @@ class P2PPipe():
         ensure there's enough time to receive any
         updated mappings for the dest peer (if any.)
         """
-        """
         asyncio.ensure_future(
             self.node.schedule_punching_with_delay(
                 puncher.if_index,
@@ -127,10 +133,10 @@ class P2PPipe():
                 puncher.side,
             )
         )
-        """
 
         print("after schedule punch")
         # Forward protocol details to peer.
+        mappings = [m.toJSON() for m in ret[0]]
         msg = TCPPunchMsg({
             "meta": {
                 "pipe_id": pipe_id,
@@ -145,9 +151,9 @@ class P2PPipe():
                 "dest_index": dest_info["if_index"],
             },
             "payload": {
-                "punch_mode": puncher.mode,
-                "ntp": start_time,
-                "mappings": list(recv_mappings),
+                "punch_mode": puncher.punch_mode,
+                "ntp": ret[1],
+                "mappings": mappings,
             },
         })
         self.route_msg(msg)
@@ -157,7 +163,7 @@ class P2PPipe():
         msg.routing.load_if_extra(self.node)
         msg.validate_dest(
             af,
-            puncher.mode,
+            puncher.punch_mode,
             str(dest_info["ip"])
         )
 

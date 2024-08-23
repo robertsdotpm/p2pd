@@ -54,9 +54,12 @@ def tcp_puncher_states(dest_mappings, state):
         if from_state != state:
             continue
 
-        return to_state, sides[to_state]
+        return (to_state, sides[to_state])
     
     raise Exception("Invalid puncher state progression.")
+
+out = tcp_puncher_states([1], INITIATED_PREDICTIONS)
+print(out)
 
 def get_nat_predictions(a, b, c, d, e):
     pass

@@ -70,19 +70,26 @@ def strip_duplicate_mappings(mappings):
 
 class NATMapping():
     def __init__(self, mapping, sock=None):
-        check_mapping(mapping)
         self.local = mapping[0]
         self.reply = mapping[1]
         self.remote = mapping[2]
         self.sock = sock
+
+    def __str__(self):
+        buf = f"{self.local} {self.reply} "
+        buf += f"{self.remote} {self.sock}"
+        return buf
+
+    def toJSON(self):
+        return [self.local, self.reply, self.remote]
 
 class NATMappings():
     def __init__(self, mappings):
         check_mappings_len(mappings)
         self.mappings = strip_duplicate_mappings(mappings)
 
-nat_map = NATMapping([32000, 0, 32000])
-print(nat_map)
+#nat_map = NATMapping([32000, 0, 32000])
+#print(nat_map)
 
 async def get_high_port_mapping(stun_client):
     assert(stun_client.conf["reuse_addr"])
@@ -128,13 +135,13 @@ def get_mapping_templates(use_stun_port=False, use_range=[2000, MAX_PORT], test_
         # [port restrict, rand delta] NAT.
         if use_stun_port:
             mappings.append(
-                NATMapping([STUN_PORT, 0, 0])
+                NATMapping([0, 0, STUN_PORT])
             )
             break
         else:
             mappings.append(
                 NATMapping([
-                    from_range(use_range), 0, 0
+                    0, 0, from_range(use_range)
                 ])
             )
 
@@ -196,6 +203,8 @@ def mock_get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, preload
     remote_port = rmap.remote
     reply_port = rmap.reply
     bind_port = reply_port or remote_port
+    assert(bind_port)
+    assert(remote_port)
 
     """
     Normally the code tries to use the same port as
@@ -339,6 +348,8 @@ def mock_get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, preload
     raise Exception("Can't predict this NAT type.")
 
 async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mappings=None, test_no=2):
+    print(f"punch mode = {mode}")
+
     # Setup nats and initial mapping templates.
     # The mappings will be filled in with details.
     use_range, src_nat, dest_nat, recv_mappings = \
@@ -367,6 +378,11 @@ async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mapping
             preloaded_mapping = preloaded_mappings[i]
         except IndexError:
             preloaded_mapping = preloaded_mappings[0]
+
+        print(f"recv maps = {recv_mappings[i]}")
+        print(f"preloaded mappings = {preloaded_mappings[i]}")
+        print(f"use range {use_range}")
+        print(f"src_nat {src_nat}")
 
         # Predict our mappings.
         # Try to match our ports to any provided mappings.
@@ -430,6 +446,8 @@ def update_nat_predictions(mode, src_nat, dest_nat, preloaded_mappings, send_map
             src_nat,
             preloaded_mappings[i]
         )
+
+        print(mapping)
 
         # Update our local port.
         send_mappings[i].local = mapping.local

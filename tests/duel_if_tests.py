@@ -318,17 +318,18 @@ async def test_tcp_punch_direct_lan_fail_ext_suc():
         await pipe.close()
 
 async def test_dir_reverse_fail_direct():
+
     params = {
         "return_msg": True,
         "sig_pipe_no": 0,
-        "addr_types": [NIC_BIND, EXT_BIND],
+        "addr_types": [EXT_BIND],
     }
 
     #patch_strats = [DIRECT_FAIL, RELAY_FAIL, REVERSE_FAIL, P2P_PUNCH]
     #use_strats = [P2P_DIRECT, P2P_RELAY, P2P_REVERSE, P2P_PUNCH]
     patch_strats = use_strats = [P2P_PUNCH_REWRITE]
     async with TestNodes(**params) as nodes:
-        patch_p2p_stats(patch_strats, nodes.pp_alice)
+        #patch_p2p_stats(patch_strats, nodes.pp_alice)
         #patch_p2p_stats(patch_strats, nodes.pp_bob)
         pipe = await nodes.pp_alice.connect(
             strategies=use_strats,

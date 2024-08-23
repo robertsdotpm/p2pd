@@ -60,19 +60,23 @@ class TCPPunchFactory:
         self.clients = {}
 
 class TCPPuncher():
-    def __init__(self, src_info, dest_info, node, same_machine=False):
-        af = self.af = src_info["af"]
-        self.node = node
+    def __init__(self, af, src_info, dest_info, stun, sys_clock, same_machine=False):
+        # Save input params.
+        self.af = af
         self.src_info = src_info
         self.dest_info = dest_info
+        self.stun = stun
+        self.sys_clock = sys_clock
+        self.same_machine = same_machine
+
+        # Short hands.
         self.set_interface()
         self.set_punch_mode()
-        self.stun = node.stun_clients[af][self.if_index]
         self.state = None
 
     def set_interface(self):
         self.if_index = self.src_info["if_index"]
-        self.interface = self.node.ifs[self.if_index]
+        self.interface = self.stun.interface
 
     def set_punch_mode(self):
         self.punch_mode = get_punch_mode(
@@ -92,7 +96,6 @@ class TCPPuncher():
         self.state, self.side = tcp_puncher_states(
             recv_mappings,
             self.state,
-        
         )
 
         # Covers exchanging and receiving mappings.
@@ -102,7 +105,7 @@ class TCPPuncher():
         if self.state in fetch_states:
             self.send_mappings, preloaded_mappings = \
                 await mock_nat_prediction(
-                    self.mode,
+                    self.punch_mode,
                     self.src_info["nat"],
                     self.dest_info["nat"],
                     self.stun,
@@ -121,13 +124,14 @@ class TCPPuncher():
             # Only things needed for protocol.
             return self.send_mappings, self.start_time
                 
-        # Update the peers mapping to match needed reply ports.
+        # Update the  mapping to match needed reply ports.
         # Optional step but improves success chance.
         if self.state == UPDATED_PREDICTIONS:
+            print("in updated mappings")
             await update_nat_predictions(
-                self.mode,
-                src_nat,
-                dest_nat,
+                self.punch_mode,
+                self.src_info["nat"],
+                self.dest_info["nat"],
                 preloaded_mappings,
                 self.send_mappings,
                 recv_mappings
@@ -138,42 +142,42 @@ class TCPPuncher():
 
 ##################################################
 # Workspace
+if __name__ == "__main__":
+    class MockInterface:
+        def __init__(self):
+            self.nat = None
 
-class MockInterface:
-    def __init__(self):
-        self.nat = None
+    class NodeMock:
+        def __init__(self):
+            self.ifs = [MockInterface()]
 
-class NodeMock:
-    def __init__(self):
-        self.ifs = [MockInterface()]
+    alice_node = NodeMock()
+    bob_node = NodeMock()
 
-alice_node = NodeMock()
-bob_node = NodeMock()
+    ds_info = {
+        "nat": None,
+        "if_index": 0
+    }
 
-ds_info = {
-    "nat": None,
-    "if_index": 0
-}
+    src_info = ds_info
+    dest_info = ds_info
 
-src_info = ds_info
-dest_info = ds_info
+    stun_client = "placeholder"
 
-stun_client = "placeholder"
+    pipe_id = "my pipe"
+    alice_node_id = "alice node id"
+    bob_node_id = "bob node id"
+    alice_dest = {}
+    bob_dest = {}
 
-pipe_id = "my pipe"
-alice_node_id = "alice node id"
-bob_node_id = "bob node id"
-alice_dest = {}
-bob_dest = {}
+    alice_punch = TCPPuncher(src_info, dest_info, alice_node)
+    bob_punch = TCPPuncher(src_info, dest_info, bob_node)
 
-alice_punch = TCPPuncher(src_info, dest_info, alice_node)
-bob_punch = TCPPuncher(src_info, dest_info, bob_node)
+    print(alice_punch)
+    print(bob_punch)
 
-print(alice_punch)
-print(bob_punch)
-
-n_map = NATMapping([23000, -1, 23000])
-recv_mappings = [n_map]
-alice_punch.proto_predict_mappings(stun_client)
-alice_punch.proto_predict_mappings(stun_client, recv_mappings)
-bob_punch.proto_predict_mappings(stun_client, recv_mappings)
+    n_map = NATMapping([23000, -1, 23000])
+    recv_mappings = [n_map]
+    alice_punch.proto_predict_mappings(stun_client)
+    alice_punch.proto_predict_mappings(stun_client, recv_mappings)
+    bob_punch.proto_predict_mappings(stun_client, recv_mappings)
