@@ -322,7 +322,8 @@ async def test_dir_reverse_fail_direct():
     params = {
         "return_msg": True,
         "sig_pipe_no": 0,
-        "addr_types": [EXT_BIND],
+        "addr_types": [NIC_BIND],
+        "same_if": True,
     }
 
     #patch_strats = [DIRECT_FAIL, RELAY_FAIL, REVERSE_FAIL, P2P_PUNCH]
