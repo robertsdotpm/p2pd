@@ -154,6 +154,8 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
     print("in schedule delay punch")
     #print(f"{len(send_mappings)} {dest_addr} {recv_mappings[0].remote}")
 
+
+
     # Config.
     secs = 6
     ms_spacing = 5
@@ -175,6 +177,8 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
             recv_mappings[i].remote,
             route
         ).res()
+
+        print(f"addr: {send_mappings[i].local} {recv_mappings[i].remote} {dest_addr}")
 
         # Attempt to punch dest at intervals.
         for sleep_time in range(0, steps):
@@ -217,6 +221,7 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
 
 async def wait_for_punch_time(current_ntp, ntp_meet):
     # Sleep until the ntp timeframe.
+    assert(current_ntp)
     if current_ntp < ntp_meet:
         remaining_time = float(ntp_meet - current_ntp)
         if remaining_time:
@@ -251,19 +256,17 @@ def choose_same_punch_sock(our_wan, outs):
             multiple 'holes' were punched. The clients will
             close the unneeded connections.
             """
-            if our_ip_num == their_ip_num:
-                x = sorted([our_ip_num, their_ip_num, remote_port, their_r_port])
-            else:
-                if our_ip_num > their_ip_num:
-                    x = [our_ip_num, their_ip_num, remote_port, their_r_port]
-                else:
-                    x = [their_ip_num, our_ip_num, their_r_port, remote_port]
+            str_to_hash = ""
+            socket_quad_list = sorted([our_ip_num, their_ip_num, remote_port, their_r_port])
+            for entry in socket_quad_list:
+                str_to_hash += f"{entry} "
 
             # Mix values into a somewhat unique result.
-            h = abs(hash(str(x)))
-            assert(h > 0)
-            if h > h_val:
-                h_val = h
+            str_hash = hashlib.sha256(to_b(str_to_hash)).hexdigest()
+            str_hash_as_int = int(to_s(str_hash), 16)
+            assert(str_hash_as_int > 0)
+            if str_hash_as_int > h_val:
+                h_val = str_hash_as_int
                 chosen_sock = sock
     except Exception as e:
         log_exception()
@@ -312,9 +315,13 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
     then the ir remote port doesn't apply. Punch to
     their local port instead.
     """
+
+    """
     if mode in [TCP_PUNCH_SELF, TCP_PUNCH_LAN]:
         for mapping in recv_mappings:
             mapping.remote = mapping.local
+        
+    """
 
     # Carry out TCP punching.
     outs = await schedule_delayed_punching(

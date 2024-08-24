@@ -91,7 +91,17 @@ class TCPPuncher():
 
             # Ii receive mapping isn't set use templates.
             self.recv_mappings = \
-                recv_mappings or self.send_mappings
+                recv_mappings or copy.deepcopy(
+                    self.send_mappings
+                )
+            
+            # Patch mappings for self punch.
+            # This forces different ports to be used.
+            if self.side == INITIATOR:
+                self_punch_patch(
+                    self.punch_mode,
+                    self.recv_mappings
+                )
             
             # Set meeting start time.
             arrange_time = self.get_ntp_meet_time()
@@ -105,12 +115,13 @@ class TCPPuncher():
         # Optional step but improves success chance.
         if self.state == UPDATED_PREDICTIONS:
             print("in updated mappings")
+            return 1
             update_nat_predictions(
                 self.punch_mode,
                 self.src_info["nat"],
                 self.dest_info["nat"],
                 self.preloaded_mappings,
-                self.send_mappings,
+                self.recv_mappings,
                 recv_mappings
             )
 

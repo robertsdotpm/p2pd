@@ -323,7 +323,7 @@ async def test_dir_reverse_fail_direct():
         "return_msg": True,
         "sig_pipe_no": 0,
         "addr_types": [NIC_BIND],
-        "same_if": True,
+        "same_if": False,
     }
 
     #patch_strats = [DIRECT_FAIL, RELAY_FAIL, REVERSE_FAIL, P2P_PUNCH]
@@ -332,6 +332,7 @@ async def test_dir_reverse_fail_direct():
     async with TestNodes(**params) as nodes:
         #patch_p2p_stats(patch_strats, nodes.pp_alice)
         #patch_p2p_stats(patch_strats, nodes.pp_bob)
+        print(f"same machine = {nodes.pp_alice.same_machine}")
         pipe = await nodes.pp_alice.connect(
             strategies=use_strats,
             conf=nodes.pp_conf,

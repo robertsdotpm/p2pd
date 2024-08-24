@@ -362,6 +362,14 @@ async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mapping
 
     return results, preloaded_mappings
 
+def self_punch_patch(mode, mappings, step=1000):
+    if mode != TCP_PUNCH_SELF:
+        return
+    
+    for m in mappings:
+        m.local = port_wrap(m.local + step)
+        m.remote = m.local
+
 def update_nat_predictions(mode, src_nat, dest_nat, preloaded_mappings, send_mappings, recv_mappings):
     test_no = min(len(send_mappings), len(recv_mappings))
     use_range = nats_intersect(src_nat, dest_nat, test_no)
@@ -399,6 +407,8 @@ def update_nat_predictions(mode, src_nat, dest_nat, preloaded_mappings, send_map
         # Update our local port.
         send_mappings[i].local = mapping.local
         send_mappings[i].remote = recv_mappings[i].reply
+
+    return send_mappings
 
 
 

@@ -554,7 +554,6 @@ class Interface():
             return self.name == if_name
         
         ret = try_sock_trick(af) or try_netiface_check(af, gws)
-        log(f"is_default set = {ret}")
         return ret
     
     def supported(self, skip_resolve=0):

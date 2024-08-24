@@ -298,7 +298,7 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp, reply=None, conf
                         # can you make this case
                         # run for all
                         # try it
-                        func == pp.tcp_hole_punch
+                        func == pp.tcp_hole_punch or pp.punch_rewrite
                     )
                 )
 
