@@ -3,6 +3,7 @@ from .ip_range import *
 from .nat import *
 from .interface import *
 from .nat_rewrite import *
+from .clock_skew import *
 
 INITIATED_PREDICTIONS = 1
 RECEIVED_PREDICTIONS = 2
@@ -341,4 +342,45 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
     # Return sock result.
     return chosen_sock
 
+def puncher_to_dict(self):
+    assert(self.interface)
+    assert(self.sys_clock)
+    assert(self.state)
+    recv_mappings = mappings_objs_to_dicts(self.recv_mappings)
+    send_mappings = mappings_objs_to_dicts(self.send_mappings)
+    return {
+        "af": self.af,
+        "src_info": self.src_info,
+        "dest_info": self.dest_info,
+        "sys_clock": self.sys_clock.to_dict(),
+        "start_time": self.start_time,
+        "same_machine": self.same_machine,
+        "interface": self.interface.to_dict(),
+        "punch_mode": self.punch_mode,
+        "state": self.state,
+        "side": self.side,
+        "recv_mappings": recv_mappings,
+        "send_mappings": send_mappings,
+    }
 
+def puncher_from_dict(d, cls):
+    interface = Interface.from_dict(d["interface"])
+    recv_mappings = mappings_dicts_to_objs(d["recv_mappings"])
+    send_mappings = mappings_dicts_to_objs(d["send_mappings"])
+    sys_clock = SysClock.from_dict(d["sys_clock"])
+    puncher = cls(
+        af=d["af"],
+        src_info=d["src_info"],
+        dest_info=d["dest_info"],
+        stun=None,
+        sys_clock=sys_clock,
+        same_machine=d["same_machine"]
+    )
+    puncher.state = d["state"]
+    puncher.side = d["side"]
+    puncher.punch_mode = d["punch_mode"]
+    puncher.recv_mappings = recv_mappings
+    puncher.send_mappings = send_mappings
+    puncher.start_time = Dec(d["start_time"])
+    puncher.interface = interface
+    return puncher

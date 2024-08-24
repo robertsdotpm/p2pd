@@ -1,72 +1,9 @@
-"""
-- seperate lists for everything
-- internal functions
-- io spread throughout
-
-- goals:
-    - seperate data processing funcs that can be fed results
-    - io in their own funcs
-    - 
-
-current layout:
-    IO:
-        - choose local ports to use
-        - edge-case for initial test for delta type nats
-            - get first mapping (uses a high port)
-                - is this the same as the other func
-        - main i/o to get a prediction (from another func)
-    Data:
-        - main data processing of results 
-            - seems to just been for the same duplicate logic ?
-
-    move get initial map into the preload code
-
-"""
-
 from .utils import *
 from .nat import *
 from .interface import *
 from .stun_client import *
 
 MAX_PREDICT_NO = 100
-
-def check_mapping(mapping):
-    # Check rest of ports: local and remote.
-    if not valid_port(mapping[0]):
-        raise Exception(f"invalid mapping {mapping}")
-        
-    # These require root.
-    if mapping[0] <= 1024:
-        raise Exception(f"invalid low port for mapping")
-        
-def check_mappings_len(mappings):
-    if not len(mappings):
-        raise Exception("Invalid mapping len 0")
-
-    if len(mappings) > MAX_PREDICT_NO:
-        raise Exception("Invalid mappings len 1")
-
-def strip_duplicate_mappings(mappings):
-    remote_list = []
-    reply_list = []
-    local_list = []
-    filtered_list = []
-    for mapping in mappings:
-        if mapping.local in local_list:
-            continue
-
-        if mapping.reply in reply_list:
-            continue
-
-        if mapping.remote in remote_list:
-            continue
-
-        remote_list.append(mapping.remote)
-        reply_list.append(mapping.reply)
-        local_list.append(mapping.local)
-        filtered_list.append(mapping)
-
-    return filtered_list
 
 class NATMapping():
     def __init__(self, mapping, sock=None):
@@ -111,14 +48,6 @@ def mappings_objs_to_dicts(mappings):
         ret.append(m.to_dict())
 
     return ret
-
-class NATMappings():
-    def __init__(self, mappings):
-        check_mappings_len(mappings)
-        self.mappings = strip_duplicate_mappings(mappings)
-
-#nat_map = NATMapping([32000, 0, 32000])
-#print(nat_map)
 
 async def get_high_port_mapping(stun_client):
     assert(stun_client.conf["reuse_addr"])

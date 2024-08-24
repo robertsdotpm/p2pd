@@ -62,7 +62,9 @@ class P2PNodeExtra():
             pipe_id = params[0]
             puncher = self.tcp_punch_clients[pipe_id]
 
-            await puncher.setup_punching_process()
+            await async_wrap_errors(
+                puncher.setup_punching_process()
+            )
             print("punch done")
 
             self.punch_worker_task = asyncio.ensure_future(

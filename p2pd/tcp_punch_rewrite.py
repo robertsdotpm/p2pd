@@ -1,28 +1,5 @@
 """
-Old module problems:
-
-- God object - lets use isolated classes that encapsulate state for one set of peers.
-    - factory management with member objects in same object
-    - no separation of concerns
-- 1300 lines - move utils to own file, do reset of cleanup later
-- multiple data formats for the mappings?
-    - mappings data type and logic scattered throughout
-- duplicate code for init mappings and recv init mappings
-- do_punching
-    - static method that would be better in a process module
-    - remote mode and local mode almost exactly the same
-- lengthy test code that is outdated
-"""
-
-"""
-proto uses 'our maps' map info to their maps
-'their maps'
-- list of lists which are [remote reply local]
-- proto also uses ntp meet time
-
-map_info is from 'get_nat_predictions'
-    - so wrong format
-
+todo:
 This code needs to be moved to the get_nat_predictions func.
     - pass it a side parameter
     # initiator
@@ -68,11 +45,6 @@ from .nat_rewrite import *
 from .tcp_punch_utils import *
 from .clock_skew import *
 
-class TCPPunchFactory:
-    def __init__(self):
-        # by pipe_id, node_id
-        self.clients = {}
-
 class TCPPuncher():
     def __init__(self, af, src_info, dest_info, stun, sys_clock, same_machine=False):
         # Save input params.
@@ -92,35 +64,6 @@ class TCPPuncher():
         self.recv_mappings = []
         self.send_mappings = []
         self.preloaded_mappings = []
-
-    def set_parent(self, pipe_id, node):
-        self.pipe_id = pipe_id
-        self.node = node
-
-    def set_interface(self):
-        self.if_index = self.src_info["if_index"]
-        if self.stun is not None:
-            self.interface = self.stun.interface
-        else:
-            self.interface = None
-
-    def set_punch_mode(self):
-        self.punch_mode = get_punch_mode(
-            self.af,
-            str(self.dest_info["ip"]),
-            self.same_machine
-        )
-
-    def setup_multiproc(self, pp_executor, mp_manager):
-        # Process pools are disabled.
-        if pp_executor is None:
-            self.pp_executor = None
-            self.mp_manager = None
-            return
-            
-        assert(mp_manager)
-        self.pp_executor = pp_executor
-        self.mp_manager = mp_manager
 
     def get_ntp_meet_time(self):
         return self.sys_clock.time() + Dec(NTP_MEET_STEP)
@@ -173,115 +116,90 @@ class TCPPuncher():
 
             return 1
         
+    async def sock_to_pipe(self, sock):
+        log(f"> TCP hole made {sock}.")
+        route = await self.interface.route(self.af).bind(
+            sock.getsockname()[1]
+        )
+
+        pipe = await pipe_open(
+            route=route,
+            proto=TCP,
+            dest=Address(
+                *sock.getpeername(),
+            ),
+            sock=sock,
+            msg_cb=self.node.msg_cb
+        )
+
+        self.node.pipe_ready(self.pipe_id, pipe)
+        return pipe
+        
     async def setup_punching_process(self):
-        # The executor pool is used to start processes.
+        # Passed on to a new process.
+        queue = self.mp_manager.Queue()
+        args = (
+            queue,
+            self.to_dict(),
+        )
+        
+        # Schedule TCP punching in process pool executor.
         loop = asyncio.get_event_loop()
+        loop.run_in_executor(
+            self.pp_executor,
+            proc_do_punching,
+            args
+        )
 
-        if self.mp_manager is not None:
-            queue = self.mp_manager.Queue()
-        else:
-            queue = None
+        # Wait for queue result with timeout.
+        for _ in range(0, 8):
+            if not queue.empty():
+                break
 
-        # Multiprocessing pool is enabled.
-        if self.pp_executor is not None:
-            print("executors enabled")
-            # test
-            args = (
-                queue,
-                self.to_dict(),
-            )
-            
-            # Schedule TCP punching in process pool executor.
-            loop.run_in_executor(
-                self.pp_executor,
-                proc_do_punching,
-                args
-            )
+            await asyncio.sleep(1)
 
-            # Wait for queue result with timeout.
-            for _ in range(0, 30):
-                if not queue.empty():
-                    break
-
-                await asyncio.sleep(1)
-
-            # Executor pushes back socket to queue.
-            try:
-                sock = queue.get(timeout=2)
-            except Exception:
-                log_exception()
-                sock = None
+        # Executor pushes back socket to queue.
+        sock = queue.get(timeout=2)
         
         # Wrap returned socket in a pipe.
-        pipe = None
-        try:
-            if sock is not None: 
-                log(f"> TCP hole made {sock}.")
-                route = await self.interface.route(self.af).bind(
-                    sock.getsockname()[1]
-                )
+        if sock is not None: 
+            return await self.sock_to_pipe(sock)
 
-                pipe = await pipe_open(
-                    route=route,
-                    proto=TCP,
-                    dest=Address(
-                        *sock.getpeername(),
-                    ),
-                    sock=sock,
-                    msg_cb=self.node.msg_cb
-                )
+    def set_interface(self):
+        self.if_index = self.src_info["if_index"]
+        if self.stun is not None:
+            self.interface = self.stun.interface
+        else:
+            self.interface = None
 
-                self.node.pipe_ready(self.pipe_id, pipe)
-                print(pipe_id)
-                print("after pipe ready")
-        except:
-            log_exception()
+    def set_punch_mode(self):
+        self.punch_mode = get_punch_mode(
+            self.af,
+            str(self.dest_info["ip"]),
+            self.same_machine
+        )
 
-        return pipe
+    def setup_multiproc(self, pp_executor, mp_manager):
+        # Process pools are disabled.
+        if pp_executor is None:
+            self.pp_executor = None
+            self.mp_manager = None
+            return
+            
+        assert(mp_manager)
+        self.pp_executor = pp_executor
+        self.mp_manager = mp_manager
+
+    def set_parent(self, pipe_id, node):
+        self.pipe_id = pipe_id
+        self.node = node
 
     def to_dict(self):
-        assert(self.interface)
-        assert(self.sys_clock)
-        assert(self.state)
-        recv_mappings = mappings_objs_to_dicts(self.recv_mappings)
-        send_mappings = mappings_objs_to_dicts(self.send_mappings)
-        return {
-            "af": self.af,
-            "src_info": self.src_info,
-            "dest_info": self.dest_info,
-            "sys_clock": self.sys_clock.to_dict(),
-            "start_time": self.start_time,
-            "same_machine": self.same_machine,
-            "interface": self.interface.to_dict(),
-            "punch_mode": self.punch_mode,
-            "state": self.state,
-            "side": self.side,
-            "recv_mappings": recv_mappings,
-            "send_mappings": send_mappings,
-        }
+        return puncher_to_dict(self)
     
     @staticmethod
     def from_dict(d):
-        interface = Interface.from_dict(d["interface"])
-        recv_mappings = mappings_dicts_to_objs(d["recv_mappings"])
-        send_mappings = mappings_dicts_to_objs(d["send_mappings"])
-        sys_clock = SysClock.from_dict(d["sys_clock"])
-        puncher = TCPPuncher(
-            af=d["af"],
-            src_info=d["src_info"],
-            dest_info=d["dest_info"],
-            stun=None,
-            sys_clock=sys_clock,
-            same_machine=d["same_machine"]
-        )
-        puncher.state = d["state"]
-        puncher.side = d["side"]
-        puncher.punch_mode = d["punch_mode"]
-        puncher.recv_mappings = recv_mappings
-        puncher.send_mappings = send_mappings
-        puncher.start_time = Dec(d["start_time"])
-        puncher.interface = interface
-        return puncher
+        return puncher_from_dict(d, TCPPuncher)
 
 # Started in a new process.
 def proc_do_punching(args):
@@ -298,11 +216,6 @@ def proc_do_punching(args):
     q = args[0]
     d = args[1]
     puncher = TCPPuncher.from_dict(d)
-
-    print(puncher.send_mappings)
-    print(puncher.recv_mappings)
-    print(puncher.punch_mode)
-    print(d)
 
     # Execute the punching in a new event loop.
     loop = asyncio.get_event_loop()
