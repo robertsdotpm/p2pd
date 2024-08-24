@@ -38,6 +38,7 @@ class P2PNodeExtra():
         self.sys_clock = sys_clock
 
     def setup_tcp_punching(self):
+        return
         for index in range(len(self.ifs)):
             interface = self.ifs[index]
             self.tcp_punch_clients[index] = TCPPunch(
@@ -57,11 +58,11 @@ class P2PNodeExtra():
                 return
             
             print("do punch ")
-            punch_offset = params.pop(0)
 
-            punch = self.tcp_punch_clients[punch_offset]
+            pipe_id = params[0]
+            puncher = self.tcp_punch_clients[pipe_id]
 
-            await punch.proto_do_punching(*params)
+            await puncher.setup_punching_process()
             print("punch done")
 
             self.punch_worker_task = asyncio.ensure_future(
@@ -81,30 +82,11 @@ class P2PNodeExtra():
         # Schedule the TCP punching.
         self.punch_queue.put_nowait(params)
 
-    async def schedule_punching_with_delay(self, if_index, pipe_id, node_id, n=0):
-        # Get reference to punch client and state.
-        punch = self.tcp_punch_clients[if_index]
-        state = punch.get_state_info(node_id, pipe_id)
-        if state is None:
-            log("State none in punch with delay.")
-            return
-
-        # Return on timeout or on update.
-        if n:
-            try:
-                await asyncio.wait_for(
-                    state["data"]["update_event"].wait(),
-                    n
-                )
-            except:
-                # Attempt punching with default ports.
-                log("Initiator punch update timeout.")
+    async def schedule_punching_with_delay(self, pipe_id, n=2):
+        await asyncio.sleep(n)
 
         # Ready to do the punching process.
         self.add_punch_meeting([
-            if_index,
-            PUNCH_INITIATOR,
-            node_id,
             pipe_id,
         ])
 

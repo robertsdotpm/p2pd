@@ -88,6 +88,8 @@ class P2PPipe():
             # Create a new puncher for this pipe ID.
             if_index = src_info["if_index"]
             stun = self.node.stun_clients[af][if_index]
+
+            # Create a new puncher for this pipe ID.
             puncher = TCPPuncher(
                 af,
                 src_info,
@@ -96,6 +98,18 @@ class P2PPipe():
                 self.node.sys_clock,
                 self.same_machine,
             )
+
+            # Save a reference to node.
+            puncher.set_parent(pipe_id, self.node)
+
+            # Setup process manager and executor.
+            # So that objects are shareable over processes.
+            puncher.setup_multiproc(
+                self.node.pp_executor,
+                self.node.mp_manager
+            )
+
+            # Save puncher reference.
             self.node.tcp_punch_clients[pipe_id] = puncher
 
         # Extract any received payload attributes.
@@ -127,10 +141,8 @@ class P2PPipe():
         """
         asyncio.ensure_future(
             self.node.schedule_punching_with_delay(
-                puncher.if_index,
                 pipe_id,
-                self.dest["node_id"],
-                puncher.side,
+                n=2 if puncher.side == INITIATOR else 0
             )
         )
 

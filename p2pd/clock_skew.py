@@ -231,7 +231,7 @@ class SysClock:
     def to_dict(self):
         return {
             "if": self.interface.to_dict(),
-            "clock_skew": self.clock_skew
+            "clock_skew": '{0:f}'.format(self.clock_skew)
         }
 
     @staticmethod

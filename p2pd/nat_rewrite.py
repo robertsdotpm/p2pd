@@ -82,6 +82,35 @@ class NATMapping():
 
     def toJSON(self):
         return [self.local, self.reply, self.remote]
+    
+    def to_dict(self):
+        return {
+            "local": self.local,
+            "reply": self.reply,
+            "remote": self.remote,
+            "sock": self.sock,
+        }
+    
+    @staticmethod
+    def from_dict(d):
+        return NATMapping(
+            [d["local"], d["reply"], d["remote"]],
+            d["sock"]
+        )
+    
+def mappings_dicts_to_objs(mappings):
+    ret = []
+    for d in mappings:
+        ret.append(NATMapping.from_dict(d))
+
+    return ret
+
+def mappings_objs_to_dicts(mappings):
+    ret = []
+    for m in mappings:
+        ret.append(m.to_dict())
+
+    return ret
 
 class NATMappings():
     def __init__(self, mappings):
@@ -108,8 +137,6 @@ async def get_high_port_mapping(stun_client):
             await route.bind(
                 port=high_port
             )
-
-            print(route)
 
             # Determine associated remote port.
             ret = await stun_client.get_mapping(
@@ -348,8 +375,6 @@ def mock_get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, preload
     raise Exception("Can't predict this NAT type.")
 
 async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mappings=None, test_no=2):
-    print(f"punch mode = {mode}")
-
     # Setup nats and initial mapping templates.
     # The mappings will be filled in with details.
     use_range, src_nat, dest_nat, recv_mappings = \
@@ -378,11 +403,6 @@ async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mapping
             preloaded_mapping = preloaded_mappings[i]
         except IndexError:
             preloaded_mapping = preloaded_mappings[0]
-
-        print(f"recv maps = {recv_mappings[i]}")
-        print(f"preloaded mappings = {preloaded_mappings[i]}")
-        print(f"use range {use_range}")
-        print(f"src_nat {src_nat}")
 
         # Predict our mappings.
         # Try to match our ports to any provided mappings.
@@ -446,8 +466,6 @@ def update_nat_predictions(mode, src_nat, dest_nat, preloaded_mappings, send_map
             src_nat,
             preloaded_mappings[i]
         )
-
-        print(mapping)
 
         # Update our local port.
         send_mappings[i].local = mapping.local

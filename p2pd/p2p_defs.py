@@ -111,10 +111,6 @@ class SigMsg():
             if_index = self.dest_index
             self.interface = node.ifs[if_index]
             self.stun = node.stun_clients[self.af][if_index]
-            try:
-                self.punch = node.tcp_punch_clients[if_index]
-            except IndexError:
-                self.punch = None
 
         """
         Peers usually have dynamic addresses.

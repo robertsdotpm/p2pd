@@ -116,7 +116,7 @@ async def get_node(if_name, node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     nat = nat_info(OPEN_INTERNET, delta)
     iface = await Interface(if_name)
     iface.set_nat(nat)
-    sys_clock = SysClock(Dec("-0.02839018452552057081653225806"))
+    sys_clock = SysClock(iface, Dec("-0.02839018452552057081653225806"))
     conf = copy.deepcopy(NODE_CONF)
     conf["sig_pipe_no"] = sig_pipe_no
     node = P2PNode([iface], port=node_port, conf=conf)
