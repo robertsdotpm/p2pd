@@ -114,6 +114,7 @@ def patch_p2p_stats(strategies, src_pp):
 async def get_node(if_name, node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     delta = delta_info(NA_DELTA, 0)
     nat = nat_info(OPEN_INTERNET, delta)
+    nat = nat_info(RESTRICT_NAT, delta_info(INDEPENDENT_DELTA, node_port + 10))
     iface = await Interface(if_name)
     iface.set_nat(nat)
     sys_clock = SysClock(iface, Dec("-0.02839018452552057081653225806"))
@@ -318,7 +319,6 @@ async def test_tcp_punch_direct_lan_fail_ext_suc():
         await pipe.close()
 
 async def test_dir_reverse_fail_direct():
-
     params = {
         "return_msg": True,
         "sig_pipe_no": 0,

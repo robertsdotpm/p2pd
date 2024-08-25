@@ -176,6 +176,17 @@ def get_interface_stack(rp):
 
     return UNKNOWN_STACK
 
+def clean_if_list(ifs):
+    # Otherwise use the interface type function.
+    # Looks at common patterns for interface names (not accurate.)
+    clean_ifs = []
+    for if_name in ifs:
+        if_type = get_interface_type(if_name)
+        if if_type != INTERFACE_UNKNOWN:
+            clean_ifs.append(if_name)
+
+    return clean_ifs
+
 # Used for specifying the interface for sending out packets on
 # in TCP streams and UDP streams.
 class Interface():
@@ -400,6 +411,11 @@ class Interface():
         if self.mac is None:
             raise Exception("mac none.")
 
+        # If there's only 1 interface set is_default.   
+        ifs = clean_if_list(self.netifaces.interfaces())
+        if len(ifs) == 1:
+            self.is_default = lambda af, gws=None: True
+    
         return self
 
     async def start(self, netifaces=None, min_agree=3, max_agree=6, timeout=2):

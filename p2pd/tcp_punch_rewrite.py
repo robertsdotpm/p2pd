@@ -1,43 +1,14 @@
 """
-todo:
-This code needs to be moved to the get_nat_predictions func.
-    - pass it a side parameter
-    # initiator
-    if mode == TCP_PUNCH_SELF:
-        rmaps = copy.deepcopy(map_info)
-        patch_map_info_for_self_punch(rmaps)
-        rmaps = map_info_to_their_maps(rmaps)
+Notes:
 
-    # recipient
-    if mode != TCP_PUNCH_SELF:
-        x = len(map_info["reply"])
-        y = len(their_maps)
-        for i in range(0, min(x, y)):
-            if map_info["reply"][i]:
-                # Overwrite their remote port.
-                their_maps[i][0] = map_info["reply"][i]
-
-    # recipient
-    if mode == TCP_PUNCH_SELF:
-    our_maps = copy.deepcopy(map_info)
-    patch_map_info_for_self_punch(our_maps)
-    our_maps = map_info_to_their_maps(map_info)
-
-- in that light:
-    - get nat predictions probably needs to be broken into funcs
-    - this function is ungodly
-
-       # Updated mapping error occured.
-        # Cannot bind to same port as other side on same host.
-        if mode == TCP_PUNCH_SELF:
-
-            if send_mappings[0]
-        and remote[0] == rmaps[0][0]:
-            log("> Punch updated mapping error for punch self.")
-            return None
-
-add a check func for that kind of thing for
-    send_map.. vs recv_map to find contradictions
+- It makes sense for the combination of the worst NAT + delta type
+to go first since it means the better NAT is put in the position
+of assuming receipt of their initial mappings which it can then
+try to use for its own external mappings without the need to
+successfully return back updated mappings. Making only one initial
+message necessary to do the punching. But for now -- this is not
+done. If some kind of reverse start logic is needed then it
+would itself require another message. So maybe not worth the cost.
 """
 
 import asyncio

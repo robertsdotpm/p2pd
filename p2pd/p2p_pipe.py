@@ -34,16 +34,16 @@ class P2PPipe():
         # Loop over the most likely strategies left.
         self.func_table = {
             # Short timeouts for direct TCP cons.
-            P2P_DIRECT: [self.direct_connect, 5, None],
-            P2P_REVERSE: [self.reverse_connect, 5, None],
+            P2P_DIRECT: [self.direct_connect, 5, None, 1],
+            P2P_REVERSE: [self.reverse_connect, 5, None, 1],
 
             # Large timeout for meetings with a state cleanup.
-            P2P_PUNCH: [self.tcp_hole_punch, 40, self.tcp_punch_cleanup],
+            P2P_PUNCH: [self.tcp_hole_punch, 40, self.tcp_punch_cleanup, 0],
 
             # Large timeout, end refreshers, disable LAN cons.
-            P2P_RELAY: [self.udp_turn_relay, 20, self.turn_cleanup],
+            P2P_RELAY: [self.udp_turn_relay, 20, self.turn_cleanup, 1],
 
-            P2P_PUNCH_REWRITE: [self.punch_rewrite, 20, None],
+            P2P_PUNCH_REWRITE: [self.punch_rewrite, 20, None, 0],
         }
 
     def route_msg(self, msg):
@@ -58,17 +58,17 @@ class P2PPipe():
                 continue
 
             # Returns a pipe given comp addr info pairs.
-            func, timeout, cleanup = self.func_table[strategy]
+            func, timeout, cleanup, has_set_bind = \
+                self.func_table[strategy]
             print(f"using func {func}")
 
             pipe = await for_addr_infos(
-                self.src,
-                self.dest,
                 func,
                 timeout,
                 cleanup,
-                self,
+                has_set_bind,
                 reply,
+                self,
                 conf,
             )
 

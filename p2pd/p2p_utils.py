@@ -124,19 +124,31 @@ connections will fail because it will be the same
 address as ourself. The solution here is to replace
 that external address with a private, NIC address.
 For this reason the P2P address format includes
-a private address section that corrosponds to
+a private address section that corresponds to
 the address passed to bind() for the nodes listen().
 
 also addr compares arent the best idea since ifaces can have
 multiple addresses. think on this more.
 """
-def select_dest_ipr(same_pc, src_info, dest_info, addr_types, is_tcp_punch=False):
+def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=True):
     # Shorten these for expressions.
     src_nid = src_info["netiface_index"]
     dest_nid = dest_info["netiface_index"]
 
+    """
+    Very simplified -- another external address could
+    be routable for the same LAN. There must
+    be a better way to do this.
+    """
+    if af == IP4:
+        # Compares external v4 default route.
+        same_lan = src_info["ext"] == dest_info["ext"]
+    if af == IP6:
+        # Compares the first n bits for typical v6 subnet.
+        # Todo: need to know the subnet bits for this.
+        same_lan = src_info["ext"] == dest_info["ext"]
+
     # Makes long conditions slightly more readable.
-    same_lan = True # TODO
     same_if = src_nid == dest_nid
     same_if_on_host = same_pc and same_if
     different_ifs_on_host = same_pc and not same_if
@@ -166,8 +178,9 @@ def select_dest_ipr(same_pc, src_info, dest_info, addr_types, is_tcp_punch=False
             different NICs can't interact (maybe unless
             they're bridged.) Keep this edge-case here.
             """
-            if is_tcp_punch:
-                # Designate 1 IP (and the NIC its on) master.
+            if not has_set_bind:
+                # Choose the same NIC IP for both sides.
+                # That chooses the same interface.
                 if different_ifs_on_host:
                     return sorted([
                         dest_info["nic"],
@@ -232,7 +245,6 @@ async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=Non
 
     return peer_tup, relay_tup, turn_client
 
-
 """
 The iterator filters the addr info for both
 P2P addresses by the best NAT.
@@ -249,11 +261,11 @@ proto: direct_connect(... msg.meta.src)
 
 Is the only function that does this so far.
 """
-async def for_addr_infos(src, dest, func, timeout, cleanup, pp, reply=None, conf=None):
+async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=None):
     # Use an AF supported by both.
     for af in VALID_AFS:
         # Iterates by shared AFs, filtered by best NAT.
-        if_info_iter = IFInfoIter(af, src, dest)
+        if_info_iter = IFInfoIter(af, pp.src, pp.dest)
         if not len(if_info_iter):
             continue
 
@@ -290,6 +302,7 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp, reply=None, conf
 
                 dest_info["ip"] = str(
                     select_dest_ipr(
+                        af,
                         pp.same_machine,
                         src_info,
                         dest_info,
@@ -298,7 +311,7 @@ async def for_addr_infos(src, dest, func, timeout, cleanup, pp, reply=None, conf
                         # can you make this case
                         # run for all
                         # try it
-                        func == pp.tcp_hole_punch or pp.punch_rewrite
+                        has_set_bind,
                     )
                 )
 
