@@ -7,6 +7,7 @@ from .p2p_utils import *
 from .p2p_pipe import *
 from .signaling import *
 from .stun_client import get_stun_clients
+from .nat import USE_MAP_NO
 
 class P2PNodeExtra():
     async def load_stun_clients(self):
@@ -15,13 +16,13 @@ class P2PNodeExtra():
             for if_index in range(0, len(self.ifs)):
                 interface = self.ifs[if_index]
                 if af in interface.supported():
-                    self.stun_clients[af][if_index] = (await get_stun_clients(
-                        af,
-                        1,
-                        interface,
-                        TCP,
-                        conf=PUNCH_CONF
-                    ))[0]
+                    self.stun_clients[af][if_index] = await get_n_stun_clients(
+                        af=af,
+                        n=USE_MAP_NO + 2,
+                        interface=interface,
+                        proto=TCP,
+                        conf=PUNCH_CONF,
+                    )
 
     def setup_multiproc(self, pp_executor, mp_manager):
         # Process pools are disabled.

@@ -3,6 +3,7 @@ from .address import *
 
 STUN_PORT = 3478
 MAX_MAP_NO = 100
+USE_MAP_NO = 2
 
 # NAT TYPES ---------------------------------------------
 

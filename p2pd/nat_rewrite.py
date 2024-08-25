@@ -139,11 +139,12 @@ def init_predictions(mode, src_nat, dest_nat, recv_mappings=None, test_no=2):
 
     return use_range, src_nat, dest_nat, recv_mappings
 
-async def preload_mappings(no, stun_client):
+async def preload_mappings(no, stuns):
     # Get a mapping to use.
     tasks = []
     for _ in range(0, no):
-        task = get_high_port_mapping(stun_client)
+        stun = random.choice(stuns)
+        task = get_high_port_mapping(stun)
         tasks.append(task)
 
     mappings = await asyncio.gather(*tasks)
@@ -303,7 +304,7 @@ def mock_get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, preload
 
     raise Exception("Can't predict this NAT type.")
 
-async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mappings=None, test_no=2):
+async def mock_nat_prediction(mode, src_nat, dest_nat, stuns, recv_mappings=None, test_no=2):
     # Setup nats and initial mapping templates.
     # The mappings will be filled in with details.
     use_range, src_nat, dest_nat, recv_mappings = \
@@ -319,7 +320,7 @@ async def mock_nat_prediction(mode, src_nat, dest_nat, stun_client, recv_mapping
     # mock single mapping can be a function.
     preloaded_mappings = await preload_mappings(
         len(recv_mappings),
-        stun_client
+        stuns
     )
     assert(len(preloaded_mappings))
 
@@ -370,7 +371,7 @@ def self_punch_patch(mode, mappings, step=1000):
         m.local = port_wrap(m.local + step)
         m.remote = m.local
 
-def update_nat_predictions(mode, src_nat, dest_nat, preloaded_mappings, send_mappings, recv_mappings):
+def update_for_reply_ports(mode, src_nat, dest_nat, preloaded_mappings, send_mappings, recv_mappings):
     test_no = min(len(send_mappings), len(recv_mappings))
     use_range = nats_intersect(src_nat, dest_nat, test_no)
     bad_delta = [

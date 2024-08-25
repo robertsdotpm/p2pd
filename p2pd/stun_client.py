@@ -176,7 +176,6 @@ class STUNClient():
     # The pipe is left open to be used with punch code.
     async def get_mapping(self, pipe=None):
         pipe = await self._get_dest_pipe(pipe)
-        print(pipe)
         reply = await get_stun_reply(
             self.mode,
             self.dest,
@@ -221,6 +220,39 @@ async def get_stun_clients(af, max_agree, interface, proto=UDP, conf=NET_CONF):
         stun_clients.append(get_stun_client(serv_info))
 
     return await asyncio.gather(*stun_clients)
+
+async def get_n_stun_clients(af, n, interface, proto=UDP, limit=5, conf=NET_CONF):
+    # Find a working random STUN server.
+    # Limit to 5 attempts.
+    async def worker():
+        for _ in range(0, limit):
+            try:
+                stun = (await get_stun_clients(
+                        af=af,
+                        max_agree=1,
+                        interface=interface,
+                        proto=proto,
+                        conf=conf,
+                    ))[0]
+
+                out = await stun.get_mapping()
+                if out is not None:
+                    return stun
+            except:
+                continue
+            
+    # Create list of worker tasks for concurrency (faster.)
+    tasks = []
+    for _ in range(0, n):
+        tasks.append(worker())
+
+    # Run tasks and return results.
+    return strip_none(
+        await asyncio.gather(
+            *tasks,
+            return_exceptions=False,
+        )
+    )
 
 async def test_stun_client():
     """

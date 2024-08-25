@@ -315,13 +315,9 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
     then the ir remote port doesn't apply. Punch to
     their local port instead.
     """
-
-    """
-    if mode in [TCP_PUNCH_SELF, TCP_PUNCH_LAN]:
+    if mode == TCP_PUNCH_LAN:
         for mapping in recv_mappings:
             mapping.remote = mapping.local
-        
-    """
 
     # Carry out TCP punching.
     outs = await schedule_delayed_punching(
@@ -379,7 +375,7 @@ def puncher_from_dict(d, cls):
         af=d["af"],
         src_info=d["src_info"],
         dest_info=d["dest_info"],
-        stun=None,
+        stuns=None,
         sys_clock=sys_clock,
         same_machine=d["same_machine"]
     )

@@ -46,12 +46,12 @@ from .tcp_punch_utils import *
 from .clock_skew import *
 
 class TCPPuncher():
-    def __init__(self, af, src_info, dest_info, stun, sys_clock, same_machine=False):
+    def __init__(self, af, src_info, dest_info, stuns, sys_clock, same_machine=False):
         # Save input params.
         self.af = af
         self.src_info = src_info
         self.dest_info = dest_info
-        self.stun = stun
+        self.stuns = stuns
         self.sys_clock = sys_clock
         self.same_machine = same_machine
 
@@ -85,7 +85,7 @@ class TCPPuncher():
                     self.punch_mode,
                     self.src_info["nat"],
                     self.dest_info["nat"],
-                    self.stun,
+                    self.stuns,
                     recv_mappings=recv_mappings,
                 )
 
@@ -111,18 +111,22 @@ class TCPPuncher():
             # Only things needed for protocol.
             return self.send_mappings, self.start_time
                 
-        # Update the  mapping to match needed reply ports.
+        # Update the mapping to match needed reply ports.
         # Optional step but improves success chance.
         if self.state == UPDATED_PREDICTIONS:
             print("in updated mappings")
-            return 1
-            update_nat_predictions(
+            # More updated list of their NAT predictions.
+            self.recv_mappings = recv_mappings
+
+            # Adjust our local bind ports if they need a specific
+            # reply port to accept a connection.
+            update_for_reply_ports(
                 self.punch_mode,
                 self.src_info["nat"],
                 self.dest_info["nat"],
                 self.preloaded_mappings,
                 self.recv_mappings,
-                recv_mappings
+                self.send_mappings,
             )
 
             return 1
@@ -178,8 +182,8 @@ class TCPPuncher():
 
     def set_interface(self):
         self.if_index = self.src_info["if_index"]
-        if self.stun is not None:
-            self.interface = self.stun.interface
+        if self.stuns is not None:
+            self.interface = self.stuns[0].interface
         else:
             self.interface = None
 

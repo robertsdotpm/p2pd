@@ -87,14 +87,14 @@ class P2PPipe():
         else:
             # Create a new puncher for this pipe ID.
             if_index = src_info["if_index"]
-            stun = self.node.stun_clients[af][if_index]
+            stuns = self.node.stun_clients[af][if_index]
 
             # Create a new puncher for this pipe ID.
             puncher = TCPPuncher(
                 af,
                 src_info,
                 dest_info,
-                stun,
+                stuns,
                 self.node.sys_clock,
                 self.same_machine,
             )

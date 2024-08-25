@@ -79,9 +79,6 @@ def stun_proto(buf, af):
         
     return msg, buf
 
-
-
-
 # Handles making a STUN request to a server.
 # Pipe also accepts route and its upgraded to a pipe.
 async def get_stun_reply(mode, dest_addr, reply_addr, pipe, attrs=[]):
