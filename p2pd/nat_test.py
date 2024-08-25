@@ -27,7 +27,7 @@ import time
 from .settings import *
 from .ip_range import *
 from .stun_client import *
-from .nat import *
+from .nat_utils import *
 
 # Constants for a NAT test.
 NAT_TEST_NO = 5

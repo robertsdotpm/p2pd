@@ -1,5 +1,5 @@
 from .utils import *
-from .nat import *
+from .nat_utils import *
 from .interface import *
 from .stun_client import *
 
@@ -151,7 +151,7 @@ async def preload_mappings(no, stuns):
     mappings = strip_none(mappings)
     return mappings
 
-def mock_get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, preloaded_mapping, step=1000):
+def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, preloaded_mapping, step=1000):
     # Allow last mapped to be modified from inside func.
     last_local = last_mapped.local
     last_remote = last_mapped.remote
@@ -304,7 +304,7 @@ def mock_get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, preload
 
     raise Exception("Can't predict this NAT type.")
 
-async def mock_nat_prediction(mode, src_nat, dest_nat, stuns, recv_mappings=None, test_no=2):
+async def nat_prediction(mode, src_nat, dest_nat, stuns, recv_mappings=None, test_no=2):
     # Setup nats and initial mapping templates.
     # The mappings will be filled in with details.
     use_range, src_nat, dest_nat, recv_mappings = \
@@ -336,7 +336,7 @@ async def mock_nat_prediction(mode, src_nat, dest_nat, stuns, recv_mappings=None
 
         # Predict our mappings.
         # Try to match our ports to any provided mappings.
-        result = mock_get_single_mapping(
+        result = get_single_mapping(
             # Punching mode.
             mode,
 
@@ -396,7 +396,7 @@ def update_for_reply_ports(mode, src_nat, dest_nat, preloaded_mappings, send_map
             continue
 
         # local, remote, reply, sock.
-        mapping = mock_get_single_mapping(
+        mapping = get_single_mapping(
             mode,
             recv_mappings[i],
             preloaded_mappings[-1],
@@ -413,88 +413,4 @@ def update_for_reply_ports(mode, src_nat, dest_nat, preloaded_mappings, send_map
 
 
 
-async def workspace():
-    # Fine tune various network settings.
-    PUNCH_CONF = dict_child({
-        # Reuse address tuple for bind() socket call.
-        "reuse_addr": True,
 
-        # Return the sock instead of the base proto.
-        #"sock_only": True,
-
-        # Disable closing sock on error
-        # Applies to the pipe_open only (may not be needed.)
-        "do_close": False,
-    }, NET_CONF)
-
-    af = IP4
-
-    map_templates = get_mapping_templates()
-    print(f"get mapping templates {map_templates}")
-
-    delta_alice = delta_info(EQUAL_DELTA, NA_DELTA)
-    nat_alice = nat_info(RESTRICT_PORT_NAT, delta_alice)
-    nat_bob = nat_alice
-
-    punch_mode = TCP_PUNCH_REMOTE
-    use_range, src_nat, dest_nat, recv_mappings = init_predictions(
-        punch_mode,
-        nat_alice,
-        nat_bob
-    )
-
-    print(f"alice init predict {use_range} {src_nat} {dest_nat} {recv_mappings}")
-
-
-    nic_alice = await Interface("wlx00c0cab5760d")
-    stun_alice = (await get_stun_clients(
-        af,
-        1,
-        nic_alice,
-        proto=TCP,
-        conf=PUNCH_CONF,
-    ))[0]
-
-    print(stun_alice)
-
-    print(stun_alice.proto)
-    print(stun_alice.dest)
-    print(stun_alice.conf)
-
-    
-    #out = await stun_alice.get_mapping()
-    #print(out)
-
-    
-    hp_mapping = await get_high_port_mapping(stun_alice)
-    print(f"high order mapping = {hp_mapping}")
-
-    pl_mappings = await preload_mappings(2, stun_alice)
-    print(f"preload mappings {pl_mappings}")
-    print(f"{pl_mappings[0].local} {pl_mappings[0].reply} {pl_mappings[0].remote} ")
-
-    mgsm = mock_get_single_mapping(
-        punch_mode, 
-        recv_mappings[0],
-        pl_mappings[-1],
-        use_range,
-        nat_alice,
-        pl_mappings[0]
-    )
-
-    print(f"mock get single map = {mgsm}")
-    print(f"{mgsm.local} {mgsm.reply} {mgsm.remote}")
-
-
-    mnp = await mock_nat_prediction(
-        punch_mode,
-        nat_alice,
-        nat_bob,
-        stun_alice
-    )
-
-    print(f"mock nat prediction = {mnp}")
-    print(f"{mnp[0].local} {mnp[0].reply} {mnp[0].remote} ")
-
-if __name__ == "__main__":
-    async_test(workspace)

@@ -1,5 +1,5 @@
 from .p2p_pipe import *
-from .nat import *
+from .nat_utils import *
 
 TXT = {
     "p2p_strat": {

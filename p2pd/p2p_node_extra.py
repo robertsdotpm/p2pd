@@ -1,13 +1,12 @@
 import asyncio
 from .settings import *
 from .machine_id import hashed_machine_id
-from .tcp_punch import TCPPunch, PUNCH_CONF
-from .tcp_punch import PUNCH_INITIATOR
+from .tcp_punch_client import PUNCH_CONF
 from .p2p_utils import *
 from .p2p_pipe import *
 from .signaling import *
 from .stun_client import get_stun_clients
-from .nat import USE_MAP_NO
+from .nat_utils import USE_MAP_NO
 
 class P2PNodeExtra():
     async def load_stun_clients(self):
@@ -37,19 +36,6 @@ class P2PNodeExtra():
 
     def setup_coordination(self, sys_clock):
         self.sys_clock = sys_clock
-
-    def setup_tcp_punching(self):
-        return
-        for index in range(len(self.ifs)):
-            interface = self.ifs[index]
-            self.tcp_punch_clients[index] = TCPPunch(
-                interface,
-                self.ifs,
-                self,
-                self.sys_clock,
-                self.pp_executor,
-                self.mp_manager
-            )
 
     async def punch_queue_worker(self):
         try:

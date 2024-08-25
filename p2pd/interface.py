@@ -9,7 +9,7 @@ from .errors import *
 from .settings import *
 from .route_defs import *
 from .route_utils import *
-from .nat import *
+from .nat_utils import *
 from .route_table import *
 from .stun_client import *
 from .nat_test import fast_nat_test

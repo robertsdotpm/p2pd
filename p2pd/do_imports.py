@@ -19,7 +19,7 @@ if __name__ != '__main__':
     from .clock_skew import SysClock
     from .stun_client import STUNClient, get_stun_clients
     from .turn_client import TURNClient
-    from .tcp_punch import TCPPunch
+    from .tcp_punch_client import TCPPuncher
     from .daemon import Daemon
     from .echo_server import *
     from .http_client_lib import http_req, ParseHTTPResponse, WebCurl
@@ -35,7 +35,6 @@ if __name__ != '__main__':
     from .install import *
     from .toxiclient import ToxiToxic, ToxiTunnel, ToxiClient
     from .toxiserver import ToxiMainServer
-    from .sqlite_kvs import SqliteKVS
     from .pnp_server import *
     from .pnp_client import *
     from .test_init import *

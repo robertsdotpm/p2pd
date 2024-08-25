@@ -64,7 +64,6 @@ async def start_p2p_node(port=NODE_PORT, node_id=None, ifs=None, clock_skew=Dec(
 
     node.setup_multiproc(pp_executors, mp_manager)
     node.setup_coordination(sys_clock)
-    node.setup_tcp_punching()
 
     # Wait for MQTT sub.
     for offset in list(node.signal_pipes):

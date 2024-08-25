@@ -1,8 +1,8 @@
 import warnings
 from .ip_range import *
-from .nat import *
+from .nat_utils import *
 from .interface import *
-from .nat_rewrite import *
+from .nat_predict import *
 from .clock_skew import *
 
 INITIATED_PREDICTIONS = 1

@@ -1,6 +1,6 @@
 import struct
 from .settings import *
-from .nat import *
+from .nat_utils import *
 from .ip_range import *
 
 

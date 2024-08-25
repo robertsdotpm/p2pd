@@ -2,8 +2,8 @@ import json
 from .utils import *
 from .net import *
 from .ip_range import IPRange
-from .tcp_punch import TCP_PUNCH_REMOTE, TCP_PUNCH_LAN
-from .tcp_punch import TCP_PUNCH_SELF
+from .tcp_punch_client import TCP_PUNCH_REMOTE, TCP_PUNCH_LAN
+from .tcp_punch_client import TCP_PUNCH_SELF
 from .p2p_addr import *
 
 SIG_CON = 1
@@ -18,7 +18,6 @@ P2P_DIRECT = 1
 P2P_REVERSE = 2
 P2P_PUNCH = 3
 P2P_RELAY = 4
-P2P_PUNCH_REWRITE = 5
 DIRECT_FAIL = 5
 REVERSE_FAIL = 6
 PUNCH_FAIL = 7
