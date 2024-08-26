@@ -282,6 +282,23 @@ def close_unneeded_socks(needed, outs):
         if mapping.sock != needed:
             mapping.sock.close()
 
+def punching_sanity_check(mode, our_wan, dest_addr, send_mappings, recv_mappings):
+    if mode == TCP_PUNCH_SELF:
+        for sm in send_mappings:
+            for rm in recv_mappings:
+                if sm.local == rm.local:
+                    error = \
+                    f"punch self local port conflict "
+                    f"{sm.local} {rm.local}"
+                    log(error)
+
+    if mode == TCP_PUNCH_REMOTE:
+        if our_wan == dest_addr:
+            error = \
+            f"punch remote but dest is the same "
+            f"as our ext {our_wan}"
+            log(error)
+
 async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface):
     """
     Punching is done in its own process.
@@ -318,6 +335,15 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
     if mode == TCP_PUNCH_LAN:
         for mapping in recv_mappings:
             mapping.remote = mapping.local
+
+    # Log warning messages.
+    punching_sanity_check(
+        mode=mode,
+        our_wan=our_wan,
+        dest_addr=dest_addr,
+        send_mappings=send_mappings,
+        recv_mappings=recv_mappings,
+    )
 
     # Carry out TCP punching.
     outs = await schedule_delayed_punching(
