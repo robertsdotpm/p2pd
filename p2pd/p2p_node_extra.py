@@ -191,14 +191,6 @@ class P2PNodeExtra():
             msg.pack(),
             to_s(msg.routing.dest["node_id"])
         )
-
-        try:
-            return await asyncio.wait_for(
-                self.pipes[msg.meta.pipe_id],
-                timeout
-            )
-        except asyncio.TimeoutError:
-            return None
         
     async def sig_msg_dispatcher(self):
         try:

@@ -262,6 +262,8 @@ proto: direct_connect(... msg.meta.src)
 Is the only function that does this so far.
 """
 async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=None):
+    print(f"for addr infos {conf}")
+
     # Use an AF supported by both.
     for af in VALID_AFS:
         # Iterates by shared AFs, filtered by best NAT.
@@ -272,101 +274,109 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=N
         # Get interface offset that supports this af.
         for src_info, dest_info in if_info_iter:
             for addr_type in conf["addr_types"]:
-                # Create a future for pending pipes.
-                if reply is None:
-                    pipe_id = to_s(rand_plain(15))
-                else:
-                    pipe_id = reply.meta.pipe_id
+                try:
+                    # Create a future for pending pipes.
+                    if reply is None:
+                        pipe_id = to_s(rand_plain(15))
+                    else:
+                        pipe_id = reply.meta.pipe_id
 
-                pp.node.pipe_future(pipe_id)
+                    pp.node.pipe_future(pipe_id)
 
 
-                # Select interface to use.
-                if_index = src_info["if_index"]
-                interface = pp.node.ifs[if_index]
+                    # Select interface to use.
+                    if_index = src_info["if_index"]
+                    interface = pp.node.ifs[if_index]
 
-                # Select a specific if index.
-                if reply is not None:
-                    if reply.routing.dest_index != if_index:
+                    # Select a specific if index.
+                    if reply is not None:
+                        if reply.routing.dest_index != if_index:
+                            print("dest index not our if index")
+                            continue
+
+                    # Support testing addr type failures.
+                    if addr_type in [NIC_FAIL, EXT_FAIL]:
+                        use_addr_type = addr_type - 2
+                        do_fail = True
+                    else:
+                        use_addr_type = addr_type
+                        do_fail = False
+
+                    print(f"Addr types = {use_addr_type} do fail = {do_fail}")
+
+                    dest_info["ip"] = str(
+                        select_dest_ipr(
+                            af,
+                            pp.same_machine,
+                            src_info,
+                            dest_info,
+                            [use_addr_type],
+
+                            # can you make this case
+                            # run for all
+                            # try it
+                            has_set_bind,
+                        )
+                    )
+
+                    if dest_info["ip"] == "None":
+                        print(src_info)
+                        print(dest_info)
+                        print("invalid matched af")
                         continue
 
-                # Support testing addr type failures.
-                if addr_type in [NIC_FAIL, EXT_FAIL]:
-                    use_addr_type = addr_type - 2
-                    do_fail = True
-                else:
-                    use_addr_type = addr_type
-                    do_fail = False
+                    print(dest_info["ip"])
 
-                print(f"Addr types = {use_addr_type} do fail = {do_fail}")
-
-                dest_info["ip"] = str(
-                    select_dest_ipr(
+        
+                    interface = await select_if_by_dest(
                         af,
-                        pp.same_machine,
-                        src_info,
-                        dest_info,
-                        [use_addr_type],
-
-                        # can you make this case
-                        # run for all
-                        # try it
-                        has_set_bind,
-                    )
-                )
-
-                if dest_info["ip"] == "None":
-                    print(src_info)
-                    print(dest_info)
-                    print("invalid matched af")
-                    continue
-
-                print(dest_info["ip"])
-
-                interface = await select_if_by_dest(
-                    af,
-                    dest_info["ip"],
-                    interface,
-                    pp.node.ifs,
-                )
-
-                # Coroutine to run.
-                result = await async_wrap_errors(
-                    func(
-                        af,
-                        pipe_id,
-                        src_info,
-                        dest_info,
+                        dest_info["ip"],
                         interface,
-                        addr_type,
-                        reply,
-                    ),
-                    timeout
-                )
-
-                # Support testing failures for an addr type.
-                if do_fail:
-                    result = None
-
-                # Success result from function.
-                if result is not None:
-                    return result
-                
-                msg = f"FAIL: {func} {use_addr_type} {result}"
-                print(msg)
-                
-                # Optional cleanup on failure.
-                if cleanup is not None:
-                    await cleanup(
-                        af,
-                        pipe_id,
-                        src_info,
-                        dest_info,
-                        interface,
-                        use_addr_type,
-                        reply,
+                        pp.node.ifs,
                     )
+
+                    # Coroutine to run.
+                    result = await async_wrap_errors(
+                        func(
+                            af,
+                            pipe_id,
+                            src_info,
+                            dest_info,
+                            interface,
+                            addr_type,
+                            reply,
+                        ),
+                        timeout
+                    )
+
+                    # Support testing failures for an addr type.
+                    if do_fail:
+                        result = None
+
+                    # Success result from function.
+                    if result is not None:
+                        print(f"result not none {result}")
+                        return result
+                    
+                    msg = f"FAIL: {func} {use_addr_type} {result}"
+                    print(msg)
+                    
+                    # Optional cleanup on failure.
+                    if cleanup is not None:
+                        print(cleanup)
+                        await cleanup(
+                            af,
+                            pipe_id,
+                            src_info,
+                            dest_info,
+                            interface,
+                            use_addr_type,
+                            reply,
+                        )
             
+                except:
+                    what_exception()
+
             # Only use iter to order by NAT.
             break
 

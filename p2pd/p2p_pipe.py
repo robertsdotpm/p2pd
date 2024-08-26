@@ -35,7 +35,7 @@ class P2PPipe():
         self.func_table = {
             # Short timeouts for direct TCP cons.
             P2P_DIRECT: [self.direct_connect, 5, None, 1],
-            P2P_REVERSE: [self.reverse_connect, 5, None, 1],
+            P2P_REVERSE: [self.reverse_connect, 10, None, 1],
 
             # Large timeout for meetings with a state cleanup.
             P2P_PUNCH: [self.tcp_hole_punch, 20, None, 0],
@@ -60,14 +60,16 @@ class P2PPipe():
                 self.func_table[strategy]
             print(f"using func {func}")
 
-            pipe = await for_addr_infos(
-                func,
-                timeout,
-                cleanup,
-                has_set_bind,
-                reply,
-                self,
-                conf,
+            pipe = await async_wrap_errors(
+                for_addr_infos(
+                    func,
+                    timeout,
+                    cleanup,
+                    has_set_bind,
+                    reply,
+                    self,
+                    conf,
+                )
             )
 
             # Check return value.

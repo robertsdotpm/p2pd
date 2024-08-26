@@ -71,7 +71,7 @@ def patch_p2p_stats(strategies, src_pp):
     strat_len = len(src_pp.func_table)
     for strategy in strategies:
         # Indicates not to fail it so continue.
-        if strategy < strat_len:
+        if strategy <= strat_len:
             continue
 
         # Workout func table offset from strategy enum.
@@ -147,6 +147,11 @@ class TestNodes():
         self.addr_types = addr_types
         self.return_msg = return_msg
         self.sig_pipe_no = sig_pipe_no
+
+        # If sig pipes are needed ensure they're enabled.
+        if not self.return_msg:
+            if not self.sig_pipe_no:
+                self.sig_pipe_no = 2
 
     async def __aenter__(self):
         # Setup node on specific interfaces.
@@ -331,15 +336,14 @@ async def test_tcp_punch_direct_lan_fail_ext_suc():
 
 async def test_dir_reverse_fail_direct():
     params = {
-        "return_msg": True,
-        "sig_pipe_no": 0,
+        "return_msg": False,
         "addr_types": [EXT_BIND, NIC_BIND],
         "same_if": False,
     }
 
     patch_strats = [DIRECT_FAIL, RELAY_FAIL, REVERSE_FAIL, P2P_PUNCH]
     use_strats = [P2P_DIRECT, P2P_RELAY, P2P_REVERSE, P2P_PUNCH]
-    use_strats = patch_strats = [P2P_DIRECT]
+    use_strats = patch_strats = [P2P_RELAY]
     async with TestNodes(**params) as nodes:
         patch_p2p_stats(patch_strats, nodes.pp_alice)
         #patch_p2p_stats(patch_strats, nodes.pp_bob)
