@@ -52,6 +52,8 @@ class P2PNodeExtra():
             await async_wrap_errors(
                 puncher.setup_punching_process()
             )
+
+
             print("punch done")
 
             self.punch_worker_task = asyncio.ensure_future(

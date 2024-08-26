@@ -60,63 +60,75 @@ def patch_p2p_pipe(src_pp):
     
     return patch
 
+"""
+This patches an associated technique function
+to always return a failure result. But it will
+still run the technique function so that the same
+state impacts are done and you can check to see if
+the code really can handle a real failure or not.
+"""
 def patch_p2p_stats(strategies, src_pp):
     strat_len = len(src_pp.func_table)
     for strategy in strategies:
-        if strategy > strat_len: # how many current stats.
-            offset = (strategy - strat_len)
-            func_info = src_pp.func_table[offset]
-            func = func_info[0]
+        # Indicates not to fail it so continue.
+        if strategy < strat_len:
+            continue
 
-            async def failure(af, pipe_id, src_info, dest_info, iface, addr_type, reply):
+        # Workout func table offset from strategy enum.
+        offset = (strategy - strat_len)
 
-                #f = src_pp.node.pipe_ready
-                #src_pp.node.pipe_ready = lambda b, c: c
+        # Func info from table.
+        func_info = src_pp.func_table[offset]
 
-                # Func runs as usual making any state changes.
-                print(f"before failure {func}")
-                """
-                try:
-                    pipe = await asyncio.wait_for(
-                        func(
-                            af,
-                            src_info,
-                            dest_info,
-                            iface,
-                            addr_type
-                        ),
-                        5
-                    )
+        # Regular function to execute.
+        func = func_info[0]
 
-                    if pipe is not None:
-                        await pipe.close()
-                except:
-                    log_exception()
-                """
+        # Patched function bellow to sim failure.
+        async def failure(af, pipe_id, src_info, dest_info, iface, addr_type, reply):
+            # May return a success pipe.
+            pipe = await asyncio.wait_for(
+                # Just pass all params on to func.
+                func(
+                    af,
+                    pipe_id,
+                    src_info,
+                    dest_info,
+                    iface,
+                    addr_type,
+                    reply,
+                ),
 
-                print("in patched fail = None.")
-                #src_pp.pipe_id = to_s(rand_plain(15))
-                #src_pp.node.pipe_future(src_pp.pipe_id)
+                # Timeout for specific func.
+                func_info[1]
+            )
 
-                #src_pp.node.pipe_ready = f
-
-
-
-                # But always fails.
-                return None
+            # Handle cleanup if needed.
+            if isinstance(pipe, PipeEvents):
+                await pipe.close()
             
-            #code = f"src_pp.{func.__name__} = failure"
-            print(func)
-            src_pp.func_table[offset][0] = failure
-            #setattr(src_pp.func_table[offset], f"{func.__name__}", failure)
-            #print(src_pp.reverse_connect)
+            # But always fails.
+            return None
+        
+        # Overwrite the func pointer to failure closure.
+        src_pp.func_table[offset][0] = failure
 
 async def get_node(if_name, node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
-    delta = delta_info(NA_DELTA, 0)
+    delta = delta_info(EQUAL_DELTA, NA_DELTA)
     nat = nat_info(OPEN_INTERNET, delta)
-    nat = nat_info(RESTRICT_NAT, delta_info(INDEPENDENT_DELTA, node_port + 10))
+    #nat = nat_info(RESTRICT_NAT, delta_info(INDEPENDENT_DELTA, node_port + 10))
     iface = await Interface(if_name)
+
+    """
+    Note that: if the incorrect nat details are set
+    then the NAT predictions will be wrong and
+    the chances of success for punching will be
+    much lower. Loading the NAT is easier but most
+    NATs use equal delta types so prediction is easy.
+    Will use this for testing at least.
+    """
     iface.set_nat(nat)
+
+
     sys_clock = SysClock(iface, Dec("-0.02839018452552057081653225806"))
     conf = copy.deepcopy(NODE_CONF)
     conf["sig_pipe_no"] = sig_pipe_no
@@ -321,15 +333,15 @@ async def test_dir_reverse_fail_direct():
     params = {
         "return_msg": True,
         "sig_pipe_no": 0,
-        "addr_types": [NIC_BIND],
+        "addr_types": [EXT_BIND, NIC_BIND],
         "same_if": False,
     }
 
-    #patch_strats = [DIRECT_FAIL, RELAY_FAIL, REVERSE_FAIL, P2P_PUNCH]
-    #use_strats = [P2P_DIRECT, P2P_RELAY, P2P_REVERSE, P2P_PUNCH]
-    patch_strats = use_strats = [P2P_PUNCH]
+    patch_strats = [DIRECT_FAIL, RELAY_FAIL, REVERSE_FAIL, P2P_PUNCH]
+    use_strats = [P2P_DIRECT, P2P_RELAY, P2P_REVERSE, P2P_PUNCH]
+    use_strats = patch_strats = [P2P_DIRECT]
     async with TestNodes(**params) as nodes:
-        #patch_p2p_stats(patch_strats, nodes.pp_alice)
+        patch_p2p_stats(patch_strats, nodes.pp_alice)
         #patch_p2p_stats(patch_strats, nodes.pp_bob)
         print(f"same machine = {nodes.pp_alice.same_machine}")
         pipe = await nodes.pp_alice.connect(

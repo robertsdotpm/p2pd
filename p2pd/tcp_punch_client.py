@@ -104,6 +104,7 @@ class TCPPuncher():
         self.set_punch_mode()
         self.side = self.state = None
         self.pipe_id = self.node = None
+        self.pipe = None
         self.start_time = Dec(0)
         self.recv_mappings = []
         self.send_mappings = []
@@ -222,7 +223,8 @@ class TCPPuncher():
         
         # Wrap returned socket in a pipe.
         if sock is not None: 
-            return await self.sock_to_pipe(sock)
+            self.pipe = await self.sock_to_pipe(sock)
+            return self.pipe
 
     def set_interface(self):
         self.if_index = self.src_info["if_index"]
@@ -259,6 +261,12 @@ class TCPPuncher():
     @staticmethod
     def from_dict(d):
         return puncher_from_dict(d, TCPPuncher)
+    
+    async def close(self):
+        if self.pipe is None:
+            return
+        
+        await self.pipe.close()
 
 # Started in a new process.
 def proc_do_punching(args):
