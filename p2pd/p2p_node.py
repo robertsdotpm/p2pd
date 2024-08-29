@@ -4,6 +4,7 @@ from .daemon import *
 from .p2p_addr import *
 from .p2p_utils import *
 from .p2p_node_extra import *
+from .nickname import *
 
 NODE_CONF = dict_child({
     """
@@ -128,16 +129,30 @@ class P2PNode(P2PNodeExtra, Daemon):
         # Save a dict version of the address fields.
         self.p2p_addr = parse_peer_addr(self.addr_bytes)
         print(f"> P2P node = {self.addr_bytes}")
+
+        # Used for setting nicknames for the node.
+        self.nick_client = await Nickname(self.sk, self.ifs[0])
         return self
     
     # Connect to a remote P2P node using a number of techniques.
-    async def connect(self, addr_bytes, strategies=P2P_STRATEGIES, timeout=60):
-        pass
+    async def connect(self, addr_bytes, strategies=P2P_STRATEGIES, conf=P2P_PIPE_CONF):
+        if pnp_name_has_tld(addr_bytes):
+            addr_bytes = await self.nick_client.fetch(addr_bytes)
+            # Todo: set pk for proto.
+
+        pp = self.p2p_pipe(addr_bytes)
+        return await pp.connect(strategies, conf)
 
     # Get our node server's address.
     def address(self):
         return self.addr_bytes
     
-    async def register(self, name_field):
-        pass
+    # Simple KVS over a few servers.
+    # Returns your nickname + a tld designating server.
+    async def nickname(self, name, value=None):
+        value = value or self.address()
+        return await self.nick_client.push(
+            name,
+            value
+        )
 

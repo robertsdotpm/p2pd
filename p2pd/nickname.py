@@ -46,6 +46,15 @@ def pnp_strip_tlds(name):
 
     return name
 
+def pnp_name_has_tld(name):
+    name = to_s(name)
+    for tld in PNP_TLD_TO_INDEX:
+        portion = name[-len(tld):]
+        if portion == tld:
+            return True
+        
+    return False
+
 NAMING_TIMEOUT = 10
 
 class PartialNameSuccess(Exception):
@@ -54,7 +63,7 @@ class PartialNameSuccess(Exception):
 class FullNameFailure(Exception):
     pass
 
-class Naming():
+class Nickname():
     def __init__(self, sk, interface):
         self.sk = sk
         self.interface = interface
@@ -169,6 +178,9 @@ class Naming():
             )
 
         await asyncio.gather(*tasks)
+
+    def __await__(self):
+        return self.start().__await__()
 
 
 async def workspace():
