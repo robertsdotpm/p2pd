@@ -347,9 +347,10 @@ async def test_tcp_punch_direct_lan_fail_ext_suc():
         await pipe.close()
 
 async def test_dir_reverse_fail_direct():
-    name = "my e"
+    # bug in the message dispatcher.
+    name = ""
     params = {
-        "return_msg": False,
+        "return_msg": True,
         "addr_types": [EXT_BIND, NIC_BIND],
         "same_if": False,
     }

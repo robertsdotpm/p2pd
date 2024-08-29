@@ -72,10 +72,10 @@ class Nickname():
 
     # A client for each PNP server is loaded by index.
     async def start(self):
-        if IP6 in self.interface.supported():
-            af = IP6
-        else:
+        if IP4 in self.interface.supported():
             af = IP4
+        else:
+            af = IP6
 
         for serv_info in PNP_SERVERS[af]:
             dest = await Address(

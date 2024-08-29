@@ -46,8 +46,8 @@ class SigProtoHandlers():
         is_enc = buf[0]
         if is_enc:
             buf = decrypt(
-                self.node.sk,
-                buf[0:]
+                self.node.sk.to_string(),
+                buf[1:]
             )
 
         if buf[0] not in SIG_PROTO:
