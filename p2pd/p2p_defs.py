@@ -1,4 +1,5 @@
 import json
+from ecdsa import VerifyingKey
 from .utils import *
 from .net import *
 from .ip_range import IPRange
@@ -48,9 +49,23 @@ class SigMsg():
         
         return af, addr
 
-    # Todo: will eventually have sig here too.
-    class Integrity():
-        pass
+    class Integrity:
+        def __init__(self, vkc, sig=b""):
+            self.vkc = vkc
+            self.sig = sig
+
+        def to_dict(self):
+            return {
+                "vkc": self.vkc.to_string(),
+                "sig": to_h(self.sig)
+            }
+        
+        @staticmethod
+        def from_dict(d):
+            return SigMsg.Integrity(
+                VerifyingKey.from_str(d["vkc"]),
+                h_to_b(d["sig"])
+            )
 
     # Information about the message sender.
     class Meta():
@@ -168,6 +183,10 @@ class SigMsg():
             data.get("payload", {})
         )
 
+        self.integrity = self.Integrity.from_dict(
+            data.get("integrity", {})
+        )
+
         self.enum = enum
             
 
@@ -176,21 +195,34 @@ class SigMsg():
             "meta": self.meta.to_dict(),
             "routing": self.routing.to_dict(),
             "payload": self.payload.to_dict(),
+            "integrity": self.integrity.to_dict(),
         }
 
         return d
 
-    def pack(self):
-        return bytes([self.enum]) + \
+    def pack(self, sk=None):
+        buf = bytes([self.enum]) + \
             to_b(
                 json.dumps(
                     self.to_dict()
                 )
             )
+        
+        if sk is not None:
+            sig = sk.sign(buf)
+            j = self.unpack(buf)
+            j.integrity.sig = sig
+            return SigMsg(j).pack()
+        
+        return buf
     
     @classmethod
     def unpack(cls, buf):
         d = json.loads(to_s(buf))
+
+        # Sig checks if set.
+        # check node id portion matches pub portion.
+        # check sig matches serialized obj.
         return cls(d)
 
     def set_cur_addr(self, cur_addr_buf):

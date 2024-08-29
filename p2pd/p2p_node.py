@@ -59,8 +59,16 @@ class P2PNode(P2PNodeExtra, Daemon):
         self.sk = self.load_signing_key()
         self.vk = self.sk.verifying_key
         self.node_id = hashlib.sha256(
-            self.vk.to_string()
+            self.vk.to_string("compressed")
         ).digest()[:20]
+
+        # Table of authenticated users.
+        self.auth = {
+            self.node_id: {
+                "sk": self.sk,
+                "vk": self.vk,
+            }
+        }
 
     # Used by the node servers.
     async def msg_cb(self, msg, client_tup, pipe):
@@ -137,8 +145,13 @@ class P2PNode(P2PNodeExtra, Daemon):
     # Connect to a remote P2P node using a number of techniques.
     async def connect(self, addr_bytes, strategies=P2P_STRATEGIES, conf=P2P_PIPE_CONF):
         if pnp_name_has_tld(addr_bytes):
-            addr_bytes = await self.nick_client.fetch(addr_bytes)
-            # Todo: set pk for proto.
+            pkt = await self.nick_client.fetch(addr_bytes)
+            addr_bytes = pkt.value
+            addr = parse_peer_addr(addr_bytes)
+            self.auth[addr["node_id"]] = {
+                "vk": pkt.vkc,
+                "sk": None,
+            }
 
         pp = self.p2p_pipe(addr_bytes)
         return await pp.connect(strategies, conf)

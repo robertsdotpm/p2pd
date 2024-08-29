@@ -45,6 +45,7 @@ class P2PPipe():
         }
 
     def route_msg(self, msg, m=0):
+        
         self.node.sig_msg_queue.put_nowait([msg, m])
 
     async def connect(self, strategies=P2P_STRATEGIES, reply=None, conf=P2P_PIPE_CONF):

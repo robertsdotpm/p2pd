@@ -6,6 +6,7 @@ index by host name even if its longer.
 
 from .utils import *
 from .p2p_defs import *
+from .ecies import encrypt, decrypt
 
 SIG_PROTO = {
     SIG_CON: [ConMsg, P2P_DIRECT, 5],
@@ -42,6 +43,13 @@ class SigProtoHandlers():
     
     # Receive a protocol message and validate it.
     async def proto(self, buf):
+        is_enc = buf[0]
+        if is_enc:
+            buf = decrypt(
+                self.node.sk,
+                buf[0:]
+            )
+
         if buf[0] not in SIG_PROTO:
             print(f"proto got unsupported msg {buf[0]}")
             return

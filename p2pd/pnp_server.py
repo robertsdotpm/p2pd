@@ -266,7 +266,7 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
             name_limit = name_limit_by_af(af, serv)
             if names_used >= name_limit:
                 raise Exception("insert name limit reached.")
-         
+
         # Insert a brand new name.
         sql = """
         INSERT INTO names

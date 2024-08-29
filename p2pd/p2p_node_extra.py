@@ -7,6 +7,7 @@ from .signaling import *
 from .stun_client import get_stun_clients
 from .nat_utils import USE_MAP_NO
 from .install import *
+from .ecies import encrypt, decrypt
 import asyncio
 import pathlib
 import secrets
@@ -214,6 +215,16 @@ class P2PNodeExtra():
         return pipe
 
     async def await_peer_con(self, msg, m=0):
+        # Encrypt the message if the public key is known.
+        buf = b"\0" + msg.pack()
+        dest_node_id = msg.routing.dest["node_id"]
+        # or ... integrity portion...
+        if dest_node_id in self.auth:
+            buf = b"\1" + encrypt(
+                self.auth[dest_node_id]["vk"],
+                msg.pack(),
+            )
+
         # Try not to load a new signal pipe if
         # one already exists for the dest.
         dest = msg.routing.dest
@@ -252,7 +263,7 @@ class P2PNodeExtra():
             # Send message.
             sent = await async_wrap_errors(
                 sig_pipe.send_msg(
-                    msg.pack(),
+                    buf,
                     to_s(dest["node_id"])
                 )
             )
