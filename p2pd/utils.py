@@ -143,7 +143,7 @@ to_unique = lambda x: [i for n, i in enumerate(x) if i not in x[:n]]
 ip_f = ipaddress.ip_address
 class_name = lambda x: type(x).__name__ if inspect.isclass(x) else None
 timestamp = lambda p=0: time.time() if p else int(time.time())
-strip_none = lambda x: [i for i in x if i]
+strip_none = lambda x: [i for i in x if i is not None]
 neg_flip = lambda r, x, y: -r if x > y else r
 n_dist = lambda x, y: neg_flip(max(x, y) - min(x, y), x, y)
 dict_plus = lambda d, k: d[k] if k in d else 0

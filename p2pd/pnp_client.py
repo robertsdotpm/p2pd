@@ -42,15 +42,12 @@ class PNPClient():
         route = self.dest.route.interface.route(self.dest.route.af)
         route = await route.bind()
         pipe = await pipe_open(self.proto, self.dest, route)
-        print(pipe)
         return pipe
 
     async def return_resp(self, pipe):
         try:
             buf = await proto_recv(pipe)
-            print(buf)
             buf = decrypt(self.reply_sk, buf)
-            print(buf)
             pkt = PNPPacket.unpack(buf)
             if not pkt.updated:
                 pkt.value = None

@@ -37,6 +37,7 @@ if __name__ != '__main__':
     from .toxiserver import ToxiMainServer
     from .pnp_server import *
     from .pnp_client import *
+    from .naming import *
     from .test_init import *
 
 

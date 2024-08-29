@@ -364,11 +364,36 @@ async def test_dir_reverse_fail_direct():
 async def test_nicknames():
     node = await get_node()
     print(node)
+    print(node.sk)
 
-    name = "unique test name"
-    val = "unique test val"
+    nic = node.ifs[0]
+    name = "unique test name2"
+    val = "unique test val2"
+
+
+    n = Naming(node.sk, nic)
+    await n.start()
+
+    print(n.clients[0].dest.af)
+
+    """
+    out = await n.clients[0].push(name, val)
+    print(out)
+    print(out.value)
+    return
+    """
+
+    name = await n.push(name, val)
+    print(name)
+
+
+    out = await n.fetch(name)
+    print(out)
+    """
+
+    
     af = IP4
-    serv = PNP_SERVERS[af][0]
+    serv = PNP_SERVERS[af][1]
     nic = node.ifs[0]
     dest = await Address(
         serv["ip"],
@@ -385,6 +410,7 @@ async def test_nicknames():
     print(out.value)
 
     print(pnpc)
+    """
 
     await node.close()
 

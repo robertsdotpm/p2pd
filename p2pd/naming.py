@@ -31,7 +31,22 @@ def pnp_get_offsets(tld):
     index = PNP_TLD_TO_INDEX[tld]
     return list(index)
 
-NAMING_TIMEOUT = 1.0
+def pnp_strip_tlds(name):
+    name = to_s(name)
+    for tld in PNP_TLD_TO_INDEX:
+        # Grab the last len(tld) characters in name.
+        # Underflows will grab everything.
+        portion = name[-len(tld):]
+
+        # TLD found so strip it.
+        # Underflows set the str to "" empty.
+        if portion == tld:
+            name = name[:-len(tld)]
+            break
+
+    return name
+
+NAMING_TIMEOUT = 10
 
 class PartialNameSuccess(Exception):
     pass
@@ -40,11 +55,13 @@ class FullNameFailure(Exception):
     pass
 
 class Naming():
-    def __init__(self, sk_hex, interface):
-        self.sk = SigningKey.from_string(h_to_b(sk_hex))
+    def __init__(self, sk, interface):
+        self.sk = sk
         self.interface = interface
         self.clients = []
+        self.started = False
 
+    # A client for each PNP server is loaded by index.
     async def start(self):
         if IP6 in self.interface.supported():
             af = IP6
@@ -52,7 +69,6 @@ class Naming():
             af = IP4
 
         for serv_info in PNP_SERVERS[af]:
-            print(serv_info["ip"])
             dest = await Address(
                 serv_info["ip"],
                 serv_info["port"],
@@ -66,56 +82,79 @@ class Naming():
                     serv_info["pk"]
                 )
             )
-
-    async def do_client_actions_concurrently(self, action_s, action_p, timeout=NAMING_TIMEOUT):
-        tasks = []
-        for client in self.clients:
-            action = eval(f"client.{action_s}")
-            task = action(*action_p)
-            tasks.append(task)
-
-        success_no = 0
-        try:
-            results = await asyncio.wait_for(
-                asyncio.gather(*tasks),
-                timeout
-            )
-
-            for pkt in results:
-                if pkt is None:
-                    continue
-                if pkt.value is None:
-                    continue
-
-                success_no += 1
-        except asyncio.TimeoutError:
-            success_no = 0
-
-        if success_no == 0:
-            raise FullNameFailure("Name action failed. All servers down.")
         
-        if success_no and success_no != len(results):
-            raise PartialNameSuccess("Some name actions to register across servers.")
-
-    async def fetch(self, name, timeout=NAMING_TIMEOUT):
-        tasks = []
-        for client in self.clients:
-            task = client.fetch(name)
-            tasks.append(task)
-
-        for task in asyncio.as_completed(tasks, timeout=timeout):
-            pkt = await task
-            if pkt.value is not None:
-                return pkt
+        self.started = True
 
     async def push(self, name, value, behavior=BEHAVIOR_DO_BUMP, timeout=NAMING_TIMEOUT):
-        return await self.do_client_actions_concurrently(
-            "push",
-            (name, value, behavior,),
-            timeout
-        )
+        assert(self.started)
+        name = pnp_strip_tlds(name)
 
+        # Single coro for storing at one server.
+        async def worker(offset):
+            try:
+                client = self.clients[offset]
+                ret = await client.push(name, value, behavior)
+                if ret.value is not None:
+                    return offset
+            except:
+                log_exception()
+
+        # Schedule store tasks at all PNP servers.
+        tasks = []
+        for offset in range(0, len(self.clients)):
+            tasks.append(
+                async_wrap_errors(
+                    worker(offset),
+                    timeout,
+                )
+            )
+
+        # Attempt storage at all PNP servers.
+        results = await asyncio.gather(*tasks)
+        offsets = strip_none(results)
+        if not len(offsets):
+            raise FullNameFailure("All name servers failed.")
+        
+        # Translate success offsets into specific TLD.
+        tld = pnp_get_tld(offsets)
+        return f"{name}{tld}"
+
+    async def fetch(self, name, timeout=NAMING_TIMEOUT):
+        assert(self.started)
+
+        async def worker(offset, name):
+            client = self.clients[offset]
+            return await client.fetch(name)
+
+        # Convert TLD to client offset list.
+        tld = "." + name.split(".")[-1]
+        offsets = pnp_get_offsets(tld)
+        name = name[:-len(tld)]
+
+        # Build concurrent fetch tasks.
+        tasks = []
+        for offset in offsets:
+            tasks.append(
+                async_wrap_errors(
+                    worker(offset, name),
+                    timeout
+                )
+            )
+
+        # Return first success.
+        t = timeout + 1
+        first_in = asyncio.as_completed(tasks, timeout=t)
+        for task in first_in:
+            ret = await task
+            if ret.value is not None:
+                return ret.value
+            
+        raise FullNameFailure(f"Could not fetch {name}")
+        
     async def delete(self, name, timeout=NAMING_TIMEOUT):
+        assert(self.started)
+
+        return
         return await self.do_client_actions_concurrently(
             "delete",
             (name,),
@@ -124,6 +163,7 @@ class Naming():
 
 
 async def workspace():
+    return
     TEST_SK = b'\xfe\xb1w~v\xfe\xc4:\x83\xa6C\x19\xde\x11\xc2\xc8\xc4A\xdaEC\x01\xc2\x9d'
     TEST_SK = (b"12345" * 100)[:24]
     test_sk_hex = to_h(TEST_SK)
@@ -169,4 +209,3 @@ delete:
 
 """
 
-async_test(workspace)
