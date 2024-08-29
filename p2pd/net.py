@@ -466,7 +466,7 @@ def ip_norm(ip):
     return ip
 
 async def proto_recv(pipe):
-    n = 1 if pipe.stream.proto == TCP else 5
+    n = 1 if pipe.sock.type == TCP else 5
     for _ in range(0, n):
         try:
             return await pipe.recv()
@@ -517,10 +517,10 @@ This code will be used to make the p2p connect code more
 robust -- so that it works to hosts in the LAN and to
 services on interfaces on the same machine.
 """
-def determine_if_path(af, dest, sock_type=UDP):
+def determine_if_path(af, dest):
     # Setup socket for connection.
     src_ip = None
-    s = socket.socket(af, sock_type)
+    s = socket.socket(af, UDP)
 
     # We don't care about connection success.
     # But avoiding delays is important.

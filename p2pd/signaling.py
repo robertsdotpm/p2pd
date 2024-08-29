@@ -58,8 +58,13 @@ class SignalMock():
         await self.send_msg(data, client_tup)
 
     async def send_msg(self, msg, peer_id):
-        log(f"> Send signal to {peer_id} = {msg}.")
+        log(f"> Send signal to {peer_id} = {msg}.")        
         self.client.publish(to_s(peer_id), to_s(msg), qos=2)
+        if not self.is_connected:
+            return 0
+        else:
+            return len(msg)
+
 
     async def echo(self, msg, dest_chan):
         out = f"ECHO {self.peer_id} {msg}"
@@ -74,7 +79,10 @@ class SignalMock():
         client.on_subscribe = self.on_subscribe
 
         await asyncio.wait_for(
-            client.connect(host=mqtt_server[0], port=mqtt_server[1]),
+            client.connect(
+                host=mqtt_server[0],
+                port=mqtt_server[1]
+            ),
             5
         )
 

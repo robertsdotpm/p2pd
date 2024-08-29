@@ -26,10 +26,10 @@ NODE_CONF = dict_child({
 class P2PNode(P2PNodeExtra, Daemon):
     def __init__(self, ifs, port=NODE_PORT, conf=NODE_CONF):
         super().__init__()
+        assert(port)
         
         # Main variables for the class.
         self.conf = conf
-        self.node_id = conf["node_id"] or rand_plain(15)
         self.listen_port = port
         self.ifs = ifs
 
@@ -53,6 +53,13 @@ class P2PNode(P2PNodeExtra, Daemon):
 
         # Fixed reference for long-running tasks.
         self.tasks = []
+
+        # Cryptography for authenticated messages.
+        self.sk = self.load_signing_key()
+        self.vk = self.sk.verifying_key
+        self.node_id = hashlib.sha256(
+            self.vk.to_string()
+        ).digest()[:20]
 
     # Used by the node servers.
     async def msg_cb(self, msg, client_tup, pipe):
@@ -104,6 +111,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         # Translate any port 0 to actual assigned port.
         node_sock = self.servers[0][2].sock
         listen_port = node_sock.getsockname()[1]
+        self.conf["listen_port"] = listen_port
         print(f"Server port = {listen_port}")
         print(self.ifs)
 

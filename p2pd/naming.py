@@ -1,6 +1,8 @@
 """
 Prefer IPv6 as it will potentially have fewer bumping from dynamic swapping across a shared IPv4 if there's
 multiple ifaces; Otherwise use what we've got
+
+python3 run_pnp_serv.py
 """
 
 from .settings import *
@@ -8,6 +10,26 @@ from .utils import *
 from .pnp_client import *
 from .interface import *
 from ecdsa import SigningKey
+
+PNP_INDEX_TO_TLD = {
+    frozenset([0]): ".p2p",
+    frozenset([1]): ".node",
+    frozenset([0, 1]): ".peer",
+}
+
+PNP_TLD_TO_INDEX = {
+    ".p2p": frozenset([0]),
+    ".node": frozenset([1]),
+    ".peer": frozenset([0, 1]),
+}
+
+def pnp_get_tld(offsets):
+    index = frozenset(offsets)
+    return PNP_INDEX_TO_TLD[index]
+
+def pnp_get_offsets(tld):
+    index = PNP_TLD_TO_INDEX[tld]
+    return list(index)
 
 NAMING_TIMEOUT = 1.0
 
@@ -122,5 +144,29 @@ async def workspace():
     print(out)
 
     await asyncio.sleep(2)
+
+
+
+
+"""
+push:
+    - try to store on all of them
+    - store success offsets
+    - convert success offsets to tld
+    - return name + tld on success
+
+fetch:
+    - name + tld
+    - convert to list of offsets
+    - use first in to get the fastest success result
+
+delete:
+    - name + tld
+    - convert to list of offsets
+    - concurrently delete them
+    - no follow up
+
+
+"""
 
 async_test(workspace)

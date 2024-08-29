@@ -435,10 +435,10 @@ class PNPServer(Daemon):
         self.v6_iface_limit = v6_iface_limit
 
     async def msg_cb(self, msg, client_tup, pipe):
-        msg = decrypt(self.reply_sk, msg)
-        cidr = 32 if pipe.route.af == IP4 else 128
         db_con = None
         try:
+            msg = decrypt(self.reply_sk, msg)
+            cidr = 32 if pipe.route.af == IP4 else 128
             pkt = PNPPacket.unpack(msg)
             pnp_msg = pkt.get_msg_to_sign()
             db_con = await aiomysql.connect(
@@ -519,8 +519,7 @@ class PNPServer(Daemon):
                 buf = self.serv_resp(pkt)
                 await proto_send(pipe, buf)
         except:
-            if self.debug:
-                log_exception()
+            log_exception()
         finally:
             if db_con is not None:
                 db_con.close()
@@ -561,6 +560,7 @@ async def start_pnp_server(bind_port):
     print("Now starting PNP serv on ...")
     print(serv_v4)
     print(serv_v6)
+    print(reply_pk_hex)
     await serv.listen_all(
         [serv_v4, serv_v6],
         [PNP_PORT],

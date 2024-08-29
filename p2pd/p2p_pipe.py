@@ -44,8 +44,8 @@ class P2PPipe():
             P2P_RELAY: [self.udp_turn_relay, 20, self.turn_cleanup, 1],
         }
 
-    def route_msg(self, msg):
-        self.node.sig_msg_queue.put_nowait(msg)
+    def route_msg(self, msg, m=0):
+        self.node.sig_msg_queue.put_nowait([msg, m])
 
     async def connect(self, strategies=P2P_STRATEGIES, reply=None, conf=P2P_PIPE_CONF):
         # Try strategies to achieve a connection.
@@ -127,22 +127,9 @@ class P2PPipe():
             },
         })
 
-        self.route_msg(msg)
+        self.route_msg(msg, m=1)
         return await self.node.pipes[pipe_id]
 
-    """
-    Peer A and peer B both have a list of interface info
-    for each address family. Each interface connected to
-    a unique gateway will have its own NAT characteristics.
-    The challenge is to prioritize which combination of
-    peer interfaces is most favorable given the interplay
-    between their corresponding NAT qualities.
-
-    The least restrictive NATs are assigned a lower
-    value. So the start of the algorithm just groups together
-    the lowest value pairs and runs through them until one
-    succeeds.
-    """
     async def tcp_hole_punch(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
         # Load TCP punch client for this pipe ID.
         if pipe_id in self.node.tcp_punch_clients:
@@ -233,7 +220,7 @@ class P2PPipe():
                 "mappings": mappings,
             },
         })
-        self.route_msg(msg)
+        self.route_msg(msg, m=2)
 
         # Basic dest addr validation.
         #msg.set_cur_addr(self.src_bytes)
@@ -332,22 +319,16 @@ class P2PPipe():
                     },
                 })
                 print(msg)
-                self.route_msg(msg)
+                self.route_msg(msg, m=3)
                 return await self.node.pipes[pipe_id]
             except:
                 log_exception()
                 continue
 
-    def general_cleanup(self, pipe_id):
-        del self.node.pipes[pipe_id]
-        self.node.pipe_future(pipe_id)
-
     async def turn_cleanup(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
-        self.general_cleanup(pipe_id)
         if pipe_id not in self.node.turn_clients:
             return
-        return
-        
+
         turn_client = self.node.turn_clients[pipe_id]
         await turn_client.close()
         del self.node.turn_clients[pipe_id]

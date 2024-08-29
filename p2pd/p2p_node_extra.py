@@ -1,4 +1,3 @@
-import asyncio
 from .settings import *
 from .machine_id import hashed_machine_id
 from .tcp_punch_client import PUNCH_CONF
@@ -7,8 +6,46 @@ from .p2p_pipe import *
 from .signaling import *
 from .stun_client import get_stun_clients
 from .nat_utils import USE_MAP_NO
+from .install import *
+import asyncio
+import pathlib
+import secrets
+from ecdsa import SigningKey
 
 class P2PNodeExtra():
+    def load_signing_key(self):
+        # Make install dir if needed.
+        install_root = get_p2pd_install_root()
+        pathlib.Path(install_root).mkdir(
+            parents=True,
+            exist_ok=True
+        )
+
+        # Store cryptographic random bytes here for ECDSA ident.
+        sk_path = os.path.realpath(
+            os.path.join(
+                install_root,
+                f"SECRET_KEY_DONT_SHARE_{self.listen_port}.hex"
+            )
+        )
+
+        # Read secret key as binary if it exists.
+        if os.path.exists(sk_path):
+            with open(sk_path, mode='r') as fp:
+                sk_hex = fp.read()
+
+        # Write a new key if the path doesn't exist.
+        if not os.path.exists(sk_path):
+            sk_buf = secrets.token_bytes(24)
+            sk_hex = to_h(sk_buf)
+            with open(sk_path, "w") as file:
+                file.write(sk_hex)
+
+        # Convert secret key to a singing key.
+        sk_buf = h_to_b(sk_hex)
+        sk = SigningKey.from_string(sk_buf)
+        return sk
+
     async def load_stun_clients(self):
         self.stun_clients = {IP4: {}, IP6: {}}
         for af in VALID_AFS:
@@ -176,30 +213,70 @@ class P2PNodeExtra():
         
         return pipe
 
-    async def await_peer_con(self, msg, timeout=10):
-        # Used to relay signal proto messages.
-        signal_pipe = self.find_signal_pipe(msg.routing.dest)
-        if signal_pipe is None:
-            signal_pipe = await new_peer_signal_pipe(
-                msg.routing.dest,
-                self
+    async def await_peer_con(self, msg, m=0):
+        # Try not to load a new signal pipe if
+        # one already exists for the dest.
+        dest = msg.routing.dest
+        offsets = dest["signal"]
+
+        # Try signal pipes in order.
+        # If connect fails try another.
+        for i in range(0, len(offsets)):
+            """
+            The start location within the offset list
+            depends on the technique no in the p2p_pipe
+            so that a different start server can be used
+            per method to skip failing on the same
+            server every time. Adds more resilience.
+            """
+            offset = offsets[(i + (m - 1)) % len(offsets)]
+
+            # Use existing sig pipe.
+            if offset in self.signal_pipes:
+                sig_pipe = self.signal_pipes[offset]
+
+            # Or load new server offset.
+            if offset not in self.signal_pipes:
+                sig_pipe = await async_wrap_errors(
+                    new_peer_signal_pipe(
+                        dest,
+                        self
+                    )
+                )
+
+            # Save offset.
+            self.signal_pipes[offset] = sig_pipe
+            if sig_pipe is None:
+                continue
+
+            # Send message.
+            sent = await async_wrap_errors(
+                sig_pipe.send_msg(
+                    msg.pack(),
+                    to_s(dest["node_id"])
+                )
             )
-            assert(signal_pipe is not None)
 
-
-        await signal_pipe.send_msg(
-            msg.pack(),
-            to_s(msg.routing.dest["node_id"])
-        )
-        
-    async def sig_msg_dispatcher(self):
-        try:
-            msg = await self.sig_msg_queue.get()
-            if msg is None:
+            # Otherwise try next signal pipe.
+            if sent:
                 return
             
-            await self.await_peer_con(
-                msg
+        # TODO: no paths to host.
+        # Need fallback plan here.
+
+    async def sig_msg_dispatcher(self):
+        try:
+            x = await self.sig_msg_queue.get()
+            if x is None:
+                return
+            else:
+                msg, m = x
+            
+            await async_wrap_errors(
+                self.await_peer_con(
+                    msg,
+                    m,
+                )
             )
 
             self.sig_msg_dispatcher_task = asyncio.ensure_future(

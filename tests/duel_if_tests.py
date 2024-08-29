@@ -27,9 +27,11 @@ IF_BOB_NAME = "wlx00c0cab5760d"
 def patch_msg_dispatcher(src_pp, src_node, dest_node):
     async def patch():
         try:
-            msg = await src_node.sig_msg_queue.get()
-            if msg is None:
+            x = await src_node.sig_msg_queue.get()
+            if x is None:
                 return
+            else:
+                msg, _ = x
             
             print(msg)
             
@@ -112,7 +114,7 @@ def patch_p2p_stats(strategies, src_pp):
         # Overwrite the func pointer to failure closure.
         src_pp.func_table[offset][0] = failure
 
-async def get_node(if_name, node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
+async def get_node(if_name=IF_ALICE_NAME, node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     delta = delta_info(EQUAL_DELTA, NA_DELTA)
     nat = nat_info(OPEN_INTERNET, delta)
     #nat = nat_info(RESTRICT_NAT, delta_info(INDEPENDENT_DELTA, node_port + 10))
@@ -359,26 +361,37 @@ async def test_dir_reverse_fail_direct():
         assert(await check_pipe(pipe))
         await pipe.close()
 
+async def test_nicknames():
+    node = await get_node()
+    print(node)
 
-
-async def test_node_start():
-    """
-
-    node = await get_node(
-        IF_ALICE_NAME,
-        node_port=NODE_PORT + 1
+    name = "unique test name"
+    val = "unique test val"
+    af = IP4
+    serv = PNP_SERVERS[af][0]
+    nic = node.ifs[0]
+    dest = await Address(
+        serv["ip"],
+        serv["port"],
+        nic.route(af)
     )
 
+    pnpc = PNPClient(node.sk, dest, serv["pk"])
 
-    node = await get_node(
-        IF_BOB_NAME
-    )
-    """
+    await pnpc.push(name, val)
+
+    out = await pnpc.fetch(name)
+    print(out)
+    print(out.value)
+
+    print(pnpc)
+
+    await node.close()
+
+    # 24 random bytes.
+    # SigningKey.from_string(h_to_b(sk_hex))
 
 
-    async with TestNodes() as nodes:
-        #print(nodes.alice.p2p_addr)
-        pass
 
 async def duel_if_tests():
     try:
@@ -402,7 +415,7 @@ async def duel_if_tests():
         # Works
         #await test_tcp_punch_direct_lan_fail_ext_suc()
 
-        await test_dir_reverse_fail_direct()
+        await test_nicknames()
 
 
         # Multiple methods now with failures inbetween.

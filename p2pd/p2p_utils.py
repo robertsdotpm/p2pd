@@ -373,6 +373,9 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=N
                             use_addr_type,
                             reply,
                         )
+
+                    if pipe_id in pp.node.pipes:
+                        del pp.node.pipes[pipe_id]
             
                 except:
                     what_exception()
@@ -383,30 +386,24 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=N
     # Failure.
     return None
 
-async def new_peer_signal_pipe(p2p_dest, node):
-    for offset in p2p_dest["signal"]:
-        # Build a channel to relay signal messages to peer.
-        mqtt_server = MQTT_SERVERS[offset]
-        signal_pipe = SignalMock(
-            peer_id=to_s(node.node_id),
-            f_proto=node.signal_protocol,
-            mqtt_server=mqtt_server
-        )
+async def new_peer_signal_pipe(offset, p2p_dest, node):
+    # Build a channel to relay signal messages to peer.
+    mqtt_server = MQTT_SERVERS[offset]
+    signal_pipe = SignalMock(
+        peer_id=to_s(node.node_id),
+        f_proto=node.signal_protocol,
+        mqtt_server=mqtt_server
+    )
 
-        print(signal_pipe)
-
-        # If it fails unset the client.
-        try:
-            # If it's successful exit server offset attempts.
-            await signal_pipe.start()
-            node.signal_pipes[offset] = signal_pipe
-        except asyncio.TimeoutError:
-            print("sig pipe timeout")
-            # Cleanup and make sure it's unset.
-            await signal_pipe.close()
-            continue
-
+    # If it fails unset the client.
+    try:
+        # If it's successful exit server offset attempts.
+        await signal_pipe.start()
         return signal_pipe
+    except asyncio.TimeoutError:
+        print("sig pipe timeout")
+        # Cleanup and make sure it's unset.
+        await signal_pipe.close()
     
 async def fallback_machine_id(netifaces, app_id="p2pd"):
     host = socket.gethostname()
