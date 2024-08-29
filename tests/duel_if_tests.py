@@ -32,12 +32,22 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
                 return
             else:
                 msg, _ = x
+
+            # Encrypt the message if the public key is known.
+            buf = b"\0" + msg.pack()
+            dest_node_id = msg.routing.dest["node_id"]
+            # or ... integrity portion...
+            if dest_node_id in src_node.auth:
+                buf = b"\1" + encrypt(
+                    src_node.auth[dest_node_id]["vk"],
+                    msg.pack(),
+                )
             
-            print(msg)
+            print(buf)
             
             try:
                 await dest_node.sig_proto_handlers.proto(
-                    msg.pack()
+                    buf
                 )
             except asyncio.CancelledError:
                 raise Exception("cancelled")
@@ -337,6 +347,7 @@ async def test_tcp_punch_direct_lan_fail_ext_suc():
         await pipe.close()
 
 async def test_dir_reverse_fail_direct():
+    name = "my e"
     params = {
         "return_msg": False,
         "addr_types": [EXT_BIND, NIC_BIND],
@@ -347,11 +358,17 @@ async def test_dir_reverse_fail_direct():
     use_strats = [P2P_DIRECT, P2P_RELAY, P2P_REVERSE, P2P_PUNCH]
     use_strats = patch_strats = [P2P_RELAY]
     use_strats = patch_strats = [P2P_PUNCH]
+    use_strats = patch_strats = [P2P_REVERSE]
     async with TestNodes(**params) as nodes:
         patch_p2p_stats(patch_strats, nodes.pp_alice)
         #patch_p2p_stats(patch_strats, nodes.pp_bob)
         print(f"same machine = {nodes.pp_alice.same_machine}")
-        pipe = await nodes.pp_alice.connect(
+
+        name = await nodes.bob.nickname(name)
+        print(name)
+
+        pipe = await nodes.alice.connect(
+            name,
             strategies=use_strats,
             conf=nodes.pp_conf,
         )
@@ -367,7 +384,7 @@ async def test_nicknames():
     print(node.sk)
 
     nic = node.ifs[0]
-    name = "unique test name2"
+    name = ""
     val = "unique test val2"
 
 
@@ -446,7 +463,9 @@ async def duel_if_tests():
         # Works
         #await test_tcp_punch_direct_lan_fail_ext_suc()
 
-        await test_nicknames()
+        await test_dir_reverse_fail_direct()
+
+        #await test_nicknames()
 
 
         # Multiple methods now with failures inbetween.

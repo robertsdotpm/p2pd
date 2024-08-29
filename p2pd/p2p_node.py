@@ -60,7 +60,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         self.vk = self.sk.verifying_key
         self.node_id = hashlib.sha256(
             self.vk.to_string("compressed")
-        ).digest()[:20]
+        ).hexdigest()[:25]
 
         # Table of authenticated users.
         self.auth = {
@@ -153,8 +153,10 @@ class P2PNode(P2PNodeExtra, Daemon):
                 "sk": None,
             }
 
+        print(f"Connecting to {addr_bytes}")
+        print(f"pkt vkc = {pkt.vkc}")
         pp = self.p2p_pipe(addr_bytes)
-        return await pp.connect(strategies, conf)
+        return await pp.connect(strategies, reply=None, conf=conf)
 
     # Get our node server's address.
     def address(self):

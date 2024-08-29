@@ -10,8 +10,7 @@ from .install import *
 from .ecies import encrypt, decrypt
 import asyncio
 import pathlib
-import secrets
-from ecdsa import SigningKey
+from ecdsa import SigningKey, SECP256k1
 
 class P2PNodeExtra():
     def load_signing_key(self):
@@ -37,14 +36,15 @@ class P2PNodeExtra():
 
         # Write a new key if the path doesn't exist.
         if not os.path.exists(sk_path):
-            sk_buf = secrets.token_bytes(24)
+            sk = SigningKey.generate(curve=SECP256k1)
+            sk_buf = sk.to_string()
             sk_hex = to_h(sk_buf)
             with open(sk_path, "w") as file:
                 file.write(sk_hex)
 
         # Convert secret key to a singing key.
         sk_buf = h_to_b(sk_hex)
-        sk = SigningKey.from_string(sk_buf)
+        sk = SigningKey.from_string(sk_buf, curve=SECP256k1)
         return sk
 
     async def load_stun_clients(self):

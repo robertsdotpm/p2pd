@@ -58,7 +58,7 @@ CREATE TABLE `names` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `name` varbinary(50) NOT NULL,
   `value` varbinary(500) NOT NULL,
-  `owner_pub` binary(25) NOT NULL,
+  `owner_pub` binary(33) NOT NULL,
   `af` tinyint(3) UNSIGNED NOT NULL,
   `ip_id` bigint(20) UNSIGNED NOT NULL,
   `timestamp` bigint(20) UNSIGNED NOT NULL

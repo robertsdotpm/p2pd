@@ -23,8 +23,7 @@ Todo: test IPv6 works - setup home for it again.
 from .ecies import encrypt, decrypt
 import os
 import aiomysql
-from aiomysql import Cursor
-from ecdsa import VerifyingKey
+from ecdsa import VerifyingKey, SECP256k1
 from .pnp_utils import *
 from .net import *
 from .ip_range import IPRange
@@ -469,7 +468,10 @@ class PNPServer(Daemon):
                         return
 
                     # Ensure valid sig for next delete op.
-                    vk = VerifyingKey.from_string(row[3])
+                    vk = VerifyingKey.from_string(
+                        row[3],
+                        curve=SECP256k1
+                    )
                     vk.verify(pkt.sig, pnp_msg)
 
                     # Delete pre-existing value.

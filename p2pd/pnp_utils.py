@@ -2,7 +2,7 @@ import time
 import random
 import struct
 from .ecies import generate_key
-from ecdsa import VerifyingKey
+from ecdsa import VerifyingKey, SECP256k1
 from .utils import *
 
 #####################################################################################
@@ -56,7 +56,7 @@ class PNPPacket():
         ).pack()
 
     def is_valid_sig(self):
-        vk = VerifyingKey.from_string(self.vkc)
+        vk = VerifyingKey.from_string(self.vkc, curve=SECP256k1)
         msg = self.get_msg_to_sign()
         try:
             # recover_verify_key(msg, self.sig, vk_b)
@@ -128,7 +128,7 @@ class PNPPacket():
         val = buf[p:p + val_len]; p += val_len;
 
         # Extract sig field.
-        vkc = buf[p:p + 25]; p += 25;
+        vkc = buf[p:p + 33]; p += 33;
         sig = buf[p:]
 
         return PNPPacket(name, val, vkc, sig, updated, behavior, pkid, reply_pk)

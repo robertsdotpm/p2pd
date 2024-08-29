@@ -50,22 +50,33 @@ class SigMsg():
         return af, addr
 
     class Integrity:
-        def __init__(self, vkc, sig=b""):
+        def __init__(self, vkc="", sig=""):
             self.vkc = vkc
             self.sig = sig
 
         def to_dict(self):
-            return {
-                "vkc": self.vkc.to_string(),
+            out = {
                 "sig": to_h(self.sig)
             }
+
+            if len(self.vkc):
+                out["vkc"] = self.vkc.to_string("compressed")
+            else:
+                out["vkc"] = ""
+
+            return out
         
         @staticmethod
         def from_dict(d):
-            return SigMsg.Integrity(
-                VerifyingKey.from_str(d["vkc"]),
-                h_to_b(d["sig"])
-            )
+            vkc = d.get("vkc", "")
+            sig = d.get("sig", "")
+            if len(vkc):
+                return SigMsg.Integrity(
+                    VerifyingKey.from_string(vkc),
+                    h_to_b(sig),
+                )
+            else:
+                return SigMsg.Integrity()
 
     # Information about the message sender.
     class Meta():

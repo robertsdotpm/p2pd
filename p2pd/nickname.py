@@ -93,6 +93,7 @@ class Nickname():
             )
         
         self.started = True
+        return self
 
     async def push(self, name, value, behavior=BEHAVIOR_DO_BUMP, timeout=NAMING_TIMEOUT):
         assert(self.started)
@@ -156,7 +157,7 @@ class Nickname():
         for task in first_in:
             ret = await task
             if ret.value is not None:
-                return ret.value
+                return ret
             
         raise FullNameFailure(f"Could not fetch {name}")
         
