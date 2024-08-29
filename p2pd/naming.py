@@ -153,13 +153,22 @@ class Naming():
         
     async def delete(self, name, timeout=NAMING_TIMEOUT):
         assert(self.started)
+        name = pnp_strip_tlds(name)
 
-        return
-        return await self.do_client_actions_concurrently(
-            "delete",
-            (name,),
-            timeout
-        )
+        async def worker(offset):
+            client = self.clients[offset]
+            return await client.delete(name)
+
+        tasks = []
+        for offset in range(0, len(self.clients)):
+            tasks.append(
+                async_wrap_errors(
+                    worker(offset),
+                    timeout
+                )
+            )
+
+        await asyncio.gather(*tasks)
 
 
 async def workspace():

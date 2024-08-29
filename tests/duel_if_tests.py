@@ -389,6 +389,11 @@ async def test_nicknames():
 
     out = await n.fetch(name)
     print(out)
+
+    await n.delete(name)
+
+    out = await n.fetch(name)
+    print(out)
     """
 
     
