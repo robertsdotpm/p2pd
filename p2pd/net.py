@@ -474,7 +474,7 @@ async def proto_recv(pipe):
             continue
 
 async def proto_send(pipe, buf):
-    n = 1 if pipe.stream.proto == TCP else 5
+    n = 1 if pipe.sock.type == TCP else 5
     for _ in range(0, n):
         try:
             await pipe.send(buf)
