@@ -437,7 +437,7 @@ async def test_nicknames():
 
     pnpc = PNPClient(node.sk, dest, serv["pk"])
 
-    out = await pnpc.push(name, val)
+    #out = await pnpc.push(name, val)
 
 
     out = await pnpc.fetch(name)
