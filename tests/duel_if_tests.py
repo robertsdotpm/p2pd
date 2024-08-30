@@ -348,6 +348,7 @@ async def test_tcp_punch_direct_lan_fail_ext_suc():
 
 async def test_dir_reverse_fail_direct():
     # bug in the message dispatcher.
+    # Ip6 for naming doesnt work -- fix that too.
     name = ""
     params = {
         "return_msg": True,
@@ -385,6 +386,8 @@ async def test_nicknames():
     print(node.sk)
 
     nic = node.ifs[0]
+
+    """
     name = ""
     val = "unique test val2"
 
@@ -393,6 +396,7 @@ async def test_nicknames():
     await n.start()
 
     print(n.clients[0].dest.af)
+    """
 
     """
     out = await n.clients[0].push(name, val)
@@ -401,6 +405,7 @@ async def test_nicknames():
     return
     """
 
+    """
     name = await n.push(name, val)
     print(name)
 
@@ -414,10 +419,16 @@ async def test_nicknames():
     print(out)
     """
 
-    
+
+
+
+
+
+    name = "test name 33479"
+    val = name
     af = IP4
     serv = PNP_SERVERS[af][1]
-    nic = node.ifs[0]
+    nic = await Interface("wlx00c0cab5760d")
     dest = await Address(
         serv["ip"],
         serv["port"],
@@ -426,14 +437,15 @@ async def test_nicknames():
 
     pnpc = PNPClient(node.sk, dest, serv["pk"])
 
-    await pnpc.push(name, val)
+    out = await pnpc.push(name, val)
+
 
     out = await pnpc.fetch(name)
     print(out)
     print(out.value)
 
     print(pnpc)
-    """
+
 
     await node.close()
 
@@ -464,9 +476,9 @@ async def duel_if_tests():
         # Works
         #await test_tcp_punch_direct_lan_fail_ext_suc()
 
-        await test_dir_reverse_fail_direct()
+        #await test_dir_reverse_fail_direct()
 
-        #await test_nicknames()
+        await test_nicknames()
 
 
         # Multiple methods now with failures inbetween.

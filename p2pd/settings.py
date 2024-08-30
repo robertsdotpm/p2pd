@@ -44,7 +44,7 @@ PNP_SERVERS = {
     IP6: [
         {
             "host": "hetzner1.p2pd.net",
-            "ip": "2a01:04f8:010a:3ce0:0000:0000:0000:0002",
+            "ip": "2a01:04f8:010a:3ce0:0000:0000:0000:0003",
             "port": 5300,
             "pk": "0249fb385ed71aee6862fdb3c0d4f8b193592eca4d61acc983ac5d6d3d3893689f"
         },

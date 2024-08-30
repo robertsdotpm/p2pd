@@ -35,8 +35,11 @@ class PNPPacket():
         self.sig = sig
         self.behavior = behavior
         self.pkid = pkid or random.randrange(0, 2 ** 32)
+
         self.reply_pk = reply_pk
         self.reply_sk = reply_sk
+        if vkc is not None:
+            assert(len(vkc) == 33)
 
     def gen_reply_key(self):
         secp_k = generate_key()
@@ -71,26 +74,31 @@ class PNPPacket():
 
         # ID for packet.
         buf += struct.pack("<I", self.pkid)
+        assert(len(buf) == 4)
 
         # Reply pk.
         if self.reply_pk is not None:
             buf += self.reply_pk
+            assert(len(self.reply_pk) == 33)
         else:
             buf += b"\0" * 33
+        assert(len(buf) == 37)
 
         # Behavior for changes.
         buf += bytes([self.behavior])
 
         # `Pr`event replay.
         buf += struct.pack("<Q", self.updated)
+        assert(len(buf) == 46)
 
         # Header (lens.)
         buf += bytes([self.name_len])
         buf += bytes([self.value_len])
 
         # Body (var len - limit)
-        buf += (self.name + (b"\0" * PNP_NAME_LEN))[:self.name_len]
-        buf += (self.value + (b"\0" * PNP_VAL_LEN))[:self.value_len]
+        buf += (self.name + (b"\0" * PNP_NAME_LEN))[:PNP_NAME_LEN]
+        buf += (self.value + (b"\0" * PNP_VAL_LEN))[:PNP_VAL_LEN]
+        assert(len(buf) == 598)
         
         # Variable length.
         if self.vkc is not None:

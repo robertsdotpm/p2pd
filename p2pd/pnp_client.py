@@ -47,12 +47,17 @@ class PNPClient():
     async def return_resp(self, pipe):
         try:
             buf = await proto_recv(pipe)
+            print(buf)
             buf = decrypt(self.reply_sk, buf)
             pkt = PNPPacket.unpack(buf)
+            
             if not pkt.updated:
+                print("not updated")
                 pkt.value = None
             return pkt
         except:
+            print("resp exception")
+            what_exception()
             log_exception()
             return None
         finally:
@@ -78,6 +83,7 @@ class PNPClient():
     async def fetch(self, name):
         pipe = await self.get_dest_pipe()
         pkt = PNPPacket(name, vkc=self.vkc)
+        print(pkt)
         await self.send_pkt(pipe, pkt, sign=False)
         return await self.return_resp(pipe)
 
