@@ -575,11 +575,12 @@ async def start_pnp_server(bind_port):
     print(serv_v4)
     print(serv_v6)
     print(reply_pk_hex)
-    await serv.listen_all(
-        [serv_v4, serv_v6],
-        [PNP_PORT],
-        [TCP, UDP]
-    )
+    await serv.listen_specific([
+        [serv_v4, TCP],
+        [serv_v6, TCP],
+        [serv_v4, UDP],
+        [serv_v6, UDP],
+    ])
 
     return serv
 
