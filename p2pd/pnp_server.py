@@ -470,7 +470,6 @@ class PNPServer(Daemon):
 
                         buf = self.serv_resp(resp)
                         await proto_send(pipe, buf)
-                        await db_con.commit()
                         return
 
                     # Ensure valid sig for next delete op.
@@ -528,6 +527,7 @@ class PNPServer(Daemon):
                 buf = self.serv_resp(pkt)
                 await proto_send(pipe, buf)
         except:
+            await db_con.rollback()
             log_exception()
         finally:
             if db_con is not None:

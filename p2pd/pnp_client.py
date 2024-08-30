@@ -48,7 +48,6 @@ class PNPClient():
     async def return_resp(self, pipe):
         try:
             buf = await proto_recv(pipe)
-            print(buf)
             buf = decrypt(self.reply_sk, buf)
             pkt = PNPPacket.unpack(buf)
             
@@ -73,11 +72,16 @@ class PNPClient():
             sig = b""
 
         buf = pnp_msg + sig
+        print(len(buf))
+        print(self.dest_pk)
+        print(buf)
         enc_msg = encrypt(self.dest_pk, buf)
+        #print(enc_msg)
         
         end = 1 if self.proto == TCP else 3
         for _ in range(0, end):
-            await pipe.send(enc_msg)
+            print("sending")
+            await pipe.send(enc_msg, self.dest.tup)
             if end > 1:
                 await asyncio.sleep(0.5)
 
