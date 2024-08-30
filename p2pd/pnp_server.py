@@ -502,7 +502,7 @@ class PNPServer(Daemon):
 
                 # Check signature is valid.
                 if not pkt.is_valid_sig():
-                    return
+                    raise Exception("pkt sig is invalid.")
 
                 # Create a new name entry.
                 await verified_write_name(

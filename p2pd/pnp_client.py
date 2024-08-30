@@ -83,7 +83,6 @@ class PNPClient():
     async def fetch(self, name):
         pipe = await self.get_dest_pipe()
         pkt = PNPPacket(name, vkc=self.vkc)
-        print(pkt)
         await self.send_pkt(pipe, pkt, sign=False)
         return await self.return_resp(pipe)
 

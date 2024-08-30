@@ -424,7 +424,7 @@ async def test_nicknames():
 
 
 
-    name = "test name 33479"
+    name = "test name 33480"
     val = name
     af = IP4
     serv = PNP_SERVERS[af][1]
