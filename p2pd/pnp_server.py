@@ -445,6 +445,9 @@ class PNPServer(Daemon):
                 password=self.db_pass,
                 db=self.db_name
             )
+            print(f"name = {pkt.name}")
+            print(f"sig = {pkt.sig}")
+
 
             async with db_con.cursor() as cur:
                 #await cur.execute("SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE")
@@ -488,6 +491,7 @@ class PNPServer(Daemon):
 
                 # A fetch failed.
                 if pkt.sig is None or not len(pkt.sig):
+                    log(f"Error: fetch {pkt.name} failed!")
                     resp = PNPPacket(
                         name=pkt.name,
                         value=b"",
