@@ -540,8 +540,8 @@ class PNPServer(Daemon):
 
 async def start_pnp_server(bind_port):
     i = await Interface()
-    serv_v4 = await i.route(IP4).bind(bind_port)
-    serv_v6 = await i.route(IP6).bind(bind_port)
+    serv_v4 = await i.route(IP4).bind(ip="*", port=bind_port)
+    serv_v6 = await i.route(IP6).bind(ips="*", port=bind_port)
 
     # Load mysql root password details.
     if "PNP_DB_PW" in os.environ:
