@@ -13,6 +13,7 @@ indicating that the server hasn't done the previous call yet.
 class PNPClient():
     def __init__(self, sk, dest, dest_pk, proto=TCP):
         self.dest_pk = dest_pk
+        assert(isinstance(dest_pk, bytes))
         self.dest = dest
         self.sk = sk
         self.vkc = sk.verifying_key.to_string("compressed")
@@ -81,10 +82,15 @@ class PNPClient():
                 await asyncio.sleep(0.5)
 
     async def fetch(self, name):
-        pipe = await self.get_dest_pipe()
-        pkt = PNPPacket(name, vkc=self.vkc)
-        await self.send_pkt(pipe, pkt, sign=False)
-        return await self.return_resp(pipe)
+        try:
+            pipe = await self.get_dest_pipe()
+            pkt = PNPPacket(name, vkc=self.vkc)
+            print("fetch built pkt")
+            await self.send_pkt(pipe, pkt, sign=False)
+            print("fetch sent pkt")
+            return await self.return_resp(pipe)
+        except:
+            what_exception()
 
     async def push(self, name, value, behavior=BEHAVIOR_DO_BUMP):
         t = await self.get_updated(name)

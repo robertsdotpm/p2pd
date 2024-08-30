@@ -435,7 +435,7 @@ async def test_nicknames():
         nic.route(af)
     )
 
-    pnpc = PNPClient(node.sk, dest, serv["pk"])
+    pnpc = PNPClient(node.sk, dest, h_to_b(serv["pk"]))
 
     #out = await pnpc.push(name, val)
 

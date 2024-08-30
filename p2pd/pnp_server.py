@@ -436,9 +436,9 @@ class PNPServer(Daemon):
     async def msg_cb(self, msg, client_tup, pipe):
         db_con = None
         try:
-            print("trying to decrypt {msg}")
+            print(f"trying to decrypt {msg}")
             msg = decrypt(self.reply_sk, msg)
-            print("decrypted msg {msg}")
+            print(f"decrypted msg {msg}")
             cidr = 32 if pipe.route.af == IP4 else 128
             pkt = PNPPacket.unpack(msg)
             print("unpacked new pkt.")
