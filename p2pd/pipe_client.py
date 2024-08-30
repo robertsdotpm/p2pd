@@ -196,13 +196,13 @@ class PipeClient(ACKUDP):
             # TCP Transport instance.
             if isinstance(handle, STREAM_TYPES):
                 # This also works for SSL wrapped sockets.
-                handle.write(data)
-                """
+                #handle.write(data)
+                
                 await self.loop.sock_sendall(
                     self.pipe_events.sock,
                     data
                 )
-                """
+                
                 
 
                 return 1
