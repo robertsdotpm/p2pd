@@ -132,8 +132,8 @@ class PNPPacket():
         val_len = min(buf[p], PNP_VAL_LEN); p += 1;
 
         # Extract body fields.
-        name = buf[p:p + name_len]; p += name_len;
-        val = buf[p:p + val_len]; p += val_len;
+        name = buf[p:p + name_len]; p += PNP_NAME_LEN;
+        val = buf[p:p + val_len]; p += PNP_VAL_LEN;
 
         # Extract sig field.
         vkc = buf[p:p + 33]; p += 33;
