@@ -87,18 +87,18 @@ class PNPPacket():
         # Behavior for changes.
         buf += bytes([self.behavior])
 
-        # `Pr`event replay.
+        # Prevent replay.
         buf += struct.pack("<Q", self.updated)
         assert(len(buf) == 46)
 
         # Header (lens.)
         buf += struct.pack("<H", self.name_len)
         buf += struct.pack("<H", self.value_len)
+        assert(len(buf) == 50)
 
         # Body (var len - limit)
-        buf += (self.name + (b"\0" * PNP_NAME_LEN))[:PNP_NAME_LEN]
-        buf += (self.value + (b"\0" * PNP_VAL_LEN))[:PNP_VAL_LEN]
-        assert(len(buf) == 600)
+        buf += self.name[:PNP_NAME_LEN]
+        buf += self.value[:PNP_VAL_LEN]
         
         # Variable length.
         if self.vkc is not None:
@@ -130,8 +130,8 @@ class PNPPacket():
         # Extract header portion.
         name_len = struct.unpack("<H", buf[p:p + 2]); p += 2;
         val_len = struct.unpack("<H", buf[p:p + 2]); p += 2;
-        assert(name_len <= PNP_NAME_LEN)
-        assert(val_len <= PNP_VAL_LEN)
+        min(name_len, PNP_NAME_LEN)
+        min(val_len, PNP_VAL_LEN)
 
         # Extract body fields.
         name = buf[p:p + name_len]; p += name_len;
