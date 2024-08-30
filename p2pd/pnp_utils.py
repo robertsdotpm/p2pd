@@ -128,8 +128,8 @@ class PNPPacket():
         updated = struct.unpack("<Q", buf[p:p + 8])[0]; p += 8;
 
         # Extract header portion.
-        name_len = struct.unpack("<H", buf[p:p + 2]); p += 2;
-        val_len = struct.unpack("<H", buf[p:p + 2]); p += 2;
+        name_len = struct.unpack("<H", buf[p:p + 2])[0]; p += 2;
+        val_len = struct.unpack("<H", buf[p:p + 2])[0]; p += 2;
         min(name_len, PNP_NAME_LEN)
         min(val_len, PNP_VAL_LEN)
 
