@@ -437,7 +437,6 @@ class PNPServer(Daemon):
         db_con = None
         print(msg)
         print(client_tup)
-        print(pipe.sock)
         return
         try:
             pipe.stream.set_dest_tup(client_tup)
