@@ -435,6 +435,10 @@ class PNPServer(Daemon):
 
     async def msg_cb(self, msg, client_tup, pipe):
         db_con = None
+        print(msg)
+        print(client_tup)
+        print(pipe.sock)
+        return
         try:
             pipe.stream.set_dest_tup(client_tup)
             print(f"trying to decrypt {msg}")

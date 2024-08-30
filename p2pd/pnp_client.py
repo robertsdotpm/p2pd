@@ -81,6 +81,7 @@ class PNPClient():
         end = 1 if self.proto == TCP else 3
         for _ in range(0, end):
             print("sending")
+            print(self.dest.tup)
             send_success = await pipe.send(enc_msg, self.dest.tup)
             if not send_success:
                 log(f"pnp client send pkt failure.")

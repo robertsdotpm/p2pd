@@ -426,9 +426,9 @@ async def test_nicknames():
 
     name = "test name 33480"
     val = name
-    af = IP6
+    af = IP4
     serv = PNP_SERVERS[af][1]
-    nic = await Interface("wlx00c0cab5760d")
+    nic = await Interface("enp0s25")
     dest = await Address(
         serv["ip"],
         serv["port"],
