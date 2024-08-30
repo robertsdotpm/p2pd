@@ -115,6 +115,7 @@ class TCPEvents(asyncio.StreamReaderProtocol):
         pass
 
     def data_received(self, data):
+        log(f"Base proto recv tcp client = {data}")
         # This just adds data to reader which we are handling ourselves.
         #super().connection_lost(exc)
         if self.client_events is None:
