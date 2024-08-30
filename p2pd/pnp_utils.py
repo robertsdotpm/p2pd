@@ -92,13 +92,13 @@ class PNPPacket():
         assert(len(buf) == 46)
 
         # Header (lens.)
-        buf += bytes([self.name_len])
-        buf += bytes([self.value_len])
+        buf += struct.pack("<H", self.name_len)
+        buf += struct.pack("<H", self.value_len)
 
         # Body (var len - limit)
         buf += (self.name + (b"\0" * PNP_NAME_LEN))[:PNP_NAME_LEN]
         buf += (self.value + (b"\0" * PNP_VAL_LEN))[:PNP_VAL_LEN]
-        assert(len(buf) == 598)
+        assert(len(buf) == 600)
         
         # Variable length.
         if self.vkc is not None:
@@ -118,7 +118,7 @@ class PNPPacket():
 
         # Reply pk.
         reply_pk = buf[p:p + 33]; p += 33;
-        if not reply_pk:
+        if reply_pk == b"\0" * 33:
             reply_pk = None
 
         # Extract behavior.
@@ -128,12 +128,14 @@ class PNPPacket():
         updated = struct.unpack("<Q", buf[p:p + 8])[0]; p += 8;
 
         # Extract header portion.
-        name_len = min(buf[p], PNP_NAME_LEN); p += 1;
-        val_len = min(buf[p], PNP_VAL_LEN); p += 1;
+        name_len = struct.unpack("<H", buf[p:p + 2]); p += 2;
+        val_len = struct.unpack("<H", buf[p:p + 2]); p += 2;
+        assert(name_len <= PNP_NAME_LEN)
+        assert(val_len <= PNP_VAL_LEN)
 
         # Extract body fields.
-        name = buf[p:p + name_len]; p += PNP_NAME_LEN;
-        val = buf[p:p + val_len]; p += PNP_VAL_LEN;
+        name = buf[p:p + name_len]; p += name_len;
+        val = buf[p:p + val_len]; p += val_len;
 
         # Extract sig field.
         vkc = buf[p:p + 33]; p += 33;
