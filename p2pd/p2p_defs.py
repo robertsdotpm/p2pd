@@ -49,35 +49,6 @@ class SigMsg():
         
         return af, addr
 
-    class Integrity:
-        def __init__(self, vkc="", sig=""):
-            self.vkc = vkc
-            self.sig = sig
-
-        def to_dict(self):
-            out = {
-                "sig": to_h(self.sig)
-            }
-
-            if len(self.vkc):
-                out["vkc"] = self.vkc.to_string("compressed")
-            else:
-                out["vkc"] = ""
-
-            return out
-        
-        @staticmethod
-        def from_dict(d):
-            vkc = d.get("vkc", "")
-            sig = d.get("sig", "")
-            if len(vkc):
-                return SigMsg.Integrity(
-                    VerifyingKey.from_string(vkc),
-                    h_to_b(sig),
-                )
-            else:
-                return SigMsg.Integrity()
-
     # Information about the message sender.
     class Meta():
         def __init__(self, pipe_id, af, src_buf, src_index=0, addr_types=[EXT_BIND, NIC_BIND]):
@@ -194,10 +165,6 @@ class SigMsg():
             data.get("payload", {})
         )
 
-        self.integrity = self.Integrity.from_dict(
-            data.get("integrity", {})
-        )
-
         self.enum = enum
             
 
@@ -206,26 +173,17 @@ class SigMsg():
             "meta": self.meta.to_dict(),
             "routing": self.routing.to_dict(),
             "payload": self.payload.to_dict(),
-            "integrity": self.integrity.to_dict(),
         }
 
         return d
 
     def pack(self, sk=None):
-        buf = bytes([self.enum]) + \
+        return bytes([self.enum]) + \
             to_b(
                 json.dumps(
                     self.to_dict()
                 )
             )
-        
-        if sk is not None:
-            sig = sk.sign(buf)
-            j = self.unpack(buf)
-            j.integrity.sig = sig
-            return SigMsg(j).pack()
-        
-        return buf
     
     @classmethod
     def unpack(cls, buf):

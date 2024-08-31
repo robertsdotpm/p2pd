@@ -52,12 +52,9 @@ class PNPClient():
             pkt = PNPPacket.unpack(buf)
             
             if not pkt.updated:
-                print("not updated")
                 pkt.value = None
             return pkt
         except:
-            print("resp exception")
-            what_exception()
             log_exception()
             return None
         finally:
@@ -72,16 +69,9 @@ class PNPClient():
             sig = b""
 
         buf = pnp_msg + sig
-        print(len(buf))
-        print(self.dest_pk)
-        print(buf)
         enc_msg = encrypt(self.dest_pk, buf)
-        #print(enc_msg)
-        print(pipe.sock)
         end = 1 if self.proto == TCP else 3
         for _ in range(0, end):
-            print("sending")
-            print(self.dest.tup)
             send_success = await pipe.send(enc_msg, self.dest.tup)
             if not send_success:
                 log(f"pnp client send pkt failure.")
@@ -90,15 +80,10 @@ class PNPClient():
                 await asyncio.sleep(0.5)
 
     async def fetch(self, name):
-        try:
-            pipe = await self.get_dest_pipe()
-            pkt = PNPPacket(name, vkc=self.vkc)
-            print("fetch built pkt")
-            await self.send_pkt(pipe, pkt, sign=False)
-            print("fetch sent pkt")
-            return await self.return_resp(pipe)
-        except:
-            what_exception()
+        pipe = await self.get_dest_pipe()
+        pkt = PNPPacket(name, vkc=self.vkc)
+        await self.send_pkt(pipe, pkt, sign=False)
+        return await self.return_resp(pipe)
 
     async def push(self, name, value, behavior=BEHAVIOR_DO_BUMP):
         t = await self.get_updated(name)

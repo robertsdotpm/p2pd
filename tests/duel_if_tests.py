@@ -424,11 +424,11 @@ async def test_nicknames():
 
 
 
-    name = "test name 33480"
+    name = "test name 33600"
     val = name
-    af = IP4
+    af = IP6
     serv = PNP_SERVERS[af][1]
-    nic = await Interface("enp0s25")
+    nic = await Interface("wlx00c0cab5760d")
     dest = await Address(
         serv["ip"],
         serv["port"],
@@ -439,7 +439,7 @@ async def test_nicknames():
 
     pnpc = PNPClient(node.sk, dest, h_to_b(serv["pk"]))
 
-    #out = await pnpc.push(name, val)
+    out = await pnpc.push(name, val)
 
 
     out = await pnpc.fetch(name)
@@ -478,9 +478,9 @@ async def duel_if_tests():
         # Works
         #await test_tcp_punch_direct_lan_fail_ext_suc()
 
-        #await test_dir_reverse_fail_direct()
+        await test_dir_reverse_fail_direct()
 
-        await test_nicknames()
+        #await test_nicknames()
 
 
         # Multiple methods now with failures inbetween.

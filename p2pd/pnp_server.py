@@ -438,20 +438,15 @@ class PNPServer(Daemon):
         db_con = None
         try:
             pipe.stream.set_dest_tup(client_tup)
-            print(f"trying to decrypt {msg}")
             msg = decrypt(self.reply_sk, msg)
-            print(f"decrypted msg {msg}")
             cidr = 32 if pipe.route.af == IP4 else 128
             pkt = PNPPacket.unpack(msg)
-            print("unpacked new pkt.")
             pnp_msg = pkt.get_msg_to_sign()
             db_con = await aiomysql.connect(
                 user=self.db_user, 
                 password=self.db_pass,
                 db=self.db_name
             )
-            print(f"name = {pkt.name}")
-            print(f"sig = {pkt.sig}")
 
 
             async with db_con.cursor() as cur:
