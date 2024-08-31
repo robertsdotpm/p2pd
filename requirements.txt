@@ -5,10 +5,9 @@ aiounittest == 1.4.2 # Needed for unit tests on some Python versions.
 xmltodict # Needed for UPnP SOAP protocol stuff.
 ecdsa # Used for signing messages.
 aiomysql # Used for PNP.
-pyroute2; platform_system != "Windows" and platform_system != "Darwin" # Fallback for interface lookups on Android with netlink.
+pyroute2; platform_system != "Windows" and platform_system != "Darwin" # Fallback for interface on Android with netlink.
 
 # These are the dependencies for ECIES.
 coincurve >=13,<20
-aiosqlite
-
 winregistry; platform_system == "Windows"
+psutil # Used to check for zombie processes.

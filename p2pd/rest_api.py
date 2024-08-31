@@ -40,6 +40,7 @@ def get_sub_params(v):
 
 class P2PDServer(RESTD):
     def __init__(self, interfaces=[], node=None):
+        self.__name__ = "P2PDServer"
         super().__init__()
         self.interfaces = interfaces
         self.node = node

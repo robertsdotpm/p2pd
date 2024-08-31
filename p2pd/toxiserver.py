@@ -378,6 +378,7 @@ class ToxiTunnelServer(Daemon):
 
 class ToxiMainServer(RESTD):
     def __init__(self, interfaces):
+        self.__name__ = "ToxiMainServer"
         super().__init__()
         self.interfaces = interfaces
         self.tunnel_servs = {}

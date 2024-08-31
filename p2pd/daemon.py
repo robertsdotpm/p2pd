@@ -1,7 +1,9 @@
+# TODO: rewrite this crap code module.
 import struct
 from .address import *
 from .interface import *
 from .pipe_utils import *
+from .install import p2pd_detect_zombie_serv
 
 DAEMON_CONF = dict_child({
     "reuse_addr": True
@@ -25,8 +27,29 @@ f = lambda msg, stream: ...
 def get_listen_port(server_info):
     return server_info[2].sock.getsockname()[1]
 
+async def serv_already_listening(proto, listen_route):
+    # Destination address details for serv.
+    listen_ip = listen_route.bind_tup()[0]
+    listen_port = listen_route.bind_tup()[1]
+    if not listen_port:
+        return False
+
+    # Route to connect to serv.
+    route = listen_route.interface.route(listen_route.af)
+    await route.bind()
+
+    # Try make pipe to the server socket.
+    dest = await Address(listen_ip, listen_port, route)
+    pipe = await pipe_open(proto, dest, route)
+    if pipe is not None:
+        await pipe.close()
+        return True
+    
+    return False
+
 class Daemon():
     def __init__(self, interfaces=None, conf=DAEMON_CONF):
+        self.__name__ = getattr(self, "__name__", "Daemon")
         self.conf = conf
         self.servers = []
         self.restricted_proto = None
@@ -102,9 +125,19 @@ class Daemon():
         routes.append(target)
 
         # Start server on every address.
+        ports = {}
         for route in routes:
             if not route.resolved:
                 await route.bind(port)
+
+            if route.bind_port and route.bind_port not in ports:
+                ports[route.bind_port] = 1
+                is_running = p2pd_detect_zombie_serv(
+                    route.bind_port
+                )
+
+                if is_running:
+                    log("error serv pid exists!")
 
             log('starting server {}:{} p={}, af={}'.format(
                 route.nic(),
@@ -117,6 +150,16 @@ class Daemon():
             # So it can do cool tricks.
             if self.rp is not None:
                 route.link_route_pool(self.rp[route.af])
+
+            # Check if a server already listening.
+            is_listening = await serv_already_listening(proto, route)
+            if is_listening:
+                log('error potential bind conflict! {}:{} p={}, af={}'.format(
+                    route.nic(),
+                    route.bind_port,
+                    proto,
+                    route.af
+                ))
 
             # Save list of servers.
             listen_task = pipe_open(proto, route=route, msg_cb=msg_cb, up_cb=up_cb, conf=self.conf)

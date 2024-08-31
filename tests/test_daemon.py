@@ -34,14 +34,14 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
     async def test_bind_target(self):
         d = Daemon()
         i = await Interface()
-        i.rp[IP6].routes = []
 
-        p = 10233
-        b = await Bind(i, i.supported()[0], port=p).bind(p)
+        port = 40000
+        route = i.route(i.supported()[0])
+        await route.bind(port=port)
         await d._listen(
-            target=b,
-            port=p,
-            proto=TCP
+            target=route,
+            proto=TCP,
+            port=port
         )
 
         await d.close()
@@ -49,18 +49,17 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
     async def test_listen_specific(self):
         d = Daemon()
         i = await Interface()
-        i.rp[IP6].routes = []
 
-        p = 10233
-        b = await Bind(i, i.supported()[0], port=p).bind(p)
+        route = i.route(i.supported()[0])
+        await route.bind()
         await d.listen_specific(
-            targets=[[b, TCP]],
+            targets=[[route, TCP]],
         )
 
         await d.close()
 
     async def test_daemon(self):
-        server_port = 0
+        server_port = 30000
         loopbacks = {
             IP4: "127.0.0.1",
             IP6: "::1"

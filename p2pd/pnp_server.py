@@ -397,6 +397,7 @@ async def verified_write_name(db_con, cur, serv, behavior, updated, name, value,
 
 class PNPServer(Daemon):
     def __init__(self, db_user, db_pass, db_name, reply_sk, reply_pk, v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION, v6_addr_expiry=V6_ADDR_EXPIRY):
+        self.__name__ = "PNPServer"
         self.db_user = db_user
         self.db_pass = db_pass
         self.db_name = db_name

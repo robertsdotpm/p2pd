@@ -26,6 +26,7 @@ NODE_CONF = dict_child({
 # Main class for the P2P node server.
 class P2PNode(P2PNodeExtra, Daemon):
     def __init__(self, ifs, port=NODE_PORT, conf=NODE_CONF):
+        self.__name__ = "P2PNode"
         super().__init__()
         assert(port)
         
