@@ -54,6 +54,14 @@ def copy_p2pd_install_files_as_needed():
         shutil.copy(kvs_db_copy_path, kvs_db_install_path)
 
 def p2pd_detect_zombie_serv(serv_port):
+    # Make install dir if needed.
+    try:
+        install_root = get_p2pd_install_root()
+        pathlib.Path(install_root).mkdir(parents=True, exist_ok=True)
+    except:
+        log_exception()
+
+    # Main path files.
     already_running = True
     my_pid = os.getpid()
     pidfile_path = os.path.realpath(
@@ -82,9 +90,14 @@ def p2pd_detect_zombie_serv(serv_port):
         already_running = False
         
     # Update the PID file.
-    if not already_running:
-        with open(pidfile_path, 'w') as f:
-            f.write(str(my_pid))
+    try:
+        if not already_running:
+            with open(pidfile_path, 'w') as f:
+                f.write(str(my_pid))
+    except FileNotFoundError:
+        # Potential permission error.
+        # Return False.
+        return False
 
     return already_running
 
