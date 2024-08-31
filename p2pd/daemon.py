@@ -1,3 +1,45 @@
+"""
+node:
+    - route list of every ifs on all afs for specific port
+    - listen on all those routes for all protos specified
+
+pnp_server:
+    - listen all v4 route
+    - listen all v6 route
+    - pair of [v4, proto] for udp and tcp
+
+toxid
+    - pair [localhost route, tcp]
+
+p2pd rest server:
+    route = nic ip, port
+    listen on route, tcp
+
+----------------------------------------
+code problems:
+- hard to index the servers within and access needed fields
+    - like what port is running on and the addr
+    - todo: lookup how else its used
+- listen specific and all ... confusingly named
+- listen all tries to do too much
+    - no reason to try support interface and route pools
+- listen specific and all could be moved out of class if they neeed to exist
+- error hiding like binding unbound routes = bad idea
+- funcs that have no reason being there like dev
+- features that dont need to exist like restricted protos
+
+
+----------------------------------------
+
+helper funcs that do the loop stuff:
+    listen all ...
+
+cls:
+    add_listener(proto, route, msg_cb)
+
+"""
+
+
 # TODO: rewrite this crap code module.
 import struct
 from .address import *

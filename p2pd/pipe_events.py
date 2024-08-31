@@ -96,6 +96,7 @@ class PipeEvents(BaseACKProto):
         self.is_ack = None
         self.is_ackable = None
         self.is_running = True
+        self.proc_lock = None
 
     # Indicates the type of endpoint this is.
     def set_endpoint_type(self, endpoint_type):
@@ -412,6 +413,8 @@ class PipeEvents(BaseACKProto):
         self.tcp_server = None
         self.tcp_server_task = None
         self.tcp_clients = []
+        if self.proc_lock is not None:
+            self.proc_lock.release()
 
     # Return a matching message, async, non-blocking.
     async def recv(self, sub=SUB_ALL, timeout=2, full=False):
