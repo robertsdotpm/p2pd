@@ -18,7 +18,6 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
         }, NET_CONF)
 
 
-
         # Make server implement a custom ping protocol extension.
         async def proto_extension(msg, client_tup, pipe):
             if b"PING" in msg:

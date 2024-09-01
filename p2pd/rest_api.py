@@ -1,4 +1,5 @@
 import asyncio
+import multiprocessing
 from .utils import *
 from .p2p_node import *
 from .p2p_utils import *
@@ -11,7 +12,7 @@ def con_info(self, con_name, con):
     return {
         "error": 0,
         "name": con_name,
-        "strategy": con.strat,
+        #"strategy": con.strat,
         "fd": con.sock.fileno(),
         "laddr": con.sock.getsockname(),
         "raddr": con.sock.getpeername(),
@@ -90,7 +91,7 @@ class P2PDServer(RESTD):
         print(dest_addr)
 
         # Attempt to make the connection.
-        con, strat = await asyncio.ensure_future(
+        con = await asyncio.ensure_future(
             self.node.connect(
                 to_b(dest_addr),
 
@@ -101,7 +102,6 @@ class P2PDServer(RESTD):
 
         print("p2pd got con")
         print(con)
-        print(strat)
 
         # Success -- store pipe.
         if con is not None:
@@ -119,7 +119,7 @@ class P2PDServer(RESTD):
             con.add_end_cb(build_do_cleanup())
 
             # Return the results.
-            con.strat = TXT["p2p_strat"][strat]
+            #con.strat = TXT["p2p_strat"][strat]
             self.cons[con_name] = con
             return con_info(self, con_name, con)
 
@@ -305,17 +305,21 @@ async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=
         netifaces = await init_p2pd()
 
     # Start node server.
-    ifs = ifs or await load_interfaces(netifaces=netifaces)
+    if_names = await load_interfaces(netifaces=netifaces)
     print(ifs)
 
     #port = get_port_by_ip
-    node = await start_p2p_node(
-        # Attempt deterministic port allocation based on NICs.
-        # If in use a random port will be used.
-        port=NODE_PORT + 60 + 1,
-        ifs=ifs,
-        enable_upnp=enable_upnp
-    )
+    ifs = []
+    for if_name in if_names:
+        try:
+            nic = await Interface(if_name)
+            await nic.load_nat()
+            ifs.append(nic)
+        except:
+            log_exception()
+
+    node = P2PNode(ifs, port=NODE_PORT + 60 + 1)
+    await node.dev()
 
     # Specify listen port details.
     #route = await ifs[0].route(IP4).bind(ips="127.0.0.1")
@@ -333,8 +337,7 @@ async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=
 
     # Stop this thread exiting.
     print(p2p_server.servers)
-    bind_tup = p2p_server.servers[0][2].sock.getsockname()
-    print(f"Started server on http://{bind_tup[0]}:{bind_tup[1]}")
+    print(f"Started p2pd server")
     if do_loop:
         while 1:
             await asyncio.sleep(1)

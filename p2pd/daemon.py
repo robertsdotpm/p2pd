@@ -207,6 +207,15 @@ class Daemon():
     def up_cb(self, msg, client_tup, pipe):
         pass
 
+    # Should make this iterable over all for all pipes.
+    def add_msg_cb(self, msg_cb):
+        for af in VALID_AFS:
+            for proto in [TCP, UDP]:
+                for port in self.servers[af][proto]:
+                    for ip in self.servers[af][proto][port]:
+                        pipe = self.servers[af][proto][port][ip]
+                        pipe.add_msg_cb(msg_cb)
+
     async def close(self):
         for af in VALID_AFS:
             for proto in [TCP, UDP]:

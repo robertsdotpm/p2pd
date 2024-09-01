@@ -211,7 +211,7 @@ async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=Non
         ).res()
     except:
         turn_addr = await Address(
-            turn_server["ip"][af],
+            turn_server[af],
             turn_server["port"],
             route
         )

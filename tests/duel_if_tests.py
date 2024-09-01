@@ -355,11 +355,6 @@ async def test_tcp_punch_direct_lan_fail_ext_suc():
         await pipe.close()
 
 async def test_dir_reverse_fail_direct():
-    i = await Interface("enp0s25") # enp0s25 # wlx00c0cab5760d 
-    print(i)
-
-    return
-
     # bug in the message dispatcher.
     # Ip6 for naming doesnt work -- fix that too.
     name = input("name: ")

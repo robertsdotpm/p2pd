@@ -28,7 +28,7 @@ class TestRUDP(unittest.IsolatedAsyncioTestCase):
 
     async def test_is_unique(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        b = BaseProto(sock=s)
+        b = PipeEvents(sock=s)
         d = b"ayy lmao"
         c = ("127.0.0.1", 1337)
         r = b.is_unique_msg(

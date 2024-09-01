@@ -4,11 +4,19 @@ from p2pd import *
 async def get_turn_client(af, interface, turn_offset):
     # Get a route for this interface.
     route = await interface.route(af).bind()
-    dest = await Address(
-        TURN_SERVERS[turn_offset]["host"],
-        TURN_SERVERS[turn_offset]["port"],
-        route
-    ).res()
+    try:
+        dest = await Address(
+            to_s(TURN_SERVERS[turn_offset]["host"]),
+            TURN_SERVERS[turn_offset]["port"],
+            route
+        ).res()
+    except:
+        ip = TURN_SERVERS[turn_offset][IP4] or TURN_SERVERS[turn_offset][IP6] 
+        dest = await Address(
+            ip,
+            TURN_SERVERS[turn_offset]["port"],
+            route
+        ).res()
 
     # Implement the TURN protocol for UDP send / recv.
     client = TURNClient(
@@ -37,11 +45,12 @@ asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestTurn(unittest.IsolatedAsyncioTestCase):
     async def test_turn_duel_ifs(self):
         # Offset of turn server to use.
-        turn_offset = 0
+        turn_offset = 2
 
         # Load interface list.
         netifaces = await init_p2pd()
         ifs, af = await duel_if_setup(netifaces)
+        assert(len(ifs) == 2)
         if af is None:
             return
 
@@ -63,14 +72,15 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
         # Thereby allowing msgs from that interface through.
         for if_index in range(0, len(ifs)):
             # Sending interface and it's external IP
-            interface = ifs[if_index]
+            interface = ifs[(if_index + 1) % 2]
             route = await interface.route(af).bind()
             peer_tup = (route.ext(), 0)
 
             # Accept the other interfaces external IP.
-            turn_client = turn_clients[if_index - 1]
-            turn_client.subscribe(SUB_ALL)
-            await turn_client.accept_peer(peer_tup, peer_tup)
+            src_turn = turn_clients[if_index]
+            dest_turn = turn_clients[(if_index + 1) % 2]
+            relay_tup = await dest_turn.relay_tup_future
+            await src_turn.accept_peer(peer_tup, relay_tup)
 
         # Test message receipt for both clients.
         msg = b"hello, world!"
@@ -78,128 +88,19 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
             # Perspective is this if to that turn client.
             # The turn client is on another interface.
             interface = ifs[if_index]
-            route = await interface.route(af).bind()
-            turn_client = turn_clients[if_index - 1]
+            turn_client = turn_clients[(if_index + 1) % 2]
 
             # Send data to the relay endpoint.
-            relay_tup = await turn_client.relay_tup_future
             for i in range(0, 3):
-                await turn_clients[if_index].send(msg, relay_tup)
+                await turn_client.send(msg)
 
             # Recv data back.
-            out = await turn_client.recv(SUB_ALL, 2)
+            out = await turn_clients[if_index].recv(SUB_ALL, 2)
             assert(msg in out)
 
         # Cleanup
         for turn_client in turn_clients:
             await turn_client.close()
-
-    async def test_turn(self):
-        #print(sys.modules.keys())
-        # Network interface details.
-        log(">>> test_turn")
-        n = 0
-        i = await Interface()
-        af = i.supported()[0]
-        r = await i.route(af).bind()
-
-        # Address of a TURN server.
-        dest = await Address(
-            TURN_SERVERS[n]["host"],
-            TURN_SERVERS[n]["port"],
-            r
-        ).res()
-
-        # Implement the TURN protocol for UDP send / recv.
-        client = await get_turn_client(
-            af,
-            i,
-            n
-        )
-
-        # Disabled until valid net debug available.
-        if 0:
-            # Server hosting a PHP script that can send traffic.
-            net_debug_url = NET_DEBUG_PROVIDERS[af][0]
-            url_parts = await url_res(r, net_debug_url)
-            outbound_ip = await url_open(
-                r,
-                url_parts,
-                {
-                    "action": "host",
-                    "version": str(af_to_v(af))
-                },
-                timeout=6,
-                throttle=1
-            )
-
-            print(outbound_ip)
-
-            # Whitelist outbound addr of server.
-            # Note that the send port doesn't matter here.
-            bind_port = 0
-            peer_tup = (outbound_ip, bind_port)
-            print(peer_tup)
-            await client.accept_peer(peer_tup, peer_tup)
-            peer_tup = ("153.92.0.27", bind_port)
-            await client.accept_peer(peer_tup, peer_tup)
-
-            # Interested in any messages to queue.
-            client.subscribe(SUB_ALL)
-
-            #await client.accept_peer(client_tup, relay_tup)
-            #await client.accept_peer(relay_tup, relay_tup)
-            """
-            m = TurnMessage(msg_type=TurnMessageMethod.SendResponse, msg_code=TurnMessageCode.Request)
-            m.write_attr(
-                TurnAttribute.Data,
-                b"test message to send."
-            )
-            buf, _ = TurnMessage.unpack(m.encode())
-            buf.write_credential(client.turn_user, client.realm, client.nonce)
-            buf.write_hmac(client.key)
-            """
-
-            # Attempt to get a reply at our relay address.
-            # Do it up to 3 times due to UDP being unreliable.
-            got_reply = False
-            for i in range(0, 3):
-                http_route = copy.deepcopy(r)
-                await http_route.bind()
-                out = await url_open(
-                    http_route,
-                    url_parts,
-                    {
-                        "action": "hello",
-                        "proto": "udp",
-                        "host": relay_tup[0],
-                        "port": str(relay_tup[1]),
-                        "bind": str(bind_port)
-                    },
-                    timeout=6,
-                    throttle=1
-                )
-                print(out)
-
-                # Attempt to read the message back.
-                out = await client.recv(SUB_ALL, 2)
-                print(out)
-                if out == b"hello":
-                    got_reply = True
-                    break
-
-            # Make sure we got a valid reply.
-            self.assertTrue(got_reply)
-        
-        # Test refresh.
-        client.lifetime = 0
-        await async_retry(
-            lambda: client.refresh_allocation(), count=3, timeout=5
-        )
-        self.assertTrue(client.lifetime)
-
-        # Cleanup the client.
-        await client.close()
 
 if __name__ == '__main__':
     main()

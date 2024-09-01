@@ -89,7 +89,7 @@ class P2PNode(P2PNodeExtra, Daemon):
                 out.routing.dest["node_id"]
             )
 
-    async def dev(self, protos=[TCP]):
+    async def dev(self, sys_clock=None):
         # Set machine id.
         self.machine_id = await self.load_machine_id(
             "p2pd",
@@ -116,9 +116,16 @@ class P2PNode(P2PNodeExtra, Daemon):
             raise Exception("Unable to get any signal pipes.")
         """
 
+        # Coordination.
+        if sys_clock is None:
+            sys_clock = await SysClock(self.ifs[0]).start()
+        pe = await get_pp_executors()
+        qm = multiprocessing.Manager()
+        self.setup_multiproc(pe, qm)
+        self.setup_coordination(sys_clock)
+
         # Start the server for the node protocol.
         await self.listen_on_ifs()
-
 
         # Build P2P address bytes.
         self.addr_bytes = make_peer_addr(
@@ -136,6 +143,7 @@ class P2PNode(P2PNodeExtra, Daemon):
 
         # Used for setting nicknames for the node.
         self.nick_client = await Nickname(self.sk, self.ifs[0])
+
         return self
     
     # Connect to a remote P2P node using a number of techniques.
@@ -149,9 +157,9 @@ class P2PNode(P2PNodeExtra, Daemon):
                 "vk": pkt.vkc,
                 "sk": None,
             }
+            print(f"pkt vkc = {pkt.vkc}")
 
         print(f"Connecting to {addr_bytes}")
-        print(f"pkt vkc = {pkt.vkc}")
         pp = self.p2p_pipe(addr_bytes)
         return await pp.connect(strategies, reply=None, conf=conf)
 

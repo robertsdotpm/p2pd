@@ -341,9 +341,8 @@ TURN_SERVERS = [
         "host": b"turn.threema.ch",
         "port": 443,
         "afs": [IP4],
-        "ip": {
-            IP4: "185.88.236.76"
-        },
+        IP4: "185.88.236.76",
+        IP6: None,
         "user": b"threema-angular",
         "pass": b"Uv0LcCq3kyx6EiRwQW5jVigkhzbp70CjN2CJqzmRxG3UGIdJHSJV6tpo7Gj7YnGB",
         "realm": None
@@ -352,10 +351,8 @@ TURN_SERVERS = [
         "host": b"turn.obs.ninja",
         "port": 443,
         "afs": [IP4, IP6],
-        "ip": {
-            IP4: "51.195.101.185",
-            IP6: "2001:41d0:701:1100::62e5",
-        },
+        IP4: "51.195.101.185",
+        IP6: "2001:41d0:701:1100::62e5",
         "user": b"steve",
         "pass": b"setupYourOwnPlease",
         "realm": None
@@ -364,9 +361,8 @@ TURN_SERVERS = [
         "host": b"stun.contus.us",
         "port": 3478,
         "afs": [IP4],
-        "ip": {
-            IP4: "152.67.9.43"
-        },
+        IP4: "152.67.9.43",
+        IP6: None,
         "user": b"contus",
         "pass": b"SAE@admin",
         "realm": None
@@ -375,9 +371,8 @@ TURN_SERVERS = [
         "host": b"turn.quickblox.com",
         "port": 3478,
         "afs": [IP4],
-        "ip": {
-            IP4: "103.253.147.231",
-        },
+        IP4: "103.253.147.231",
+        IP6: None,
         "user": b"quickblox",
         "pass": b"baccb97ba2d92d71e26eb9886da5f1e0",
         "realm": None
