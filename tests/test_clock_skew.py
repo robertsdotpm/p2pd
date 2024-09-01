@@ -8,7 +8,7 @@ class TestClockSkew(unittest.IsolatedAsyncioTestCase):
 
         for _ in range(0, 5):
             server = random.choice(NTP_SERVERS)
-            ntp = await get_ntp(i, server=server[0])
+            ntp = await get_ntp(i, server=server)
             if ntp:
                 break
 

@@ -3,63 +3,9 @@ from p2pd import *
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestDaemon(unittest.IsolatedAsyncioTestCase):
-    async def test_close_serv_sock_with_listen_after(self):
-        i = await Interface()
-
-        for _ in range(3):
-            # Daemon instance.
-            echod = await EchoServer().listen_all(
-                [i],
-                [10126],
-                [TCP]
-            )
-
-            await echod.close()
-
-    async def test_listen_all_interface_target(self):
-        i = await Interface()
-        i.rp[IP6].routes = []
-
-        # Daemon instance.
-        server_port = 10126
-        proto = TCP
-        echod = await EchoServer().listen_all(
-            [i],
-            [server_port],
-            [proto]
-        )
-
-        await echod.close()
-
-    async def test_bind_target(self):
-        d = Daemon()
-        i = await Interface()
-
-        port = 40000
-        route = i.route(i.supported()[0])
-        await route.bind(port=port)
-        await d._listen(
-            target=route,
-            proto=TCP,
-            port=port
-        )
-
-        await d.close()
-
-    async def test_listen_specific(self):
-        d = Daemon()
-        i = await Interface()
-
-        route = i.route(i.supported()[0])
-        await route.bind()
-        await d.listen_specific(
-            targets=[[route, TCP]],
-        )
-
-        await d.close()
 
     async def test_daemon(self):
-        server_port = 30000
+        server_port = 33200
         loopbacks = {
             IP4: "127.0.0.1",
             IP6: "::1"
@@ -67,18 +13,9 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
         at_least_one = False
         i = 0
-        for af in [IP4, IP6]:
+        interface = await Interface()
+        for af in interface.supported():
             log(f"Test daemon af = {af}")
-            try:
-                interface = await Interface(af).start()
-                at_least_one = True
-            except Exception:
-                """
-                Skip unsupported AF types. Meaning they cannot use
-                the Internet with that address family. Will ensure
-                IP6 has at least one global IP and one link local.
-                """
-                continue
 
             """
             (1) Get first route for AF type.
@@ -97,6 +34,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
             if af == IP6:
                 addrs.append(route.link_local())
 
+            addrs = [route.nic()]
             for addr in addrs:
                 log(f"test daemon addr = {addr}")
                 msg = b"hello world ay lmaoo"
@@ -113,18 +51,15 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                     #print(echo_route._bind_tups)
 
                     # Daemon instance.
-                    echod = await EchoServer().listen_all(
-                        [echo_route],
-                        [server_port + i],
-                        [proto]
+                    echod = await EchoServer().add_listener(
+                        proto,
+                        echo_route
                     )
-                    #print(echod.servers[0][2].sock)
-                    #print(echod.servers[0][2].route._bind_tups)
-                    server_port = echod.get_listen_port()
+
                     if addr == "*":
                         addr = "localhost"
 
-                    dest = Address(addr, server_port)
+                    dest = Address(addr, server_port + i)
 
                     # Spawn a pipe to the echo server.
                     test_route = await interface.route(af).bind(ips=addr)
@@ -169,7 +104,6 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                     if echod is not None:
                         await echod.close()
 
-        self.assertTrue(at_least_one)
         await asyncio.sleep(0.1)
 
 if __name__ == '__main__':

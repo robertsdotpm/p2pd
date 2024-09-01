@@ -151,7 +151,7 @@ def get_interface_type(name):
         if eth_name in name:
             return INTERFACE_ETHERNET
 
-    wlan_names = ["wlp", "wireless", "wlan", "wifi"]
+    wlan_names = ["wlx", "wlp", "wireless", "wlan", "wifi"]
     for wlan_name in wlan_names:
         if wlan_name in name:
             return INTERFACE_WIRELESS
@@ -604,8 +604,8 @@ async def filter_trash_interfaces(netifaces=None):
     if os_family == "Windows":
         return ifs
 
-    # Use route table for these OS family to determine if interface
-    # is useful or not.
+    # Use route table for these OS family.
+    """
     if os_family in ["Linux", "Darwin"]:
         tasks = []
         for if_name in ifs:
@@ -621,13 +621,14 @@ async def filter_trash_interfaces(netifaces=None):
         results = await asyncio.gather(*tasks)
         results = strip_none(results)
         
-        """
+        
         The 'is_interface_if' function depends on using the 'route' binary.
         If it does not exist then the code will fail and return no results.
         In this case default to name-based filtering of netifaces.
-        """
+        
         if len(results):
             return results
+    """
 
     # Otherwise use the interface type function.
     # Looks at common patterns for interface names (not accurate.)
@@ -669,12 +670,16 @@ async def load_interfaces(netifaces=None, load_nat=True):
     if netifaces is None:
         netifaces = await init_p2pd()
 
+    
+
     # Get list of good interfaces with ::/0 or 0.0.0.0 routes.
     ifs = await filter_trash_interfaces(netifaces)
     ifs = to_unique(ifs)
     if ifs == []:
         # Something must have gone wrong so just use regular netifaces.
         ifs = netifaces.interfaces()
+
+    return ifs
 
     # Start all interfaces.
     if_list = []

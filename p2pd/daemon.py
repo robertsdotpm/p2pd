@@ -9,6 +9,11 @@ DAEMON_CONF = dict_child({
 }, NET_CONF)
 
 async def is_serv_listening(proto, listen_route):
+    # UDP is connectionless.
+    # A Pipe socket doesn't mean its open.
+    if proto == UDP:
+        return False
+
     # Destination address details for serv.
     listen_ip = listen_route.bind_tup()[0]
     listen_port = listen_route.bind_tup()[1]

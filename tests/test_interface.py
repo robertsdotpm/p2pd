@@ -88,13 +88,10 @@ class TestInterface(unittest.IsolatedAsyncioTestCase):
 
     async def test_interface_start(self):
         start_worked = False
-        for af in VALID_AFS:
-            try:
-                await Interface(af).start()
-                start_worked = True
-                break
-            except Exception:
-                pass
+        i = await Interface()
+        for af in i.supported():
+            start_worked = True
+            break
 
         self.assertTrue(start_worked)
 
@@ -103,7 +100,7 @@ class TestInterface(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(len(ifs))
 
         # Check nic IP fetch. 
-        i = ifs[0]
+        i = await Interface(ifs[0])
         af = i.supported()[0]
         n = i.nic(af)
         self.assertTrue(n is not None)

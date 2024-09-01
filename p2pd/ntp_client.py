@@ -277,7 +277,7 @@ class NTPClient:
         """Constructor."""
         self.interface = interface
 
-    async def request(self, host, version=2, port=123, timeout=2):
+    async def request(self, dest, version=2, timeout=2):
         """Query a NTP server.
 
         Parameters:
@@ -291,7 +291,6 @@ class NTPClient:
         """
         # lookup server address
         route = await self.interface.route().bind()
-        dest = Address(host, port)
 
         # create the socket
         pipe = await pipe_open(UDP, dest, route)

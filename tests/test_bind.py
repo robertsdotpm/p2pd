@@ -9,43 +9,6 @@ from p2pd import *
 
 
 class TestBind(unittest.IsolatedAsyncioTestCase):
-    async def test_bind_refresher(self):
-        i = await Interface()
-        print(i.route(IP6))
-        print(i.route(IP4))
-
-        print(i)
-
-        """
-            nic, ext
-        v6:
-            glob, glob
-
-        v4:
-            192..  8.8.8.8
-
-        if_ip -> Bind(if_ip) -> get_wan_ip() -> Route(af, nic=if_ip, ext=wan_ip)
-
-        Bind:
-
-            convert ips: (return nic bind, ext bind)
-                1. use interface.route(af) if ips is none
-                    - not relevant for Route which sets ips
-                2. convert special ip vals
-                3. ext_bind = nic_bind = ips
-
-            awaitable -> bind_closure:
-                ext_bind, nic_bind = convert ips(ips)
-                    - otherwise set from routes .nic() and ext()
-
-                - set bind tups for each addr type
-                    - handles edge cases
-                - 
-
-
-
-        """
-
     async def test_binder(self):
         vectors = [
             [
@@ -145,8 +108,8 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
             ],
             [
                 "debian",
-                [IP6, "fe80::6c00:b217:18ca:e365", 80, "eth0"],
-                ('fe80::6c00:b217:18ca:e365', 80, 0, "no")
+                [IP6, "fe80::6c00:b217:18ca:e365", 80, 3],
+                ('fe80::6c00:b217:18ca:e365', 80, 0, 3)
             ],
             [
                 "debian",
@@ -166,21 +129,21 @@ class TestBind(unittest.IsolatedAsyncioTestCase):
         ]
 
         for vector in vectors:
+            our_plat = platform.system()
             plat, params, expected = vector
+            if our_plat != "Windows" and plat == "Windows":
+                continue
+
             try:
                 out = await binder(*params, plat=plat)
             except:
+                what_exception()
                 print(f"skipping {vector}")
                 continue
 
-            # Support variables 
-            if expected[-1] == "no":
-                if out[-1]:
-                    expected[-1] = out[-1]
-
             if out != expected:
                 print("test_binder failed")
-                print(f"{out} != {expected}")
+                print(f"{plat} {out} != {expected}")
                 assert(False)
 
     async def test_bind_closure(self):

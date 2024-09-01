@@ -28,18 +28,30 @@ NTP_RETRY = 2
 NTP_TIMEOUT = 2
 
 async def get_ntp(interface, server=None, retry=NTP_RETRY):
-    server = server or random.choice(NTP_SERVERS)[0]
+    server = server or random.choice(NTP_SERVERS)
+    try:
+        dest = await Address(
+            server["host"],
+            server["port"],
+            interface.route()
+        )
+    except:
+        ip = server[IP4] or server[IP6]
+        dest = await Address(
+            ip,
+            server["port"],
+            interface.route()
+        )
+
     try:
         for _ in range(retry):
             client = NTPClient(interface)
-            dest_tup = [server["host"], server["port"]]
-            response = await client.request(dest_tup, version=3)
+            response = await client.request(
+                dest,
+                version=3
+            )
             if response is None:
-                ip = server[IP4] or server[IP6]
-                dest_tup = [ip, server["port"]]
-                response = await client.request(dest_tup, version=3)
-                if response is None:
-                    continue
+                continue
 
 
             ntp = response.tx_time
