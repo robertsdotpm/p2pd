@@ -67,6 +67,7 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
 
 def patch_p2p_pipe(src_pp):
     def patch(dest_bytes):
+        src_pp.reply = None
         return src_pp
     
     return patch
@@ -79,6 +80,7 @@ state impacts are done and you can check to see if
 the code really can handle a real failure or not.
 """
 def patch_p2p_stats(strategies, src_pp):
+    is_patched = False
     strat_len = len(src_pp.func_table)
     for strategy in strategies:
         # Indicates not to fail it so continue.
@@ -92,36 +94,42 @@ def patch_p2p_stats(strategies, src_pp):
         func_info = src_pp.func_table[offset]
 
         # Regular function to execute.
-        func = func_info[0]
+        func_p = func_info[0]
 
         # Patched function bellow to sim failure.
-        async def failure(af, pipe_id, src_info, dest_info, iface, addr_type, reply):
-            # May return a success pipe.
-            pipe = await asyncio.wait_for(
-                # Just pass all params on to func.
-                func(
-                    af,
-                    pipe_id,
-                    src_info,
-                    dest_info,
-                    iface,
-                    addr_type,
-                    reply,
-                ),
+        def closure(func, timeout):
+            async def failure(af, pipe_id, src_info, dest_info, iface, addr_type, reply):
+                # May return a success pipe.
+                pipe = await asyncio.wait_for(
+                    # Just pass all params on to func.
+                    func(
+                        af,
+                        pipe_id,
+                        src_info,
+                        dest_info,
+                        iface,
+                        addr_type,
+                        reply,
+                    ),
 
-                # Timeout for specific func.
-                func_info[1]
-            )
+                    # Timeout for specific func.
+                    timeout
+                )
 
-            # Handle cleanup if needed.
-            if isinstance(pipe, PipeEvents):
-                await pipe.close()
+                # Handle cleanup if needed.
+                if isinstance(pipe, PipeEvents):
+                    await pipe.close()
+                
+                # But always fails.
+                return None
             
-            # But always fails.
-            return None
+            return failure
         
         # Overwrite the func pointer to failure closure.
-        src_pp.func_table[offset][0] = failure
+        src_pp.func_table[offset][0] = closure(func_p, func_info[1])
+        is_patched = True
+
+    return is_patched
 
 async def get_node(if_name=IF_ALICE_NAME, node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     delta = delta_info(EQUAL_DELTA, NA_DELTA)
@@ -230,8 +238,9 @@ class TestNodes():
             )
 
         # Return the same pp pipe with patched msg handler.
-        self.bob.p2p_pipe = patch_p2p_pipe(self.pp_bob)
-        self.alice.p2p_pipe = patch_p2p_pipe(self.pp_alice)
+        # Currently commented to test new pipe behavior.
+        # self.bob.p2p_pipe = patch_p2p_pipe(self.pp_bob)
+        # self.alice.p2p_pipe = patch_p2p_pipe(self.pp_alice)
 
         alice_start_sig()
         bob_start_sig()
@@ -330,7 +339,7 @@ async def test_tcp_punch_direct_ext_lan():
 # Last one doesnt result in sides using same addr type.
 async def test_tcp_punch_direct_lan_fail_ext_suc():
     params = {
-        "return_msg": True,
+        "return_msg": False,
         "sig_pipe_no": 0,
         "addr_types": [NIC_FAIL, EXT_BIND],
     }
@@ -346,22 +355,43 @@ async def test_tcp_punch_direct_lan_fail_ext_suc():
         await pipe.close()
 
 async def test_dir_reverse_fail_direct():
+    i = await Interface("enp0s25") # enp0s25 # wlx00c0cab5760d 
+    print(i)
+
+    return
+
     # bug in the message dispatcher.
     # Ip6 for naming doesnt work -- fix that too.
     name = input("name: ")
     params = {
-        "return_msg": False,
+        "return_msg": True,
         "addr_types": [EXT_BIND, NIC_BIND],
         "same_if": False,
     }
 
     patch_strats = [DIRECT_FAIL, RELAY_FAIL, REVERSE_FAIL, P2P_PUNCH]
     use_strats = [P2P_DIRECT, P2P_RELAY, P2P_REVERSE, P2P_PUNCH]
+    #use_strats = [P2P_PUNCH]
+    #patch_strats = use_strats
     #use_strats = patch_strats = [P2P_RELAY]
     #use_strats = patch_strats = [P2P_PUNCH]
     #use_strats = patch_strats = [P2P_PUNCH]
     async with TestNodes(**params) as nodes:
-        patch_p2p_stats(patch_strats, nodes.pp_alice)
+        is_patched = patch_p2p_stats(patch_strats, nodes.pp_alice)
+        #if not is_patched:
+
+        def get_p2p_pipe(d):
+            p = P2PPipe(d, nodes.alice)
+            patch_p2p_stats(patch_strats, p)
+            return p
+        
+        # This is more realistic because the clients make a new
+        # P2PPipe for each proto method message.
+        nodes.alice.p2p_pipe = get_p2p_pipe
+        #nodes.alice.p2p_pipe = lambda d: P2PPipe(d, nodes.alice)
+        nodes.bob.p2p_pipe = lambda d: P2PPipe(d, nodes.bob)
+
+        print(nodes.pp_alice.func_table)
         #patch_p2p_stats(patch_strats, nodes.pp_bob)
         print(f"same machine = {nodes.pp_alice.same_machine}")
 

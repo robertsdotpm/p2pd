@@ -59,7 +59,14 @@ class SignalMock():
 
     async def send_msg(self, msg, peer_id):
         log(f"> Send signal to {peer_id} = {msg}.")        
-        self.client.publish(to_s(peer_id), to_s(msg), qos=2)
+        self.client.publish(
+            to_s(peer_id),
+            to_s(msg),
+            qos=2,
+
+            # Allow time for P2P protocol to finish.
+            message_expiry_interval=120
+        )
         if not self.is_connected:
             return 0
         else:

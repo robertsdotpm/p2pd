@@ -198,36 +198,10 @@ async def get_wan_ip_cfab(src_ip, min_agree, stun_clients, timeout):
 
     return (src_ip, Route(af, [nic_ipr], [ext_ipr], interface))
 
-def sort_routes(default_route, routes):
+def sort_routes(routes):
     # Deterministically order routes list.
     cmp = lambda r1, r2: int(r1.ext_ips[0]) - int(r2.ext_ips[0])
-    routes = sorted(routes, key=cmp_to_key(cmp))
-
-    # If default route not found return early.
-    if default_route is None:
-        return routes
-
-    # Remove default route from routes list.
-    cleaned_routes = []
-    new_default = default_route
-    for route in routes:
-        do_remove = False
-        if route.nic_ips == default_route.nic_ips:
-            do_remove = True
-        else:
-            for ext_ipr in route.ext_ips:
-                if len(ext_ipr) == 1:
-                    if default_route.ext_ips[0] == ext_ipr:
-                        # Ensure the nic IPs are set.
-                        new_default = route
-                        do_remove = True
-                        break
-
-        if not do_remove:
-            cleaned_routes.append(route)
-
-    # Ensure that the default route is first.
-    return [new_default] + cleaned_routes
+    return sorted(routes, key=cmp_to_key(cmp))
 
 def get_route_by_src(src_ip, results):
     route = [y for x, y in results if x == src_ip]
@@ -252,9 +226,6 @@ def exclude_routes_by_src(src_ips, results):
     return new_list
 
 async def get_routes_with_res(af, min_agree, enable_default, interface, stun_clients, netifaces, timeout):
-
-    enable_default = False 
-
     # Get a list of tasks to resolve NIC addresses.
     tasks = []
     link_locals = []
@@ -353,9 +324,15 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
             priv_route = Route(af, priv_iprs, priv_ext, interface)
             routes.append(priv_route)
 
-    # Deterministic sort routes -- add default first.
-    if default_route is not None:
-        routes = sort_routes(default_route, routes)
+    # Only use default route if no other option.
+    if not len(routes):
+        if default_route is None:
+            routes = []
+        else:
+            routes = [default_route]
+    else:
+        # Deterministic order = consistent for servers.
+        routes = sort_routes(routes)
 
     # Set link locals in route list.
     [r.set_link_locals(link_locals) for r in routes]
