@@ -262,7 +262,7 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
     nic_iprs = await get_nic_iprs(af, interface, netifaces)
     for nic_ipr in nic_iprs:
         assert(int(nic_ipr[0]))
-        if ip_norm(nic_ipr[0])[:4] == "fe80":
+        if ip_norm(nic_ipr[0])[:2] in ["fe", "fd"]:
             link_locals.append(nic_ipr)
             log(f"Addr is link local so skipping")
             continue

@@ -28,7 +28,7 @@ async def is_serv_listening(proto, listen_route):
     
     return False
 
-def get_serv_lock(af, proto, serv_port):
+def get_serv_lock(af, proto, serv_port, serv_ip):
     # Make install dir if needed.
     try:
         install_root = get_p2pd_install_root()
@@ -37,10 +37,12 @@ def get_serv_lock(af, proto, serv_port):
         log_exception()
 
     # Main path files.
+    af = "v4" if af == IP4 else "v6"
+    proto = "tcp" if proto == TCP else "udp"
     pidfile_path = os.path.realpath(
         os.path.join(
             get_p2pd_install_root(),
-            f"{int(af)}_{int(proto)}_{serv_port}_pid.txt"
+            f"{af}_{proto}_{serv_port}_{serv_ip}_pid.txt"
         )
     )
 
@@ -49,16 +51,22 @@ def get_serv_lock(af, proto, serv_port):
         return fasteners.InterProcessLock(pidfile_path)
     except:
         return None
-
-def bind_str(r):
-    return f"{r.bind_tup()[0]}:{r.bind_tup()[1]}"
+    
+def avoid_time_wait(pipe):
+    sock = pipe.sock
+    linger = struct.pack('ii', 1, 0)
+    sock.setsockopt(
+        socket.SOL_SOCKET,
+        socket.SO_LINGER,
+        linger
+    )
 
 class DaemonRewrite():
     def __init__(self, conf=DAEMON_CONF):
         # Special net conf for daemon servers.
         self.conf = conf
 
-        # AF: listen port: pipe_events/
+        # AF: proto: port: ip: pipe_events.
         self.pipes = {
             IP4: {
                 TCP: {}, UDP: {}
@@ -68,7 +76,7 @@ class DaemonRewrite():
             }, 
         }
 
-    async def add_listener(self, proto, route, msg_cb=None, up_cb=None):
+    async def add_listener(self, proto, route):
         # Enforce static ports for listen port.
         assert(route.bind_port)
 
@@ -76,7 +84,8 @@ class DaemonRewrite():
         assert(route.resolved)
 
         # Detect zombie servers.
-        lock = get_serv_lock(route.af, proto, route.bind_port)
+        port, ip = route.bind_tup()[:2]
+        lock = get_serv_lock(route.af, proto, port, ip)
         if lock is not None:
             if not lock.acquire(blocking=False):
                 error = f"{proto}:{bind_str(route)} zombie pid"
@@ -89,27 +98,102 @@ class DaemonRewrite():
             raise Exception(error)
         
         # Start a new server listening.
-        msg_cb = msg_cb or self.msg_cb
-        up_cb = up_cb or self.up_cb
         pipe = await pipe_open(
             proto,
             route=route,
-            msg_cb=msg_cb,
-            up_cb=up_cb,
+            msg_cb=self.msg_cb,
+            up_cb=self.up_cb,
             conf=self.conf
         )
 
+        # Avoid TIME_WAIT for socket.
+        avoid_time_wait(pipe)
+
         # Store the server pipe.
-        self.pipes[route.af][proto][route.bind_port] = pipe
+        if port not in self.pipes[route.af][proto]:
+            self.pipes[route.af][proto][port] = {}
+        self.pipes[route.af][proto][port][ip] = pipe
+        
+        # Only one instance of this service allowed.
         pipe.proc_lock = lock
         return pipe
 
+    """
+    There's a special IPv6 sock option to listen on
+    all address types but its not guaranteed.
+    Hence I use two sockets based on supported stack.
+    """
+    async def listen_all(self, port, proto, nic):
+        for af in nic.supported():
+            route = nic.route(af)
+            await route.bind(ips="*", port=port)
+            await async_wrap_errors(
+                self.add_listener(proto, route)
+            )
+
+    """
+    Localhost here is translated to the right address
+    depending on the AF supported by the NIC.
+    The bind_magic function takes care of this.
+    """
+    async def listen_loopback(self, port, proto, nic):
+        for af in nic.supported():
+            route = nic.route(af)
+            await route.bind(ips="localhost", port=port)
+            await async_wrap_errors(
+                self.add_listener(proto, route)
+            )
+
+    """
+    Really no way to do this with IPv4 without adding
+    something like a basic firewall. But IPv6 has the
+    link-local addresses and UNL. Perhaps a basic
+    firewall could be a future feature.
+    """
+    async def listen_local(self, port, proto, nic):
+        for af in nic.supported():
+            # Supports private IPv4 addresses.
+            if af == IP4:
+                nic_iprs = []
+                for route in nic.rp[af]:
+                    # For every local address in the route table.
+                    for nic_ipr in route.nic_ips:
+                        # Only bind to unique addresses.
+                        if nic_ipr in nic_iprs:
+                            continue
+                        else:
+                            nic_iprs.append(nic_ipr)
+
+                        # Don't modify the route table directly.
+                        # Note: only binds to first IP.
+                        # An IPR could represent a range.
+                        local = copy.deepcopy(route)
+                        ips = ipr_norm(nic_ipr)
+                        await local.bind(ips=ips, port=port)
+                        await async_wrap_errors(
+                            self.add_listener(proto, local)
+                        )
+
+            # Supports link-locals and unique local addresses.
+            if af == IP6:
+                route = nic.route(af)
+                for link_local in route.link_locals:
+                    local = nic.route(af)
+                    ips = ipr_norm(link_local)
+                    await async_wrap_errors(
+                        local.bind(ips=ips, port=port)
+                    )
+                    await async_wrap_errors(
+                        self.add_listener(proto, local)
+                    )
+
+    # On message received (placeholder.)
     async def msg_cb(self, msg, client_tup, pipe):
-        # Overwritten by inherited classes.
-        print("This is a default proto msg_cb! Specify your own in a child class.")
+        print("Specify your own msg_cb in a child class.")
         print(f"{msg} {client_tup}")
         await pipe.send(msg, client_tup)
 
+    # On connection success(placeholder.)
     def up_cb(self, msg, client_tup, pipe):
         pass
 
@@ -117,15 +201,19 @@ class DaemonRewrite():
         for af in VALID_AFS:
             for proto in [TCP, UDP]:
                 for port in self.pipes[af][proto]:
-                    await self.pipes[af][proto][port].close()
+                    for ip in self.pipes[af][proto][port]:
+                        await self.pipes[af][proto][port][ip].close()
+
+
 
 async def daemon_rewrite_workspace():
     serv = None
     try:
-        nic = await Interface()
+        nic = await Interface("wlx00c0cab5760d")
         serv = DaemonRewrite()
-        route = await nic.route(IP4).bind(port=12344)
-        await serv.add_listener(TCP, route)
+
+        await serv.listen_local(1337, TCP, nic)
+        print(serv.pipes)
 
         while 1:
             await asyncio.sleep(1)

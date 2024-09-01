@@ -4,7 +4,7 @@ from .net import *
 def ip6_patch_bind_ip(ip_obj, bind_ip, nic_id):
     # Add interface descriptor if it's link local.
     if ip_obj.is_private:
-        if to_s(bind_ip[0:2]).lower() == "fe":
+        if to_s(bind_ip[0:2]).lower() in ["fe", "fd"]:
             # Interface specified by no on windows.
             if platform.system() == "Windows":
                 bind_ip = "%s%%%d" % (
@@ -138,7 +138,7 @@ async def binder(af, ip="", port=0, nic_id=None, loop=None, plat=platform.system
         addr_infos = []
 
     if not len(addr_infos):
-        raise Exception("Can't resolve IPv6 address for bind.")
+        raise Exception(f"Can't resolve {ips} for bind.")
     
     # Set initial bind tup.
     bind_tup = addr_infos[0][4]
