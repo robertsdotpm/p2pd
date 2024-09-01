@@ -43,6 +43,8 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
                     msg.pack(),
                 )
             
+            # UTF-8 messes up binary data in MQTT.
+            buf = to_h(buf)
             print(buf)
             
             try:
@@ -64,10 +66,7 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
     return patch
 
 def patch_p2p_pipe(src_pp):
-    def patch(dest_bytes, reply=None, conf=P2P_PIPE_CONF):
-        src_pp.reply = reply
-        #src_pp.conf = conf
-
+    def patch(dest_bytes):
         return src_pp
     
     return patch
@@ -230,9 +229,9 @@ class TestNodes():
                 self.alice,
             )
 
-            # Return the same pp pipe with patched msg handler.
-            self.bob.p2p_pipe = patch_p2p_pipe(self.pp_bob)
-            self.alice.p2p_pipe = patch_p2p_pipe(self.pp_alice)
+        # Return the same pp pipe with patched msg handler.
+        self.bob.p2p_pipe = patch_p2p_pipe(self.pp_bob)
+        self.alice.p2p_pipe = patch_p2p_pipe(self.pp_alice)
 
         alice_start_sig()
         bob_start_sig()
@@ -248,7 +247,7 @@ class TestNodes():
 
 async def test_dir_direct_con_lan_ext():
     params = {
-        "return_msg": True,
+        "return_msg": False,
         "sig_pipe_no": 0,
         "addr_types": [NIC_BIND, EXT_BIND],
     }
@@ -351,7 +350,7 @@ async def test_dir_reverse_fail_direct():
     # Ip6 for naming doesnt work -- fix that too.
     name = input("name: ")
     params = {
-        "return_msg": True,
+        "return_msg": False,
         "addr_types": [EXT_BIND, NIC_BIND],
         "same_if": False,
     }

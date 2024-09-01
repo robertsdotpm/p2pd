@@ -43,8 +43,11 @@ class SigProtoHandlers():
     
     # Receive a protocol message and validate it.
     async def proto(self, buf):
+        buf = h_to_b(buf)
         is_enc = buf[0]
         if is_enc:
+            print("got encrypted msg")
+            print(buf)
             buf = decrypt(
                 self.node.sk.to_string(),
                 buf[1:]
@@ -74,6 +77,7 @@ class SigProtoHandlers():
         if is_enc:
             src_node_id = msg.meta.src["node_id"]
             if src_node_id not in self.node.auth:
+                assert(isinstance(msg.cipher.vk, bytes))
                 self.node.auth[src_node_id] = {
                     "vk": msg.cipher.vk
                 }

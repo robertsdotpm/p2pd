@@ -19,6 +19,10 @@ async def is_serv_listening(proto, listen_route):
     route = listen_route.interface.route(listen_route.af)
     await route.bind()
 
+    # If listen was on all then the dest IP will be wrong.
+    if listen_ip in VALID_ANY_ADDR:
+        listen_ip = "localhost"
+
     # Try make pipe to the server socket.
     dest = await Address(listen_ip, listen_port, route)
     pipe = await pipe_open(proto, dest, route)

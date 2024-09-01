@@ -119,44 +119,37 @@ class P2PNodeExtra():
             pipe_id,
         ])
 
-    async def load_signal_pipe(self, offsets, attempts=2):
-        count = 0
-        while not offsets.empty():
-            count += 1
-            if count >= attempts:
-                return
-            
-            offset = await offsets.get()
-            server = MQTT_SERVERS[offset]
+    async def load_signal_pipe(self, offset):
+        server = MQTT_SERVERS[offset]
 
-            # Lookup IP and port of MQTT server.
-            try:
-                addr = await Address(
-                    server["host"],
-                    server["port"],
-                    self.ifs[0].route()
-                )
-                dest_tup = addr.tup[0:2]
-            except:
-                # Fallback to fixed IPs if host res fails.
-                ip = server[IP4] or server[IP6]
-                dest_tup = [ip, server["port"]]
-
-            signal_pipe = SignalMock(
-                peer_id=to_s(self.node_id),
-                f_proto=self.signal_protocol,
-                mqtt_server=dest_tup
+        # Lookup IP and port of MQTT server.
+        try:
+            addr = await Address(
+                server["host"],
+                server["port"],
+                self.ifs[0].route()
             )
+            dest_tup = addr.tup[0:2]
+        except:
+            # Fallback to fixed IPs if host res fails.
+            ip = server[IP4] or server[IP6]
+            dest_tup = [ip, server["port"]]
 
-            try:
-                await signal_pipe.start()
-                self.signal_pipes[offset] = signal_pipe
-                return
-            except Exception:
-                if signal_pipe.is_connected:
-                    await signal_pipe.close()
+        signal_pipe = SignalMock(
+            peer_id=to_s(self.node_id),
+            f_proto=self.signal_protocol,
+            mqtt_server=dest_tup
+        )
 
-                return None
+        try:
+            await signal_pipe.start()
+            self.signal_pipes[offset] = signal_pipe
+            return signal_pipe
+        except Exception:
+            if signal_pipe.is_connected:
+                await signal_pipe.close()
+
+            return None
         
     """
     There's a massive problem with the MQTT client
@@ -169,15 +162,13 @@ class P2PNodeExtra():
     TODO: investigate this.
     """
     async def load_signal_pipes(self):
-        q = asyncio.Queue()
+        tasks = []
         serv_len = len(MQTT_SERVERS)
         offsets = shuffle(list(range(serv_len)))
-        [q.put_nowait(o) for o in offsets]
-
-        tasks = []
-        sig_pipe_no = self.conf["sig_pipe_no"]
-        for _ in range(sig_pipe_no):
-            task = self.load_signal_pipe(q)
+        sig_pipe_no = min(self.conf["sig_pipe_no"] + 2, serv_len)
+        for i in range(0, sig_pipe_no):
+            offset = offsets[i]
+            task = self.load_signal_pipe(offset)
             tasks.append(task)
 
         await asyncio.gather(*tasks)
@@ -210,22 +201,37 @@ class P2PNodeExtra():
             self.pipes[pipe_id].set_result(pipe)
         
         return pipe
+    
+    # Make already loaded sig pipes first to try.
+    def prioritize_sig_pipe_overlap(self, offsets):
+        overlap = []
+        non_overlap = []
+        for offset in offsets:
+            if offset in self.signal_pipes:
+                overlap.append(offset)
+            else:
+                non_overlap.append(offset)
+
+        return overlap + non_overlap
 
     async def await_peer_con(self, msg, m=0):
         # Encrypt the message if the public key is known.
         buf = b"\0" + msg.pack()
         dest_node_id = msg.routing.dest["node_id"]
-        # or ... integrity portion...
         if dest_node_id in self.auth:
             buf = b"\1" + encrypt(
                 self.auth[dest_node_id]["vk"],
                 msg.pack(),
             )
 
+        # UTF-8 messes up binary data in MQTT.
+        buf = to_h(buf)
+
         # Try not to load a new signal pipe if
         # one already exists for the dest.
         dest = msg.routing.dest
         offsets = dest["signal"]
+        offsets = self.prioritize_sig_pipe_overlap(offsets)
 
         # Try signal pipes in order.
         # If connect fails try another.
@@ -246,14 +252,10 @@ class P2PNodeExtra():
             # Or load new server offset.
             if offset not in self.signal_pipes:
                 sig_pipe = await async_wrap_errors(
-                    new_peer_signal_pipe(
-                        dest,
-                        self
-                    )
+                    self.load_signal_pipe(offset)
                 )
 
-            # Save offset.
-            self.signal_pipes[offset] = sig_pipe
+            # Failed.
             if sig_pipe is None:
                 continue
 

@@ -144,6 +144,7 @@ class P2PNode(P2PNodeExtra, Daemon):
             pkt = await self.nick_client.fetch(addr_bytes)
             addr_bytes = pkt.value
             addr = parse_peer_addr(addr_bytes)
+            assert(isinstance(pkt.vkc, bytes))
             self.auth[addr["node_id"]] = {
                 "vk": pkt.vkc,
                 "sk": None,
