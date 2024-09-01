@@ -34,18 +34,18 @@ class P2PPipe():
         # Loop over the most likely strategies left.
         self.func_table = {
             # Short timeouts for direct TCP cons.
-            P2P_DIRECT: [self.direct_connect, 5, None, 1],
-            P2P_REVERSE: [self.reverse_connect, 10, None, 1],
+            P2P_DIRECT: [self.direct_connect, 2, None, 1],
+            P2P_REVERSE: [self.reverse_connect, 4, None, 1],
 
             # Large timeout for meetings with a state cleanup.
-            P2P_PUNCH: [self.tcp_hole_punch, 20, None, 0],
+            P2P_PUNCH: [self.tcp_hole_punch, 10, None, 0],
 
             # Large timeout, end refreshers, disable LAN cons.
-            P2P_RELAY: [self.udp_turn_relay, 20, self.turn_cleanup, 1],
+            P2P_RELAY: [self.udp_turn_relay, 10, self.turn_cleanup, 1],
         }
 
     def route_msg(self, msg, m=0):
-        
+        msg.cipher.vk = self.node.vk.to_string("compressed")
         self.node.sig_msg_queue.put_nowait([msg, m])
 
     async def connect(self, strategies=P2P_STRATEGIES, reply=None, conf=P2P_PIPE_CONF):
@@ -224,7 +224,6 @@ class P2PPipe():
         self.route_msg(msg, m=2)
 
         # Basic dest addr validation.
-        #msg.set_cur_addr(self.src_bytes)
         msg.routing.load_if_extra(self.node)
         msg.validate_dest(
             af,

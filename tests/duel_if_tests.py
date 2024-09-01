@@ -349,7 +349,7 @@ async def test_tcp_punch_direct_lan_fail_ext_suc():
 async def test_dir_reverse_fail_direct():
     # bug in the message dispatcher.
     # Ip6 for naming doesnt work -- fix that too.
-    name = ""
+    name = input("name: ")
     params = {
         "return_msg": True,
         "addr_types": [EXT_BIND, NIC_BIND],
@@ -358,9 +358,9 @@ async def test_dir_reverse_fail_direct():
 
     patch_strats = [DIRECT_FAIL, RELAY_FAIL, REVERSE_FAIL, P2P_PUNCH]
     use_strats = [P2P_DIRECT, P2P_RELAY, P2P_REVERSE, P2P_PUNCH]
-    use_strats = patch_strats = [P2P_RELAY]
-    use_strats = patch_strats = [P2P_PUNCH]
-    use_strats = patch_strats = [P2P_REVERSE]
+    #use_strats = patch_strats = [P2P_RELAY]
+    #use_strats = patch_strats = [P2P_PUNCH]
+    #use_strats = patch_strats = [P2P_PUNCH]
     async with TestNodes(**params) as nodes:
         patch_p2p_stats(patch_strats, nodes.pp_alice)
         #patch_p2p_stats(patch_strats, nodes.pp_bob)
@@ -368,6 +368,7 @@ async def test_dir_reverse_fail_direct():
 
         name = await nodes.bob.nickname(name)
         print(name)
+        #name += ".peer"
 
         pipe = await nodes.alice.connect(
             name,

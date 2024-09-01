@@ -532,8 +532,6 @@ class PNPServer(Daemon):
 
 async def start_pnp_server(bind_port):
     i = await Interface()
-    serv_v4 = await i.route(IP4).bind(ips="*", port=bind_port)
-    serv_v6 = await i.route(IP6).bind(ips="*", port=bind_port)
 
     # Load mysql root password details.
     if "PNP_DB_PW" in os.environ:
@@ -564,18 +562,10 @@ async def start_pnp_server(bind_port):
 
     # Start the server listening on public routes.
     print("Now starting PNP serv on ...")
-    print(serv_v4)
-    print(serv_v6)
     print(reply_pk_hex)
-    await serv.listen_specific(
-        [
-            [serv_v4, TCP],
-            [serv_v6, TCP],
-            [serv_v4, UDP],
-            [serv_v6, UDP],
-        ],
-        msg_cb = serv.msg_cb
-    )
+
+    for proto in [TCP, UDP]:
+        await serv.listen_all(proto, bind_port, i)
 
     return serv
 

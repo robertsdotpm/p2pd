@@ -32,9 +32,15 @@ async def get_ntp(interface, server=None, retry=NTP_RETRY):
     try:
         for _ in range(retry):
             client = NTPClient(interface)
-            response = await client.request(server, version=3)
+            dest_tup = [server["host"], server["port"]]
+            response = await client.request(dest_tup, version=3)
             if response is None:
-                continue
+                ip = server[IP4] or server[IP6]
+                dest_tup = [ip, server["port"]]
+                response = await client.request(dest_tup, version=3)
+                if response is None:
+                    continue
+
 
             ntp = response.tx_time
             return ntp

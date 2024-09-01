@@ -1,6 +1,7 @@
 
 import asyncio
 from .daemon import *
+from .daemon import *
 from .p2p_addr import *
 from .p2p_utils import *
 from .p2p_node_extra import *
@@ -118,12 +119,6 @@ class P2PNode(P2PNodeExtra, Daemon):
         # Start the server for the node protocol.
         await self.listen_on_ifs()
 
-        # Translate any port 0 to actual assigned port.
-        node_sock = self.servers[0][2].sock
-        listen_port = node_sock.getsockname()[1]
-        self.conf["listen_port"] = listen_port
-        print(f"Server port = {listen_port}")
-        print(self.ifs)
 
         # Build P2P address bytes.
         self.addr_bytes = make_peer_addr(
@@ -131,7 +126,7 @@ class P2PNode(P2PNodeExtra, Daemon):
             self.machine_id,
             self.ifs,
             list(self.signal_pipes),
-            port=listen_port,
+            port=self.listen_port,
             ip=self.conf["listen_ip"]
         )
 

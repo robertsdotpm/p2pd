@@ -1,75 +1,14 @@
-"""
-node:
-    - route list of every ifs on all afs for specific port
-    - listen on all those routes for all protos specified
-
-pnp_server:
-    - listen all v4 route
-    - listen all v6 route
-    - pair of [v4, proto] for udp and tcp
-
-toxid
-    - pair [localhost route, tcp]
-
-p2pd rest server:
-    route = nic ip, port
-    listen on route, tcp
-
-----------------------------------------
-code problems:
-- hard to index the servers within and access needed fields
-    - like what port is running on and the addr
-    - todo: lookup how else its used
-- listen specific and all ... confusingly named
-- listen all tries to do too much
-    - no reason to try support interface and route pools
-- listen specific and all could be moved out of class if they neeed to exist
-- error hiding like binding unbound routes = bad idea
-- funcs that have no reason being there like dev
-- features that dont need to exist like restricted protos
-
-
-----------------------------------------
-
-helper funcs that do the loop stuff:
-    listen all ...
-
-cls:
-    add_listener(proto, route, msg_cb)
-
-"""
-
-
-# TODO: rewrite this crap code module.
-import struct
+from .utils import *
 from .address import *
 from .interface import *
 from .pipe_utils import *
-from .install import p2pd_detect_zombie_serv
+from .install import *
 
 DAEMON_CONF = dict_child({
     "reuse_addr": True
 }, NET_CONF)
 
-"""
-interface = listen on all addresses given by af
-bind = may take specific addresses to listen to -- listen only on af addresses
-targets = [interface, bind, ...]
-
-protocols to use for the server.
-protos = [TCP, UDP]
-
-list of ports to listen on. may contain ranges.
-ports = [n, [x, y], ...]
-
-called on new messages from a stream.
-process the message.
-f = lambda msg, stream: ...
-"""
-def get_listen_port(server_info):
-    return server_info[2].sock.getsockname()[1]
-
-async def serv_already_listening(proto, listen_route):
+async def is_serv_listening(proto, listen_route):
     # Destination address details for serv.
     listen_ip = listen_route.bind_tup()[0]
     listen_port = listen_route.bind_tup()[1]
@@ -89,275 +28,198 @@ async def serv_already_listening(proto, listen_route):
     
     return False
 
-class Daemon():
-    def __init__(self, interfaces=None, conf=DAEMON_CONF):
-        self.__name__ = getattr(self, "__name__", "Daemon")
-        self.conf = conf
-        self.servers = []
-        self.restricted_proto = None
-        self.interfaces = interfaces or []
-        self.iface_lookup = {}
-        for iface in self.interfaces:
-            self.iface_lookup[iface.name] = iface
-        self.rp = None
+def get_serv_lock(af, proto, serv_port, serv_ip):
+    # Make install dir if needed.
+    try:
+        install_root = get_p2pd_install_root()
+        pathlib.Path(install_root).mkdir(parents=True, exist_ok=True)
+    except:
+        log_exception()
 
-    async def dev(self):
-        from .interface import Interface
-        from .http_client_lib import WebCurl
-        from .address import Address
-
-        iface = await Interface()
-        route = await iface.route()
-        await self.listen_all(
-            [route],
-            [0],
-            [TCP]
+    # Main path files.
+    af = "v4" if af == IP4 else "v6"
+    proto = "tcp" if proto == TCP else "udp"
+    pidfile_path = os.path.realpath(
+        os.path.join(
+            get_p2pd_install_root(),
+            f"{af}_{proto}_{serv_port}_{serv_ip}_pid.txt"
         )
-        port = self.get_listen_port()
-        dest = await Address(route.nic(), port, route)
-        print(f"Dev server started on {dest.tup}")
-        return WebCurl(dest)
-    
-    def avoid_time_wait(self):
-        for serv in self.servers:
-            sock = serv[2].sock
-            linger = struct.pack('ii', 1, 0)
-            sock.setsockopt(
-                socket.SOL_SOCKET,
-                socket.SO_LINGER,
-                linger
-            )
-
-    def get_listen_port(self):
-        return get_listen_port(self.servers[0])
-
-    def set_rp(self, rp):
-        self.rp = rp
-
-    def restrict_proto(self, proto):
-        self.restricted_proto = proto
-
-    """
-    Overwritten by children.
-    msg = data received from server
-    client_tup = (remote ip, remote port) of client socket.
-    pipe = BaseProto object
-    """
-    def msg_cb(self, msg, client_tup, pipe):
-        # Overwritten by inherited classes.
-        print("This is a default proto msg_cb! Specify your own in a child class.")
-        pass
-
-    def up_cb(self, msg, client_tup, pipe):
-        pass
-    
-    async def _listen(self, target, port, proto, msg_cb=None, up_cb=None):
-        msg_cb = msg_cb or self.msg_cb
-        up_cb = up_cb or self.up_cb
-
-        # Protocol not supported.
-        if self.restricted_proto is not None:
-            if self.restricted_proto != proto:
-                raise Exception("That protocol is not supported for this server.")
-    
-        # Convert Bind to routes.
-        routes = []
-
-        # Target is already a route - record.
-        routes.append(target)
-
-        # Start server on every address.
-        ports = {}
-        for route in routes:
-            if not route.resolved:
-                await route.bind(port)
-
-            if route.bind_port and route.bind_port not in ports:
-                ports[route.bind_port] = 1
-                is_running = p2pd_detect_zombie_serv(
-                    route.bind_port
-                )
-
-                if is_running:
-                    log("error serv pid exists!")
-
-            log('starting server {}:{} p={}, af={}'.format(
-                route.nic(),
-                route.bind_port,
-                proto,
-                route.af
-            ))
-
-            # Link route to a route pool.
-            # So it can do cool tricks.
-            if self.rp is not None:
-                route.link_route_pool(self.rp[route.af])
-
-            # Check if a server already listening.
-            is_listening = await serv_already_listening(proto, route)
-            if is_listening:
-                log('error potential bind conflict! {}:{} p={}, af={}'.format(
-                    route.nic(),
-                    route.bind_port,
-                    proto,
-                    route.af
-                ))
-
-            # Save list of servers.
-            listen_task = pipe_open(proto, route=route, msg_cb=msg_cb, up_cb=up_cb, conf=self.conf)
-            base_proto = await listen_task
-            if base_proto is None:
-                raise Exception("Could not start server.")
-
-            self.servers.append([ route, proto, base_proto, listen_task ])
-    
-    # [[Bound, proto], ...]
-    # Allows for servers to be bound to specific addresses and transports.
-    # The other start method is more general.
-    async def listen_specific(self, targets, msg_cb=None, up_cb=None):
-        up_cb = up_cb or self.up_cb
-        msg_cb = msg_cb or self.msg_cb
-        targets = [targets] if not isinstance(targets, list) else targets
-        for listen_info in targets:
-            # Unpack.
-            bound, proto = listen_info
-
-            # Start server.
-            await self._listen(
-                target=bound,
-                proto=proto,
-                port=bound.bind_port,
-                msg_cb=msg_cb,
-                up_cb=up_cb
-            )
-
-        self.avoid_time_wait()
-
-    # Start all the servers listening.
-    # All targets are started on the same list of ports and protocols.
-    # A more general version of the above function.
-    #
-    async def listen_all(self, targets, ports, protos, af=AF_ANY, msg_cb=None, up_cb=None, error_on_af=0):
-        up_cb = up_cb or self.up_cb
-        msg_cb = msg_cb or self.msg_cb
-        targets = [targets] if not isinstance(targets, list) else targets
-        routes = []
-        for target in targets:
-            # Convert Interface to route.
-            if isinstance(target, Interface):
-                # List of AFs to use.
-                if af == AF_ANY:
-                    af_list = target.what_afs()
-                else:
-                    af_list = [af]
-
-                # If Interface doesn't support AF
-                # do we throw an error or skip it?
-                for af_val in af_list:
-                    if af_val not in target.what_afs():
-                        log("> listen all af not in what afs")
-                        if error_on_af:
-                            e = "IF {} doesn't support AF {}".format(
-                                target.id,
-                                af
-                            )
-                            raise Exception(e)
-
-                # Build routes from afs + interface.
-                for af_val in af_list:
-                    if not len(target.rp[af_val].routes):
-                        continue
-
-                    # First route in pool for that AF.
-                    # Makes a copy of the route.
-                    route = target.route(af_val)
-                    routes.append(route)
-
-            # Convert RoutePool to Routes.
-            # Makes new instances of the routes.
-            if isinstance(target, RoutePool):
-                # There could be massive blocks of IPs in a RoutePool.
-                # It's not practical to index all of them.
-                routes += target[:10]
-
-            # Route.
-            if isinstance(target, Route):
-                routes.append(
-                    copy.deepcopy(target)
-                )
-
-        # Targets are Interfaces to listen on or Bind objects.
-        for route in routes:
-            # Loop over all the listen ports.
-            for port_info in ports:
-                # Ports may be a single port or a range.
-                if type(port_info) == list:
-                    port_start, port_end = port_info
-                else:
-                    port_end = port_start = port_info
-
-                # Treat ports as a range.
-                for port in range(port_start, port_end + 1):
-                    # Start the server on bind address, port, and proto.
-                    for proto in protos:
-                        route = copy.deepcopy(route)
-                        await route.bind(port=port, ips=route.ips)
-                        await self._listen(route, port, proto, msg_cb)
-
-                        """
-                        # Bind to additional link-local for IPv6.
-                        if route.af == IP6:
-                            try:
-                                route = copy.deepcopy(route)
-                                route = await route.bind(port=port, ips=route.link_local())
-                                await self._listen(target=route, port=port, proto=proto, msg_cb=msg_cb, up_cb=up_cb)
-                            except Exception:
-                                log_exception()
-                                pass
-                                # May already be started -- ignore.
-                        """
-                                
-        self.avoid_time_wait()
-        return self
-
-    async def close(self):
-        for server_info in self.servers:
-            _, _, server, _ = server_info
-            await server.close()
-
-        self.servers = []
-
-
-"""
-    Route * Proto = 
-
-    [proto, route]
-
-    Endpoint(
-        route
-    ) * 
-    Endpoint(
-        1000...
-    ) * 
-    (
-        PROTO
     )
 
-"""
+    try:
+        import fasteners
+        return fasteners.InterProcessLock(pidfile_path)
+    except:
+        return None
+    
+def avoid_time_wait(pipe):
+    sock = pipe.sock
+    linger = struct.pack('ii', 1, 0)
+    sock.setsockopt(
+        socket.SOL_SOCKET,
+        socket.SO_LINGER,
+        linger
+    )
 
-"""
-class Listen():
-    def __init__(self, *args):
-        self.args = args
+class Daemon():
+    def __init__(self, conf=DAEMON_CONF):
+        # Special net conf for daemon servers.
+        self.conf = conf
+
+        # AF: proto: port: ip: pipe_events.
+        self.servers = {
+            IP4: {
+                TCP: {}, UDP: {}
+            }, 
+            IP6: {
+                TCP: {}, UDP: {}
+            }, 
+        }
+
+    async def add_listener(self, proto, route):
+        # Enforce static ports for listen port.
+        assert(route.bind_port)
+
+        # Ensure route is bound.
+        assert(route.resolved)
+
+        # Detect zombie servers.
+        port, ip = route.bind_tup()[:2]
+        lock = get_serv_lock(route.af, proto, port, ip)
+        if lock is not None:
+            if not lock.acquire(blocking=False):
+                error = f"{proto}:{bind_str(route)} zombie pid"
+                raise Exception(error)
+
+        # Is the server already listening.
+        is_listening = await is_serv_listening(proto, route)
+        if is_listening:
+            error = f"{proto}:{bind_str(route)} listen conflict."
+            raise Exception(error)
+        
+        # Start a new server listening.
+        pipe = await pipe_open(
+            proto,
+            route=route,
+            msg_cb=self.msg_cb,
+            up_cb=self.up_cb,
+            conf=self.conf
+        )
+
+        # Avoid TIME_WAIT for socket.
+        avoid_time_wait(pipe)
+
+        # Only one instance of this service allowed.
+        pipe.proc_lock = lock
+
+        # Store the server pipe.
+        if port not in self.servers[route.af][proto]:
+            self.servers[route.af][proto][port] = {}
+        self.servers[route.af][proto][port][ip] = pipe
+        
+        return pipe
+
+    """
+    There's a special IPv6 sock option to listen on
+    all address types but its not guaranteed.
+    Hence I use two sockets based on supported stack.
+    """
+    async def listen_all(self, proto, port, nic):
+        for af in nic.supported():
+            route = nic.route(af)
+            await route.bind(ips="*", port=port)
+            await async_wrap_errors(
+                self.add_listener(proto, route)
+            )
+
+    """
+    Localhost here is translated to the right address
+    depending on the AF supported by the NIC.
+    The bind_magic function takes care of this.
+    """
+    async def listen_loopback(self, proto, port, nic):
+        for af in nic.supported():
+            route = nic.route(af)
+            await route.bind(ips="localhost", port=port)
+            await async_wrap_errors(
+                self.add_listener(proto, route)
+            )
+
+    """
+    Really no way to do this with IPv4 without adding
+    something like a basic firewall. But IPv6 has the
+    link-local addresses and UNL. Perhaps a basic
+    firewall could be a future feature.
+    """
+    async def listen_local(self, proto, port, nic):
+        for af in nic.supported():
+            # Supports private IPv4 addresses.
+            if af == IP4:
+                nic_iprs = []
+                for route in nic.rp[af]:
+                    # For every local address in the route table.
+                    for nic_ipr in route.nic_ips:
+                        # Only bind to unique addresses.
+                        if nic_ipr in nic_iprs:
+                            continue
+                        else:
+                            nic_iprs.append(nic_ipr)
+
+                        # Don't modify the route table directly.
+                        # Note: only binds to first IP.
+                        # An IPR could represent a range.
+                        local = copy.deepcopy(route)
+                        ips = ipr_norm(nic_ipr)
+                        await local.bind(ips=ips, port=port)
+                        await async_wrap_errors(
+                            self.add_listener(proto, local)
+                        )
+
+            # Supports link-locals and unique local addresses.
+            if af == IP6:
+                route = nic.route(af)
+                for link_local in route.link_locals:
+                    local = nic.route(af)
+                    ips = ipr_norm(link_local)
+                    await async_wrap_errors(
+                        local.bind(ips=ips, port=port)
+                    )
+                    await async_wrap_errors(
+                        self.add_listener(proto, local)
+                    )
+
+    # On message received (placeholder.)
+    async def msg_cb(self, msg, client_tup, pipe):
+        print("Specify your own msg_cb in a child class.")
+        print(f"{msg} {client_tup}")
+        await pipe.send(msg, client_tup)
+
+    # On connection success(placeholder.)
+    def up_cb(self, msg, client_tup, pipe):
+        pass
+
+    async def close(self):
+        for af in VALID_AFS:
+            for proto in [TCP, UDP]:
+                for port in self.servers[af][proto]:
+                    for ip in self.servers[af][proto][port]:
+                        await self.servers[af][proto][port][ip].close()
+
+async def daemon_rewrite_workspace():
+    serv = None
+    try:
+        nic = await Interface("wlx00c0cab5760d")
+        serv = Daemon()
+
+        await serv.listen_local(TCP, 1337, nic)
+        print(serv.pipes)
+
+        while 1:
+            await asyncio.sleep(1)
+    except:
+        await serv.close()
+        log_exception()
 
 
-
-async def workspace():
-    x = Listen(1, 2, 3)
-    print(x.args)
-
-
-if __name__ == "__main__": # pragma: no cover
-    async_test(workspace())
-    #async_test(test_tcp_punch)
-"""
+if __name__ == "__main__":
+    async_test(daemon_rewrite_workspace)

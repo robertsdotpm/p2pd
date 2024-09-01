@@ -89,43 +89,181 @@ STUN_MAP_SERVERS = {UDP: {IP4: [{'mode': 2, 'host': 'stun.kaseya.com', 'primary'
 
 STUN_CHANGE_SERVERS = {UDP: {IP4: [{'mode': 1, 'host': 'stun.solomo.de', 'primary': {'ip': '5.9.87.18', 'port': 3478}, 'secondary': {'ip': '136.243.205.11', 'port': 3479}}, {'mode': 1, 'host': 'stun.hoiio.com', 'primary': {'ip': '52.76.91.67', 'port': 3478}, 'secondary': {'ip': '52.74.211.13', 'port': 3479}}, {'mode': 1, 'host': 'stun.tel.lu', 'primary': {'ip': '85.93.219.114', 'port': 3478}, 'secondary': {'ip': '85.93.219.115', 'port': 3479}}, {'mode': 1, 'host': 'stun.m-online.net', 'primary': {'ip': '212.18.0.14', 'port': 3478}, 'secondary': {'ip': '62.245.150.225', 'port': 3479}}, {'mode': 1, 'host': 'stun1.p2pd.net', 'primary': {'ip': '88.99.211.216', 'port': 3478}, 'secondary': {'ip': '88.99.211.211', 'port': 3479}}, {'mode': 1, 'host': 'stun.stadtwerke-eutin.de', 'primary': {'ip': '185.39.86.17', 'port': 3478}, 'secondary': {'ip': '185.39.86.18', 'port': 3479}}, {'mode': 1, 'host': 'stun.freecall.com', 'primary': {'ip': '77.72.169.212', 'port': 3478}, 'secondary': {'ip': '77.72.169.213', 'port': 3479}}, {'mode': 1, 'host': 'stun.url.net.au', 'primary': {'ip': '180.235.108.91', 'port': 3478}, 'secondary': {'ip': '180.235.108.92', 'port': 3479}}, {'mode': 1, 'host': 'stun.dls.net', 'primary': {'ip': '209.242.17.106', 'port': 3478}, 'secondary': {'ip': '209.242.17.107', 'port': 3479}}, {'mode': 1, 'host': 'stun.voipzoom.com', 'primary': {'ip': '77.72.169.210', 'port': 3478}, 'secondary': {'ip': '77.72.169.211', 'port': 3479}}, {'mode': 1, 'host': 'stun.levigo.de', 'primary': {'ip': '89.106.220.34', 'port': 3478}, 'secondary': {'ip': '89.106.220.35', 'port': 3479}}, {'mode': 1, 'host': 'stun.vozelia.com', 'primary': {'ip': '37.139.120.14', 'port': 3478}, 'secondary': {'ip': '37.139.120.15', 'port': 3479}}, {'mode': 1, 'host': 'stun.gmx.de', 'primary': {'ip': '212.227.67.33', 'port': 3478}, 'secondary': {'ip': '212.227.67.34', 'port': 3479}}, {'mode': 1, 'host': 'stun.voipxs.nl', 'primary': {'ip': '194.140.246.192', 'port': 3478}, 'secondary': {'ip': '91.215.4.139', 'port': 3479}}, {'mode': 1, 'host': 'stun.officinabit.com', 'primary': {'ip': '83.211.9.232', 'port': 3478}, 'secondary': {'ip': '83.211.9.235', 'port': 3479}}, {'mode': 1, 'host': 'stun.1-voip.com', 'primary': {'ip': '209.105.241.31', 'port': 3478}, 'secondary': {'ip': '209.105.241.32', 'port': 3479}}, {'mode': 1, 'host': 'stun.irishvoip.com', 'primary': {'ip': '216.93.246.18', 'port': 3478}, 'secondary': {'ip': '216.93.246.15', 'port': 3479}}, {'mode': 1, 'host': 'stun.uls.co.za', 'primary': {'ip': '154.73.34.8', 'port': 3478}, 'secondary': {'ip': '154.73.34.9', 'port': 3479}}, {'mode': 1, 'host': 'stun.waterpolopalermo.it', 'primary': {'ip': '185.18.24.50', 'port': 3478}, 'secondary': {'ip': '185.18.24.16', 'port': 3479}}, {'mode': 1, 'host': 'stun.easybell.de', 'primary': {'ip': '138.201.243.186', 'port': 3478}, 'secondary': {'ip': '138.201.243.187', 'port': 3479}}, {'mode': 1, 'host': 'stun.commpeak.com', 'primary': {'ip': '138.201.60.199', 'port': 3478}, 'secondary': {'ip': '94.130.116.102', 'port': 3479}}, {'mode': 1, 'host': 'stun.totalcom.info', 'primary': {'ip': '82.113.193.63', 'port': 3478}, 'secondary': {'ip': '82.113.193.67', 'port': 3479}}, {'mode': 1, 'host': 'stun.usfamily.net', 'primary': {'ip': '64.131.63.216', 'port': 3478}, 'secondary': {'ip': '64.131.63.240', 'port': 3479}}, {'mode': 1, 'host': 'stun.babelforce.com', 'primary': {'ip': '109.235.234.65', 'port': 3478}, 'secondary': {'ip': '109.235.234.125', 'port': 3479}}, {'mode': 1, 'host': 'stun.tel2.co.uk', 'primary': {'ip': '27.111.15.93', 'port': 3478}, 'secondary': {'ip': '27.111.15.81', 'port': 3479}}, {'mode': 1, 'host': 'stun.fitauto.ru', 'primary': {'ip': '195.208.107.138', 'port': 3478}, 'secondary': {'ip': '195.208.107.140', 'port': 3479}}, {'mode': 1, 'host': 'stun.plexicomm.net', 'primary': {'ip': '23.252.81.20', 'port': 3478}, 'secondary': {'ip': '23.252.81.21', 'port': 3479}}, {'mode': 1, 'host': 'stun.nexphone.ch', 'primary': {'ip': '212.25.7.87', 'port': 3478}, 'secondary': {'ip': '212.25.7.88', 'port': 3479}}, {'mode': 1, 'host': 'stun.sewan.fr', 'primary': {'ip': '37.97.65.52', 'port': 3478}, 'secondary': {'ip': '37.97.65.53', 'port': 3479}}, {'mode': 1, 'host': 'stun.infra.net', 'primary': {'ip': '195.242.206.1', 'port': 3478}, 'secondary': {'ip': '195.242.206.28', 'port': 3479}}, {'mode': 1, 'host': 'stun.halonet.pl', 'primary': {'ip': '193.43.148.37', 'port': 3478}, 'secondary': {'ip': '193.43.148.38', 'port': 3479}}, {'mode': 1, 'host': 'stun.ixc.ua', 'primary': {'ip': '136.243.202.77', 'port': 3478}, 'secondary': {'ip': '136.243.202.78', 'port': 3479}}, {'mode': 1, 'host': '185.125.180.70', 'primary': {'ip': '185.125.180.70', 'port': 3478}, 'secondary': {'ip': '185.125.180.71', 'port': 3479}}, {'mode': 1, 'host': '51.255.31.35', 'primary': {'ip': '51.255.31.35', 'port': 3478}, 'secondary': {'ip': '162.19.91.238', 'port': 3479}}, {'mode': 1, 'host': 'stun.logic.ky', 'primary': {'ip': '216.144.89.2', 'port': 3478}, 'secondary': {'ip': '216.144.89.3', 'port': 3482}}, {'mode': 1, 'host': 'stun.hot-chilli.net', 'primary': {'ip': '49.12.125.53', 'port': 3478}, 'secondary': {'ip': '49.12.125.24', 'port': 3479}}, {'mode': 1, 'host': 'stun.eoni.com', 'primary': {'ip': '216.228.192.76', 'port': 3478}, 'secondary': {'ip': '216.228.192.77', 'port': 3479}}, {'mode': 1, 'host': 'stun.teamfon.de', 'primary': {'ip': '212.29.18.56', 'port': 3478}, 'secondary': {'ip': '212.29.18.57', 'port': 3479}}, {'mode': 1, 'host': 'stun.megatel.si', 'primary': {'ip': '91.199.161.149', 'port': 3478}, 'secondary': {'ip': '91.199.161.158', 'port': 3479}}, {'mode': 1, 'host': 'stun.aeta.com', 'primary': {'ip': '85.214.119.212', 'port': 3478}, 'secondary': {'ip': '81.169.176.31', 'port': 3479}}, {'mode': 1, 'host': 'stun.srce.hr', 'primary': {'ip': '161.53.1.100', 'port': 3478}, 'secondary': {'ip': '161.53.1.101', 'port': 3479}}, {'mode': 1, 'host': 'stun.3wayint.com', 'primary': {'ip': '95.216.145.84', 'port': 3478}, 'secondary': {'ip': '95.216.176.73', 'port': 3479}}, {'mode': 1, 'host': 'stunserver.stunprotocol.org', 'primary': {'ip': '3.132.228.249', 'port': 3478}, 'secondary': {'ip': '3.135.212.85', 'port': 3479}}, {'mode': 1, 'host': 'stun.next-gen.ro', 'primary': {'ip': '193.16.148.245', 'port': 3478}, 'secondary': {'ip': '193.16.148.244', 'port': 3479}}, {'mode': 1, 'host': 'stun.easter-eggs.com', 'primary': {'ip': '37.9.136.90', 'port': 3478}, 'secondary': {'ip': '37.9.136.91', 'port': 3479}}, {'mode': 1, 'host': 'stun.syrex.co.za', 'primary': {'ip': '41.79.23.6', 'port': 3478}, 'secondary': {'ip': '41.79.23.24', 'port': 3479}}, {'mode': 1, 'host': 'stun.sipthor.net', 'primary': {'ip': '85.17.186.7', 'port': 3478}, 'secondary': {'ip': '85.17.186.12', 'port': 3479}}, {'mode': 1, 'host': 'stun.syncthing.net', 'primary': {'ip': '198.211.120.59', 'port': 3478}, 'secondary': {'ip': '188.166.128.84', 'port': 3479}}, {'mode': 1, 'host': 'stun.qcol.net', 'primary': {'ip': '69.89.160.30', 'port': 3478}, 'secondary': {'ip': '69.89.160.31', 'port': 3479}}, {'mode': 1, 'host': 'stun.miwifi.com', 'primary': {'ip': '111.206.174.3', 'port': 3478}, 'secondary': {'ip': '111.206.174.2', 'port': 3479}}, {'mode': 1, 'host': 'stun.meowsbox.com', 'primary': {'ip': '173.255.213.166', 'port': 3478}, 'secondary': {'ip': '45.56.86.112', 'port': 3479}}, {'mode': 1, 'host': 'stun.axeos.nl', 'primary': {'ip': '185.67.224.59', 'port': 3478}, 'secondary': {'ip': '185.67.224.58', 'port': 3479}}, {'mode': 1, 'host': 'stun.mywatson.it', 'primary': {'ip': '92.222.127.114', 'port': 3478}, 'secondary': {'ip': '92.222.127.116', 'port': 5060}}, {'mode': 1, 'host': 'stun.fairytel.at', 'primary': {'ip': '77.237.51.83', 'port': 3478}, 'secondary': {'ip': '77.237.51.84', 'port': 3479}}, {'mode': 1, 'host': 'webrtc.free-solutions.org', 'primary': {'ip': '94.103.99.223', 'port': 3478}, 'secondary': {'ip': '94.103.99.224', 'port': 3479}}, {'mode': 1, 'host': 'stun.voztele.com', 'primary': {'ip': '193.22.119.20', 'port': 3478}, 'secondary': {'ip': '193.22.119.3', 'port': 3479}}, {'mode': 1, 'host': 'stun.t-online.de', 'primary': {'ip': '217.0.12.1', 'port': 3478}, 'secondary': {'ip': '217.0.12.2', 'port': 3479}}, {'mode': 1, 'host': 'stun.sipgate.net', 'primary': {'ip': '3.33.249.248', 'port': 3478}, 'secondary': {'ip': '15.197.250.192', 'port': 3479}}, {'mode': 1, 'host': 'stun.deepfinesse.com', 'primary': {'ip': '157.22.130.80', 'port': 3478}, 'secondary': {'ip': '157.22.130.81', 'port': 3479}}, {'mode': 1, 'host': 'stun.jabbim.cz', 'primary': {'ip': '88.86.102.51', 'port': 3478}, 'secondary': {'ip': '88.86.102.52', 'port': 3479}}, {'mode': 1, 'host': 'stun.sky.od.ua', 'primary': {'ip': '81.25.228.2', 'port': 3478}, 'secondary': {'ip': '81.25.228.3', 'port': 3479}}, {'mode': 1, 'host': 'stun.voicetech.se', 'primary': {'ip': '91.205.60.185', 'port': 3478}, 'secondary': {'ip': '91.205.60.139', 'port': 3479}}, {'mode': 1, 'host': 'stun.tng.de', 'primary': {'ip': '82.97.157.254', 'port': 3478}, 'secondary': {'ip': '82.97.157.252', 'port': 3479}}, {'mode': 1, 'host': 'stun.acrobits.cz', 'primary': {'ip': '85.17.88.164', 'port': 3478}, 'secondary': {'ip': '85.17.88.165', 'port': 3479}}, {'mode': 1, 'host': 'stun.leucotron.com.br', 'primary': {'ip': '177.66.4.31', 'port': 3478}, 'secondary': {'ip': '177.66.4.32', 'port': 3479}}, {'mode': 1, 'host': 'stun.imafex.sk', 'primary': {'ip': '188.123.97.201', 'port': 3478}, 'secondary': {'ip': '188.123.97.202', 'port': 3479}}, {'mode': 1, 'host': 'stun.gigaset.net', 'primary': {'ip': '81.173.115.217', 'port': 3478}, 'secondary': {'ip': '157.97.108.95', 'port': 3479}}, {'mode': 1, 'host': '192.76.120.66', 'primary': {'ip': '192.76.120.66', 'port': 3478}, 'secondary': {'ip': '64.16.250.34', 'port': 3479}}, {'mode': 1, 'host': 'stun.aaisp.co.uk', 'primary': {'ip': '81.187.30.115', 'port': 3478}, 'secondary': {'ip': '81.187.30.124', 'port': 3479}}, {'mode': 1, 'host': 'stun.cablenet-as.net', 'primary': {'ip': '213.140.209.236', 'port': 3478}, 'secondary': {'ip': '213.140.209.237', 'port': 3479}}, {'mode': 1, 'host': 'stun.taxsee.com', 'primary': {'ip': '195.209.116.72', 'port': 3478}, 'secondary': {'ip': '195.209.116.73', 'port': 3479}}, {'mode': 1, 'host': 'stun.hide.me', 'primary': {'ip': '209.250.250.224', 'port': 3478}, 'secondary': {'ip': '209.250.247.151', 'port': 3479}}, {'mode': 1, 'host': 'stun.alphacron.de', 'primary': {'ip': '193.22.2.248', 'port': 3478}, 'secondary': {'ip': '193.22.2.249', 'port': 3479}}, {'mode': 1, 'host': 'stun.wxnz.net', 'primary': {'ip': '182.154.16.7', 'port': 3478}, 'secondary': {'ip': '182.154.16.8', 'port': 3479}}, {'mode': 1, 'host': 'stun.medvc.eu', 'primary': {'ip': '150.254.161.60', 'port': 3478}, 'secondary': {'ip': '150.254.161.48', 'port': 3479}}, {'mode': 1, 'host': 'stun.vadacom.co.nz', 'primary': {'ip': '103.124.135.6', 'port': 3478}, 'secondary': {'ip': '103.124.135.7', 'port': 3479}}, {'mode': 1, 'host': 'stun.voip.aebc.com', 'primary': {'ip': '66.51.128.11', 'port': 3478}, 'secondary': {'ip': '66.51.128.12', 'port': 3479}}, {'mode': 1, 'host': 'stun.futurasp.es', 'primary': {'ip': '178.33.166.29', 'port': 3478}, 'secondary': {'ip': '91.121.210.25', 'port': 3479}}, {'mode': 1, 'host': 'stun.epygi.com', 'primary': {'ip': '23.253.102.137', 'port': 3478}, 'secondary': {'ip': '162.242.144.6', 'port': 3479}}, {'mode': 1, 'host': 'stun.rolmail.net', 'primary': {'ip': '195.254.254.20', 'port': 3478}, 'secondary': {'ip': '195.254.254.4', 'port': 3479}}, {'mode': 1, 'host': 'stun.solcon.nl', 'primary': {'ip': '212.45.38.40', 'port': 3478}, 'secondary': {'ip': '212.45.38.41', 'port': 3479}}, {'mode': 1, 'host': 'stun.fathomvoice.com', 'primary': {'ip': '54.173.127.160', 'port': 3478}, 'secondary': {'ip': '54.173.127.161', 'port': 3479}}, {'mode': 1, 'host': 'stun.webmatrix.com.br', 'primary': {'ip': '192.99.194.90', 'port': 3478}, 'secondary': {'ip': '192.99.194.91', 'port': 3479}}], IP6: [{'mode': 1, 'host': 'stun1.p2pd.net', 'primary': {'ip': '2a01:4f8:10a:3ce0::2', 'port': 3478}, 'secondary': {'ip': '2a01:4f8:10a:3ce0::3', 'port': 3479}}, {'mode': 1, 'host': 'stun.hot-chilli.net', 'primary': {'ip': '2a01:4f8:242:56ca::2', 'port': 3478}, 'secondary': {'ip': '2a01:4f8:242:56ca::3', 'port': 3479}}, {'mode': 1, 'host': 'stunserver.stunprotocol.org', 'primary': {'ip': '2600:1f16:8c5:101:80b:b58b:828:8df4', 'port': 3478}, 'secondary': {'ip': '2600:1f16:8c5:101:6388:1fb6:8b7e:c2', 'port': 3479}}]}, TCP: {IP4: [{'mode': 1, 'host': 'stun1.p2pd.net', 'primary': {'ip': '88.99.211.216', 'port': 3478}, 'secondary': {'ip': '88.99.211.211', 'port': 3479}}, {'mode': 1, 'host': 'stunserver.stunprotocol.org', 'primary': {'ip': '3.132.228.249', 'port': 3478}, 'secondary': {'ip': '3.135.212.85', 'port': 3479}}], IP6: [{'mode': 1, 'host': 'stun1.p2pd.net', 'primary': {'ip': '2a01:4f8:10a:3ce0::2', 'port': 3478}, 'secondary': {'ip': '2a01:4f8:10a:3ce0::3', 'port': 3479}}, {'mode': 1, 'host': 'stunserver.stunprotocol.org', 'primary': {'ip': '2600:1f16:8c5:101:80b:b58b:828:8df4', 'port': 3478}, 'secondary': {'ip': '2600:1f16:8c5:101:6388:1fb6:8b7e:c2', 'port': 3479}}]}}
 
-# The main server used to exchange 'signaling' messages.
-# These are messages that help nodes create connections.
 MQTT_SERVERS = [
-    # [b"p2pd.net", 1883],
-    [b"mqtt.eclipseprojects.io", 1883],
-    [b"broker.mqttdashboard.com", 1883],
-    [b"test.mosquitto.org", 1883],
-    [b"broker.emqx.io", 1883],
-    [b"broker.hivemq.com", 1883],
+    {
+        "host": "mqtt.eclipseprojects.io",
+        "port": 1883,
+        IP4: "137.135.83.217",
+        IP6: None,
+    },
+    {
+        "host": "broker.mqttdashboard.com",
+        "port": 1883,
+        IP4: "3.72.227.226",
+        IP6: None,
+    },
+    {
+        "host": "test.mosquitto.org",
+        "port": 1883,
+        IP4: "91.121.93.94",
+        IP6: "2001:41d0:1:925e::1",
+    },
+    {
+        "host": "broker.emqx.io",
+        "port": 1883,
+        IP4: "44.232.241.40",
+        IP6: None,
+    },
+    {
+        "host": "broker.hivemq.com",
+        "port": 1883,
+        IP4: "3.74.214.208",
+        IP6: None,
+    },
 ]
 
 # Port is ignored for now.
 NTP_SERVERS = [
-    ["time.google.com", 123],
-    ["pool.ntp.org", 123],
-    ["time.cloudflare.com", 123],
-    ["time.facebook.com", 123],
-    ["time.windows.com", 123],
-    ["time.apple.com", 123],
-    ["time.nist.gov", 123],
-    ["utcnist.colorado.edu", 123],
-    ["ntp2.net.berkeley.edu", 123],
-    ["time.mit.edu", 123],
-    ["time.stanford.edu", 123],
-    ["ntp.nict.jp", 123],
-    ["ntp1.hetzner.de", 123],
-    ["ntp.ripe.net", 123],
-    ["clock.isc.org", 123],
-    ["ntp.ntsc.ac.cn", 123],
-    ["1.amazon.pool.ntp.org", 123],
-    ["0.android.pool.ntp.org", 123],
-    ["0.pfsense.pool.ntp.org", 123],
-    ["0.debian.pool.ntp.org", 123],
-    ["0.gentoo.pool.ntp.org", 123],
-    ["0.arch.pool.ntp.org", 123],
-    ["0.fedora.pool.ntp.org", 123],
+    {
+        "host": "time.google.com",
+        "port": 123,
+        IP4: "216.239.35.4",
+        IP6: "2001:4860:4806::"
+    },
+    {
+        "host": "pool.ntp.org",
+        "port": 123,
+        IP4: "162.159.200.123",
+        IP6: None
+    },
+    {
+        "host": "time.cloudflare.com",
+        "port": 123,
+        IP4: "162.159.200.123",
+        IP6: "2606:4700:f1::1"
+    },
+    {
+        "host": "time.facebook.com",
+        "port": 123,
+        IP4: "129.134.26.123",
+        IP6: "2a03:2880:ff0a::123"
+    },
+    {
+        "host": "time.windows.com",
+        "port": 123,
+        IP4: "52.148.114.188",
+        IP6: None
+    },
+    {
+        "host": "time.apple.com",
+        "port": 123,
+        IP4: "17.253.66.45",
+        IP6: "2403:300:a08:3000::31"
+    },
+    {
+        "host": "time.nist.gov",
+        "port": 123,
+        IP4: "129.6.15.27",
+        IP6: "2610:20:6f97:97::4"
+    },
+    {
+        "host": "utcnist.colorado.edu",
+        "port": 123,
+        IP4: "128.138.140.44",
+        IP6: None
+    },
+    {
+        "host": "ntp2.net.berkeley.edu",
+        "port": 123,
+        IP4: "169.229.128.142",
+        IP6: "2607:f140:ffff:8000:0:8003:0:a"
+    },
+    {
+        "host": "time.mit.edu",
+        "port": 123,
+        IP4: "18.7.33.13",
+        IP6: None
+    },
+    {
+        "host": "time.stanford.edu",
+        "port": 123,
+        IP4: "171.64.7.67",
+        IP6: None
+    },
+    {
+        "host": "ntp.nict.jp",
+        "port": 123,
+        IP4: "133.243.238.243",
+        IP6: "2001:df0:232:eea0::fff4"
+    },
+    {
+        "host": "ntp1.hetzner.de",
+        "port": 123,
+        IP4: "213.239.239.164",
+        IP6: "2a01:4f8:0:a0a1::2:1"
+    },
+    {
+        "host": "ntp.ripe.net",
+        "port": 123,
+        IP4: "193.0.0.229",
+        IP6: "2001:67c:2e8:14:ffff::229"
+    },
+    {
+        "host": "clock.isc.org",
+        "port": 123,
+        IP4: "64.62.194.188",
+        IP6: "2001:470:1:b07::123:2000"
+    },
+    {
+        "host": "ntp.ntsc.ac.cn",
+        "port": 123,
+        IP4: "114.118.7.163",
+        IP6: None
+    },
+    {
+        "host": "1.amazon.pool.ntp.org",
+        "port": 123,
+        IP4: "103.152.64.212",
+        IP6: None
+    },
+    {
+        "host": "0.android.pool.ntp.org",
+        "port": 123,
+        IP4: "159.196.44.158",
+        IP6: None
+    },
+    {
+        "host": "0.pfsense.pool.ntp.org",
+        "port": 123,
+        IP4: "27.124.125.250",
+        IP6: None
+    },
+    {
+        "host": "0.debian.pool.ntp.org",
+        "port": 123,
+        IP4: "139.180.160.82",
+        IP6: None
+    },
+    {
+        "host": "0.gentoo.pool.ntp.org",
+        "port": 123,
+        IP4: "14.202.65.230",
+        IP6: None
+    },
+    {
+        "host": "0.arch.pool.ntp.org",
+        "port": 123,
+        IP4: "110.232.114.22",
+        IP6: None
+    },
+    {
+        "host": "0.fedora.pool.ntp.org",
+        "port": 123,
+        IP4: "139.180.160.82",
+        IP6: None
+    }
 ]
+
 
 """
 These are TURN servers used as fallbacks (if configured by a P2P pipe.)
@@ -158,6 +296,9 @@ NATs, unfortunately. So they've been removed from the server list for now.
     "host": b"webrtc.free-solutions.org",
     "port": 3478,
     "afs": [IP4],
+    "ip": {
+        IP4: "94.103.99.223"
+    },
     "user": b"tatafutz",
     "pass": b"turnuser",
     "realm": None
@@ -168,6 +309,7 @@ NATs, unfortunately. So they've been removed from the server list for now.
     "host": b"openrelay.metered.ca",
     "port": 80,
     "afs": [IP4],
+    "
     "user": b"openrelayproject",
     "pass": b"openrelayproject",
     "realm": None
@@ -193,11 +335,27 @@ todo: update this
     "realm": None
 },
 """
+
 TURN_SERVERS = [
+    {
+        "host": b"turn.threema.ch",
+        "port": 443,
+        "afs": [IP4],
+        "ip": {
+            IP4: "185.88.236.76"
+        },
+        "user": b"threema-angular",
+        "pass": b"Uv0LcCq3kyx6EiRwQW5jVigkhzbp70CjN2CJqzmRxG3UGIdJHSJV6tpo7Gj7YnGB",
+        "realm": None
+    },
     {
         "host": b"turn.obs.ninja",
         "port": 443,
         "afs": [IP4, IP6],
+        "ip": {
+            IP4: "51.195.101.185",
+            IP6: "2001:41d0:701:1100::62e5",
+        },
         "user": b"steve",
         "pass": b"setupYourOwnPlease",
         "realm": None
@@ -206,6 +364,9 @@ TURN_SERVERS = [
         "host": b"stun.contus.us",
         "port": 3478,
         "afs": [IP4],
+        "ip": {
+            IP4: "152.67.9.43"
+        },
         "user": b"contus",
         "pass": b"SAE@admin",
         "realm": None
@@ -214,18 +375,11 @@ TURN_SERVERS = [
         "host": b"turn.quickblox.com",
         "port": 3478,
         "afs": [IP4],
+        "ip": {
+            IP4: "103.253.147.231",
+        },
         "user": b"quickblox",
         "pass": b"baccb97ba2d92d71e26eb9886da5f1e0",
         "realm": None
     },
-    {
-        "host": b"turn.threema.ch",
-        "port": 443,
-        "afs": [IP4],
-        "user": b"threema-angular",
-        "pass": b"Uv0LcCq3kyx6EiRwQW5jVigkhzbp70CjN2CJqzmRxG3UGIdJHSJV6tpo7Gj7YnGB",
-        "realm": None
-    },
 ]
-
-

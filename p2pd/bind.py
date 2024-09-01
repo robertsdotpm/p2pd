@@ -138,7 +138,7 @@ async def binder(af, ip="", port=0, nic_id=None, loop=None, plat=platform.system
         addr_infos = []
 
     if not len(addr_infos):
-        raise Exception(f"Can't resolve {ips} for bind.")
+        raise Exception(f"Can't resolve {ip} for bind.")
     
     # Set initial bind tup.
     bind_tup = addr_infos[0][4]

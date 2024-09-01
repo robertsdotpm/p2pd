@@ -127,11 +127,25 @@ class P2PNodeExtra():
                 return
             
             offset = await offsets.get()
-            mqtt_server = MQTT_SERVERS[offset]
+            server = MQTT_SERVERS[offset]
+
+            # Lookup IP and port of MQTT server.
+            try:
+                addr = await Address(
+                    server["host"],
+                    server["port"],
+                    self.ifs[0].route()
+                )
+                dest_tup = addr.tup[0:2]
+            except:
+                # Fallback to fixed IPs if host res fails.
+                ip = server[IP4] or server[IP6]
+                dest_tup = [ip, server["port"]]
+
             signal_pipe = SignalMock(
                 peer_id=to_s(self.node_id),
                 f_proto=self.signal_protocol,
-                mqtt_server=mqtt_server
+                mqtt_server=dest_tup
             )
 
             try:
@@ -177,30 +191,13 @@ class P2PNodeExtra():
         return None
 
     async def listen_on_ifs(self, protos=[TCP]):
-        # Make a list of routes by supported AF.
-        routes = []
-        if_names = []
-        for interface in self.ifs:
-            for af in interface.supported():
-                route = interface.route(af)
-                route = await route.bind(
-                    port=self.listen_port,
-                    ips=self.conf["listen_ip"]
+        for nic in self.ifs:
+            for proto in protos:
+                await self.listen_all(
+                    proto,
+                    self.listen_port,
+                    nic
                 )
-                assert(route is not None)
-
-                routes.append(route)
-
-            if_names.append(interface.name)
-
-        # Start handling messages for self.msg_cb.
-        # Bind to all ifs provided to class on route[0].
-        task = await self.listen_all(
-            routes,
-            [self.listen_port],
-            protos
-        )
-        self.tasks.append(task)
 
     def pipe_future(self, pipe_id):
         if pipe_id not in self.pipes:

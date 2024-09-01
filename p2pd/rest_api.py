@@ -324,11 +324,12 @@ async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=
 
     # Start P2PD server.
     p2p_server = P2PDServer(ifs, node)
-    await p2p_server.listen_all(
-        [route],
-        [port],
-        [TCP]
-    )
+    for nic in ifs:
+        await p2p_server.listen_all(
+            TCP,
+            port,
+            nic
+        )
 
     # Stop this thread exiting.
     print(p2p_server.servers)

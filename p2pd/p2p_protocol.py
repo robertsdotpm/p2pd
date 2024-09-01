@@ -49,6 +49,8 @@ class SigProtoHandlers():
                 self.node.sk.to_string(),
                 buf[1:]
             )
+        else:
+            buf = buf[1:]
 
         if buf[0] not in SIG_PROTO:
             print(f"proto got unsupported msg {buf[0]}")
@@ -68,22 +70,20 @@ class SigProtoHandlers():
             print(f"Received message not intended for us. {dest['node_id']} {node_id}")
             return
         
-        # Reject already processed.
-        """
-        if msg.meta.pipe_id in self.seen:
-            print("in seen")
-            return
-        else:
-            self.seen[msg.meta.pipe_id] = 1
-        """
-
+        # Allow encryption.
+        if is_enc:
+            src_node_id = msg.meta.src["node_id"]
+            if src_node_id not in self.node.auth:
+                self.node.auth[src_node_id] = {
+                    "vk": msg.cipher.vk
+                }
+        
         # Updating routing dest with current addr.
         print(msg is not None)
         assert(msg is not None)
         msg.set_cur_addr(self.node.addr_bytes)
         msg.routing.load_if_extra(self.node)
         
-
         # Toggle local and remote address support.
         conf = dict_child({
             "addr_types": msg.meta.addr_types

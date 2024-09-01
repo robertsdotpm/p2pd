@@ -88,7 +88,7 @@ class Nickname():
                 PNPClient(
                     self.sk,
                     dest,
-                    serv_info["pk"]
+                    h_to_b(serv_info["pk"])
                 )
             )
         

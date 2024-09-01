@@ -48,6 +48,21 @@ class SigMsg():
             raise Exception("bad if_i {if_index}")
         
         return af, addr
+    
+    class Cipher():
+        def __init__(self, vk):
+            self.vk = vk
+
+        def to_dict(self):
+            return {
+                "vk": to_h(self.vk)
+            }
+        
+        @staticmethod
+        def from_dict(d):
+            vk = d.get("vk", "")
+            vk = h_to_b(vk)
+            return SigMsg.Cipher(vk)
 
     # Information about the message sender.
     class Meta():
@@ -59,8 +74,9 @@ class SigMsg():
             self.af = af
             self.same_machine = False
             self.addr_types = addr_types
+            self.load_src_addr()
 
-        def patch_source(self, cur_addr):
+        def load_src_addr(self):
             # Parse src_buf to addr.
             self.af, self.src = \
             SigMsg.load_addr(
@@ -68,8 +84,6 @@ class SigMsg():
                 self.src_buf,
                 self.src_index,
             )
-
-            self.cur_addr = cur_addr
 
             # Reference to the network info.
             info = self.src[self.af]
@@ -165,6 +179,10 @@ class SigMsg():
             data.get("payload", {})
         )
 
+        self.cipher = self.Cipher.from_dict(
+            data.get("cipher", {})
+        )
+
         self.enum = enum
             
 
@@ -173,6 +191,7 @@ class SigMsg():
             "meta": self.meta.to_dict(),
             "routing": self.routing.to_dict(),
             "payload": self.payload.to_dict(),
+            "cipher": self.cipher.to_dict(),
         }
 
         return d
@@ -196,13 +215,6 @@ class SigMsg():
 
     def set_cur_addr(self, cur_addr_buf):
         self.routing.set_cur_dest(cur_addr_buf)
-
-        """
-        Update the parsed source addresses to
-        point to internal addresses if behind
-        the same router.
-        """
-        self.meta.patch_source(self.routing.dest)
 
         # Set same machine flag.
         sid = self.meta.src["machine_id"]
