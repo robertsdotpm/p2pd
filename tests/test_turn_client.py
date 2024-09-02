@@ -1,5 +1,11 @@
 from p2pd import *
 
+async def turn_msg_cb(msg, client_tup, pipe):
+    #print(msg)
+    #print(client_tup)
+    #print(pipe)
+    pipe.got_msg = msg
+    
 
 async def get_turn_client(af, interface, turn_offset):
     # Get a route for this interface.
@@ -24,7 +30,8 @@ async def get_turn_client(af, interface, turn_offset):
         turn_user=TURN_SERVERS[turn_offset]["user"],
         turn_pw=TURN_SERVERS[turn_offset]["pass"],
         turn_realm=TURN_SERVERS[turn_offset]["realm"],
-        route=route
+        route=route,
+        #msg_cb=turn_msg_cb
     )
 
     # Enable blank UDP headers.
@@ -71,14 +78,10 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
         # Each turn client white lists the others external IP.
         # Thereby allowing msgs from that interface through.
         for if_index in range(0, len(ifs)):
-            # Sending interface and it's external IP
-            interface = ifs[(if_index + 1) % 2]
-            route = await interface.route(af).bind()
-            peer_tup = (route.ext(), 0)
-
             # Accept the other interfaces external IP.
             src_turn = turn_clients[if_index]
             dest_turn = turn_clients[(if_index + 1) % 2]
+            peer_tup = await dest_turn.client_tup_future
             relay_tup = await dest_turn.relay_tup_future
             await src_turn.accept_peer(peer_tup, relay_tup)
 
@@ -95,7 +98,9 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
                 await turn_client.send(msg)
 
             # Recv data back.
-            out = await turn_clients[if_index].recv(SUB_ALL, 2)
+            peer_tup = await turn_client.client_tup_future
+            sub = tup_to_sub(peer_tup)
+            out = await turn_clients[if_index].recv(SUB_ALL)
             assert(msg in out)
 
         # Cleanup

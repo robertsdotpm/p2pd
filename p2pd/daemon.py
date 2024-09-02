@@ -86,25 +86,27 @@ class Daemon():
         }
 
     async def add_listener(self, proto, route):
-        # Enforce static ports for listen port.
-        assert(route.bind_port)
-
         # Ensure route is bound.
         assert(route.resolved)
 
-        # Detect zombie servers.
-        port, ip = route.bind_tup()[:2]
-        lock = get_serv_lock(route.af, proto, port, ip)
-        if lock is not None:
-            if not lock.acquire(blocking=False):
-                error = f"{proto}:{bind_str(route)} zombie pid"
-                raise Exception(error)
+        # Detect if server already running.
+        lock = None
+        bind_port = route.bind_port
+        ip, port = route.bind_tup()[:2]
+        if bind_port:
+            # Detect zombie servers.
+            lock = get_serv_lock(route.af, proto, port, ip)
+            if lock is not None:
+                if not lock.acquire(blocking=False):
+                    error = f"{proto}:{bind_str(route)} zombie pid"
+                    raise Exception(error)
 
-        # Is the server already listening.
-        is_listening = await is_serv_listening(proto, route)
-        if is_listening:
-            error = f"{proto}:{bind_str(route)} listen conflict."
-            raise Exception(error)
+            # Is the server already listening.
+            is_listening = await is_serv_listening(proto, route)
+            if is_listening:
+                error = f"{proto}:{bind_str(route)} listen conflict."
+                raise Exception(error)
+            
         
         # Start a new server listening.
         pipe = await pipe_open(
@@ -119,14 +121,19 @@ class Daemon():
         avoid_time_wait(pipe)
 
         # Only one instance of this service allowed.
-        pipe.proc_lock = lock
+        if bind_port:
+            pipe.proc_lock = lock
+
+        # Record assigned port.
+        if not bind_port:
+            port = pipe.sock.getsockname()[1]
 
         # Store the server pipe.
         if port not in self.servers[route.af][proto]:
             self.servers[route.af][proto][port] = {}
         self.servers[route.af][proto][port][ip] = pipe
         
-        return pipe
+        return port, pipe
 
     """
     There's a special IPv6 sock option to listen on

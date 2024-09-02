@@ -401,7 +401,7 @@ class ToxiMainServer(RESTD):
                 "enabled": False,
                 "toxics": []
             }
-
+        
         # Otherwise it's a new create call.
         tup_pattern = "([\s\S]+):([0-9]+)$"
         bind_ip, bind_port = re.findall(
@@ -409,16 +409,26 @@ class ToxiMainServer(RESTD):
             j["listen"]
         )[0]
 
+        # Disable bind port.
+        bind_port = int(bind_port)
+
+
+        if not bind_port:
+            bind_port = None
+
+    
+
         # Build listen route.
         route = await pipe.route.interface.route().bind(
             ips=bind_ip,
-            port=int(bind_port)
+            port=bind_port
         )
 
         # Start the tunnel server.
         tunnel_serv = ToxiTunnelServer(name=j["name"])
-        await tunnel_serv.listen_specific(
-            [[route, TCP]]
+        bind_port, pipe = await tunnel_serv.add_listener(
+            TCP,
+            route
         )
 
         # Extract destination IP.
@@ -456,7 +466,6 @@ class ToxiMainServer(RESTD):
         tunnel_serv.set_upstream(upstream)
 
         # If zero was passed convert to port no.
-        bind_port = route.bind_port
         self.tunnel_servs[j["name"]] = tunnel_serv
 
         # Return response

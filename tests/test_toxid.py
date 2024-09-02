@@ -12,30 +12,26 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
 
         # Create main Toxi server.
         i = await Interface()
-        route = await i.route().bind(ips="127.0.0.1")
+        toxiport = 8031
+        route = await i.route().bind(ips="127.0.0.1", port=toxiport)
         toxid = ToxiMainServer([i])
-        await toxid.listen_specific(
-            [[route, TCP]]
-        )
+        await toxid.add_listener(TCP, route)
         
         # Create a Toxi client.
-        listen_port = toxid.get_listen_port()
-        toxid_addr = await Address("127.0.0.1", listen_port, route)
+        toxid_addr = await Address("127.0.0.1", toxiport, route)
         client = await ToxiClient(
             toxid_addr,
             net_conf
         ).start()
 
         # Create an echo server -- used for some tests.
-        route = await i.route().bind(ips="127.0.0.1")
+        echodport = 23111
+        route = await i.route().bind(ips="127.0.0.1", port=echodport)
         echod = EchoServer()
-        await echod.listen_specific(
-            [[route, TCP]]
-        )
+        await echod.add_listener(TCP, route)
 
         # Address to connect to echod.
-        listen_port = echod.get_listen_port()
-        echo_dest = await Address("127.0.0.1", listen_port, route)
+        echo_dest = await Address("127.0.0.1", echodport, route)
         return net_conf, i, toxid, toxid_addr, client, echod, echo_dest
 
     """
@@ -68,7 +64,7 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
 
         # Test downstream and upstream.
         lag_amount = 2000
-        tunnel_dest = await Address("www.google.com", 80, i.route())
+        tunnel_dest = await Address("142.250.70.238", 80, i.route())
         for toxi_stream in streams():
             # Add the initial toxic to a new tunnel.
             tunnel = await self.new_tunnel(tunnel_dest, client)
@@ -357,8 +353,11 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
 
             start_time = time.time()
             if n == 0:
-                client_pipe = tunneld.servers[0][2].tcp_clients[0]
-                await client_pipe.close()
+                ports = tunneld.servers[IP4][TCP]
+                for port in ports:
+                    client_pipe = ports[port]["127.0.0.1"].tcp_clients[0]
+                    await client_pipe.close()
+                    break
             else:        
                 await tunneld.upstream_pipe.close()
 

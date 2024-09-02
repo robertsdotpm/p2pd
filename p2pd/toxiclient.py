@@ -258,6 +258,8 @@ class ToxiClient():
         assert(b"error" not in resp.out)
 
         # Listen porn for the tunnel server.
+        print(resp)
+        print(resp.out)
         port = re.findall("127[.]0[.]0[.]1[:]([0-9]+)", to_s(resp.out))[0]
         port = to_n(port)
 

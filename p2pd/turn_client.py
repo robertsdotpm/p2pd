@@ -320,6 +320,9 @@ class TURNClient(PipeEvents):
         # Build a sub from the first accepted peer.
         print("bob turn recv ")
         print(self.peers)
+        if sub == SUB_ALL:
+            sub = None
+            
         if sub is None:
             for peer_tup in self.peers:
                 sub = tup_to_sub(peer_tup)
