@@ -28,16 +28,9 @@ class CustomServer(RESTD):
         return b""
 
 async def example():
-    i = await Interface()
+    nic = await Interface()
     server = CustomServer()
-    await server.listen_all(
-        [
-            await i.route(IP4),
-            await i.route(IP4).bind(ips="127.0.0.1")
-        ],
-        [60322],
-        [TCP, UDP],
-    )
+    await server.listen_loopback(TCP, 60322, nic)
     #
     """
     Feel free to add a while: sleep

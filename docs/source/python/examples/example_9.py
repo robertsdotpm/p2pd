@@ -6,8 +6,9 @@ async def example():
     d = Daemon()
     i = await Interface().start()
     b = await i.route(i.supported()[0]).bind(ips="127.0.0.1")
-    await d.listen_specific(
-        targets=[[b, TCP]],
+    await d.add_listener(
+        TCP,
+        b,
     )
     #
     await d.close()

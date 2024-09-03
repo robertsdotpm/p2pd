@@ -1,8 +1,6 @@
-import hashlib
-import secrets
 from p2pd import *
 
-COMPUTER_A_NAME = ["computer_a", ".node"]
+COMPUTER_A_NAME = "computer_a"
 
 # Put your custom protocol code here.
 async def msg_cb(msg, client_tup, pipe):
@@ -15,45 +13,36 @@ async def msg_cb(msg, client_tup, pipe):
 async def computer_a():
     # Start our main node server.
     # The node implements your protocol.
-    node = await start_p2p_node(
-        # Used to create the accounts that can modify COMPUTER_A_NAME!
-        # Save your seed value to reuse it! Otherwise names are lost.
-        seed=hashlib.sha3_256(b"computer a unique password"),
-        #
-        # Set to true for port forwarding + pin holes.
-        enable_upnp=False,
-        #
+    node = P2PNode(
         # Make sure node server uses different port.
         port=NODE_PORT + 50 + 1
-        
     )
-    node.add_msg_cb(msg_cb)
+    await node.add_msg_cb(msg_cb)
+    #
+    # Start the node listening.
+    await node.start()
     #
     # Register a human readable name for this peer.
     # NOTE: for demo only -- use your own unique name!
-    await node.register(COMPUTER_A_NAME)
+    # NOTE: it returns the name + success TLD.
+    node_a_url = await node.nickname(COMPUTER_A_NAME)
     #
-    return node
+    return node_a_url, node
 
-async def computer_b():
+async def computer_b(node_a_url):
     # Start our main node server.
     # The node implements your protocol.
-    node = await start_p2p_node(
-        # Used to create the accounts that can modify computer b's names!
-        # Save your seed value to reuse it! Otherwise names are lost.
-        seed=secrets.token_bytes(24),
-        #
-        # Set to true for port forwarding + pin holes.
-        enable_upnp=False,
-        #
-        # Make sure node server uses different port
-        # to computer_a.
+    node = P2PNode(
+        # Make sure node server uses different port.
         port=NODE_PORT + 50 + 2
     )
     #
+    # Start the node listening.
+    await node.start()
+    #
     # Spawn a new pipe from a P2P con.
     # Connect to their node server.
-    pipe, success_type = await node.connect(COMPUTER_A_NAME)
+    pipe = await node.connect(node_a_url)
     #
     # Test send / receive.
     msg = b"test send"
@@ -69,17 +58,17 @@ async def computer_b():
 # Warning: startup is slow - be patient.
 async def example():
     """
-    (1) Computer A starts a node server and uses 'IRCDNS'
+    (1) Computer A starts a node server and uses 'PNP'
     to store its address at a given name.
     """
-    node_a = await computer_a()
+    node_a_url, node_a = await computer_a()
     #
     #
     """
-    (2) Computer B starts a node server and uses 'IRCDNS'
+    (2) Computer B starts a node server and uses 'PNP'
     to lookup the p2p address of computer a to connect to it.
     """
-    node_b = await computer_b()
+    node_b = await computer_b(node_a_url)
     #
     #
     # Cleanup / shut down node servers.

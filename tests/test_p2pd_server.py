@@ -22,7 +22,7 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
         async def proto_extension(msg, client_tup, pipe):
             if b"PING" in msg:
                 await pipe.send(b"PONG")
-        server.node.add_msg_cb(proto_extension)
+        await server.node.add_msg_cb(proto_extension)
 
         # Server address.
         dest = await Address(nic_ip, P2PD_PORT, r).res()

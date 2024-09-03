@@ -40,27 +40,16 @@ async def example():
     # Default interface of your machine.
     # netifaces.interfaces() for names
     # or await load_interfaces() for a started list.
-    i = await Interface().start()
+    nic = await Interface().start()
     #
     # Server object inherits from a standard Daemon.
     server = NetInfoServer()
     #
-    # Makes a Route aware of all Routes used for the server.
-    # Might do this automatically in the future.
-    server.set_rp(i.rp)
-    #
     # Defines addresses and protocols to listen on.
     # Feel free to switch this up.
-    await server.listen_all(
-        # Listen on all routes for IP4 and IPv6.
-        [i.rp[IP4], i.rp[IP6]],
-        #
-        # Port(s) to listen on.
-        [20000],
-        #
-        # Interested in TCP and UDP.
-        [TCP, UDP]
-    )
+    await server.listen_all(TCP, 20000, nic)
+    await server.listen_all(UDP, 20000, nic)
+    #
     # Do a while sleep loop ...
     # Instead we'll just close.
     await server.close()

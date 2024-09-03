@@ -4,14 +4,13 @@ from p2pd import *
 async def example():
     # Start our main node server.
     # The node implements your protocol.
-    node = await start_p2p_node(
-        # Set to true for port forwarding + pin holes.
-        enable_upnp=False,
-        #
-        # Make sure node server uses different port
-        # to other examples.
+    node = P2PNode(
+        # Make sure node server uses different port.
         port=NODE_PORT + 50 + 12
     )
+    #
+    # Start node listening.
+    await node.start()
     #
     # Strategies used to make a P2P connection.
     # Note that P2P_RELAY enables TURN.
@@ -25,7 +24,7 @@ async def example():
     a plain direct TCP connection / P2P_DIRECT.
     Feel free to experiment with how it works.
     """
-    pipe, success_type = await node.connect(node.addr_bytes, strategies)
+    pipe = await node.connect(node.addr_bytes, strategies)
     #
     # Do some stuff on the pipe ...
     # Cleanup.

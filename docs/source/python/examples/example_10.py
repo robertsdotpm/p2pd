@@ -9,7 +9,7 @@ async def example():
     #
     # Address of a TURN server.
     dest = await Address(
-        TURN_SERVERS[TURN_OFFSET]["host"],
+        TURN_SERVERS[TURN_OFFSET][IP4],
         TURN_SERVERS[TURN_OFFSET]["port"],
         r
     ).res()

@@ -1,5 +1,6 @@
 
 import asyncio
+from .interface import load_interfaces
 from .daemon import *
 from .daemon import *
 from .p2p_addr import *
@@ -26,7 +27,7 @@ NODE_CONF = dict_child({
 
 # Main class for the P2P node server.
 class P2PNode(P2PNodeExtra, Daemon):
-    def __init__(self, ifs, port=NODE_PORT, conf=NODE_CONF):
+    def __init__(self, ifs=[], port=NODE_PORT, conf=NODE_CONF):
         self.__name__ = "P2PNode"
         super().__init__()
         assert(port)
@@ -72,9 +73,14 @@ class P2PNode(P2PNodeExtra, Daemon):
             }
         }
 
+    async def add_msg_cb(self, msg_cb):
+        self.msg_cbs.append(msg_cb)
+
     # Used by the node servers.
     async def msg_cb(self, msg, client_tup, pipe):
-        return await node_protocol(self, msg, client_tup, pipe)
+        await node_protocol(self, msg, client_tup, pipe)
+        for msg_cb in self.msg_cb:
+            run_handler(pipe, msg_cb, client_tup, msg)
     
     # Used by the MQTT clients.
     async def signal_protocol(self, msg, signal_pipe):
@@ -89,7 +95,22 @@ class P2PNode(P2PNodeExtra, Daemon):
                 out.routing.dest["node_id"]
             )
 
-    async def dev(self, sys_clock=None):
+    async def start(self, sys_clock=None):
+        # Load ifs.
+        if not len(self.ifs):
+            if_names = await load_interfaces()
+            nics = []
+            for if_name in if_names:
+                try:
+                    nic = await Interface(if_name)
+                    await nic.load_nat()
+                    nics.append(nic)
+                except:
+                    log_exception()
+
+            self.ifs = nics
+
+
         # Set machine id.
         self.machine_id = await self.load_machine_id(
             "p2pd",

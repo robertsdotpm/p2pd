@@ -12,10 +12,11 @@ async def example():
     #
     # Daemon instance.
     server_port = 10126
-    echod = await EchoServer().listen_all(
-        [i],
-        [server_port],
-        [TCP]
+    route = await i.route().bind(port=server_port)
+    echod = EchoServer()
+    await echod.add_listener(
+        TCP,
+        route,
     )
     #
     await echod.close()
