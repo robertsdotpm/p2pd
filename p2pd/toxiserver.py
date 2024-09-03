@@ -383,14 +383,29 @@ class ToxiMainServer(RESTD):
         self.interfaces = interfaces
         self.tunnel_servs = {}
 
+    @RESTD.GET(["version"])
+    async def show_version(self, v, pipe):
+        return {
+            "title": "Toxid",
+            "author": "Matthew@Roberts.PM", 
+            "version": "1.0.0",
+            "error": 0
+        }
+
     @RESTD.POST(["proxies"])
     async def create_tunnel_server(self, v, pipe):
         j = v["body"]
 
         # This is a request to close a tunnel.
         if j["enabled"] == False:
-            # Close server and delete record of tunnel.
+            # Check tunnel exists.
             tunnel_name = v["name"]["proxies"]
+            if tunnel_name not in self.tunnel_servs:
+                return {
+                    "error": "tunnel name not found."
+                }
+
+            # Close server and delete record of tunnel.
             tunnel_serv = self.tunnel_servs[tunnel_name]
             await tunnel_serv.close()
             del self.tunnel_servs[tunnel_name]
@@ -403,39 +418,53 @@ class ToxiMainServer(RESTD):
             }
         
         # Otherwise it's a new create call.
-        tup_pattern = "([\s\S]+):([0-9]+)$"
-        bind_ip, bind_port = re.findall(
-            tup_pattern,
-            j["listen"]
-        )[0]
+        try:
+            tup_pattern = "([\s\S]+):([0-9]+)$"
+            bind_ip, bind_port = re.findall(
+                tup_pattern,
+                j["listen"]
+            )[0]
 
-        # Disable bind port.
-        bind_port = int(bind_port)
+            # Disable bind port.
+            bind_port = int(bind_port)
+            if not bind_port:
+                bind_port = None
+        except:
+            log_exception()
+            return {
+                "error": "did not find listen details for create tunnel."
+            }
 
+        # Return more descriptive errors for debugging.
+        try:
+            # Build listen route.
+            route = await pipe.route.interface.route().bind(
+                ips=bind_ip,
+                port=bind_port
+            )
 
-        if not bind_port:
-            bind_port = None
-
-    
-
-        # Build listen route.
-        route = await pipe.route.interface.route().bind(
-            ips=bind_ip,
-            port=bind_port
-        )
-
-        # Start the tunnel server.
-        tunnel_serv = ToxiTunnelServer(name=j["name"])
-        bind_port, pipe = await tunnel_serv.add_listener(
-            TCP,
-            route
-        )
+            # Start the tunnel server.
+            tunnel_serv = ToxiTunnelServer(name=j["name"])
+            bind_port, pipe = await tunnel_serv.add_listener(
+                pipe.sock.type,
+                route
+            )
+        except:
+            log_exception()
+            return {
+                "error": f"cant bind to {bind_ip}:{bind_port}"
+            }
 
         # Extract destination IP.
-        dest_ip, dest_port = re.findall(
-            tup_pattern,
-            j["upstream"]
-        )[0]
+        try:
+            dest_ip, dest_port = re.findall(
+                tup_pattern,
+                j["upstream"]
+            )[0]
+        except IndexError:
+            return {
+                "error": "upstream create tunnel field malformed."
+            }
 
         # rewrite this to use an interface that supports
         # dest AF
@@ -451,16 +480,29 @@ class ToxiMainServer(RESTD):
                 "error": "no interfaces for that address family."
             }
 
-        # Resolve upstream address.
-        up_route = await use_if.route().bind()
-        dest = Address(dest_ip, dest_port)
+        # Try connect to upstream.
+        proto = j.get("proto", TCP)
+        try:
+            # Resolve upstream address.
+            up_route = await use_if.route().bind()
+            dest = Address(dest_ip, dest_port)
 
-        # Connect to upstream.
-        upstream = await pipe_open(
-            TCP,
-            dest,
-            up_route,
-        )
+            # Connect to upstream.
+            upstream = await pipe_open(
+                proto,
+                dest,
+                up_route,
+            )
+        except:
+            return {
+                "error": f"upstream res failure {dest_ip}:{dest_port}"
+            }
+
+        # Did the endpoint succeed.
+        if upstream is None:
+            return {
+                "error": f"upstream failure {dest_ip}:{dest_port}"
+            }
 
         # Add upstream to tunnel server.
         tunnel_serv.set_upstream(upstream)
@@ -473,13 +515,15 @@ class ToxiMainServer(RESTD):
             "name": j["name"],
             "listen": f"{bind_ip}:{bind_port}",
             "upstream": j["upstream"],
+            "proto": int(proto),
             "enabled": True,
             "toxics": []
         }
 
     @RESTD.POST(["proxies"], ["toxics"])
     async def add_new_toxic(self, v, pipe):
-        j = v["body"]; attrs = j["attributes"]
+        j = v["body"]
+        attrs = j["attributes"]
         proxy_name = v["name"]["proxies"]
         if proxy_name not in self.tunnel_servs:
             return {

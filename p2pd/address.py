@@ -62,6 +62,13 @@ class Address():
             # Target is an IP.
             target = self.ips[self.chosen]
 
+            # Patch 0 dest.
+            if target in VALID_ANY_ADDR:
+                if af == IP4:
+                    target = "127.0.0.1"
+                else:
+                    target = "::1"
+
             # Patch link local addresses.
             if self.af == IP6 and target not in ["::", "::1"]:
                 target = ip6_patch_bind_ip(

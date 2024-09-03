@@ -1,5 +1,4 @@
 import asyncio
-import json
 import re
 from .test_init import *
 
@@ -176,47 +175,65 @@ class ToxiToxic():
         return toxic
 
 class ToxiTunnel():
-    def __init__(self, name, port, client):
+    def __init__(self, name, ip, port, client):
+        self.toxics = []
         self.name = name
+        self.ip = ip
         self.port = port
         self.client = client
-        self.toxics = []
+        self.curl = self.client.curl
+        self.nic = self.client.addr.route.interface
 
     async def new_toxic(self, toxic):
         path = f"/proxies/{self.name}/toxics"
-        resp = await self.client.curl.vars(body=toxic.body).post(path)
+        resp = await self.curl.vars(body=toxic.body).post(path)
+        assert(resp.info is not None)
         assert(b"error" not in resp.out)
         self.toxics.append(toxic)
 
     async def remove_toxic(self, toxic):
         path = f"/proxies/{self.name}/toxics/{toxic.name}"
-        resp = await self.client.curl.vars().delete(path)
+        resp = await self.curl.vars().delete(path)
+        assert(resp.info is not None)
         assert(resp.out == b'')
         self.toxics.remove(toxic)
 
     async def test_list(self):
         path = f"/proxies/{self.name}"
-        resp = await self.client.curl.vars().get(path)
+        resp = await self.curl.vars().get(path)
+        assert(resp.info is not None)
         return resp.out
 
     async def get_pipe(self, conf=None):
         # Build new route.
         conf = conf or self.client.conf
-        route = self.client.addr.route.interface.route()
+        route = self.nic.route()
         await route.bind()
 
+        # Resolve tunnel address,
+        try:
+            dest = await Address(self.ip, self.port, route)
+        except:
+            raise Exception("addr res tunnel client {self.port}")
+        
         # Connect to the listen server for this tunnel.
-        dest = Address("localhost", self.port)
         pipe = await pipe_open(TCP, dest, route, conf=conf)
-        return pipe, dest.tup
+        if pipe is None:
+            raise Exception("Cant get tunnel pipe.")
+        else:
+            return pipe, dest.tup
     
     async def get_curl(self):
         # Build new route.
-        route = self.client.addr.route.interface.route()
+        route = self.nic.route()
         await route.bind()
 
         # Connect to the listen server for this tunnel.
-        dest = await Address("localhost", self.port, route)
+        try:
+            dest = await Address(self.ip, self.port, route)
+        except:
+            raise Exception("get curl for tunnel client addr res")
+        
         return WebCurl(addr=dest, do_close=0)
 
     # Close the tunnel on the toxiproxy instance.
@@ -226,7 +243,8 @@ class ToxiTunnel():
         }
 
         path = f"/proxies/{self.name}"
-        resp = await self.client.curl.vars(body=json_body).post(path)
+        resp = await self.curl.vars(body=json_body).post(path)
+        assert(resp.info is not None)
         self.client.tunnels.remove(self)
         return resp.out
 
@@ -239,35 +257,51 @@ class ToxiClient():
     async def start(self):
         hdrs = [[b"user-agent", b"toxiproxy-cli"]]
         self.curl = WebCurl(self.addr, hdrs=hdrs)
+        try:
+            await self.version()
+        except:
+            raise Exception("Failed to connect to toxid.")
+        
         return self
 
     async def version(self):
         resp = await self.curl.vars().get("/version")
+        assert(resp.info is not None)
         return resp.out
 
-    async def new_tunnel(self, addr, name=None):
+    async def new_tunnel(self, addr, name=None, proto=TCP):
         name = name or to_s(rand_plain(10))
+        listen_ip = self.addr.tup[0]
         json_body = {
             "name": name,
-            "listen": "127.0.0.1:0",
+            "listen": f"{listen_ip}:0",
             "upstream": f"{addr.target()}:{addr.port}",
+            "proto": proto,
             "enabled": True
         }
 
         resp = await self.curl.vars(body=json_body).post("/proxies")
+        assert(resp.info is not None)
         assert(b"error" not in resp.out)
 
         # Listen porn for the tunnel server.
-        print(resp)
-        print(resp.out)
-        port = re.findall("127[.]0[.]0[.]1[:]([0-9]+)", to_s(resp.out))[0]
-        port = to_n(port)
+        try:
+            p = re.escape(listen_ip) + "[:]([0-9]+)"
+            bind_port = re.findall(p, to_s(resp.out))[0]
+            bind_port = int(bind_port)
+        except IndexError:
+            raise Exception("Server new tunnel invalid resp")
 
         # Create a new object to interact with the tunnel.
-        tunnel = ToxiTunnel(name=name, port=port, client=self)
-        self.tunnels.append(tunnel)
+        tunnel = ToxiTunnel(
+            name=name,
+            ip=listen_ip,
+            port=bind_port,
+            client=self
+        )
 
         # Return tunnel.
+        self.tunnels.append(tunnel)
         return tunnel
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
