@@ -116,15 +116,9 @@ class FakeSTUNClient():
         return out
     
 async def duel_if_setup(netifaces):
-    # Load interface list.
-    if_names = await load_interfaces(netifaces)
-    ifs = []
-    for if_name in if_names:
-        try:
-            nic = await Interface(if_name)
-            ifs.append(nic)
-        except:
-            continue
+    # Load interface list
+    if_names = await list_interfaces(netifaces)
+    ifs = await load_interfaces(if_names)
 
     for af in VALID_AFS:
         found = []

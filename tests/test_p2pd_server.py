@@ -8,7 +8,12 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
         i = await Interface().start()
         nic_ip = i.route(af).nic()
         r = await i.route(af).bind(ips=nic_ip, port=P2PD_PORT)
-        server = await start_p2pd_server([i], r, port=P2PD_PORT, do_loop=False, do_init=False, enable_upnp=False)
+        server = await start_p2pd_server(
+            r,
+            ifs=[i], 
+            enable_upnp=False
+        )
+        
         conf = dict_child({
             # N seconds before a registering recv timeout.
             "recv_timeout": 100,

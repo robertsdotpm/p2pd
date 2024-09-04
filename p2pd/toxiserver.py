@@ -11,11 +11,13 @@ class ToxicBase():
         self.name = name
         self.direction = direction
         self.toxicity = toxicity
+
     def setup(self, base):
         self.name = base.name
         self.direction = base.direction
         self.toxicity = base.toxicity
         return self
+    
     def should_run(self):
         p = min(int(self.toxicity * 100), 100)
         r = random.randrange(1, 101)
@@ -23,6 +25,7 @@ class ToxicBase():
             return True
         else:
             return False
+        
     async def placeholder(self, msg, dest_pipe):
         return msg, dest_pipe
         
@@ -53,10 +56,12 @@ async def toxic_router(msg, src_pipe, dest_pipe, toxics):
 class ToxicLatency(ToxicBase):
     def __init__(self):
         super().__init__(self)
+
     def set_params(self, latency, jitter):
         self.latency = latency
         self.jitter = jitter
         return self
+    
     async def run(self, msg, dest_pipe):
         # Simulate different message arrival times.
         jitter = 0
@@ -64,10 +69,12 @@ class ToxicLatency(ToxicBase):
             jitter = random.randrange(0, self.jitter)
             if random.choice([0, 1]):
                 jitter = -jitter
+
         # Return control to other coroutines.
         ms = self.latency + jitter
         if ms > 0:
             await asyncio.sleep(ms / 1000)
+            
         return msg, dest_pipe
     
 class ToxicBandwidthLimit(ToxicBase):

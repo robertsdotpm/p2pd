@@ -9,6 +9,11 @@ from .daemon import Daemon
 
 P2PD_PORT = 12333
 P2PD_CORS = ['null', 'http://127.0.0.1']
+P2PD_MIME = [
+    [dict, "json"],
+    [bytes, "binary"],
+    [str, "text"]
+]
 
 # Support passing in GET params using path seperators.
 # Ex: /timeout/10/sub/all -> {'timeout': '10', 'sub': 'all'}
@@ -398,12 +403,28 @@ class RESTD(Daemon):
 
         # Call matching API method.
         if best_matching_api is not None:
-            # Return a reply.
-            resp = await async_wrap_errors(best_matching_api(v, pipe)) or b""
-            out_infos = [[dict, "json"], [bytes, "binary"], [str, "text"]]
-            for out_info in out_infos:
+            # Get response from wrapped function.
+            # Capture any exceptions in the reply.
+            try:
+                resp = await best_matching_api(v, pipe)
+            except Exception as e:
+                resp = {
+                    "error": "Exception",
+                    "msg": str(e),
+                }
+
+            # Match output types to the write mime headers.
+            for out_info in P2PD_MIME:
                 if isinstance(resp, out_info[0]):
-                    buf = http_res(resp, out_info[1], req, client_tup)
+                    # Full HTTP reply to client.
+                    buf = http_res(
+                        resp,
+                        out_info[1],
+                        req,
+                        client_tup
+                    )
+
+                    # Send it back to the client.
                     await pipe.send(buf, client_tup)
                     break
                 

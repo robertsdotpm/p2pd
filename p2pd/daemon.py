@@ -116,6 +116,7 @@ class Daemon():
             up_cb=self.up_cb,
             conf=self.conf
         )
+        assert(pipe is not None)
 
         # Avoid TIME_WAIT for socket.
         avoid_time_wait(pipe)

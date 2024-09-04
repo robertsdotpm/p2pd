@@ -1,0 +1,20 @@
+DNS deserves special mention cause its such a piece of shit. 
+
+'No Internet connection.'
+'No route to host.'
+'Could not find host.'
+
+Sometimes, when something breaks in a network nothing is wrong.
+Sometimes, its just DNS 'working' as usual.
+
+As I see it -- broken connectivity from DNS issues exposes the same
+issues you see with network programming. Everyone chooses the laziest
+possible approach. They let magical functions try to automatically
+determine all behavior instead of specifying what they need.
+Consequently, when the magic breaks so does the software.
+
+You'll see that good software is written to bypass problems with
+DNS. Browsers will hardcode some backup DNS resolvers and they'll
+hardcode IP addresses for fallbacks. If the goal of P2PD is to
+improve connectivity it must properly handle DNS failure. They
+really are quite common on some networks. 

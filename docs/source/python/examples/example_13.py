@@ -38,8 +38,9 @@ class NetInfoServer(Daemon):
 
 async def example():
     # Default interface of your machine.
-    # netifaces.interfaces() for names
-    # or await load_interfaces() for a started list.
+    # netifaces.interfaces() for names or
+    # if_names = await list_interfaces()
+    # await load_interfaces(if_names) for a started list.
     nic = await Interface().start()
     #
     # Server object inherits from a standard Daemon.

@@ -9,14 +9,33 @@ from .http_server_lib import *
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 
 def con_info(self, con_name, con):
+    # A socket might not be connected.
+    try:
+        raddr = con.sock.getpeername()
+    except OSError:
+        raddr = "not connected"
+
+    # A socket might be closed.
+    try:
+        laddr = con.sock.getsockname()
+    except OSError:
+        laddr = "sock closed"
+
+    # A route might end up malformed.
+    try:
+        con_route = con.route.to_dict()
+    except:
+        log_exception()
+        con_route = "couldn't load"
+
     return {
         "error": 0,
         "name": con_name,
         #"strategy": con.strat,
         "fd": con.sock.fileno(),
-        "laddr": con.sock.getsockname(),
-        "raddr": con.sock.getpeername(),
-        "route": con.route.to_dict(),
+        "laddr": laddr,
+        "raddr": raddr,
+        "route": con_route,
         "if": {
             "name": con.route.interface.name,
             "offset": self.interfaces.index(
@@ -41,8 +60,8 @@ def get_sub_params(v):
 
 class P2PDServer(RESTD):
     def __init__(self, interfaces=[], node=None):
-        self.__name__ = "P2PDServer"
         super().__init__()
+        self.__name__ = "P2PDServer"
         self.interfaces = interfaces
         self.node = node
         self.cons = {}
@@ -58,17 +77,30 @@ class P2PDServer(RESTD):
     
     @RESTD.GET(["ifs"])
     async def get_interfaces(self, v, pipe):
-        return {
-            "ifs": if_list_to_dict(self.interfaces),
-            "error": 0
-        }
+        try:
+            return {
+                "ifs": if_list_to_dict(self.interfaces),
+                "error": 0
+            }
+        except:
+            log_exception()
+            return {
+                "error": 4,
+                "msg": "unable to convert ifs to dict."
+            }
     
     @RESTD.GET(["p2p"], ["addr"])
     async def get_peer_addr(self, v, pipe):
-        return {
-            "addr": to_s(self.node.addr_bytes),
-            "error": 0
-        }
+        if self.node.addr_bytes is None:
+            return {
+                "error": 5,
+                "msg": "p2pd node addr bytes is none."
+            }
+        else:
+            return {
+                "addr": to_s(self.node.addr_bytes),
+                "error": 0
+            }
     
     @RESTD.GET(["p2p"], ["open"])
     async def open_p2p_pipe(self, v, pipe):
@@ -86,17 +118,25 @@ class P2PDServer(RESTD):
 
         # Connect to ourself for tests.
         if dest_addr == "self":
+            if self.node.addr_bytes is None:
+                return {
+                    "error": 5,
+                    "msg": "p2pd node addr bytes is none."
+                }
+            
             dest_addr = self.node.addr_bytes
 
         print(dest_addr)
 
         # Attempt to make the connection.
         con = await asyncio.ensure_future(
-            self.node.connect(
-                to_b(dest_addr),
+            async_wrap_errors(
+                self.node.connect(
+                    to_b(dest_addr),
 
-                # All connection strats except TURN by default.
-                P2P_STRATEGIES
+                    # All connection strats except TURN by default.
+                    P2P_STRATEGIES
+                )
             )
         )
 
@@ -133,6 +173,11 @@ class P2PDServer(RESTD):
     @RESTD.GET(["p2p"], ["con"])
     async def get_con_info(self, v, pipe):
         con_name = v["name"]["con"]
+        if con_name not in self.cons:
+            return {
+                "error": 7,
+                "msg": f"con {con_name} does not exist"
+            }
 
         # Check con exists.
         con = self.cons[con_name]
@@ -147,10 +192,17 @@ class P2PDServer(RESTD):
         con = self.cons[con_name]
 
         # Send data.
-        await con.send(
+        send_success = await con.send(
             data=to_b(en_msg),
             dest_tup=con.stream.dest_tup
         )
+
+        # Check return value.
+        if not send_success:
+            return {
+                "error": 8,
+                "msg": "send txt failed"
+            }
 
         # Return success.
         return {
@@ -207,7 +259,12 @@ class P2PDServer(RESTD):
         con = self.cons[con_name]
 
         # Last content-len bytes == payload.
-        await con.send(v["body"], con.stream.dest_tup)
+        send_success = await con.send(v["body"], con.stream.dest_tup)
+        if not send_success:
+            return {
+                "error": 8,
+                "msg": "binary send failed."
+            }
 
         # Return status.
         return {
@@ -292,56 +349,44 @@ class P2PDServer(RESTD):
         }
 
 # pragma: no cover
-async def start_p2pd_server(ifs=None, route=None, port=0, do_loop=True, do_init=True, enable_upnp=True):
+async def start_p2pd_server(route, ifs=[], enable_upnp=False):
     print("Loading interfaces...")
     print("If you've just connected a new NIC ")
     print("there can be a slight delay until it's online.")
     if enable_upnp:
-        print("Doing node port forwarding and pin hole rules. Please wait.")
+        print("Doing node port forwarding and pin hole rules.")
+
+    # Passed to setup the p2p node.
+    node_conf = dict_child({
+        "enable_upnp": enable_upnp
+    }, NODE_CONF)
 
     # Load netifaces.
-    netifaces = None
-    if do_init:
-        netifaces = await init_p2pd()
+    netifaces = await init_p2pd()
 
-    # Start node server.
-    if_names = await load_interfaces(netifaces=netifaces)
-    print(ifs)
+    # Load interfaces.
+    if not len(ifs):
+        # Load a list of interface names.
+        if_names = await list_interfaces(netifaces=netifaces)
+        if not len(if_names):
+            raise Exception("p2pd rest could not find if names")
+        
+        # Load those interfaces with NAT details.
+        ifs =  await load_interfaces(if_names)
+        if not len(ifs):
+            raise Exception("p2pd rest no ifs loaded.")
 
-    #port = get_port_by_ip
-    ifs = []
-    for if_name in if_names:
-        try:
-            nic = await Interface(if_name)
-            await nic.load_nat()
-            ifs.append(nic)
-        except:
-            log_exception()
-
-    node = P2PNode(ifs, port=NODE_PORT + 60 + 1)
-    await node.dev()
-
-    # Specify listen port details.
-    #route = await ifs[0].route(IP4).bind(ips="127.0.0.1")
-
-    print(route)
+    # Start P2PD node.
+    node = P2PNode(ifs, port=NODE_PORT + 60 + 1, conf=node_conf)
+    await node.start()
 
     # Start P2PD server.
     p2p_server = P2PDServer(ifs, node)
-    for nic in ifs:
-        await p2p_server.listen_all(
-            TCP,
-            port,
-            nic
-        )
+    await p2p_server.add_listener(TCP, route)
 
     # Stop this thread exiting.
     print(p2p_server.servers)
     print(f"Started p2pd server")
-    if do_loop:
-        while 1:
-            await asyncio.sleep(1)
-
     return p2p_server
 
 async def p2pd_workspace():

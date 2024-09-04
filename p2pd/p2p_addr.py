@@ -28,6 +28,15 @@ SIGNAL_PIPE_NO = 3
 def make_peer_addr(node_id, machine_id, interface_list, signal_offsets, port=NODE_PORT, ip=None, nat=None, if_index=None):
     ensure_resolved(interface_list)
 
+    # Make the program crash early on invalid addr inputs.
+    assert(isinstance(node_id, (str, bytes)))
+    assert(isinstance(machine_id, (str, bytes)))
+    assert(len(interface_list))
+    assert(port)
+    assert(isinstance(signal_offsets, list))
+    for x in signal_offsets:
+        assert(isinstance(x, int))
+
     # Signal offsets to load.
     if len(signal_offsets):
         signal_offsets_as_str = [to_b(str(x)) for x in signal_offsets]

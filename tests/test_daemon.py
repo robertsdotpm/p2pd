@@ -51,7 +51,8 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                     #print(echo_route._bind_tups)
 
                     # Daemon instance.
-                    echod = await EchoServer().add_listener(
+                    echod = EchoServer()
+                    await echod.add_listener(
                         proto,
                         echo_route
                     )

@@ -60,20 +60,7 @@ class P2PNodeExtra():
                         proto=TCP,
                         conf=PUNCH_CONF,
                     )
-
-    def setup_multiproc(self, pp_executor, mp_manager):
-        # Process pools are disabled.
-        if pp_executor is None:
-            self.pp_executor = None
-            self.mp_manager = None
-            return
-            
-        assert(mp_manager)
-        self.pp_executor = pp_executor
-        self.mp_manager = mp_manager
-
-    def setup_coordination(self, sys_clock):
-        self.sys_clock = sys_clock
+                    assert(len(self.stun_clients[af][if_index]))
 
     async def punch_queue_worker(self):
         try:
@@ -106,6 +93,14 @@ class P2PNodeExtra():
         self.punch_worker_task = asyncio.ensure_future(
             self.punch_queue_worker()
         )
+
+    async def setup_punch_coordination(self, sys_clock=None):
+        if sys_clock is None:
+            sys_clock = await SysClock(self.ifs[0]).start()
+
+        self.pp_executor = await get_pp_executors()
+        self.mp_manager = multiprocessing.Manager()
+        self.sys_clock = sys_clock
 
     def add_punch_meeting(self, params):
         # Schedule the TCP punching.
@@ -165,13 +160,15 @@ class P2PNodeExtra():
         tasks = []
         serv_len = len(MQTT_SERVERS)
         offsets = shuffle(list(range(serv_len)))
-        sig_pipe_no = min(self.conf["sig_pipe_no"] + 2, serv_len)
+        sig_pipe_no = min(self.conf["sig_pipe_no"] + 1, serv_len)
         for i in range(0, sig_pipe_no):
             offset = offsets[i]
             task = self.load_signal_pipe(offset)
             tasks.append(task)
 
-        await asyncio.gather(*tasks)
+        ret = await asyncio.gather(*tasks)
+        ret = strip_none(ret)
+        assert(len(ret))
     
     def find_signal_pipe(self, addr):
         our_offsets = list(self.signal_pipes)

@@ -2,6 +2,7 @@ import asyncio
 import re
 from .ack_udp import *
 from .net import *
+from .ip_range import *
 
 def tup_to_sub(dest_tup):
     return [
@@ -61,6 +62,7 @@ class PipeClient(ACKUDP):
 
     # Subscribe to a certain message and host type.
     # sub = [b_msg_pattern, b_addr_pattern]
+    # optional: 3rd field in sub = example match
     def subscribe(self, sub, handler=None):
         offset = self.hash_sub(sub)
         if offset not in self.subs:
@@ -110,7 +112,7 @@ class PipeClient(ACKUDP):
         client_addr = b"%s:%d" % (to_b(client_tup[0]), client_tup[1])
         for sub, q, handler in self.subs.values():
             # Msg pattern, address pattern.
-            b_msg_p, b_addr_p = sub
+            b_msg_p, b_addr_p = sub[:2]
 
             # Check client_addr matches their host pattern.
             if b_addr_p:

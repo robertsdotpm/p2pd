@@ -18,9 +18,7 @@ NODE_CONF = dict_child({
     the node server.
     """
     "reuse_addr": False,
-    "node_id": None,
     "listen_ip": None,
-    "seed": None,
     "enable_upnp": False,
     "sig_pipe_no": SIGNAL_PIPE_NO,
 }, NET_CONF)
@@ -28,8 +26,8 @@ NODE_CONF = dict_child({
 # Main class for the P2P node server.
 class P2PNode(P2PNodeExtra, Daemon):
     def __init__(self, ifs=[], port=NODE_PORT, conf=NODE_CONF):
-        self.__name__ = "P2PNode"
         super().__init__()
+        self.__name__ = "P2PNode"
         assert(port)
         
         # Main variables for the class.
@@ -73,6 +71,8 @@ class P2PNode(P2PNodeExtra, Daemon):
             }
         }
 
+        self.addr_bytes = None
+
     async def add_msg_cb(self, msg_cb):
         self.msg_cbs.append(msg_cb)
 
@@ -88,7 +88,6 @@ class P2PNode(P2PNodeExtra, Daemon):
             self.sig_proto_handlers.proto(msg)
         )
 
-        
         if isinstance(out, SigMsg):
             await signal_pipe.send_msg(
                 out,
@@ -98,18 +97,16 @@ class P2PNode(P2PNodeExtra, Daemon):
     async def start(self, sys_clock=None):
         # Load ifs.
         if not len(self.ifs):
-            if_names = await load_interfaces()
-            nics = []
-            for if_name in if_names:
-                try:
-                    nic = await Interface(if_name)
-                    await nic.load_nat()
-                    nics.append(nic)
-                except:
-                    log_exception()
+            try:
+                if_names = await list_interfaces()
+                self.ifs = await load_interfaces(if_names)
+            except:
+                log_exception()
+                self.ifs = []
 
-            self.ifs = nics
-
+        # Managed to load IFs?
+        if not len(self.ifs):
+            raise Exception("p2p node could not load ifs.")
 
         # Set machine id.
         self.machine_id = await self.load_machine_id(
@@ -117,33 +114,25 @@ class P2PNode(P2PNodeExtra, Daemon):
             self.ifs[0].netifaces
         )
 
+        # Managed to load machine IDs?
+        if self.machine_id in (None, ""):
+            raise Exception("Could not load machine id.")
+
         # Used by TCP punch clients.
         await self.load_stun_clients()
 
         # MQTT server offsets for signal protocol.
         if self.conf["sig_pipe_no"]:
             await self.load_signal_pipes()
-        #self.signal_pipes[0] = None
 
+        # Multiprocess support for TCP punching and NTP sync.
+        await self.setup_punch_coordination(sys_clock)
+            
         # Accept TCP punch requests.
         self.start_punch_worker()
 
         # Start worker that forwards sig proto messages.
         self.start_sig_msg_dispatcher()
-
-        """
-        # Check at least one signal pipe was set.
-        if not len(self.signal_pipes):
-            raise Exception("Unable to get any signal pipes.")
-        """
-
-        # Coordination.
-        if sys_clock is None:
-            sys_clock = await SysClock(self.ifs[0]).start()
-        pe = await get_pp_executors()
-        qm = multiprocessing.Manager()
-        self.setup_multiproc(pe, qm)
-        self.setup_coordination(sys_clock)
 
         # Start the server for the node protocol.
         await self.listen_on_ifs()
@@ -159,12 +148,16 @@ class P2PNode(P2PNodeExtra, Daemon):
         )
 
         # Save a dict version of the address fields.
-        self.p2p_addr = parse_peer_addr(self.addr_bytes)
+        try:
+            self.p2p_addr = parse_peer_addr(self.addr_bytes)
+        except:
+            log_exception()
+            raise Exception("Can't parse nodes p2p addr.")
+        
         print(f"> P2P node = {self.addr_bytes}")
 
         # Used for setting nicknames for the node.
-        self.nick_client = await Nickname(self.sk, self.ifs[0])
-
+        self.nick_client = await Nickname(self.sk, self.ifs)
         return self
     
     # Connect to a remote P2P node using a number of techniques.

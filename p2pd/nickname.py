@@ -64,25 +64,45 @@ class FullNameFailure(Exception):
     pass
 
 class Nickname():
-    def __init__(self, sk, interface):
+    def __init__(self, sk, ifs):
         self.sk = sk
-        self.interface = interface
+        self.ifs = ifs
+
+        # Select best NIC from if list to be primary NIC.
+        for preferred_stack in [DUEL_STACK, IP6, IP4]:
+            break_all = False
+            for nic in self.ifs:
+                if nic.stack == preferred_stack:
+                    self.interface = nic
+                    break_all = True
+                    break
+
+            if break_all:
+                break
+
         self.clients = []
         self.started = False
 
     # A client for each PNP server is loaded by index.
     async def start(self):
-        if IP4 in self.interface.supported():
-            af = IP4
-        else:
+        # Prefer IP6.
+        if IP6 in self.interface.supported():
             af = IP6
+        else:
+            af = IP4
 
+        # Uses direct IPs to avoid domain names.
         for serv_info in PNP_SERVERS[af]:
-            dest = await Address(
-                serv_info["ip"],
-                serv_info["port"],
-                self.interface.route(af)
-            )
+            try:
+                dest = await Address(
+                    serv_info["ip"],
+                    serv_info["port"],
+                    self.interface.route(af)
+                )
+            except:
+                log_exception()
+                self.clients.append(None)
+                continue
 
             self.clients.append(
                 PNPClient(
@@ -103,6 +123,7 @@ class Nickname():
         async def worker(offset):
             try:
                 client = self.clients[offset]
+                if client is None: return
                 ret = await client.push(name, value, behavior)
                 if ret.value is not None:
                     return offset
@@ -134,6 +155,7 @@ class Nickname():
 
         async def worker(offset, name):
             client = self.clients[offset]
+            if client is None: return
             return await client.fetch(name)
 
         # Convert TLD to client offset list.
@@ -167,6 +189,7 @@ class Nickname():
 
         async def worker(offset):
             client = self.clients[offset]
+            if client is None: return
             return await client.delete(name)
 
         tasks = []

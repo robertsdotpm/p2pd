@@ -665,7 +665,7 @@ def get_ifs_by_af_intersect(if_list):
 
     return [largest, af_used]
 
-async def load_interfaces(netifaces=None, load_nat=True):
+async def list_interfaces(netifaces=None):
     netifaces = netifaces or Interface.get_netifaces()
     if netifaces is None:
         netifaces = await init_p2pd()
@@ -726,6 +726,18 @@ async def load_interfaces(netifaces=None, load_nat=True):
         log_interface_rp(interface)
 
     return good_ifs
+
+async def load_interfaces(if_names):
+    nics = []
+    for if_name in if_names:
+        try:
+            nic = await Interface(if_name)
+            await nic.load_nat()
+            nics.append(nic)
+        except:
+            log_exception()
+
+    return nics
 
 # Given a list of Interface objs.
 # Convert to dict and return a list.
