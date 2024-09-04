@@ -290,7 +290,7 @@ class P2PNodeExtra():
                 self.sig_msg_dispatcher()
             )
         except RuntimeError:
-            what_exception()
+            log_exception()
             return
         
     def start_sig_msg_dispatcher(self):

@@ -72,6 +72,15 @@ def sort_if_info_by_best_nat(p2p_addr):
 
     return nat_pairs
 
+def swap_if_infos_with_overlapping_exts(src, dest):
+    bound = min(len(src), len(dest))
+    for i in range(0, bound):
+        if i + 1 >= bound:
+            break
+
+        if src[i]["ext"] == dest[i]["ext"]:
+            src[i], src[i + 1] = src[i + 1], src[i]
+
 class IFInfoIter():
     def __init__(self, af, src_addr, dest_addr):
         self.our_offset = 0
@@ -87,6 +96,13 @@ class IFInfoIter():
 
         self.dest_addr = dest_addr[af]
         self.src_addr = src_addr[af]
+
+        """
+        swap_if_infos_with_overlapping_exts(
+            self.src_addr,
+            self.dest_addr
+        )
+        """
 
     def __iter__(self):
         return self
@@ -280,6 +296,9 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=N
 
         # Get interface offset that supports this af.
         for src_info, dest_info in if_info_iter:
+            print(src_info)
+            print(dest_info)
+            print()
             for addr_type in conf["addr_types"]:
                 try:
                     # Create a future for pending pipes.
@@ -298,7 +317,7 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=N
                     # Select a specific if index.
                     if reply is not None:
                         if reply.routing.dest_index != if_index:
-                            print("dest index not our if index")
+                            print(" our if index")
                             continue
 
                     # Support testing addr type failures.

@@ -1,7 +1,5 @@
 """
-It probably has a bug with the context manager.
-I don't have time to fix it so just write a simple function
-that runs the tests and call with the async_test.
+return_msg False = use signal pipes
 """
 
 from p2pd import *
@@ -45,7 +43,6 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
             # UTF-8 messes up binary data in MQTT.
             buf = to_h(buf)
             print(buf)
-            
             try:
                 await dest_node.sig_proto_handlers.proto(
                     buf
@@ -53,13 +50,13 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
             except asyncio.CancelledError:
                 raise Exception("cancelled")
             except:
-                what_exception()
+                log_exception()
 
             src_node.sig_msg_dispatcher_task = asyncio.ensure_future(
                 src_node.sig_msg_dispatcher()
             )
         except:
-            what_exception()
+            log_exception()
             return
 
     return patch
@@ -137,11 +134,13 @@ async def get_node(ifs=[], node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     return node
 
 class TestNodes():
-    def __init__(self, same_if=False, addr_types=[EXT_BIND, NIC_BIND], return_msg=True, sig_pipe_no=SIGNAL_PIPE_NO, ifs=[]):
+    def __init__(self, same_if=False, addr_types=[EXT_BIND, NIC_BIND], return_msg=True, sig_pipe_no=SIGNAL_PIPE_NO, ifs=[], multi_ifs=False):
+        self.multi_ifs = multi_ifs
         self.ifs = ifs
         self.same_if = same_if
         if len(ifs) <= 1:
             self.same_if = True
+            self.multi_ifs = False
 
         self.addr_types = addr_types
         self.return_msg = return_msg
@@ -153,6 +152,12 @@ class TestNodes():
                 self.sig_pipe_no = 2
 
     async def __aenter__(self):
+        # Load the default nic.
+        if not len(self.ifs):
+            nic = await Interface()
+            await nic.load_nat()
+            self.ifs = [nic]
+
         # Setup node on specific interfaces.
         if self.same_if:
             self.alice = await get_node(
@@ -166,14 +171,19 @@ class TestNodes():
                 sig_pipe_no=self.sig_pipe_no,
             )
         else:
+            if self.multi_ifs:
+                alice_ifs = self.ifs
+                bob_ifs = self.ifs
+            else:
+                alice_ifs = [self.ifs[0]]
+                bob_ifs = [self.ifs[0]]
+                if len(self.ifs) >= 2:
+                    bob_ifs = [self.ifs[1]]
+
             self.alice = await get_node(
-                [self.ifs[0]],
+                alice_ifs,
                 sig_pipe_no=self.sig_pipe_no,
             )
-
-            bob_ifs = [self.ifs[0]]
-            if len(self.ifs) >= 2:
-                bob_ifs = [self.ifs[1]]
 
             self.bob = await get_node(
                 bob_ifs,
@@ -240,101 +250,118 @@ class TestNodes():
         await self.bob.close()
         print("nodes closed")
 
-
-
-
-
-async def test_dir_reverse_fail_direct():
-    # bug in the message dispatcher.
-    # Ip6 for naming doesnt work -- fix that too.
-    name = input("name: ")
-    params = {
-        "return_msg": True,
-        "addr_types": [EXT_BIND, NIC_BIND],
-        "same_if": False,
-    }
-
-    patch_strats = [DIRECT_FAIL, RELAY_FAIL, REVERSE_FAIL, P2P_PUNCH]
-    use_strats = [P2P_DIRECT, P2P_RELAY, P2P_REVERSE, P2P_PUNCH]
+async def p2p_check_strats(params):
+    strats = [P2P_DIRECT, P2P_REVERSE, P2P_RELAY, P2P_PUNCH]
     async with TestNodes(**params) as nodes:
-        is_patched = patch_p2p_stats(patch_strats, nodes.pp_alice)
-        #if not is_patched:
+        for strat in strats:
+            pipe = await nodes.alice.connect(
+                nodes.bob.addr_bytes,
+                strategies=[strat],
+                conf=nodes.pp_conf,
+            )
 
-        def get_p2p_pipe(d):
-            p = P2PPipe(d, nodes.alice)
-            patch_p2p_stats(patch_strats, p)
-            return p
-        
-        # This is more realistic because the clients make a new
-        # P2PPipe for each proto method message.
-        nodes.alice.p2p_pipe = get_p2p_pipe
-        #nodes.alice.p2p_pipe = lambda d: P2PPipe(d, nodes.alice)
-        nodes.bob.p2p_pipe = lambda d: P2PPipe(d, nodes.bob)
+            if params["same_if"] == False:
+                assert(pipe is not None)
+                assert(await check_pipe(pipe))
 
-        print(nodes.pp_alice.func_table)
-        #patch_p2p_stats(patch_strats, nodes.pp_bob)
-        print(f"same machine = {nodes.pp_alice.same_machine}")
+            if strat in [P2P_PUNCH]:
+                if pipe is None:
+                    log(f"opt test self {strat} failed")
 
-        name = await nodes.bob.nickname(name)
-        print(name)
-        #name += ".peer"
+            if pipe is not None:
+                await pipe.close()
 
-        pipe = await nodes.alice.connect(
-            name,
-            strategies=use_strats,
-            conf=nodes.pp_conf,
-        )
-
-        print(f"connect result = {pipe}")
-        assert(pipe is not None)
-        assert(await check_pipe(pipe))
-        await pipe.close()
-
-
+    # Give time to close.
+    await asyncio.sleep(2)
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
-class TestTurn(unittest.IsolatedAsyncioTestCase):
+class TestP2P(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
         warnings.simplefilter("ignore")
 
-    async def test_some_p2p(self):
-        pass
-        #await test_dir_reverse_fail_direct()
+    async def test_p2p_multi_node_ifs(self):
+        if_names = await list_interfaces()
+        ifs = await load_interfaces(if_names)
+        if len(ifs) <= 1:
+            print("skipping multi if tests -- only one if")
+            return
+
+        params = {
+            "return_msg": False,
+            "addr_types": [EXT_BIND, NIC_BIND],
+            "ifs": ifs,
+            "same_if": False if len(ifs) >= 2 else True,
+            "multi_ifs": True,
+        }
+
+        await p2p_check_strats(params)
+
+    async def test_p2p_register_connect(self):
+        name = input("name: ")
+        params = {
+            "return_msg": True,
+            "addr_types": [EXT_BIND, NIC_BIND],
+            "same_if": True,
+        }
+
+        use_strats = [P2P_DIRECT]
+        async with TestNodes(**params) as nodes:
+            name = await nodes.bob.nickname(name)
+            pipe = await nodes.alice.connect(
+                name,
+                strategies=use_strats,
+                conf=nodes.pp_conf,
+            )
+
+            assert(pipe is not None)
+            assert(await check_pipe(pipe))
+            await pipe.close()
+
+    async def test_p2p_successive_failure(self):
+        params = {
+            "return_msg": True,
+            "addr_types": [EXT_BIND, NIC_BIND],
+            "same_if": True,
+        }
+
+        patch_strats = [PUNCH_FAIL, RELAY_FAIL, REVERSE_FAIL, P2P_DIRECT]
+        use_strats = [P2P_PUNCH, P2P_RELAY, P2P_REVERSE, P2P_DIRECT]
+        async with TestNodes(**params) as nodes:
+            is_patched = patch_p2p_stats(patch_strats, nodes.pp_alice)
+            def get_p2p_pipe(d):
+                p = P2PPipe(d, nodes.alice)
+                patch_p2p_stats(patch_strats, p)
+                return p
+            
+            # This is more realistic because the clients make a new
+            # P2PPipe for each proto method message.
+            nodes.alice.p2p_pipe = get_p2p_pipe
+            #nodes.alice.p2p_pipe = lambda d: P2PPipe(d, nodes.alice)
+            nodes.bob.p2p_pipe = lambda d: P2PPipe(d, nodes.bob)
+            #patch_p2p_stats(patch_strats, nodes.pp_bob)
+
+            pipe = await nodes.alice.connect(
+                nodes.bob.addr_bytes,
+                strategies=use_strats,
+                conf=nodes.pp_conf,
+            )
+
+            assert(pipe is not None)
+            assert(await check_pipe(pipe))
+            await pipe.close()
 
     async def test_p2p_strats(self):
         if_names = await list_interfaces()
         ifs = await load_interfaces(if_names)
         params = {
-            "return_msg": True,
+            "return_msg": False,
             "addr_types": [EXT_BIND, NIC_BIND],
             "ifs": ifs,
             "same_if": False if len(ifs) >= 2 else True
         }
 
-        strats = [P2P_DIRECT, P2P_REVERSE, P2P_RELAY, P2P_PUNCH]
-        async with TestNodes(**params) as nodes:
-            for strat in strats:
-                pipe = await nodes.alice.connect(
-                    nodes.bob.addr_bytes,
-                    strategies=[strat],
-                    conf=nodes.pp_conf,
-                )
-
-                print(f"connect result = {pipe}")
-                if params["same_if"] == False:
-                    assert(pipe is not None)
-                    assert(await check_pipe(pipe))
-
-                if strat in [P2P_RELAY, P2P_PUNCH]:
-                    if pipe is None:
-                        log(f"opt test self {strat} failed")
-
-                if pipe is not None:
-                    await pipe.close()
-
-        # Give time to close.
-        await asyncio.sleep(2)
+        await p2p_check_strats(params)
 
 if __name__ == '__main__':
     main()
