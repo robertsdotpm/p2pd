@@ -4,6 +4,7 @@ from .pipe_utils import pipe_open, PipeEvents
 from .p2p_addr import *
 from .tcp_punch_client import *
 from .p2p_utils import for_addr_infos, get_turn_client
+from .p2p_utils import get_first_working_turn_client
 from .p2p_protocol import *
 from .tcp_punch_client import *
 
@@ -238,92 +239,71 @@ class P2PPipe():
     async def udp_turn_relay(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
         if addr_type == NIC_BIND:
             return None
-
+        
         print("in p2p pipe udp relay")
-        peer_tup = relay_tup = None
-        dest_peer = dest_relay = turn_client = None
+        
+        # Load TURN client for this PIPE ID.
+        if pipe_id in self.node.turn_clients:
+            client = self.node.turn_clients[pipe_id]
+        else:
+            # Use these TURN servers.
+            offsets = list(range(0, len(TURN_SERVERS)))
+            random.shuffle(offsets)
+            if reply is not None:
+                offsets = [reply.payload.serv_id]
 
-        # Try TURN servers in random order.
-        offsets = list(range(0, len(TURN_SERVERS)))
-        random.shuffle(offsets)
+            # Use first server from offsets that works.
+            client = await get_first_working_turn_client(
+                af,
+                offsets,
+                iface,
+                self.node.msg_cb
+            )
+
+            # Save client reference.
+            self.node.turn_clients[pipe_id] = client
+
+        # Extract any received payload attributes.
         if reply is not None:
-            offsets = [reply.payload.serv_id]
             dest_peer = reply.payload.peer_tup
             dest_relay = reply.payload.relay_tup
+            already_accepted = await client.accept_peer(
+                dest_peer,
+                dest_relay,
+            )
 
-        print(self.node.turn_clients)
-        print(pipe_id)
+            # Indicate client ready to waiters.
+            self.node.pipe_ready(pipe_id, client)
 
-        # Attempt to connect to TURN server.
-        for offset in offsets:
-            try:
-                # Attempt to load a TURN client.
-                if pipe_id not in self.node.turn_clients:
-                    print(f"{pipe_id} not in turn clients {self.node.turn_clients}")
-                    peer_tup, relay_tup, turn_client = await get_turn_client(
-                        af,
-                        offset,
-                        iface,
-                        dest_peer=dest_peer,
-                        dest_relay=dest_relay,
-                        msg_cb=self.node.msg_cb,
-                    )
+            # Protocol end.
+            if already_accepted:
+                return PipeEvents(None)
 
-                    # Load TURN client failed.
-                    if turn_client is None:
-                        continue
+        # Return a new TURN request.
+        msg = TURNMsg({
+            "meta": {
+                "pipe_id": pipe_id,
+                "af": af,
+                "src_buf": self.src_bytes,
+                "src_index": src_info["if_index"],
+                "addr_types": [addr_type],
+            },
+            "routing": {
+                "af": af,
+                "dest_buf": self.dest_bytes,
+                "dest_index": dest_info["if_index"],
+            },
+            "payload": {
+                "peer_tup": await client.client_tup_future,
+                "relay_tup": await client.relay_tup_future,
+                "serv_id": client.serv_offset,
+            },
+        })
+        print(msg)
 
-                    self.node.turn_clients[pipe_id] = turn_client
-                else:
-                    turn_client = self.node.turn_clients[pipe_id]
+        self.route_msg(msg, m=3)
+        return await self.node.pipes[pipe_id]
 
-                if reply is not None:
-                    print("reply is not none in turn ")
-                    print(f"{dest_peer} {turn_client.peers}")
-
-                    # TURN request.
-                    if tuple(dest_peer) not in turn_client.peers:
-                        print("in turn client accept peer")
-                        print(peer_tup)
-                        print(relay_tup)
-                        await turn_client.accept_peer(
-                            dest_peer,
-                            dest_relay,
-                        )
-
-                        self.node.pipe_ready(pipe_id, turn_client)
-
-                        # Protocol end.
-                        return PipeEvents(None)
-                    else:
-                        self.node.pipe_ready(pipe_id, turn_client)
-
-                # Return a new TURN request.
-                msg = TURNMsg({
-                    "meta": {
-                        "pipe_id": pipe_id,
-                        "af": af,
-                        "src_buf": self.src_bytes,
-                        "src_index": src_info["if_index"],
-                        "addr_types": [addr_type],
-                    },
-                    "routing": {
-                        "af": af,
-                        "dest_buf": self.dest_bytes,
-                        "dest_index": dest_info["if_index"],
-                    },
-                    "payload": {
-                        "peer_tup": peer_tup,
-                        "relay_tup": relay_tup,
-                        "serv_id": offset,
-                    },
-                })
-                print(msg)
-                self.route_msg(msg, m=3)
-                return await self.node.pipes[pipe_id]
-            except:
-                log_exception()
-                continue
 
     async def turn_cleanup(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
         if pipe_id not in self.node.turn_clients:

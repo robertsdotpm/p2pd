@@ -79,7 +79,7 @@ class P2PNode(P2PNodeExtra, Daemon):
     # Used by the node servers.
     async def msg_cb(self, msg, client_tup, pipe):
         await node_protocol(self, msg, client_tup, pipe)
-        for msg_cb in self.msg_cb:
+        for msg_cb in self.msg_cbs:
             run_handler(pipe, msg_cb, client_tup, msg)
     
     # Used by the MQTT clients.

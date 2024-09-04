@@ -73,6 +73,7 @@ def sort_if_info_by_best_nat(p2p_addr):
     return nat_pairs
 
 def swap_if_infos_with_overlapping_exts(src, dest):
+    src = copy.deepcopy(src)
     bound = min(len(src), len(dest))
     for i in range(0, bound):
         if i + 1 >= bound:
@@ -80,6 +81,8 @@ def swap_if_infos_with_overlapping_exts(src, dest):
 
         if src[i]["ext"] == dest[i]["ext"]:
             src[i], src[i + 1] = src[i + 1], src[i]
+
+    return src
 
 class IFInfoIter():
     def __init__(self, af, src_addr, dest_addr):
@@ -96,13 +99,11 @@ class IFInfoIter():
 
         self.dest_addr = dest_addr[af]
         self.src_addr = src_addr[af]
-
-        """
-        swap_if_infos_with_overlapping_exts(
+        self.src_addr = swap_if_infos_with_overlapping_exts(
             self.src_addr,
             self.dest_addr
         )
-        """
+        
 
     def __iter__(self):
         return self
@@ -268,6 +269,23 @@ async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=Non
 
     return peer_tup, relay_tup, turn_client
 
+async def get_first_working_turn_client(af, offsets, nic, msg_cb):
+    for offset in offsets:
+        try: 
+            peer_tup, relay_tup, turn_client = await get_turn_client(
+                af,
+                offset,
+                nic,
+                msg_cb=msg_cb,
+            )
+
+            turn_client.serv_offset = offset
+            return turn_client
+        except:
+            log_exception()
+            continue
+
+
 """
 The iterator filters the addr info for both
 P2P addresses by the best NAT.
@@ -287,8 +305,128 @@ Is the only function that does this so far.
 async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=None):
     print(f"for addr infos {conf}")
 
+
+    async def try_addr_infos(src_info, dest_info):
+        for addr_type in conf["addr_types"]:
+            try:
+                # Create a future for pending pipes.
+                if reply is None:
+                    pipe_id = to_s(rand_plain(15))
+                else:
+                    pipe_id = reply.meta.pipe_id
+
+                pp.node.pipe_future(pipe_id)
+
+
+                # Select interface to use.
+                if_index = src_info["if_index"]
+                interface = pp.node.ifs[if_index]
+
+                # Select a specific if index.
+                if reply is not None:
+                    if reply.routing.dest_index != if_index:
+                        print(" error our if index")
+                        continue
+
+                # Support testing addr type failures.
+                if addr_type in [NIC_FAIL, EXT_FAIL]:
+                    use_addr_type = addr_type - 2
+                    do_fail = True
+                else:
+                    use_addr_type = addr_type
+                    do_fail = False
+
+                print(f"Addr types = {use_addr_type} do fail = {do_fail}")
+
+                dest_info["ip"] = str(
+                    select_dest_ipr(
+                        af,
+                        pp.same_machine,
+                        src_info,
+                        dest_info,
+                        [use_addr_type],
+
+                        # can you make this case
+                        # run for all
+                        # try it
+                        has_set_bind,
+                    )
+                )
+
+                if dest_info["ip"] == "None":
+                    print(src_info)
+                    print(dest_info)
+                    print("invalid matched af")
+                    continue
+
+                print(dest_info["ip"])
+
+    
+                interface = await select_if_by_dest(
+                    af,
+                    dest_info["ip"],
+                    interface,
+                    pp.node.ifs,
+                )
+
+                # Coroutine to run.
+                result = await async_wrap_errors(
+                    func(
+                        af,
+                        pipe_id,
+                        src_info,
+                        dest_info,
+                        interface,
+                        addr_type,
+                        reply,
+                    ),
+                    timeout
+                )
+
+                # Support testing failures for an addr type.
+                if do_fail:
+                    result = None
+
+                # Success result from function.
+                if result is not None:
+                    print(f"result not none {result}")
+                    return result
+                
+                msg = f"FAIL: {func} {use_addr_type} {result}"
+                print(msg)
+                
+                # Optional cleanup on failure.
+                if cleanup is not None:
+                    print(cleanup)
+                    await cleanup(
+                        af,
+                        pipe_id,
+                        src_info,
+                        dest_info,
+                        interface,
+                        use_addr_type,
+                        reply,
+                    )
+
+                if pipe_id in pp.node.pipes:
+                    del pp.node.pipes[pipe_id]
+        
+            except:
+                what_exception()
+
+
+
     # Use an AF supported by both.
     for af in VALID_AFS:
+        if reply is not None:
+            dest_info = pp.dest[af][reply.meta.src_index]
+            src_info = pp.src[af][reply.routing.dest_index]
+            
+            ret = await async_wrap_errors(
+                try_addr_infos(src_info, dest_info)
+            )
+            return ret
+
         # Iterates by shared AFs, filtered by best NAT.
         if_info_iter = IFInfoIter(af, pp.src, pp.dest)
         if not len(if_info_iter):
@@ -299,112 +437,12 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=N
             print(src_info)
             print(dest_info)
             print()
-            for addr_type in conf["addr_types"]:
-                try:
-                    # Create a future for pending pipes.
-                    if reply is None:
-                        pipe_id = to_s(rand_plain(15))
-                    else:
-                        pipe_id = reply.meta.pipe_id
+            ret = await async_wrap_errors(
+                try_addr_infos(src_info, dest_info)
+            )
+            if ret is not None:
+                return ret
 
-                    pp.node.pipe_future(pipe_id)
-
-
-                    # Select interface to use.
-                    if_index = src_info["if_index"]
-                    interface = pp.node.ifs[if_index]
-
-                    # Select a specific if index.
-                    if reply is not None:
-                        if reply.routing.dest_index != if_index:
-                            print(" our if index")
-                            continue
-
-                    # Support testing addr type failures.
-                    if addr_type in [NIC_FAIL, EXT_FAIL]:
-                        use_addr_type = addr_type - 2
-                        do_fail = True
-                    else:
-                        use_addr_type = addr_type
-                        do_fail = False
-
-                    print(f"Addr types = {use_addr_type} do fail = {do_fail}")
-
-                    dest_info["ip"] = str(
-                        select_dest_ipr(
-                            af,
-                            pp.same_machine,
-                            src_info,
-                            dest_info,
-                            [use_addr_type],
-
-                            # can you make this case
-                            # run for all
-                            # try it
-                            has_set_bind,
-                        )
-                    )
-
-                    if dest_info["ip"] == "None":
-                        print(src_info)
-                        print(dest_info)
-                        print("invalid matched af")
-                        continue
-
-                    print(dest_info["ip"])
-
-        
-                    interface = await select_if_by_dest(
-                        af,
-                        dest_info["ip"],
-                        interface,
-                        pp.node.ifs,
-                    )
-
-                    # Coroutine to run.
-                    result = await async_wrap_errors(
-                        func(
-                            af,
-                            pipe_id,
-                            src_info,
-                            dest_info,
-                            interface,
-                            addr_type,
-                            reply,
-                        ),
-                        timeout
-                    )
-
-                    # Support testing failures for an addr type.
-                    if do_fail:
-                        result = None
-
-                    # Success result from function.
-                    if result is not None:
-                        print(f"result not none {result}")
-                        return result
-                    
-                    msg = f"FAIL: {func} {use_addr_type} {result}"
-                    print(msg)
-                    
-                    # Optional cleanup on failure.
-                    if cleanup is not None:
-                        print(cleanup)
-                        await cleanup(
-                            af,
-                            pipe_id,
-                            src_info,
-                            dest_info,
-                            interface,
-                            use_addr_type,
-                            reply,
-                        )
-
-                    if pipe_id in pp.node.pipes:
-                        del pp.node.pipes[pipe_id]
-            
-                except:
-                    what_exception()
 
             # Only use iter to order by NAT.
             break

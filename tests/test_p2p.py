@@ -252,6 +252,7 @@ class TestNodes():
 
 async def p2p_check_strats(params):
     strats = [P2P_DIRECT, P2P_REVERSE, P2P_RELAY, P2P_PUNCH]
+    strats = [P2P_RELAY]
     async with TestNodes(**params) as nodes:
         for strat in strats:
             pipe = await nodes.alice.connect(

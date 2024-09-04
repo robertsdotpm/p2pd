@@ -428,6 +428,8 @@ class TURNClient(PipeEvents):
             )
             self.tasks.append(task)
 
+        return already_accepted
+
     # Relay addresses are only valid for a certain 'life time.'
     # This creates and sends a message to refresh the lifetime.
     async def refresh_allocation(self):
