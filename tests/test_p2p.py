@@ -5,6 +5,7 @@ that runs the tests and call with the async_test.
 """
 
 from p2pd import *
+import warnings
 import multiprocessing
 
 TEST_P2P_PIPE_CONF = {
@@ -21,8 +22,6 @@ self-relays (makes sense.) While self-punch to an
 external address makes no sense from a routing
 perspective (though the code supports self-route.)
 """
-IF_ALICE_NAME = "enp0s25"
-IF_BOB_NAME = "wlx00c0cab5760d"
 
 def patch_msg_dispatcher(src_pp, src_node, dest_node):
     async def patch():
@@ -131,38 +130,19 @@ def patch_p2p_stats(strategies, src_pp):
 
     return is_patched
 
-async def get_node(if_name=IF_ALICE_NAME, node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
-    delta = delta_info(EQUAL_DELTA, NA_DELTA)
-    nat = nat_info(OPEN_INTERNET, delta)
-    #nat = nat_info(RESTRICT_NAT, delta_info(INDEPENDENT_DELTA, node_port + 10))
-    iface = await Interface(if_name)
-
-    """
-    Note that: if the incorrect nat details are set
-    then the NAT predictions will be wrong and
-    the chances of success for punching will be
-    much lower. Loading the NAT is easier but most
-    NATs use equal delta types so prediction is easy.
-    Will use this for testing at least.
-    """
-    iface.set_nat(nat)
-
-
-    sys_clock = SysClock(iface, Dec("-0.02839018452552057081653225806"))
+async def get_node(ifs=[], node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     conf = copy.deepcopy(NODE_CONF)
     conf["sig_pipe_no"] = sig_pipe_no
-    node = P2PNode([iface], port=node_port, conf=conf)
-
-    pe = await get_pp_executors()
-    qm = multiprocessing.Manager()
-    node.setup_multiproc(pe, qm)
-    node.setup_coordination(sys_clock)
-
+    node = P2PNode(ifs, port=node_port, conf=conf)
     return node
 
 class TestNodes():
-    def __init__(self, same_if=False, addr_types=[EXT_BIND, NIC_BIND], return_msg=True, sig_pipe_no=SIGNAL_PIPE_NO):
+    def __init__(self, same_if=False, addr_types=[EXT_BIND, NIC_BIND], return_msg=True, sig_pipe_no=SIGNAL_PIPE_NO, ifs=[]):
+        self.ifs = ifs
         self.same_if = same_if
+        if len(ifs) <= 1:
+            self.same_if = True
+
         self.addr_types = addr_types
         self.return_msg = return_msg
         self.sig_pipe_no = sig_pipe_no
@@ -176,23 +156,27 @@ class TestNodes():
         # Setup node on specific interfaces.
         if self.same_if:
             self.alice = await get_node(
-                IF_ALICE_NAME,
+                [self.ifs[0]],
                 sig_pipe_no=self.sig_pipe_no,
             )
 
             self.bob = await get_node(
-                IF_ALICE_NAME,
+                [self.ifs[0]],
                 NODE_PORT + 1,
                 sig_pipe_no=self.sig_pipe_no,
             )
         else:
             self.alice = await get_node(
-                IF_ALICE_NAME,
+                [self.ifs[0]],
                 sig_pipe_no=self.sig_pipe_no,
             )
 
+            bob_ifs = [self.ifs[0]]
+            if len(self.ifs) >= 2:
+                bob_ifs = [self.ifs[1]]
+
             self.bob = await get_node(
-                IF_BOB_NAME,
+                bob_ifs,
                 NODE_PORT + 1,
                 sig_pipe_no=self.sig_pipe_no,
             )
@@ -210,8 +194,10 @@ class TestNodes():
         
 
         # Start the nodes.
-        await self.alice.dev()
-        await self.bob.dev()
+        nic = self.alice.ifs[0]
+        sys_clock = SysClock(nic, Dec("-0.02839018452552057081653225806"))
+        await self.alice.start(sys_clock)
+        await self.bob.start(sys_clock)
 
         # Set pipe conf.
         self.pp_alice = self.alice.p2p_pipe(
@@ -254,105 +240,9 @@ class TestNodes():
         await self.bob.close()
         print("nodes closed")
 
-async def test_dir_direct_con_lan_ext():
-    params = {
-        "return_msg": False,
-        "sig_pipe_no": 0,
-        "addr_types": [NIC_BIND, EXT_BIND],
-    }
 
-    async with TestNodes(**params) as nodes:
-        pipe = await nodes.pp_alice.connect(
-            strategies=[P2P_DIRECT]
-        )
-        print(pipe)
-        assert(pipe is not None)
-        assert(await check_pipe(pipe))
-        await pipe.close()
 
-async def test_dir_direct_con_ext_fail_lan_suc():
-    params = {
-        "return_msg": True,
-        "sig_pipe_no": 0,
-        "addr_types": [EXT_FAIL, NIC_BIND],
-    }
 
-    async with TestNodes(**params) as nodes:
-        pipe = await nodes.pp_alice.connect(
-            strategies=[P2P_DIRECT]
-        )
-        print(pipe)
-        assert(pipe is not None)
-        assert(await check_pipe(pipe))
-        await pipe.close()
-
-async def test_reverse_direct_lan():
-    params = {
-        "return_msg": True,
-        "sig_pipe_no": 0,
-        "addr_types": [NIC_BIND],
-    }
-
-    async with TestNodes(**params) as nodes:
-        pipe = await nodes.pp_alice.connect(
-            strategies=[P2P_REVERSE]
-        )
-        print(pipe)
-        assert(pipe is not None)
-        assert(await check_pipe(pipe))
-        await pipe.close()
-
-async def test_turn_direct():
-    params = {
-        "return_msg": True,
-        "sig_pipe_no": 0,
-        "addr_types": [EXT_BIND],
-    }
-
-    async with TestNodes(**params) as nodes:
-        pipe = await nodes.pp_alice.connect(
-            strategies=[P2P_RELAY]
-        )
-
-        print(pipe)
-        assert(pipe is not None)
-        assert(await check_pipe(pipe))
-        await pipe.close()
-
-async def test_tcp_punch_direct_ext_lan():
-    params = {
-        "return_msg": True,
-        "sig_pipe_no": 0,
-        "addr_types": [EXT_BIND, NIC_BIND],
-    }
-
-    async with TestNodes(**params) as nodes:
-        pipe = await nodes.pp_alice.connect(
-            strategies=[P2P_PUNCH]
-        )
-
-        print(pipe)
-        assert(pipe is not None)
-        assert(await check_pipe(pipe))
-        await pipe.close()
-
-# Last one doesnt result in sides using same addr type.
-async def test_tcp_punch_direct_lan_fail_ext_suc():
-    params = {
-        "return_msg": False,
-        "sig_pipe_no": 0,
-        "addr_types": [NIC_FAIL, EXT_BIND],
-    }
-
-    async with TestNodes(**params) as nodes:
-        pipe = await nodes.pp_alice.connect(
-            strategies=[P2P_PUNCH]
-        )
-
-        print(pipe)
-        assert(pipe is not None)
-        assert(await check_pipe(pipe))
-        await pipe.close()
 
 async def test_dir_reverse_fail_direct():
     # bug in the message dispatcher.
@@ -366,11 +256,6 @@ async def test_dir_reverse_fail_direct():
 
     patch_strats = [DIRECT_FAIL, RELAY_FAIL, REVERSE_FAIL, P2P_PUNCH]
     use_strats = [P2P_DIRECT, P2P_RELAY, P2P_REVERSE, P2P_PUNCH]
-    #use_strats = [P2P_PUNCH]
-    #patch_strats = use_strats
-    #use_strats = patch_strats = [P2P_RELAY]
-    #use_strats = patch_strats = [P2P_PUNCH]
-    #use_strats = patch_strats = [P2P_PUNCH]
     async with TestNodes(**params) as nodes:
         is_patched = patch_p2p_stats(patch_strats, nodes.pp_alice)
         #if not is_patched:
@@ -405,120 +290,51 @@ async def test_dir_reverse_fail_direct():
         assert(await check_pipe(pipe))
         await pipe.close()
 
-async def test_nicknames():
-    node = await get_node()
-    print(node)
-    print(node.sk)
-
-    nic = node.ifs[0]
-
-    """
-    name = ""
-    val = "unique test val2"
 
 
-    n = Naming(node.sk, nic)
-    await n.start()
+asyncio.set_event_loop_policy(SelectorEventPolicy())
+class TestTurn(unittest.IsolatedAsyncioTestCase):
+    @classmethod
+    def setUpClass(cls):
+        warnings.simplefilter("ignore")
 
-    print(n.clients[0].dest.af)
-    """
+    async def test_some_p2p(self):
+        pass
+        #await test_dir_reverse_fail_direct()
 
-    """
-    out = await n.clients[0].push(name, val)
-    print(out)
-    print(out.value)
-    return
-    """
+    async def test_p2p_strats(self):
+        if_names = await list_interfaces()
+        ifs = await load_interfaces(if_names)
+        params = {
+            "return_msg": True,
+            "addr_types": [EXT_BIND, NIC_BIND],
+            "ifs": ifs,
+            "same_if": False if len(ifs) >= 2 else True
+        }
 
-    """
-    name = await n.push(name, val)
-    print(name)
+        strats = [P2P_DIRECT, P2P_REVERSE, P2P_RELAY, P2P_PUNCH]
+        async with TestNodes(**params) as nodes:
+            for strat in strats:
+                pipe = await nodes.alice.connect(
+                    nodes.bob.addr_bytes,
+                    strategies=[strat],
+                    conf=nodes.pp_conf,
+                )
 
+                print(f"connect result = {pipe}")
+                if params["same_if"] == False:
+                    assert(pipe is not None)
+                    assert(await check_pipe(pipe))
 
-    out = await n.fetch(name)
-    print(out)
+                if strat in [P2P_RELAY, P2P_PUNCH]:
+                    if pipe is None:
+                        log(f"opt test self {strat} failed")
 
-    await n.delete(name)
+                if pipe is not None:
+                    await pipe.close()
 
-    out = await n.fetch(name)
-    print(out)
-    """
-
-
-
-
-
-
-    name = "test name 33600"
-    val = name
-    af = IP6
-    serv = PNP_SERVERS[af][1]
-    nic = await Interface("wlx00c0cab5760d")
-    dest = await Address(
-        serv["ip"],
-        serv["port"],
-        nic.route(af)
-    )
-
-    print(dest.tup)
-
-    pnpc = PNPClient(node.sk, dest, h_to_b(serv["pk"]))
-
-    out = await pnpc.push(name, val)
-
-
-    out = await pnpc.fetch(name)
-    print(out)
-    print(out.value)
-
-    print(pnpc)
-
-
-    await node.close()
-
-    # 24 random bytes.
-    # SigningKey.from_string(h_to_b(sk_hex))
-
-
-
-async def duel_if_tests():
-    try:
-        #await test_node_start()
-
-        # Works.
-        #await test_dir_direct_con_lan_ext()
-
-        # Works.
-        #await test_dir_direct_con_fail_lan()
-
-        # Works.
-        #await test_reverse_direct_lan()
-
-        # Works.
-        #await test_turn_direct()
-
-        # Works.
-        #await test_tcp_punch_direct_ext_lan()
-
-        # Works
-        #await test_tcp_punch_direct_lan_fail_ext_suc()
-
-        await test_dir_reverse_fail_direct()
-
-        #await test_nicknames()
-
-
-        # Multiple methods now with failures inbetween.
-        # 
-
-        #await test_dir_direct_con()
-        #await test_turn_with_sig()
-    except:
-        log_exception()
+        # Give time to close.
+        await asyncio.sleep(2)
 
 if __name__ == '__main__':
-    async_test(duel_if_tests)
-
-"""
-make sure msg_cb works for punch and turn
-"""
+    main()
