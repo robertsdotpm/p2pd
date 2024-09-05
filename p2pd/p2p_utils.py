@@ -72,6 +72,13 @@ def sort_if_info_by_best_nat(p2p_addr):
 
     return nat_pairs
 
+"""
+The position of the infos in their lists correspond to
+the if_index. Hence, modifying the original object
+is going to cause code that depends on offsets to fail.
+The hack here is just to copy the src and leave the
+parent obj unchanged. The code seems to work.
+"""
 def swap_if_infos_with_overlapping_exts(src, dest):
     src = copy.deepcopy(src)
     bound = min(len(src), len(dest))

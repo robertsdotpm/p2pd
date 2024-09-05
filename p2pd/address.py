@@ -9,6 +9,7 @@ from .bind import *
 # from a specific interface. This may not matter though.
 class Address():
     def __init__(self, host, port, route=None, sock_type=socket.SOCK_STREAM, timeout=2):
+        self.af = None
         self.timeout = timeout
         self.resolved = False
         self.sock_type = sock_type
@@ -21,10 +22,10 @@ class Address():
         self.host = to_s(host) if host is not None else host
         log("> Address: %s:%d" % (self.host, self.port))
 
-    async def res(self):
-        # Lookup IPs for domain.
-        route = self.route
-        loop = asyncio.get_event_loop()
+    async def parse_af(self):
+        self.af = None
+        if self.route is not None:
+            self.af = self.route.af
 
         # Determine if IP or domain.
         self.chosen = AF_ANY
@@ -32,17 +33,16 @@ class Address():
             return
 
         # Try parse host as an IP address.
-        self.af = route.af
         try:
             self.ip_obj = ipaddress.ip_address(self.host)
             if self.ip_obj.version == 4:
-                if self.af not in [AF_ANY, IP4]:
+                if self.af not in [AF_ANY, IP4, None]:
                     raise Exception("Found IP doesn't match AF.")
 
                 self.chosen = socket.AF_INET
                 self.ips[AF_ANY] = self.ips[socket.AF_INET] = self.host
             else:
-                if self.af not in [AF_ANY, IP6]:
+                if self.af not in [AF_ANY, IP6, None]:
                     raise Exception("Found IP doesn't match AF.")
 
                 self.chosen = socket.AF_INET6
@@ -53,6 +53,16 @@ class Address():
             self.ip_obj = None
             self.host_type = HOST_TYPE_DOMAIN
             self.chosen = self.af
+            log_exception()
+
+        return self.chosen
+
+    async def res(self):
+        loop = asyncio.get_event_loop()
+
+        # Load AF of any fixed IPs.
+        if self.af is None:
+            await self.parse_af()
 
         # Set IP port tup.
         self.as_tup = self.tup = self.tuple = ()
@@ -74,7 +84,7 @@ class Address():
                 target = ip6_patch_bind_ip(
                     self.ip_obj,
                     target,
-                    route.interface.id
+                    self.route.interface.id
                 )
         else:
             # Target is a domain name.

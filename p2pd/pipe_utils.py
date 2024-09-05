@@ -1,8 +1,22 @@
+"""
+- pipe_open allows multiple encoding forms to be used for the IP
+field. But bytes is a little unclear. Is it the raw bytes of
+an IP address or is it a human-readable IP in ASCII? I
+decided to default to the latter otherwise devs. But you
+can still pass in ints or IPRanges to use raw IPs. With
+ints just make sure there is a route alongside it because
+the address family is needed to disambiguate whether the
+int is a short IPv6 or an IPv4.
+"""
+
+
 import asyncio
 from .utils import *
 from .net import *
 from .bind import *
 from .pipe_events import *
+from .address import Address
+from .ip_range import IPRange
 
 """
 StreamReaderProtocol provides a way to "translate" between
@@ -156,6 +170,32 @@ You can pull data from it based on a regex pattern.
 You can execute code on new messages or connection disconnects.
 """
 async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=None, conf=NET_CONF):
+    # Load dest as an Address.
+    af = route.af if route is not None else None
+    if dest is not None:
+        # IP:port pair -> Address.
+        if isinstance(dest, (list, tuple)):
+            ip, port = dest
+
+            # Supports int, bytes.
+            # Due to lack of preceding 0s
+            # int can be ambiguous for AFs tho.
+            if isinstance(ip, int):
+                cidr = CIDR_WAN if af is None else af_to_cidr(af)
+                ip = IPRange(ip, cidr=cidr)
+
+            # Support IP as an IPR.
+            if isinstance(ip, IPRange):
+                ip = ipr_norm(ip)
+
+            # Load AF of any entered IPs.
+            dest = Address(
+                ip, # Host / IP
+                int(port), # Port
+                route, # IPv6 edge-cases.
+            )
+            af = await dest.parse_af()
+
     # If no route is set assume default interface route 0.
     if route is None:
         from .interface import Interface
@@ -164,10 +204,11 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
         i = await Interface()
 
         # Bind to route 0.
-        route = await i.route()
+        route = await i.route(af)
 
-    # If dest has no route set use this route.
-    if dest is not None and dest.route is None:
+    # Ensure address instance is resolved.
+    if isinstance(dest, Address):
+        # Resolve unresolved addresses.
         if not dest.resolved:
             dest.route = route
             await dest

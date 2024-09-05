@@ -1,11 +1,30 @@
+import aiodns
 from p2pd import *
 
 async def do_something():
-    await init_p2pd()
+
+    resolver = aiodns.DNSResolver()
+
+
+    result = await resolver.query("google.com", "A")
+    print(result)
+
+    return
     i = await Interface()
-    print(i)
-    loop = asyncio.get_event_loop()
-    print(loop)
+
+
+    dest = ("google.com", 80)
+
+
+    #route = i.route(IP4)
+    route = None
+    addr = await Address(*dest, route)
+    pipe = await pipe_open(TCP, dest, route)
+
+    print(pipe)
+    print(pipe.sock)
+    if pipe is not None:
+        await pipe.close()
 
 async_test(do_something)
 

@@ -42,7 +42,7 @@ class P2PPipe():
             P2P_PUNCH: [self.tcp_hole_punch, 10, None, 0],
 
             # Large timeout, end refreshers, disable LAN cons.
-            P2P_RELAY: [self.udp_turn_relay, 10, self.turn_cleanup, 1],
+            P2P_RELAY: [self.udp_turn_relay, 20, self.turn_cleanup, 1],
         }
 
     def route_msg(self, msg, m=0):
@@ -235,7 +235,6 @@ class P2PPipe():
         # Prevent protocol loop.
         return await self.node.pipes[pipe_id]
 
-    # TODO improve this code?
     async def udp_turn_relay(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
         if addr_type == NIC_BIND:
             return None
@@ -299,11 +298,9 @@ class P2PPipe():
                 "serv_id": client.serv_offset,
             },
         })
-        print(msg)
 
         self.route_msg(msg, m=3)
         return await self.node.pipes[pipe_id]
-
 
     async def turn_cleanup(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
         if pipe_id not in self.node.turn_clients:
