@@ -56,7 +56,7 @@ class TestIPv6(unittest.IsolatedAsyncioTestCase):
 
         await route
 
-        dest = await Address("p2pd.net", 7, route)
+        dest = ("p2pd.net", 7)
         pipe = await pipe_open(TCP, dest, route)
         await pipe.send(b"Test")
         out = await pipe.recv()

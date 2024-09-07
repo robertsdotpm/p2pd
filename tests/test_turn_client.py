@@ -11,18 +11,17 @@ async def get_turn_client(af, interface, turn_offset):
     # Get a route for this interface.
     route = await interface.route(af).bind()
     try:
-        dest = await Address(
+        dest = (
             to_s(TURN_SERVERS[turn_offset]["host"]),
             TURN_SERVERS[turn_offset]["port"],
-            route
-        ).res()
+            
+        )
     except:
         ip = TURN_SERVERS[turn_offset][IP4] or TURN_SERVERS[turn_offset][IP6] 
-        dest = await Address(
+        dest = (
             ip,
             TURN_SERVERS[turn_offset]["port"],
-            route
-        ).res()
+        )
 
     # Implement the TURN protocol for UDP send / recv.
     client = TURNClient(

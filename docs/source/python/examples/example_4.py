@@ -19,7 +19,7 @@ async def example():
     # Lookup Google.com's IP address -- specify a specific address family.
     # Most websites support IPv4 but not always IPv6.
     # Interface is needed to resolve some specialty edge-cases.
-    dest = Address("8.8.8.8", 53)
+    dest = ("8.8.8.8", 53)
     #
     # Now open a TCP connection to that the destination.
     pipe = await pipe_open(TCP, dest, route)

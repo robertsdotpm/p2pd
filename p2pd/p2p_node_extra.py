@@ -119,10 +119,9 @@ class P2PNodeExtra():
 
         # Lookup IP and port of MQTT server.
         try:
-            addr = await Address(
+            addr = (
                 server["host"],
                 server["port"],
-                self.ifs[0].route()
             )
             dest_tup = addr.tup[0:2]
         except:

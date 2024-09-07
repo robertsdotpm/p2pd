@@ -17,6 +17,7 @@ from .bind import *
 from .pipe_events import *
 from .address import Address
 from .ip_range import IPRange
+from .address_rewrite import *
 
 """
 StreamReaderProtocol provides a way to "translate" between
@@ -170,6 +171,12 @@ You can pull data from it based on a regex pattern.
 You can execute code on new messages or connection disconnects.
 """
 async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=None, conf=NET_CONF):
+    # Covers the case where passed in route is an Interface.
+    # In that case -- just use first route at first supported AF.
+    if route is not None and route.__name__ == "Interface":
+        nic = route
+        route = nic.route()
+
     # Load dest as an Address.
     af = route.af if route is not None else None
     if dest is not None:
@@ -189,14 +196,13 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
                 ip = ipr_norm(ip)
 
             # Load AF of any entered IPs.
-            dest = Address(
-                ip, # Host / IP
-                int(port), # Port
-                route, # IPv6 edge-cases.
+            dest = AddressRewrite(
+                ip,
+                port,
+                conf=conf
             )
-            af = await dest.parse_af()
 
-    # If no route is set assume default interface route 0.
+    # If no route is set assume default interface, first route.
     if route is None:
         from .interface import Interface
 
@@ -207,12 +213,14 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
         route = await i.route(af)
 
     # Ensure address instance is resolved.
-    if isinstance(dest, Address):
+    if isinstance(dest, AddressRewrite):
         # Resolve unresolved addresses.
         if not dest.resolved:
-            dest.route = route
-            await dest
+            await dest.res(route)
 
+        # Select compatible address.
+        dest = dest.select_ip(route.af)
+        
     # Build the base protocol object.
     pipe_events = None
     try:
@@ -378,12 +386,11 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
                 await pipe_events.close()
 
 async def pipe_utils_workspace():
-    from .address import Address
     from .interface import Interface
 
     i = await Interface()
-    dest = Address("google.com", 80)
-    r = await i.route()
+    dest = ("google.com", 80)
+    r = await i.route(IP4)
     p = await pipe_open(TCP, dest, r)
     print(p.sock)
     await p.close()

@@ -228,16 +228,14 @@ async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=Non
     # Resolve the TURN address.
     route = await interface.route(af).bind()
     try:
-        turn_addr = await Address(
+        turn_addr = (
             turn_server["host"],
             turn_server["port"],
-            route
-        ).res()
+        )
     except:
-        turn_addr = await Address(
+        turn_addr = (
             turn_server[af],
             turn_server["port"],
-            route
         )
 
     # Make a TURN client instance to whitelist them.

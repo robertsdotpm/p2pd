@@ -18,7 +18,7 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
         await toxid.add_listener(TCP, route)
         
         # Create a Toxi client.
-        toxid_addr = await Address("127.0.0.1", toxiport, route)
+        toxid_addr = ("127.0.0.1", toxiport)
         client = await ToxiClient(
             toxid_addr,
             net_conf
@@ -31,7 +31,7 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
         await echod.add_listener(TCP, route)
 
         # Address to connect to echod.
-        echo_dest = await Address("127.0.0.1", echodport, route)
+        echo_dest = ("127.0.0.1", echodpor)
         return net_conf, i, toxid, toxid_addr, client, echod, echo_dest
 
     """
@@ -64,7 +64,7 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
 
         # Test downstream and upstream.
         lag_amount = 2000
-        tunnel_dest = await Address("142.250.70.238", 80, i.route())
+        tunnel_dest = ("142.250.70.238", 80)
         for toxi_stream in streams():
             # Add the initial toxic to a new tunnel.
             tunnel = await self.new_tunnel(tunnel_dest, client)

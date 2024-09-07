@@ -192,6 +192,7 @@ def clean_if_list(ifs):
 class Interface():
     def __init__(self, name=None, stack=DUEL_STACK, nat=None, netifaces=None):
         super().__init__()
+        self.__name__ = "Interface"
         self.resolved = False
         self.netiface_index = None
         self.id = self.mac = self.nic_no = None

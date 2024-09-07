@@ -30,17 +30,15 @@ NTP_TIMEOUT = 2
 async def get_ntp(interface, server=None, retry=NTP_RETRY):
     server = server or random.choice(NTP_SERVERS)
     try:
-        dest = await Address(
+        dest = (
             server["host"],
             server["port"],
-            interface.route()
         )
     except:
         ip = server[IP4] or server[IP6]
-        dest = await Address(
+        dest = (
             ip,
             server["port"],
-            interface.route()
         )
 
     try:

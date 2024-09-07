@@ -240,7 +240,7 @@ async def add_fixed_paths(interface, af, get_root_desc):
     tasks = []
     async def worker(host, port, path):
         route = await interface.route(af).bind()
-        dest = await Address(host, port, route).res()
+        dest = (host, port, route)
         return await get_root_desc(route, dest, path)
 
     # Build list of tasks.
@@ -282,7 +282,7 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
         sock.setsockopt(socket.IPPROTO_IPV6, socket.IP_MULTICAST_TTL, 2)
 
     # Create async pipe wrapper for multicast socket.
-    dest = Address(UPNP_IP[af], UPNP_PORT)
+    dest = (UPNP_IP[af], UPNP_PORT)
     pipe = await pipe_open(UDP, dest, route, sock, conf=sock_conf)
     pipe.subscribe()
 
@@ -400,11 +400,10 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
             hostname = hostname.strip("[]")
 
         # Root XML address.
-        xml_dest = await Address(
+        xml_dest = (
             hostname,
             url.port,
-            route
-        ).res()
+        )
 
         # Request rootDesc.xml.
         http_route = await interface.route(af).bind(ips=src_addr.tup[0])
@@ -443,7 +442,7 @@ if __name__ == "__main__":
 
         f = F(i, IP4)
         #src_addr = await Address("fe80::1131:b51a:3f8f:1f2d", port).res(f)
-        src_addr = await Address("192.168.21.21", port, f).res()
+        src_addr = ("192.168.21.21", port)
         tasks = await port_forward(i, port, src_addr, desc)
         results = await asyncio.gather(*tasks)
 

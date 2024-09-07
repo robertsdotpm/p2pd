@@ -148,6 +148,9 @@ SUB_ALL = [b"", b""]
 
 # Fine tune various network settings.
 NET_CONF = {
+    # Seconds to use for a DNS request before timeout exception.
+    "dns_timeout": 2,
+
     # Wrap socket with SSL.
     "use_ssl": 0,
 

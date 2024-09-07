@@ -74,7 +74,7 @@ class ToxicLatency(ToxicBase):
         ms = self.latency + jitter
         if ms > 0:
             await asyncio.sleep(ms / 1000)
-            
+
         return msg, dest_pipe
     
 class ToxicBandwidthLimit(ToxicBase):
@@ -492,7 +492,7 @@ class ToxiMainServer(RESTD):
         try:
             # Resolve upstream address.
             up_route = await use_if.route().bind()
-            dest = Address(dest_ip, dest_port)
+            dest = (dest_ip, dest_port)
 
             # Connect to upstream.
             upstream = await pipe_open(

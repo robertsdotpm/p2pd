@@ -63,7 +63,7 @@ async def pnp_get_test_client_serv(v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6
     dest_ips = {IP4: "127.0.0.1", IP6: v6_serv_ips}
     for af in VALID_AFS:
         route = i.route(af)
-        dest = await Address(dest_ips[af], PNP_TEST_PORT, route)
+        dest = (dest_ips[af], PNP_TEST_PORT)
         clients[af] = PNPClient(PNP_LOCAL_SK, dest, PNP_TEST_ENC_PK)
 
     return clients, serv
@@ -322,7 +322,7 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
         bob = {}
         for af in VALID_AFS:
             route = i.route(af)
-            dest = await Address('localhost', PNP_TEST_PORT, route)
+            dest = ('localhost', PNP_TEST_PORT)
             alice[af] = PNPClient(SigningKey.generate(), dest, PNP_TEST_ENC_PK)
             bob[af] = PNPClient(SigningKey.generate(), dest, PNP_TEST_ENC_PK)
 

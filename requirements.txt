@@ -10,5 +10,4 @@ pyroute2; platform_system != "Windows" and platform_system != "Darwin" # Fallbac
 # These are the dependencies for ECIES.
 coincurve >=13,<20
 winregistry; platform_system == "Windows"
-psutil # Used to check for zombie processes.
 aiodns # Used for DNS queries.

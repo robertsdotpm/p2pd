@@ -212,7 +212,7 @@ class ToxiTunnel():
 
         # Resolve tunnel address,
         try:
-            dest = await Address(self.ip, self.port, route)
+            dest = (self.ip, self.port)
         except:
             raise Exception("addr res tunnel client {self.port}")
         
@@ -230,7 +230,7 @@ class ToxiTunnel():
 
         # Connect to the listen server for this tunnel.
         try:
-            dest = await Address(self.ip, self.port, route)
+            dest = (self.ip, self.port)
         except:
             raise Exception("get curl for tunnel client addr res")
         
@@ -317,7 +317,7 @@ async def test_setup(netifaces=None, client=None):
     if not hasattr(test_setup, "client"):
         i = await Interface().start_local(skip_resolve=True)
         r = i.route()
-        addr = await Address("localhost", 8474, r)
+        addr = ("localhost", 8474)
         client = ToxiClient(addr)
         await client.start()
 
@@ -329,7 +329,7 @@ class TestToxi(unittest.IsolatedAsyncioTestCase):
         client = await test_setup()
 
         # Create a new tunnel from toxiproxi to google.
-        dest = await Address("www.google.com", 80, client.addr.route)
+        dest = ("www.google.com", 80)
         tunnel = await client.new_tunnel(dest)
         assert(isinstance(tunnel, ToxiTunnel))
 

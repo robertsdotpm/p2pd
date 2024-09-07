@@ -8,11 +8,10 @@ async def example():
     r = await i.route().bind()
     #
     # Address of a TURN server.
-    dest = await Address(
+    dest = (
         TURN_SERVERS[TURN_OFFSET][IP4],
         TURN_SERVERS[TURN_OFFSET]["port"],
-        r
-    ).res()
+    )
     #
     # Sync message callback -- do something here if you like.
     # Can be async too.

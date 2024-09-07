@@ -1,22 +1,21 @@
 from .utils import *
 from .net import *
 
-def ip6_patch_bind_ip(ip_obj, bind_ip, nic_id):
+def ip6_patch_bind_ip(bind_ip, nic_id):
     # Add interface descriptor if it's link local.
-    if ip_obj.is_private:
-        if to_s(bind_ip[0:2]).lower() in ["fe", "fd"]:
-            # Interface specified by no on windows.
-            if platform.system() == "Windows":
-                bind_ip = "%s%%%d" % (
-                    bind_ip,
-                    nic_id
-                )
-            else:
-                # Other platforms just use the name
-                bind_ip = "%s%%%s" % (
-                    bind_ip,
-                    nic_id
-                )
+    if to_s(bind_ip[0:2]).lower() in ["fe", "fd"]:
+        # Interface specified by no on windows.
+        if platform.system() == "Windows":
+            bind_ip = "%s%%%d" % (
+                bind_ip,
+                nic_id
+            )
+        else:
+            # Other platforms just use the name
+            bind_ip = "%s%%%s" % (
+                bind_ip,
+                nic_id
+            )
 
     return bind_ip
 
@@ -217,7 +216,7 @@ class Bind():
     def __init__(self, interface, af, port=0, ips=None, leave_none=0):
         #if IS_DEBUG:
         #assert("Interface" in str(type(interface)))
-
+        self.__name__ = "Bind"
         self.ips = ips
         self.interface = interface
         self.af = af

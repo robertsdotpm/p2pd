@@ -18,3 +18,25 @@ DNS. Browsers will hardcode some backup DNS resolvers and they'll
 hardcode IP addresses for fallbacks. If the goal of P2PD is to
 improve connectivity it must properly handle DNS failure. They
 really are quite common on some networks. 
+
+Technical notes:
+
+In Python the function socket.getaddrinfo is used to resolve a
+domain name to an IP. This is a standard 'blocking' function
+and asyncio uses a process executor to run this function in.
+That means that DNS queries in Python aren't really async.
+They've been implemented as a hack using [whatever] process
+executors are available to the event loop...
+
+That exposes other problems. If using a process executor pool
+the default number of processes is set to the CPU core no.
+So if you need to resolve many domains in rapid succession a
+bottleneck can occur quickly. Likewise, if you're already
+using the pool for your own work there won't be enough free
+executors to run DNS queries in. 
+
+All of this is very prone to having bottlenecks and timeouts.
+So the address class in P2PD wraps an actual async DNS library.
+This also helps mitigate issues with depending on a systems
+own configured DNS resolves and cache -- both of which
+are easily broken.

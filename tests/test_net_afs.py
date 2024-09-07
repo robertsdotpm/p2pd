@@ -60,7 +60,7 @@ class TestAFsWork(unittest.IsolatedAsyncioTestCase):
                         continue
 
                     # Set destination of echo server.
-                    echo_dest = Address(
+                    echo_dest = (
                         addr[proto][af]["host"],
                         addr[proto][af]["port"]
                     )

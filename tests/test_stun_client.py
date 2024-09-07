@@ -46,12 +46,10 @@ class TestStunClient(unittest.IsolatedAsyncioTestCase):
                 # Stun server addr.
                 route = await i.route(af).bind()
                 stun_server = STUNT_SERVERS[af][0]
-                dest = await Address(
+                dest = (
                     stun_server["primary"]["ip"],
                     stun_server["primary"]["port"],
-                    route,
-                    UDP
-                ).res()
+                )
 
                 # Check NAT test result is as expected.
                 # Then check that other STUN requests work.

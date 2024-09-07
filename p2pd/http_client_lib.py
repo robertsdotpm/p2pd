@@ -171,11 +171,9 @@ async def url_res(route, url, timeout=3):
         port = int(port)
 
     # Resolve domain of URL.
-    dest = await Address(
+    dest = (
         host,
         port,
-        route,
-        timeout=timeout
     )
 
     # Return URL parts.

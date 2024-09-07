@@ -1,3 +1,17 @@
+"""
+rewrite notes:
+- ipv6 needs nic for certain edge cases (id)
+- theres no way to know what afs a domain supports until resolving them
+    - this has practical implications if a domain doesnt support an af that the nic does -- check this but usually everything supports at least ipv6
+- allow for route to be passes to res to use that for the res networking
+- asyncdns:
+    - fetch A and AAA concurrently
+    - fallback to getaddrinfo if it fails
+
+
+
+"""
+
 import asyncio
 import socket
 import ipaddress
@@ -78,14 +92,6 @@ class Address():
                     target = "127.0.0.1"
                 else:
                     target = "::1"
-
-            # Patch link local addresses.
-            if self.af == IP6 and target not in ["::", "::1"]:
-                target = ip6_patch_bind_ip(
-                    self.ip_obj,
-                    target,
-                    self.route.interface.id
-                )
         else:
             # Target is a domain name.
             target = self.host

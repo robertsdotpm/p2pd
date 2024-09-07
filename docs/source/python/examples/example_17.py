@@ -12,12 +12,12 @@ async def example():
     #
     # Create a Toxiproxy client.
     # This just connects to the server above.
-    toxid_addr = await Address(TOXID_HOST, TOXID_PORT, route)
+    toxid_addr = (TOXID_HOST, TOXID_PORT)
     client = await ToxiClient(toxid_addr).start()
     #
     # Create a new relay to an upstream.
     # The upstream location is set bellow.
-    relay_dest = await Address("93.184.215.14", 80, route)
+    relay_dest = ("93.184.215.14", 80)
     tunnel = await client.new_tunnel(relay_dest)
     #
     # Add an upstream 'toxic' that adds latency to replies.

@@ -60,7 +60,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                     if addr == "*":
                         addr = "localhost"
 
-                    dest = Address(addr, server_port + i)
+                    dest = (addr, server_port + i)
 
                     # Spawn a pipe to the echo server.
                     test_route = await interface.route(af).bind(ips=addr)

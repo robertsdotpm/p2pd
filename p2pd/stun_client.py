@@ -108,15 +108,12 @@ class STUNClient():
             raise ErrorFeatureDeprecated(error)
 
         # Expect a reply from this address.
-        reply_addr = await Address(
+        reply_addr = (
             # The IP stays the same.
             self.dest.tup[0],
 
             # But expect the reply on the change port.
             ctup[1],
-
-            # Use a route from the same interface as dest.
-            self.interface.route(self.af)
         )
 
         # Flag to make the port change request.
@@ -137,15 +134,12 @@ class STUNClient():
             raise ErrorFeatureDeprecated(error)
 
         # Expect a reply from this address.
-        reply_addr = await Address(
+        reply_addr = (
             # The IP differs.
             ctup[0],
 
             # ... and so does the port.
             ctup[1],
-
-            # Use a route from the same interface as dest.
-            self.interface.route(self.af)
         )
 
         # Flag to make the tup change request.
@@ -205,10 +199,9 @@ async def get_stun_clients(af, max_agree, interface, proto=UDP, conf=NET_CONF):
     stun_clients = []
     for serv_info in serv_list:
         async def get_stun_client(serv_info):
-            dest = await Address(
+            dest = (
                 serv_info["primary"]["ip"],
                 serv_info["primary"]["port"],
-                mock_route
             )
             return STUNClient(
                 dest,
@@ -272,7 +265,7 @@ async def test_stun_client():
 
 
     i = await Interface()
-    a = await Address("stunserver.stunprotocol.org", 3478, i.route(IP4))
+    a = ("stunserver.stunprotocol.org", 3478)
     s = STUNClientRef(a)
     r = await s.get_stun_reply()
     print(r.rtup)
@@ -303,10 +296,9 @@ async def test_con_stun_client():
     stun_clients = []
     tasks = []
     for n in range(0, 5):
-        dest = await Address(
+        dest = (
             STUND_SERVERS[af][n]["primary"]["ip"],
             STUND_SERVERS[af][n]["primary"]["port"],
-            i.route(af)
         )
         stun_client = STUNClient(dest, proto=proto)
         stun_clients.append(stun_client)

@@ -137,11 +137,9 @@ async def validate_stun_server(af, host, port, proto, interface, mode, timeout, 
         else:
             ip = host
         
-        dest = Address(
+        dest = (
             ip,
             port,
-            route=route,
-            timeout=STUN_CONF["dns_timeout"]
         )
         if af == IP6:
             dest.tup = (ip, port, 0, 0)

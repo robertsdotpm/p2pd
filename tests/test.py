@@ -18,7 +18,7 @@ async def do_something():
 
     #route = i.route(IP4)
     route = None
-    addr = await Address(*dest, route)
+    addr = (*dest)
     pipe = await pipe_open(TCP, dest, route)
 
     print(pipe)

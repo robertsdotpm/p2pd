@@ -573,7 +573,7 @@ if __name__ == '__main__': # pragma: no cover
         turn_user=b""
         turn_pw=b""
         route = interface.route(af)
-        turn_addr = await Address("", 3478, route).res()
+        turn_addr = ("", 3478)
 
 
         """

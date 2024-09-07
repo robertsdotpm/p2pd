@@ -82,7 +82,7 @@ class P2PPipe():
             
     async def direct_connect(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
         # Connect to this address.
-        dest = Address(
+        dest = (
             dest_info["ip"],
             dest_info["port"],
         )
@@ -93,7 +93,7 @@ class P2PPipe():
         route = await iface.route(af).bind()
 
         # Connect to this address.
-        dest = Address(
+        dest = (
             str(dest_info["ip"]),
             dest_info["port"],
         )

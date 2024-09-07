@@ -172,11 +172,10 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
 
     for i in range(0, len(send_mappings)):
         # Endpoint to punch to.
-        dest = await Address(
+        dest = (
             dest_addr,
             recv_mappings[i].remote,
-            route
-        ).res()
+        )
 
         print(f"addr: {send_mappings[i].local} {recv_mappings[i].remote} {dest_addr}")
 

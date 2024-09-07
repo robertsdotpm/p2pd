@@ -12,7 +12,7 @@ async def example():
     # Subscribe to all messages.
     pipe = await pipe_open(
         UDP,
-        Address("74.125.192.127", 3478),
+        ("74.125.192.127", 3478),
         route
     )
     #

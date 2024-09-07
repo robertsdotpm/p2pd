@@ -89,10 +89,9 @@ async def nat_test_workers(pipe, q, test_index, test_coro, servers, test_no):
 
                 # Resolve IP and port as an Address.
                 addrs.append(
-                    await Address(
+                    (
                         servers[server_no][ip_type]["ip"],
                         servers[server_no][port_type]["port"],
-                        pipe.route
                     )
                 )
 
@@ -254,7 +253,7 @@ async def nat_test_main():
     pipe = await pipe_open(UDP, route=route)
     assert(pipe is not None)
     s = STUNClient(
-        await Address("stun1.p2pd.net", 3478, i.route(af))
+        ("stun1.p2pd.net", 3478)
     )
 
 

@@ -29,7 +29,7 @@ async def is_serv_listening(proto, listen_route):
         listen_ip = "localhost"
 
     # Try make pipe to the server socket.
-    dest = await Address(listen_ip, listen_port, route)
+    dest = (listen_ip, listen_port)
     pipe = await pipe_open(proto, dest, route)
     if pipe is not None:
         await pipe.close()

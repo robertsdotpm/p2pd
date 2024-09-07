@@ -12,7 +12,7 @@ and message processing. A pipe supports UDP or TCP and IPv4 or IPv6.
         proto = TCP or UDP.
         route = Route object that's been bound with await route.bind().
         dest  = If it's a client pipe a destionation should be included.
-                    await Address('host/ip', port, route).res()
+                ('host/ip', port)
                 A server includes no destination.
         sock  = Used to wrap a pre-existing socket in a pipe. If the protocol is
                 TCP and dest is included the socket is assumed to be connected.

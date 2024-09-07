@@ -94,10 +94,9 @@ class Nickname():
         # Uses direct IPs to avoid domain names.
         for serv_info in PNP_SERVERS[af]:
             try:
-                dest = await Address(
+                dest = (
                     serv_info["ip"],
                     serv_info["port"],
-                    self.interface.route(af)
                 )
             except:
                 log_exception()

@@ -82,6 +82,7 @@ class Route(Bind):
 
         # Interface my be None.
         super().__init__(interface, af, leave_none=1)
+        self.__name__ = "Route"
         self.af = af
         self.nic_ips = nic_ips or []
         self.ext_ips = ext_ips or []
@@ -98,17 +99,16 @@ class Route(Bind):
         self.link_locals = link_locals
     
     async def Address(self, dest, port):
-        return await Address(dest, port, self)
+        return (dest, port)
 
     async def forward(self, port=None, proto="TCP"):
         assert(self.resolved)
         port = port or self.bind_port
         ip = self.nic()
-        src_addr = await Address(
+        src_addr = (
             ip,
             port,
-            self
-        ).res()
+        )
         return await port_forward(
             interface=self.interface,
             ext_port=port,

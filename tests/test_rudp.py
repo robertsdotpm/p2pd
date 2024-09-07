@@ -8,7 +8,7 @@ class TestRUDP(unittest.IsolatedAsyncioTestCase):
         port = 40000
         r = await i.route(af).bind(port)
         dest_tup = (r.nic(), port)
-        dest = Address(*dest_tup)
+        dest = dest_tup
         pipe = (await pipe_open(
             route=r,
             proto=RUDP,

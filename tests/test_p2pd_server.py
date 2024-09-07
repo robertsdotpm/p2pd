@@ -13,7 +13,7 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
             ifs=[i], 
             enable_upnp=False
         )
-        
+
         conf = dict_child({
             # N seconds before a registering recv timeout.
             "recv_timeout": 100,
@@ -30,7 +30,7 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
         await server.node.add_msg_cb(proto_extension)
 
         # Server address.
-        dest = await Address(nic_ip, P2PD_PORT, r).res()
+        dest = (nic_ip, P2PD_PORT)
 
         # List of API end points to check.
         en = lambda x: to_s(urlencode(x))
