@@ -17,7 +17,7 @@ from .bind import *
 from .pipe_events import *
 from .address import Address
 from .ip_range import IPRange
-from .address_rewrite import *
+from .address import *
 
 """
 StreamReaderProtocol provides a way to "translate" between
@@ -196,7 +196,7 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
                 ip = ipr_norm(ip)
 
             # Load AF of any entered IPs.
-            dest = AddressRewrite(
+            dest = Address(
                 ip,
                 port,
                 conf=conf
@@ -213,7 +213,7 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
         route = await i.route(af)
 
     # Ensure address instance is resolved.
-    if isinstance(dest, AddressRewrite):
+    if isinstance(dest, Address):
         # Resolve unresolved addresses.
         if not dest.resolved:
             await dest.res(route)

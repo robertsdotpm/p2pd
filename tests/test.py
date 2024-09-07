@@ -3,6 +3,11 @@ from p2pd import *
 
 async def do_something():
 
+    i = await Interface()
+    await i.load_nat()
+    print(i)
+    return
+
     resolver = aiodns.DNSResolver()
 
 
@@ -18,7 +23,6 @@ async def do_something():
 
     #route = i.route(IP4)
     route = None
-    addr = (*dest)
     pipe = await pipe_open(TCP, dest, route)
 
     print(pipe)

@@ -1,249 +1,210 @@
-"""
-rewrite notes:
-- ipv6 needs nic for certain edge cases (id)
-- theres no way to know what afs a domain supports until resolving them
-    - this has practical implications if a domain doesnt support an af that the nic does -- check this but usually everything supports at least ipv6
-- allow for route to be passes to res to use that for the res networking
-- asyncdns:
-    - fetch A and AAA concurrently
-    - fallback to getaddrinfo if it fails
-
-
-
-"""
-
-import asyncio
-import socket
-import ipaddress
-import pprint
+import aiodns
+from .utils import *
 from .net import *
 from .bind import *
+from .ip_range import *
 
-# TODO: address doesn't support domain resolution
-# from a specific interface. This may not matter though.
-class Address():
-    def __init__(self, host, port, route=None, sock_type=socket.SOCK_STREAM, timeout=2):
-        self.af = None
-        self.timeout = timeout
-        self.resolved = False
-        self.sock_type = sock_type
-        self.route = route
-        self.host = host
-        self.host_type = None
-        self.port = int(port)
-        self.afs_found = [] # Supported AFs once resolved.
-        self.ips = {} # Destination indexed by IP.
-        self.host = to_s(host) if host is not None else host
-        log("> Address: %s:%d" % (self.host, self.port))
+DNS_NAMESERVERS = {
+    IP4: [
+        # OpenDNS.
+        "208.67.222.222",
+        "208.67.220.220",
+    ],
+    IP6: [
+        # OpenDNS.
+        "2620:119:35::35",
+        "2620:119:53::53",
+    ]
+}
 
-    async def parse_af(self):
-        self.af = None
-        if self.route is not None:
-            self.af = self.route.af
+async def async_res_domain_af(af, host):
+    # Get IP of domain based on specific address family.
+    nameservers = DNS_NAMESERVERS[af]
+    resolver = aiodns.DNSResolver(nameservers=nameservers)
+    if af == IP4:
+        query_type = "A"
+    else:
+        query_type = "AAAA"
 
-        # Determine if IP or domain.
-        self.chosen = AF_ANY
-        if self.host is None:
-            return
+    # On success use first returned result.
+    results = await resolver.query(host, query_type)
+    if len(results):
+        result = results[0]
+        ip = ip_norm(result.host)
+        return (af, ip)
+    
+async def async_res_domain(host, route=None):
+    # Make a list of DNS res tasks.
+    tasks = []
+    for af in VALID_AFS:
+        tasks.append(
+            async_res_domain_af(af, host)
+        )
 
-        # Try parse host as an IP address.
-        try:
-            self.ip_obj = ipaddress.ip_address(self.host)
-            if self.ip_obj.version == 4:
-                if self.af not in [AF_ANY, IP4, None]:
-                    raise Exception("Found IP doesn't match AF.")
+    # Concurrently get IP fields from domain.
+    return strip_none(
+        await asyncio.gather(
+            *tasks,
+            return_exceptions=False
+        )
+    )
 
-                self.chosen = socket.AF_INET
-                self.ips[AF_ANY] = self.ips[socket.AF_INET] = self.host
-            else:
-                if self.af not in [AF_ANY, IP6, None]:
-                    raise Exception("Found IP doesn't match AF.")
+async def sock_res_domain(host, route=None):
+    # Current event loop.
+    loop = asyncio.get_event_loop()
 
-                self.chosen = socket.AF_INET6
-                self.ips[AF_ANY] = self.ips[socket.AF_INET6] = self.host
+    # Uses a process pool executor.
+    # Caution needed here.
+    addr_infos = await loop.getaddrinfo(
+        host,
+        None,
+    )
 
-            self.host_type = HOST_TYPE_IP
-        except Exception as e:
-            self.ip_obj = None
-            self.host_type = HOST_TYPE_DOMAIN
-            self.chosen = self.af
-            log_exception()
+    # Pull out IP4 and IP6 results.
+    results = []
+    for addr_info in addr_infos:
+        for af in VALID_AFS:
+            if af == addr_info[0]:
+                ip = ip_norm(addr_info[4][0])
+                result = (af, ip)
+                results.append(result)
 
-        return self.chosen
+    return results
 
-    async def res(self):
-        loop = asyncio.get_event_loop()
-
-        # Load AF of any fixed IPs.
-        if self.af is None:
-            await self.parse_af()
-
-        # Set IP port tup.
-        self.as_tup = self.tup = self.tuple = ()
-
-        # Set target to resolve.
-        if self.host_type == HOST_TYPE_IP:
-            # Target is an IP.
-            target = self.ips[self.chosen]
-
-            # Patch 0 dest.
-            if target in VALID_ANY_ADDR:
-                if af == IP4:
-                    target = "127.0.0.1"
-                else:
-                    target = "::1"
-        else:
-            # Target is a domain name.
-            target = self.host
-
-        # Get endpoint connect / bind results.
-        results = []
-        afs_wanted = VALID_AFS if self.chosen == AF_ANY else [self.chosen]
-        family = 0 if len(afs_wanted) == 2 else afs_wanted[0]
-        try:
-            addr_infos = loop.getaddrinfo(
-                target,
-                self.port,
-                type=self.sock_type,
-                family=family
-            )
-            results = await asyncio.wait_for(addr_infos, self.timeout)
-        except Exception as e:
-            log(f"{target} {self.port} {family} {self.sock_type}")
-            log_exception()
-            log("> Address: res e = %s" % (str(e)))
-
-        # Choose a tuple that matches requirements.
-        addr_tup = None
-        afs_found = []  
-        for addr_info in results:
-            for af in afs_wanted:
-                if af == addr_info[0]:
-                    addr_tup = addr_info[4]
-                    if af not in afs_found:
-                        afs_found.append(af)
-
-        # Strip %n from tup 0 if it exists.
-        """
-        addr_tup = (
-            ip_strip_if(addr_tup[0]),
-        ) + addr_tup[1:]
-        """
-
-        # No results found for our requirements.
-        if addr_tup is None:
-            log("> Address: res couldnt find compatible address")
-            self.chosen = AF_NONE
-            raise Exception("couldnt translate address")
-        else:
-            self.tup = addr_tup
-
-        # Set attributes of the IP like if private or loopback.
-        self.ip_set_info(ip_strip_if(addr_tup[0]))
-        self.afs_found = afs_found
+class DestTup():
+    def __init__(self, af, ip, port, ipr):
+        self.af = af
+        self.ip = ip
+        self.port = port
+        self.tup = (ip, port)
+        self.ipr = ipr
+        self.is_private = ipr.is_private
+        self.is_public = ipr.is_public
+        self.is_loopback = ipr.is_loopback
         self.resolved = True
-        return self
+
+    def supported(self):
+        return [self.af]
+
+class Address():
+    def __init__(self, host, port, conf=NET_CONF):
+        self.host = host
+        self.port = port
+        self.conf = conf
+        self.IP6 = self.IP4 = None
+        self.v6_ipr = self.v4_ipr = None
+        self.resolved = False
+    
+    def patch_ip(self, ip, ipr, nic_id=None):
+        """
+        When a daemon is bound to the any address you can't just
+        use that address to connect to as it's not a valid addr.
+        In that case -- rewrite the addr to loopback.
+        """
+        if ipr.ip in VALID_ANY_ADDR:
+            if ipr.af == IP4:
+                return "127.0.0.1"
+            else:
+                return "::1"
+            
+        # Patch link local addresses.
+        if ipr.af == IP6 and ip not in ["::", "::1"]:
+            if ipr.is_private:
+                return ip6_patch_bind_ip(
+                    ip,
+                    nic_id
+                )
+
+        return ip
+
+    async def res(self, route=None, host=None):
+        host = host or self.host
+        try:
+            # Ensure human-readable IPs aren't passed as binary.
+            if isinstance(host, bytes):
+                host = to_s(host)
+
+            # If it can be parsed as an IP.
+            # Then it's an IP.
+            ipr = IPRange(host)
+            ipr.is_loopback = False
+
+            # Used to patch IPv6 private IPs.
+            if route is not None:
+                nic_id = route.interface.id
+            else:
+                nic_id = None
+        
+            # Apply any needed IP patches.
+            ip = self.patch_ip(ipr_norm(ipr), ipr, nic_id)
+            if ip in VALID_LOOPBACKS:
+                ipr.is_loopback = True
+
+            # What type of IP.
+            if ipr.af == IP4:
+                self.IP4 = ip
+                self.v4_ipr = ipr
+            if ipr.af == IP6:
+                self.IP6 = ip
+                self.v6_ipr = ipr
+        except:
+            # Resolve domain to IP.
+            try:
+                # Uses a manual DNS req to resolve a domain.
+                # Bypasses any DNS errors.
+                results = await asyncio.wait_for(
+                    async_res_domain(host, route),
+                    self.conf["dns_timeout"]
+                )
+
+                # Ensure some IPs returned.
+                if not len(results):
+                    raise Exception("Using fallback DNS")
+            except:
+                # If that fails -- fallback to getaddrinfo.
+                results = await asyncio.wait_for(
+                    sock_res_domain(host, route),
+                    self.conf["dns_timeout"]
+                )
+
+                # Otherwise complete failure.
+                if not len(results):
+                    raise Exception("could not resolve addr.")
+
+            # Save results in class field.
+            for result in results:
+                _, ip = result
+                await self.res(route=route, host=ip)
+
+        self.resolved = True
 
     def __await__(self):
         return self.res().__await__()
 
-    def supported(self):
-        return self.afs_found
+    def select_ip(self, af):
+        if af == IP4:
+            ip, ipr = self.IP4, self.v4_ipr
+        if af == IP6:
+            ip, ipr = self.IP6, self.v6_ipr
 
-    def ip_set_info(self, ip_s):
-        # Determine whether IP is public or private.
-        ip_obj = ip_f(ip_s)
-        if ip_obj.is_private:
-            self.is_private = True
-            self.is_public = False
-        else:
-            self.is_private = False
-            self.is_public = True
+        return DestTup(af, ip, self.port, ipr)
 
-        # Used for IPv6 code.
-        if str(ip_obj) in VALID_LOOPBACKS:
-            self.is_loopback = True
-        else:
-            self.is_loopback = False
 
-    def target(self):
-        return self.tup[0]
 
-    def as_tuple(self):
-        return self.as_tup
+async def workstation():
+    host = "google.com"
+    addr = AddressRewrite(host, 80)
 
-    def to_dict(self):
-        return {
-            "host_type": self.host_type,
-            "host": self.host,
-            "port": self.port,
-            "sock_type": self.sock_type,
-            "timeout": self.timeout,
-            "ips": self.ips,
-            "chosen": self.chosen,
-            "afs_found": self.afs_found,
-            "is_private": self.is_private,
-            "is_public": self.is_public,
-            "is_loopback": self.is_loopback,
-            "tup": self.tup,
-            "resolved": self.resolved
-        }
+    
+    await addr.res()
 
-    @staticmethod
-    def from_dict(d):
-        a = Address(
-            host=d["host"],
-            port=d["port"],
-            sock_type=d["sock_type"],
-            timeout=d["timeout"]
-        )
 
-        for key in d:
-            setattr(a, key, d[key])
-            #a.__setattr__("self." + key, d[key])
+    #await addr.fallback_res_domain(host)
 
-        return a
+    print(addr.IP4)
+    print(addr.IP6)
+    print(addr)
 
-    # Pickle.
-    def __getstate__(self):
-        return self.to_dict()
+#async_test(workstation)
 
-    # Unpickle.
-    def __setstate__(self, state):
-        o = self.from_dict(state)
-        self.__dict__ = o.__dict__
 
-    # Show a representation of this object.
-    def __repr__(self):
-        return f"Address.from_dict({str(self)})"
-
-    # Make this interface printable because it's useful.
-    def __str__(self):
-        return pprint.pformat(self.tup)
-
-    def __hash__(self):
-        return hash(repr(self))
-
-    def  __len__(self):
-        return 0
-
-async def test_address(): # pragma: no cover
-    from p2pd.interface import init_p2pd, Interface
-    i = await Interface()
-    print(i)
-    a = await Address("www.google.com", 80, i.route()).res()
-
-    d = a.to_dict()
-    print(d)
-
-    x = Address.from_dict(d)
-    print(str(x))
-
-    y = repr(x)
-    print(type(y))
-
-if __name__ == "__main__": # pragma: no cover
-    from .interface import Interface
-    from .net import IP6
-    from .utils import timestamp, async_test
-    async_test(test_address)

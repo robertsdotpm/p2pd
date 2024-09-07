@@ -182,7 +182,8 @@ class ToxiTunnel():
         self.port = port
         self.client = client
         self.curl = self.client.curl
-        self.nic = self.client.addr.route.interface
+        self.nic = self.client.route.interface
+        self.af = self.client.route.af
 
     async def new_toxic(self, toxic):
         path = f"/proxies/{self.name}/toxics"
@@ -207,7 +208,7 @@ class ToxiTunnel():
     async def get_pipe(self, conf=None):
         # Build new route.
         conf = conf or self.client.conf
-        route = self.nic.route()
+        route = self.nic.route(self.af)
         await route.bind()
 
         # Resolve tunnel address,
@@ -221,11 +222,11 @@ class ToxiTunnel():
         if pipe is None:
             raise Exception("Cant get tunnel pipe.")
         else:
-            return pipe, dest.tup
+            return pipe, dest
     
     async def get_curl(self):
         # Build new route.
-        route = self.nic.route()
+        route = self.nic.route(self.af)
         await route.bind()
 
         # Connect to the listen server for this tunnel.
@@ -234,7 +235,7 @@ class ToxiTunnel():
         except:
             raise Exception("get curl for tunnel client addr res")
         
-        return WebCurl(addr=dest, do_close=0)
+        return WebCurl(addr=dest, route=route, do_close=0)
 
     # Close the tunnel on the toxiproxy instance.
     async def close(self):
@@ -249,14 +250,15 @@ class ToxiTunnel():
         return resp.out
 
 class ToxiClient():
-    def __init__(self, addr, conf=NET_CONF):
+    def __init__(self, addr, route, conf=NET_CONF):
         self.addr = addr
+        self.route = route
         self.conf = conf
         self.tunnels = []
 
     async def start(self):
         hdrs = [[b"user-agent", b"toxiproxy-cli"]]
-        self.curl = WebCurl(self.addr, hdrs=hdrs)
+        self.curl = WebCurl(self.addr, self.route, hdrs=hdrs)
         try:
             await self.version()
         except:
@@ -271,11 +273,11 @@ class ToxiClient():
 
     async def new_tunnel(self, addr, name=None, proto=TCP):
         name = name or to_s(rand_plain(10))
-        listen_ip = self.addr.tup[0]
+        listen_ip = self.addr[0]
         json_body = {
             "name": name,
             "listen": f"{listen_ip}:0",
-            "upstream": f"{addr.target()}:{addr.port}",
+            "upstream": f"{addr[0]}:{addr[1]}",
             "proto": proto,
             "enabled": True
         }
@@ -318,7 +320,7 @@ async def test_setup(netifaces=None, client=None):
         i = await Interface().start_local(skip_resolve=True)
         r = i.route()
         addr = ("localhost", 8474)
-        client = ToxiClient(addr)
+        client = ToxiClient(addr, r)
         await client.start()
 
     return client

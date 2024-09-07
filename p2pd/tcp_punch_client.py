@@ -185,7 +185,7 @@ class TCPPuncher():
         pipe = await pipe_open(
             route=route,
             proto=TCP,
-            dest=*sock.getpeername(),
+            dest=sock.getpeername()[:2],
             sock=sock,
             msg_cb=self.node.msg_cb
         )

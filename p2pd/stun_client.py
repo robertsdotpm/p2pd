@@ -54,10 +54,10 @@ from .route_defs import Route
 
 
 class STUNClient():
-    def __init__(self, dest, proto=UDP, mode=RFC3489, conf=NET_CONF):
+    def __init__(self, af, dest, nic, proto=UDP, mode=RFC3489, conf=NET_CONF):
         self.dest = dest
-        self.interface = self.dest.route.interface
-        self.af = self.dest.af
+        self.interface = nic
+        self.af = af
         self.proto = proto
         self.mode = mode
         self.conf = conf
@@ -204,7 +204,9 @@ async def get_stun_clients(af, max_agree, interface, proto=UDP, conf=NET_CONF):
                 serv_info["primary"]["port"],
             )
             return STUNClient(
+                af,
                 dest,
+                interface,
                 proto=proto,
                 mode=serv_info["mode"],
                 conf=conf,
@@ -300,7 +302,7 @@ async def test_con_stun_client():
             STUND_SERVERS[af][n]["primary"]["ip"],
             STUND_SERVERS[af][n]["primary"]["port"],
         )
-        stun_client = STUNClient(dest, proto=proto)
+        stun_client = STUNClient(dest, i, proto=proto)
         stun_clients.append(stun_client)
         task = stun_client.get_wan_ip()
         tasks.append(task)

@@ -193,7 +193,7 @@ async def process_replies(self):
         These indicate a peer who sent data to our relay address.
         Attempt to look for these attributes and process them if found.
         """
-        msg_data, peer_tup = turn_get_data_attr(turn_msg, self.turn_addr.af, self)
+        msg_data, peer_tup = turn_get_data_attr(turn_msg, self.turn_pipe.route.af, self)
 
         if msg_data is not None and peer_tup is not None:
             print("got turn data msg")
@@ -259,7 +259,7 @@ async def process_replies(self):
         # A few important attributes are saved into the client for future use.
         # Mostly details for relaying and authentication.
         try:
-            error_code, error_msg = await process_attributes(self.turn_addr.af, self, turn_msg)
+            error_code, error_msg = await process_attributes(self.turn_pipe.route.af, self, turn_msg)
         except Exception:
             log_exception()
             continue

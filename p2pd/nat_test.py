@@ -52,16 +52,16 @@ NAT_TEST_SCHEMA = [
 ]
 
 async def nat_test_exec(dest_addr, reply_addr, payload, mode, pipe, q, test_coro):
-    stun_client = STUNClient(dest_addr, mode=mode)
+    stun_client = STUNClient(pipe.route.af, dest_addr, pipe.route.interface, mode=mode)
     if payload == STUN_CHANGE_NONE:
         reply = await stun_client.get_stun_reply(pipe)
     if payload == STUN_CHANGE_PORT:
         reply = await stun_client.get_change_port_reply(
-            reply_addr.tup, pipe
+            reply_addr, pipe
         )
     if payload == STUN_CHANGE_BOTH:
         reply = await stun_client.get_change_tup_reply(
-            reply_addr.tup, pipe
+            reply_addr, pipe
         )
 
     ret = await stun_reply_to_ret_dic(reply)

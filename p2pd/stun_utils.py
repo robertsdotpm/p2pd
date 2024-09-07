@@ -96,7 +96,7 @@ async def get_stun_reply(mode, dest_addr, reply_addr, pipe, attrs=[]):
         msg.write_attr(attr_code, attr_data)
 
     # Subscribe to replies that match the req tran ID.
-    sub = sub_to_stun_reply(msg.txn_id, reply_addr.tup)
+    sub = sub_to_stun_reply(msg.txn_id, reply_addr)
     pipe.subscribe(sub)
 
     # Send the req and get a matching reply.
@@ -107,9 +107,9 @@ async def get_stun_reply(mode, dest_addr, reply_addr, pipe, attrs=[]):
         raise ErrorNoReply("STUN recv loop got no reply.")
 
     # Return response.
-    reply, _ = stun_proto(recv_buf, reply_addr.af)
+    reply, _ = stun_proto(recv_buf, pipe.route.af)
     reply.pipe = pipe
-    reply.stup = reply_addr.tup
+    reply.stup = reply_addr
     return reply
 
 async def stun_reply_to_ret_dic(reply):

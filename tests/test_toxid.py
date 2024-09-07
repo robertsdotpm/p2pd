@@ -21,6 +21,7 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
         toxid_addr = ("127.0.0.1", toxiport)
         client = await ToxiClient(
             toxid_addr,
+            i.route(IP4),
             net_conf
         ).start()
 
@@ -31,7 +32,7 @@ class TestToxid(unittest.IsolatedAsyncioTestCase):
         await echod.add_listener(TCP, route)
 
         # Address to connect to echod.
-        echo_dest = ("127.0.0.1", echodpor)
+        echo_dest = ("127.0.0.1", echodport)
         return net_conf, i, toxid, toxid_addr, client, echod, echo_dest
 
     """

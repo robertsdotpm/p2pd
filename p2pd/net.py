@@ -490,7 +490,7 @@ async def send_recv_loop(dest, pipe, buf, sub=SUB_ALL):
     n = 1 if pipe.sock.type == TCP else 3
     for _ in range(0, n):
         try:
-            await pipe.send(buf, dest.tup)
+            await pipe.send(buf, dest)
             return await pipe.recv(
                 sub=sub,
                 timeout=pipe.conf["recv_timeout"]

@@ -119,7 +119,7 @@ async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, h
         p.subscribe(SUB_ALL)
 
         # Set host and port from con service.
-        host, port = dest.tup
+        host, port = dest
 
         # But overwrite host if it's set.
         hdr_index, new_host = get_hdr(b"Host", headers)
@@ -137,7 +137,7 @@ async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, h
             headers=headers
         )
 
-        await p.send(buf, dest.tup)
+        await p.send(buf, dest)
         out = await p.recv(SUB_ALL, timeout=conf["recv_timeout"])
     except Exception:
         log_exception()
@@ -253,12 +253,10 @@ def Payload(f, url={}, body=b""):
 # urllib.parse.urlencode(params)
 
 # Returns pipe, ParseHTTPResponse
-async def do_web_req(addr, http_buf, do_close, conf=NET_CONF):
-    log(f"{addr.route} {addr}")
+async def do_web_req(addr, http_buf, do_close, route, conf=NET_CONF):
+    log(f"{addr}")
 
     # Open TCP connection to HTTP server.
-    route = addr.route.interface.route(addr.af)
-    route = await route.bind()
     try:
         p = await pipe_open(
             route=route,
@@ -276,7 +274,7 @@ async def do_web_req(addr, http_buf, do_close, conf=NET_CONF):
     # Send HTTP request.
     try:
         p.subscribe(SUB_ALL)
-        await p.send(http_buf, addr.tup)
+        await p.send(http_buf, addr)
         out = await p.recv(SUB_ALL, timeout=conf['recv_timeout'])
     except Exception as e:
         log_exception()
@@ -305,9 +303,9 @@ resp.info # parsed http reply
 """
 
 class WebCurl():
-    def __init__(self, addr, throttle=0, do_close=1, hdrs=[]):
-        # Address addr.route
+    def __init__(self, addr, route, throttle=0, do_close=1, hdrs=[]):
         self.addr = addr
+        self.route = route
         self.url_params = {}
         self.hdrs = hdrs
         self.body = b""
@@ -318,7 +316,8 @@ class WebCurl():
 
     # Figure out less brainlet way to do this.
     def copy(self):
-        client = WebCurl(self.addr)
+        route = copy.deepcopy(self.route)
+        client = WebCurl(self.addr, route)
         client.url_params = self.url_params
         client.body = self.body
         client.path = self.path
@@ -362,13 +361,14 @@ class WebCurl():
 
         # Build a HTTP request to send to server.
         req_buf = http_req_buf(
-            af=self.addr.af,
-            host=self.addr.host,
+            af=self.route.af,
+            host=self.addr[0],
             path=path,
             method=method,
             payload=self.body_payload,
             headers=hdrs
         )
+
 
         # Save request for debugging.
         if IS_DEBUG:
@@ -379,7 +379,9 @@ class WebCurl():
             await asyncio.sleep(self.throttle)
 
         # Make the HTTP request to the server.
+        route = await self.route.bind()
         pipe, info = await do_web_req(
+            route=route,
             addr=self.addr, 
             http_buf=req_buf,
             do_close=self.do_close,

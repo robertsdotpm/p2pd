@@ -31,11 +31,14 @@ class TestSock(unittest.IsolatedAsyncioTestCase):
         af = i.supported()[0]
         r = await i.route(af).bind(0)
         d = ("8.8.8.8", 53)
-        s = await socket_factory(route=r, dest_addr=d, sock_type=TCP, conf=NET_CONF)
+        dest = Address("8.8.8.8", 53)
+        await dest.res(r)
+        dest = dest.select_ip(IP4)
+        s = await socket_factory(route=r, dest_addr=dest, sock_type=TCP, conf=NET_CONF)
         con_task = asyncio.create_task(
             loop.sock_connect(
                 s, 
-                d.tup
+                dest.tup
             )
         )
 

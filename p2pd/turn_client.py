@@ -58,8 +58,10 @@ class TURNClient(PipeEvents):
 
         # Set from attributes in replies.
         self.realm = turn_realm
-        if turn_addr.host_type == HOST_TYPE_DOMAIN:
+        """
+        if turn_realm is None:
             self.realm = turn_addr.host
+        """
         self.key = None
         self.nonce = None
 
@@ -139,7 +141,6 @@ class TURNClient(PipeEvents):
             self.auth_event.set()
 
         # Connect to TURN server over UDP.
-        af = self.turn_addr.af
         self.turn_pipe = await pipe_open(
             route=self.route,
             proto=UDP,
@@ -292,11 +293,11 @@ class TURNClient(PipeEvents):
         # Sanity checking on the dest IP.
         # If dest IP doesn't match this TURN server IP
         # it means maybe the wrong relay IP is used.
-        if dest_tup[0] != self.turn_addr.tup[0]:
+        if dest_tup[0] != self.turn_addr[0]:
             error = f"""
             The destination IP for TURN.send 
             is different to the IP address of the current 
-            server {dest_tup[0]} !+ {self.turn_addr.tup[0]}
+            server {dest_tup[0]} !+ {self.turn_addr[0]}
             this could indicate that an incorrect 
             address is being used for the send call 
             (like a peer address) or it may mean 
@@ -342,7 +343,7 @@ class TURNClient(PipeEvents):
                 buf.write_hmac(self.key)
 
         buf = buf.pack()
-        await self.turn_pipe.send(buf, self.turn_addr.tup)
+        await self.turn_pipe.send(buf, self.turn_addr)
 
     # Record TURN protocol messages by TXID.
     # Events are triggered on receipt.
@@ -380,11 +381,11 @@ class TURNClient(PipeEvents):
     # Allows a peer to send messages to our relay address.
     async def accept_peer(self, peer_tup, peer_relay_tup):
         # Basic validation for logging.
-        if peer_relay_tup[0] != self.turn_addr.tup[0]:
+        if peer_relay_tup[0] != self.turn_addr[0]:
             error = f"""
             TURN accept peer has a relay tup different 
             to the IP of the current server 
-            {peer_relay_tup[0]} != {self.turn_addr.tup[0]}
+            {peer_relay_tup[0]} != {self.turn_addr[0]}
             this may indicate an error or mean different 
             TURN servers are being mixed.
             """
