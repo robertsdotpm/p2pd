@@ -256,7 +256,8 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
     cidr = af_to_cidr(af)
     af_default_nic_ip = ""
     if enable_default:
-        af_default_nic_ip = determine_if_path(af, "google.com")
+        dest = "8.8.8.8" if af == IP4 else "2001:4860:4860::8888"
+        af_default_nic_ip = determine_if_path(af, dest)
         tasks.append(
             get_wan_ip_cfab(
                 af_default_nic_ip,

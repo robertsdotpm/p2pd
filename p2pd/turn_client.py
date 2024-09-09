@@ -52,12 +52,14 @@ class TURNClient(PipeEvents):
         # Username and password are optional.
         self.requires_auth = True
         self.turn_addr = turn_addr
-        self.turn_user = turn_user
-        self.turn_pw = turn_pw
+        self.turn_user = to_b(turn_user)
+        self.turn_pw = to_b(turn_pw)
         self.msg_cb = msg_cb
 
         # Set from attributes in replies.
         self.realm = turn_realm
+        if turn_realm is not None:
+            self.realm = to_b(turn_realm)
         """
         if turn_realm is None:
             self.realm = turn_addr.host
@@ -110,8 +112,8 @@ class TURNClient(PipeEvents):
 
     def get_turn_server(self, af=None):
         return {
-            "host": self.turn_addr.host,
-            "port": self.turn_addr.port,
+            "host": self.turn_addr.tup[0],
+            "port": self.turn_addr.tup[1],
             "afs": [af],
             "user": self.turn_user,
             "pass": self.turn_pw,

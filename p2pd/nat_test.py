@@ -247,7 +247,7 @@ async def nat_test_main():
 
     await asyncio.sleep(2)
 
-    return
+    
     af = IP4
     route = await i.route(af).bind(0)
     pipe = await pipe_open(UDP, route=route)

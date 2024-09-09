@@ -96,6 +96,7 @@ class P2PNode(P2PNodeExtra, Daemon):
 
     async def start(self, sys_clock=None):
         # Load ifs.
+        t = time.time()
         if not len(self.ifs):
             try:
                 if_names = await list_interfaces()
@@ -103,30 +104,37 @@ class P2PNode(P2PNodeExtra, Daemon):
             except:
                 log_exception()
                 self.ifs = []
+        print(time.time() - t)
 
         # Managed to load IFs?
         if not len(self.ifs):
             raise Exception("p2p node could not load ifs.")
 
         # Set machine id.
+        t = time.time()
         self.machine_id = await self.load_machine_id(
             "p2pd",
             self.ifs[0].netifaces
         )
+        print(time.time() - t)
 
         # Managed to load machine IDs?
         if self.machine_id in (None, ""):
             raise Exception("Could not load machine id.")
 
         # Used by TCP punch clients.
+        t = time.time()
         await self.load_stun_clients()
+        print(time.time() - t)
 
         # MQTT server offsets for signal protocol.
         if self.conf["sig_pipe_no"]:
             await self.load_signal_pipes()
 
         # Multiprocess support for TCP punching and NTP sync.
+        t = time.time()
         await self.setup_punch_coordination(sys_clock)
+        print(time.time() - t)
             
         # Accept TCP punch requests.
         self.start_punch_worker()

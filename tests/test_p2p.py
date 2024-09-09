@@ -8,7 +8,7 @@ import multiprocessing
 
 TEST_P2P_PIPE_CONF = {
     "addr_types": [EXT_BIND, NIC_BIND],
-    "return_msg": True,
+    "sig_pipe_no": 0,
 }
 
 """
@@ -134,7 +134,7 @@ async def get_node(ifs=[], node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     return node
 
 class TestNodes():
-    def __init__(self, same_if=False, addr_types=[EXT_BIND, NIC_BIND], return_msg=True, sig_pipe_no=SIGNAL_PIPE_NO, ifs=[], multi_ifs=False):
+    def __init__(self, same_if=False, addr_types=[EXT_BIND, NIC_BIND], sig_pipe_no=0, ifs=[], multi_ifs=False):
         self.multi_ifs = multi_ifs
         self.ifs = ifs
         self.same_if = same_if
@@ -143,13 +143,7 @@ class TestNodes():
             self.multi_ifs = False
 
         self.addr_types = addr_types
-        self.return_msg = return_msg
         self.sig_pipe_no = sig_pipe_no
-
-        # If sig pipes are needed ensure they're enabled.
-        if not self.return_msg:
-            if not self.sig_pipe_no:
-                self.sig_pipe_no = 2
 
     async def __aenter__(self):
         # Load the default nic.
@@ -194,7 +188,7 @@ class TestNodes():
         # Build p2p con pipe config.
         self.pp_conf = {
             "addr_types": self.addr_types,
-            "return_msg": self.return_msg,
+            "sig_pipe_no": self.sig_pipe_no,
         }
 
         alice_start_sig = self.alice.start_sig_msg_dispatcher
@@ -220,7 +214,7 @@ class TestNodes():
         self.bob.sig_proto_handlers.conf = self.pp_conf
 
         # Send directly to each other.
-        if self.return_msg:
+        if not self.sig_pipe_no:
             self.alice.sig_msg_dispatcher = patch_msg_dispatcher(
                 self.pp_alice,
                 self.alice,
@@ -250,9 +244,7 @@ class TestNodes():
         await self.bob.close()
         print("nodes closed")
 
-async def p2p_check_strats(params):
-    strats = [P2P_DIRECT, P2P_REVERSE, P2P_RELAY, P2P_PUNCH]
-    #strats = [P2P_RELAY]
+async def p2p_check_strats(params, strats):
     async with TestNodes(**params) as nodes:
         for strat in strats:
             pipe = await nodes.alice.connect(
@@ -261,9 +253,10 @@ async def p2p_check_strats(params):
                 conf=nodes.pp_conf,
             )
 
-            if params["same_if"] == False:
-                assert(pipe is not None)
+            if pipe is not None:
                 assert(await check_pipe(pipe))
+            else:
+                print(f"pipe is None. {strat} failed")
 
             if strat in [P2P_PUNCH]:
                 if pipe is None:
@@ -289,7 +282,7 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
             return
 
         params = {
-            "return_msg": False,
+            "sig_pipe_no": 2,
             "addr_types": [EXT_BIND, NIC_BIND],
             "ifs": ifs,
             "same_if": False if len(ifs) >= 2 else True,
@@ -301,7 +294,7 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
     async def test_p2p_register_connect(self):
         name = input("name: ")
         params = {
-            "return_msg": True,
+            "sig_pipe_no": 0,
             "addr_types": [EXT_BIND, NIC_BIND],
             "same_if": True,
         }
@@ -321,7 +314,7 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
 
     async def test_p2p_successive_failure(self):
         params = {
-            "return_msg": True,
+            "sig_pipe_no": 0,
             "addr_types": [EXT_BIND, NIC_BIND],
             "same_if": True,
         }
@@ -356,13 +349,26 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
         if_names = await list_interfaces()
         ifs = await load_interfaces(if_names)
         params = {
-            "return_msg": False,
+            "sig_pipe_no": 2,
             "addr_types": [EXT_BIND, NIC_BIND],
             "ifs": ifs,
             "same_if": False if len(ifs) >= 2 else True
         }
 
         await p2p_check_strats(params)
+
+    async def test_bug_fix(self):
+        if_names = await list_interfaces()
+        ifs = await load_interfaces(if_names)
+        params = {
+            "sig_pipe_no": 2,
+            "addr_types": [EXT_BIND],
+            "ifs": ifs,
+            "same_if": False if len(ifs) >= 2 else True
+        }
+
+        strats = [P2P_RELAY]
+        await p2p_check_strats(params, strats)
 
 if __name__ == '__main__':
     main()

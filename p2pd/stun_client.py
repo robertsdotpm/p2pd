@@ -110,7 +110,7 @@ class STUNClient():
         # Expect a reply from this address.
         reply_addr = (
             # The IP stays the same.
-            self.dest.tup[0],
+            self.dest[0],
 
             # But expect the reply on the change port.
             ctup[1],
@@ -133,21 +133,12 @@ class STUNClient():
             error = "STUN change port only supported in RFC3480 mode."
             raise ErrorFeatureDeprecated(error)
 
-        # Expect a reply from this address.
-        reply_addr = (
-            # The IP differs.
-            ctup[0],
-
-            # ... and so does the port.
-            ctup[1],
-        )
-
         # Flag to make the tup change request.
         pipe = await self._get_dest_pipe(pipe)
         return await get_stun_reply(
             self.mode,
             self.dest,
-            reply_addr,
+            ctup,
             pipe,
             [[STUNAttrs.ChangeRequest, b"\0\0\0\6"]]
         )

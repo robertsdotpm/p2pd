@@ -163,7 +163,6 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
     # Create punching async task list.
     tasks = []
     steps = int((secs * 1000) / ms_spacing)
-    route = interface.route(af)
 
     assert(steps > 0)
     assert(steps)
@@ -172,12 +171,12 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
 
     for i in range(0, len(send_mappings)):
         # Endpoint to punch to.
-        dest = (
-            dest_addr,
-            recv_mappings[i].remote,
-        )
-
         print(f"addr: {send_mappings[i].local} {recv_mappings[i].remote} {dest_addr}")
+
+        # Validate IP address.
+        dest = Address(dest_addr, recv_mappings[i].remote)
+        await dest.res(interface.route(af))
+        dest = dest.select_ip(af)
 
         # Attempt to punch dest at intervals.
         for sleep_time in range(0, steps):

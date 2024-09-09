@@ -539,3 +539,10 @@ def determine_if_path(af, dest):
         s.close()
 
     return src_ip
+
+def client_tup_norm(client_tup):
+    if client_tup is None:
+        return None
+    
+    ip = ip_norm(client_tup[0])
+    return (ip, client_tup[1])

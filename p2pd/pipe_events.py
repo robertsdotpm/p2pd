@@ -1,3 +1,20 @@
+"""
+Python's asyncio protocol classes seem to return human-readable
+tuples that identify the packet's sender. At first glance this
+seems to make sense. For people use the readable form of
+addresses when working with them. But the network stack
+needs it in binary form for routing. Hence, it will end up
+having to convert an address to/from binary.
+
+The problem is more complicated because IPv6 can have several representations of the same address in a readable form.
+E.g. omitting zero portions with : or leading zero parts
+of a segment. If you're trying to index a reply by an address it adds extra work because you have to normalize the address (for IPv6.)
+Extra work means extra CPU.
+
+Networking is generally supposed to be as fast as possible so
+this design might not be ideal.
+"""
+
 import asyncio
 from .utils import *
 from .net import *
@@ -125,7 +142,7 @@ class PipeEvents(BaseACKProto):
                 pass
 
         return client_tup
-
+    
     def add_tcp_client(self, client):
         # Save location of this client pipe in the table.
         client.p_client_entry = self.p_client_insert
@@ -330,7 +347,7 @@ class PipeEvents(BaseACKProto):
 
     # UDP packets.
     def datagram_received(self, data, client_tup):
-        log(f"Base proto recv udp = {client_tup}")
+        log(f"Base proto recv udp = {client_tup} {data}")
         if self.transport is None:
             log(f"Skipping process data cause transport none 1.")
             return
@@ -344,9 +361,10 @@ class PipeEvents(BaseACKProto):
             log(f"Skipping process data cause transport none 2.")
             return
 
+        client_tup = self.transport.get_extra_info('socket').getpeername()
         self.handle_data(
             data,
-            self.transport.get_extra_info('socket').getpeername()
+            client_tup
         )
 
     async def close(self, do_sleep=True):

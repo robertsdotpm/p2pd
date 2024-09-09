@@ -3,6 +3,7 @@
 from .ecies import generate_key, decrypt, encrypt
 from .pipe_utils import *
 from .pnp_utils import *
+from .address import *
 
 """
 Important: since this immediately returns if one
@@ -11,9 +12,10 @@ status receipt it may return an invalid value
 indicating that the server hasn't done the previous call yet.
 """
 class PNPClient():
-    def __init__(self, sk, dest, dest_pk, proto=TCP):
+    def __init__(self, sk, dest, dest_pk, nic, proto=TCP):
         self.dest_pk = dest_pk
         assert(isinstance(dest_pk, bytes))
+        self.nic = nic
         self.dest = dest
         self.sk = sk
         self.vkc = sk.verifying_key.to_string("compressed")
@@ -40,7 +42,10 @@ class PNPClient():
                 return t
 
     async def get_dest_pipe(self):
-        route = self.dest.route.interface.route(self.dest.route.af)
+        addr = Address(self.dest[0], self.dest[1])
+        await addr.res(self.nic.route())
+        ipr = addr.v4_ipr or addr.v6_ipr
+        route = self.nic.route(ipr.af)
         route = await route.bind()
         pipe = await pipe_open(self.proto, self.dest, route)
         return pipe
@@ -72,7 +77,7 @@ class PNPClient():
         enc_msg = encrypt(self.dest_pk, buf)
         end = 1 if self.proto == TCP else 3
         for _ in range(0, end):
-            send_success = await pipe.send(enc_msg, self.dest.tup)
+            send_success = await pipe.send(enc_msg, self.dest)
             if not send_success:
                 log(f"pnp client send pkt failure.")
 

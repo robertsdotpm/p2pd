@@ -24,6 +24,7 @@ from .ip_range import *
     
 # Filter all other messages that don't match this.
 def sub_to_stun_reply(tran_id, dest_tup):
+    dest_tup = client_tup_norm(dest_tup)
     b_msg_p = re.escape(tran_id)
     b_addr_p = b"%s:%d" % (
         re.escape(
@@ -96,8 +97,11 @@ async def get_stun_reply(mode, dest_addr, reply_addr, pipe, attrs=[]):
         msg.write_attr(attr_code, attr_data)
 
     # Subscribe to replies that match the req tran ID.
+    print(reply_addr)
+    print(dest_addr)
     sub = sub_to_stun_reply(msg.txn_id, reply_addr)
     pipe.subscribe(sub)
+    print(sub)
 
     # Send the req and get a matching reply.
     send_buf = msg.pack()

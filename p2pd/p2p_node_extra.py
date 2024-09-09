@@ -119,15 +119,14 @@ class P2PNodeExtra():
 
         # Lookup IP and port of MQTT server.
         try:
-            addr = (
+            dest_tup = (
                 server["host"],
                 server["port"],
             )
-            dest_tup = addr.tup[0:2]
         except:
             # Fallback to fixed IPs if host res fails.
             ip = server[IP4] or server[IP6]
-            dest_tup = [ip, server["port"]]
+            dest_tup = (ip, server["port"])
 
         signal_pipe = SignalMock(
             peer_id=to_s(self.node_id),

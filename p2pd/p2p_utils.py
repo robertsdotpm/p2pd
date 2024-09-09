@@ -232,11 +232,17 @@ async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=Non
             turn_server["host"],
             turn_server["port"],
         )
+        turn_addr = Address(*turn_addr)
+        await turn_addr.res(route)
+        turn_addr = turn_addr.select_ip(af).tup
     except:
         turn_addr = (
             turn_server[af],
             turn_server["port"],
         )
+        turn_addr = Address(*turn_addr)
+        await turn_addr.res(route)
+        turn_addr = turn_addr.select_ip(af).tup
 
     # Make a TURN client instance to whitelist them.
     turn_client = TURNClient(

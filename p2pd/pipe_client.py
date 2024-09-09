@@ -5,6 +5,7 @@ from .net import *
 from .ip_range import *
 
 def tup_to_sub(dest_tup):
+    dest_tup = client_tup_norm(dest_tup)
     return [
         b"", # Any message.
         re.escape(b'%s:%d' % ( # Specific IP:port.
@@ -44,6 +45,7 @@ class PipeClient(ACKUDP):
     (3) TCP and UDP servers won't have a dest.
     """
     def set_dest_tup(self, dest_tup):
+        dest_tup = client_tup_norm(dest_tup)
         self.dest_tup = dest_tup
 
     """
@@ -53,6 +55,7 @@ class PipeClient(ACKUDP):
     """
     def set_handle(self, handle, client_tup=None):
         if client_tup is not None:
+            client_tup = client_tup_norm(client_tup)
             self.handle[client_tup] = handle
         else:
             self.handle = handle
@@ -94,6 +97,9 @@ class PipeClient(ACKUDP):
         if not len(self.subs):
             log("no subs")
             return
+
+        # Norm compressed IPv6 addresses.
+        client_tup = client_tup_norm(client_tup)
 
         # Add message to queue and raise an event.
         def do_add(q):
@@ -171,6 +177,7 @@ class PipeClient(ACKUDP):
     # Async send for TCP and UDP cons.
     # Listen servers also supported.
     async def send(self, data, dest_tup):
+        dest_tup = client_tup_norm(dest_tup)
         try:
             # Get handle reference.
             if isinstance(self.handle, dict):
