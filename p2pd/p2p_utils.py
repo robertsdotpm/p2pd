@@ -48,28 +48,24 @@ def sort_if_info_by_best_nat(p2p_addr):
     # [af] = [[nat_type, if_info], ...]
     nat_pairs = {}
 
-    # Check all valid addresses.
-    for af in VALID_AFS:
-        if not len(p2p_addr[af]):
-            continue
+    # Store subset of interface details.
+    nat_pairs = []
 
-        # Store subset of interface details.
-        nat_pairs[af] = []
+    # Loop over all the interface details by address family.
+    for _, if_info in enumerate(p2p_addr):
+        # Save interface details we're interested in.
+        nat_pairs.append([
+            if_info["nat"]["type"],
+            if_info
+        ])
 
-        # Loop over all the interface details by address family.
-        for _, if_info in enumerate(p2p_addr[af]):
-            # Save interface details we're interested in.
-            nat_pairs[af].append([
-                if_info["nat"]["type"],
-                if_info
-            ])
-
-        # Sort based on NAT enum (lower = better)
-        nat_pairs[af] = sorted(
-            nat_pairs[af],
-            key=lambda x: x[0]
+    # Sort based on NAT enum (lower = better)
+    nat_pairs = sorted(
+        nat_pairs,
+        key=lambda x: x[0]
         )
 
+    return [x[1] for x in nat_pairs]
     return nat_pairs
 
 """
@@ -80,7 +76,6 @@ The hack here is just to copy the src and leave the
 parent obj unchanged. The code seems to work.
 """
 def swap_if_infos_with_overlapping_exts(src, dest):
-    src = copy.deepcopy(src)
     bound = min(len(src), len(dest))
     for i in range(0, bound):
         if i + 1 >= bound:
@@ -88,28 +83,49 @@ def swap_if_infos_with_overlapping_exts(src, dest):
 
         if src[i]["ext"] == dest[i]["ext"]:
             src[i], src[i + 1] = src[i + 1], src[i]
+            #dest[i], dest[i + 1] = dest[i + 1], dest[i]
 
-    return src
+    return dest
 
+"""
+The iterator filters the addr info for both
+P2P addresses by the best NAT.
+
+The first addr info used for both is thus the
+best possible pairing. Further iterations aren't
+likely to be any more successful so to keep things
+simple only the first iteration is tried.
+"""
 class IFInfoIter():
     def __init__(self, af, src_addr, dest_addr):
+
+        #self.src_addr = copy.deepcopy(src_addr)
+        #self.dest_addr = copy.deepcopy(dest_addr)
+        self.src_addr = list(src_addr[af].values())
+        self.dest_addr = list(dest_addr[af].values())
+        self.src_addr = sort_if_info_by_best_nat(self.src_addr)
+        self.dest_addr = sort_if_info_by_best_nat(self.dest_addr)
+
         self.our_offset = 0
         self.their_offset = 0
         self.af = af
-        self.src_addr = sort_if_info_by_best_nat(src_addr)
-        self.dest_addr = sort_if_info_by_best_nat(dest_addr)
-        cond_one = not len(self.src_addr.get(af, []))
-        cond_two = not len(self.dest_addr.get(af, [])   )
+ 
+        cond_one = not len(self.src_addr)
+        cond_two = not len(self.dest_addr)
         if cond_one or cond_two:
             self.dest_addr = self.src_addr = []
             return
 
-        self.dest_addr = dest_addr[af]
-        self.src_addr = src_addr[af]
-        self.src_addr = swap_if_infos_with_overlapping_exts(
+
+
+        
+        swap_if_infos_with_overlapping_exts(
             self.src_addr,
             self.dest_addr
         )
+    
+        
+        
         
 
     def __iter__(self):
@@ -121,7 +137,7 @@ class IFInfoIter():
             raise StopIteration
 
         # Stop when they have no new entries.
-        if self.their_offset > (len(self.dest_addr) - 1):
+        if self.their_offset >= len(self.dest_addr):
             raise StopIteration
         
         # Load addr info to use.
@@ -296,28 +312,15 @@ async def get_first_working_turn_client(af, offsets, nic, msg_cb):
             log_exception()
             continue
 
-
-"""
-The iterator filters the addr info for both
-P2P addresses by the best NAT.
-The first addr info used for both is thus the
-best possible pairing. Further iterations aren't
-likely to be any more successful so to keep things
-simple only the first iteration is tried.
-
-Note: that parse_peer_addr doesn't covert the input
-if it detects its a dict so that pre-patched
-addresses from messages can be parsed in.
-
-proto: direct_connect(... msg.meta.src)
-
-Is the only function that does this so far.
-"""
-async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=None):
-    print(f"for addr infos {conf}")
-
-
+async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply, pp, conf=None):
+    """
+    Given info on a local interface, a remote interface,
+    and a chosen connectivity technique, attempt to create
+    a connection. Adapt the technique depending on whether
+    addressing is suitably local or remote.
+    """
     async def try_addr_infos(src_info, dest_info):
+        # Local addressing and/or remote.
         for addr_type in conf["addr_types"]:
             try:
                 # Create a future for pending pipes.
@@ -326,20 +329,22 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=N
                 else:
                     pipe_id = reply.meta.pipe_id
 
+                # Allow awaiting by pipe_id.
                 pp.node.pipe_future(pipe_id)
-
 
                 # Select interface to use.
                 if_index = src_info["if_index"]
                 interface = pp.node.ifs[if_index]
 
-                # Select a specific if index.
+                # Ensure our selected NIC is what the
+                # remote peer wanted to use for the technique.
                 if reply is not None:
                     if reply.routing.dest_index != if_index:
                         print(" error our if index")
                         continue
 
                 # Support testing addr type failures.
+                # This is for test harnesses.
                 if addr_type in [NIC_FAIL, EXT_FAIL]:
                     use_addr_type = addr_type - 2
                     do_fail = True
@@ -349,6 +354,12 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=N
 
                 print(f"Addr types = {use_addr_type} do fail = {do_fail}")
 
+                """
+                Determine the best destination IP to use
+                for the connectivity technique based on
+                addressing and relationships between the
+                two machines (deep networking specific.)
+                """
                 dest_info["ip"] = str(
                     select_dest_ipr(
                         af,
@@ -364,6 +375,8 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=N
                     )
                 )
 
+                # Need a destination address.
+                # Possibly a different address type will work.
                 if dest_info["ip"] == "None":
                     print(src_info)
                     print(dest_info)
@@ -372,7 +385,12 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=N
 
                 print(dest_info["ip"])
 
-    
+                """
+                There are rules that govern the reachability
+                of a destination by a given interface. This
+                function takes care of edge cases mostly
+                to do with same-machine, multi-interfaces.
+                """
                 interface = await select_if_by_dest(
                     af,
                     dest_info["ip"],
@@ -380,7 +398,11 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=N
                     pp.node.ifs,
                 )
 
-                # Coroutine to run.
+                """
+                With all the correct interfaces and IPs
+                chosen -- call the function that will run
+                the technique to achieve connectivity.
+                """
                 result = await async_wrap_errors(
                     func(
                         af,
@@ -406,9 +428,11 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=N
                 msg = f"FAIL: {func} {use_addr_type} {result}"
                 print(msg)
                 
-                # Optional cleanup on failure.
+                """
+                Some functions require cleanup on failure.
+                Ensure that the state overtime remains clean.
+                """
                 if cleanup is not None:
-                    print(cleanup)
                     await cleanup(
                         af,
                         pipe_id,
@@ -419,45 +443,64 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, reply, pp, conf=N
                         reply,
                     )
 
+                # Delete unused futures on failure.
                 if pipe_id in pp.node.pipes:
                     del pp.node.pipes[pipe_id]
-        
             except:
-                what_exception()
+                log_exception()
 
-
-
-    # Use an AF supported by both.
     for af in VALID_AFS:
-        if reply is not None:
-            dest_info = pp.dest[af][reply.meta.src_index]
-            src_info = pp.src[af][reply.routing.dest_index]
-            
-            ret = await async_wrap_errors(
-                try_addr_infos(src_info, dest_info)
-            )
-            return ret
-
-        # Iterates by shared AFs, filtered by best NAT.
         if_info_iter = IFInfoIter(af, pp.src, pp.dest)
         if not len(if_info_iter):
             continue
 
         # Get interface offset that supports this af.
         for src_info, dest_info in if_info_iter:
-            print(src_info)
-            print(dest_info)
-            print()
+            print(f"af = {af}")
+            print(f"src info = {src_info}")
+            print(f"dest info = {dest_info}")
+
+            print(f"len iter = {len(if_info_iter)}")
+
+
+    # Use an AF supported by both.
+    count = 1
+    #max_pairs = 1
+    for af in VALID_AFS:
+        if reply is not None:
+            # Try select if info based on their chosen offset.
+            src_info = pp.src[af][reply.routing.dest_index]
+            dest_info = pp.dest[af][reply.meta.src_index]
             ret = await async_wrap_errors(
                 try_addr_infos(src_info, dest_info)
             )
-            if ret is not None:
-                return ret
 
+            return ret
 
-            # Only use iter to order by NAT.
-            break
+        # Iterates by shared AFs
+        # filtered by best NAT (non-overlapping WANS.)
+        if_info_iter = IFInfoIter(af, pp.src, pp.dest)
+        if not len(if_info_iter):
+            continue
 
+        # Get interface offset that supports this af.
+        for src_info, dest_info in if_info_iter:
+            # Only try up to N pairs per technique.
+            # Technique-specific N to avoid lengthy delays.
+            for _ in range(count, max_pairs + 1):
+                print(src_info)
+                print(dest_info)
+                print()
+                ret = await async_wrap_errors(
+                    try_addr_infos(src_info, dest_info)
+                )
+
+                # Success so return.
+                if ret is not None:
+                    return ret
+
+                # Cleanup here?
+                
     # Failure.
     return None
 

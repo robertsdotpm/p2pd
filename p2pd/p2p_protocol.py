@@ -73,6 +73,12 @@ class SigProtoHandlers():
             print(f"Received message not intended for us. {dest['node_id']} {node_id}")
             return
         
+        # Old message?
+        if msg.meta.pipe_id in self.seen:
+            return
+        else:
+            self.seen[msg.meta.pipe_id] = time.time()
+        
         # Allow encryption.
         if is_enc:
             src_node_id = msg.meta.src["node_id"]

@@ -209,7 +209,7 @@ class P2PNodeExtra():
 
         return overlap + non_overlap
 
-    async def await_peer_con(self, msg, m=0):
+    async def await_peer_con(self, msg, m=0, relay_no=2):
         # Encrypt the message if the public key is known.
         buf = b"\0" + msg.pack()
         dest_node_id = msg.routing.dest["node_id"]
@@ -230,6 +230,7 @@ class P2PNodeExtra():
 
         # Try signal pipes in order.
         # If connect fails try another.
+        count = 0
         for i in range(0, len(offsets)):
             """
             The start location within the offset list
@@ -264,6 +265,10 @@ class P2PNodeExtra():
 
             # Otherwise try next signal pipe.
             if sent:
+                count += 1
+
+            # Relay limit reached.
+            if count >= relay_no:
                 return
             
         # TODO: no paths to host.

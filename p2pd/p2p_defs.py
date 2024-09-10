@@ -245,6 +245,12 @@ class TCPPunchMsg(SigMsg):
                 d["mappings"],
             )
         
+    """
+    Note: having the dest the same as ourself is not
+    necessarily an error if two nodes are on the same
+    computer using the same interfaces. But these
+    checks are left in if they're needed.
+    """
     def validate_dest(self, af, punch_mode, dest_s):
         # Do we support this af?
         interface = self.routing.interface
@@ -273,9 +279,11 @@ class TCPPunchMsg(SigMsg):
             if ipr.is_private:
                 raise Exception(f"{dest_s} is priv in punch remote")
             
+            """
             # Punching our own external address?
             if dest_s == ext:
                 raise Exception(f"{dest_s} == ext in punch remote")
+            """
             
         # Private address sanity checks.
         if punch_mode in [TCP_PUNCH_SELF, TCP_PUNCH_LAN]:
@@ -283,10 +291,12 @@ class TCPPunchMsg(SigMsg):
             if ipr.is_public:
                 raise Exception(f"{dest_s} is pub for punch $priv")
             
+        """
         # Should be another computer's IP.
         if punch_mode == TCP_PUNCH_LAN:
             if dest_s == nic:
                 raise Exception(f"{dest_s} is ourself for lan punch")
+        """
             
         # Should be ourself.
         if punch_mode == TCP_PUNCH_SELF:

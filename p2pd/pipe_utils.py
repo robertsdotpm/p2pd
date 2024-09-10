@@ -212,6 +212,10 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
         # Bind to route 0.
         route = await i.route(af)
 
+    # Ensure route is bound.
+    if not route.resolved:
+        await route.bind()
+
     # Ensure address instance is resolved.
     if isinstance(dest, Address):
         # Resolve unresolved addresses.

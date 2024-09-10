@@ -198,7 +198,9 @@ def validate_peer_addr(addr):
         return None
     
     for af in VALID_AFS:
-        for if_info in addr[af]:
+        for if_offset in addr[af]:
+            if_info = addr[af][if_offset]
+
             # Is listen port right?
             if not in_range(if_info["port"], [1, MAX_PORT]):
                 log("p2p addr: listen port invalid")
@@ -311,8 +313,8 @@ def parse_peer_addr(addr):
     schema = [is_no, is_no, is_b, is_b, is_no,  is_no, is_no, is_no]
     translate = [to_n, to_n, to_b, to_b, to_n, to_n, to_n, to_n]
     out = {
-        IP4: [],
-        IP6: [],
+        IP4: {},
+        IP6: {},
         "node_id": to_s(af_parts[2]),
         "signal": signal,
         "machine_id": to_s(af_parts[3]),
@@ -372,9 +374,15 @@ def parse_peer_addr(addr):
 
             # Save results.
             af = VALID_AFS[af_index]
-            out[af].append(as_dict)
+            out[af][parts[1]] = as_dict
 
-    return validate_peer_addr(out)
+    # Sanity check address.
+    validate_peer_addr(out)
+
+    # Convert to tuple to prevent change.
+    out["signal"] = tuple(out["signal"])
+
+    return out
 
 def peer_addr_extract_exts(p2p_addr):
     exts = []

@@ -32,7 +32,7 @@ if __name__ != '__main__':
     from .p2p_addr import *
     from .p2p_pipe import *
     from .p2p_node import P2PNode, NODE_CONF, NODE_PORT
-    from .p2p_utils import get_pp_executors
+    from .p2p_utils import get_pp_executors, IFInfoIter
     from .install import *
     from .toxiclient import ToxiToxic, ToxiTunnel, ToxiClient
     from .toxiserver import ToxiMainServer

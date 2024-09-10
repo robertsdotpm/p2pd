@@ -33,16 +33,17 @@ class P2PPipe():
 
         # Mapping for funcs over addr infos.
         # Loop over the most likely strategies left.
+        # func, timeout, cleanup, same_if, max_pairs
         self.func_table = {
             # Short timeouts for direct TCP cons.
-            P2P_DIRECT: [self.direct_connect, 2, None, 1],
-            P2P_REVERSE: [self.reverse_connect, 4, None, 1],
+            P2P_DIRECT: [self.direct_connect, 2, None, 1, 4],
+            P2P_REVERSE: [self.reverse_connect, 4, None, 1, 2],
 
             # Large timeout for meetings with a state cleanup.
-            P2P_PUNCH: [self.tcp_hole_punch, 10, None, 0],
+            P2P_PUNCH: [self.tcp_hole_punch, 10, None, 0, 2],
 
             # Large timeout, end refreshers, disable LAN cons.
-            P2P_RELAY: [self.udp_turn_relay, 20, self.turn_cleanup, 1],
+            P2P_RELAY: [self.udp_turn_relay, 20, self.turn_cleanup, 1, 1],
         }
 
     def route_msg(self, msg, m=0):
@@ -58,7 +59,7 @@ class P2PPipe():
                 continue
 
             # Returns a pipe given comp addr info pairs.
-            func, timeout, cleanup, has_set_bind = \
+            func, timeout, cleanup, has_set_bind, max_pairs = \
                 self.func_table[strategy]
             print(f"using func {func}")
 
@@ -68,6 +69,7 @@ class P2PPipe():
                     timeout,
                     cleanup,
                     has_set_bind,
+                    max_pairs,
                     reply,
                     self,
                     conf,
@@ -137,6 +139,7 @@ class P2PPipe():
         if pipe_id in self.node.tcp_punch_clients:
             puncher = self.node.tcp_punch_clients[pipe_id]
             assert(src_info == puncher.src_info)
+            print(f"assert check {dest_info} ? {puncher.dest_info}")
             assert(dest_info == puncher.dest_info)
         else:
             # Create a new puncher for this pipe ID.

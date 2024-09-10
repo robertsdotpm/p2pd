@@ -1,34 +1,55 @@
+"""
+Theories:
+    - parse peer addr doesn't append them back in the right order?
+
+    - assuming af availability when one doesnt exist leads to invalid offsets. but i dont think thats the only issue as both afs support ipv4
+"""
+
 import aiodns
 from p2pd import *
 
+
+
+def check_if_offsets(addr):
+    for af in VALID_AFS:
+        for i in range(0, len(addr[af])):
+            if i not in addr[af]:
+                continue
+
+            assert(addr[af][i]["if_index"] == i)
+            #print(f"{addr[af][i]} {i}")
+
+
 async def do_something():
+    #print(x)
+    #print(y)
 
-    i = await Interface()
-    await i.load_nat()
-    print(i)
-    return
-
-    resolver = aiodns.DNSResolver()
-
-
-    result = await resolver.query("google.com", "A")
-    print(result)
-
-    return
-    i = await Interface()
+    global x
+    global y
+    x = parse_peer_addr(x["bytes"])
+    y = parse_peer_addr(y["bytes"])
 
 
-    dest = ("google.com", 80)
 
+    #print(a)
 
-    #route = i.route(IP4)
-    route = None
-    pipe = await pipe_open(TCP, dest, route)
+    #return
+    for af in [IP4]:
 
-    print(pipe)
-    print(pipe.sock)
-    if pipe is not None:
-        await pipe.close()
+        if_info_iter = IFInfoIter(af, y, x) 
+        print(len(if_info_iter))
+        for src_info, dest_info in if_info_iter:
+            print(src_info)
+            print(dest_info)
+
+            print()
+
+    # Make sure iter hasn't corrupted if offsets.
+    check_if_offsets(x)
+    check_if_offsets(y)
+
+    #print(x)
+    #print(y)
 
 async_test(do_something)
 

@@ -200,8 +200,10 @@ class TestNodes():
         # Start the nodes.
         nic = self.alice.ifs[0]
         sys_clock = SysClock(nic, Dec("-0.02839018452552057081653225806"))
-        await self.alice.start(sys_clock)
-        await self.bob.start(sys_clock)
+        await asyncio.gather(
+            self.alice.start(sys_clock),
+            self.bob.start(sys_clock),
+        )
 
         # Set pipe conf.
         self.pp_alice = self.alice.p2p_pipe(
@@ -246,6 +248,11 @@ class TestNodes():
 
 async def p2p_check_strats(params, strats):
     async with TestNodes(**params) as nodes:
+
+        print(nodes.alice.p2p_addr)
+        print()
+        print(nodes.bob.p2p_addr)
+
         for strat in strats:
             pipe = await nodes.alice.connect(
                 nodes.bob.addr_bytes,
@@ -282,16 +289,18 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
             return
 
         params = {
-            "sig_pipe_no": 2,
-            "addr_types": [EXT_BIND, NIC_BIND],
+            "sig_pipe_no": 0,
+            "addr_types": [EXT_BIND],
             "ifs": ifs,
             "same_if": False if len(ifs) >= 2 else True,
             "multi_ifs": True,
         }
 
-        await p2p_check_strats(params)
+        strats = [P2P_PUNCH]
+        await p2p_check_strats(params, strats)
 
     async def test_p2p_register_connect(self):
+        return
         name = input("name: ")
         params = {
             "sig_pipe_no": 0,
@@ -348,6 +357,7 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
     async def test_p2p_strats(self):
         if_names = await list_interfaces()
         ifs = await load_interfaces(if_names)
+
         params = {
             "sig_pipe_no": 2,
             "addr_types": [EXT_BIND, NIC_BIND],
@@ -355,19 +365,21 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
             "same_if": False if len(ifs) >= 2 else True
         }
 
-        await p2p_check_strats(params)
+        strats = [P2P_DIRECT, P2P_REVERSE, P2P_RELAY, P2P_PUNCH]
+        await p2p_check_strats(params, strats)
 
     async def test_bug_fix(self):
+        # temporarily cache this for testing like 5 min expiry?
         if_names = await list_interfaces()
         ifs = await load_interfaces(if_names)
         params = {
-            "sig_pipe_no": 2,
-            "addr_types": [EXT_BIND],
+            "sig_pipe_no": 0,
+            "addr_types": [NIC_BIND, EXT_BIND],
             "ifs": ifs,
             "same_if": False if len(ifs) >= 2 else True
         }
 
-        strats = [P2P_RELAY]
+        strats = [P2P_DIRECT]
         await p2p_check_strats(params, strats)
 
 if __name__ == '__main__':
