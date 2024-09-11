@@ -115,11 +115,6 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
         if not reuse_set:
             log("Punch socket missing reuse addr opt.")
             return
-        
-        # Require a non-blocking socket.
-        if sock.getblocking():
-            log("Punch sock is blocking.")
-            return
 
         # Async connect that sends SYN.
         await loop.sock_connect(
@@ -141,6 +136,7 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
         mapping.sock = sock
         return mapping
     except:
+        what_exception()
         return None
     
 """
@@ -306,6 +302,10 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
     This code disables that warning.
     """
     warnings.filterwarnings('ignore', message="unclosed", category=ResourceWarning)
+    
+    # Ensure net ifaces is loaded.
+    if interface.netifaces is None:
+        interface.netifaces = await init_p2pd()
 
     """
     Any patched interface stuff won't work because it

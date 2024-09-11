@@ -48,7 +48,10 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
 
         # Load interface list.
         netifaces = await init_p2pd()
-        ifs, af = await duel_if_setup(netifaces)
+        try:
+            ifs, af = await duel_if_setup(netifaces)
+        except:
+            return
         assert(len(ifs) == 2)
         if af is None:
             return

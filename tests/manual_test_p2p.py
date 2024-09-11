@@ -373,14 +373,17 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
         # temporarily cache this for testing like 5 min expiry?
         if_names = await list_interfaces()
         ifs = await load_interfaces(if_names)
+        print(ifs)
+        print(ifs[0].netifaces)
+        #return
         params = {
             "sig_pipe_no": 0,
-            "addr_types": [NIC_BIND, EXT_BIND],
+            "addr_types": [NIC_BIND],
             "ifs": ifs,
             "same_if": False if len(ifs) >= 2 else True
         }
 
-        strats = [P2P_DIRECT]
+        strats = [P2P_PUNCH]
         await p2p_check_strats(params, strats)
 
 if __name__ == '__main__':

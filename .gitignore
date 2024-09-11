@@ -160,3 +160,6 @@ p2pd/scripts/stund.txt
 p2pd/scripts/stunt.txt
 p2pd/scripts/stun_change.txt
 p2pd/scripts/stun_map.txt
+
+*_pid.txt
+SECRET_KEY*.hex

@@ -348,6 +348,7 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                 if addr_type in [NIC_FAIL, EXT_FAIL]:
                     use_addr_type = addr_type - 2
                     do_fail = True
+                    print(f"test fail {addr_type}")
                 else:
                     use_addr_type = addr_type
                     do_fail = False
@@ -397,6 +398,9 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                     interface,
                     pp.node.ifs,
                 )
+                print(f"if = {id(interface)}")
+                print(f"netifaces = {interface.netifaces}")
+                
 
                 """
                 With all the correct interfaces and IPs
@@ -476,19 +480,23 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
         for src_info, dest_info in if_info_iter:
             # Only try up to N pairs per technique.
             # Technique-specific N to avoid lengthy delays.
-            for _ in range(count, max_pairs + 1):
-                print(src_info)
-                print(dest_info)
-                print()
-                ret = await async_wrap_errors(
-                    try_addr_infos(src_info, dest_info)
-                )
+            print(src_info)
+            print(dest_info)
+            print()
+            ret = await async_wrap_errors(
+                try_addr_infos(src_info, dest_info)
+            )
 
-                # Success so return.
-                if ret is not None:
-                    return ret
+            # Success so return.
+            if ret is not None:
+                return ret
+                
+            count += 1
+            if count >= max_pairs:
+                return None
+            
 
-                # Cleanup here?
+            # Cleanup here?
                 
     # Failure.
     return None

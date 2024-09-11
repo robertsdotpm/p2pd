@@ -48,6 +48,8 @@ def get_serv_lock(af, proto, serv_port, serv_ip):
     # Main path files.
     af = "v4" if af == IP4 else "v6"
     proto = "tcp" if proto == TCP else "udp"
+    serv_ip = serv_ip.replace(":", "_")
+    serv_ip = serv_ip.replace(".", "_")
     pidfile_path = os.path.realpath(
         os.path.join(
             get_p2pd_install_root(),
