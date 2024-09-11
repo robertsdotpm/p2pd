@@ -377,13 +377,14 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
         print(ifs[0].netifaces)
         #return
         params = {
-            "sig_pipe_no": 0,
-            "addr_types": [NIC_BIND],
+            "sig_pipe_no": 2,
+            "addr_types": [EXT_BIND, NIC_BIND],
             "ifs": ifs,
             "same_if": False if len(ifs) >= 2 else True
         }
 
         strats = [P2P_PUNCH]
+        strats = [P2P_DIRECT, P2P_REVERSE, P2P_RELAY, P2P_PUNCH]
         await p2p_check_strats(params, strats)
 
 if __name__ == '__main__':

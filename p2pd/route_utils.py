@@ -155,48 +155,51 @@ async def get_nic_iprs(af, interface, netifaces):
     return [r for r in results if r is not None]
 
 async def get_wan_ip_cfab(src_ip, min_agree, stun_clients, timeout):
-    tasks = []
-    interface = stun_clients[0].interface
-    af = stun_clients[0].af
-    for stun_client in stun_clients:
-        local_addr = await Bind(
-            stun_client.interface,
-            af=stun_client.af,
-            port=0,
-            ips=src_ip
-        ).res()
+    try:
+        tasks = []
+        interface = stun_clients[0].interface
+        af = stun_clients[0].af
+        for stun_client in stun_clients:
+            local_addr = await Bind(
+                stun_client.interface,
+                af=stun_client.af,
+                port=0,
+                ips=src_ip
+            ).res()
 
-        # Get external IP and compare to bind IP.
-        task = async_wrap_errors(
-            stun_client.get_wan_ip(
-                # Will be upgraded to a pipe.
-                pipe=local_addr
+            # Get external IP and compare to bind IP.
+            task = async_wrap_errors(
+                stun_client.get_wan_ip(
+                    # Will be upgraded to a pipe.
+                    pipe=local_addr
+                )
             )
+            tasks.append(task)
+
+        wan_ip = await concurrent_first_agree_or_best(
+            min_agree,
+            tasks,
+            timeout
         )
-        tasks.append(task)
 
-    wan_ip = await concurrent_first_agree_or_best(
-        min_agree,
-        tasks,
-        timeout
-    )
-
-    if wan_ip is None:
-        return None
-    
-    # Convert default details to a Route object.
-    cidr = af_to_cidr(af)
-    ext_ipr = IPRange(wan_ip, cidr=cidr)
-    nic_ipr = IPRange(src_ip, cidr=cidr)
-    if nic_ipr.is_private or src_ip != wan_ip:
-        nic_ipr.is_private = True
-        nic_ipr.is_public = False
-    else:
-        nic_ipr.is_private = False
-        nic_ipr.is_public = True
+        if wan_ip is None:
+            return None
+        
+        # Convert default details to a Route object.
+        cidr = af_to_cidr(af)
+        ext_ipr = IPRange(wan_ip, cidr=cidr)
+        nic_ipr = IPRange(src_ip, cidr=cidr)
+        if nic_ipr.is_private or src_ip != wan_ip:
+            nic_ipr.is_private = True
+            nic_ipr.is_public = False
+        else:
+            nic_ipr.is_private = False
+            nic_ipr.is_public = True
 
 
-    return (src_ip, Route(af, [nic_ipr], [ext_ipr], interface))
+        return (src_ip, Route(af, [nic_ipr], [ext_ipr], interface))
+    except:
+        what_exception()
 
 def sort_routes(routes):
     # Deterministically order routes list.
@@ -231,6 +234,8 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
     link_locals = []
     priv_iprs = []
     nic_iprs = await get_nic_iprs(af, interface, netifaces)
+    print(nic_iprs)
+    print()
     for nic_ipr in nic_iprs:
         assert(int(nic_ipr[0]))
         if ip_norm(nic_ipr[0])[:2] in ["fe", "fd"]:
@@ -244,11 +249,13 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
         else:
             src_ip = ip_norm(str(nic_ipr[0]))
             tasks.append(
-                get_wan_ip_cfab(
-                    src_ip,
-                    min_agree,
-                    stun_clients,
-                    timeout
+                async_wrap_errors(
+                    get_wan_ip_cfab(
+                        src_ip,
+                        min_agree,
+                        stun_clients,
+                        timeout
+                    )
                 )
             )
 
@@ -271,21 +278,30 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
     priv_src = ""
     if len(priv_iprs):
         priv_src = ip_norm(str(priv_iprs[0]))
+        print(priv_src)
+        print(af)
+        
         tasks.append(
-            get_wan_ip_cfab(
-                priv_src,
-                min_agree,
-                stun_clients,
-                timeout
+            async_wrap_errors(
+                get_wan_ip_cfab(
+                    priv_src,
+                    min_agree,
+                    stun_clients,
+                    timeout
+                )
             )
         )
+        
+    print(tasks)
 
     # Resolve interface addresses CFAB.
     results = await asyncio.gather(*tasks)
     results = [r for r in results if r is not None]
+    print(results)
 
     # Only the default NIC will have
     # a default route enabled for the af.
+    enable_default = 1
     if enable_default:
         default_route = get_route_by_src(
             af_default_nic_ip,
@@ -297,10 +313,15 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
         is not in the NIC IPs for this interface then
         don't enable the use of the default route.
         """
-        af_default_nic_ipr = IPRange(af_default_nic_ip, cidr=cidr)
-        if af_default_nic_ipr not in nic_iprs:
+        print(f"af default nic ip = {af_default_nic_ip}")
+        try:
+            af_default_nic_ipr = IPRange(af_default_nic_ip, cidr=cidr)
+            if af_default_nic_ipr not in nic_iprs:
+                default_route = None
+                log(f"Route error {af} disabling default route.")
+        except:
             default_route = None
-            log(f"Route error {af} disabling default route.")
+
     else:
         default_route = None
 

@@ -13,7 +13,7 @@ RECIPIENT = 2
 
 # Number of seconds in the future from an NTP time
 # for hole punching to occur.
-NTP_MEET_STEP = 5
+NTP_MEET_STEP = 7
 
 # Fine tune various network settings.
 PUNCH_CONF = dict_child({
@@ -90,8 +90,8 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
         code adjusts the delay based on any amount
         of time already passed.
         """
-        if ms_delay:
-            await asyncio.sleep(ms_delay / 1000)
+        #if ms_delay:
+        #    await asyncio.sleep(ms_delay / 1000)
 
         # Bind to a specific port and interface.
         route = await interface.route(af).bind(
@@ -136,7 +136,7 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
         mapping.sock = sock
         return mapping
     except:
-        what_exception()
+        #what_exception()
         return None
     
 """
@@ -147,71 +147,61 @@ in the Internet as packets travel across routers.
 Optimized and tested for remote connections.
 """
 async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings, interface):
-    print("in schedule delay punch")
-    #print(f"{len(send_mappings)} {dest_addr} {recv_mappings[0].remote}")
+    try:
+        print("in schedule delay punch")
+        #print(f"{len(send_mappings)} {dest_addr} {recv_mappings[0].remote}")
 
+        # Config.
+        secs = 10
+        ms_spacing = 5
 
+        # Create punching async task list.
+        tasks = []
+        steps = int((secs * 1000) / ms_spacing)
 
-    # Config.
-    secs = 6
-    ms_spacing = 5
+        assert(steps > 0)
+        assert(steps)
+        assert(len(send_mappings))
+        for i in range(0, len(send_mappings)):
+            # Endpoint to punch to.
+            print(f"addr: {send_mappings[i].local} {recv_mappings[i].remote} {dest_addr}")
 
-    # Create punching async task list.
-    tasks = []
-    steps = int((secs * 1000) / ms_spacing)
+            # Validate IP address.
+            dest = Address(dest_addr, recv_mappings[i].remote)
+            await dest.res(interface.route(af))
+            dest = dest.select_ip(af)
+            
+            for i in range(0, steps):
+                s = await delayed_punch(
+                    # Address family for the con.
+                    af,
 
-    assert(steps > 0)
-    assert(steps)
-    assert(len(send_mappings))
+                    # Wait until ms to do punching.
+                    # Punches are split up over time
+                    # to increase chances of success.
+                    0,
 
+                    # Local mapping.
+                    send_mappings[i],
 
-    for i in range(0, len(send_mappings)):
-        # Endpoint to punch to.
-        print(f"addr: {send_mappings[i].local} {recv_mappings[i].remote} {dest_addr}")
+                    # Destination addr to connect to.
+                    dest,
 
-        # Validate IP address.
-        dest = Address(dest_addr, recv_mappings[i].remote)
-        await dest.res(interface.route(af))
-        dest = dest.select_ip(af)
+                    # Event loop for this process.
+                    asyncio.get_event_loop(),
 
-        # Attempt to punch dest at intervals.
-        for sleep_time in range(0, steps):
-            tasks.append(
-                asyncio.wait_for(
-                    delayed_punch(
-                        # Address family for the con.
-                        af,
-
-                        # Wait until ms to do punching.
-                        # Punches are split up over time
-                        # to increase chances of success.
-                        sleep_time * ms_spacing,
-
-                        # Local mapping.
-                        send_mappings[i],
-
-                        # Destination addr to connect to.
-                        dest,
-
-                        # Event loop for this process.
-                        asyncio.get_event_loop(),
-
-                        # Punch from this interface.
-                        interface,
-                    ),
-                    2
+                    # Punch from this interface.
+                    interface,
                 )
-            )
-    
-    # Start running tasks.
-    assert(len(tasks))
-    all_tasks = asyncio.gather(
-        *tasks,
-        return_exceptions=False
-    )
-    outs = await all_tasks
-    outs = strip_none(outs)
-    return outs
+                
+                if s is not None:
+                    print(s)
+                    return [s]
+                    
+                await asyncio.sleep(0.001)
+
+    except:
+        what_exception()
 
 async def wait_for_punch_time(current_ntp, ntp_meet):
     # Sleep until the ntp timeframe.
