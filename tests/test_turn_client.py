@@ -10,18 +10,11 @@ async def turn_msg_cb(msg, client_tup, pipe):
 async def get_turn_client(af, interface, turn_offset):
     # Get a route for this interface.
     route = await interface.route(af).bind()
-    try:
-        dest = (
-            to_s(TURN_SERVERS[turn_offset]["host"]),
-            TURN_SERVERS[turn_offset]["port"],
-            
-        )
-    except:
-        ip = TURN_SERVERS[turn_offset][IP4] or TURN_SERVERS[turn_offset][IP6] 
-        dest = (
-            ip,
-            TURN_SERVERS[turn_offset]["port"],
-        )
+    ip = TURN_SERVERS[turn_offset][IP4] or TURN_SERVERS[turn_offset][IP6] 
+    dest = (
+        ip,
+        TURN_SERVERS[turn_offset]["port"],
+    )
 
     # Implement the TURN protocol for UDP send / recv.
     client = TURNClient(

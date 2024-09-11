@@ -289,14 +289,15 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
             return
 
         params = {
-            "sig_pipe_no": 0,
-            "addr_types": [EXT_BIND],
+            "sig_pipe_no": 2,
+            "addr_types": [EXT_BIND, NIC_BIND],
             "ifs": ifs,
             "same_if": False if len(ifs) >= 2 else True,
             "multi_ifs": True,
         }
 
-        strats = [P2P_PUNCH]
+        strats = [P2P_DIRECT, P2P_RELAY, P2P_REVERSE, P2P_PUNCH]
+        #strats = [P2P_PUNCH]
         await p2p_check_strats(params, strats)
 
     async def test_p2p_register_connect(self):

@@ -7,13 +7,15 @@ async def example():
     # Start the Toxiproxy server.
     i = await Interface()
     toxid = ToxiMainServer([i])
-    route = await i.route().bind(port=TOXID_PORT, ips=TOXID_HOST)
+    af = IP4
+    route = await i.route(af).bind(port=TOXID_PORT, ips=TOXID_HOST)
     await toxid.add_listener(TCP, route)
     #
     # Create a Toxiproxy client.
     # This just connects to the server above.
     toxid_addr = (TOXID_HOST, TOXID_PORT)
-    client = await ToxiClient(toxid_addr).start()
+    client_route = await i.route(af).bind()
+    client = await ToxiClient(toxid_addr, client_route).start()
     #
     # Create a new relay to an upstream.
     # The upstream location is set bellow.

@@ -246,7 +246,7 @@ class TCPPunchMsg(SigMsg):
             )
         
     """
-    Note: having the dest the same as ourself is not
+    Note: having the dest the same as an if in our ifs is not
     necessarily an error if two nodes are on the same
     computer using the same interfaces. But these
     checks are left in if they're needed.

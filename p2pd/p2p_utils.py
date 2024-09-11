@@ -449,18 +449,7 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
             except:
                 log_exception()
 
-    for af in VALID_AFS:
-        if_info_iter = IFInfoIter(af, pp.src, pp.dest)
-        if not len(if_info_iter):
-            continue
 
-        # Get interface offset that supports this af.
-        for src_info, dest_info in if_info_iter:
-            print(f"af = {af}")
-            print(f"src info = {src_info}")
-            print(f"dest info = {dest_info}")
-
-            print(f"len iter = {len(if_info_iter)}")
 
 
     # Use an AF supported by both.

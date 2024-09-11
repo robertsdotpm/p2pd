@@ -18,7 +18,7 @@ async def example():
     #
     # Send data down the pipe.
     msg = b"do echo test"
-    await pipe.send(msg + b"\r\n", echo_dest.tup)
+    await pipe.send(msg + b"\r\n", echo_dest)
     #
     # Receive data back.
     data = await pipe.recv(SUB_ALL, 4)
