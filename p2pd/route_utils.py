@@ -301,7 +301,6 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
 
     # Only the default NIC will have
     # a default route enabled for the af.
-    enable_default = 1
     if enable_default:
         default_route = get_route_by_src(
             af_default_nic_ip,
@@ -314,14 +313,10 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
         don't enable the use of the default route.
         """
         print(f"af default nic ip = {af_default_nic_ip}")
-        try:
-            af_default_nic_ipr = IPRange(af_default_nic_ip, cidr=cidr)
-            if af_default_nic_ipr not in nic_iprs:
-                default_route = None
-                log(f"Route error {af} disabling default route.")
-        except:
+        af_default_nic_ipr = IPRange(af_default_nic_ip, cidr=cidr)
+        if af_default_nic_ipr not in nic_iprs:
             default_route = None
-
+            log(f"Route error {af} disabling default route.")
     else:
         default_route = None
 
