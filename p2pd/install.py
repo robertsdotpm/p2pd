@@ -2,7 +2,6 @@ import os
 import pathlib
 import inspect
 import shutil
-import psutil
 from .utils import *
 
 # Path to where the script is running from.

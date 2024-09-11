@@ -62,13 +62,17 @@ def get_serv_lock(af, proto, serv_port, serv_ip):
         return None
     
 def avoid_time_wait(pipe):
-    sock = pipe.sock
-    linger = struct.pack('ii', 1, 0)
-    sock.setsockopt(
-        socket.SOL_SOCKET,
-        socket.SO_LINGER,
-        linger
-    )
+    try:
+        sock = pipe.sock
+        linger = struct.pack('ii', 1, 0)
+        sock.setsockopt(
+            socket.SOL_SOCKET,
+            socket.SO_LINGER,
+            linger
+        )
+    except:
+        # Not guaranteed on windows.
+        log_exception()
 
 class Daemon():
     def __init__(self, conf=DAEMON_CONF):
