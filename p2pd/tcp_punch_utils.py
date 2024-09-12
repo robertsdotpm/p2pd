@@ -292,21 +292,6 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
     This code disables that warning.
     """
     warnings.filterwarnings('ignore', message="unclosed", category=ResourceWarning)
-    
-    # Ensure net ifaces is loaded.
-    if interface.netifaces is None:
-        interface.netifaces = await init_p2pd()
-
-    """
-    Any patched interface stuff won't work because it
-    gets pickled and unpickled into a dict and reloaded
-    into the standard interface class.
-    """
-    interface = await select_if_by_dest(
-        af,
-        dest_addr,
-        interface
-    )
 
     # Set our WAN address from default route.
     our_wan = interface.route(af).ext()

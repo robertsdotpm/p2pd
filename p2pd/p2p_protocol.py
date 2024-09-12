@@ -10,7 +10,7 @@ from .ecies import encrypt, decrypt
 
 SIG_PROTO = {
     SIG_CON: [ConMsg, P2P_DIRECT, 5],
-    SIG_TCP_PUNCH: [TCPPunchMsg, P2P_PUNCH, 10],
+    SIG_TCP_PUNCH: [TCPPunchMsg, P2P_PUNCH, 20],
     SIG_TURN: [TURNMsg, P2P_RELAY, 10],
 }
 

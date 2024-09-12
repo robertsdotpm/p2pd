@@ -186,6 +186,12 @@ class TCPPuncher():
             route=route,
             msg_cb=self.node.msg_cb,
         )
+        
+        interface = await select_if_by_dest(
+            self.af,
+            self.dest_info["ip"],
+            self.interface
+        )
 
         # Passed on to a new process.
         listen_tup = self.listen_pipe.sock.getsockname()[:2]
@@ -194,7 +200,11 @@ class TCPPuncher():
         args = (
             listen_tup,
             self.to_dict(),
+            interface,
         )
+        
+
+
         
         # Schedule TCP punching in process pool executor.
         loop = asyncio.get_event_loop()
@@ -209,7 +219,7 @@ class TCPPuncher():
             punch_proc_task.cancel()
 
         # Check every 100 ms for 5 seconds.
-        for _ in range(0, 5000):
+        while 1:
             try:
                 # Check if reverse connect server has a client yet.
                 if len(self.listen_pipe.tcp_clients):
@@ -222,7 +232,7 @@ class TCPPuncher():
                 what_exception()
             
             # Check every 100 ms.
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.1)
 
     def set_interface(self):
         self.if_index = self.src_info["if_index"]
@@ -277,6 +287,7 @@ def proc_do_punching(args):
     # Build a puncher from a dictionary.
     reverse_tup = args[0]
     d = args[1]
+    interface = args[2]
     puncher = TCPPuncher.from_dict(d)
 
     # Execute the punching in a new event loop.
@@ -291,7 +302,7 @@ def proc_do_punching(args):
                 puncher.sys_clock.time(),
                 puncher.start_time,
                 puncher.punch_mode,
-                puncher.interface,
+                interface,
                 reverse_tup
             )
         ),
