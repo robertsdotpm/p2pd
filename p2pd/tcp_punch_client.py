@@ -189,6 +189,8 @@ class TCPPuncher():
 
         # Passed on to a new process.
         listen_tup = self.listen_pipe.sock.getsockname()[:2]
+        print(listen_tup)
+        print(self.listen_pipe.sock)
         args = (
             listen_tup,
             self.to_dict(),
@@ -196,23 +198,28 @@ class TCPPuncher():
         
         # Schedule TCP punching in process pool executor.
         loop = asyncio.get_event_loop()
-        loop.run_in_executor(
+        punch_proc_task = loop.run_in_executor(
             self.pp_executor,
             proc_do_punching,
             args
         )
+        print(punch_proc_task)
+        
+        async def close_patch():
+            punch_proc_task.cancel()
 
         # Check every 100 ms for 5 seconds.
-        for _ in range(0, 500):
+        for _ in range(0, 5000):
             try:
                 # Check if reverse connect server has a client yet.
                 if len(self.listen_pipe.tcp_clients):
                     self.pipe = self.listen_pipe.tcp_clients[0]
                     print(self.pipe)
                     self.node.pipe_ready(self.pipe_id, self.pipe)
+                    #self.pipe.close = close_patch
                     return self.pipe
             except:
-                log_exception()
+                what_exception()
             
             # Check every 100 ms.
             await asyncio.sleep(0.01)
@@ -294,5 +301,5 @@ def proc_do_punching(args):
     # The moment the function is done save its result to the queue.
     # The queue is sharable and works with basic types.
     #f.add_done_callback(lambda t: q.put(t.result()))
-    loop.run_until_complete(f)
+    return loop.run_until_complete(f)
 

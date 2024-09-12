@@ -546,3 +546,18 @@ def client_tup_norm(client_tup):
     
     ip = ip_norm(client_tup[0])
     return (ip, client_tup[1])
+    
+def is_socket_closed(sock):
+    try:
+        # this will try to read bytes without blocking and also without removing them from buffer (peek only)
+        data = sock.recv(16, socket.MSG_DONTWAIT | socket.MSG_PEEK)
+        if len(data) == 0:
+            return True
+    except BlockingIOError:
+        return False  # socket is open and reading from it would block
+    except ConnectionResetError:
+        return True  # socket was closed for some other reason
+    except Exception as e:
+        log("unexpected exception when checking if a socket is closed")
+        return False
+    return False

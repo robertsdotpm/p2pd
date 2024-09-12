@@ -13,7 +13,7 @@ RECIPIENT = 2
 
 # Number of seconds in the future from an NTP time
 # for hole punching to occur.
-NTP_MEET_STEP = 7
+NTP_MEET_STEP = 5
 
 # Fine tune various network settings.
 PUNCH_CONF = dict_child({
@@ -356,48 +356,56 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
 
     print(f"chosen sock = {sock}")
 
-    # Punched hole to the remote node.
-    route = await interface.route(af).bind(sock.getsockname()[1])
-    upstream_pipe = await pipe_open(
-        route=route,
-        proto=TCP,
-        dest=sock.getpeername()[:2],
-        sock=sock
-    )
+    try:
+        # Punched hole to the remote node.
+        route = await interface.route(af).bind(sock.getsockname()[1])
+        upstream_pipe = await pipe_open(
+            route=route,
+            proto=TCP,
+            dest=sock.getpeername()[:2],
+            sock=sock
+        )
 
-    # Reverse connect to a listen server in parent process.
-    # This avoids sharing between processes which breaks easily.
-    route = await interface.route(af).bind()
-    client_pipe = await pipe_open(
-        TCP,
-        dest=reverse_tup,
-        route=route
-    )
+        print(f"punch pipe = {upstream_pipe} {upstream_pipe.sock}")
 
-    # Forward messages from upstream to client.
-    # upstream_sock -> client_pipe
-    upstream_pipe.add_pipe(client_pipe)
-
-    # Forward messages from client to upstream.
-    # client_pipe  -> upstream_sock
-    client_pipe.add_pipe(upstream_pipe)
-
-    # Prevent this process from exiting.
-    while 1:
-        # Don't tie up the event loop.
-        await asyncio.sleep(1)
-
+        # Reverse connect to a listen server in parent process.
+        # This avoids sharing between processes which breaks easily.
+        route = await interface.route(af).bind()
+        client_pipe = await pipe_open(
+            TCP,
+            dest=reverse_tup,
+            route=route
+        )
         
-        # Closing the reverse connect servers client socket
-        # should end the upstream pipe connection.
-        if client_pipe.sock.fileno() == -1:
-            await upstream_pipe.close()
-            break
-        
-        # This thus propagates a close between linked clients.
-        if upstream_pipe.sock.fileno() == -1:
-            await client_pipe.close()
-            break
+        print(f"client pipe = {client_pipe} {client_pipe.sock}")
+
+        # Forward messages from upstream to client.
+        # upstream_sock -> client_pipe
+        upstream_pipe.add_pipe(client_pipe)
+
+        # Forward messages from client to upstream.
+        # client_pipe  -> upstream_sock
+        client_pipe.add_pipe(upstream_pipe)
+
+        # Prevent this process from exiting.
+        while 1:
+            # Don't tie up the event loop.
+            await asyncio.sleep(1)
+
+            # Closing the reverse connect servers client socket
+            # should end the upstream pipe connection.
+            if not client_pipe.is_running:
+                await upstream_pipe.close()
+                break
+            
+            # This thus propagates a close between linked clients.
+            if not upstream_pipe.is_running:
+                await client_pipe.close()
+                break
+            
+
+    except:
+        what_exception()
 
 def puncher_to_dict(self):
     assert(self.interface)

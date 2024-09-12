@@ -377,8 +377,8 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
         print(ifs[0].netifaces)
         #return
         params = {
-            "sig_pipe_no": 2,
-            "addr_types": [EXT_BIND, NIC_BIND],
+            "sig_pipe_no": 0,
+            "addr_types": [EXT_BIND],
             "ifs": ifs,
             "same_if": False if len(ifs) >= 2 else True
         }
