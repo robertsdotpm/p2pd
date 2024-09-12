@@ -194,10 +194,19 @@ class TCPPuncher():
         return pipe
         
     async def setup_punching_process(self):
+        # Listen server that process will connect back to.
+        route = await self.interface.route(self.af).bind()
+        listen_pipe = await pipe_open(
+            TCP,
+            dest=None,
+            route=route,
+            msg_cb=self.node.msg_cb,
+        )
+
         # Passed on to a new process.
-        queue = self.mp_manager.Queue()
+        listen_tup = listen_pipe.sock.getsockname()[:2]
         args = (
-            queue,
+            listen_tup,
             self.to_dict(),
         )
         
@@ -209,20 +218,16 @@ class TCPPuncher():
             args
         )
 
-        # Wait for queue result with timeout.
-        for _ in range(0, 8):
-            if not queue.empty():
-                break
-
-            await asyncio.sleep(1)
-
-        # Executor pushes back socket to queue.
-        sock = queue.get(timeout=2)
-        
-        # Wrap returned socket in a pipe.
-        if sock is not None: 
-            self.pipe = await self.sock_to_pipe(sock)
-            return self.pipe
+        # Check every 10 ms for 5 seconds.
+        for _ in range(0, 500):
+            if len(listen_pipe.tcp_clients):
+                self.pipe = listen_pipe.tcp_clients[0]
+                #self.pipe.add_msg_cb(self.node.msg_cb)
+                print(self.pipe)
+                self.node.pipe_ready(self.pipe_id, self.pipe)
+                return self.pipe
+            
+            await asyncio.sleep(0.01)
 
     def set_interface(self):
         self.if_index = self.src_info["if_index"]
@@ -278,7 +283,7 @@ def proc_do_punching(args):
     asyncio.set_event_loop_policy(SelectorEventPolicy())
 
     # Build a puncher from a dictionary.
-    q = args[0]
+    reverse_tup = args[0]
     d = args[1]
     puncher = TCPPuncher.from_dict(d)
 
@@ -294,7 +299,8 @@ def proc_do_punching(args):
                 puncher.sys_clock.time(),
                 puncher.start_time,
                 puncher.punch_mode,
-                puncher.interface
+                puncher.interface,
+                reverse_tup
             )
         ),
         loop=loop
@@ -302,6 +308,6 @@ def proc_do_punching(args):
 
     # The moment the function is done save its result to the queue.
     # The queue is sharable and works with basic types.
-    f.add_done_callback(lambda t: q.put(t.result()))
+    #f.add_done_callback(lambda t: q.put(t.result()))
     loop.run_until_complete(f)
 

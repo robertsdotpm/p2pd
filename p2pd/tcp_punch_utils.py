@@ -283,7 +283,7 @@ def punching_sanity_check(mode, our_wan, dest_addr, send_mappings, recv_mappings
             f"as our ext {our_wan}"
             log(error)
 
-async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface):
+async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup):
     """
     Punching is done in its own process.
     The process returns an open socket and Python
@@ -346,18 +346,53 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
     print(outs)
 
     # Make both sides choose the same socket.
-    chosen_sock = choose_same_punch_sock(our_wan, outs)
-    if chosen_sock is None:
+    sock = choose_same_punch_sock(our_wan, outs)
+    if sock is None:
         log("> tcp punch chosen sock is none")
         return None
 
     # Close all other sockets that aren't needed.
-    close_unneeded_socks(chosen_sock, outs)
+    close_unneeded_socks(sock, outs)
 
-    print(f"chosen sock = {chosen_sock}")
-    
-    # Return sock result.
-    return chosen_sock
+    print(f"chosen sock = {sock}")
+
+    route = await interface.route(af).bind(
+        sock.getsockname()[1]
+    )
+
+    upstream_pipe = await pipe_open(
+        route=route,
+        proto=TCP,
+        dest=sock.getpeername()[:2],
+        sock=sock
+    )
+
+    route = await interface.route(af).bind()
+    client_pipe = await pipe_open(
+        TCP,
+        dest=reverse_tup,
+        route=route
+    )
+
+
+    # Forward messages from upstream to client.
+    # upstream_sock -> client_pipe
+    upstream_pipe.add_pipe(client_pipe)
+
+    # Forward messages from client to upstream.
+    # client_pipe  -> upstream_sock
+    client_pipe.add_pipe(upstream_pipe)
+
+    while 1:
+        await asyncio.sleep(1)
+        
+        if client_pipe.sock.fileno() == -1:
+            await upstream_pipe.close()
+            break
+        
+        if upstream_pipe.sock.fileno() == -1:
+            await client_pipe.close()
+            break
 
 def puncher_to_dict(self):
     assert(self.interface)
