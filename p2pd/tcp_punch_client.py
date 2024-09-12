@@ -176,27 +176,11 @@ class TCPPuncher():
 
             return 1
         
-    async def sock_to_pipe(self, sock):
-        log(f"> TCP hole made {sock}.")
-        route = await self.interface.route(self.af).bind(
-            sock.getsockname()[1]
-        )
-
-        pipe = await pipe_open(
-            route=route,
-            proto=TCP,
-            dest=sock.getpeername()[:2],
-            sock=sock,
-            msg_cb=self.node.msg_cb
-        )
-
-        self.node.pipe_ready(self.pipe_id, pipe)
-        return pipe
-        
     async def setup_punching_process(self):
         # Listen server that process will connect back to.
+        # References are saved to avoid garbage collection.
         route = await self.interface.route(self.af).bind()
-        listen_pipe = await pipe_open(
+        self.listen_pipe = await pipe_open(
             TCP,
             dest=None,
             route=route,
@@ -204,7 +188,7 @@ class TCPPuncher():
         )
 
         # Passed on to a new process.
-        listen_tup = listen_pipe.sock.getsockname()[:2]
+        listen_tup = self.listen_pipe.sock.getsockname()[:2]
         args = (
             listen_tup,
             self.to_dict(),
@@ -218,15 +202,19 @@ class TCPPuncher():
             args
         )
 
-        # Check every 10 ms for 5 seconds.
+        # Check every 100 ms for 5 seconds.
         for _ in range(0, 500):
-            if len(listen_pipe.tcp_clients):
-                self.pipe = listen_pipe.tcp_clients[0]
-                #self.pipe.add_msg_cb(self.node.msg_cb)
-                print(self.pipe)
-                self.node.pipe_ready(self.pipe_id, self.pipe)
-                return self.pipe
+            try:
+                # Check if reverse connect server has a client yet.
+                if len(self.listen_pipe.tcp_clients):
+                    self.pipe = self.listen_pipe.tcp_clients[0]
+                    print(self.pipe)
+                    self.node.pipe_ready(self.pipe_id, self.pipe)
+                    return self.pipe
+            except:
+                log_exception()
             
+            # Check every 100 ms.
             await asyncio.sleep(0.01)
 
     def set_interface(self):
@@ -243,16 +231,13 @@ class TCPPuncher():
             self.same_machine
         )
 
-    def setup_multiproc(self, pp_executor, mp_manager):
+    def setup_multiproc(self, pp_executor):
         # Process pools are disabled.
         if pp_executor is None:
             self.pp_executor = None
-            self.mp_manager = None
             return
             
-        assert(mp_manager)
         self.pp_executor = pp_executor
-        self.mp_manager = mp_manager
 
     def set_parent(self, pipe_id, node):
         self.pipe_id = pipe_id

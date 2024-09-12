@@ -161,10 +161,7 @@ class P2PPipe():
 
             # Setup process manager and executor.
             # So that objects are shareable over processes.
-            puncher.setup_multiproc(
-                self.node.pp_executor,
-                self.node.mp_manager
-            )
+            puncher.setup_multiproc(self.node.pp_executor)
 
             # Save puncher reference.
             self.node.tcp_punch_clients[pipe_id] = puncher

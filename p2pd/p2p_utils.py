@@ -98,36 +98,24 @@ simple only the first iteration is tried.
 """
 class IFInfoIter():
     def __init__(self, af, src_addr, dest_addr):
-
-        #self.src_addr = copy.deepcopy(src_addr)
-        #self.dest_addr = copy.deepcopy(dest_addr)
         self.src_addr = list(src_addr[af].values())
         self.dest_addr = list(dest_addr[af].values())
         self.src_addr = sort_if_info_by_best_nat(self.src_addr)
         self.dest_addr = sort_if_info_by_best_nat(self.dest_addr)
-
         self.our_offset = 0
         self.their_offset = 0
         self.af = af
- 
         cond_one = not len(self.src_addr)
         cond_two = not len(self.dest_addr)
         if cond_one or cond_two:
             self.dest_addr = self.src_addr = []
             return
 
-
-
-        
         swap_if_infos_with_overlapping_exts(
             self.src_addr,
             self.dest_addr
         )
     
-        
-        
-        
-
     def __iter__(self):
         return self
 
@@ -452,9 +440,6 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                     del pp.node.pipes[pipe_id]
             except:
                 log_exception()
-
-
-
 
     # Use an AF supported by both.
     count = 1

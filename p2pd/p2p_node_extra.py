@@ -99,7 +99,6 @@ class P2PNodeExtra():
             sys_clock = await SysClock(self.ifs[0]).start()
 
         self.pp_executor = await get_pp_executors()
-        self.mp_manager = multiprocessing.Manager()
         self.sys_clock = sys_clock
 
     def add_punch_meeting(self, params):
@@ -344,7 +343,7 @@ class P2PNodeExtra():
         return P2PPipe(dest_bytes, self)
 
     def cleanup_multiproc(self):
-        targets = [self.mp_manager, self.pp_executor]
+        targets = [self.pp_executor]
         for target in targets:
             if target is None:
                 continue
@@ -354,7 +353,6 @@ class P2PNodeExtra():
             except:
                 continue
 
-        self.mp_manager = None
         self.pp_executor = None
 
     # Shutdown the node server and do cleanup.
