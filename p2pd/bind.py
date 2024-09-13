@@ -327,10 +327,8 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
                 sock.setsockopt(socket.SOL_SOCKET, 25, to_b(route.interface.id))
     except Exception:
         log_exception()
-        log("> couldnt bind to specific iface.")
-        if sock is not None:
-            sock.close()
-        return None 
+        # Try continue -- an exception isn't always accurate.
+        # E.g. Mac OS X doesn't support that sockopt but still works.
 
     # Default = use any IPv4 NIC.
     # For IPv4 -- bind address
