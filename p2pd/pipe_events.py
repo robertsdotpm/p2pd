@@ -408,7 +408,8 @@ class PipeEvents(BaseACKProto):
                 continue
 
             # Close client transports.
-            await client.close(do_sleep=False)
+            if client.close != self.close:
+                await client.close(do_sleep=False)
 
         # Close the main server socket.
         # This does cleanup for any TCP servers.

@@ -187,6 +187,7 @@ class TCPPuncher():
             msg_cb=self.node.msg_cb,
         )
         
+        # Might not be necessary since the get addr infos does this.
         interface = await select_if_by_dest(
             self.af,
             self.dest_info["ip"],
@@ -202,31 +203,28 @@ class TCPPuncher():
             self.to_dict(),
             interface,
         )
-        
-
-
-        
+      
         # Schedule TCP punching in process pool executor.
         loop = asyncio.get_event_loop()
-        punch_proc_task = loop.run_in_executor(
+        loop.run_in_executor(
             self.pp_executor,
             proc_do_punching,
             args
         )
-        print(punch_proc_task)
         
-        async def close_patch():
-            punch_proc_task.cancel()
-
         # Check every 100 ms for 5 seconds.
         while 1:
             try:
                 # Check if reverse connect server has a client yet.
                 if len(self.listen_pipe.tcp_clients):
                     self.pipe = self.listen_pipe.tcp_clients[0]
-                    print(self.pipe)
+                    pipe_close = self.pipe.close
+                    async def close_patch():
+                        await self.pipe.send(PUNCH_END)
+                        await pipe_close()
+                        
+                    self.pipe.close = close_patch
                     self.node.pipe_ready(self.pipe_id, self.pipe)
-                    #self.pipe.close = close_patch
                     return self.pipe
             except:
                 what_exception()

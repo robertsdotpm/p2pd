@@ -242,8 +242,8 @@ class TestNodes():
 
     async def __aexit__(self, exc_t, exc_v, exc_tb):
         print("aexit")
-        await self.alice.close()
-        await self.bob.close()
+        await async_wrap_errors(self.alice.close())
+        await async_wrap_errors(self.bob.close())
         print("nodes closed")
 
 async def p2p_check_strats(params, strats):
@@ -377,15 +377,15 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
         print(ifs[0].netifaces)
         #return
         params = {
-            "sig_pipe_no": 0,
-            "addr_types": [EXT_BIND],
+            "sig_pipe_no": 2,
+            "addr_types": [EXT_BIND, NIC_BIND],
             "ifs": ifs,
             "same_if": False if len(ifs) >= 2 else True
         }
 
         strats = [P2P_PUNCH]
         strats = [P2P_DIRECT, P2P_REVERSE, P2P_RELAY, P2P_PUNCH]
-        strats = [P2P_PUNCH]
+        #strats = [P2P_PUNCH]
         await p2p_check_strats(params, strats)
 
 if __name__ == '__main__':

@@ -5,6 +5,8 @@ from .interface import *
 from .nat_predict import *
 from .clock_skew import *
 
+PUNCH_ALIVE = b"234o2jdjf"
+PUNCH_END = b"qwekl2k343ok"
 INITIATED_PREDICTIONS = 1
 RECEIVED_PREDICTIONS = 2
 UPDATED_PREDICTIONS = 3
@@ -13,7 +15,7 @@ RECIPIENT = 2
 
 # Number of seconds in the future from an NTP time
 # for hole punching to occur.
-NTP_MEET_STEP = 5
+NTP_MEET_STEP = 6
 
 # Fine tune various network settings.
 PUNCH_CONF = dict_child({
@@ -282,6 +284,13 @@ def punching_sanity_check(mode, our_wan, dest_addr, send_mappings, recv_mappings
             f"punch remote but dest is the same "
             f"as our ext {our_wan}"
             log(error)
+            
+# Not really the best approach but process communication is a pain.
+async def punch_close_msg(msg, client_tup, pipe):
+    if msg == PUNCH_END:
+        # Allow time to send message down pipes.
+        await asyncio.sleep(2)
+        await pipe.close()
 
 async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup):
     """
@@ -341,56 +350,51 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
 
     print(f"chosen sock = {sock}")
 
-    try:
-        # Punched hole to the remote node.
-        route = await interface.route(af).bind(sock.getsockname()[1])
-        upstream_pipe = await pipe_open(
-            route=route,
-            proto=TCP,
-            dest=sock.getpeername()[:2],
-            sock=sock
-        )
+    # Punched hole to the remote node.
+    route = await interface.route(af).bind(sock.getsockname()[1])
+    upstream_pipe = await pipe_open(
+        route=route,
+        proto=TCP,
+        dest=sock.getpeername()[:2],
+        sock=sock,
+        msg_cb=punch_close_msg
+    )
 
-        print(f"punch pipe = {upstream_pipe} {upstream_pipe.sock}")
+    print(f"punch pipe = {upstream_pipe} {upstream_pipe.sock}")
 
-        # Reverse connect to a listen server in parent process.
-        # This avoids sharing between processes which breaks easily.
-        route = await interface.route(af).bind()
-        client_pipe = await pipe_open(
-            TCP,
-            dest=reverse_tup,
-            route=route
-        )
-        
-        print(f"client pipe = {client_pipe} {client_pipe.sock}")
+    # Reverse connect to a listen server in parent process.
+    # This avoids sharing between processes which breaks easily.
+    route = await interface.route(af).bind()
+    client_pipe = await pipe_open(
+        TCP,
+        dest=reverse_tup,
+        route=route,
+        msg_cb=punch_close_msg
+    )
+    
+    print(f"client pipe = {client_pipe} {client_pipe.sock}")
 
-        # Forward messages from upstream to client.
-        # upstream_sock -> client_pipe
-        upstream_pipe.add_pipe(client_pipe)
+    # Forward messages from upstream to client.
+    # upstream_sock -> client_pipe
+    upstream_pipe.add_pipe(client_pipe)
 
-        # Forward messages from client to upstream.
-        # client_pipe  -> upstream_sock
-        client_pipe.add_pipe(upstream_pipe)
+    # Forward messages from client to upstream.
+    # client_pipe  -> upstream_sock
+    client_pipe.add_pipe(upstream_pipe)
 
-        # Prevent this process from exiting.
-        while 1:
-            # Don't tie up the event loop.
-            await asyncio.sleep(1)
-
-            # Closing the reverse connect servers client socket
-            # should end the upstream pipe connection.
-            if not client_pipe.is_running:
-                await upstream_pipe.close()
-                break
+    # Prevent this process from exiting.
+    while 1:
+        # Don't tie up the event loop.
+        await asyncio.sleep(1)
+       
+       # Exit loop if chain breaks.
+        if False in [client_pipe.is_running, upstream_pipe.is_running]:
+            break
             
-            # This thus propagates a close between linked clients.
-            if not upstream_pipe.is_running:
-                await client_pipe.close()
-                break
-            
-
-    except:
-        what_exception()
+    # Ensure cleanup for pipes.
+    await client_pipe.close()
+    await upstream_pipe.close()
+    print("punch proc exited.")
 
 def puncher_to_dict(self):
     assert(self.interface)

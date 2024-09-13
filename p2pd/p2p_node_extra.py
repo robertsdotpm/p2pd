@@ -342,33 +342,23 @@ class P2PNodeExtra():
     def p2p_pipe(self, dest_bytes):
         return P2PPipe(dest_bytes, self)
 
-    def cleanup_multiproc(self):
-        targets = [self.pp_executor]
-        for target in targets:
-            if target is None:
-                continue
-
-            try:
-                target.shutdown()
-            except:
-                continue
-
-        self.pp_executor = None
-
     # Shutdown the node server and do cleanup.
     async def close(self):
         print("in close")
+        
         # Make the worker thread for punching end.
         self.punch_queue.put_nowait(None)
         if self.punch_worker_task is not None:
             self.punch_worker_task.cancel()
             self.punch_worker_task = None
+        print("after punch queue cancel")
 
         # Stop sig message dispatcher.
         self.sig_msg_queue.put_nowait(None)
         if self.sig_msg_dispatcher_task is not None:
             self.sig_msg_dispatcher_task.cancel()
             self.sig_msg_dispatcher_task = None
+        print("after sig msg queue cancel")
 
         # Close other pipes.
         pipe_lists = [
@@ -379,7 +369,9 @@ class P2PNodeExtra():
         ]
 
         for pipe_list in pipe_lists:
+            print(pipe_list)
             for pipe in pipe_list.values():
+                print(pipe)
                 if pipe is None:
                     continue
 
@@ -388,11 +380,13 @@ class P2PNodeExtra():
                         pipe = pipe.result()
                     else:
                         continue
-
+                        
+                print("try pipe close")
                 await pipe.close()
 
         # Try close the multiprocess manager.
-        self.cleanup_multiproc()
+        print("before cleanup multi proc")
+        print("after cleanup multi proc")
 
         """
         Node close will throw: 
@@ -404,6 +398,10 @@ class P2PNodeExtra():
         """
 
         # Stop node server.
+        print("stop node server")
         await super().close()
+        print("after stop node server")
 
         await asyncio.sleep(.25)
+        
+        
