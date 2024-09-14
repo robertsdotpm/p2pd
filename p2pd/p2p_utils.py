@@ -477,7 +477,7 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                 return ret
                 
             count += 1
-            if count >= max_pairs:
+            if count > max_pairs:
                 return None
             
 

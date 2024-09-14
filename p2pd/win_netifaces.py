@@ -496,8 +496,26 @@ class Netifaces():
 
         # Setup name index.
         self.by_name_index = {}
+        name_counts = {}
         for _, if_info in self.by_guid_index.items():
+            # Name used for this interface.
             name = if_info["name"]
+
+            # A duplicate for this if exists.
+            if name in name_counts:
+                # Increment count for this name.
+                name_counts[name] += 1
+                count = name_counts[name] 
+
+                # Update the name associated with if details.
+                name = f"{name} #{count}"
+                if_info["name"] = name
+            else:
+                # Record first use of this name.
+                name_counts[name] = 1
+
+            # Every if_info has a unique name.
+            # Because if descriptions aren't unique for the same HW.
             self.by_name_index[name] = if_info
 
         # Save main gateways used.

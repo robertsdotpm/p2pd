@@ -36,7 +36,14 @@ if __name__ != '__main__':
     from .install import *
     from .toxiclient import ToxiToxic, ToxiTunnel, ToxiClient
     from .toxiserver import ToxiMainServer
-    from .pnp_server import *
+
+    # Will fail if no aiomysql.
+    # But PNP server is not needed to use P2PD.
+    try:
+        from .pnp_server import *
+    except:
+        log_exception()
+        
     from .pnp_client import *
     from .nickname import *
     from .test_init import *

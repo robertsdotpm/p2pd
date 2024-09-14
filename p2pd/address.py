@@ -1,4 +1,3 @@
-import aiodns
 from .utils import *
 from .net import *
 from .bind import *
@@ -18,6 +17,10 @@ DNS_NAMESERVERS = {
 }
 
 async def async_res_domain_af(af, host):
+    # Throw error if not installed.
+    # So auto fallback to getaddrinfo.
+    import aiodns
+
     # Get IP of domain based on specific address family.
     nameservers = DNS_NAMESERVERS[af]
     resolver = aiodns.DNSResolver(nameservers=nameservers)

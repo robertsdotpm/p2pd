@@ -1,1 +1,1 @@
-fasteners
+aiodns # Used for DNS queries.

@@ -266,11 +266,13 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
         dest = "8.8.8.8" if af == IP4 else "2001:4860:4860::8888"
         af_default_nic_ip = determine_if_path(af, dest)
         tasks.append(
-            get_wan_ip_cfab(
-                af_default_nic_ip,
-                min_agree,
-                stun_clients,
-                timeout
+            async_wrap_errors(
+                get_wan_ip_cfab(
+                    af_default_nic_ip,
+                    min_agree,
+                    stun_clients,
+                    timeout
+                )
             )
         )
 

@@ -21,6 +21,9 @@ else:
 def get_interface_af(netifaces, name):
     af_list = []
     for af in [IP4, IP6]:
+        if af not in netifaces.ifaddresses(name):
+            continue
+
         if len(netifaces.ifaddresses(name)[af]):
             af_list.append(af)
 
@@ -410,7 +413,10 @@ class Interface():
         # Set MAC address of Interface.
         self.mac = await get_mac_address(self.name, self.netifaces)
         if self.mac is None:
-            raise Exception("mac none.")
+            # Currently not used for anything important.
+            # Might as well not crash if not needed.
+            log("Could not load mac. Setting to blank.")
+            self.mac = ""
 
         # If there's only 1 interface set is_default.   
         ifs = clean_if_list(self.netifaces.interfaces())

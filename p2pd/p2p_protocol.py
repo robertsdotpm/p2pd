@@ -48,10 +48,14 @@ class SigProtoHandlers():
         if is_enc:
             print("got encrypted msg")
             print(buf)
-            buf = decrypt(
-                self.node.sk.to_string(),
-                buf[1:]
-            )
+            try:
+                buf = decrypt(
+                    self.node.sk,
+                    buf[1:]
+                )
+            except:
+                what_exception()
+            print(buf)
         else:
             buf = buf[1:]
 

@@ -301,16 +301,23 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
         await p2p_check_strats(params, strats)
 
     async def test_p2p_register_connect(self):
+        if_names = await list_interfaces()
+        ifs = await load_interfaces(["enp0s25"])
+
+        
         name = input("name: ")
         params = {
-            "sig_pipe_no": 0,
+            "sig_pipe_no": 2,
             "addr_types": [EXT_BIND, NIC_BIND],
-            "same_if": True,
+            "ifs": ifs,
         }
 
         use_strats = [P2P_DIRECT]
         async with TestNodes(**params) as nodes:
             name = await nodes.bob.nickname(name)
+            while 1:
+                await asyncio.sleep(1)
+
             pipe = await nodes.alice.connect(
                 name,
                 strategies=use_strats,
