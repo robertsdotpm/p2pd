@@ -1,6 +1,7 @@
 # TODO: different key per request.
 
-from .ecies import generate_key, decrypt, encrypt
+from ecdsa import SECP256k1, SigningKey
+from .ecies import decrypt, encrypt
 from .pipe_utils import *
 from .pnp_utils import *
 from .address import *
@@ -21,9 +22,8 @@ class PNPClient():
         self.vkc = sk.verifying_key.to_string("compressed")
         self.names = {}
         self.proto = proto
-        secp_k = generate_key()
-        self.reply_sk = secp_k.secret
-        self.reply_pk = secp_k.public_key.format(True)
+        self.reply_sk = SigningKey.generate(curve=SECP256k1)
+        self.reply_pk = self.reply_sk.get_verifying_key().to_string("compressed")
         assert(len(self.reply_pk) == 33)
 
     async def get_updated(self, name):

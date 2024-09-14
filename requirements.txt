@@ -8,6 +8,5 @@ aiomysql # Used for PNP.
 pyroute2; platform_system != "Windows" and platform_system != "Darwin" # Fallback for interface on Android with netlink.
 
 # These are the dependencies for ECIES.
-coincurve >=13,<20
 winregistry; platform_system == "Windows"
 aiodns # Used for DNS queries.

@@ -301,7 +301,6 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
         await p2p_check_strats(params, strats)
 
     async def test_p2p_register_connect(self):
-        return
         name = input("name: ")
         params = {
             "sig_pipe_no": 0,

@@ -1,8 +1,7 @@
 import time
 import random
 import struct
-from .ecies import generate_key
-from ecdsa import VerifyingKey, SECP256k1
+from ecdsa import VerifyingKey, SECP256k1, SigningKey
 from .utils import *
 
 #####################################################################################
@@ -42,9 +41,8 @@ class PNPPacket():
             assert(len(vkc) == 33)
 
     def gen_reply_key(self):
-        secp_k = generate_key()
-        self.reply_sk = secp_k.secret
-        self.reply_pk = secp_k.public_key.format(True)
+        self.reply_sk = SigningKey.generate(curve=SECP256k1)
+        self.reply_pk = self.reply_sk.get_verifying_key().to_string("compressed")
 
     def get_msg_to_sign(self):
         return PNPPacket(

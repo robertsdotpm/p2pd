@@ -23,7 +23,7 @@ Todo: test IPv6 works - setup home for it again.
 from .ecies import encrypt, decrypt
 import os
 import aiomysql
-from ecdsa import VerifyingKey, SECP256k1
+from ecdsa import VerifyingKey, SECP256k1, SigningKey
 from .pnp_utils import *
 from .net import *
 from .ip_range import IPRange
@@ -401,7 +401,7 @@ class PNPServer(Daemon):
         self.db_user = db_user
         self.db_pass = db_pass
         self.db_name = db_name
-        self.reply_sk = reply_sk
+        self.reply_sk = SigningKey.from_string(reply_sk, curve=SECP256k1)
         self.reply_pk = reply_pk
         self.v4_name_limit = v4_name_limit
         self.v6_name_limit = v6_name_limit
