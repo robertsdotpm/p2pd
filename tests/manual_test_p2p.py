@@ -302,14 +302,15 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
 
     async def test_p2p_register_connect(self):
         if_names = await list_interfaces()
-        ifs = await load_interfaces(["enp0s25"])
-
+        ifs = await load_interfaces(if_names[1:])
         
         name = input("name: ")
         params = {
             "sig_pipe_no": 2,
             "addr_types": [EXT_BIND, NIC_BIND],
             "ifs": ifs,
+            "same_if": False if len(ifs) >= 2 else True,
+            "multi_ifs": True,
         }
 
         use_strats = [P2P_DIRECT]

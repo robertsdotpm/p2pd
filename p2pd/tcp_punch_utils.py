@@ -92,8 +92,8 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
         code adjusts the delay based on any amount
         of time already passed.
         """
-        #if ms_delay:
-        #    await asyncio.sleep(ms_delay / 1000)
+        if ms_delay:
+            await asyncio.sleep(ms_delay / 1000)
 
         # Bind to a specific port and interface.
         route = await interface.route(af).bind(
@@ -173,15 +173,15 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
             await dest.res(interface.route(af))
             dest = dest.select_ip(af)
             
-            for i in range(0, steps):
-                s = await delayed_punch(
+            for sleep_time in range(0, steps):
+                task = delayed_punch(
                     # Address family for the con.
                     af,
 
                     # Wait until ms to do punching.
                     # Punches are split up over time
                     # to increase chances of success.
-                    0,
+                    sleep_time * ms_spacing,
 
                     # Local mapping.
                     send_mappings[i],
@@ -195,13 +195,14 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
                     # Punch from this interface.
                     interface,
                 )
+                tasks.append(task)
                 
-                if s is not None:
-                    print(s)
-                    return [s]
-                    
-                await asyncio.sleep(0.001)
 
+        # Start running tasks.
+        all_tasks = asyncio.gather(*tasks)
+        outs = await all_tasks
+        outs = strip_none(outs)
+        return outs
     except:
         what_exception()
 
@@ -386,8 +387,8 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
     while 1:
         # Don't tie up the event loop.
         await asyncio.sleep(1)
-       
-       # Exit loop if chain breaks.
+
+        # Exit loop if chain breaks.
         if False in [client_pipe.is_running, upstream_pipe.is_running]:
             break
             
