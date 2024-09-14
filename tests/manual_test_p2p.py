@@ -199,7 +199,8 @@ class TestNodes():
 
         # Start the nodes.
         nic = self.alice.ifs[0]
-        sys_clock = SysClock(nic, Dec("-0.02839018452552057081653225806"))
+        sys_clock = SysClock(nic)
+        await sys_clock.start()
         await asyncio.gather(
             self.alice.start(sys_clock),
             self.bob.start(sys_clock),
