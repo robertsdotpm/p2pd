@@ -32,14 +32,14 @@ class SigProtoHandlers():
         )
 
         # Connect to chosen address.
-        return await asyncio.wait_for(
+        task = asyncio.ensure_future(
             pp.connect(
                 strategies=[strategy],
                 reply=msg,
                 conf=conf,
-            ),
-            timeout
+            )
         )
+        self.node.tasks.append(task)
     
     # Receive a protocol message and validate it.
     async def proto(self, buf):

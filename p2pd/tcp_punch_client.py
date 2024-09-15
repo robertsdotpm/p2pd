@@ -109,6 +109,7 @@ class TCPPuncher():
         self.recv_mappings = []
         self.send_mappings = []
         self.preloaded_mappings = []
+        self.listen_pipe = None
 
     def get_ntp_meet_time(self):
         return self.sys_clock.time() + Dec(NTP_MEET_STEP)
@@ -271,10 +272,11 @@ class TCPPuncher():
         return puncher_from_dict(d, TCPPuncher)
     
     async def close(self):
-        if self.pipe is None:
-            return
-        
-        await self.pipe.close()
+        if self.pipe is not None:
+            await self.pipe.close()
+
+        if self.listen_pipe is not None:
+            await self.listen_pipe.close()
 
 # Started in a new process.
 def proc_do_punching(args):
