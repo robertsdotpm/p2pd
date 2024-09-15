@@ -293,7 +293,9 @@ async def punch_close_msg(msg, client_tup, pipe):
         await asyncio.sleep(2)
         await pipe.close()
 
-async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup):
+
+
+async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, has_success):
     try:
         print("do punching")
 
@@ -387,6 +389,7 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         client_pipe.add_pipe(upstream_pipe)
 
         # Prevent this process from exiting.
+        has_success.set()
         while 1:
             # Don't tie up the event loop.
             await asyncio.sleep(1)
@@ -401,6 +404,41 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         print("punch proc exited.")
     except:
         what_exception()
+
+
+async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup):
+    has_success = asyncio.Event()
+    task = asyncio.ensure_future(
+        async_wrap_errors(
+            do_punching(
+                af,
+                dest_addr,
+                send_mappings,
+                recv_mappings,
+                current_ntp,
+                ntp_meet,
+                mode,
+                interface,
+                reverse_tup,
+                has_success,
+            )
+        )
+    )
+
+    """
+    The punching func has 30 seconds to set this.
+    If it doesn't a timeout error is thrown to end the process.
+    So a hung punching process doesn't take up a process.
+    On the other hand -- if it succeeds and sets it block forever.
+    """
+    await asyncio.wait_for(
+        has_success.wait(),
+        30
+    )
+
+    while 1:
+        await asyncio.sleep(1)
+
 
 def puncher_to_dict(self):
     assert(self.interface)

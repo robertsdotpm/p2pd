@@ -328,6 +328,8 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
 
             assert(pipe is not None)
             assert(await check_pipe(pipe))
+            while 1:
+                asyncio.sleep(1)
             await pipe.close()
 
     async def test_p2p_successive_failure(self):

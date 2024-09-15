@@ -275,7 +275,7 @@ class PipeEvents(BaseACKProto):
 
         # Route messages to any pipes.
         for pipe in self.pipes:
-            task = asyncio.create_task(
+            task = asyncio.ensure_future(
                 pipe.send(
                     data,
                     pipe.stream.dest_tup

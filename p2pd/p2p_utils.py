@@ -1,6 +1,7 @@
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 import hashlib
+import os
 import socket
 from .settings import *
 from .utils import *
@@ -22,7 +23,8 @@ def init_process_pool():
     # Handle exceptions on close.
     loop.set_exception_handler(handle_exceptions)
 
-async def get_pp_executors(workers=2):
+async def get_pp_executors(workers=None):
+    workers = workers or min(32, os.cpu_count() + 4)
     try:
         pp_executor = ProcessPoolExecutor(max_workers=workers)
     except Exception:
@@ -394,12 +396,15 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                 NOTE: if you do this then surely the src_info
                 needs to be patched to account for possibly
                 changed offsets and details.
-                interface = await select_if_by_dest(
+                interface, src_index = await select_if_by_dest(
                     af,
+                    src_info["if_index"],
                     dest_info["ip"],
                     interface,
                     pp.node.ifs,
                 )
+
+                src_info = pp.src[af][src_index]
                 """
                 print(f"if = {id(interface)}")
                 print(f"netifaces = {interface.netifaces}")

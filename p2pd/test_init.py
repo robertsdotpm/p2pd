@@ -59,7 +59,7 @@ async def check_pipe(pipe, dest_tup=None):
 
     # Give any pipes time to add callback handlers.
     # This prevents race conditions in processing messages.
-    await asyncio.sleep(1)
+    await asyncio.sleep(4)
     await pipe.echo(data, dest_tup)
 
     # Wait for message with timeout.

@@ -75,7 +75,7 @@ class P2PNodeExtra():
                 if pipe_id in self.tcp_punch_clients:
                     puncher = self.tcp_punch_clients[pipe_id]
 
-                    """
+                    
                     task = asyncio.ensure_future(
                         async_wrap_errors(
                             puncher.setup_punching_process()
@@ -84,11 +84,12 @@ class P2PNodeExtra():
 
                     # Avoid garbage collection for this task.
                     self.tasks.append(task)
+                    
                     """
-
                     await async_wrap_errors(
                         puncher.setup_punching_process()
                     )
+                    """
 
 
             print("punch done")

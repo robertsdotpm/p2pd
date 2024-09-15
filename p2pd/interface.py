@@ -796,7 +796,7 @@ correspond to a certain network interface which
 can be double-checked against what interface is
 intended as the source for a connection.
 """
-async def select_if_by_dest(af, dest_ip, interface, ifs=[]):
+async def select_if_by_dest(af, src_index, dest_ip, interface, ifs=[]):
     """
     All valid interfaces for the software can reach
     internet -- use original interface if the dest_ip
@@ -805,7 +805,7 @@ async def select_if_by_dest(af, dest_ip, interface, ifs=[]):
     cidr = af_to_cidr(af)
     dest_ipr = IPRange(dest_ip, cidr=cidr)
     if dest_ipr.is_public:
-        return interface
+        return interface, src_index
     
     # Simply connects a non-blocking socket to the dest_ip
     # and checks the local IP used to select an Interface.
@@ -826,10 +826,13 @@ async def select_if_by_dest(af, dest_ip, interface, ifs=[]):
         return interface
     
     # If already exists return it instead.
-    for needle_if in ifs:
+    for if_index, needle_if in enumerate(ifs):
         if needle_if.name == bind_interface.name:
-            return needle_if
+            return needle_if, if_index
 
+    return interface, src_index
+
+    # No longer load an IF if its not in their ifs set.
     return await bind_interface
         
     """
