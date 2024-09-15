@@ -211,33 +211,36 @@ class TCPPuncher():
 
         print("starting proc do punching")
 
-        # Schedule TCP punching in process pool executor.
-        loop = asyncio.get_event_loop()
-        loop.run_in_executor(
-            self.pp_executor,
-            proc_do_punching,
-            args
-        )
-        
-        # Check every 100 ms for 5 seconds.
-        while 1:
-            try:
-                # Check if reverse connect server has a client yet.
-                if len(self.listen_pipe.tcp_clients):
-                    self.pipe = self.listen_pipe.tcp_clients[0]
-                    pipe_close = self.pipe.close
-                    async def close_patch():
-                        await self.pipe.send(PUNCH_END)
-                        await pipe_close()
-                        
-                    self.pipe.close = close_patch
-                    self.node.pipe_ready(self.pipe_id, self.pipe)
-                    return self.pipe
-            except:
-                what_exception()
+        try:
+            # Schedule TCP punching in process pool executor.
+            loop = asyncio.get_event_loop()
+            loop.run_in_executor(
+                self.pp_executor,
+                proc_do_punching,
+                args
+            )
             
-            # Check every 100 ms.
-            await asyncio.sleep(0.1)
+            # Check every 100 ms for 5 seconds.
+            while 1:
+                try:
+                    # Check if reverse connect server has a client yet.
+                    if len(self.listen_pipe.tcp_clients):
+                        self.pipe = self.listen_pipe.tcp_clients[0]
+                        pipe_close = self.pipe.close
+                        async def close_patch():
+                            await self.pipe.send(PUNCH_END)
+                            await pipe_close()
+                            
+                        self.pipe.close = close_patch
+                        self.node.pipe_ready(self.pipe_id, self.pipe)
+                        return self.pipe
+                except:
+                    what_exception()
+                
+                # Check every 100 ms.
+                await asyncio.sleep(0.1)
+        except:
+            what_exception()
 
     def set_punch_mode(self):
         self.punch_mode = get_punch_mode(
@@ -275,42 +278,49 @@ class TCPPuncher():
 
 # Started in a new process.
 def proc_do_punching(args):
-    """
-    On Windows it seems like using the default 'proactor event loop'
-    prevents the TCP hole punching code from working. It seems that
-    manually setting the event loop to use SelectorEventLoop
-    fixes the issue. However, this may mean breaking some of
-    my command execution code on Windows -- test this.
-    """
-    asyncio.set_event_loop_policy(SelectorEventPolicy())
+    print("in proc do punching")
 
-    # Build a puncher from a dictionary.
-    reverse_tup = args[0]
-    d = args[1]
-    interface = args[2]
-    puncher = TCPPuncher.from_dict(d)
+    try:
 
-    # Execute the punching in a new event loop.
-    loop = asyncio.get_event_loop()
-    f = asyncio.ensure_future(
-        async_wrap_errors(
-            do_punching(
-                puncher.af,
-                puncher.dest_info["ip"],
-                puncher.send_mappings,
-                puncher.recv_mappings,
-                puncher.sys_clock.time(),
-                puncher.start_time,
-                puncher.punch_mode,
-                interface,
-                reverse_tup
-            )
-        ),
-        loop=loop
-    )
 
-    # The moment the function is done save its result to the queue.
-    # The queue is sharable and works with basic types.
-    #f.add_done_callback(lambda t: q.put(t.result()))
-    return loop.run_until_complete(f)
+        """
+        On Windows it seems like using the default 'proactor event loop'
+        prevents the TCP hole punching code from working. It seems that
+        manually setting the event loop to use SelectorEventLoop
+        fixes the issue. However, this may mean breaking some of
+        my command execution code on Windows -- test this.
+        """
+        asyncio.set_event_loop_policy(SelectorEventPolicy())
+
+        # Build a puncher from a dictionary.
+        reverse_tup = args[0]
+        d = args[1]
+        interface = args[2]
+        puncher = TCPPuncher.from_dict(d)
+
+        # Execute the punching in a new event loop.
+        loop = asyncio.get_event_loop()
+        f = asyncio.ensure_future(
+            async_wrap_errors(
+                do_punching(
+                    puncher.af,
+                    puncher.dest_info["ip"],
+                    puncher.send_mappings,
+                    puncher.recv_mappings,
+                    puncher.sys_clock.time(),
+                    puncher.start_time,
+                    puncher.punch_mode,
+                    interface,
+                    reverse_tup
+                )
+            ),
+            loop=loop
+        )
+
+        # The moment the function is done save its result to the queue.
+        # The queue is sharable and works with basic types.
+        #f.add_done_callback(lambda t: q.put(t.result()))
+        return loop.run_until_complete(f)
+    except:
+        what_exception()
 

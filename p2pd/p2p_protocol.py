@@ -79,6 +79,7 @@ class SigProtoHandlers():
         
         # Old message?
         if msg.meta.pipe_id in self.seen:
+            print("dropping old msg.")
             return
         else:
             self.seen[msg.meta.pipe_id] = time.time()

@@ -86,7 +86,9 @@ class P2PNodeExtra():
                     self.tasks.append(task)
                     """
 
-                    await puncher.setup_punching_process()
+                    await async_wrap_errors(
+                        puncher.setup_punching_process()
+                    )
 
 
             print("punch done")

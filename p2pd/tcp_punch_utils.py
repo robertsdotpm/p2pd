@@ -294,108 +294,113 @@ async def punch_close_msg(msg, client_tup, pipe):
         await pipe.close()
 
 async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup):
-    """
-    Punching is done in its own process.
-    The process returns an open socket and Python
-    warns that the socket wasn't closed properly.
-    This is the intention and not a bug!
-    This code disables that warning.
-    """
-    warnings.filterwarnings('ignore', message="unclosed", category=ResourceWarning)
+    try:
+        print("do punching")
 
-    # Set our WAN address from default route.
-    our_wan = interface.route(af).ext()
+        """
+        Punching is done in its own process.
+        The process returns an open socket and Python
+        warns that the socket wasn't closed properly.
+        This is the intention and not a bug!
+        This code disables that warning.
+        """
+        warnings.filterwarnings('ignore', message="unclosed", category=ResourceWarning)
 
-    # Wait for NTP punching time.
-    if ntp_meet:
-        await wait_for_punch_time(current_ntp, ntp_meet)
+        # Set our WAN address from default route.
+        our_wan = interface.route(af).ext()
 
-    """
-    If punching to our self or a machine on the LAN
-    then the ir remote port doesn't apply. Punch to
-    their local port instead.
-    """
-    if mode == TCP_PUNCH_LAN:
-        for mapping in recv_mappings:
-            mapping.remote = mapping.local
+        # Wait for NTP punching time.
+        if ntp_meet:
+            await wait_for_punch_time(current_ntp, ntp_meet)
 
-    # Log warning messages.
-    punching_sanity_check(
-        mode=mode,
-        our_wan=our_wan,
-        dest_addr=dest_addr,
-        send_mappings=send_mappings,
-        recv_mappings=recv_mappings,
-    )
+        """
+        If punching to our self or a machine on the LAN
+        then the ir remote port doesn't apply. Punch to
+        their local port instead.
+        """
+        if mode == TCP_PUNCH_LAN:
+            for mapping in recv_mappings:
+                mapping.remote = mapping.local
 
-    # Carry out TCP punching.
-    outs = await schedule_delayed_punching(
-        af=af,
-        dest_addr=dest_addr,
-        send_mappings=send_mappings,
-        recv_mappings=recv_mappings,
-        interface=interface,
-    )
+        # Log warning messages.
+        punching_sanity_check(
+            mode=mode,
+            our_wan=our_wan,
+            dest_addr=dest_addr,
+            send_mappings=send_mappings,
+            recv_mappings=recv_mappings,
+        )
 
-    print("punch outs = ")
-    print(outs)
+        # Carry out TCP punching.
+        outs = await schedule_delayed_punching(
+            af=af,
+            dest_addr=dest_addr,
+            send_mappings=send_mappings,
+            recv_mappings=recv_mappings,
+            interface=interface,
+        )
 
-    # Make both sides choose the same socket.
-    sock = choose_same_punch_sock(our_wan, outs)
-    if sock is None:
-        log("> tcp punch chosen sock is none")
-        return None
+        print("punch outs = ")
+        print(outs)
 
-    # Close all other sockets that aren't needed.
-    close_unneeded_socks(sock, outs)
+        # Make both sides choose the same socket.
+        sock = choose_same_punch_sock(our_wan, outs)
+        if sock is None:
+            log("> tcp punch chosen sock is none")
+            return None
 
-    print(f"chosen sock = {sock}")
+        # Close all other sockets that aren't needed.
+        close_unneeded_socks(sock, outs)
 
-    # Punched hole to the remote node.
-    route = await interface.route(af).bind(sock.getsockname()[1])
-    upstream_pipe = await pipe_open(
-        route=route,
-        proto=TCP,
-        dest=sock.getpeername()[:2],
-        sock=sock,
-        msg_cb=punch_close_msg
-    )
+        print(f"chosen sock = {sock}")
 
-    print(f"punch pipe = {upstream_pipe} {upstream_pipe.sock}")
+        # Punched hole to the remote node.
+        route = await interface.route(af).bind(sock.getsockname()[1])
+        upstream_pipe = await pipe_open(
+            route=route,
+            proto=TCP,
+            dest=sock.getpeername()[:2],
+            sock=sock,
+            msg_cb=punch_close_msg
+        )
 
-    # Reverse connect to a listen server in parent process.
-    # This avoids sharing between processes which breaks easily.
-    route = await interface.route(af).bind()
-    client_pipe = await pipe_open(
-        TCP,
-        dest=reverse_tup,
-        route=route,
-        msg_cb=punch_close_msg
-    )
-    
-    print(f"client pipe = {client_pipe} {client_pipe.sock}")
+        print(f"punch pipe = {upstream_pipe} {upstream_pipe.sock}")
 
-    # Forward messages from upstream to client.
-    # upstream_sock -> client_pipe
-    upstream_pipe.add_pipe(client_pipe)
+        # Reverse connect to a listen server in parent process.
+        # This avoids sharing between processes which breaks easily.
+        route = await interface.route(af).bind()
+        client_pipe = await pipe_open(
+            TCP,
+            dest=reverse_tup,
+            route=route,
+            msg_cb=punch_close_msg
+        )
+        
+        print(f"client pipe = {client_pipe} {client_pipe.sock}")
 
-    # Forward messages from client to upstream.
-    # client_pipe  -> upstream_sock
-    client_pipe.add_pipe(upstream_pipe)
+        # Forward messages from upstream to client.
+        # upstream_sock -> client_pipe
+        upstream_pipe.add_pipe(client_pipe)
 
-    # Prevent this process from exiting.
-    while 1:
-        # Don't tie up the event loop.
-        await asyncio.sleep(1)
+        # Forward messages from client to upstream.
+        # client_pipe  -> upstream_sock
+        client_pipe.add_pipe(upstream_pipe)
 
-        # Exit loop if chain breaks.
-        if False in [client_pipe.is_running, upstream_pipe.is_running]:
-            break
-            
-    # Ensure cleanup for pipes.
-    await client_pipe.close()
-    await upstream_pipe.close()
-    print("punch proc exited.")
+        # Prevent this process from exiting.
+        while 1:
+            # Don't tie up the event loop.
+            await asyncio.sleep(1)
+
+            # Exit loop if chain breaks.
+            if False in [client_pipe.is_running, upstream_pipe.is_running]:
+                break
+                
+        # Ensure cleanup for pipes.
+        await client_pipe.close()
+        await upstream_pipe.close()
+        print("punch proc exited.")
+    except:
+        what_exception()
 
 def puncher_to_dict(self):
     assert(self.interface)
@@ -429,7 +434,8 @@ def puncher_from_dict(d, cls):
         dest_info=d["dest_info"],
         stuns=None,
         sys_clock=sys_clock,
-        same_machine=d["same_machine"]
+        same_machine=d["same_machine"],
+        nic=interface
     )
     puncher.state = d["state"]
     puncher.side = d["side"]
@@ -437,5 +443,4 @@ def puncher_from_dict(d, cls):
     puncher.recv_mappings = recv_mappings
     puncher.send_mappings = send_mappings
     puncher.start_time = Dec(d["start_time"])
-    puncher.interface = interface
     return puncher
