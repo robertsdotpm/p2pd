@@ -164,7 +164,7 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
         assert(steps > 0)
         assert(steps)
         assert(len(send_mappings))
-        for i in range(0, len(send_mappings)):
+        for i in range(0, 1):
             # Endpoint to punch to.
             print(f"addr: {send_mappings[i].local} {recv_mappings[i].remote} {dest_addr}")
 

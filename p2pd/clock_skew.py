@@ -32,13 +32,13 @@ async def get_ntp(interface, server=None, retry=NTP_RETRY):
     try:
         dest = (
             server["host"],
-            server["port"],
+            int(server["port"]),
         )
     except:
         ip = server[IP4] or server[IP6]
         dest = (
             ip,
-            server["port"],
+            int(server["port"]),
         )
 
     try:
@@ -84,7 +84,7 @@ class SysClock:
             ntp_ret = await async_wrap_errors(
                 get_ntp(
                     self.interface,
-                    local_ip
+                    (local_ip, 123)
                 ),
                 timeout=NTP_RETRY * NTP_TIMEOUT
             )
