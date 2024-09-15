@@ -42,10 +42,8 @@ class SigMsg():
         af = i_to_af(af) 
 
         # Validate src if index.
-        if_len = len(addr[af])
-        r = [0, if_len - 1]
-        if not in_range(if_index, r):
-            raise Exception("bad if_i {if_index}")
+        if if_index not in addr[af]:
+            raise Exception(f"bad if_i {if_index}")
         
         return af, addr
     

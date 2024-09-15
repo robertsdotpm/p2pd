@@ -570,4 +570,5 @@ class Netifaces():
         for _, if_info in self.by_guid_index.items():
             ifs.append(if_info["name"])
 
+        ifs = sorted(ifs)
         return ifs

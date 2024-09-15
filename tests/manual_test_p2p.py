@@ -308,7 +308,7 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
         name = input("name: ")
         params = {
             "sig_pipe_no": 2,
-            "addr_types": [EXT_BIND, NIC_BIND],
+            "addr_types": [EXT_BIND],
             "ifs": ifs,
             "same_if": False if len(ifs) >= 2 else True,
             "multi_ifs": True,

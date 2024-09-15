@@ -677,8 +677,6 @@ async def list_interfaces(netifaces=None):
     if netifaces is None:
         netifaces = await init_p2pd()
 
-    
-
     # Get list of good interfaces with ::/0 or 0.0.0.0 routes.
     ifs = await filter_trash_interfaces(netifaces)
     ifs = to_unique(ifs)
@@ -686,6 +684,7 @@ async def list_interfaces(netifaces=None):
         # Something must have gone wrong so just use regular netifaces.
         ifs = netifaces.interfaces()
 
+    ifs = sorted(ifs)
     return ifs
 
     # Start all interfaces.

@@ -143,8 +143,10 @@ class P2PPipe():
             assert(dest_info == puncher.dest_info)
         else:
             # Create a new puncher for this pipe ID.
-            #if_index = src_info["if_index"]
-            #stuns = self.node.stun_clients[af][if_index]
+            if_index = src_info["if_index"]
+            stuns = self.node.stun_clients[af][if_index]
+
+            """
             stuns = await get_n_stun_clients(
                 af=af,
                 n=USE_MAP_NO + 2,
@@ -152,7 +154,8 @@ class P2PPipe():
                 proto=TCP,
                 conf=PUNCH_CONF,
             )
-
+            """
+            
             # Create a new puncher for this pipe ID.
             puncher = TCPPuncher(
                 af,
@@ -232,14 +235,6 @@ class P2PPipe():
             },
         })
         self.route_msg(msg, m=2)
-
-        # Basic dest addr validation.
-        msg.routing.load_if_extra(self.node)
-        msg.validate_dest(
-            af,
-            puncher.punch_mode,
-            str(dest_info["ip"])
-        )
 
         # Prevent protocol loop.
         return await self.node.pipes[pipe_id]

@@ -177,6 +177,8 @@ class TCPPuncher():
             return 1
         
     async def setup_punching_process(self):
+        print("in setup punching process")
+
         # Listen server that process will connect back to.
         # References are saved to avoid garbage collection.
         route = await self.interface.route(self.af).bind()
@@ -188,11 +190,14 @@ class TCPPuncher():
         )
         
         # Might not be necessary since the get addr infos does this.
+        """
         interface = await select_if_by_dest(
             self.af,
             self.dest_info["ip"],
             self.interface
         )
+        """
+        interface = self.interface
 
         # Passed on to a new process.
         listen_tup = self.listen_pipe.sock.getsockname()[:2]
@@ -203,6 +208,8 @@ class TCPPuncher():
             self.to_dict(),
             interface,
         )
+
+        print("starting proc do punching")
 
         # Schedule TCP punching in process pool executor.
         loop = asyncio.get_event_loop()
