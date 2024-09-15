@@ -70,13 +70,19 @@ class P2PNodeExtra():
                 return
             
             print("do punch ")
+            if len(params):
+                pipe_id = params[0]
+                if pipe_id in self.tcp_punch_clients:
+                    puncher = self.tcp_punch_clients[pipe_id]
 
-            pipe_id = params[0]
-            puncher = self.tcp_punch_clients[pipe_id]
+                    task = asyncio.ensure_future(
+                        async_wrap_errors(
+                            puncher.setup_punching_process()
+                        )
+                    )
 
-            await async_wrap_errors(
-                puncher.setup_punching_process()
-            )
+                    # Avoid garbage collection for this task.
+                    self.tasks.append(task)
 
 
             print("punch done")
@@ -87,7 +93,10 @@ class P2PNodeExtra():
         except RuntimeError:
             print("punch queue worker run time error")
             return
-
+        except:
+            log_exception()
+            what_exception()
+        
     def start_punch_worker(self):
         print("in start punch worker")
         self.punch_worker_task = asyncio.ensure_future(

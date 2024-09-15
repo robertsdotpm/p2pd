@@ -29,7 +29,7 @@ class SignalMock():
 
     def on_message(self, client, topic, payload, qos, properties):
         self.pending_tasks.append(
-            asyncio.create_task(
+            asyncio.ensure_future(
                 async_wrap_errors(
                     self.f_proto(payload, self),
 

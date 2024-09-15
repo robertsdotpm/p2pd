@@ -303,7 +303,7 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
 
     async def test_p2p_register_connect(self):
         if_names = await list_interfaces()
-        ifs = await load_interfaces(if_names[1:])
+        ifs = await load_interfaces(if_names)
         
         name = input("name: ")
         params = {

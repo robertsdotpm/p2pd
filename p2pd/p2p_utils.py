@@ -159,6 +159,8 @@ also addr compares arent the best idea since ifaces can have
 multiple addresses. think on this more.
 """
 def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=True):
+    print(f"in select dest ipr {af} {same_pc} {addr_types}")
+
     # Shorten these for expressions.
     src_nid = src_info["netiface_index"]
     dest_nid = dest_info["netiface_index"]
@@ -180,6 +182,12 @@ def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=T
     same_if = src_nid == dest_nid
     same_if_on_host = same_pc and same_if
     different_ifs_on_host = same_pc and not same_if
+
+    print(f"same if = {same_if}")
+    print(f"same if on host = {same_if_on_host}")
+    print(f"different ifs on host = {different_ifs_on_host}")
+    print(f"same lan = {same_lan}")
+    print(f"has set bind = {has_set_bind}")
 
     # There may be multiple compatible addresses per info.
     for addr_type in addr_types:
@@ -372,7 +380,7 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                     print("invalid matched af")
                     continue
 
-                print(dest_info["ip"])
+                print(f"dest ipr ip selected = {dest_info['ip']}")
 
                 """
                 There are rules that govern the reachability
@@ -380,12 +388,19 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                 function takes care of edge cases mostly
                 to do with same-machine, multi-interfaces.
                 """
+
+                """
+                disable for testing
+                NOTE: if you do this then surely the src_info
+                needs to be patched to account for possibly
+                changed offsets and details.
                 interface = await select_if_by_dest(
                     af,
                     dest_info["ip"],
                     interface,
                     pp.node.ifs,
                 )
+                """
                 print(f"if = {id(interface)}")
                 print(f"netifaces = {interface.netifaces}")
                 
@@ -457,31 +472,37 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
 
         # Iterates by shared AFs
         # filtered by best NAT (non-overlapping WANS.)
+        """
         if_info_iter = IFInfoIter(af, pp.src, pp.dest)
         if not len(if_info_iter):
             continue
+        """
 
         # Get interface offset that supports this af.
-        for src_info, dest_info in if_info_iter:
-            # Only try up to N pairs per technique.
-            # Technique-specific N to avoid lengthy delays.
-            print(src_info)
-            print(dest_info)
-            print()
-            ret = await async_wrap_errors(
-                try_addr_infos(src_info, dest_info)
-            )
+        #for src_info, dest_info in if_info_iter:
+        for dest_info in list(pp.dest[af].values()):
+            for src_info in list(pp.src[af].values()):
+                # Only try up to N pairs per technique.
+                # Technique-specific N to avoid lengthy delays.
+                print(src_info)
+                print(dest_info)
+                print()
+                ret = await async_wrap_errors(
+                    try_addr_infos(src_info, dest_info)
+                )
 
-            # Success so return.
-            if ret is not None:
-                return ret
-                
-            count += 1
-            if count > max_pairs:
-                return None
-            
+                # Success so return.
+                if ret is not None:
+                    return ret
+                    
+                count += 1
 
-            # Cleanup here?
+                """
+                if count > max_pairs:
+                    return None
+                """
+
+                # Cleanup here?
                 
     # Failure.
     return None
@@ -510,5 +531,5 @@ async def fallback_machine_id(netifaces, app_id="p2pd"):
     if_name = get_default_iface(netifaces)
     mac = await get_mac_address(if_name, netifaces)
     buf = f"{app_id} {host} {if_name} {mac}"
-    return to_s(hashlib.sha256(to_b(buf)).digest())
+    return to_s(hashlib.sha256(to_b(buf)).hexdigest())
 

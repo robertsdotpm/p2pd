@@ -134,7 +134,7 @@ class P2PPipe():
         self.route_msg(msg, m=1)
         return await self.node.pipes[pipe_id]
 
-    async def tcp_hole_punch(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
+    async def tcp_hole_punch(self, af, pipe_id, src_info, dest_info, nic, addr_type, reply=None):
         # Load TCP punch client for this pipe ID.
         if pipe_id in self.node.tcp_punch_clients:
             puncher = self.node.tcp_punch_clients[pipe_id]
@@ -143,8 +143,15 @@ class P2PPipe():
             assert(dest_info == puncher.dest_info)
         else:
             # Create a new puncher for this pipe ID.
-            if_index = src_info["if_index"]
-            stuns = self.node.stun_clients[af][if_index]
+            #if_index = src_info["if_index"]
+            #stuns = self.node.stun_clients[af][if_index]
+            stuns = await get_n_stun_clients(
+                af=af,
+                n=USE_MAP_NO + 2,
+                interface=nic,
+                proto=TCP,
+                conf=PUNCH_CONF,
+            )
 
             # Create a new puncher for this pipe ID.
             puncher = TCPPuncher(
@@ -153,6 +160,7 @@ class P2PPipe():
                 dest_info,
                 stuns,
                 self.node.sys_clock,
+                nic,
                 self.same_machine,
             )
 
@@ -193,12 +201,13 @@ class P2PPipe():
         ensure there's enough time to receive any
         updated mappings for the dest peer (if any.)
         """
-        asyncio.ensure_future(
+        task = asyncio.ensure_future(
             self.node.schedule_punching_with_delay(
                 pipe_id,
                 n=2 if puncher.side == INITIATOR else 0
             )
         )
+        self.node.tasks.append(task)
 
         print("after schedule punch")
         # Forward protocol details to peer.

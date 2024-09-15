@@ -90,17 +90,17 @@ from .tcp_punch_utils import *
 from .clock_skew import *
 
 class TCPPuncher():
-    def __init__(self, af, src_info, dest_info, stuns, sys_clock, same_machine=False):
+    def __init__(self, af, src_info, dest_info, stuns, sys_clock, nic, same_machine=False):
         # Save input params.
         self.af = af
         self.src_info = src_info
         self.dest_info = dest_info
         self.stuns = stuns
         self.sys_clock = sys_clock
+        self.interface = nic
         self.same_machine = same_machine
 
         # Short hands.
-        self.set_interface()
         self.set_punch_mode()
         self.side = self.state = None
         self.pipe_id = self.node = None
@@ -203,7 +203,7 @@ class TCPPuncher():
             self.to_dict(),
             interface,
         )
-      
+
         # Schedule TCP punching in process pool executor.
         loop = asyncio.get_event_loop()
         loop.run_in_executor(
@@ -232,19 +232,14 @@ class TCPPuncher():
             # Check every 100 ms.
             await asyncio.sleep(0.1)
 
-    def set_interface(self):
-        self.if_index = self.src_info["if_index"]
-        if self.stuns is not None:
-            self.interface = self.stuns[0].interface
-        else:
-            self.interface = None
-
     def set_punch_mode(self):
         self.punch_mode = get_punch_mode(
             self.af,
             str(self.dest_info["ip"]),
             self.same_machine
         )
+
+        print(f"punch mode = {self.punch_mode}")
 
     def setup_multiproc(self, pp_executor):
         # Process pools are disabled.
