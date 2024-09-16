@@ -110,6 +110,11 @@ class P2PNodeExtra():
             self.punch_queue_worker()
         )
 
+    def start_pipe_pinger(self):
+        self.pipe_pinger_task = asyncio.ensure_future(
+            self.ping_checker()
+        )
+
     async def setup_punch_coordination(self, sys_clock=None):
         if sys_clock is None:
             sys_clock = await SysClock(self.ifs[0]).start()
@@ -362,37 +367,38 @@ class P2PNodeExtra():
     def p2p_pipe(self, dest_bytes):
         return P2PPipe(dest_bytes, self)
 
-    async def ping_checker(self, pipe, n=10):
+    async def ping_checker(self, n=10):
         while 1:
             # Wait until ping time.
             await asyncio.sleep(n)
 
-            # Setup ping event.
-            ping_id = to_s(rand_plain(10))
-            self.ping_ids[ping_id] = asyncio.Event()
-            msg = to_b(f"PING {ping_id}\n")
-            print(f"ping to send {msg}")
+            still_monitoring = []
+            for pipe in self.ping_pipes:
+                # Setup ping event.
+                ping_id = to_s(rand_plain(10))
+                self.ping_ids[ping_id] = asyncio.Event()
+                msg = to_b(f"PING {ping_id}\n")
+                print(f"ping to send {msg}")
 
-            # Send ping to node.
-            await pipe.send(msg, pipe.sock.getpeername())
-
-            # Await receipt.
-            """
-            try:
-                await asyncio.wait_for(
-                    self.ping_ids[ping_id].wait(),
-                    200
+                # Send ping to node.
+                await pipe.send(
+                    msg,
+                    pipe.sock.getpeername()
                 )
-                print("got pong.")
-            except asyncio.TimeoutError:
-                print("ping timeout")
-                break
-            """
-            while 1:
-                await asyncio.sleep(1)
 
-        # Close pipe.
-        await pipe.close()
+                # Await receipt.
+                try:
+                    await asyncio.wait_for(
+                        self.ping_ids[ping_id].wait(),
+                        200
+                    )
+                    print("got pong.")
+                    still_monitoring.append(pipe)
+                except asyncio.TimeoutError:
+                    print("ping timeout")
+                    await pipe.close()
+
+            self.ping_pipes = still_monitoring
 
 
     # Shutdown the node server and do cleanup.

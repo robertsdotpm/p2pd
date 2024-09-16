@@ -47,6 +47,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         # Table of Events for outbound pings.
         # Used to check if a con is still alive.
         self.ping_ids = {}
+        self.ping_pipes = []
 
         # Pending TCP punch queue.
         self.punch_queue = asyncio.Queue()
@@ -151,6 +152,9 @@ class P2PNode(P2PNodeExtra, Daemon):
             
         # Accept TCP punch requests.
         self.start_punch_worker()
+
+        # Start pipe pinger.
+        self.start_pipe_pinger()
 
         # Start worker that forwards sig proto messages.
         self.start_sig_msg_dispatcher()

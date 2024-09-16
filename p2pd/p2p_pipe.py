@@ -240,15 +240,7 @@ class P2PPipe():
         pipe = await self.node.pipes[pipe_id]
 
         # Close pipe if ping times out.
-        pipe.subscribe(SUB_ALL)
-        self.node.tasks.append(
-            asyncio.ensure_future(
-                self.node.ping_checker(
-                    pipe
-                )
-            )
-        )
-
+        self.node.ping_pipes.append(pipe)
         return pipe
 
     async def udp_turn_relay(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
