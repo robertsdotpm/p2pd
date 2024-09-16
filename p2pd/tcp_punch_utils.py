@@ -409,24 +409,22 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
             # Generate a unique ping message for the node.
             ping_id = to_s(rand_plain(10))
             ping = to_b(f"PING {ping_id}\n")
-            pong = to_b(f"PONG {ping_id}\n*")
+            pong = to_b(f"PONG {ping_id}\n")
             sub = [pong, b""]
 
             # Ping the node.
             # Break if couldn't send.
-            client_pipe.subscribe(sub)
-            sent_no = await upstream_pipe.send(ping, upstream_dest)
-            print(f"ping {sent_no}")
-            if not sent_no:
-                print("ping failed -- upstream closed.")
-                break
+            upstream_pipe.subscribe(sub)
+            send_task = asyncio.ensure_future(
+                upstream_pipe.send(ping, upstream_dest)
+            )
+
             
             # Break if response wasn't the pong.
             # Indicating invalid response or timeout.
-            out = await client_pipe.recv(sub, timeout=8)
-            print(client_pipe.stream.subs)
+            out = await upstream_pipe.recv(sub, timeout=8)
+            print(upstream_pipe.stream.subs)
             print(out)
-            print(pong)
             if out != pong:
                 print("pong timeout - client closed.")
                 break
