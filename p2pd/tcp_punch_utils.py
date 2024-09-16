@@ -407,7 +407,7 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
                     break
 
             # Generate a unique ping message for the node.
-            ping_id = rand_plain(10)
+            ping_id = to_s(rand_plain(10))
             ping = to_b(f"PING {ping_id}")
             pong = to_b(f"PONG {ping_id}")
             sub = [pong, b""]
@@ -423,7 +423,7 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
             
             # Break if response wasn't the pong.
             # Indicating invalid response or timeout.
-            out = await upstream_pipe.recv(sub)
+            out = await upstream_pipe.recv(sub, timeout=4)
             if out != pong:
                 print("pong timeout - client closed.")
                 break
