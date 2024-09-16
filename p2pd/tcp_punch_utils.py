@@ -361,6 +361,7 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         upstream_pipe = await pipe_open(
             route=route,
             proto=TCP,
+            dest=sock.getpeername()[:2],
             sock=sock,
             msg_cb=punch_close_msg
         )
@@ -388,6 +389,9 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         # client_pipe  -> upstream_sock
         client_pipe.add_pipe(upstream_pipe)
         client_pipe.unsubscribe(SUB_ALL)
+
+        print(upstream_pipe.stream.handle)
+        print(sock.getpeername()[:2])
 
         # Prevent this process from exiting.
         has_success.set()
