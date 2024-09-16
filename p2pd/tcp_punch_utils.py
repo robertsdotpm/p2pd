@@ -414,7 +414,7 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
 
             # Ping the node.
             # Break if couldn't send.
-            upstream_pipe.subscribe(sub)
+            client_pipe.subscribe(sub)
             sent_no = await upstream_pipe.send(ping, upstream_dest)
             print(f"ping {sent_no}")
             if not sent_no:
@@ -423,7 +423,7 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
             
             # Break if response wasn't the pong.
             # Indicating invalid response or timeout.
-            out = await upstream_pipe.recv(sub, timeout=4)
+            out = await client_pipe.recv(sub, timeout=4)
             if out != pong:
                 print("pong timeout - client closed.")
                 break
