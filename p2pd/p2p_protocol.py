@@ -109,8 +109,7 @@ class SigProtoHandlers():
         return await self.handle_msg(msg_info, msg, conf)
     
 async def node_protocol(self, msg, client_tup, pipe):
-    print(f"in node proto got {msg} from {client_tup}")
-    print(parts)
+
 
     log(f"> node proto = {msg}, {client_tup}")
 
@@ -121,7 +120,8 @@ async def node_protocol(self, msg, client_tup, pipe):
     parts = msg.split(b" ")
     cmd = parts[0]
 
-
+    print(f"in node proto got {msg} from {client_tup}")
+    print(parts)
 
     if cmd == b"PONG":
         ping_id = to_s(parts[1])
