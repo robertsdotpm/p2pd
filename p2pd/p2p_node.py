@@ -84,7 +84,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         be read by splitting at a new line. Excluding
         complex cases of partial replies (who cares for now.)
         """
-        for sub_msg in msg.split('\n'):
+        for sub_msg in msg.split(b'\n'):
             if not len(sub_msg): continue
             await node_protocol(self, sub_msg, client_tup, pipe)
             for msg_cb in self.msg_cbs:
