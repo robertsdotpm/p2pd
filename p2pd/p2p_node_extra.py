@@ -377,6 +377,7 @@ class P2PNodeExtra():
             await pipe.send(msg, pipe.sock.getpeername())
 
             # Await receipt.
+            """
             try:
                 await asyncio.wait_for(
                     self.ping_ids[ping_id].wait(),
@@ -386,6 +387,9 @@ class P2PNodeExtra():
             except asyncio.TimeoutError:
                 print("ping timeout")
                 break
+            """
+            while 1:
+                await asyncio.sleep(1)
 
         # Close pipe.
         await pipe.close()
