@@ -237,7 +237,18 @@ class P2PPipe():
         self.route_msg(msg, m=2)
 
         # Prevent protocol loop.
-        return await self.node.pipes[pipe_id]
+        pipe = await self.node.pipes[pipe_id]
+
+        # Close pipe if ping times out.
+        self.node.tasks.append(
+            asyncio.ensure_future(
+                self.node.ping_checker(
+                    pipe
+                )
+            )
+        )
+
+        return pipe
 
     async def udp_turn_relay(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
         if addr_type == NIC_BIND:

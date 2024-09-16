@@ -44,6 +44,10 @@ class P2PNode(P2PNodeExtra, Daemon):
         self.turn_clients = {} # by pipe_id
         self.signal_pipes = {} # by MQTT_SERVERS index
 
+        # Table of Events for outbound pings.
+        # Used to check if a con is still alive.
+        self.ping_ids = {}
+
         # Pending TCP punch queue.
         self.punch_queue = asyncio.Queue()
         self.punch_worker_task = None

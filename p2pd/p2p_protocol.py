@@ -121,6 +121,14 @@ async def node_protocol(self, msg, client_tup, pipe):
     print(msg)
     print(client_tup)
 
+    if cmd == b"PONG":
+        ping_id = to_s(parts[1])
+        if ping_id not in self.ping_ids:
+            return
+
+        self.ping_ids[ping_id].set()
+        return
+
     # Basic ping part of the protocol.
     # Useful to test if a connection is alive.
     if cmd == b"PING":

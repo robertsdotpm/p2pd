@@ -362,6 +362,32 @@ class P2PNodeExtra():
     def p2p_pipe(self, dest_bytes):
         return P2PPipe(dest_bytes, self)
 
+    async def ping_checker(self, pipe, n=10):
+        while 1:
+            # Wait until ping time.
+            await asyncio.sleep(n)
+
+            # Setup ping event.
+            ping_id = to_s(rand_plain(10))
+            self.ping_ids[ping_id] = asyncio.Event()
+            msg = to_b(f"PING {ping_id}\n")
+
+            # Send ping to node.
+            await pipe.send(msg)
+
+            # Await receipt.
+            try:
+                await asyncio.wait_for(
+                    self.ping_ids[ping_id].wait(),
+                    4
+                )
+            except asyncio.TimeoutError:
+                break
+
+        # Close pipe.
+        await pipe.close()
+
+
     # Shutdown the node server and do cleanup.
     async def close(self):
         print("in close")

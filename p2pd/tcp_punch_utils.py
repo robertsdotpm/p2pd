@@ -5,8 +5,8 @@ from .interface import *
 from .nat_predict import *
 from .clock_skew import *
 
-PUNCH_ALIVE = b"234o2jdjf"
-PUNCH_END = b"qwekl2k343ok"
+PUNCH_ALIVE = b"234o2jdjf\n"
+PUNCH_END = b"qwekl2k343ok\n"
 INITIATED_PREDICTIONS = 1
 RECEIVED_PREDICTIONS = 2
 UPDATED_PREDICTIONS = 3
@@ -288,12 +288,10 @@ def punching_sanity_check(mode, our_wan, dest_addr, send_mappings, recv_mappings
             
 # Not really the best approach but process communication is a pain.
 async def punch_close_msg(msg, client_tup, pipe):
-    if msg == PUNCH_END:
+    if msg in PUNCH_END:
         # Allow time to send message down pipes.
         await asyncio.sleep(2)
         await pipe.close()
-
-
 
 async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, has_success):
     try:
@@ -352,7 +350,7 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
             return None
 
         # Close all other sockets that aren't needed.
-        close_unneeded_socks(sock, outs)
+        #close_unneeded_socks(sock, outs)
 
         print(f"chosen sock = {sock}")
 
@@ -380,9 +378,15 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         )
 
         async def forward_to_client_pipe(msg, client_tup, pipe):
-            await client_pipe.send(msg)
+            print(client_tup)
+            print(client_pipe.sock)
+            client_pipe.sock.send(msg)
+            #await client_pipe.send(msg)
 
         async def forward_to_upstream_pipe(msg, client_tup, pipe):
+            print(client_tup)
+            print(client_pipe.sock)
+            upstream_pipe.sock.send(msg)
             await upstream_pipe.send(msg)
 
         upstream_pipe.add_msg_cb(forward_to_client_pipe)
@@ -401,8 +405,6 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         has_success.set()
         while 1:
             await asyncio.sleep(1)
-
-            continue
 
             # Exit loop if chain breaks.
             if False in [client_pipe.is_running, upstream_pipe.is_running]:
