@@ -118,7 +118,7 @@ async def node_protocol(self, msg, client_tup, pipe):
     parts = msg.split(b" ")
     cmd = parts[0]
 
-    print(f'in node proto got {msg} from {client_tup}")
+    print(f"in node proto got {msg} from {client_tup}")
     print(parts)
 
     if cmd == b"PONG":
