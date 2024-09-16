@@ -97,6 +97,7 @@ class PipeClient(ACKUDP):
         if not len(self.subs):
             log("no subs")
             return
+        
 
         # Norm compressed IPv6 addresses.
         client_tup = client_tup_norm(client_tup)
@@ -128,6 +129,8 @@ class PipeClient(ACKUDP):
 
             # Check data matches their message pattern.
             if b_msg_p:
+                print(b_msg_p)
+                print(data)
                 msg_matches = re.findall(b_msg_p, data)
                 if msg_matches == []:
                     continue

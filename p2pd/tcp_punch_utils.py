@@ -423,7 +423,10 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
             
             # Break if response wasn't the pong.
             # Indicating invalid response or timeout.
-            out = await client_pipe.recv(sub, timeout=4)
+            out = await client_pipe.recv(sub, timeout=8)
+            print(client_pipe.stream.subs)
+            print(out)
+            print(pong)
             if out != pong:
                 print("pong timeout - client closed.")
                 break
