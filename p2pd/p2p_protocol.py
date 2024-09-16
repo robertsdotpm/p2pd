@@ -142,7 +142,8 @@ async def node_protocol(self, msg, client_tup, pipe):
     # Basic echo server used for testing networking.
     if cmd == b"ECHO":
         if len(msg) > 5:
-            await pipe.send(memoryview(msg)[5:], client_tup)
+            buf = msg[5:] + b'\n'
+            await pipe.send(buf, client_tup)
 
         return
 
