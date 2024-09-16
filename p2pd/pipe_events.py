@@ -285,6 +285,7 @@ class PipeEvents(BaseACKProto):
             self.tasks.append(task)
 
         # Process messages using any registered handlers.
+        print(self.msg_cbs)
         self.run_handlers(self.msg_cbs, client_tup, data)
 
         # Add message to any interested subscriptions.

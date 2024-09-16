@@ -178,7 +178,8 @@ class TCPPuncher():
 
             return 1
         
-    async def do_ping_pong(self, pipe):
+    async def do_ping_pong(self, listen_pipe, client_pipe):
+
         # Generate a unique ping message for the node.
         ping_id = to_s(rand_plain(10))
         ping = to_b(f"PING {ping_id}\n")
@@ -192,11 +193,14 @@ class TCPPuncher():
             if pong in msg:
                 got_pong.set()
 
-        pipe.add_msg_cb(check_for_pong)
+        listen_pipe.add_msg_cb(check_for_pong)
+        print(check_for_pong)
+        print(pong)
 
         # Ping the node.
         # Break if couldn't send.
-        await pipe.send(ping)
+        dest_tup = client_pipe.sock.getpeername()
+        await client_pipe.send(ping, dest_tup)
         ret = 0
         try:
             await asyncio.wait_for(
@@ -207,22 +211,21 @@ class TCPPuncher():
             
         except asyncio.TimeoutError:
             print("ping timeout error")
-            await pipe.close()
+            await client_pipe.close()
             ret = 1
             
 
-        pipe.del_msg_cb(check_for_pong)
+        listen_pipe.del_msg_cb(check_for_pong)
         return ret
 
-    async def ping_pong_loop(self, pipe):
+    async def ping_pong_loop(self, listen_pipe, client_pipe):
         errors = 0
         while not errors:
             for _ in range(0, 10):
                 await asyncio.sleep(1)
 
-            errors = await async_wrap_errors(
-                self.do_ping_pong(pipe)
-            )
+            print("do ping pong")
+            errors = await self.do_ping_pong(listen_pipe, client_pipe)
         
     async def setup_punching_process(self):
         print("in setup punching process")
@@ -282,7 +285,8 @@ class TCPPuncher():
                         self.pipe.close = close_patch
                         task = asyncio.ensure_future(
                             self.ping_pong_loop(
-                                self.pipe
+                                self.listen_pipe,
+                                self.pipe,
                             )
                         )
                         self.ping_pong_task = task
