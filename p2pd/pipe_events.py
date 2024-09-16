@@ -284,16 +284,20 @@ class PipeEvents(BaseACKProto):
 
             self.tasks.append(task)
 
+        # Process messages using any registered handlers.
+        self.run_handlers(self.msg_cbs, client_tup, data)
+
         # Add message to any interested subscriptions.
         # Matching pattern for host is in bytes so
         # there is a need to convert ip to bytes.
-        self.stream.add_msg(
-            data,
-            (client_tup[0], client_tup[1])
+        asyncio.ensure_future(
+            async_wrap_errors(
+                self.stream.add_msg(
+                    data,
+                    (client_tup[0], client_tup[1])
+                )
+            )
         )
-
-        # Process messages using any registered handlers.
-        self.run_handlers(self.msg_cbs, client_tup, data)
 
     def handle_data(self, data, client_tup):
         # Convert data to bytes.

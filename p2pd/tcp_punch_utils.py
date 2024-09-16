@@ -397,36 +397,10 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         # Prevent this process from exiting.
         has_success.set()
         while 1:
+            await asyncio.sleep(1)
 
-            for _ in range(0, 15 + random.randrange(1, 60)):
-                # Don't tie up the event loop.
-                await asyncio.sleep(1)
-
-                # Exit loop if chain breaks.
-                if False in [client_pipe.is_running, upstream_pipe.is_running]:
-                    break
-
-            # Generate a unique ping message for the node.
-            ping_id = to_s(rand_plain(10))
-            ping = to_b(f"PING {ping_id}\n")
-            pong = to_b(f"PONG {ping_id}\n")
-            sub = [pong, b""]
-
-            # Ping the node.
-            # Break if couldn't send.
-            upstream_pipe.subscribe(sub)
-            send_task = asyncio.ensure_future(
-                upstream_pipe.send(ping, upstream_dest)
-            )
-
-            
-            # Break if response wasn't the pong.
-            # Indicating invalid response or timeout.
-            out = await upstream_pipe.recv(sub, timeout=8)
-            print(upstream_pipe.stream.subs)
-            print(out)
-            if out != pong:
-                print("pong timeout - client closed.")
+            # Exit loop if chain breaks.
+            if False in [client_pipe.is_running, upstream_pipe.is_running]:
                 break
                 
         # Ensure cleanup for pipes.
