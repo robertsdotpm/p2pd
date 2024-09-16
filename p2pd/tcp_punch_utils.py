@@ -398,7 +398,7 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         has_success.set()
         while 1:
 
-            for _ in range(0, 30):
+            for _ in range(0, 15 + random.randrange(1, 60)):
                 # Don't tie up the event loop.
                 await asyncio.sleep(1)
 
