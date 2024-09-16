@@ -371,7 +371,7 @@ class P2PNodeExtra():
             ping_id = to_s(rand_plain(10))
             self.ping_ids[ping_id] = asyncio.Event()
             msg = to_b(f"PING {ping_id}\n")
-            print(f"ping to send {msg})
+            print(f"ping to send {msg}")
 
             # Send ping to node.
             await pipe.send(msg, pipe.sock.getpeername())
