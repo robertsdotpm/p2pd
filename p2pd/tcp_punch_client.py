@@ -303,16 +303,18 @@ def proc_do_punching(args):
         # Execute the punching in a new event loop.
         loop = asyncio.get_event_loop()
         f = asyncio.ensure_future(
-            do_punching_wrapper(
-                puncher.af,
-                puncher.dest_info["ip"],
-                puncher.send_mappings,
-                puncher.recv_mappings,
-                puncher.sys_clock.time(),
-                puncher.start_time,
-                puncher.punch_mode,
-                interface,
-                reverse_tup
+            async_wrap_errors(
+                do_punching_wrapper(
+                    puncher.af,
+                    puncher.dest_info["ip"],
+                    puncher.send_mappings,
+                    puncher.recv_mappings,
+                    puncher.sys_clock.time(),
+                    puncher.start_time,
+                    puncher.punch_mode,
+                    interface,
+                    reverse_tup
+                )
             ),
             loop=loop
         )

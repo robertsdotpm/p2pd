@@ -121,6 +121,13 @@ async def node_protocol(self, msg, client_tup, pipe):
     print(msg)
     print(client_tup)
 
+    # Basic ping part of the protocol.
+    # Useful to test if a connection is alive.
+    if cmd == b"PING":
+        if len(parts) == 2:
+            pong = to_b(f"PONG {parts[1]}")
+            await pipe.send(pong, client_tup)
+            return
 
     # Basic echo server used for testing networking.
     if cmd == b"ECHO":
