@@ -200,7 +200,7 @@ class TCPPuncher():
         # Ping the node.
         # Break if couldn't send.
         dest_tup = client_pipe.sock.getpeername()
-        await client_pipe.send(ping, dest_tup)
+        await client_pipe.send(ping)
         ret = 0
         try:
             await asyncio.wait_for(

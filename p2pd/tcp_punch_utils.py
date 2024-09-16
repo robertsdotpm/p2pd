@@ -379,19 +379,20 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
             msg_cb=punch_close_msg
         )
 
-        
+        async def forward_to_client_pipe(msg, client_tup, pipe):
+            await client_pipe.send(msg)
+
+        async def forward_to_upstream_pipe(msg, client_tup, pipe):
+            await upstream_pipe.send(msg)
+
+        upstream_pipe.add_msg_cb(forward_to_client_pipe)
+        client_pipe.add_msg_cb(forward_to_upstream_pipe)
+
+
         
         print(f"client pipe = {client_pipe} {client_pipe.sock}")
 
-        # Forward messages from upstream to client.
-        # upstream_sock -> client_pipe
-        upstream_pipe.add_pipe(client_pipe)
-        upstream_pipe.unsubscribe(SUB_ALL)
 
-        # Forward messages from client to upstream.
-        # client_pipe  -> upstream_sock
-        client_pipe.add_pipe(upstream_pipe)
-        client_pipe.unsubscribe(SUB_ALL)
 
         print(upstream_pipe.stream.handle)
         print(sock.getpeername()[:2])
