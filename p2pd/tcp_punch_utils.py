@@ -409,7 +409,7 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
             # Generate a unique ping message for the node.
             ping_id = to_s(rand_plain(10))
             ping = to_b(f"PING {ping_id}\n")
-            pong = to_b(f"PONG {ping_id}")
+            pong = to_b(f"PONG {ping_id}\n*")
             sub = [pong, b""]
 
             # Ping the node.
