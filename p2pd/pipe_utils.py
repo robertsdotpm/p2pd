@@ -368,7 +368,8 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
             pipe_events.stream.set_dest_tup(dest.tup)
 
             # Queue all messages for convenience.
-            pipe_events.subscribe(SUB_ALL)
+            if msg_cb is None:
+                pipe_events.subscribe(SUB_ALL)
 
 
         # Register pipes, msg callbacks, and subscriptions.

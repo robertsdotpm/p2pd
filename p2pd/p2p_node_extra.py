@@ -207,6 +207,10 @@ class P2PNodeExtra():
         return pipe_id
 
     def pipe_ready(self, pipe_id, pipe):
+        if pipe_id not in self.pipes:
+            log(f"pipe ready for non existing pipe {pipe_id}!")
+            return
+        
         if not self.pipes[pipe_id].done():
             self.pipes[pipe_id].set_result(pipe)
         
