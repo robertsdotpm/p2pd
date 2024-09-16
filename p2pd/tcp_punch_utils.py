@@ -361,7 +361,6 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         upstream_pipe = await pipe_open(
             route=route,
             proto=TCP,
-            dest=sock.getpeername()[:2],
             sock=sock,
             msg_cb=punch_close_msg
         )
