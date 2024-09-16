@@ -127,6 +127,7 @@ class TCPEvents(asyncio.StreamReaderProtocol):
         super().connection_lost(exc)
 
     def error_received(self, exp):
+        print(exp)
         pass
 
     def data_received(self, data):

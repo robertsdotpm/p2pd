@@ -271,14 +271,15 @@ class PipeEvents(BaseACKProto):
     def route_msg(self, data, client_tup):
         # No data to route.
         if not data:
+            print("not data")
             return
 
         # Route messages to any pipes.
+        print(self.pipes)
         for pipe in self.pipes:
             task = asyncio.ensure_future(
                 pipe.send(
-                    data,
-                    pipe.stream.dest_tup
+                    data
                 )
             )
 
@@ -306,12 +307,13 @@ class PipeEvents(BaseACKProto):
             data = bytes(data)
 
         # Record msg received.
-        log(
+        print(
             'data recv {} = {}'.format(client_tup, to_s(binascii.hexlify(data)))
         )
 
         # Ack UDP msg if enabled.
         if self.is_ack and self.is_ackable:
+            print("is ack is ackable")
             """
             Sends an ACK down the stream if it's a message that needs an ACK.
             Clients that use the 'reliable' UDP functions over a specific
@@ -341,13 +343,14 @@ class PipeEvents(BaseACKProto):
         # Supports unique messages.
         if self.conf["enable_msg_ids"]:
             if not self.is_unique_msg(self.stream, data, client_tup):
-                log("not unique.")
+                print("not unique.")
                 return
 
         # Route message to stream.
         self.route_msg(data, client_tup)
 
     def error_received(self, exp):
+        print(exp)
         pass
 
     # UDP packets.
@@ -361,16 +364,19 @@ class PipeEvents(BaseACKProto):
 
     # Single TCP connection.
     def data_received(self, data):
-        log(f"Base proto recv tcp = {data}")
-        if self.transport is None:
-            log(f"Skipping process data cause transport none 2.")
-            return
+        try:
+            log(f"Base proto recv tcp = {data}")
+            if self.transport is None:
+                log(f"Skipping process data cause transport none 2.")
+                return
 
-        client_tup = self.transport.get_extra_info('socket').getpeername()
-        self.handle_data(
-            data,
-            client_tup
-        )
+            client_tup = self.transport.get_extra_info('socket').getpeername()
+            self.handle_data(
+                data,
+                client_tup
+            )
+        except:
+            what_exception()
 
     async def close(self, do_sleep=True):
         # Already closed.

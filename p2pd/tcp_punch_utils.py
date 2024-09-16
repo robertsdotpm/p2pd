@@ -378,6 +378,8 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
             route=route,
             msg_cb=punch_close_msg
         )
+
+        
         
         print(f"client pipe = {client_pipe} {client_pipe.sock}")
 
@@ -398,6 +400,8 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         has_success.set()
         while 1:
             await asyncio.sleep(1)
+
+            continue
 
             # Exit loop if chain breaks.
             if False in [client_pipe.is_running, upstream_pipe.is_running]:
