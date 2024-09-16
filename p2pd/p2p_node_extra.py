@@ -373,7 +373,7 @@ class P2PNodeExtra():
             msg = to_b(f"PING {ping_id}\n")
 
             # Send ping to node.
-            await pipe.send(msg)
+            await pipe.send(msg, pipe.sock.getpeername())
 
             # Await receipt.
             try:
