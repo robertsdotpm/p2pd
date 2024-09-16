@@ -381,7 +381,9 @@ class P2PNodeExtra():
                     self.ping_ids[ping_id].wait(),
                     4
                 )
+                print("got pong.")
             except asyncio.TimeoutError:
+                print("ping timeout")
                 break
 
         # Close pipe.
