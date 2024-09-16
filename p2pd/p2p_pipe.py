@@ -240,6 +240,7 @@ class P2PPipe():
         pipe = await self.node.pipes[pipe_id]
 
         # Close pipe if ping times out.
+        pipe.subscribe(SUB_ALL)
         self.node.tasks.append(
             asyncio.ensure_future(
                 self.node.ping_checker(
