@@ -314,11 +314,13 @@ class TestP2P(unittest.IsolatedAsyncioTestCase):
             "multi_ifs": True,
         }
 
-        use_strats = [P2P_DIRECT]
+        use_strats = [P2P_PUNCH]
         async with TestNodes(**params) as nodes:
+            """
             name = await nodes.bob.nickname(name)
             while 1:
                 await asyncio.sleep(1)
+            """
 
             pipe = await nodes.alice.connect(
                 name,
