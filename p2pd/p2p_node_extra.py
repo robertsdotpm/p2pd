@@ -380,7 +380,7 @@ class P2PNodeExtra():
             try:
                 await asyncio.wait_for(
                     self.ping_ids[ping_id].wait(),
-                    4
+                    200
                 )
                 print("got pong.")
             except asyncio.TimeoutError:
