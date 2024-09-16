@@ -279,7 +279,8 @@ class PipeEvents(BaseACKProto):
         for pipe in self.pipes:
             task = asyncio.ensure_future(
                 pipe.send(
-                    data
+                    data,
+                    pipe.sock.getpeername()
                 )
             )
 
@@ -292,13 +293,9 @@ class PipeEvents(BaseACKProto):
         # Add message to any interested subscriptions.
         # Matching pattern for host is in bytes so
         # there is a need to convert ip to bytes.
-        asyncio.ensure_future(
-            async_wrap_errors(
-                self.stream.add_msg(
-                    data,
-                    (client_tup[0], client_tup[1])
-                )
-            )
+        self.stream.add_msg(
+            data,
+            (client_tup[0], client_tup[1])
         )
 
     def handle_data(self, data, client_tup):

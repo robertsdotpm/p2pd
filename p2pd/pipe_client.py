@@ -92,7 +92,7 @@ class PipeClient(ACKUDP):
     being empty? Should it discard data? Maybe on limit - 1
     call https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.loop.remove_reader and on queue empty add it back.
     """
-    async def add_msg(self, data, client_tup):
+    def add_msg(self, data, client_tup):
         print(f"stream add msg {data} {client_tup}")
 
         # No subscriptions.
