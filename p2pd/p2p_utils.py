@@ -37,6 +37,7 @@ async def get_pp_executors(workers=None):
         log_exception()
         return None
     
+    return pp_executor
     loop = asyncio.get_event_loop()
     tasks = []
     for i in range(0, workers):

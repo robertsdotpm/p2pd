@@ -526,7 +526,7 @@ def run_handler(pipe, handler, client_tup, data=None):
     # It's async.
     if inspect.iscoroutinefunction(handler):
         # Lets you process messages from an async func.
-        task = asyncio.create_task(
+        task = asyncio.ensure_future(
             async_wrap_errors(
                 handler(data, client_tup, pipe)
             )
