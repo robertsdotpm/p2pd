@@ -373,7 +373,7 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         # This avoids sharing between processes which breaks easily.
         route = await interface.route(af).bind()
         client_pipe = await pipe_open(
-            TCP,
+            proto=TCP,
             dest=reverse_tup,
             route=route,
             msg_cb=punch_close_msg
@@ -408,7 +408,7 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
 
             # Generate a unique ping message for the node.
             ping_id = to_s(rand_plain(10))
-            ping = to_b(f"PING {ping_id}")
+            ping = to_b(f"PING {ping_id}\n")
             pong = to_b(f"PONG {ping_id}")
             sub = [pong, b""]
 

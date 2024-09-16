@@ -78,9 +78,17 @@ class P2PNode(P2PNodeExtra, Daemon):
 
     # Used by the node servers.
     async def msg_cb(self, msg, client_tup, pipe):
-        await node_protocol(self, msg, client_tup, pipe)
-        for msg_cb in self.msg_cbs:
-            run_handler(pipe, msg_cb, client_tup, msg)
+        """
+        TCP is stream-orientated and may buffer small sends.
+        New lines end messages. So multiple messages can
+        be read by splitting at a new line. Excluding
+        complex cases of partial replies (who cares for now.)
+        """
+        for sub_msg in msg.split('\n'):
+            if not len(sub_msg): continue
+            await node_protocol(self, sub_msg, client_tup, pipe)
+            for msg_cb in self.msg_cbs:
+                run_handler(pipe, msg_cb, client_tup, sub_msg)
     
     # Used by the MQTT clients.
     async def signal_protocol(self, msg, signal_pipe):

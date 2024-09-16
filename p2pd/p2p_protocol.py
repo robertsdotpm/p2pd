@@ -127,7 +127,7 @@ async def node_protocol(self, msg, client_tup, pipe):
         if len(parts) == 2:
             print("matched ping cmd")
             ping_id = to_s(parts[1])
-            pong = to_b(f"PONG {ping_id}")
+            pong = to_b(f"PONG {ping_id}\n")
             await pipe.send(pong, client_tup)
             return
 
