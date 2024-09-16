@@ -136,7 +136,7 @@ async def node_protocol(self, msg, client_tup, pipe):
             print("matched ping cmd")
             ping_id = to_s(parts[1])
             pong = to_b(f"PONG {ping_id}\n")
-            await pipe.send(pong)
+            await pipe.send(pong, client_tup)
             return
 
     # Basic echo server used for testing networking.

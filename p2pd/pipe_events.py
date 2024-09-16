@@ -470,6 +470,6 @@ class PipeEvents(BaseACKProto):
 
     # Echo client just for testing.
     async def echo(self, msg, dest_tup):
-        buf = bytearray().join([b"ECHO ", msg])
+        buf = bytearray().join([b"ECHO ", msg, b"\n"])
         await self.send(buf, dest_tup)
 
