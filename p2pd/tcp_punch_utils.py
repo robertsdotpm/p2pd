@@ -358,10 +358,11 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
 
         # Punched hole to the remote node.
         route = await interface.route(af).bind(sock.getsockname()[1])
+        upstream_dest = sock.getpeername()[:2]
         upstream_pipe = await pipe_open(
             route=route,
             proto=TCP,
-            dest=sock.getpeername()[:2],
+            dest=upstream_dest,
             sock=sock,
             msg_cb=punch_close_msg
         )
@@ -414,14 +415,15 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
             # Ping the node.
             # Break if couldn't send.
             upstream_pipe.subscribe(sub)
-            sent_no = await upstream_pipe.send(ping)
+            sent_no = await upstream_pipe.send(ping, upstream_dest)
+            print(f"ping {sent_no}")
             if not sent_no:
                 print("ping failed -- upstream closed.")
                 break
             
             # Break if response wasn't the pong.
             # Indicating invalid response or timeout.
-            out = await upstream_pipe.recv(pong, sub)
+            out = await upstream_pipe.recv(sub)
             if out != pong:
                 print("pong timeout - client closed.")
                 break
