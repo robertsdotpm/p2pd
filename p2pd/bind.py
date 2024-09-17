@@ -322,7 +322,12 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
     try:
         if route.interface is not None:
             # TODO: probably cache this.
-            is_default = route.interface.is_default(route.af)
+            try:
+                is_default = route.interface.is_default(route.af)
+            except:
+                log_exception()
+                is_default = True
+
             if not is_default and NOT_WINDOWS:
                 sock.setsockopt(socket.SOL_SOCKET, 25, to_b(route.interface.id))
     except Exception:
