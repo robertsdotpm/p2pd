@@ -372,7 +372,7 @@ class P2PNodeExtra():
         try:
             await asyncio.wait_for(
                 self.ping_ids[ping_id].wait(),
-                10
+                30
             )
             print("got pong.")
             return pipe
