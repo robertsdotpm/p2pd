@@ -422,9 +422,13 @@ class Interface():
         # Process interface name in right format.
         try:
             self.load_if_info()
+            print("regular load if info.")
         except:
+            print("start fallback load if info.")
             log_exception()
+
             self.load_if_info_fallback()
+            print("end fallback load if info.")
 
         # This will be used for the routes call.
         # It's only purpose is to pass in a custom netifaces for tests.
@@ -442,10 +446,15 @@ class Interface():
             stun_clients = await get_stun_clients(af, max_agree, self)
 
             # Is this default iface for this AF?
-            if self.is_default(af):
+            try:
+                if self.is_default(af):
+                    enable_default = True
+                else:
+                    enable_default = False
+            except:
+                # If it's poorly supported allow default NIC behavior.
+                log_exception()
                 enable_default = True
-            else:
-                enable_default = False
             log(f"{self.name} {af} {enable_default}")
 
             tasks.append(
