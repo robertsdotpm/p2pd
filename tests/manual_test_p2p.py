@@ -52,7 +52,7 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
             except:
                 log_exception()
 
-            src_node.sig_msg_dispatcher_task = asyncio.ensure_future(
+            src_node.sig_msg_dispatcher_task = create_task(
                 src_node.sig_msg_dispatcher()
             )
         except:

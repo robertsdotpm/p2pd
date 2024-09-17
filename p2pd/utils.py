@@ -65,6 +65,10 @@ if vmaj < 3:
 if vmin <= 4:
     raise Exception("Project needs >= 3.5")
 
+def create_task(x, loop=None):
+    loop = loop or asyncio.get_event_loop()
+    return loop.create_task(x)
+
 def my_except_hook(exctype, value, traceback):
     log("Global except handler called.")
     log_exception()

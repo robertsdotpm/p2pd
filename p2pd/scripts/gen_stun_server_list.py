@@ -296,7 +296,7 @@ async def workspace():
                 for af in ENABLE_AFS:
                     host, port = serv_addr
 
-                    task = asyncio.ensure_future(
+                    task = create_task(
                         async_wrap_errors(
                             validate_stun_server(af, host, port, proto, i, mode, task_timeout-2),
                             timeout=10

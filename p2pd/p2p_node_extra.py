@@ -76,7 +76,7 @@ class P2PNodeExtra():
                     puncher = self.tcp_punch_clients[pipe_id]
 
                     
-                    task = asyncio.ensure_future(
+                    task = create_task(
                         async_wrap_errors(
                             puncher.setup_punching_process()
                         )
@@ -94,7 +94,7 @@ class P2PNodeExtra():
 
             print("punch done")
 
-            self.punch_worker_task = asyncio.ensure_future(
+            self.punch_worker_task = create_task(
                 self.punch_queue_worker()
             )
         except RuntimeError:
@@ -106,12 +106,12 @@ class P2PNodeExtra():
         
     def start_punch_worker(self):
         print("in start punch worker")
-        self.punch_worker_task = asyncio.ensure_future(
+        self.punch_worker_task = create_task(
             self.punch_queue_worker()
         )
 
     def start_pipe_pinger(self):
-        self.pipe_pinger_task = asyncio.ensure_future(
+        self.pipe_pinger_task = create_task(
             self.ping_checker()
         )
 
@@ -313,7 +313,7 @@ class P2PNodeExtra():
                 )
             )
 
-            self.sig_msg_dispatcher_task = asyncio.ensure_future(
+            self.sig_msg_dispatcher_task = create_task(
                 self.sig_msg_dispatcher()
             )
         except RuntimeError:
@@ -323,7 +323,7 @@ class P2PNodeExtra():
     def start_sig_msg_dispatcher(self):
         # Route messages to destination.
         if self.sig_msg_dispatcher_task is None:
-            self.sig_msg_dispatcher_task = asyncio.ensure_future(
+            self.sig_msg_dispatcher_task = create_task(
                 self.sig_msg_dispatcher()
             )
 
@@ -367,12 +367,29 @@ class P2PNodeExtra():
     def p2p_pipe(self, dest_bytes):
         return P2PPipe(dest_bytes, self)
 
+    async def get_pong(self, ping_id, pipe):
+        # Await receipt.
+        try:
+            await asyncio.wait_for(
+                self.ping_ids[ping_id].wait(),
+                4
+            )
+            print("got pong.")
+            return pipe
+        except asyncio.TimeoutError:
+            print("ping timeout")
+            await pipe.close()
+        finally:
+            del self.ping_ids[ping_id]
+
     async def ping_checker(self, n=10):
+
         while 1:
             # Wait until ping time.
             await asyncio.sleep(n)
 
-            still_monitoring = []
+            # Check if any pipes need to be pinged.
+            tasks = []
             for pipe in self.ping_pipes:
                 # Setup ping event.
                 ping_id = to_s(rand_plain(10))
@@ -381,24 +398,30 @@ class P2PNodeExtra():
                 print(f"ping to send {msg}")
 
                 # Send ping to node.
-                await pipe.send(
-                    msg,
-                    pipe.sock.getpeername()
+                try:
+                    await pipe.send(
+                        msg,
+                        pipe.sock.getpeername()
+                    )
+                except:
+                    await pipe.close()
+                    continue
+
+                # Wait for response to this ping (concurrently.)
+                tasks.append(
+                    create_task(
+                        self.get_pong(
+                            ping_id,
+                            pipe
+                        )
+                    )
                 )
 
-                # Await receipt.
-                try:
-                    await asyncio.wait_for(
-                        self.ping_ids[ping_id].wait(),
-                        200
-                    )
-                    print("got pong.")
-                    still_monitoring.append(pipe)
-                except asyncio.TimeoutError:
-                    print("ping timeout")
-                    await pipe.close()
-
-            self.ping_pipes = still_monitoring
+            # Wait for all pending pong responses.
+            if len(tasks):
+                still_monitoring = await asyncio.gather(*tasks)
+                still_monitoring = strip_none(still_monitoring)
+                self.ping_pipes = still_monitoring
 
 
     # Shutdown the node server and do cleanup.

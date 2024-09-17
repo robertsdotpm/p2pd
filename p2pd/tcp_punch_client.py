@@ -303,7 +303,7 @@ def proc_do_punching(args):
 
         # Execute the punching in a new event loop.
         loop = asyncio.get_event_loop()
-        f = asyncio.ensure_future(
+        f = create_task(
             async_wrap_errors(
                 do_punching_wrapper(
                     puncher.af,

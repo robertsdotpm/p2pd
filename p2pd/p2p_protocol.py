@@ -32,7 +32,7 @@ class SigProtoHandlers():
         )
 
         # Connect to chosen address.
-        task = asyncio.ensure_future(
+        task = create_task(
             pp.connect(
                 strategies=[strategy],
                 reply=msg,
@@ -125,6 +125,8 @@ async def node_protocol(self, msg, client_tup, pipe):
 
     if cmd == b"PONG":
         ping_id = to_s(parts[1])
+
+        print(f"ping ids = {self.ping_ids}")
         if ping_id not in self.ping_ids:
             return
 

@@ -11,7 +11,7 @@ Original Python version by... myself! Now with async.
 
 This code asks for many NTP readings which are slow.
 It will probably be necessary to initalize this in
-an ensure_future that sets related objects when done.
+an create_task that sets related objects when done.
 It also doesn't support the Interface object or
 Address hence it defaults to the default route.
 

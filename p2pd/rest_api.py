@@ -129,7 +129,7 @@ class P2PDServer(RESTD):
         print(dest_addr)
 
         # Attempt to make the connection.
-        con = await asyncio.ensure_future(
+        con = await create_task(
             async_wrap_errors(
                 self.node.connect(
                     to_b(dest_addr),

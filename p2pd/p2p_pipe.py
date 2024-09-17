@@ -204,7 +204,7 @@ class P2PPipe():
         ensure there's enough time to receive any
         updated mappings for the dest peer (if any.)
         """
-        task = asyncio.ensure_future(
+        task = create_task(
             self.node.schedule_punching_with_delay(
                 pipe_id,
                 n=2 if puncher.side == INITIATOR else 0

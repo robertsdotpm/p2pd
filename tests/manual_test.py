@@ -58,7 +58,7 @@ The repr causes the code to break on windows? Why is that?
 get_running_loop
 new_event_loop
 get_event_loop
-ensure_future or create task
+create task
 
 im seeing packet drops to stun servers with ipv6 udp on my network
 im not sure what the cause is yet

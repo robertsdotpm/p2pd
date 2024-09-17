@@ -377,11 +377,13 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
             msg_cb=punch_close_msg
         )
 
+        """
         async def forward_to_client_pipe(msg, client_tup, pipe):
             print(f"in forward to client {msg} {client_tup}")
             print(client_tup)
             print(client_pipe.sock)
             #client_pipe.sock.send(msg, client_pipe.sock.getpeername())
+            dest = client_pipe.sock.getpeername()
             await client_pipe.send(msg, client_pipe.sock.getpeername())
 
         async def forward_to_upstream_pipe(msg, client_tup, pipe):
@@ -393,6 +395,12 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
 
         upstream_pipe.add_msg_cb(forward_to_client_pipe)
         client_pipe.add_msg_cb(forward_to_upstream_pipe)
+        """
+
+        upstream_pipe.add_pipe(client_pipe)
+        client_pipe.add_pipe(upstream_pipe)
+        upstream_pipe.unsubscribe(SUB_ALL)
+        client_pipe.unsubscribe(SUB_ALL)
 
 
         
@@ -422,7 +430,7 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
 
 async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup):
     has_success = asyncio.Event()
-    task = asyncio.ensure_future(
+    task = create_task(
         async_wrap_errors(
             do_punching(
                 af,
