@@ -270,6 +270,65 @@ class Interface():
 
         return self
 
+    def load_if_info_fallback(self):
+        # Just guess name.
+        # Getting this wrong will only break IPv6 link-local binds.
+        self.id = self.name = "eth0"
+        self.netiface_index = 0
+        self.type = INTERFACE_ETHERNET
+
+        # Get IP of default route.
+        ips = {
+            # Google IPs. Nothing special.
+            IP4: "142.250.70.206",
+            IP6: "2404:6800:4015:803::200e",
+        }
+
+        # Build a table of default interface IPs based on con success.
+        # Supported stack changes based on success.
+        if_addrs = {}
+        for af in VALID_AFS:
+            try:
+                s = socket.create_connection((ips[af], 80))
+                if_addrs[s.family] = s.getsockname()[0][:]
+                s.close()
+            except:
+                continue
+
+        # Same API as netifaces.
+        class NetifaceShim():
+            def __init__(self, if_addrs):
+                self.if_addrs = if_addrs
+
+            def interfaces(self):
+                return [self.name]
+
+            def ifaddresses(self, name):
+                ret = {
+                    # MAC address (blanket)
+                    17: [
+                        {
+                            'addr': '',
+                            'broadcast': 'ff:ff:ff:ff:ff:ff'
+                        }
+                    ],
+                }
+
+                for af in self.if_addrs:
+                    ret[af] = [
+                        {
+                            "addr": self.if_addrs[af],
+                            "netmask": "0"
+                        }
+                    ]
+
+                return ret
+            
+        self.netifaces = NetifaceShim(if_addrs)
+
+        # Patch is default.
+        self.is_default = lambda x, y: True
+
     def to_dict(self):
         from .var_names import TXT
         return {
@@ -361,7 +420,11 @@ class Interface():
             self.netifaces = await init_p2pd()
 
         # Process interface name in right format.
-        self.load_if_info()
+        try:
+            self.load_if_info()
+        except:
+            log_exception()
+            self.load_if_info_fallback()
 
         # This will be used for the routes call.
         # It's only purpose is to pass in a custom netifaces for tests.
