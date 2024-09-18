@@ -398,15 +398,17 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                 needs to be patched to account for possibly
                 changed offsets and details.
                 """
-                interface, src_index = await select_if_by_dest(
-                    af,
-                    src_info["if_index"],
-                    dest_info["ip"],
-                    interface,
-                    pp.node.ifs,
-                )
+                # Don't change sending interface if already chosen.
+                if reply is not None:
+                    interface, src_index = await select_if_by_dest(
+                        af,
+                        src_info["if_index"],
+                        dest_info["ip"],
+                        interface,
+                        pp.node.ifs,
+                    )
 
-                #src_info = pp.src[af][src_index]
+                    src_info = pp.src[af][src_index]
                 
                 print(f"if = {id(interface)}")
                 print(f"netifaces = {interface.netifaces}")
@@ -480,7 +482,6 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
 
         # Iterates by shared AFs
         # filtered by best NAT (non-overlapping WANS.)
-        
         if_info_iter = IFInfoIter(af, pp.src, pp.dest)
         if not len(if_info_iter):
             continue
@@ -490,7 +491,7 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
         for src_info, dest_info in if_info_iter:
         #for dest_info in list(pp.dest[af].values()):
         #    for src_info in list(pp.src[af].values()):
-        
+
             # Only try up to N pairs per technique.
             # Technique-specific N to avoid lengthy delays.
             print(src_info)
@@ -512,7 +513,7 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
             """
 
             # Cleanup here?
-                
+                    
     # Failure.
     return None
 

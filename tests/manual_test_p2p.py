@@ -365,10 +365,14 @@ async def test_p2p_register_connect():
         await pipe.close()
 
 async def test_p2p_successive_failure():
+    if_names = await list_interfaces()
+    ifs = await load_interfaces(if_names)
     params = {
-        "sig_pipe_no": 0,
+        "sig_pipe_no": 2,
         "addr_types": [EXT_BIND, NIC_BIND],
-        "same_if": True,
+        "ifs": ifs,
+        "same_if": False if len(ifs) >= 2 else True,
+        "multi_ifs": True,
     }
 
     patch_strats = [PUNCH_FAIL, RELAY_FAIL, REVERSE_FAIL, P2P_DIRECT]
@@ -421,9 +425,10 @@ async def test_bug_fix():
     #return
     params = {
         "sig_pipe_no": 0,
-        "addr_types": [EXT_BIND],
+        "addr_types": [EXT_BIND, NIC_BIND],
         "ifs": ifs,
-        "same_if": False
+        "same_if": False,
+        "multi_ifs": True,
     }
 
     use_strats = [P2P_RELAY]
@@ -439,16 +444,19 @@ async def test_bug_fix():
         print(nodes.pp_alice.dest)
         print(nodes.pp_bob.dest)
 
+        for strat in use_strats:
 
 
-        pipe = await nodes.alice.connect(
-            nodes.bob.addr_bytes,
-            strategies=use_strats,
-            conf=nodes.pp_conf,
-        )
+            pipe = await nodes.alice.connect(
+                nodes.bob.addr_bytes,
+                strategies=[strat],
+                conf=nodes.pp_conf,
+            )
 
-        print("Got pipe ")
-        print(pipe)
+            print("Got pipe ")
+            print(pipe)
+
+            await check_pipe(pipe)
 
         while 1:
             await asyncio.sleep(1)
