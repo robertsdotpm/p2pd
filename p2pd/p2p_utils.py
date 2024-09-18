@@ -397,6 +397,7 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                 NOTE: if you do this then surely the src_info
                 needs to be patched to account for possibly
                 changed offsets and details.
+                """
                 interface, src_index = await select_if_by_dest(
                     af,
                     src_info["if_index"],
@@ -406,7 +407,7 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                 )
 
                 src_info = pp.src[af][src_index]
-                """
+                
                 print(f"if = {id(interface)}")
                 print(f"netifaces = {interface.netifaces}")
                 
