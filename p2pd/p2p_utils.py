@@ -406,7 +406,7 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                     pp.node.ifs,
                 )
 
-                src_info = pp.src[af][src_index]
+                #src_info = pp.src[af][src_index]
                 
                 print(f"if = {id(interface)}")
                 print(f"netifaces = {interface.netifaces}")
