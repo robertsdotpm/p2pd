@@ -266,7 +266,9 @@ class TestNodes():
     async def __aexit__(self, exc_t, exc_v, exc_tb):
         print("aexit")
         await async_wrap_errors(self.alice.close())
-        await async_wrap_errors(self.bob.close())
+
+        if TEST_NODE_NO > 1:
+            await async_wrap_errors(self.bob.close())
         print("nodes closed")
 
 async def p2p_check_strats(params, strats):

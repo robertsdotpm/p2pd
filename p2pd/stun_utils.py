@@ -103,7 +103,6 @@ async def get_stun_reply(mode, dest_addr, reply_addr, pipe, attrs=[]):
     # Send the req and get a matching reply.
     send_buf = msg.pack()
     recv_buf = await send_recv_loop(dest_addr, pipe, send_buf, sub)
-    log(f"stun reply {mode} {pipe.endpoint_type} {recv_buf}")
     if recv_buf is None:
         raise ErrorNoReply("STUN recv loop got no reply.")
 
@@ -147,12 +146,12 @@ async def stun_reply_to_ret_dic(reply):
 
 def validate_stun_reply(reply, mode):
     if reply is None:
-        log(f'{to_h(reply.txn_id)}: reply none')
+        #log(f'{to_h(reply.txn_id)}: reply none')
         return None
     
     # Pipe needs to exist to check change addrs.
     if not hasattr(reply, "pipe"):
-        log(f'{to_h(reply.txn_id)}: no pipe')
+        #log(f'{to_h(reply.txn_id)}: no pipe')
         return None
     
     # Reply addr is stup of the server.
