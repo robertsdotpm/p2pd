@@ -890,12 +890,12 @@ async def select_if_by_dest(af, src_index, dest_ip, interface, ifs=[]):
 
     # Unable to find associated interface.
     if bind_interface is None:
-        return interface
+        return interface, src_index
 
     # Auto-selected interface matches chosen interface.
     # Return the chosen interface with no changes.
     if bind_interface.name == interface.name:
-        return interface
+        return interface, src_index
     
     # If already exists return it instead.
     for if_index, needle_if in enumerate(ifs):

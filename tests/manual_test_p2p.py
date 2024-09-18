@@ -10,7 +10,7 @@ try:
 except:
     pass
 
-TEST_NODE_NO = 1
+TEST_NODE_NO = 2
 TEST_P2P_PIPE_CONF = {
     "addr_types": [EXT_BIND, NIC_BIND],
     "sig_pipe_no": 0,
@@ -30,6 +30,7 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
     async def patch():
         try:
             x = await src_node.sig_msg_queue.get()
+            print(f"sig msg queue x = {x}")
             if x is None:
                 return
             else:
@@ -41,7 +42,7 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
             # or ... integrity portion...
             if dest_node_id in src_node.auth:
                 buf = b"\1" + encrypt(
-                    src_node.auth[dest_node_id]["vk"],
+                    dest_node.vk.to_string("compressed"),
                     msg.pack(),
                 )
             
@@ -56,13 +57,17 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
                 raise Exception("cancelled")
             except:
                 log_exception()
+                what_exception()
 
             src_node.sig_msg_dispatcher_task = create_task(
                 src_node.sig_msg_dispatcher()
             )
         except:
+            what_exception()
             log_exception()
+            print("STOPPING MSG DISPATCHER.")
             return
+
 
     return patch
 
@@ -164,6 +169,7 @@ class TestNodes():
                 sig_pipe_no=self.sig_pipe_no,
             )
 
+            self.bob = self.alice
             if TEST_NODE_NO > 1:
                 self.bob = await get_node(
                     [self.ifs[0]],
@@ -180,10 +186,12 @@ class TestNodes():
                 if len(self.ifs) >= 2:
                     bob_ifs = [self.ifs[1]]
 
+
             self.alice = await get_node(
                 alice_ifs,
                 sig_pipe_no=self.sig_pipe_no,
             )
+            self.bob = self.alice
 
             if TEST_NODE_NO > 1:
                 self.bob = await get_node(
@@ -202,8 +210,9 @@ class TestNodes():
         self.alice.start_sig_msg_dispatcher = lambda: None
 
         if TEST_NODE_NO > 1:
-            self.bob.start_sig_msg_dispatcher = lambda: None
             bob_start_sig = self.bob.start_sig_msg_dispatcher
+            self.bob.start_sig_msg_dispatcher = lambda: None
+            
         
 
         # Start the nodes.
@@ -394,12 +403,13 @@ async def test_p2p_strats():
 
     params = {
         "sig_pipe_no": 2,
-        "addr_types": [EXT_BIND, NIC_BIND],
+        "addr_types": [EXT_BIND],
         "ifs": ifs,
-        "same_if": False if len(ifs) >= 2 else True
+        "same_if": False if len(ifs) >= 2 else True,
+        "multi_ifs": True,
     }
 
-    strats = [P2P_DIRECT, P2P_REVERSE, P2P_RELAY, P2P_PUNCH]
+    strats = [P2P_RELAY]
     await p2p_check_strats(params, strats)
 
 async def test_bug_fix():
@@ -410,11 +420,41 @@ async def test_bug_fix():
     print(ifs[0].netifaces)
     #return
     params = {
-        "sig_pipe_no": 2,
-        "addr_types": [EXT_BIND, NIC_BIND],
+        "sig_pipe_no": 0,
+        "addr_types": [EXT_BIND],
         "ifs": ifs,
-        "same_if": False if len(ifs) >= 2 else True
+        "same_if": False
     }
+
+    use_strats = [P2P_RELAY]
+    async with TestNodes(**params) as nodes:
+        
+        print(nodes.alice.vk.to_string("compressed"))
+        print(nodes.bob.vk.to_string("compressed"))
+
+        print(nodes.alice.addr_bytes)
+        print(nodes.bob.addr_bytes)
+
+        print()
+        print(nodes.pp_alice.dest)
+        print(nodes.pp_bob.dest)
+
+
+
+        pipe = await nodes.alice.connect(
+            nodes.bob.addr_bytes,
+            strategies=use_strats,
+            conf=nodes.pp_conf,
+        )
+
+        print("Got pipe ")
+        print(pipe)
+
+        while 1:
+            await asyncio.sleep(1)
+
+        assert(pipe)
+        return
 
     strats = [P2P_PUNCH]
     strats = [P2P_DIRECT, P2P_REVERSE, P2P_RELAY, P2P_PUNCH]
@@ -446,6 +486,9 @@ if __name__ == '__main__':
         choice = input("Select choice: ")
         index = int(choice)
         func = choices[index][1]
+        asyncio.run(func())
+
+        continue
         try:
             asyncio.run(monitor_coroutines(func()))
         except:

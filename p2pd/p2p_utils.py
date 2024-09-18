@@ -461,6 +461,7 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                 if pipe_id in pp.node.pipes:
                     del pp.node.pipes[pipe_id]
             except:
+                what_exception()
                 log_exception()
 
     # Use an AF supported by both.
@@ -479,37 +480,38 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
 
         # Iterates by shared AFs
         # filtered by best NAT (non-overlapping WANS.)
-        """
+        
         if_info_iter = IFInfoIter(af, pp.src, pp.dest)
         if not len(if_info_iter):
             continue
-        """
+        
 
         # Get interface offset that supports this af.
-        #for src_info, dest_info in if_info_iter:
-        for dest_info in list(pp.dest[af].values()):
-            for src_info in list(pp.src[af].values()):
-                # Only try up to N pairs per technique.
-                # Technique-specific N to avoid lengthy delays.
-                print(src_info)
-                print(dest_info)
-                print()
-                ret = await async_wrap_errors(
-                    try_addr_infos(src_info, dest_info)
-                )
+        for src_info, dest_info in if_info_iter:
+        #for dest_info in list(pp.dest[af].values()):
+        #    for src_info in list(pp.src[af].values()):
+        
+            # Only try up to N pairs per technique.
+            # Technique-specific N to avoid lengthy delays.
+            print(src_info)
+            print(dest_info)
+            print()
+            ret = await async_wrap_errors(
+                try_addr_infos(src_info, dest_info)
+            )
 
-                # Success so return.
-                if ret is not None:
-                    return ret
-                    
-                count += 1
+            # Success so return.
+            if ret is not None:
+                return ret
+                
+            count += 1
 
-                """
-                if count > max_pairs:
-                    return None
-                """
+            """
+            if count > max_pairs:
+                return None
+            """
 
-                # Cleanup here?
+            # Cleanup here?
                 
     # Failure.
     return None

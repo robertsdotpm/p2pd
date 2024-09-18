@@ -301,9 +301,11 @@ class PipeEvents(BaseACKProto):
             data = bytes(data)
 
         # Record msg received.
+        """
         log(
             'data recv {} = {}'.format(client_tup, to_s(binascii.hexlify(data)))
         )
+        """
 
         # Ack UDP msg if enabled.
         if self.is_ack and self.is_ackable:
@@ -347,7 +349,7 @@ class PipeEvents(BaseACKProto):
 
     # UDP packets.
     def datagram_received(self, data, client_tup):
-        log(f"Base proto recv udp = {client_tup} {data}")
+        #log(f"Base proto recv udp = {client_tup} {data}")
         if self.transport is None:
             log(f"Skipping process data cause transport none 1.")
             return
@@ -357,7 +359,7 @@ class PipeEvents(BaseACKProto):
     # Single TCP connection.
     def data_received(self, data):
         try:
-            log(f"Base proto recv tcp = {data}")
+            #log(f"Base proto recv tcp = {data}")
             if self.transport is None:
                 log(f"Skipping process data cause transport none 2.")
                 return

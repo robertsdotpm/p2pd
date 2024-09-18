@@ -46,6 +46,8 @@ class SigProtoHandlers():
         buf = h_to_b(buf)
         is_enc = buf[0]
         if is_enc:
+            print("got enc msg")
+            print(buf)
             try:
                 buf = decrypt(
                     self.node.sk,
@@ -62,48 +64,51 @@ class SigProtoHandlers():
 
         print(f"sig msg got {buf}")
         
-        # Unpack message into fields.
-        msg_info = SIG_PROTO[buf[0]]
-        msg_class = msg_info[0]
-        msg = msg_class.unpack(buf[1:])
+        try:
+            # Unpack message into fields.
+            msg_info = SIG_PROTO[buf[0]]
+            msg_class = msg_info[0]
+            msg = msg_class.unpack(buf[1:])
 
-        # Is this message meant for us?
-        dest = msg.routing.dest
-        node_id = to_s(self.node.p2p_addr["node_id"])
-        if to_s(dest["node_id"]) != node_id:
-            print(f"Received message not intended for us. {dest['node_id']} {node_id}")
-            return
-        
-        # Old message?
-        if msg.meta.pipe_id in self.seen:
-            print("dropping old msg.")
-            return
-        else:
-            self.seen[msg.meta.pipe_id] = time.time()
-        
-        # Allow encryption.
-        if is_enc:
-            src_node_id = msg.meta.src["node_id"]
-            if src_node_id not in self.node.auth:
-                assert(isinstance(msg.cipher.vk, bytes))
-                self.node.auth[src_node_id] = {
-                    "vk": msg.cipher.vk
-                }
-        
-        # Updating routing dest with current addr.
-        print(msg is not None)
-        assert(msg is not None)
-        msg.set_cur_addr(self.node.addr_bytes)
-        msg.routing.load_if_extra(self.node)
-        
-        # Toggle local and remote address support.
-        conf = dict_child({
-            "addr_types": msg.meta.addr_types
-        }, self.conf)
+            # Is this message meant for us?
+            dest = msg.routing.dest
+            node_id = to_s(self.node.p2p_addr["node_id"])
+            if to_s(dest["node_id"]) != node_id:
+                print(f"Received message not intended for us. {dest['node_id']} {node_id}")
+                return
+            
+            # Old message?
+            if msg.meta.pipe_id in self.seen:
+                print("dropping old msg.")
+                return
+            else:
+                self.seen[msg.meta.pipe_id] = time.time()
+            
+            # Allow encryption.
+            if is_enc:
+                src_node_id = msg.meta.src["node_id"]
+                if src_node_id not in self.node.auth:
+                    assert(isinstance(msg.cipher.vk, bytes))
+                    self.node.auth[src_node_id] = {
+                        "vk": msg.cipher.vk
+                    }
+            
+            # Updating routing dest with current addr.
+            print(msg is not None)
+            assert(msg is not None)
+            msg.set_cur_addr(self.node.addr_bytes)
+            msg.routing.load_if_extra(self.node)
+            
+            # Toggle local and remote address support.
+            conf = dict_child({
+                "addr_types": msg.meta.addr_types
+            }, self.conf)
 
-        # Take action based on message.
-        print("calling handle msg")
-        return await self.handle_msg(msg_info, msg, conf)
+            # Take action based on message.
+            print("calling handle msg")
+            return await self.handle_msg(msg_info, msg, conf)
+        except:
+            what_exception()
     
 async def node_protocol(self, msg, client_tup, pipe):
 

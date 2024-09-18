@@ -112,8 +112,8 @@ class TURNClient(PipeEvents):
 
     def get_turn_server(self, af=None):
         return {
-            "host": self.turn_addr.tup[0],
-            "port": self.turn_addr.tup[1],
+            "host": self.turn_addr[0],
+            "port": self.turn_addr[1],
             "afs": [af],
             "user": self.turn_user,
             "pass": self.turn_pw,

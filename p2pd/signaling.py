@@ -79,7 +79,10 @@ class SignalMock():
 
     async def get_client(self, mqtt_server):
         client = MQTTClient(self.peer_id)
-        client.set_config({'reconnect_retries': -1, 'reconnect_delay': 60})
+        client.set_config({
+            'reconnect_retries': -1,
+            'reconnect_delay': 60
+        })
         client.on_connect = self.on_connect
         client.on_message = self.on_message
         client.on_disconnect = self.on_disconnect

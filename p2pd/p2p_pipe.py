@@ -43,11 +43,12 @@ class P2PPipe():
             P2P_PUNCH: [self.tcp_hole_punch, 20, None, 0, 2],
 
             # Large timeout, end refreshers, disable LAN cons.
-            P2P_RELAY: [self.udp_turn_relay, 20, self.turn_cleanup, 1, 1],
+            P2P_RELAY: [self.udp_turn_relay, 30, self.turn_cleanup, 1, 1],
         }
 
     def route_msg(self, msg, m=0):
-        msg.cipher.vk = self.node.vk.to_string("compressed")
+        vk = self.node.vk.to_string("compressed")
+        msg.cipher.vk = to_h(vk)
         self.node.sig_msg_queue.put_nowait([msg, m])
 
     async def connect(self, strategies=P2P_STRATEGIES, reply=None, conf=P2P_PIPE_CONF):
@@ -259,6 +260,8 @@ class P2PPipe():
             if reply is not None:
                 offsets = [reply.payload.serv_id]
 
+            print(" make new turn client")
+
             # Use first server from offsets that works.
             client = await get_first_working_turn_client(
                 af,
@@ -266,6 +269,8 @@ class P2PPipe():
                 iface,
                 self.node.msg_cb
             )
+
+            print(client)
 
             # Save client reference.
             self.node.turn_clients[pipe_id] = client
@@ -307,8 +312,12 @@ class P2PPipe():
             },
         })
 
-        self.route_msg(msg, m=3)
-        return await self.node.pipes[pipe_id]
+        print(f"sending msg {msg.pack()}")
+        try:
+            self.route_msg(msg, m=3)
+            return await self.node.pipes[pipe_id]
+        except:
+            what_exception()
 
     async def turn_cleanup(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
         if pipe_id not in self.node.turn_clients:
