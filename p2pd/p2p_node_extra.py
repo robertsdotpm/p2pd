@@ -372,24 +372,22 @@ class P2PNodeExtra():
         try:
             await asyncio.wait_for(
                 self.ping_ids[ping_id].wait(),
-                30
+                5
             )
             print("got pong.")
             return pipe
         except asyncio.TimeoutError:
             print("ping timeout")
             await pipe.close()
-        finally:
-            del self.ping_ids[ping_id]
 
-    async def ping_checker(self, n=10):
-
+    async def ping_checker(self, n=30):
         while 1:
             # Wait until ping time.
             await asyncio.sleep(n)
 
             # Check if any pipes need to be pinged.
             tasks = []
+            closed_pipes = []
             for pipe in self.ping_pipes:
                 # Setup ping event.
                 ping_id = to_s(rand_plain(10))
@@ -404,6 +402,7 @@ class P2PNodeExtra():
                         pipe.sock.getpeername()
                     )
                 except:
+                    closed_pipes.append(pipe)
                     await pipe.close()
                     continue
 
@@ -422,6 +421,13 @@ class P2PNodeExtra():
                 still_monitoring = await asyncio.gather(*tasks)
                 still_monitoring = strip_none(still_monitoring)
                 self.ping_pipes = still_monitoring
+                
+            # Remove any pipes that errored.
+            for pipe in closed_pipes:
+                self.ping_pipes.remove(pipe)
+
+            # Reset ping ids.
+            self.ping_ids = {}
 
 
     # Shutdown the node server and do cleanup.

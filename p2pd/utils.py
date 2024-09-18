@@ -436,7 +436,6 @@ async def async_wrap_errors(coro, timeout=None):
         # Log all errors.
         log("async wrap errors called")
         log_exception()
-        what_exception()
 
 def sync_wrap_errors(f, args=[]):
     try:

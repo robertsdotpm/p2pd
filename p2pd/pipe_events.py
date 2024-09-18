@@ -271,11 +271,9 @@ class PipeEvents(BaseACKProto):
     def route_msg(self, data, client_tup):
         # No data to route.
         if not data:
-            print("not data")
             return
 
         # Route messages to any pipes.
-        print(self.pipes)
         for pipe in self.pipes:
             task = create_task(
                 pipe.send(
@@ -287,7 +285,6 @@ class PipeEvents(BaseACKProto):
             self.tasks.append(task)
 
         # Process messages using any registered handlers.
-        print(self.msg_cbs)
         self.run_handlers(self.msg_cbs, client_tup, data)
 
         # Add message to any interested subscriptions.
@@ -304,13 +301,12 @@ class PipeEvents(BaseACKProto):
             data = bytes(data)
 
         # Record msg received.
-        print(
+        log(
             'data recv {} = {}'.format(client_tup, to_s(binascii.hexlify(data)))
         )
 
         # Ack UDP msg if enabled.
         if self.is_ack and self.is_ackable:
-            print("is ack is ackable")
             """
             Sends an ACK down the stream if it's a message that needs an ACK.
             Clients that use the 'reliable' UDP functions over a specific
@@ -340,14 +336,13 @@ class PipeEvents(BaseACKProto):
         # Supports unique messages.
         if self.conf["enable_msg_ids"]:
             if not self.is_unique_msg(self.stream, data, client_tup):
-                print("not unique.")
                 return
 
         # Route message to stream.
         self.route_msg(data, client_tup)
 
     def error_received(self, exp):
-        print(exp)
+        log(str(exp))
         pass
 
     # UDP packets.

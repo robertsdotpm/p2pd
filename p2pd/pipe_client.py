@@ -93,8 +93,6 @@ class PipeClient(ACKUDP):
     call https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.loop.remove_reader and on queue empty add it back.
     """
     def add_msg(self, data, client_tup):
-        print(f"stream add msg {data} {client_tup}")
-
         # No subscriptions.
         if not len(self.subs):
             log("no subs")
@@ -123,22 +121,16 @@ class PipeClient(ACKUDP):
             # Msg pattern, address pattern.
             b_msg_p, b_addr_p = sub[:2]
 
-            print(f"{b_msg_p} {b_addr_p}")
-
             # Check client_addr matches their host pattern.
             if b_addr_p:
                 host_matches = re.findall(b_addr_p, client_addr)
                 if host_matches == []:
-                    print("msg doesnt match host addr")
                     continue
 
             # Check data matches their message pattern.
             if b_msg_p:
-                print(b_msg_p)
-                print(data)
                 msg_matches = re.findall(b_msg_p, data)
                 if msg_matches == []:
-                    print("msg doesnt match pattern")
                     continue
 
             # Execute message using handle instead of adding to queue.

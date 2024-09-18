@@ -306,7 +306,7 @@ class Interface():
             def ifaddresses(self, name):
                 ret = {
                     # MAC address (blanket)
-                    17: [
+                    netifaces.AF_LINK: [
                         {
                             'addr': '',
                             'broadcast': 'ff:ff:ff:ff:ff:ff'
