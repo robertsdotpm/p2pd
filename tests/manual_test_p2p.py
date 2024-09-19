@@ -10,7 +10,7 @@ try:
 except:
     pass
 
-TEST_NODE_NO = 2
+TEST_NODE_NO = 1
 TEST_P2P_PIPE_CONF = {
     "addr_types": [EXT_BIND, NIC_BIND],
     "sig_pipe_no": 0,

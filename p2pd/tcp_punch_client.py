@@ -122,6 +122,9 @@ class TCPPuncher():
             self.state,
         )
 
+        print(self.state)
+        print(recv_mappings)
+
         # Covers exchanging and receiving mappings.
         # These steps are required for success.
         fetch_states  = [INITIATED_PREDICTIONS]

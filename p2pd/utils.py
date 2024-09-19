@@ -65,6 +65,32 @@ if vmaj < 3:
 if vmin <= 4:
     raise Exception("Project needs >= 3.5")
 
+if sys.platform != 'win32':
+    def patch():
+        pass
+else:
+    def patch():
+        """Patch selectors.SelectSelector to fix WinError 10038 in Windows
+
+        Ref: https://bugs.python.org/issue33350
+        """
+
+        import select
+        from selectors import SelectSelector
+
+        def _select(self, r, w, _, timeout=None):
+            try:
+                r, w, x = select.select(r, w, w, timeout)
+            except OSError as e:
+                if hasattr(e, 'winerror') and e.winerror == 10038:
+                    # descriptors may already be closed
+                    return [], [], []
+                raise
+            else:
+                return r, w + x, []
+
+        SelectSelector._select = _select
+
 def create_task(x, loop=None):
     loop = loop or asyncio.get_event_loop()
     return loop.create_task(x)

@@ -117,6 +117,9 @@ class P2PPipe():
 
         if pipe is None:
             return
+        
+        if pipe.sock is None:
+            return
 
         await pipe.send(to_b(f"ID {pipe_id}"))
         self.node.pipe_ready(pipe_id, pipe)
@@ -205,6 +208,7 @@ class P2PPipe():
 
         # Protocol done -- return nothing.
         if ret == 1:
+            print("tcp punch proto done returning.")
             return PipeEvents(None)
 
         """
