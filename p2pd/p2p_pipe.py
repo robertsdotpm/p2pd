@@ -50,10 +50,13 @@ class P2PPipe():
             P2P_RELAY: [self.udp_turn_relay, 20, self.turn_cleanup, 1, 1],
         }
 
-    def route_msg(self, msg, m=0):
-        vk = self.node.vk.to_string("compressed")
-        msg.cipher.vk = to_h(vk)
-        self.node.sig_msg_queue.put_nowait([msg, m])
+    def route_msg(self, msg, reply=None, m=0):
+        vk = None
+        if reply is not None:
+            vk = h_to_b(reply.cipher.vk)
+
+        msg.cipher.vk = to_h(self.node.vk.to_string("compressed"))
+        self.node.sig_msg_queue.put_nowait([msg, vk, m])
 
     async def connect(self, strategies=P2P_STRATEGIES, reply=None, conf=P2P_PIPE_CONF):
         # Try strategies to achieve a connection.
@@ -239,7 +242,8 @@ class P2PPipe():
                 "mappings": mappings,
             },
         })
-        self.route_msg(msg, m=2)
+
+        self.route_msg(msg, reply=reply, m=2)
 
         # Prevent protocol loop.
         pipe = await self.node.pipes[pipe_id]
@@ -318,7 +322,7 @@ class P2PPipe():
 
         print(f"sending msg {msg.pack()}")
         try:
-            self.route_msg(msg, m=3)
+            self.route_msg(msg, reply=reply, m=3)
             return await self.node.pipes[pipe_id]
         except:
             what_exception()

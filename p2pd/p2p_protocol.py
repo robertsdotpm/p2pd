@@ -84,15 +84,6 @@ class SigProtoHandlers():
             else:
                 self.seen[msg.meta.pipe_id] = time.time()
             
-            # Allow encryption.
-            if is_enc:
-                src_node_id = msg.meta.src["node_id"]
-                if src_node_id not in self.node.auth:
-                    assert(isinstance(msg.cipher.vk, bytes))
-                    self.node.auth[src_node_id] = {
-                        "vk": msg.cipher.vk
-                    }
-            
             # Updating routing dest with current addr.
             print(msg is not None)
             assert(msg is not None)

@@ -408,10 +408,10 @@ async def test_p2p_strats():
 
     params = {
         "sig_pipe_no": 2,
-        "addr_types": [EXT_BIND, NIC_BIND],
+        "addr_types": [NIC_BIND],
         "ifs": ifs,
-        "same_if": False,
-        "multi_ifs": True,
+        "same_if": True,
+        "multi_ifs": False,
     }
 
     strats = [P2P_PUNCH]

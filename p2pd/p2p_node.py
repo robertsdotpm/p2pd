@@ -72,7 +72,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         self.auth = {
             self.node_id: {
                 "sk": self.sk,
-                "vk": self.vk,
+                "vk": self.vk.to_string("compressed"),
             }
         }
 

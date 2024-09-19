@@ -233,13 +233,22 @@ class P2PNodeExtra():
 
         return overlap + non_overlap
 
-    async def await_peer_con(self, msg, m=0, relay_no=2):
+    async def await_peer_con(self, msg, vk=None, m=0, relay_no=2):
         # Encrypt the message if the public key is known.
         buf = b"\0" + msg.pack()
         dest_node_id = msg.routing.dest["node_id"]
+
+        # Loaded from PNP root server.
         if dest_node_id in self.auth:
+            vk = self.auth[dest_node_id]["vk"]
+            print("vk from pnp")
+
+        # Else loaded from a MSN.
+        if vk is not None:
+            print(vk)
+            assert(isinstance(vk, bytes))
             buf = b"\1" + encrypt(
-                self.auth[dest_node_id]["vk"],
+                vk,
                 msg.pack(),
             )
 
@@ -304,11 +313,12 @@ class P2PNodeExtra():
             if x is None:
                 return
             else:
-                msg, m = x
+                msg, vk, m = x
             
             await async_wrap_errors(
                 self.await_peer_con(
                     msg,
+                    vk,
                     m,
                 )
             )
