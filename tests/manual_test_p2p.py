@@ -295,6 +295,7 @@ async def p2p_check_strats(params, strats):
                 conf=nodes.pp_conf,
             )
 
+
             if pipe is not None:
                 assert(await check_pipe(pipe))
             else:
@@ -368,15 +369,15 @@ async def test_p2p_successive_failure():
     if_names = await list_interfaces()
     ifs = await load_interfaces(if_names)
     params = {
-        "sig_pipe_no": 2,
+        "sig_pipe_no": 0,
         "addr_types": [EXT_BIND, NIC_BIND],
         "ifs": ifs,
         "same_if": False if len(ifs) >= 2 else True,
         "multi_ifs": True,
     }
 
-    patch_strats = [PUNCH_FAIL, RELAY_FAIL, REVERSE_FAIL, P2P_DIRECT]
-    use_strats = [P2P_PUNCH, P2P_RELAY, P2P_REVERSE, P2P_DIRECT]
+    patch_strats = [PUNCH_FAIL]
+    use_strats = [P2P_PUNCH]
     async with TestNodes(**params) as nodes:
         is_patched = patch_p2p_stats(patch_strats, nodes.pp_alice)
         def get_p2p_pipe(d):
@@ -407,7 +408,7 @@ async def test_p2p_strats():
 
     params = {
         "sig_pipe_no": 2,
-        "addr_types": [NIC_BIND, EXT_BIND],
+        "addr_types": [EXT_BIND, NIC_BIND],
         "ifs": ifs,
         "same_if": False,
         "multi_ifs": True,

@@ -413,6 +413,8 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
             needs to be patched to account for possibly
             changed offsets and details.
             """
+
+            """
             # Don't change sending interface if already chosen.
             if reply is not None:
                 interface, src_index = await select_if_by_dest(
@@ -424,6 +426,7 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                 )
 
                 src_info = pp.src[af][src_index]
+            """
             
             print(f"if = {id(interface)}")
             print(f"netifaces = {interface.netifaces}")
