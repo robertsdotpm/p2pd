@@ -12,6 +12,9 @@ from .interface import select_if_by_dest
 from .turn_client import TURNClient
 from .signaling import SignalMock
 
+TRY_OVERLAP_EXTS = 1
+TRY_NOT_TO_OVERLAP_EXTS = 2
+
 def init_process_pool():
     # Make selector default event loop.
     # On Windows this changes it from proactor to selector.
@@ -311,6 +314,19 @@ async def get_first_working_turn_client(af, offsets, nic, msg_cb):
             log_exception()
             continue
 
+def sort_pairs_by_overlap(src_infos, dest_infos):
+    overlap = []
+    unique = []
+    for src_info in src_infos:
+        for dest_info in dest_infos:
+            pair = [src_info, dest_info]
+            if src_info["ext"] == dest_info["ext"]:
+                overlap.append(pair)
+            else:
+                unique.append(pair)
+
+    return overlap, unique
+
 async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply, pp, conf=None):
     """
     Given info on a local interface, a remote interface,
@@ -318,201 +334,215 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
     a connection. Adapt the technique depending on whether
     addressing is suitably local or remote.
     """
-    async def try_addr_infos(src_info, dest_info):
+    async def try_addr_infos(addr_type, src_info, dest_info):
         # Local addressing and/or remote.
-        for addr_type in conf["addr_types"]:
-            try:
-                # Create a future for pending pipes.
-                if reply is None:
-                    pipe_id = to_s(rand_plain(15))
-                else:
-                    pipe_id = reply.meta.pipe_id
+        try:
+            # Create a future for pending pipes.
+            if reply is None:
+                pipe_id = to_s(rand_plain(15))
+            else:
+                pipe_id = reply.meta.pipe_id
 
-                # Allow awaiting by pipe_id.
-                pp.node.pipe_future(pipe_id)
+            # Allow awaiting by pipe_id.
+            pp.node.pipe_future(pipe_id)
 
-                # Select interface to use.
-                if_index = src_info["if_index"]
-                interface = pp.node.ifs[if_index]
+            # Select interface to use.
+            if_index = src_info["if_index"]
+            interface = pp.node.ifs[if_index]
 
-                # Ensure our selected NIC is what the
-                # remote peer wanted to use for the technique.
-                if reply is not None:
-                    if reply.routing.dest_index != if_index:
-                        print(" error our if index")
-                        continue
+            # Ensure our selected NIC is what the
+            # remote peer wanted to use for the technique.
+            if reply is not None:
+                if reply.routing.dest_index != if_index:
+                    print(" error our if index")
+                    return
 
-                # Support testing addr type failures.
-                # This is for test harnesses.
-                if addr_type in [NIC_FAIL, EXT_FAIL]:
-                    use_addr_type = addr_type - 2
-                    do_fail = True
-                    print(f"test fail {addr_type}")
-                else:
-                    use_addr_type = addr_type
-                    do_fail = False
+            # Support testing addr type failures.
+            # This is for test harnesses.
+            if addr_type in [NIC_FAIL, EXT_FAIL]:
+                use_addr_type = addr_type - 2
+                do_fail = True
+                print(f"test fail {addr_type}")
+            else:
+                use_addr_type = addr_type
+                do_fail = False
 
-                print(f"Addr types = {use_addr_type} do fail = {do_fail}")
+            print(f"Addr types = {use_addr_type} do fail = {do_fail}")
 
-                """
-                Determine the best destination IP to use
-                for the connectivity technique based on
-                addressing and relationships between the
-                two machines (deep networking specific.)
-                """
-                dest_info["ip"] = str(
-                    select_dest_ipr(
-                        af,
-                        pp.same_machine,
-                        src_info,
-                        dest_info,
-                        [use_addr_type],
+            """
+            Determine the best destination IP to use
+            for the connectivity technique based on
+            addressing and relationships between the
+            two machines (deep networking specific.)
+            """
+            dest_info["ip"] = str(
+                select_dest_ipr(
+                    af,
+                    pp.same_machine,
+                    src_info,
+                    dest_info,
+                    [use_addr_type],
 
-                        # can you make this case
-                        # run for all
-                        # try it
-                        has_set_bind,
-                    )
+                    # can you make this case
+                    # run for all
+                    # try it
+                    has_set_bind,
+                )
+            )
+
+            # Need a destination address.
+            # Possibly a different address type will work.
+            if dest_info["ip"] == "None":
+                print(src_info)
+                print(dest_info)
+                print("invalid matched af")
+                return
+
+            print(f"dest ipr ip selected = {dest_info['ip']}")
+
+            """
+            There are rules that govern the reachability
+            of a destination by a given interface. This
+            function takes care of edge cases mostly
+            to do with same-machine, multi-interfaces.
+            """
+
+            """
+            disable for testing
+            NOTE: if you do this then surely the src_info
+            needs to be patched to account for possibly
+            changed offsets and details.
+            """
+            # Don't change sending interface if already chosen.
+            if reply is not None:
+                interface, src_index = await select_if_by_dest(
+                    af,
+                    src_info["if_index"],
+                    dest_info["ip"],
+                    interface,
+                    pp.node.ifs,
                 )
 
-                # Need a destination address.
-                # Possibly a different address type will work.
-                if dest_info["ip"] == "None":
-                    print(src_info)
-                    print(dest_info)
-                    print("invalid matched af")
-                    continue
+                src_info = pp.src[af][src_index]
+            
+            print(f"if = {id(interface)}")
+            print(f"netifaces = {interface.netifaces}")
+            
 
-                print(f"dest ipr ip selected = {dest_info['ip']}")
+            """
+            With all the correct interfaces and IPs
+            chosen -- call the function that will run
+            the technique to achieve connectivity.
+            """
+            result = await async_wrap_errors(
+                func(
+                    af,
+                    pipe_id,
+                    src_info,
+                    dest_info,
+                    interface,
+                    addr_type,
+                    reply,
+                ),
+                timeout
+            )
 
-                """
-                There are rules that govern the reachability
-                of a destination by a given interface. This
-                function takes care of edge cases mostly
-                to do with same-machine, multi-interfaces.
-                """
+            # Support testing failures for an addr type.
+            if do_fail:
+                result = None
 
-                """
-                disable for testing
-                NOTE: if you do this then surely the src_info
-                needs to be patched to account for possibly
-                changed offsets and details.
-                """
-                # Don't change sending interface if already chosen.
-                if reply is not None:
-                    interface, src_index = await select_if_by_dest(
-                        af,
-                        src_info["if_index"],
-                        dest_info["ip"],
-                        interface,
-                        pp.node.ifs,
-                    )
-
-                    src_info = pp.src[af][src_index]
-                
-                print(f"if = {id(interface)}")
-                print(f"netifaces = {interface.netifaces}")
-                
-
-                """
-                With all the correct interfaces and IPs
-                chosen -- call the function that will run
-                the technique to achieve connectivity.
-                """
-                result = await async_wrap_errors(
-                    func(
-                        af,
-                        pipe_id,
-                        src_info,
-                        dest_info,
-                        interface,
-                        addr_type,
-                        reply,
-                    ),
-                    timeout
+            # Success result from function.
+            if result is not None:
+                print(f"result not none {result}")
+                return result
+            
+            msg = f"FAIL: {func} {use_addr_type} {result}"
+            print(msg)
+            
+            """
+            Some functions require cleanup on failure.
+            Ensure that the state overtime remains clean.
+            """
+            if cleanup is not None:
+                await cleanup(
+                    af,
+                    pipe_id,
+                    src_info,
+                    dest_info,
+                    interface,
+                    use_addr_type,
+                    reply,
                 )
 
-                # Support testing failures for an addr type.
-                if do_fail:
-                    result = None
-
-                # Success result from function.
-                if result is not None:
-                    print(f"result not none {result}")
-                    return result
-                
-                msg = f"FAIL: {func} {use_addr_type} {result}"
-                print(msg)
-                
-                """
-                Some functions require cleanup on failure.
-                Ensure that the state overtime remains clean.
-                """
-                if cleanup is not None:
-                    await cleanup(
-                        af,
-                        pipe_id,
-                        src_info,
-                        dest_info,
-                        interface,
-                        use_addr_type,
-                        reply,
-                    )
-
-                # Delete unused futures on failure.
-                if pipe_id in pp.node.pipes:
-                    del pp.node.pipes[pipe_id]
-            except:
-                what_exception()
-                log_exception()
+            # Delete unused futures on failure.
+            if pipe_id in pp.node.pipes:
+                del pp.node.pipes[pipe_id]
+        except:
+            what_exception()
+            log_exception()
 
     # Use an AF supported by both.
     count = 1
     #max_pairs = 1
-    for af in VALID_AFS:
-        if reply is not None:
-            # Try select if info based on their chosen offset.
-            src_info = pp.src[af][reply.routing.dest_index]
-            dest_info = pp.dest[af][reply.meta.src_index]
-            ret = await async_wrap_errors(
-                try_addr_infos(src_info, dest_info)
-            )
+    for addr_type in conf["addr_types"]:
+        for af in VALID_AFS:
+            if reply is not None:
+                # Try select if info based on their chosen offset.
+                src_info = pp.src[af][reply.routing.dest_index]
+                dest_info = pp.dest[af][reply.meta.src_index]
+                ret = await async_wrap_errors(
+                    try_addr_infos(addr_type, src_info, dest_info)
+                )
 
-            return ret
-
-        # Iterates by shared AFs
-        # filtered by best NAT (non-overlapping WANS.)
-        if_info_iter = IFInfoIter(af, pp.src, pp.dest)
-        if not len(if_info_iter):
-            continue
-        
-
-        # Get interface offset that supports this af.
-        for src_info, dest_info in if_info_iter:
-        #for dest_info in list(pp.dest[af].values()):
-        #    for src_info in list(pp.src[af].values()):
-
-            # Only try up to N pairs per technique.
-            # Technique-specific N to avoid lengthy delays.
-            print(src_info)
-            print(dest_info)
-            print()
-            ret = await async_wrap_errors(
-                try_addr_infos(src_info, dest_info)
-            )
-
-            # Success so return.
-            if ret is not None:
                 return ret
-                
-            count += 1
 
-            """
-            if count > max_pairs:
-                return None
-            """
+            # Iterates by shared AFs
+            # filtered by best NAT (non-overlapping WANS.)
+            #if_info_iter = IFInfoIter(af, pp.src, pp.dest)
+            #if not len(if_info_iter):
+            #    continue
+            
 
-            # Cleanup here?
+            # Get interface offset that supports this af.
+            #for src_info, dest_info in if_info_iter:
+            src_infos = list(pp.src[af].values())
+            dest_infos = list(pp.dest[af].values())
+            overlap, unique = sort_pairs_by_overlap(
+                src_infos,
+                dest_infos
+            )
+
+            # If external address is the same try unique pairs first.
+            if addr_type == EXT_BIND:
+                pair_order = unique + overlap
+
+            # For local addresses you want to do the opposite.
+            # So you're on the same LAN or NIC if on the same machine.
+            if addr_type == NIC_BIND:
+                pair_order = overlap + unique
+
+            for src_info, dest_info in pair_order:
+                # Only try up to N pairs per technique.
+                # Technique-specific N to avoid lengthy delays.
+                print(src_info)
+                print(dest_info)
+                print()
+                ret = await async_wrap_errors(
+                    try_addr_infos(addr_type, src_info, dest_info)
+                )
+
+                # Success so return.
+                if ret is not None:
+                    return ret
+                    
+                count += 1
+
+                """
+                if count > max_pairs:
+                    return None
+                """
+
+                # Cleanup here?
                     
     # Failure.
     return None

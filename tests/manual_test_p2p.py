@@ -407,13 +407,13 @@ async def test_p2p_strats():
 
     params = {
         "sig_pipe_no": 2,
-        "addr_types": [EXT_BIND],
+        "addr_types": [NIC_BIND, EXT_BIND],
         "ifs": ifs,
-        "same_if": False if len(ifs) >= 2 else True,
+        "same_if": False,
         "multi_ifs": True,
     }
 
-    strats = [P2P_RELAY]
+    strats = [P2P_PUNCH]
     await p2p_check_strats(params, strats)
 
 async def test_bug_fix():
