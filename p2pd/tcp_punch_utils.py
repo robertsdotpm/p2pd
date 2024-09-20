@@ -4,6 +4,7 @@ from .nat_utils import *
 from .interface import *
 from .nat_predict import *
 from .clock_skew import *
+from .keep_alive import set_keep_alive
 
 PUNCH_ALIVE = b"234o2jdjf\n"
 PUNCH_END = b"qwekl2k343ok\n"
@@ -112,6 +113,10 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
             socket.SOL_SOCKET,
             socket.SO_REUSEADDR
         )
+
+        # Add pings in the background.
+        # This helps the process pool stay clean.
+        set_keep_alive(sock)
 
         # Sanity check for the sock option.
         if not reuse_set:

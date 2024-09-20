@@ -153,9 +153,6 @@ class P2PNode(P2PNodeExtra, Daemon):
         # Accept TCP punch requests.
         self.start_punch_worker()
 
-        # Start pipe pinger.
-        self.start_pipe_pinger()
-
         # Start worker that forwards sig proto messages.
         self.start_sig_msg_dispatcher()
 
