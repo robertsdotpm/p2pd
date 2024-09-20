@@ -38,16 +38,16 @@ class P2PPipe():
         # func, timeout, cleanup, same_if, max_pairs
         self.func_table = {
             # Short timeouts for direct TCP cons.
-            P2P_DIRECT: [self.direct_connect, 2, None, 1, 4],
-            P2P_REVERSE: [self.reverse_connect, 4, None, 1, 2],
+            P2P_DIRECT: [self.direct_connect, 2, None, 1, 6],
+            P2P_REVERSE: [self.reverse_connect, 4, None, 1, 6],
 
             # Large timeout for meetings with a state cleanup.
             # <20 timeout can cause timeouts for punching.
-            P2P_PUNCH: [self.tcp_hole_punch, 20, None, 0, 2],
+            P2P_PUNCH: [self.tcp_hole_punch, 20, None, 0, 4],
 
             # Large timeout, end refreshers, disable LAN cons.
             # <20 timeout can cause timeouts for relay setup.
-            P2P_RELAY: [self.udp_turn_relay, 20, self.turn_cleanup, 1, 1],
+            P2P_RELAY: [self.udp_turn_relay, 20, self.turn_cleanup, 1, 2],
         }
 
     def route_msg(self, msg, reply=None, m=0):

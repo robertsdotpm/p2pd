@@ -64,9 +64,10 @@ class FullNameFailure(Exception):
     pass
 
 class Nickname():
-    def __init__(self, sk, ifs):
+    def __init__(self, sk, ifs, sys_clock):
         self.sk = sk
         self.ifs = ifs
+        self.sys_clock = sys_clock
 
         # Select best NIC from if list to be primary NIC.
         for preferred_stack in [DUEL_STACK, IP6, IP4]:
@@ -108,7 +109,8 @@ class Nickname():
                     self.sk,
                     dest,
                     h_to_b(serv_info["pk"]),
-                    self.interface
+                    self.interface,
+                    self.sys_clock,
                 )
             )
         

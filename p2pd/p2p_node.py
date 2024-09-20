@@ -182,7 +182,11 @@ class P2PNode(P2PNodeExtra, Daemon):
         print(f"> P2P node = {self.addr_bytes}")
 
         # Used for setting nicknames for the node.
-        self.nick_client = await Nickname(self.sk, self.ifs)
+        self.nick_client = await Nickname(
+            self.sk,
+            self.ifs,
+            sys_clock,
+        )
         return self
     
     # Connect to a remote P2P node using a number of techniques.

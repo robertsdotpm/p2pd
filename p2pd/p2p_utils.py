@@ -1,3 +1,13 @@
+"""
+On ancient versions of Windows (like Vista),
+on older versions of Python (3.7 <= ?) there are socket bugs
+that can crash the event loop without being able to catch
+the exceptions. Trying to merge such patches into the project
+for these rare edge cases isn't a productive use of time
+(without much requests) -- instead, users should try upgrade
+OS or Python versions if possible.
+"""
+
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 import hashlib
@@ -49,108 +59,7 @@ async def get_pp_executors(workers=None):
         ))
     await asyncio.gather(*tasks)
     return pp_executor
-
-def sort_if_info_by_best_nat(p2p_addr):
-    # [af] = [[nat_type, if_info], ...]
-    nat_pairs = {}
-
-    # Store subset of interface details.
-    nat_pairs = []
-
-    # Loop over all the interface details by address family.
-    for _, if_info in enumerate(p2p_addr):
-        # Save interface details we're interested in.
-        nat_pairs.append([
-            if_info["nat"]["type"],
-            if_info
-        ])
-
-    # Sort based on NAT enum (lower = better)
-    nat_pairs = sorted(
-        nat_pairs,
-        key=lambda x: x[0]
-        )
-
-    return [x[1] for x in nat_pairs]
-    return nat_pairs
-
-"""
-The position of the infos in their lists correspond to
-the if_index. Hence, modifying the original object
-is going to cause code that depends on offsets to fail.
-The hack here is just to copy the src and leave the
-parent obj unchanged. The code seems to work.
-"""
-def swap_if_infos_with_overlapping_exts(src, dest):
-    bound = min(len(src), len(dest))
-    for i in range(0, bound):
-        if i + 1 >= bound:
-            break
-
-        if src[i]["ext"] == dest[i]["ext"]:
-            src[i], src[i + 1] = src[i + 1], src[i]
-            #dest[i], dest[i + 1] = dest[i + 1], dest[i]
-
-    return dest
-
-"""
-The iterator filters the addr info for both
-P2P addresses by the best NAT.
-
-The first addr info used for both is thus the
-best possible pairing. Further iterations aren't
-likely to be any more successful so to keep things
-simple only the first iteration is tried.
-"""
-class IFInfoIter():
-    def __init__(self, af, src_addr, dest_addr):
-        self.src_addr = list(src_addr[af].values())
-        self.dest_addr = list(dest_addr[af].values())
-        self.src_addr = sort_if_info_by_best_nat(self.src_addr)
-        self.dest_addr = sort_if_info_by_best_nat(self.dest_addr)
-        self.our_offset = 0
-        self.their_offset = 0
-        self.af = af
-        cond_one = not len(self.src_addr)
-        cond_two = not len(self.dest_addr)
-        if cond_one or cond_two:
-            self.dest_addr = self.src_addr = []
-            return
-
-        swap_if_infos_with_overlapping_exts(
-            self.src_addr,
-            self.dest_addr
-        )
-    
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        # No matched address types.
-        if not len(self):
-            raise StopIteration
-
-        # Stop when they have no new entries.
-        if self.their_offset >= len(self.dest_addr):
-            raise StopIteration
-        
-        # Load addr info to use.
-        src_info = self.src_addr[self.our_offset]
-        dest_info = self.dest_addr[self.their_offset]
-
-        # Don't increase our offset if no new entry.
-        if self.our_offset < (len(self.src_addr) - 1):
-            self.our_offset += 1
-
-        # Increase their offset.
-        self.their_offset += 1
-
-        # Return the addr info.
-        return src_info, dest_info
-    
-    def __len__(self):
-        return len(self.dest_addr)
-        
+ 
 """
 If nodes are behind the same router they will have
 the same external address. Using this address for
@@ -399,34 +308,6 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                 return
 
             print(f"dest ipr ip selected = {dest_info['ip']}")
-
-            """
-            There are rules that govern the reachability
-            of a destination by a given interface. This
-            function takes care of edge cases mostly
-            to do with same-machine, multi-interfaces.
-            """
-
-            """
-            disable for testing
-            NOTE: if you do this then surely the src_info
-            needs to be patched to account for possibly
-            changed offsets and details.
-            """
-
-            """
-            # Don't change sending interface if already chosen.
-            if reply is not None:
-                interface, src_index = await select_if_by_dest(
-                    af,
-                    src_info["if_index"],
-                    dest_info["ip"],
-                    interface,
-                    pp.node.ifs,
-                )
-
-                src_info = pp.src[af][src_index]
-            """
             
             print(f"if = {id(interface)}")
             print(f"netifaces = {interface.netifaces}")
@@ -485,9 +366,8 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
             log_exception()
 
     # Use an AF supported by both.
-    count = 1
-    #max_pairs = 1
     for addr_type in conf["addr_types"]:
+        count = 1
         for af in VALID_AFS:
             if reply is not None:
                 # Try select if info based on their chosen offset.
@@ -498,13 +378,6 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                 )
 
                 return ret
-
-            # Iterates by shared AFs
-            # filtered by best NAT (non-overlapping WANS.)
-            #if_info_iter = IFInfoIter(af, pp.src, pp.dest)
-            #if not len(if_info_iter):
-            #    continue
-            
 
             # Get interface offset that supports this af.
             #for src_info, dest_info in if_info_iter:
@@ -539,12 +412,9 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                     return ret
                     
                 count += 1
-
-                """
                 if count > max_pairs:
                     return None
-                """
-
+                
                 # Cleanup here?
                     
     # Failure.

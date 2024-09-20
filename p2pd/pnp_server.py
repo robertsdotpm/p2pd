@@ -28,6 +28,7 @@ from .pnp_utils import *
 from .net import *
 from .ip_range import IPRange
 from .daemon import *
+from .clock_skew import SysClock
 
 async def v6_range_usage(cur, v6_glob_main, v6_glob_extra, v6_lan_id, _):
     # Count number of subnets used.
@@ -396,13 +397,15 @@ async def verified_write_name(db_con, cur, serv, behavior, updated, name, value,
     await db_con.commit()
 
 class PNPServer(Daemon):
-    def __init__(self, db_user, db_pass, db_name, reply_sk, reply_pk, v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION, v6_addr_expiry=V6_ADDR_EXPIRY):
+    def __init__(self, db_user, db_pass, db_name, reply_sk, reply_pk, sys_clock, v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6_NAME_LIMIT, min_name_duration=MIN_NAME_DURATION, v6_addr_expiry=V6_ADDR_EXPIRY):
         self.__name__ = "PNPServer"
         self.db_user = db_user
         self.db_pass = db_pass
         self.db_name = db_name
         self.reply_sk = SigningKey.from_string(reply_sk, curve=SECP256k1)
         self.reply_pk = reply_pk
+        self.sys_clock = sys_clock
+        time.time = lambda: int(sys_clock.time())
         self.v4_name_limit = v4_name_limit
         self.v6_name_limit = v6_name_limit
         self.min_name_duration = min_name_duration
@@ -552,12 +555,14 @@ async def start_pnp_server(bind_port):
         reply_sk_hex = input("reply sk: ")
 
     # Load PNP server class with DB details.
+    sys_clock = await SysClock(i).start()
     serv = PNPServer(
         "root",
         db_pass,
         "pnp",
         h_to_b(reply_sk_hex),
-        h_to_b(reply_pk_hex)
+        h_to_b(reply_pk_hex),
+        sys_clock,
     )
 
     # Start the server listening on public routes.

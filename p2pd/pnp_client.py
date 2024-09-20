@@ -13,9 +13,10 @@ status receipt it may return an invalid value
 indicating that the server hasn't done the previous call yet.
 """
 class PNPClient():
-    def __init__(self, sk, dest, dest_pk, nic, proto=TCP):
+    def __init__(self, sk, dest, dest_pk, nic, sys_clock, proto=TCP):
         self.dest_pk = dest_pk
         assert(isinstance(dest_pk, bytes))
+        self.sys_clock = sys_clock
         self.nic = nic
         self.dest = dest
         self.sk = sk
@@ -28,7 +29,7 @@ class PNPClient():
 
     async def get_updated(self, name):
         if name not in self.names:
-            t = int(time.time())
+            t = int(self.sys_clock.time())
             self.names[name] = t
             return t
 

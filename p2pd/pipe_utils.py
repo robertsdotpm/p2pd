@@ -7,6 +7,14 @@ can still pass in ints or IPRanges to use raw IPs. With
 ints just make sure there is a route alongside it because
 the address family is needed to disambiguate whether the
 int is a short IPv6 or an IPv4.
+
+- theres a bug on ancient operating systems (Windows Vista)
+where await sock_event with wait_for can crash the event loop.
+The fix has been merged in >= 3.7.5 which also works on Vista.
+I wasn't even able to get Python 3 to run on XP so for now it
+isn't supported. Trying to merge Python fixes for older OSes
+isn't a priority so these users should be told to upgrade
+Python versions if they get bugs with the event loop.
 """
 
 
