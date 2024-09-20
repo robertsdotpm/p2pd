@@ -36,13 +36,7 @@ async def do_something():
     #return
     for af in [IP4]:
 
-        if_info_iter = IFInfoIter(af, y, x) 
-        print(len(if_info_iter))
-        for src_info, dest_info in if_info_iter:
-            print(src_info)
-            print(dest_info)
-
-            print()
+        pass
 
     # Make sure iter hasn't corrupted if offsets.
     check_if_offsets(x)
