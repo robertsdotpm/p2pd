@@ -90,7 +90,6 @@ def turn_proc_attrs(af, attr_code, attr_data, msg, self):
             )
             stun_addr.decode(attr_code, attr_data)
             self.relay_tup = stun_addr.tup
-            print("relay tup here.")
 
             # Indicate the tup has been set.
             self.relay_tup_future.set_result(self.relay_tup)
@@ -196,10 +195,6 @@ async def process_replies(self):
         msg_data, peer_tup = turn_get_data_attr(turn_msg, self.turn_pipe.route.af, self)
 
         if msg_data is not None and peer_tup is not None:
-            print("got turn data msg")
-            print(peer_tup)
-            print(msg_data)
-
             # Not a peer we white listed.
             if peer_tup not in self.peers:
                 error = f"""
@@ -208,7 +203,6 @@ async def process_replies(self):
                 may indicate a decoding error.
                 """
                 log(error)
-                print(error)
                 continue
 
             # Get relay address to route to sender of the message.
@@ -312,9 +306,7 @@ async def process_replies(self):
 
         # White list a particular peer to send replies to our relay address.
         if turn_method == STUNMsgTypes.CreatePermission:
-            print("create perm resp")
             if turn_status == STUNMsgCodes.SuccessResp:
-                print("resp success")
                 # Notify sender that message was received.
                 self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
             else:

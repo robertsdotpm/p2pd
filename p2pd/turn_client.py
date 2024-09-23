@@ -273,7 +273,6 @@ class TURNClient(PipeEvents):
         # Use a peers relay to reach them instead.
         if dest_tup in self.peers:
             dest_tup = tuple(self.peers[dest_tup])
-            print(f"patched dest tup {dest_tup}")
 
         # Sanity checking.
         found_relay = False
@@ -321,8 +320,6 @@ class TURNClient(PipeEvents):
 
     async def recv(self, sub=None, timeout=2):
         # Build a sub from the first accepted peer.
-        print("bob turn recv ")
-        print(self.peers)
         if sub == SUB_ALL:
             sub = None
             
@@ -332,7 +329,6 @@ class TURNClient(PipeEvents):
                 break
 
         assert(sub is not None)
-        print(sub)
         return await super().recv(sub, timeout)
 
     # Handles writing TURN messages to self.udp_stream.
@@ -466,10 +462,6 @@ class TURNClient(PipeEvents):
         )
 
         af = af_from_ip_s(src_tup[0])
-        print(af)
-        print("create perm for ")
-        print(src_tup)
-
         attr_code = STUNAttrs.XorPeerAddress
         attr_data = STUNAddrTup(
             ip=src_tup[0],

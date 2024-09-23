@@ -199,7 +199,7 @@ async def get_wan_ip_cfab(src_ip, min_agree, stun_clients, timeout):
 
         return (src_ip, Route(af, [nic_ipr], [ext_ipr], interface))
     except:
-        what_exception()
+        log_exception()
 
 def sort_routes(routes):
     # Deterministically order routes list.
@@ -234,8 +234,6 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
     link_locals = []
     priv_iprs = []
     nic_iprs = await get_nic_iprs(af, interface, netifaces)
-    print(nic_iprs)
-    print()
     for nic_ipr in nic_iprs:
         assert(int(nic_ipr[0]))
         if ip_norm(nic_ipr[0])[:2] in ["fe", "fd"]:
@@ -280,9 +278,6 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
     priv_src = ""
     if len(priv_iprs):
         priv_src = ip_norm(str(priv_iprs[0]))
-        print(priv_src)
-        print(af)
-        
         tasks.append(
             async_wrap_errors(
                 get_wan_ip_cfab(
@@ -293,13 +288,10 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
                 )
             )
         )
-        
-    print(tasks)
 
     # Resolve interface addresses CFAB.
     results = await asyncio.gather(*tasks)
     results = [r for r in results if r is not None]
-    print(results)
 
     # Only the default NIC will have
     # a default route enabled for the af.
@@ -314,7 +306,6 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
         is not in the NIC IPs for this interface then
         don't enable the use of the default route.
         """
-        print(f"af default nic ip = {af_default_nic_ip}")
         af_default_nic_ipr = IPRange(af_default_nic_ip, cidr=cidr)
         if af_default_nic_ipr not in nic_iprs:
             default_route = None

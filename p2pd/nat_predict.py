@@ -79,7 +79,7 @@ async def get_high_port_mapping(stun_client):
                 ret[2]
             )
         except:
-            what_exception()
+            log_exception()
             continue
 
     raise Exception("high port sock fail.")

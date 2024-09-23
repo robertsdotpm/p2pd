@@ -104,13 +104,11 @@ class P2PDServer(RESTD):
     
     @RESTD.GET(["p2p"], ["open"])
     async def open_p2p_pipe(self, v, pipe):
-        print("in matched p2p open")
         con_name = v["name"]["open"]
         dest_addr = v["pos"][0]
 
         # Need a unique name per con.
         if con_name in self.cons:
-            print("con name already exists?")
             return {
                 "msg": "Con name already exists.",
                 "error": 2
@@ -126,8 +124,6 @@ class P2PDServer(RESTD):
             
             dest_addr = self.node.addr_bytes
 
-        print(dest_addr)
-
         # Attempt to make the connection.
         con = await create_task(
             async_wrap_errors(
@@ -139,9 +135,6 @@ class P2PDServer(RESTD):
                 )
             )
         )
-
-        print("p2pd got con")
-        print(con)
 
         # Success -- store pipe.
         if con is not None:
@@ -385,8 +378,6 @@ async def start_p2pd_server(route, ifs=[], enable_upnp=False):
     await p2p_server.add_listener(TCP, route)
 
     # Stop this thread exiting.
-    print(p2p_server.servers)
-    print(f"Started p2pd server")
     return p2p_server
 
 async def p2pd_workspace():

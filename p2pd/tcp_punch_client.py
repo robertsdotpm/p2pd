@@ -122,9 +122,6 @@ class TCPPuncher():
             self.state,
         )
 
-        print(self.state)
-        print(recv_mappings)
-
         # Covers exchanging and receiving mappings.
         # These steps are required for success.
         fetch_states  = [INITIATED_PREDICTIONS]
@@ -164,7 +161,6 @@ class TCPPuncher():
         # Update the mapping to match needed reply ports.
         # Optional step but improves success chance.
         if self.state == UPDATED_PREDICTIONS:
-            print("in updated mappings")
             # More updated list of their NAT predictions.
             self.recv_mappings = recv_mappings
 
@@ -182,8 +178,6 @@ class TCPPuncher():
             return 1
         
     async def setup_punching_process(self):
-        print("in setup punching process")
-
         # Listen server that process will connect back to.
         # References are saved to avoid garbage collection.
         route = await self.interface.route(self.af).bind()
@@ -206,15 +200,11 @@ class TCPPuncher():
 
         # Passed on to a new process.
         listen_tup = self.listen_pipe.sock.getsockname()[:2]
-        print(listen_tup)
-        print(self.listen_pipe.sock)
         args = (
             listen_tup,
             self.to_dict(),
             interface,
         )
-
-        print("starting proc do punching")
 
         try:
             # Schedule TCP punching in process pool executor.
@@ -245,7 +235,7 @@ class TCPPuncher():
                         self.node.pipe_ready(self.pipe_id, self.pipe)
                         return self.pipe
                 except:
-                    what_exception()
+                    log_exception()
                 
                 # Check every 100 ms.
                 await asyncio.sleep(0.1)
@@ -259,7 +249,7 @@ class TCPPuncher():
 
                     return
         except:
-            what_exception()
+            log_exception()
 
     def set_punch_mode(self):
         self.punch_mode = get_punch_mode(
@@ -267,8 +257,6 @@ class TCPPuncher():
             str(self.dest_info["ip"]),
             self.same_machine
         )
-
-        print(f"punch mode = {self.punch_mode}")
 
     def setup_multiproc(self, pp_executor):
         # Process pools are disabled.
@@ -298,8 +286,6 @@ class TCPPuncher():
 
 # Started in a new process.
 def proc_do_punching(args):
-    print("in proc do punching")
-
     try:
 
 
@@ -342,5 +328,5 @@ def proc_do_punching(args):
         #f.add_done_callback(lambda t: q.put(t.result()))
         return loop.run_until_complete(f)
     except:
-        what_exception()
+        log_exception()
 

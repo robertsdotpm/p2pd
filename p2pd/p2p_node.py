@@ -93,10 +93,9 @@ class P2PNode(P2PNodeExtra, Daemon):
         """
 
         # Recv a message for a pipe being monitored for idleness.
-        if pipe in self.last_recv_table:
-            self.last_recv_table[pipe] = time.time()
+        if pipe in self.last_recv_queue:
+            self.last_recv_table[pipe.sock] = time.time()
 
-        print(f"Node msg cb = {msg}")
         for sub_msg in msg.split(b'\n'):
             if not len(sub_msg): continue
             await node_protocol(self, sub_msg, client_tup, pipe)
@@ -125,7 +124,6 @@ class P2PNode(P2PNodeExtra, Daemon):
             except:
                 log_exception()
                 self.ifs = []
-        print(time.time() - t)
 
         # Managed to load IFs?
         if not len(self.ifs):
@@ -137,7 +135,6 @@ class P2PNode(P2PNodeExtra, Daemon):
             "p2pd",
             self.ifs[0].netifaces
         )
-        print(time.time() - t)
 
         # Managed to load machine IDs?
         if self.machine_id in (None, ""):
@@ -146,7 +143,6 @@ class P2PNode(P2PNodeExtra, Daemon):
         # Used by TCP punch clients.
         t = time.time()
         await self.load_stun_clients()
-        print(time.time() - t)
 
         # MQTT server offsets for signal protocol.
         if self.conf["sig_pipe_no"]:
@@ -155,7 +151,6 @@ class P2PNode(P2PNodeExtra, Daemon):
         # Multiprocess support for TCP punching and NTP sync.
         t = time.time()
         await self.setup_punch_coordination(sys_clock)
-        print(time.time() - t)
             
         # Accept TCP punch requests.
         self.start_punch_worker()
@@ -187,8 +182,6 @@ class P2PNode(P2PNodeExtra, Daemon):
         except:
             log_exception()
             raise Exception("Can't parse nodes p2p addr.")
-        
-        print(f"> P2P node = {self.addr_bytes}")
 
         # Used for setting nicknames for the node.
         self.nick_client = await Nickname(
@@ -209,9 +202,7 @@ class P2PNode(P2PNodeExtra, Daemon):
                 "vk": pkt.vkc,
                 "sk": None,
             }
-            print(f"pkt vkc = {pkt.vkc}")
 
-        print(f"Connecting to {addr_bytes}")
         pp = self.p2p_pipe(addr_bytes)
         return await pp.connect(strategies, reply=None, conf=conf)
 

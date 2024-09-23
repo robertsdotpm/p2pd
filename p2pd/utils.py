@@ -88,13 +88,11 @@ async def safe_run(f, args=[]):
     await asyncio.gather(*tasks - {cur_task})
 
 if not hasattr(unittest, "IsolatedAsyncioTestCase"):
-    print("patching isolated asyncio test case")
     import aiounittest
     unittest.IsolatedAsyncioTestCase = aiounittest.AsyncTestCase
 
     def safe_run_patch(self):
         loop = asyncio.get_event_loop()
-        print(loop)
         run_wrap = loop.run_until_complete
         loop.run_until_complete = lambda f: run_wrap(safe_run(f))
         loop.set_debug(False)

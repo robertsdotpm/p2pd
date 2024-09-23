@@ -370,7 +370,7 @@ class PipeEvents(BaseACKProto):
                 client_tup
             )
         except:
-            what_exception()
+            log_exception()
 
     async def close(self, do_sleep=True):
         # Already closed.

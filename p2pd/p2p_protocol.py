@@ -46,24 +46,19 @@ class SigProtoHandlers():
         buf = h_to_b(buf)
         is_enc = buf[0]
         if is_enc:
-            print("got enc msg")
-            print(buf)
             try:
                 buf = decrypt(
                     self.node.sk,
                     buf[1:]
                 )
             except:
-                what_exception()
+                log_exception()
         else:
             buf = buf[1:]
 
         if buf[0] not in SIG_PROTO:
-            print(f"proto got unsupported msg {buf[0]}")
             return
 
-        print(f"sig msg got {buf}")
-        
         try:
             # Unpack message into fields.
             msg_info = SIG_PROTO[buf[0]]
@@ -74,18 +69,15 @@ class SigProtoHandlers():
             dest = msg.routing.dest
             node_id = to_s(self.node.p2p_addr["node_id"])
             if to_s(dest["node_id"]) != node_id:
-                print(f"Received message not intended for us. {dest['node_id']} {node_id}")
                 return
             
             # Old message?
             if msg.meta.pipe_id in self.seen:
-                print("dropping old msg.")
                 return
             else:
                 self.seen[msg.meta.pipe_id] = time.time()
             
             # Updating routing dest with current addr.
-            print(msg is not None)
             assert(msg is not None)
             msg.set_cur_addr(self.node.addr_bytes)
             msg.routing.load_if_extra(self.node)
@@ -96,10 +88,9 @@ class SigProtoHandlers():
             }, self.conf)
 
             # Take action based on message.
-            print("calling handle msg")
             return await self.handle_msg(msg_info, msg, conf)
         except:
-            what_exception()
+            log_exception()
     
 async def node_protocol(self, msg, client_tup, pipe):
 
@@ -112,29 +103,6 @@ async def node_protocol(self, msg, client_tup, pipe):
     # Execute basic services of the node protocol.
     parts = msg.split(b" ")
     cmd = parts[0]
-
-    print(f"in node proto got {msg} from {client_tup}")
-    print(parts)
-
-    if cmd == b"PONG":
-        ping_id = to_s(parts[1])
-
-        print(f"ping ids = {self.ping_ids}")
-        if ping_id not in self.ping_ids:
-            return
-
-        self.ping_ids[ping_id].set()
-        return
-
-    # Basic ping part of the protocol.
-    # Useful to test if a connection is alive.
-    if cmd == b"PING":
-        if len(parts) == 2:
-            print("matched ping cmd")
-            ping_id = to_s(parts[1])
-            pong = to_b(f"PONG {ping_id}\n")
-            await pipe.send(pong, client_tup)
-            return
 
     # Basic echo server used for testing networking.
     if cmd == b"ECHO":

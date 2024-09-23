@@ -215,7 +215,6 @@ if __name__ == "__main__": # pragma: no cover
             r = await is_internet_if(i.nic_no)
         else:
             r = await is_internet_if(i.name)
-        print(r)
 
     async_test(test_route_table)
 

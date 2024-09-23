@@ -422,13 +422,10 @@ class Interface():
         # Process interface name in right format.
         try:
             self.load_if_info()
-            print("regular load if info.")
         except:
-            print("start fallback load if info.")
             log_exception()
 
             self.load_if_info_fallback()
-            print("end fallback load if info.")
 
         # This will be used for the routes call.
         # It's only purpose is to pass in a custom netifaces for tests.

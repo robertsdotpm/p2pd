@@ -73,8 +73,6 @@ also addr compares arent the best idea since ifaces can have
 multiple addresses. think on this more.
 """
 def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=True):
-    print(f"in select dest ipr {af} {same_pc} {addr_types}")
-
     # Shorten these for expressions.
     src_nid = src_info["netiface_index"]
     dest_nid = dest_info["netiface_index"]
@@ -96,12 +94,6 @@ def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=T
     same_if = src_nid == dest_nid
     same_if_on_host = same_pc and same_if
     different_ifs_on_host = same_pc and not same_if
-
-    print(f"same if = {same_if}")
-    print(f"same if on host = {same_if_on_host}")
-    print(f"different ifs on host = {different_ifs_on_host}")
-    print(f"same lan = {same_lan}")
-    print(f"has set bind = {has_set_bind}")
 
     # There may be multiple compatible addresses per info.
     for addr_type in addr_types:
@@ -262,7 +254,6 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
             # remote peer wanted to use for the technique.
             if reply is not None:
                 if reply.routing.dest_index != if_index:
-                    print(" error our if index")
                     return
 
             # Support testing addr type failures.
@@ -270,12 +261,9 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
             if addr_type in [NIC_FAIL, EXT_FAIL]:
                 use_addr_type = addr_type - 2
                 do_fail = True
-                print(f"test fail {addr_type}")
             else:
                 use_addr_type = addr_type
                 do_fail = False
-
-            print(f"Addr types = {use_addr_type} do fail = {do_fail}")
 
             """
             Determine the best destination IP to use
@@ -301,16 +289,7 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
             # Need a destination address.
             # Possibly a different address type will work.
             if dest_info["ip"] == "None":
-                print(src_info)
-                print(dest_info)
-                print("invalid matched af")
                 return
-
-            print(f"dest ipr ip selected = {dest_info['ip']}")
-            
-            print(f"if = {id(interface)}")
-            print(f"netifaces = {interface.netifaces}")
-            
 
             """
             With all the correct interfaces and IPs
@@ -336,11 +315,7 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
 
             # Success result from function.
             if result is not None:
-                print(f"result not none {result}")
                 return result
-            
-            msg = f"FAIL: {func} {use_addr_type} {result}"
-            print(msg)
             
             """
             Some functions require cleanup on failure.
@@ -361,7 +336,6 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
             if pipe_id in pp.node.pipes:
                 del pp.node.pipes[pipe_id]
         except:
-            what_exception()
             log_exception()
 
     # Use an AF supported by both.
@@ -399,9 +373,6 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
             for src_info, dest_info in pair_order:
                 # Only try up to N pairs per technique.
                 # Technique-specific N to avoid lengthy delays.
-                print(src_info)
-                print(dest_info)
-                print()
                 ret = await async_wrap_errors(
                     try_addr_infos(addr_type, src_info, dest_info)
                 )
@@ -434,7 +405,6 @@ async def new_peer_signal_pipe(offset, p2p_dest, node):
         await signal_pipe.start()
         return signal_pipe
     except asyncio.TimeoutError:
-        print("sig pipe timeout")
         # Cleanup and make sure it's unset.
         await signal_pipe.close()
     

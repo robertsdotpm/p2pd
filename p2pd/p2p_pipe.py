@@ -69,8 +69,6 @@ class P2PPipe():
             # Returns a pipe given comp addr info pairs.
             func, timeout, cleanup, has_set_bind, max_pairs = \
                 self.func_table[strategy]
-            print(f"using func {func}")
-
             pipe = await async_wrap_errors(
                 for_addr_infos(
                     func,
@@ -126,7 +124,6 @@ class P2PPipe():
         return pipe
 
     async def reverse_connect(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
-        print("in reverse connect")
         msg = ConMsg({
             "meta": {
                 "af": af,
@@ -150,22 +147,11 @@ class P2PPipe():
         if pipe_id in self.node.tcp_punch_clients:
             puncher = self.node.tcp_punch_clients[pipe_id]
             assert(src_info == puncher.src_info)
-            print(f"assert check {dest_info} ? {puncher.dest_info}")
             assert(dest_info == puncher.dest_info)
         else:
             # Create a new puncher for this pipe ID.
             if_index = src_info["if_index"]
             stuns = self.node.stun_clients[af][if_index]
-
-            """
-            stuns = await get_n_stun_clients(
-                af=af,
-                n=USE_MAP_NO + 2,
-                interface=nic,
-                proto=TCP,
-                conf=PUNCH_CONF,
-            )
-            """
             
             # Create a new puncher for this pipe ID.
             puncher = TCPPuncher(
@@ -204,11 +190,8 @@ class P2PPipe():
             start_time,
         )
         
-        print(f"punch rewrite ret = {ret} {puncher.state}")
-
         # Protocol done -- return nothing.
         if ret == 1:
-            print("tcp punch proto done returning.")
             return PipeEvents(None)
 
         # Increase active punchers.
@@ -230,7 +213,6 @@ class P2PPipe():
         )
         self.node.tasks.append(task)
 
-        print("after schedule punch")
         # Forward protocol details to peer.
         mappings = [m.toJSON() for m in ret[0]]
         msg = TCPPunchMsg({
@@ -259,7 +241,7 @@ class P2PPipe():
         pipe = await self.node.pipes[pipe_id]
 
         # Watch this pipe for idleness.
-        self.node.last_recv_table = pipe
+        self.node.last_recv_table[pipe.sock] = time.time()
         self.node.last_recv_queue.append(pipe)
 
         # Close pipe if ping times out.
@@ -268,8 +250,6 @@ class P2PPipe():
     async def udp_turn_relay(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
         if addr_type == NIC_BIND:
             return None
-        
-        print("in p2p pipe udp relay")
         
         # Load TURN client for this PIPE ID.
         if pipe_id in self.node.turn_clients:
@@ -281,8 +261,6 @@ class P2PPipe():
             if reply is not None:
                 offsets = [reply.payload.serv_id]
 
-            print(" make new turn client")
-
             # Use first server from offsets that works.
             client = await get_first_working_turn_client(
                 af,
@@ -290,8 +268,6 @@ class P2PPipe():
                 iface,
                 self.node.msg_cb
             )
-
-            print(client)
 
             # Save client reference.
             self.node.turn_clients[pipe_id] = client
@@ -333,12 +309,11 @@ class P2PPipe():
             },
         })
 
-        print(f"sending msg {msg.pack()}")
         try:
             self.route_msg(msg, reply=reply, m=3)
             return await self.node.pipes[pipe_id]
         except:
-            what_exception()
+            log_exception()
 
     async def tcp_punch_cleanup(self, af, pipe_id, src_info, dest_info, nic, addr_type, reply=None):
         self.node.active_punchers = max(

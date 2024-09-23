@@ -143,7 +143,6 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
         mapping.sock = sock
         return mapping
     except:
-        #what_exception()
         return None
     
 """
@@ -155,9 +154,6 @@ Optimized and tested for remote connections.
 """
 async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings, interface):
     try:
-        print("in schedule delay punch")
-        #print(f"{len(send_mappings)} {dest_addr} {recv_mappings[0].remote}")
-
         # Config.
         secs = 10
         ms_spacing = 5
@@ -170,14 +166,10 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
         assert(steps)
         assert(len(send_mappings))
         for i in range(0, 1):
-            # Endpoint to punch to.
-            print(f"addr: {send_mappings[i].local} {recv_mappings[i].remote} {dest_addr}")
-
             # Validate IP address.
             dest = Address(dest_addr, recv_mappings[i].remote)
             await dest.res(interface.route(af))
             dest = dest.select_ip(af)
-            
             for sleep_time in range(0, steps):
                 task = delayed_punch(
                     # Address family for the con.
@@ -209,7 +201,7 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
         outs = strip_none(outs)
         return outs
     except:
-        what_exception()
+        log_exception()
 
 async def wait_for_punch_time(current_ntp, ntp_meet):
     # Sleep until the ntp timeframe.
@@ -300,8 +292,6 @@ async def punch_close_msg(msg, client_tup, pipe):
 
 async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, has_success):
     try:
-        print("do punching")
-
         """
         Punching is done in its own process.
         The process returns an open socket and Python
@@ -345,19 +335,11 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
             interface=interface,
         )
 
-        print("punch outs = ")
-        print(outs)
-
         # Make both sides choose the same socket.
         sock = choose_same_punch_sock(our_wan, outs)
         if sock is None:
             log("> tcp punch chosen sock is none")
             return None
-
-        # Close all other sockets that aren't needed.
-        #close_unneeded_socks(sock, outs)
-
-        print(f"chosen sock = {sock}")
 
         # Punched hole to the remote node.
         route = await interface.route(af).bind(sock.getsockname()[1])
@@ -369,8 +351,6 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
             sock=sock,
             msg_cb=punch_close_msg
         )
-
-        print(f"punch pipe = {upstream_pipe} {upstream_pipe.sock}")
 
         # Reverse connect to a listen server in parent process.
         # This avoids sharing between processes which breaks easily.
@@ -394,12 +374,6 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         upstream_pipe.unsubscribe(SUB_ALL)
         client_pipe.unsubscribe(SUB_ALL)
 
-
-        
-        print(f"client pipe = {client_pipe} {client_pipe.sock}")
-        print(upstream_pipe.stream.handle)
-        print(sock.getpeername()[:2])
-
         # Prevent this process from exiting.
         has_success.set()
         while 1:
@@ -412,9 +386,8 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         # Ensure cleanup for pipes.
         await client_pipe.close()
         await upstream_pipe.close()
-        print("punch proc exited.")
     except:
-        what_exception()
+        log_exception()
 
 
 async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup):

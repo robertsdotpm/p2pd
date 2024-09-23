@@ -30,7 +30,7 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
     async def patch():
         try:
             x = await src_node.sig_msg_queue.get()
-            print(f"sig msg queue x = {x}")
+            #print(f"sig msg queue x = {x}")
             if x is None:
                 return
             else:
@@ -48,7 +48,7 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
             
             # UTF-8 messes up binary data in MQTT.
             buf = to_h(buf)
-            print(buf)
+            #print(buf)
             try:
                 await dest_node.sig_proto_handlers.proto(
                     buf
@@ -57,15 +57,12 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
                 raise Exception("cancelled")
             except:
                 log_exception()
-                what_exception()
 
             src_node.sig_msg_dispatcher_task = create_task(
                 src_node.sig_msg_dispatcher()
             )
         except:
-            what_exception()
             log_exception()
-            print("STOPPING MSG DISPATCHER.")
             return
 
 
@@ -273,20 +270,18 @@ class TestNodes():
         return self
 
     async def __aexit__(self, exc_t, exc_v, exc_tb):
-        print("aexit")
         await async_wrap_errors(self.alice.close())
-
         if TEST_NODE_NO > 1:
             await async_wrap_errors(self.bob.close())
-        print("nodes closed")
 
 async def p2p_check_strats(params, strats):
     async with TestNodes(**params) as nodes:
 
-        print(nodes.alice.p2p_addr)
-        print()
+        #print(nodes.alice.p2p_addr)
+        #print()
         if TEST_NODE_NO > 1:
-            print(nodes.bob.p2p_addr)
+            #print(nodes.bob.p2p_addr)
+            pass
 
         for strat in strats:
             pipe = await nodes.alice.connect(
@@ -414,15 +409,15 @@ async def test_p2p_strats():
         "multi_ifs": False,
     }
 
-    strats = [P2P_DIRECT, P2P_REVERSE, P2P_RELAY]
+    strats = [P2P_PUNCH]
     await p2p_check_strats(params, strats)
 
 async def test_bug_fix():
     # temporarily cache this for testing like 5 min expiry?
     if_names = await list_interfaces()
     ifs = await load_interfaces(if_names)
-    print(ifs)
-    print(ifs[0].netifaces)
+    #print(ifs)
+    #print(ifs[0].netifaces)
     #return
     params = {
         "sig_pipe_no": 0,

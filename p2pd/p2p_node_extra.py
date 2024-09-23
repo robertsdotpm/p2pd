@@ -66,16 +66,12 @@ class P2PNodeExtra():
         try:
             params = await self.punch_queue.get()
             if params is None:
-                print("closing punch queue worker")
                 return
             
-            print("do punch ")
             if len(params):
                 pipe_id = params[0]
                 if pipe_id in self.tcp_punch_clients:
                     puncher = self.tcp_punch_clients[pipe_id]
-
-                    
                     task = create_task(
                         async_wrap_errors(
                             puncher.setup_punching_process()
@@ -84,28 +80,16 @@ class P2PNodeExtra():
 
                     # Avoid garbage collection for this task.
                     self.tasks.append(task)
-                    
-                    """
-                    await async_wrap_errors(
-                        puncher.setup_punching_process()
-                    )
-                    """
-
-
-            print("punch done")
 
             self.punch_worker_task = create_task(
                 self.punch_queue_worker()
             )
         except RuntimeError:
-            print("punch queue worker run time error")
             return
         except:
             log_exception()
-            what_exception()
         
     def start_punch_worker(self):
-        print("in start punch worker")
         self.punch_worker_task = create_task(
             self.punch_queue_worker()
         )
@@ -236,11 +220,9 @@ class P2PNodeExtra():
         # Loaded from PNP root server.
         if dest_node_id in self.auth:
             vk = self.auth[dest_node_id]["vk"]
-            print("vk from pnp")
 
         # Else loaded from a MSN.
         if vk is not None:
-            print(vk)
             assert(isinstance(vk, bytes))
             buf = b"\1" + encrypt(
                 vk,
@@ -353,7 +335,7 @@ class P2PNodeExtra():
             close_list = []
             for pipe in self.last_recv_queue:
                 # Get last recv time.
-                last_recv = self.last_recv_table[pipe]
+                last_recv = self.last_recv_table[pipe.sock]
                 elapsed = cur_time - last_recv
 
                 # No time passed.
@@ -372,7 +354,7 @@ class P2PNodeExtra():
             # Close these idle connections.
             for pipe in close_list:
                 self.last_recv_queue.remove(pipe)
-                del self.last_recv_table[pipe]
+                del self.last_recv_table[pipe.sock]
                 await pipe.close()
 
             # Don't tie up event loop
@@ -420,21 +402,17 @@ class P2PNodeExtra():
 
     # Shutdown the node server and do cleanup.
     async def close(self):
-        print("in close")
-        
         # Make the worker thread for punching end.
         self.punch_queue.put_nowait(None)
         if self.punch_worker_task is not None:
             self.punch_worker_task.cancel()
             self.punch_worker_task = None
-        print("after punch queue cancel")
 
         # Stop sig message dispatcher.
         self.sig_msg_queue.put_nowait(None)
         if self.sig_msg_dispatcher_task is not None:
             self.sig_msg_dispatcher_task.cancel()
             self.sig_msg_dispatcher_task = None
-        print("after sig msg queue cancel")
 
         # Close other pipes.
         pipe_lists = [
@@ -445,9 +423,7 @@ class P2PNodeExtra():
         ]
 
         for pipe_list in pipe_lists:
-            print(pipe_list)
             for pipe in pipe_list.values():
-                print(pipe)
                 if pipe is None:
                     continue
 
@@ -457,13 +433,9 @@ class P2PNodeExtra():
                     else:
                         continue
                         
-                print("try pipe close")
                 await pipe.close()
 
         # Try close the multiprocess manager.
-        print("before cleanup multi proc")
-        print("after cleanup multi proc")
-
         """
         Node close will throw: 
         Exception ignored in: <function BaseEventLoop.__del__
@@ -474,10 +446,7 @@ class P2PNodeExtra():
         """
 
         # Stop node server.
-        print("stop node server")
         await super().close()
-        print("after stop node server")
-
         await asyncio.sleep(.25)
         
         

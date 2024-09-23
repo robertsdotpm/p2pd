@@ -52,7 +52,6 @@ class PatchTranslate(FlowControlMixin, protocols.Protocol):
         self._over_ssl = transport.get_extra_info('sslcontext') is not None
 
     def connection_made(self, transport):
-        print("connection made called")
         if self._reject_connection:
             context = {
                 'message': ('An open stream was garbage collected prior to '
@@ -80,7 +79,6 @@ class PatchTranslate(FlowControlMixin, protocols.Protocol):
             self._strong_reader = None
 
     def connection_lost(self, exc):
-        print("connection lost called")
         reader = self._stream_reader
         if reader is not None:
             if exc is None:
@@ -99,13 +97,11 @@ class PatchTranslate(FlowControlMixin, protocols.Protocol):
         self._transport = None
 
     def data_received(self, data):
-        print("data received")
         reader = self._stream_reader
         if reader is not None:
             reader.feed_data(data)
 
     def eof_received(self):
-        print("eof received")
         reader = self._stream_reader
         if reader is not None:
             reader.feed_eof()
@@ -118,11 +114,9 @@ class PatchTranslate(FlowControlMixin, protocols.Protocol):
         return True
 
     def _get_close_waiter(self, stream):
-        print("get close waited called")
         return self._closed
 
     def __del__(self):
-        print("del called")
         # Prevent reports about unhandled exceptions.
         # Better than self._closed._log_traceback = False hack
         try:

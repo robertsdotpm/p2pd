@@ -319,7 +319,6 @@ async def verified_pruning(db_con, cur, serv, updated):
         int(updated),
         int(serv.v6_addr_expiry),
     ))
-    print(f"deleted {ret} stale ipv6s")
 
     # Delete all names that haven't been updated for X seconds.
     sql = """
@@ -330,7 +329,6 @@ async def verified_pruning(db_con, cur, serv, updated):
         int(updated),
         int(serv.min_name_duration),
     ))
-    print(f"deleted {ret} stale names")
 
     # Delete all IPs that don't have associated names.
     """
@@ -358,7 +356,6 @@ async def verified_pruning(db_con, cur, serv, updated):
         ret = await cur.execute(sql, (
             af,
         ))
-        print(f"deleted {ret} lone rows from {table}")
 
     await db_con.commit()
 
