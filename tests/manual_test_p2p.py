@@ -10,7 +10,7 @@ try:
 except:
     pass
 
-TEST_NODE_NO = 1
+TEST_NODE_NO = 2
 TEST_P2P_PIPE_CONF = {
     "addr_types": [EXT_BIND, NIC_BIND],
     "sig_pipe_no": 0,
@@ -408,13 +408,13 @@ async def test_p2p_strats():
 
     params = {
         "sig_pipe_no": 2,
-        "addr_types": [NIC_BIND],
+        "addr_types": [EXT_BIND, NIC_BIND],
         "ifs": ifs,
         "same_if": True,
         "multi_ifs": False,
     }
 
-    strats = [P2P_PUNCH]
+    strats = [P2P_DIRECT, P2P_REVERSE, P2P_RELAY]
     await p2p_check_strats(params, strats)
 
 async def test_bug_fix():

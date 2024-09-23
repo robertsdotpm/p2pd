@@ -49,5 +49,5 @@ def set_keep_alive(sock, after_idle_sec=60, interval_sec=60, max_fails=5):
             # Should also work for BSD and Android.
             return set_keepalive_linux(sock, after_idle_sec, interval_sec, max_fails)
     except:
-        log_exception()
+        pass
 

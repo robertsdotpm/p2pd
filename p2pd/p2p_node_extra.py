@@ -110,16 +110,11 @@ class P2PNodeExtra():
             self.punch_queue_worker()
         )
 
-    def start_pipe_pinger(self):
-        self.pipe_pinger_task = create_task(
-            self.ping_checker()
-        )
-
     async def setup_punch_coordination(self, sys_clock=None):
         if sys_clock is None:
             sys_clock = await SysClock(self.ifs[0]).start()
 
-        self.pp_executor = await get_pp_executors()
+        self.max_punchers, self.pp_executor = await get_pp_executors()
         self.sys_clock = sys_clock
 
     def add_punch_meeting(self, params):
@@ -337,6 +332,52 @@ class P2PNodeExtra():
                 self.sig_msg_dispatcher()
             )
 
+    async def close_idle_pipes(self):
+        """
+        As the number of free processes in the process pool
+        decreases and the pool approaches full the need to
+        check for idle connections to free up processes becomes
+        more urgent. The math bellow allocates an interval to use
+        for the idle count down based on urgency (remaining
+        processes) in reference to a min and max idle interval.)
+        """
+        floor_check = 300
+        ceil_check = 7200
+        alloc_pcent = self.active_punchers / self.max_punchers
+        num_space = ceil_check - floor_check
+        rel_placement = num_space * alloc_pcent
+        abs_placement = ceil_check - rel_placement
+        cur_time = time.time()
+        while 1:
+            # Check the list of oldest monitored pipes to least.
+            close_list = []
+            for pipe in self.last_recv_queue:
+                # Get last recv time.
+                last_recv = self.last_recv_table[pipe]
+                elapsed = cur_time - last_recv
+
+                # No time passed.
+                if elapsed <= 0:
+                    break
+                
+                # Sorted by time so >= this aren't expired.
+                if elapsed < abs_placement:
+                    break
+
+                # Record pipe to close.
+                if elapsed >= abs_placement:
+                    close_list.append(pipe)
+
+            # Don't change the prev list we're iterating.
+            # Close these idle connections.
+            for pipe in close_list:
+                self.last_recv_queue.remove(pipe)
+                del self.last_recv_table[pipe]
+                await pipe.close()
+
+            # Don't tie up event loop
+            await asyncio.sleep(5)
+
     async def load_machine_id(self, app_id, netifaces):
         # Set machine id.
         try:
@@ -376,69 +417,6 @@ class P2PNodeExtra():
 
     def p2p_pipe(self, dest_bytes):
         return P2PPipe(dest_bytes, self)
-
-    async def get_pong(self, ping_id, pipe):
-        # Await receipt.
-        try:
-            await asyncio.wait_for(
-                self.ping_ids[ping_id].wait(),
-                5
-            )
-            print("got pong.")
-            return pipe
-        except asyncio.TimeoutError:
-            print("ping timeout")
-            await pipe.close()
-
-    async def ping_checker(self, n=30):
-        while 1:
-            # Wait until ping time.
-            await asyncio.sleep(n)
-
-            # Check if any pipes need to be pinged.
-            tasks = []
-            closed_pipes = []
-            for pipe in self.ping_pipes:
-                # Setup ping event.
-                ping_id = to_s(rand_plain(10))
-                self.ping_ids[ping_id] = asyncio.Event()
-                msg = to_b(f"PING {ping_id}\n")
-                print(f"ping to send {msg}")
-
-                # Send ping to node.
-                try:
-                    await pipe.send(
-                        msg,
-                        pipe.sock.getpeername()
-                    )
-                except:
-                    closed_pipes.append(pipe)
-                    await pipe.close()
-                    continue
-
-                # Wait for response to this ping (concurrently.)
-                tasks.append(
-                    create_task(
-                        self.get_pong(
-                            ping_id,
-                            pipe
-                        )
-                    )
-                )
-
-            # Wait for all pending pong responses.
-            if len(tasks):
-                still_monitoring = await asyncio.gather(*tasks)
-                still_monitoring = strip_none(still_monitoring)
-                self.ping_pipes = still_monitoring
-                
-            # Remove any pipes that errored.
-            for pipe in closed_pipes:
-                self.ping_pipes.remove(pipe)
-
-            # Reset ping ids.
-            self.ping_ids = {}
-
 
     # Shutdown the node server and do cleanup.
     async def close(self):

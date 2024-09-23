@@ -48,9 +48,8 @@ async def get_pp_executors(workers=None):
         In this case -- log the error and revert to using a single event loop.
         """
         log_exception()
-        return None
     
-    return pp_executor
+    return workers, pp_executor
     loop = asyncio.get_event_loop()
     tasks = []
     for i in range(0, workers):

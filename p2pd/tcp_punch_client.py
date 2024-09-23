@@ -219,7 +219,7 @@ class TCPPuncher():
         try:
             # Schedule TCP punching in process pool executor.
             loop = asyncio.get_event_loop()
-            loop.run_in_executor(
+            puncher_future = loop.run_in_executor(
                 self.pp_executor,
                 proc_do_punching,
                 args
@@ -230,13 +230,18 @@ class TCPPuncher():
                 try:
                     # Check if reverse connect server has a client yet.
                     if len(self.listen_pipe.tcp_clients):
+                        # Reverse connect from punching process to
+                        # server in the main thread.
                         self.pipe = self.listen_pipe.tcp_clients[0]
+
+                        # Patch close to send close message.
                         pipe_close = self.pipe.close
                         async def close_patch():
                             await self.pipe.send(PUNCH_END)
                             await pipe_close()
-                            
                         self.pipe.close = close_patch
+
+                        # Indicate hole made to waiter.
                         self.node.pipe_ready(self.pipe_id, self.pipe)
                         return self.pipe
                 except:
@@ -244,6 +249,15 @@ class TCPPuncher():
                 
                 # Check every 100 ms.
                 await asyncio.sleep(0.1)
+
+                # Puncher ended.
+                if puncher_future.done():
+                    self.active_punchers = max(
+                        0,
+                        self.active_punchers - 1
+                    )
+
+                    return
         except:
             what_exception()
 

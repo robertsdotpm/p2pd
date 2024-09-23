@@ -44,14 +44,11 @@ class P2PNode(P2PNodeExtra, Daemon):
         self.turn_clients = {} # by pipe_id
         self.signal_pipes = {} # by MQTT_SERVERS index
 
-        # Table of Events for outbound pings.
-        # Used to check if a con is still alive.
-        self.ping_ids = {}
-        self.ping_pipes = []
-
         # Pending TCP punch queue.
         self.punch_queue = asyncio.Queue()
         self.punch_worker_task = None
+        self.active_punchers = 0
+        self.max_punchers = 0
 
         # Signal protocol class instance.
         self.sig_proto_handlers = SigProtoHandlers(self)
@@ -76,6 +73,11 @@ class P2PNode(P2PNodeExtra, Daemon):
             }
         }
 
+        # Watch for idle connections.
+        self.last_recv_table = {} # [pipe] -> time
+        self.last_recv_queue = [] # FIFO pipe ref
+
+        # Set on start.
         self.addr_bytes = None
 
     async def add_msg_cb(self, msg_cb):
@@ -89,6 +91,11 @@ class P2PNode(P2PNodeExtra, Daemon):
         be read by splitting at a new line. Excluding
         complex cases of partial replies (who cares for now.)
         """
+
+        # Recv a message for a pipe being monitored for idleness.
+        if pipe in self.last_recv_table:
+            self.last_recv_table[pipe] = time.time()
+
         print(f"Node msg cb = {msg}")
         for sub_msg in msg.split(b'\n'):
             if not len(sub_msg): continue
@@ -155,6 +162,11 @@ class P2PNode(P2PNodeExtra, Daemon):
 
         # Start worker that forwards sig proto messages.
         self.start_sig_msg_dispatcher()
+
+        # Simple loop to close idle tasks.
+        self.idle_pipe_closer = create_task(
+            self.close_idle_pipes()
+        )
 
         # Start the server for the node protocol.
         await self.listen_on_ifs()

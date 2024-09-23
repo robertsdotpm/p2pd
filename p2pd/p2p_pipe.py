@@ -43,7 +43,7 @@ class P2PPipe():
 
             # Large timeout for meetings with a state cleanup.
             # <20 timeout can cause timeouts for punching.
-            P2P_PUNCH: [self.tcp_hole_punch, 20, None, 0, 4],
+            P2P_PUNCH: [self.tcp_hole_punch, 20, self.tcp_punch_cleanup, 0, 4],
 
             # Large timeout, end refreshers, disable LAN cons.
             # <20 timeout can cause timeouts for relay setup.
@@ -211,6 +211,12 @@ class P2PPipe():
             print("tcp punch proto done returning.")
             return PipeEvents(None)
 
+        # Increase active punchers.
+        self.node.active_punchers = min(
+            self.node.max_punchers,
+            self.node.active_punchers + 1
+        )
+
         """
         Punching is delayed for a few seconds to
         ensure there's enough time to receive any
@@ -252,8 +258,11 @@ class P2PPipe():
         # Prevent protocol loop.
         pipe = await self.node.pipes[pipe_id]
 
+        # Watch this pipe for idleness.
+        self.node.last_recv_table = pipe
+        self.node.last_recv_queue.append(pipe)
+
         # Close pipe if ping times out.
-        self.node.ping_pipes.append(pipe)
         return pipe
 
     async def udp_turn_relay(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
@@ -330,6 +339,12 @@ class P2PPipe():
             return await self.node.pipes[pipe_id]
         except:
             what_exception()
+
+    async def tcp_punch_cleanup(self, af, pipe_id, src_info, dest_info, nic, addr_type, reply=None):
+        self.node.active_punchers = max(
+            0,
+            self.node.active_punchers - 1
+        )
 
     async def turn_cleanup(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
         if pipe_id not in self.node.turn_clients:
