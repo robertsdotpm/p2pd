@@ -49,18 +49,16 @@ class P2PNodeExtra():
 
     async def load_stun_clients(self):
         self.stun_clients = {IP4: {}, IP6: {}}
-        for af in VALID_AFS:
-            for if_index in range(0, len(self.ifs)):
-                interface = self.ifs[if_index]
-                if af in interface.supported():
-                    self.stun_clients[af][if_index] = await get_n_stun_clients(
-                        af=af,
-                        n=USE_MAP_NO + 2,
-                        interface=interface,
-                        proto=TCP,
-                        conf=PUNCH_CONF,
-                    )
-                    assert(len(self.stun_clients[af][if_index]))
+        for if_index in range(0, len(self.ifs)):
+            interface = self.ifs[if_index]
+            if IP4 in interface.supported():
+                self.stun_clients[IP4][if_index] = await get_n_stun_clients(
+                    af=IP4,
+                    n=USE_MAP_NO + 2,
+                    interface=interface,
+                    proto=TCP,
+                    conf=PUNCH_CONF,
+                )
 
     async def punch_queue_worker(self):
         try:

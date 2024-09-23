@@ -225,12 +225,17 @@ async def get_n_stun_clients(af, n, interface, proto=UDP, limit=5, conf=NET_CONF
                 if out is not None:
                     return stun
             except:
+                log_exception()
                 continue
             
     # Create list of worker tasks for concurrency (faster.)
     tasks = []
     for _ in range(0, n):
-        tasks.append(worker())
+        tasks.append(
+            async_wrap_errors(
+                worker()
+            )
+        )
 
     # Run tasks and return results.
     return strip_none(

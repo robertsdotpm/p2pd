@@ -92,11 +92,11 @@ class P2PNode(P2PNodeExtra, Daemon):
         if pipe in self.last_recv_queue:
             self.last_recv_table[pipe.sock] = time.time()
 
-        for sub_msg in msg.split(b'\n'):
-            if not len(sub_msg): continue
-            await node_protocol(self, sub_msg, client_tup, pipe)
-            for msg_cb in self.msg_cbs:
-                run_handler(pipe, msg_cb, client_tup, sub_msg)
+        # Pass messages directly to clients own handlers.
+        # Don't interfere so they can write their own protocol.
+        await node_protocol(self, msg, client_tup, pipe)
+        for msg_cb in self.msg_cbs:
+            run_handler(pipe, msg_cb, client_tup, msg)
     
     # Used by the MQTT clients.
     async def signal_protocol(self, msg, signal_pipe):
@@ -186,6 +186,9 @@ class P2PNode(P2PNodeExtra, Daemon):
             sys_clock,
         )
         return self
+    
+    def __await__(self):
+        return self.start().__await__()
     
     # Connect to a remote P2P node using a number of techniques.
     async def connect(self, addr_bytes, strategies=P2P_STRATEGIES, conf=P2P_PIPE_CONF):

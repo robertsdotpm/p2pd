@@ -6,6 +6,7 @@ index by host name even if its longer.
 
 from .utils import *
 from .p2p_defs import *
+from .p2p_utils import CON_ID_MSG
 from .ecies import encrypt, decrypt
 
 SIG_PROTO = {
@@ -93,27 +94,14 @@ class SigProtoHandlers():
             log_exception()
     
 async def node_protocol(self, msg, client_tup, pipe):
-
-
     log(f"> node proto = {msg}, {client_tup}")
-
-    # Execute any custom msg handlers on the msg.
-    #run_handlers(pipe, self.msg_cbs, client_tup, msg)
 
     # Execute basic services of the node protocol.
     parts = msg.split(b" ")
     cmd = parts[0]
 
-    # Basic echo server used for testing networking.
-    if cmd == b"ECHO":
-        if len(msg) > 5:
-            buf = msg[5:] + b'\n'
-            await pipe.send(buf, client_tup)
-
-        return
-
     # This connection was in regards to a request.
-    if cmd == b"ID":
+    if cmd == CON_ID_MSG:
         # Invalid format.
         if len(parts) != 2:
             log("ID: Invalid parts len.")
@@ -122,13 +110,9 @@ async def node_protocol(self, msg, client_tup, pipe):
         # If no ones expecting this connection its a reverse connect.
         pipe_id = to_s(parts[1])
         if pipe_id not in self.pipes:
-            pass
             self.pipe_future(pipe_id)
-        #else:
-        #    # Invalid handshake.
-        #    await pipe.close()
 
-
+        # Tell waiter about this pipe.
         if pipe_id in self.pipes:
             log(f"pipe = '{pipe_id}' not in pipe events. saving.")
             self.pipe_ready(pipe_id, pipe)

@@ -24,6 +24,7 @@ from .signaling import SignalMock
 
 TRY_OVERLAP_EXTS = 1
 TRY_NOT_TO_OVERLAP_EXTS = 2
+CON_ID_MSG = b"P2P_CON_ID_EQ"
 
 def init_process_pool():
     # Make selector default event loop.

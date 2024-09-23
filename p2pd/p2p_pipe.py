@@ -5,6 +5,7 @@ from .p2p_addr import *
 from .tcp_punch_client import *
 from .p2p_utils import for_addr_infos, get_turn_client
 from .p2p_utils import get_first_working_turn_client
+from .p2p_utils import CON_ID_MSG
 from .p2p_protocol import *
 from .tcp_punch_client import *
 
@@ -13,9 +14,6 @@ TCP
 nc -4 -l 127.0.0.1 10001 -k
 nc -6 -l ::1 10001 -k
 """
-
-
-
 class P2PPipe():
     def __init__(self, dest_bytes, node):
         # Record main references.
@@ -119,7 +117,7 @@ class P2PPipe():
         if pipe.sock is None:
             return
 
-        await pipe.send(to_b(f"ID {pipe_id}"))
+        await pipe.send(to_b(f"{CON_ID_MSG} {pipe_id}"))
         self.node.pipe_ready(pipe_id, pipe)
         return pipe
 
@@ -143,6 +141,10 @@ class P2PPipe():
         return await self.node.pipes[pipe_id]
 
     async def tcp_hole_punch(self, af, pipe_id, src_info, dest_info, nic, addr_type, reply=None):
+        # Skip IP6 for now.
+        if af is IP6:
+            return None
+
         # Load TCP punch client for this pipe ID.
         if pipe_id in self.node.tcp_punch_clients:
             puncher = self.node.tcp_punch_clients[pipe_id]
@@ -152,6 +154,10 @@ class P2PPipe():
             # Create a new puncher for this pipe ID.
             if_index = src_info["if_index"]
             stuns = self.node.stun_clients[af][if_index]
+
+            # Skip if no STUN clients loaded.
+            if not len(stuns):
+                return None
             
             # Create a new puncher for this pipe ID.
             puncher = TCPPuncher(

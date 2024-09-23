@@ -3,6 +3,11 @@ import time
 from ecdsa import SigningKey, SECP256k1, ECDH
 
 async def main():
+    nic = await Interface()
+    s = STUNClient(IP6, ("2600:1f16:8c5:101:80b:b58b:828:8df4", 3478), nic, proto=TCP)
+    out = await s.get_mapping()
+    print(out)
+    return
 
     sk = SigningKey.generate(curve=SECP256k1)
     print(sk)

@@ -216,6 +216,8 @@ class TestNodes():
         nic = self.alice.ifs[0]
         sys_clock = SysClock(nic)
         await sys_clock.start()
+    
+
         tasks = [
             self.alice.start(sys_clock),
         ]
@@ -403,15 +405,17 @@ async def test_p2p_strats():
     if_names = await list_interfaces()
     ifs = await load_interfaces(if_names)
 
+    
+
     params = {
         "sig_pipe_no": 2,
-        "addr_types": [EXT_BIND],
+        "addr_types": [EXT_BIND, NIC_BIND],
         "ifs": ifs,
-        "same_if": False,
-        "multi_ifs": True,
+        "same_if": True,
+        "multi_ifs": False,
     }
 
-    strats = [P2P_DIRECT]
+    strats = [P2P_DIRECT, P2P_REVERSE]
 
     await p2p_check_strats(params, strats)
 

@@ -98,6 +98,8 @@ async def get_stun_reply(mode, dest_addr, reply_addr, pipe, attrs=[]):
 
     # Subscribe to replies that match the req tran ID.
     sub = sub_to_stun_reply(msg.txn_id, reply_addr)
+    print(sub)
+    print(reply_addr)
     pipe.subscribe(sub)
 
     # Send the req and get a matching reply.
