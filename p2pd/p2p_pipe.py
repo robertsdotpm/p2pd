@@ -143,6 +143,10 @@ class P2PPipe():
         return await self.node.pipes[pipe_id]
 
     async def tcp_hole_punch(self, af, pipe_id, src_info, dest_info, nic, addr_type, reply=None):
+        # Skip v6 punch for now.
+        if af == IP6:
+            return None
+
         # Load TCP punch client for this pipe ID.
         if pipe_id in self.node.tcp_punch_clients:
             puncher = self.node.tcp_punch_clients[pipe_id]
