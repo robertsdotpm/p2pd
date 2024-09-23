@@ -1,5 +1,4 @@
-# Python version 3.5 and up.
-
+# Python version 3.6 and up.
 from setuptools import setup, find_packages
 from codecs import open
 from os import path
@@ -15,7 +14,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    version='2.8.1',
+    version='3.0.0',
     name='p2pd',
     description='Asynchronous P2P networking library and service',
     keywords=('NAT traversal, TCP hole punching, simultaneous open, UPnP, STUN, TURN, SIP, DHCP, add IP to interface, NATPMP, P2P, Peer-to-peer networking library, python'),

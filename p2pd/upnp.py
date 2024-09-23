@@ -124,10 +124,10 @@ def parse_root_xml(d, service_type):
     #
     return results
 
-def port_forward_task(route, dest, service, lan_ip, lan_port, ext_port, proto, desc):
+async def port_forward_task(route, dest, service, lan_ip, lan_port, ext_port, proto, desc):
     # Do port forwarding.
     desc = to_s(desc)
-    if dest.af == IP4:
+    if route.af == IP4:
         soap_action = "AddPortMapping"
         body = f"""
 <u:{soap_action} xmlns:u="{service["serviceType"]}">
@@ -144,7 +144,7 @@ def port_forward_task(route, dest, service, lan_ip, lan_port, ext_port, proto, d
 
     # Add a hole in the firewall.
     # Have not added UniqueID -- will it still work?
-    if dest.af == IP6:
+    if route.af == IP6:
         # Protocol field based on IANA protocol numbers.
         proto_no = proto
         if proto.lower() == "tcp":
@@ -164,6 +164,8 @@ def port_forward_task(route, dest, service, lan_ip, lan_port, ext_port, proto, d
     <LeaseTime>{UPNP_LEASE_TIME}</LeaseTime>
 </u:{soap_action}>
         """
+
+    
 
     # Build the XML payload to send.
     payload = f"""
@@ -186,7 +188,7 @@ def port_forward_task(route, dest, service, lan_ip, lan_port, ext_port, proto, d
         [b"Content-Length", to_b(f"{len(payload)}")]
     ]
 
-    return http_req(
+    return await http_req(
         route,
         dest,
         service["controlURL"],
@@ -240,7 +242,7 @@ async def add_fixed_paths(interface, af, get_root_desc):
     tasks = []
     async def worker(host, port, path):
         route = await interface.route(af).bind()
-        dest = (host, port, route)
+        dest = (host, port)
         return await get_root_desc(route, dest, path)
 
     # Build list of tasks.
@@ -262,9 +264,8 @@ async def add_fixed_paths(interface, af, get_root_desc):
 
     return out
 
-async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
+async def port_forward(af, interface, ext_port, src_addr, desc, proto="TCP"):
     # Set protocol family for multicast socket.
-    af = src_addr.af
     if af == IP4:
         sock_conf = dict_child({
             "sock_proto": socket.IPPROTO_UDP
@@ -335,13 +336,13 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
         }
 
         # Bind ip for http forwarding.
-        if src_addr.af == IP6:
+        if af == IP6:
             # The source address needs to match the internal client
             # being forwarded for add pin hole.
-            ips = src_addr.tup[0]
+            ips = src_addr[0]
         else:
             # The source address doesn't matter in IPv6 port forwarding.
-            ips = src_addr.tup[0]
+            ips = src_addr[0]
 
         # Get main XML for device.
         tasks = []
@@ -357,7 +358,7 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
             # Convert to a list of services.
             services = parse_root_xml(d, service_types[route.af])
         except Exception:
-            log(f"Failed to get root xml {dest.tup} {path}")
+            log(f"Failed to get root xml {dest} {path}")
             log_exception()
             return tasks
 
@@ -369,8 +370,8 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
                     forward_route,
                     dest,
                     service,
-                    src_addr.tup[0],
-                    src_addr.tup[1],
+                    src_addr[0],
+                    src_addr[1],
                     ext_port,
                     proto,
                     desc
@@ -396,7 +397,7 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
         # Location header points to rootDesc.xml.
         url = urllib.parse.urlparse(req.hdrs["location"])
         hostname = url.hostname
-        if src_addr.af == IP6:
+        if af == IP6:
             hostname = hostname.strip("[]")
 
         # Root XML address.
@@ -406,11 +407,10 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
         )
 
         # Request rootDesc.xml.
-        http_route = await interface.route(af).bind(ips=src_addr.tup[0])
+        http_route = await interface.route(af).bind(ips=src_addr[0])
         results = await async_wrap_errors(
             get_root_desc(http_route, xml_dest, url.path)
         )
-
         if results is None:
             continue
         
@@ -418,10 +418,13 @@ async def port_forward(interface, ext_port, src_addr, desc, proto="TCP"):
             tasks += results
 
     # Generate fixed path attempts to increase success if m-search fails.
-    tasks += await add_fixed_paths(interface, af, get_root_desc)
+    tasks += await async_wrap_errors(
+        add_fixed_paths(interface, af, get_root_desc)
+    )
 
     # Return port forward tasks.
-    return tasks
+    if len(tasks):
+        return await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
     async def upnp_main():

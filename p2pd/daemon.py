@@ -140,7 +140,7 @@ class Daemon():
             self.servers[route.af][proto][port] = {}
         self.servers[route.af][proto][port][ip] = pipe
         
-        return port, pipe
+        return (port, pipe)
 
     """
     There's a special IPv6 sock option to listen on
@@ -148,12 +148,17 @@ class Daemon():
     Hence I use two sockets based on supported stack.
     """
     async def listen_all(self, proto, port, nic):
+        outs = []
         for af in nic.supported():
             route = nic.route(af)
             await route.bind(ips="*", port=port)
-            await async_wrap_errors(
+            out = await async_wrap_errors(
                 self.add_listener(proto, route)
             )
+
+            outs.append(out)
+
+        return strip_none(outs)
 
     """
     Localhost here is translated to the right address
@@ -161,12 +166,17 @@ class Daemon():
     The bind_magic function takes care of this.
     """
     async def listen_loopback(self, proto, port, nic):
+        outs = []
         for af in nic.supported():
             route = nic.route(af)
             await route.bind(ips="localhost", port=port)
-            await async_wrap_errors(
+            out = await async_wrap_errors(
                 self.add_listener(proto, route)
             )
+
+            outs.append(out)
+
+        return strip_none(outs)
 
     """
     Really no way to do this with IPv4 without adding
@@ -175,6 +185,7 @@ class Daemon():
     firewall could be a future feature.
     """
     async def listen_local(self, proto, port, nic):
+        outs = []
         for af in nic.supported():
             # Supports private IPv4 addresses.
             if af == IP4:
@@ -194,8 +205,10 @@ class Daemon():
                         local = copy.deepcopy(route)
                         ips = ipr_norm(nic_ipr)
                         await local.bind(ips=ips, port=port)
-                        await async_wrap_errors(
-                            self.add_listener(proto, local)
+                        outs.append(
+                            await async_wrap_errors(
+                                self.add_listener(proto, local)
+                            )
                         )
 
             # Supports link-locals and unique local addresses.
@@ -207,9 +220,13 @@ class Daemon():
                     await async_wrap_errors(
                         local.bind(ips=ips, port=port)
                     )
-                    await async_wrap_errors(
-                        self.add_listener(proto, local)
+                    outs.append(
+                        await async_wrap_errors(
+                            self.add_listener(proto, local)
+                        )
                     )
+
+        return strip_none(outs)
 
     # On message received (placeholder.)
     async def msg_cb(self, msg, client_tup, pipe):

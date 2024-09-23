@@ -277,6 +277,8 @@ class TestNodes():
 async def p2p_check_strats(params, strats):
     async with TestNodes(**params) as nodes:
 
+
+
         #print(nodes.alice.p2p_addr)
         #print()
         if TEST_NODE_NO > 1:
@@ -403,13 +405,14 @@ async def test_p2p_strats():
 
     params = {
         "sig_pipe_no": 2,
-        "addr_types": [EXT_BIND, NIC_BIND],
+        "addr_types": [EXT_BIND],
         "ifs": ifs,
-        "same_if": True,
-        "multi_ifs": False,
+        "same_if": False,
+        "multi_ifs": True,
     }
 
-    strats = [P2P_PUNCH]
+    strats = [P2P_DIRECT]
+
     await p2p_check_strats(params, strats)
 
 async def test_bug_fix():

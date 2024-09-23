@@ -2,6 +2,14 @@
 
 ``[Coverage >= 82%] [Python >= 3.6] [Mac, Win, Nix, BSD, Android]``
 
+EDIT: There's been a major update. I have released version 3 but
+haven't written the new docs yet. Feel free to try it out.
+Node startup will be slow but the success of TCP P2P
+connectivity is now greater than any other library out there.
+Connectivity establishment is initially slow as many traversal
+techniques are tried. But once connected it is the same as any
+other TCP connection. Will update the docs over the coming weeks.
+
 **P2PD** is a new async networking library for Python. It's based on solving some of the problems with Python's existing APIs and supports P2P networking among other features.
 
 ## Installation

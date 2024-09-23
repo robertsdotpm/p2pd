@@ -1,4 +1,8 @@
-
+"""
+Note:
+Reusing address can hide socket errors and
+make servers appear broken when they're not.
+"""
 import asyncio
 from .interface import load_interfaces
 from .daemon import *
@@ -9,17 +13,9 @@ from .p2p_node_extra import *
 from .nickname import *
 
 NODE_CONF = dict_child({
-    """
-    Note:
-    Reusing address can hide socket errors and
-    make servers appear broken when they're not.
-
-    Todo: write code to test this state against
-    the node server.
-    """
     "reuse_addr": False,
     "listen_ip": None,
-    "enable_upnp": False,
+    "enable_upnp": True,
     "sig_pipe_no": SIGNAL_PIPE_NO,
 }, NET_CONF)
 
@@ -164,7 +160,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         )
 
         # Start the server for the node protocol.
-        await self.listen_on_ifs()
+        await self.listen_on_ifs(self.conf["enable_upnp"])
 
         # Build P2P address bytes.
         self.addr_bytes = make_peer_addr(

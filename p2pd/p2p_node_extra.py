@@ -175,14 +175,37 @@ class P2PNodeExtra():
 
         return None
 
-    async def listen_on_ifs(self, protos=[TCP]):
+    async def listen_on_ifs(self, do_forward=False, protos=[TCP]):
+        # Port forwarding tasks.
+        tasks = []
+
+        # Multi-iface connection facilitation.
         for nic in self.ifs:
+            # Default to listen to all on TCP.
             for proto in protos:
-                await self.listen_all(
+                outs = await self.listen_all(
                     proto,
                     self.listen_port,
                     nic
                 )
+
+                # Optional port forwarding.
+                for port, pipe in outs:
+                    async def forwarder():
+                        route = copy.deepcopy(pipe.route)
+                        ip = route.nic()
+                        port = self.listen_port
+                        await route.forward(ip, port, "TCP")
+
+                    if do_forward:
+                        tasks.append(
+                            async_wrap_errors(
+                                forwarder()
+                            )
+                        )
+
+        if len(tasks):
+            await asyncio.gather(*tasks)
 
     def pipe_future(self, pipe_id):
         if pipe_id not in self.pipes:
