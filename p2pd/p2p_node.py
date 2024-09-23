@@ -15,7 +15,7 @@ from .nickname import *
 NODE_CONF = dict_child({
     "reuse_addr": False,
     "listen_ip": None,
-    "enable_upnp": True,
+    "enable_upnp": False,
     "sig_pipe_no": SIGNAL_PIPE_NO,
 }, NET_CONF)
 
