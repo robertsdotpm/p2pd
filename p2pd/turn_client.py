@@ -325,7 +325,7 @@ class TURNClient(PipeEvents):
             
         if sub is None:
             for peer_tup in self.peers:
-                sub = tup_to_sub(peer_tup)
+                sub = (b"", peer_tup)
                 break
 
         assert(sub is not None)

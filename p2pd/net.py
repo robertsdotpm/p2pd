@@ -496,10 +496,10 @@ async def send_recv_loop(dest, pipe, buf, sub=SUB_ALL):
                 timeout=pipe.conf["recv_timeout"]
             )
         except asyncio.TimeoutError:
+            log_exception()
             continue
         except Exception:
             log_exception()
-            return
         
 """
 If trying to reach a destination that uses a private address

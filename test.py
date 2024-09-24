@@ -3,8 +3,25 @@ import time
 from ecdsa import SigningKey, SECP256k1, ECDH
 
 async def main():
+    """
+    x = "2600:1f16:8c5:101:80b:b58b:828:8df4"
+
+    print(x)
+    print(ip_norm(x))
+
+    dest_tup = (x, 1023)
+    y = client_tup_norm(dest_tup)
+    print(y)
+
+    z = tup_to_sub(dest_tup)
+    print(z)
+    return
+    """
+
+
     nic = await Interface()
     s = STUNClient(IP6, ("2600:1f16:8c5:101:80b:b58b:828:8df4", 3478), nic, proto=TCP)
+
     out = await s.get_mapping()
     print(out)
     return

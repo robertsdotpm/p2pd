@@ -379,7 +379,6 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
             if msg_cb is None:
                 pipe_events.subscribe(SUB_ALL)
 
-
         # Register pipes, msg callbacks, and subscriptions.
         return pipe_events
     except Exception as e:

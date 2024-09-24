@@ -336,6 +336,8 @@ def ipr_in_interfaces(needle_ipr, if_list, mode=IP_PUBLIC):
 def ipr_norm(ipr):
     return ip_norm(str(ipr[0]))
 
+IPR = IPRange
+
 if __name__ == "__main__": # pragma: no cover
     # Blank host = range.
     x = IPRange("192.168.1.0", "255.255.255.0")

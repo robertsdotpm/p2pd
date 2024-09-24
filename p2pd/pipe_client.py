@@ -14,6 +14,10 @@ def tup_to_sub(dest_tup):
         ))
     ]
 
+def norm_client_tup(client_tup):
+    ip = ip_norm(client_tup[0])
+    return (ip, client_tup[1])
+
 """
 The code in this class supports a pull / fetch style use-case.
 More suitable for some apps whereas the parent class allows
@@ -61,12 +65,22 @@ class PipeClient(ACKUDP):
             self.handle = handle
 
     def hash_sub(self, sub):
-        return hash(sub[0]) + hash(sub[1])
+        h = hash(sub[0])
+        if len(sub[1]):
+            client_tup_str = f"{sub[1][0]}:{sub[1][1]}"
+            h += hash(client_tup_str)
+
+        return h
 
     # Subscribe to a certain message and host type.
     # sub = [b_msg_pattern, b_addr_pattern]
     # optional: 3rd field in sub = example match
     def subscribe(self, sub, handler=None):
+        b_msg_p, client_tup = sub
+        if len(client_tup):
+            client_tup = norm_client_tup(client_tup)
+            sub = (b_msg_p, client_tup)
+
         offset = self.hash_sub(sub)
         if offset not in self.subs:
             self.subs[offset] = [
@@ -98,7 +112,6 @@ class PipeClient(ACKUDP):
             log("no subs")
             return
         
-
         # Norm compressed IPv6 addresses.
         client_tup = client_tup_norm(client_tup)
 
@@ -116,16 +129,16 @@ class PipeClient(ACKUDP):
 
         # Apply bool filters to message.
         msg_added = False
-        client_addr = b"%s:%d" % (to_b(client_tup[0]), client_tup[1])
         for sub, q, handler in self.subs.values():
             # Msg pattern, address pattern.
-            b_msg_p, b_addr_p = sub[:2]
+            b_msg_p, m_client_tup = sub[:2]
 
             # Check client_addr matches their host pattern.
-            if b_addr_p:
-                host_matches = re.findall(b_addr_p, client_addr)
-                if host_matches == []:
+            if len(m_client_tup):
+                if m_client_tup != client_tup:
                     continue
+                else:
+                    client_tup = m_client_tup
 
             # Check data matches their message pattern.
             if b_msg_p:
@@ -136,7 +149,13 @@ class PipeClient(ACKUDP):
             # Execute message using handle instead of adding to queue.
             if handler is not None:
                 log("handler not none.")
-                run_handler(self.pipe_events, handler, client_tup, data)
+                run_handler(
+                    self.pipe_events,
+                    handler,
+                    client_tup,
+                    data
+                )
+
                 continue
 
             # Add message to queue.
@@ -149,6 +168,11 @@ class PipeClient(ACKUDP):
     # Async wait for a message that matches a pattern in a queue.
     async def recv(self, sub=SUB_ALL, timeout=2, full=False):
         recv_timeout = timeout or self.conf["recv_timeout"]
+        msg_p, addr_p = sub
+        if len(addr_p):
+            addr_p = client_tup_norm(addr_p)
+            sub = (msg_p, addr_p)
+
         offset = self.hash_sub(sub)
         try:
             # Sanity checking.
@@ -164,7 +188,12 @@ class PipeClient(ACKUDP):
 
             # Run handler if one is set.
             if handler is not None:
-                run_handler(self.pipe_events, handler, ret[0], ret[1])
+                run_handler(
+                    self.pipe_events,
+                    handler,
+                    ret[0],
+                    ret[1]
+                )
 
             # Return data, sender_tup.
             if full:

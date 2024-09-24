@@ -310,7 +310,7 @@ class NTPClient:
             # build the destination timestamp
             dest_timestamp = system_to_ntp_time(time.time())
         except asyncio.TimeoutError:
-            raise NTPException("No response received from %s." % host)
+            raise NTPException("No response received from host")
         except Exception as e:
             log_exception()
         finally:
