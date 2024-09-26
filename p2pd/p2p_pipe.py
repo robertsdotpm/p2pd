@@ -117,7 +117,7 @@ class P2PPipe():
         if pipe.sock is None:
             return
 
-        await pipe.send(to_b(f"{CON_ID_MSG} {pipe_id}"))
+        await pipe.send(CON_ID_MSG + to_b(f" {pipe_id}"))
         self.node.pipe_ready(pipe_id, pipe)
         return pipe
 

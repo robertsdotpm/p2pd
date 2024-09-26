@@ -134,10 +134,16 @@ def patch_p2p_stats(strategies, src_pp):
 
     return is_patched
 
+async def add_echo_support(msg, client_tup, pipe):
+    if b"ECHO" == msg[:4]:
+        await pipe.send(msg[4:], client_tup)
+
 async def get_node(ifs=[], node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     conf = copy.deepcopy(NODE_CONF)
     conf["sig_pipe_no"] = sig_pipe_no
+    conf["enable_upnp"] = False
     node = P2PNode(ifs, port=node_port, conf=conf)
+    await node.add_msg_cb(add_echo_support)
     return node
 
 class TestNodes():
@@ -404,9 +410,6 @@ async def test_p2p_successive_failure():
 async def test_p2p_strats():
     if_names = await list_interfaces()
     ifs = await load_interfaces(if_names)
-
-    
-
     params = {
         "sig_pipe_no": 2,
         "addr_types": [EXT_BIND, NIC_BIND],
@@ -415,7 +418,7 @@ async def test_p2p_strats():
         "multi_ifs": False,
     }
 
-    strats = [P2P_DIRECT, P2P_REVERSE]
+    strats = [P2P_RELAY]
 
     await p2p_check_strats(params, strats)
 
