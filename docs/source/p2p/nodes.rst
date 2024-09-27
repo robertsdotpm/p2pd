@@ -13,7 +13,7 @@ reach services behind them. So a design that works for multiple interfaces
 maximizes peer-to-peer reachability. A direct example of this is that of
 mobile phones where one interface might be for mobile data and another for wifi.
 
-.. literalinclude:: ../python/examples/p2pd_in_a_nutshell.py
+.. literalinclude:: ../../examples/p2pd_in_a_nutshell.py
     :language: python3
 
 When the node starts it may take a few seconds to load everything. This is
@@ -27,7 +27,7 @@ But in practice many people aren't going to have this setup or may
 not want to enable it for security reasons. Fortunately, reachability
 in P2PD does not depend solely on UPnP support like other libraries.
 
-.. literalinclude:: ../python/examples/node_with_config.py
+.. literalinclude:: ../../examples/node_with_config.py
     :language: python3
 
 P2PD has a data directory in your home folder. This folder stores private

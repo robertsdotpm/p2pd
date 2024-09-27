@@ -16,5 +16,5 @@ server with multiple IPv4/6s on TCP and UDP.
 
 Here is how to use the STUN client.
 
-.. literalinclude:: ../python/examples/example_12.py
+.. literalinclude:: ../../examples/example_12.py
     :language: python3

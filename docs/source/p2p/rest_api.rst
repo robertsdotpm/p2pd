@@ -273,4 +273,4 @@ to a peer's node server which implements echo.
 Publish-subscribe
 ------------------
 
-To learn about how to use the REST API for topic filtering please read the :doc:`/python/queues` page.
+To learn about how to use the REST API for topic filtering please read the :doc:`/general/queues` page.

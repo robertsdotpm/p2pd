@@ -30,12 +30,12 @@ can be ensured automatically. Assuming that the node is behind a NAT. For
 machines in data centers they are often directly reachable. Otherwise, they
 may need firewall rules to be setup.
 
-.. literalinclude:: ../python/examples/tcp_direct_connect.py
+.. literalinclude:: ../../examples/tcp_direct_connect.py
     :language: python3
 
 ----
 
-2. Reverse Connect
+1. Reverse Connect
 -----------------------
 
 .. image:: ../../diagrams/tcp_reverse_connect.png
@@ -51,12 +51,12 @@ if either side is reachable. So UPnP doesn't have to be enabled by both.
 Such possibilities greatly improve reachability when we can expect that
 UPnP isn't always going to be enabled. 
 
-.. literalinclude:: ../python/examples/tcp_reverse_connect.py
+.. literalinclude:: ../../examples/tcp_reverse_connect.py
     :language: python3
 
 ----
 
-3. TCP Hole Punching
+1. TCP Hole Punching
 ---------------------------
 
 .. image:: ../../diagrams/tcp_hole_punch.png
@@ -64,12 +64,12 @@ UPnP isn't always going to be enabled.
 
 fillter text
 
-.. literalinclude:: ../python/examples/tcp_hole_punch.py
+.. literalinclude:: ../../examples/tcp_hole_punch.py
     :language: python3
 
 ----
 
-4. TURN Relaying
+1. TURN Relaying
 ------------------
 
 .. image:: ../../diagrams/udp_turn_relay.png
@@ -90,15 +90,6 @@ Though sequencing has not been provided. The client is implemented in
 such a way that it provides an identical API to the connections returned
 from following any of the above strategies.
 
-.. literalinclude:: ../python/examples/udp_turn_relay.py
+.. literalinclude:: ../../examples/udp_turn_relay.py
     :language: python3
 
-Next Steps
-------------
-
-Now you have a good understanding how P2PD works. Choose a specialty:
-
-1.  I want to learn :doc:`how to use P2PD's library in my Python 3 program.<python/basics>`
-        :doc:`I think Python is le based so let's use it.<python/basics>`
-2.  I want to learn :doc:`how to use the P2PD REST API.<rest_api>`
-        :doc:`I'm not interested in touching any Python code.<rest_api>`

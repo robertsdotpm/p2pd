@@ -11,7 +11,7 @@ interface and interacting with it. Starting the interface looks up all
 its internal and external addresses, builds basic routing tables, and
 enumerates the NAT qualities of associated gateways.
 
-.. literalinclude:: examples/example_2.py
+.. literalinclude:: ../../examples/example_2.py
     :language: python3
 
 .. code-block:: text
@@ -58,7 +58,7 @@ contain loopback devices, and other adapters that aren't directly
 useful for networking. Often we are only interested in the adapters
 that are usable for WAN or LAN networking.
 
-.. literalinclude:: examples/example_3.py
+.. literalinclude:: ../../examples/example_3.py
     :language: python3
 
 Now you know how to lookup interfaces and start them. It's time to
@@ -169,7 +169,7 @@ A first networking program
 
 Connect to Google.com and get a response from it.
 
-.. literalinclude:: examples/example_4.py
+.. literalinclude:: ../../examples/example_4.py
     :language: python3
 
 You can see from this example that P2PD supports duel-stack networking,

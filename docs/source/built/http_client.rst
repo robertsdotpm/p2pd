@@ -11,7 +11,7 @@ In my opinion one design that absolutely nailed building services
 for the web was PHP so my HTTP client takes inspiration from that.
 First lets start with a basic GET request.
 
-.. literalinclude:: ../python/examples/example_14.py
+.. literalinclude:: ../../examples/example_14.py
     :language: python3
 
 The above code shows how you can send $_GET params to a website.
@@ -19,7 +19,7 @@ Loosely speaking: the vars method is where $_GET and $_POST go.
 There is a method for get, post, and delete that cause such
 HTTP methods to occur. Here's an example for POST:
 
-.. literalinclude:: ../python/examples/example_15.py
+.. literalinclude:: ../../examples/example_15.py
     :language: python3
 
 The design of this HTTP client results in copies of the objects

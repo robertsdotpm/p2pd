@@ -42,7 +42,7 @@ Adding a toxic
 
 Let's start with an example that shows how to add a toxic.
 
-.. literalinclude:: ../python/examples/example_17.py
+.. literalinclude:: ../../examples/example_17.py
     :language: python3
 
 So what's going on here? Well, you've started a toxiproxy server and

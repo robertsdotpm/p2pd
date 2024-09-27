@@ -1,4 +1,4 @@
-Using P2PD from Python
+General networking
 ========================
 
 **Running async examples**

@@ -114,7 +114,7 @@ For brevity I won't go into using the library in this section.
 This is just an example to get a sense of what subscriptions look like
 from Python code.
 
-.. literalinclude:: examples/example_7.py
+.. literalinclude:: ../../examples/example_7.py
     :language: python3
 
 Last words on queues

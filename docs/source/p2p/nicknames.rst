@@ -25,7 +25,7 @@ that identifies the sub-set of name servers that store the name on.
 This is made based on the success responses when registering the name.
 Though the software automates this part for you.
 
-.. literalinclude:: ../python/examples/node_with_nickname.py
+.. literalinclude:: ../../examples/node_with_nickname.py
     :language: python3
 
 Another peer can then use your node's nickname in a connect call.

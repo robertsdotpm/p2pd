@@ -7,7 +7,6 @@ from scratch starting from fundamental principles of how networking
 should be handled. The bellow pages list tools that are useful alone.
 
 .. toctree::
-    irc_kvs
     stun
     turn
     netifaces

@@ -39,7 +39,7 @@ pipes for the sender. If this example works you should see nothing.
 Notice that msg handlers include a field for the senders addressing information
 and a pipe that can be used to interact with that client.
 
-.. literalinclude:: examples/example_5.py
+.. literalinclude:: ../../examples/example_5.py
     :language: python3
 
 UDP await example
@@ -63,7 +63,7 @@ with TCP usually has retransmissions built-in after a set duration. But no such
 logic here has been included. Note that the await for the recv is fully
 asynchronous. The event loop is free to run other tasks until a match occurs.
 
-.. literalinclude:: examples/example_6.py
+.. literalinclude:: ../../examples/example_6.py
     :language: python3
 
 Pipe methods

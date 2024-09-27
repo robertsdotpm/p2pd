@@ -12,7 +12,7 @@ To use it you sub class it and define your own msg_cb function.
 listen_all
 -----------
 
-.. literalinclude:: examples/example_8.py
+.. literalinclude:: ../../examples/example_8.py
     :language: python3
 
 The listen_all method of the Daemon class is as follows.
@@ -63,7 +63,7 @@ The listen_all function is useful for applying the same AFs, protocols, and port
 
 The format of targets here is given as **[[target, protocol], ...]**.
 
-.. literalinclude:: examples/example_9.py
+.. literalinclude:: ../../examples/example_9.py
     :language: python3
 
 The listen_specific code hasn't been tested too much so it's better to use **listen_all**.

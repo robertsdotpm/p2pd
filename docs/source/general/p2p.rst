@@ -9,7 +9,7 @@ for people to directly remember IP address information names are used instead.
 Here the naming solution is provided by 'IRCDNS' - a permissioned, key-value
 store that P2PD provides running on IRC infrastructure.
 
-.. literalinclude:: examples/example_1.py
+.. literalinclude:: ../../examples/example_1.py
     :language: python3
 
 If you use 'IRCDNS' to name your node the first thing to understand is the seed. Seeds are 24 or more cryptographically random bytes (such as from

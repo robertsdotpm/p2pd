@@ -7,7 +7,7 @@ peer-to-peer TCP connections. It handles all of the complexity of modern
 networks such as NAT traversal and firewalls. So you can
 focus on building your software instead of traversing NATs (fun times.)
 
-.. literalinclude:: python/examples/p2pd_in_a_nutshell.py
+.. literalinclude:: ../examples/p2pd_in_a_nutshell.py
    :language: python3
 
 In P2PD nodes have long addresses to describe their network details. The
@@ -19,7 +19,7 @@ peers to connect to.
 
 **This service is free and requires no registration in P2PD.**
 
-.. literalinclude:: python/examples/p2p_connect_with_nickname.py
+.. literalinclude:: ../examples/p2p_connect_with_nickname.py
    :language: python3
 
 Before we get ahead of ourselves though: the nickname you register isn't the
@@ -28,15 +28,9 @@ to it after registration that identifies the quorum of name servers that
 can be used to pull records from your name. So it's important you give
 out the full name. Ready to learn more?
 
-Contents
---------
-
 .. toctree::
    p2p/index
-   problems
-   how
-   python/index
-   rest_api
+   general/index
    built/index
-   future_work
+   articles/index
 

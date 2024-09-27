@@ -44,7 +44,7 @@ The downside is... it's UDP. It offers no reliable delivery or sequencing. But a
 hacks add delivery back in. It wouldn't be possible to add sequencing, too.
 Though I have not done this for now. That was a lot of text so let's look at some code.
 
-.. literalinclude:: ../python/examples/example_10.py
+.. literalinclude:: ../../examples/example_10.py
     :language: python3
 
 Using TURN as a fall-back option
@@ -56,5 +56,5 @@ establishing a 'connection.' The reason for this is it does not provide ordered
 delivery like TCP does which might come as a shock to most developers.
 However, it can be enabled should a developer choose to use it.
 
-.. literalinclude:: ../python/examples/example_11.py
+.. literalinclude:: ../../examples/example_11.py
     :language: python3

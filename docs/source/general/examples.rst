@@ -17,5 +17,5 @@ I've built a simple module that accesses these features. Using this
 module you can now easily build a TCP / UDP / IPv4 / IPv6 async
 REST API in Python. Here's an example of that.
 
-.. literalinclude:: examples/example_13.py
+.. literalinclude:: ../../examples/example_13.py
     :language: python3
