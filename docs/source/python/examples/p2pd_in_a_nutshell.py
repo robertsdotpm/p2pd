@@ -10,7 +10,3 @@ async def example():
     # Start a new P2P node with your protocol.
     node = await P2PNode()
     await node.add_msg_cb(msg_cb)
-    #
-    # Register a short name for it.
-    node_domain = await node.register("unique") # -> unique.tld 
-    print(node_domain)
