@@ -1,4 +1,4 @@
-Connection strategies
+Connection methods
 ======================
 
 This section covers how P2PD achieves a TCP connection with another machine.
@@ -13,8 +13,11 @@ same LAN; External paths are routed over the Internet.
 
 That means that P2PD is designed to work with any number of interfaces,
 address families, or network configurations. Making it a very flexible system
-for achieving connectivity. But how exactly does it do this? Let's look
-into some of the main strategies it uses to setup TCP connections.
+for achieving connectivity. The downside is it can take a while to setup
+a connection depending on the reachability characteristics between the two nodes.
+This is because multiple interfaces, methods, and paths may have to be tried
+to get a connection opened. But once that's complete it functions as
+any other TCP connection.
 
 ----
 
@@ -35,7 +38,7 @@ may need firewall rules to be setup.
 
 ----
 
-1. Reverse Connect
+2. Reverse Connect
 -----------------------
 
 .. image:: ../../diagrams/tcp_reverse_connect.png
@@ -56,40 +59,57 @@ UPnP isn't always going to be enabled.
 
 ----
 
-1. TCP Hole Punching
+3. TCP Hole Punching
 ---------------------------
 
 .. image:: ../../diagrams/tcp_hole_punch.png
     :alt: Diagram of P2P connectivity methods
 
-fillter text
+TCP hole punching relies on the strange behavior of the TCP three-way
+handshake to succeed when both sides to a connection connect to each
+other at the same time. If the timing for this is synchronized -- and I do mean
+with millisecond accuracy -- then both SYN packets will cross their respective
+routers before the other arrives -- spawning a new TCP connection.
+
+P2PD's hole punching features are unrivaled. They support punching
+over the Internet; over the LAN; to different interfaces on the same machine;
+on the same interface; with either single initial mappings or updated mapping
+messages. And it works hand-in-hand with advanced NAT enumeration supporting
+a multitude of NATs and port prediction strategies.
 
 .. literalinclude:: ../../examples/tcp_hole_punch.py
     :language: python3
 
 ----
 
-1. TURN Relaying
+4. TURN Relaying
 ------------------
 
 .. image:: ../../diagrams/udp_turn_relay.png
     :alt: Diagram of P2P connectivity methods
 
 TURN is a protocol that provides a generic proxy service for TCP and
-UDP traffic. It is utilized within WebRTC as a last resort approach
-for connecting peers when all other connection establishment options have
-failed. Since TURN servers must relay all traffic between peers it
-is much more expensive and centralized than other options. Hence why TURN
-is only used as a last resort.
+UDP traffic. It is utilized in WebRTC as a last resort approach
+for connecting peers when other options have failed. Since TURN servers
+must relay all traffic between peers it is more centralized than
+other options. Hence why TURN is only used as a last resort.
 
-In P2PD TURN support is not part of the default strategies for P2P connections
-as it utilizes UDP instead of TCP which would be inconsistent with other
-approaches. The TURN client I have implemented includes a feature
-that automatically acknowledges messages and retransmits them.
-Though sequencing has not been provided. The client is implemented in
-such a way that it provides an identical API to the connections returned
-from following any of the above strategies.
+In P2PD TURN support is not part of the default connectivity methods
+as it utilizes UDP. P2PD implements acknowledgements but data 
+arrives unordered for TURN / UDP.
 
 .. literalinclude:: ../../examples/udp_turn_relay.py
     :language: python3
 
+----
+
+All approaches combined
+-----------------------------
+
+Now that you understand how the various approaches work. Here
+is some simple code that uses the above techniques to create
+a peer-to-peer TCP connection. The next section will show
+how to write a protocol for your peer-to-peer node.
+
+.. literalinclude:: ../../examples/p2p_tcp_con.py
+    :language: python3

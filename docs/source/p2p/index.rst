@@ -5,4 +5,5 @@ Peer-to-peer networking
     nodes
     nicknames
     connect
+    msg_handling
     rest_api

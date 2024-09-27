@@ -36,5 +36,4 @@ also stores mutexes to prevent zombie daemons from taking the same listen ports
 in P2PD (this is useful when combined with socket options that bypass
 TIME WAIT allowing servers to be instantly restarted without socket errors.)
 
-Woah, this page was boring but you gotta start somewhere! The most
-interesting stuff is yet to come.
+The most interesting stuff is yet to come.
