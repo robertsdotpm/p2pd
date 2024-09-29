@@ -30,6 +30,7 @@ class PNPClient():
     async def get_updated(self, name):
         if name not in self.names:
             t = int(self.sys_clock.time())
+            print(t)
             self.names[name] = t
             return t
 
@@ -49,11 +50,13 @@ class PNPClient():
         route = self.nic.route(ipr.af)
         route = await route.bind()
         pipe = await pipe_open(self.proto, self.dest, route)
+        print(pipe)
         return pipe
 
     async def return_resp(self, pipe):
         try:
             buf = await proto_recv(pipe)
+            print(buf)
             buf = decrypt(self.reply_sk, buf)
             pkt = PNPPacket.unpack(buf)
             
@@ -76,6 +79,7 @@ class PNPClient():
 
         buf = pnp_msg + sig
         enc_msg = encrypt(self.dest_pk, buf)
+        print(enc_msg)
         end = 1 if self.proto == TCP else 3
         for _ in range(0, end):
             send_success = await pipe.send(enc_msg, self.dest)

@@ -6,4 +6,4 @@ Peer-to-peer networking
     nicknames
     connect
     msg_handling
-    rest_api
+

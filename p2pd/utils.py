@@ -638,6 +638,12 @@ def p2pd_setup_event_loop():
         if start_method is None:
             multiprocessing.set_start_method("spawn")
 
+    """
+    if platform.system() == "Windows":
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+            return
+    """
+
     # Set the event loop policy to the selector if its not.
     policy = asyncio.get_event_loop_policy()
     if not isinstance(policy, SelectorEventPolicy):

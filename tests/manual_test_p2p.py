@@ -222,8 +222,6 @@ class TestNodes():
         nic = self.alice.ifs[0]
         sys_clock = SysClock(nic)
         await sys_clock.start()
-    
-
         tasks = [
             self.alice.start(sys_clock),
         ]
@@ -352,10 +350,11 @@ async def test_p2p_register_connect():
 
     use_strats = [P2P_PUNCH]
     async with TestNodes(**params) as nodes:
-        
+        """
         name = await nodes.alice.nickname(name)
         while 1:
             await asyncio.sleep(1)
+        """
         
 
         pipe = await nodes.alice.connect(
