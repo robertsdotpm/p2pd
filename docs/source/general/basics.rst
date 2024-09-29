@@ -35,7 +35,7 @@ There are other ways to design protocols though. You could start with a fixed
 header of known length. The header would then describe the length and kind of
 data that is to follow. STUN uses this approach for messages because the messages
 may contain attributes. For example: a STUN message may contain attributes that
-have the clients IP, a relay to contact them on, and the version of the server.
+have the relay to contact them on and the version of the server.
 
 .. WARNING::
     TCP callbacks in P2PD may contain partial or buffered data!
@@ -43,4 +43,25 @@ have the clients IP, a relay to contact them on, and the version of the server.
 What about UDP?
 -----------------
 
-UDP is a message-orientated protocol so 
+UDP is another way to transfer data. UDP doesn't have the reliabilities of TCP
+but it does have a feature that makes it much less annoying: no buffering.
+What this means is receivers for UDP data will receive messages exactly
+as they were sent. Of course, data may be split up by the networking stack but
+these details will be hidden. So as to simulate receiving unbroken messages.
+
+The downside of using UDP is that messages my arrive in any order. Assuming
+they arrive at all. This is because unlike UDP -- a UDP message has no
+acknowledgement and may be lost in transit. So most clients that work with UDP
+have a simple loop that sends off packets and checks for a reply. The process
+can be repeated until it succeeds or times out.
+
+UDP is a very useful protocol and far from obscure. For instance -- many
+of the latest developments in network protocols are being built on UDP.
+The connectionless nature of UDP allows broken connections to be easily resumed;
+lack of buffering to reduce latency; and message-orientated approach make it
+more desirable to developers.
+
+Indeed: it seems that what developers really want from a networking API is
+something that performs logically like UDP but with the ordered delivery guarantees
+that made TCP famous. So if you want to know what the Internet looks like in the
+future -- look no further than UDP.

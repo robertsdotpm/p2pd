@@ -1,35 +1,55 @@
 Pipes
 ======
 
-In P2PD all data messages are sent and received via pipes. Pipes are simply the
+In P2PD all messages are sent and received via pipes. Pipes are simply the
 name given to the object providing a common list of functions for transmission
-and message processing. A pipe supports UDP or TCP and IPv4 or IPv6.
+and message processing. A pipe supports UDP or TCP; IPv4 or IPv6; and can
+be used for clients or servers.
 
 .. code-block:: python
 
-    async def pipe_open(proto, route, dest=None, sock=None, msg_cb=None, conf=NET_CONF):
+    async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=None, conf=NET_CONF):
         """
-        proto = TCP or UDP.
-        route = Route object that's been bound with await route.bind().
-        dest  = If it's a client pipe a destionation should be included.
+        proto  = TCP or UDP.
+        dest   = If it's a client pipe a destination should be included.
                 ('host/ip', port)
                 A server includes no destination.
-        sock  = Used to wrap a pre-existing socket in a pipe. If the protocol is
+        route  = Route object that's been bound with await route.bind().
+        sock   = Used to wrap a pre-existing socket in a pipe. If the protocol is
                 TCP and dest is included the socket is assumed to be connected.
-        cb    = A message handler registered with servers before they're started
+        msb_cb = A message handler registered with servers before they're started
                 so that messages aren't received before a handler is setup.
+        up_cb  = A handler is started when the underlying pipe is connected.
         conf  = A dictionary describing many different configuration options for
                 changing various properties of the pipe.
 
         More details on msg_cb format and conf format later.
-
         Returns: a pipe object.
         """
 
 Whether a pipe is for a client or server, UDP or TCP, IPv4 or IPv6, every
-pipe works the same. Pipes have been designed to process messages as
-they arrive. They pass these messages to any registered
-handlers (to process in real-time) or message queues (to be processed later).
+pipe works the same. Pipes are able to process messages as they arrive.
+They pass these messages to any registered handlers (to process in real-time)
+or add them to a message queue (to be processed later).
+
+Interface selection
+----------------------
+
+In network programming its very common to write code that doesn't specifically
+choose a network interface. The reason for this is arguably because its hard
+to do; If you don't specify an interface the code will still work. But you'll
+have to be fine with the default chosen by the OS.
+
+For some applications this is fine. Maybe the only thing that matters is
+whether the code works. But other applications might want to be more nuanced.
+Imagine a server that has multiple interfaces and it wants to select what ones
+to listen on. Or perhaps a torrent client that wants to work across interfaces
+to improve theoretical download speed.
+
+.. IMPORTANT::
+    Normally in P2PD you would choose an interface and a route to use for a pipe.
+    But to simplify these examples no route is given. In which case -- the
+    default interface is loaded for each pipe.
 
 TCP echo server example
 ------------------------
@@ -45,23 +65,17 @@ and a pipe that can be used to interact with that client.
 UDP await example
 ------------------
 
-In Python if you want to do asynchronous programming you're likely going to be writing different code for TCP and UDP. This is because TCP is 'stream-based' and UDP 
-is 'packet-based.' TCP streams are reliable and ordered. UDP communication is not.
-So in Python for TCP connections you will be dealing with 'streams' while for
-UDP you will use protocol classes.
-
-Only stream readers are 'asynchronous' e.g. you can await 'draining' a writer
-or await a reader - while there is no such equivalent for UDP. It's all very
-**inconvenient**. Wouldn't it be great if you could use asynchronous awaits
-for UDP and TCP? Further: wouldn't it be great if you modelled interactions in
-such a way that the same code would work for both?
+In Python if you want to do asynchronous networking you normally
+have to write different code for UDP and TCP. Python has decent enough
+classes for TCP clients (stream readers) -- though UDP has no such equivalent. 
+As for servers Python offers protocol classes. Wouldn't it be great if you
+could use either style on either protocol? P2PD can help here.
 
 Here's an example of how simple P2PD makes this. Here I'm using await for UDP
 which is based on message queues. Since there is no delivery guarantees for UDP it's
-possible this example throws a timeout error for you. Real-world code that deals
-with TCP usually has retransmissions built-in after a set duration. But no such
-logic here has been included. Note that the await for the recv is fully
-asynchronous. The event loop is free to run other tasks until a match occurs.
+possible this example throws a timeout error for you. Note that the await for
+the recv is fully asynchronous. The event loop is free to run other tasks
+until a message is received.
 
 .. literalinclude:: ../../examples/example_6.py
     :language: python3
@@ -69,15 +83,15 @@ asynchronous. The event loop is free to run other tasks until a match occurs.
 Pipe methods
 --------------
 
-Pipes are an instance of the BaseProto class that provides many useful methods
+Pipes are an instance of the PipeEvents class that provides many useful methods
 and properties for working with connections (TCP or UDP.) Assume all of
 these methods are of the form 'pipe.method_name()' and that they 'belong'
-to a BaseProto class instance.
+to a PipeEvents class instance.
 
 def subscribe(self, sub=SUB_ALL, handler=None)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Install a new message queue indexed by the regex pair sub = [msg_regex, client_tup_regex]. Doing this enables the use of publish-subscribe e.g. 
+Install a new message queue indexed by the regex pair sub = [msg_regex, client_tup]. Doing this enables the use of publish-subscribe e.g. 
 push / pull style awaits for a message. **By default a pipe will subscribe to all messages (SUB_ALL) if a pipe has a destination given.**
 
 .. code-block:: python

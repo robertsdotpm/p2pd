@@ -3,17 +3,11 @@ import binascii
 from p2pd import *
 
 async def example():
-    # Open default interface.
-    # Get a route for the first AF supported.
-    i = await Interface().start()
-    route = await i.route().bind()
-    #
     # Open a UDP pipe to stunprotocol.org.
     # Subscribe to all messages.
     pipe = await pipe_open(
         UDP,
-        ("74.125.192.127", 3478),
-        route
+        ("74.125.192.127", 3478)
     )
     #
     # Build a STUN request and send it.
