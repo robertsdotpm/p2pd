@@ -1,5 +1,5 @@
 Peer-to-peer networking
--------------------------
+===========================
 
 .. toctree::
     nodes

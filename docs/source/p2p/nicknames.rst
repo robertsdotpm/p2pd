@@ -1,5 +1,5 @@
 Nicknames
-----------
+============
 
 Your P2P node has an address that lists information on your network
 interface cards and meta data useful for encrypted communication.

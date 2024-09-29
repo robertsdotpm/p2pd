@@ -1,5 +1,5 @@
 Nodes
--------
+=========
 
 Your P2P node is a class where you can add message handlers for your protocol.
 Every technique for making P2P TCP connections in P2PD ultimately passes
