@@ -135,10 +135,15 @@ class PipeClient(ACKUDP):
 
             # Check client_addr matches their host pattern.
             if len(m_client_tup):
-                if m_client_tup != client_tup:
-                    continue
-                else:
-                    client_tup = m_client_tup
+                # Also check the source port.
+                if m_client_tup[1]:
+                    if m_client_tup != client_tup:
+                        continue
+
+                # Ignore source port but check IPs.
+                if not m_client_tup[1]:
+                    if m_client_tup[0] != client_tup[0]:
+                        continue
 
             # Check data matches their message pattern.
             if b_msg_p:

@@ -1,23 +1,32 @@
-import random
 import binascii
 from p2pd import *
 
 async def example():
-    # Open a UDP pipe to stunprotocol.org.
-    # Subscribe to all messages.
-    pipe = await pipe_open(
-        UDP,
-        ("74.125.192.127", 3478)
-    )
+    # Open a UDP pipe to google's STUN server.
+    pipe = await pipe_open(UDP, ("stun.l.google.com", 19302))
     #
-    # Build a STUN request and send it.
-    msg_id = ''.join([str(random.randrange(10, 99)) for _ in range(16)])
-    req_hex = "00010000" + msg_id
+    # Random STUN message ID.
+    msg_id = binascii.hexlify(rand_b(12))
+    #
+    #         req type    len     magic cookie
+    req_hex = b"0001" + b"0000"  + b"2112A442"  + msg_id
     req_buf = binascii.unhexlify(req_hex)
-    await pipe.send(req_buf)
     #
-    # Get the response.
-    resp = await pipe.recv()
+    # UDP is unreliable -- try up to 3 times.
+    for _ in range(0, 3):
+        # Send STUN bind request and get resp.
+        await pipe.send(req_buf)
+        resp = await pipe.recv()
+        #
+        # Timeout -- try again.
+        if resp is None:
+            continue
+        #
+        # Show resp -- exit loop.
+        print(resp)
+        break
+    #
+    # Cleanup.
     await pipe.close()
 
 if __name__ == '__main__':

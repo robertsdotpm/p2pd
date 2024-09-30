@@ -1,5 +1,5 @@
-Basics
-========
+Basic concepts
+================
 
 The operating systems network stack abstracts offers developers high-level
 features that are easier to work with than dealing with hardware directly.
@@ -7,6 +7,9 @@ If the developer uses TCP they don't have to worry about things like bit
 errors due to electrical interference, packet loss, and so on. But these
 APIs aren't as user-friendly as they might initially appear. One way
 they might trip up newer engineers is the way they buffer data.
+
+.. image:: ../../diagrams/tcp_buffering.png
+    :alt: Diagram of TCP buffering
 
 You see, when you hit the send() call it makes sense that once it finishes
 the data has been dispatched. When in reality multiple send calls may
@@ -18,7 +21,8 @@ isn't optimal to send it -- then you're not going to get the full amount.
 This is what it means for TCP to be 'stream orientated.'
 
 .. WARNING::
-    TCP data arrives in any number of pieces!
+    | TCP data arrives in any number of pieces! TCP buffers send and recv calls.
+    | So there is no way to know when data is sent.
 
 Protocol design
 -----------------
@@ -34,8 +38,8 @@ signify where messages start and stop.
 There are other ways to design protocols though. You could start with a fixed
 header of known length. The header would then describe the length and kind of
 data that is to follow. STUN uses this approach for messages because the messages
-may contain attributes. For example: a STUN message may contain attributes that
-have the relay to contact them on and the version of the server.
+may contain attributes. For example: a STUN message may contain attributes like the
+version and relay address.
 
 .. WARNING::
     TCP callbacks in P2PD may contain partial or buffered data!

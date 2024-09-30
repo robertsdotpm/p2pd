@@ -21,19 +21,6 @@ from .utils import *
 from .stun_defs import *
 from .net import *
 from .ip_range import *
-    
-# Filter all other messages that don't match this.
-def sub_to_stun_reply(tran_id, dest_tup):
-    dest_tup = client_tup_norm(dest_tup)
-    b_msg_p = re.escape(tran_id)
-    b_addr_p = b"%s:%d" % (
-        re.escape(
-            to_b(dest_tup[0])
-        ),
-        dest_tup[1]
-    )
-
-    return [b_msg_p, b_addr_p]
 
 def stun_proc_attrs(af, attr_code, attr_data, msg):
     # Set our remote IP and port.

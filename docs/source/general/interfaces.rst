@@ -1,15 +1,11 @@
-Basics
-=======
-
-Network interface cards
--------------------------
+Interfaces
+===========================
 
 All network programming in P2PD starts with the network interface card. Usually
-your computer will have a 'default' interface that all traffic is sent
+your computer will have a 'default' interface that traffic is sent
 down based on various routing methods. Let's start by loading this default
 interface and interacting with it. Starting the interface looks up all
-its internal and external addresses, builds basic routing tables, and
-enumerates the NAT qualities of associated gateways.
+its addresses and enumerates the NAT of its associated router.
 
 .. literalinclude:: ../../examples/example_2.py
     :language: python3
@@ -64,36 +60,42 @@ that are usable for WAN or LAN networking.
 Now you know how to lookup interfaces and start them. It's time to
 learn about 'routes.'
 
+----
+
 The addressing problem
 -----------------------
 
-Modern network programming with event loops makes it incredibly easy to write
-high-performance networking code. The engineers of today are spoiled by such
-elegant features compared to the tools available in the early days. But there
-is still something very basic missing from the networking toolbelt:
+Modern event loops makes it easy to write high-performance networking code.
+The engineers of today are spoiled by such elegant features compared to the
+tools available in the early days. But there is still something very basic
+missing from the networking toolbox:
 
 **The ability to easily know your external addressing information**
 
-There are many cases where this information is needed. For example imagine
+There are many cases where this information is needed. For example: imagine
 a server that listens on multiple IPs such that it is available on more
 than one external IP. The server may wish to know what external IPs are
 available to it in case it needs to refer a client to another server. The
-STUN protocol is an example of just this case where a client can
-request a connection back 'from a different IP address' in order to
-determine what type of NAT they have.
+STUN protocol is the perfect instance where a client can request
+a connection back 'from a different IP address' in order to determine
+what type of NAT they have.
 
-P2PD makes all external addressing information available to the programmer
-so that servers and clients can be aware of their own addresses.
+.. HINT::
+    P2PD makes external addressing details available to the programmer.
+    Such information avoids having to manually pass details to bind() 
+    to use a given external IP.
 
 Routes to the rescue
 ---------------------
 
-P2PD solves the addressing problem by introducing mappings called 'Routes'
-to describe how interface-assigned addresses relate to external addresses.
+P2PD solves the addressing problem by introducing mappings called 'Routes'.
+A Route describes how interface-assigned addresses relate to external addresses.
 Each route is indexed by address family. Either IPv4 or IPv6. A Route
 has the following basic form.
 
     **[NIC IPR, ...] -> [external IPR]**
+
+----
 
 **Example 1 -- IPv4 routes**
 
@@ -130,7 +132,9 @@ has the following basic form.
             whole block is valid without checking every IP. This becomes another
             route. This example shows how some machines set their NIC IPs to
             their external addresses. It also demonstrates how ranges work.
-    
+
+----
+
 **Example 2 -- IPv6 routes**
 
 .. code-block:: text
@@ -164,21 +168,30 @@ what external addresses to use for servers or what external addresses will be
 visible for outbound traffic. In other words when you bind in P2PD you are
 selecting what external addresses to use.
 
-A first networking program
----------------------------
+----
+
+Using a route with a pipe
+----------------------------
 
 Connect to Google.com and get a response from it.
 
 .. literalinclude:: ../../examples/example_4.py
     :language: python3
 
-You can see from this example that P2PD supports duel-stack networking,
-multiple network interface cards, external addressing, DNS / IP / target parsing,
-and publish-subscribe. But there are many more useful features for
-network programming.
+Look closely at the route part. What this code is doing is it's asking for
+the first route in the route pool for that address family. The route points
+to one or more external addresses (more if it's a block) and 'knowns'
+how to setup the tuples for bind to use that external address. Once a route
+is bound it can be used in the familiar open_pipe call to use a given interface
+and given external address.
 
-In the next section we'll be taking a closer look at pipes.
+.. HINT::
+    You can see from this example that P2PD supports duel-stack networking,
+    multiple network interface cards, external addressing, DNS / IP / target parsing,
+    and publish-subscribe. But there are many more useful features for
+    network programming.
 
+In the next section we'll be looking at publish-subscribe features.
 
 
 

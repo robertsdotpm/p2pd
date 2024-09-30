@@ -3,7 +3,7 @@ from p2pd import *
 async def example():
     #
     # Load default interface.
-    i = await Interface().start()
+    i = await Interface()
     #
     # Get first supported address family.
     # E.g. if the NIC only supports IPv4 this will == [AF_INET].

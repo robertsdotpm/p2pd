@@ -31,6 +31,6 @@ out the full name. Ready to learn more?
 .. toctree::
    p2p/index
    general/index
-   built/index
    articles/index
+   built/index
 

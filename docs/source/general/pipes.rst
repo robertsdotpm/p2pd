@@ -13,7 +13,7 @@ be used for clients or servers.
         proto  = TCP or UDP.
         dest   = If it's a client pipe a destination should be included.
                 ('host/ip', port)
-                A server includes no destination.
+                A server includes no destination - None
         route  = Route object that's been bound with await route.bind().
         sock   = Used to wrap a pre-existing socket in a pipe. If the protocol is
                 TCP and dest is included the socket is assumed to be connected.
@@ -88,63 +88,16 @@ and properties for working with connections (TCP or UDP.) Assume all of
 these methods are of the form 'pipe.method_name()' and that they 'belong'
 to a PipeEvents class instance.
 
-def subscribe(self, sub=SUB_ALL, handler=None)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Install a new message queue indexed by the regex pair sub = [msg_regex, client_tup]. Doing this enables the use of publish-subscribe e.g. 
-push / pull style awaits for a message. **By default a pipe will subscribe to all messages (SUB_ALL) if a pipe has a destination given.**
-
-.. code-block:: python
-
-    # Match any message containing meow.
-    # Allow only hosts from the 192.168.0.0/16 subnet.
-    # Put them into the same queue.
-    sub = [b"meow", b"192[.]168[.][0-9]+[.][0-9]+:[0-9]+"]
-    pipe.subscribe(sub)
-
-    # Wait for a message that fits into the sub queue.
-    await pipe.recv(sub, timeout=4)
-
-def unsubscribe(self, sub)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Delete the queue and its resources marked by sub (if it exists.) No longer
-copy messages that fit this subscription into this queue.
-
-async def recv(self, sub=SUB_ALL, timeout=2, full=False)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Given a queue identified by the subscription 'sub' -- wait for a message that suites it. Waiting is done asynchronously and other tasks may be done by the
-event loop until a message arrives. Timeout specifies the total duration
-to attempt to wait. After the duration an exception will be thrown. Set this
-to 0 to disable timeouts (not recommended.)
-
-.. code-block:: python
-
-    # Wait for any message from a loopback client.
-    out = await pipe.recv([b"[\s\S]+", "127.0.0.1:[0-9]+"])
-
-By default this function only returns the message received on the pipe.
-Some pipes receive messages from multiple destinations (like UDP.)
-To also show the sender set the full flag to True. The return value will
-end up being [msg_bytes, client_tup].
-
-async def send(self, data, dest_tup=None)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Wait for data to be transmitted down the pipe (non-blocking.) For TCP / UDP connections (with a fixed destination) the dest_tup does not need to be set.
-But it's a good practice to include it in servers because the same socket
-in UDP servers is used to receive messages from multiple clients and the
-pipe by itself won't be able to disambiguate what the destination should be.
-This is also one reasons why msg_cbs include a client_tup for a message sender.
+----
 
 def add_msg_cb(self, msg_cb)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When a pipe receives a message it will also forward it to any installed message
 handlers. The format for a message handler is:
-    
-    **async def msg_cb(msg, client_tup, pipe)**
+
+.. TIP::
+    async def msg_cb(msg, client_tup, pipe)
 
 The msg_cb also doesn't have to be an async callback but keep in mind if it's
 given as a regular function you will have to use asyncio.create_task
@@ -156,28 +109,37 @@ for either a server pipe or a client pipe and it will automatically be
 called when there's a new message. No need to run your own loop and
 call awaits on some object. The event loop handles it.
 
+----
+
 def del_msg_cb(self, msg_cb)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Removes a function reference designated by msg_cb from the pipe's msg_cbs.
 
+----
+
 def add_end_cb(self, end_cb)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When a connection is closed manually or forcefully the end_cb handlers are
 called. These are useful for cleanup. The format is:
-    
-    **async def end_cb(msg, client_tup, pipe)**
+
+.. TIP::
+    async def end_cb(msg, client_tup, pipe)
 
 Where message is set to None.
 
+----
+
 def del_end_cb(self, end_cb)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Removes a function reference designated by end_cb from the pipe's end_cb handlers.
 
+----
+
 def add_pipe(self, pipe)
-^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Pipes can be made to route messages to other pipes. You can connect
 two pipes together by adding each pipe to each other.
@@ -190,16 +152,22 @@ two pipes together by adding each pipe to each other.
 1.  Messages received at pipe_a will be sent down pipe_b.
 2.  Messages received at pipe_b will be sent down pipe_a.
 
-This doesn't cause looping as the messages get sent to the destination rather than the pipe itself. Linking pipes together is the trick used in the P2PD REST API
-for 'converting' an active HTTP connection into a two-way relay to an active P2P connection in only two lines of code.
+This doesn't cause looping as the messages get sent to the destination rather than the pipe itself.
+Linking pipes together is the trick used in the P2PD REST API for 'converting' an
+active HTTP connection into a two-way relay to an active P2P connection in
+only two lines of code.
+
+----
 
 def del_pipe(self, pipe)
-^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Unlink 'pipe' from self.
 
+----
+
 async def close(self)
-^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Closes all resources associated with a pipe. If it's a server it will stop serving
 any clients and all client connections will be closed. All sockets will be
@@ -209,8 +177,10 @@ this by setting SO_LINGER to enabled and using a zero timeout. But using
 this option on client TCP sockets on Windows prevents the hole punching algorithm
 from working so this needs to only be considered for server sockets.
 
+----
+
 Additional pipe options
----------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A default dictionary of configuration options is passed to each pipe. The
 options look like this:
@@ -218,6 +188,15 @@ options look like this:
 .. code-block:: python
 
     NET_CONF = {
+        # Seconds to use for a DNS request before timeout exception.
+        "dns_timeout": 2,
+
+        # Wrap socket with SSL.
+        "use_ssl": 0,
+
+        # Timeout for SSL handshake.
+        "ssl_handshake": 4,
+
         # Protocol family used for the socket.socket function.
         "sock_proto": 0,
 
@@ -254,6 +233,9 @@ options look like this:
         # Whether to set SO_LINGER. None = off.
         # Non-none = linger value.
         "linger": None,
+
+        # Retry N times on reply timeout.
+        "send_retry": 2,
 
         # Ref to an event loop.
         "loop": None

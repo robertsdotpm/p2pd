@@ -2,7 +2,7 @@ from p2pd import *
 
 async def example():
     # Start the default interface.
-    i = await Interface().start()
+    i = await Interface()
     #
     # Load additional NAT details.
     # Restrict, random port NAT assumed by default.
