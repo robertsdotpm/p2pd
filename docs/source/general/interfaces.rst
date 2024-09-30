@@ -90,10 +90,7 @@ Routes to the rescue
 
 P2PD solves the addressing problem by introducing mappings called 'Routes'.
 A Route describes how interface-assigned addresses relate to external addresses.
-Each route is indexed by address family. Either IPv4 or IPv6. A Route
-has the following basic form.
-
-    **[NIC IPR, ...] -> [external IPR]**
+Each route is indexed by address family. Either IPv4 or IPv6. 
 
 ----
 
@@ -115,23 +112,19 @@ has the following basic form.
     Routes:
         [...20, 193..., 7.7.7.7] -> [1.3.3.7]
         [8.8.0.0] -> [8.8.0.0]
-    
-    Explanation:
-        1.  The software starts by grouping all private addresses for a NIC.
-            It then binds to one of the addresses and checks the external IP
-            using STUN. The result is saved as the external address and this
-            becomes a new route. When it finds a public IP for a NIC address
-            it binds to the first IP in it's range and checks the external
-            IP. Here it finds that 7.7.7.7 results in the same external
-            address as the other private IPs and groups them into the same
-            route. This demonstrates that public IPs can be assigned to NICs
-            and they don't necessarily mean that an IP is externally routable.
 
-        2.  The software finds that when processing the block of IPs '8.8.0.0/16'
-            that the external address matches. It assumes that this means the
-            whole block is valid without checking every IP. This becomes another
-            route. This example shows how some machines set their NIC IPs to
-            their external addresses. It also demonstrates how ranges work.
+The software starts by grouping private IPs. It binds to the first
+and checks the external IP. The result is the external IP and a new route.
+If it finds a public IP for a NIC address it binds to the first IP
+in it's range (range if it's a block) and checks the external IP.
+If the IPs match it assumes the range is valid. If it matches the
+previous route it groups them as the same route. 
+
+The software finds when processing the block of IPs '8.8.0.0/16'
+the external address matches. It assumes this means the
+whole block is valid without checking every IP. This becomes a new
+route. This shows how some machines set their NIC IPs to their
+external addresses.
 
 ----
 
@@ -153,20 +146,14 @@ has the following basic form.
         [FE80:DEED:BEEF::0000/128] -> [2020:DEED:BEEF::0000/128]
         [FE80:DEED:BEEF::0000/128] -> [2020:DEED:DEED::0000/64]
     
-    Explanation:
-        1.  The algorithm for building routes in IPv6 is slightly different to IPv4.
-            All link-local addresses for a list and are copied to the NIC
-            section of the route. While every global address -- whether it's a
-            single IP or a block -- creates a new route.
-        2.  P2PD uses the EXT portion of routes for IPv6 servers. While it uses
-            the NIC portion for IPv4. It is assumed that all servers should be
-            publicly reachable. Though this can be bypassed by specifying IPs
-            directly for bind code which is indeed what the P2PD REST server does.
-    
-The reason why routes are important is they are used in bind() code to instruct
-what external addresses to use for servers or what external addresses will be
-visible for outbound traffic. In other words when you bind in P2PD you are
-selecting what external addresses to use.
+The algorithm for IPv6 routes is slightly different.
+All link-local addresses are copied to each route.
+While every global address 'EXT' forms a new route.
+
+P2PD uses the EXT portion for IPv6 servers. While it uses the NIC portion
+for IPv4. It is assumed that all servers should be publicly reachable.
+Though this can be bypassed by specifying IPs directly for bind call
+which is indeed what the P2PD REST server does.
 
 ----
 
@@ -190,9 +177,3 @@ and given external address.
     multiple network interface cards, external addressing, DNS / IP / target parsing,
     and publish-subscribe. But there are many more useful features for
     network programming.
-
-In the next section we'll be looking at publish-subscribe features.
-
-
-
-
