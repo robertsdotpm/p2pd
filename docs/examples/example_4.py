@@ -5,16 +5,10 @@ async def example():
     # Load default interface.
     i = await Interface()
     #
-    # Get first supported address family.
-    # E.g. if the NIC only supports IPv4 this will == [AF_INET].
-    # If it supports both families it will == [AF_INET, AF_INET6].
-    # If no AF for route and address specified = use i.supported()[0].
-    af = i.supported()[0]
-    #
     # Get a route to use for sockets.
     # This will give you a copy of the first route for that address family.
     # Routes belong to an interface and include a reference to it.
-    route = await i.route(af).bind()
+    route = await i.route(IP4).bind()
     #
     # Lookup Google.com's IP address -- specify a specific address family.
     # Most websites support IPv4 but not always IPv6.

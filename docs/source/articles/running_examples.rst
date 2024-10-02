@@ -3,12 +3,12 @@ Running examples
 
 **Running async examples**
 
-Alr1ght people, P2PD uses Python's 'asynchronous' features to run
-everything in an event loop. The easiest way to try out examples is to
-run code in an interactive prompt. For convenience P2PD includes an
-interactive REPL that lets you easily run async code. It also handles
-choosing the right event loop policy and multiprocessing start methods
-otherwise the code wouldn't work consistently across platforms.
+P2PD uses Python's 'asynchronous' features to run everything in an event loop.
+The easiest way to try out examples is to run code in an interactive prompt.
+For convenience P2PD includes an interactive REPL that lets you easily run async
+code. It also handles choosing the right event loop policy and
+multiprocessing start methods otherwise the code wouldn't work
+consistently across platforms.
 
 .. code-block:: shell
 
