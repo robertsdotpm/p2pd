@@ -1,7 +1,7 @@
 from p2pd import *
 
 async def example():
-    i = await Interface().start()
+    i = await Interface()
     nat = await i.load_nat()
     print(i)
     #

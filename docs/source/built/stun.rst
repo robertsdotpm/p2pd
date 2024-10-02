@@ -14,3 +14,28 @@ Here is how to use the STUN client.
 .. literalinclude:: ../../examples/example_12.py
     :language: python3
 
+STUN magic cookies
+-------------------
+
+The first RFC that introduced STUN was RFC 3489. In this version of the protocol
+you're able to specify whether the STUN server sends a reply from a different IP
+or port. Being able to do this is significant because it lets you determine
+the kind of NAT for a router. The basic version of STUN supports 'bind'
+requests -- where the server will reply with your external IP and port.
+
+Later versions of STUN removed the ability to specify that a reply should come
+from a different IP or port. People writing STUN software should know about this.
+It's not just about having the right protocol messages. Many public STUN
+servers will only support more recent versions of the protocol so that if you're
+not sending the magic cookie they won't even reply. Google's own STUN server
+does just that.
+
+Now, if you know about this you'll be able to write STUN software that can correctly
+classify what versions of the protocol they support and optimize how many servers
+your software can support. This is something I've had to do with P2PD and the
+p2pd/scripts folder has some code in there for how I did that. Bellow are the
+key takeaways from the RFC changes.
+
+.. csv-table::
+    :file: ../../diagrams/stun_rfcs.csv
+    :header-rows: 1

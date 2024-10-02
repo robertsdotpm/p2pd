@@ -58,3 +58,6 @@ However, it can be enabled should a developer choose to use it.
 
 .. literalinclude:: ../../examples/example_11.py
     :language: python3
+
+.. image:: ../../diagrams/turn_proxy.png
+    :alt: Establishing TURN relays
