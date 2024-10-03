@@ -1,0 +1,7 @@
+name,local ip:port,dest ip:port,mappings reusable by
+open internet,any,any,not applicable
+full cone,same ip:port,any,anyone
+restrict,same ip:port,same ip,dest ip for a connection
+restrict port,same ip:port,same ip:port,dest ip:ports for a connection
+symmetric,per dest ip:port,per unique ip:port,not reusable
+filtered,any,all are blocked,blocked

@@ -27,8 +27,7 @@ Later versions of STUN removed the ability to specify that a reply should come
 from a different IP or port. People writing STUN software should know about this.
 It's not just about having the right protocol messages. Many public STUN
 servers will only support more recent versions of the protocol so that if you're
-not sending the magic cookie they won't even reply. Google's own STUN server
-does just that.
+not sending the magic cookie they won't even reply.
 
 Now, if you know about this you'll be able to write STUN software that can correctly
 classify what versions of the protocol they support and optimize how many servers
@@ -39,3 +38,9 @@ key takeaways from the RFC changes.
 .. csv-table::
     :file: ../../diagrams/stun_rfcs.csv
     :header-rows: 1
+
+.. TIP::
+    A new field for the magic cookie wasn't added to the packet. Instead,
+    the first 4 bytes of the 16 byte TXID were reserved for the magic cookie.
+    Thus: as long as these bytes ARE NOT set to the magic cookie you are signaling
+    your desire to use RFC 3489 capabilities.

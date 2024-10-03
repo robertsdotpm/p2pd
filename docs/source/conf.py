@@ -7,7 +7,7 @@ copyright = '2023'
 author = 'Matthew Roberts'
 
 release = '0.1'
-version = '0.1.0'
+version = '3.0.0'
 
 # -- General configuration
 

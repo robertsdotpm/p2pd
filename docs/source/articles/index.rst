@@ -5,4 +5,5 @@ Knowledge articles
     running_examples
     problems
     how
+    nat_classification
     future_work

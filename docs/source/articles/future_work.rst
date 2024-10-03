@@ -7,9 +7,7 @@ Network changes
 Most production software has a way to detect network changes. Events like
 disconnects, IP changes, gateway changes, or default NIC changes-- make the program
 more robust. I'd like to eventually have code to detect these changes for all
-major operating systems. Then give pipes -- the ability to add handlers 
-for such events. This would make it very easy to engineer reliable
-networking software.
+major operating systems. Then give pipes handlers for such events.
 
 Firewall bypass
 -----------------
@@ -18,8 +16,7 @@ Windows-based systems include firewalls that will interfere with many programs.
 Mac OS X has similar security measures. A user without much experience
 may not know what to do. It would be a good idea to automatically setup rules
 to allow P2PD to use the Internet on various platforms.
-I'd also like to put some work into packaging in the future
-so that this software is as easy to use as possible.
+I'd also like to put some work into packaging in the future.
 
 Pushing sockets
 ----------------

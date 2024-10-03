@@ -1,0 +1,6 @@
+name,local port equal to,mapping equal to,delta value
+equal,any,local_port,NA
+preserving,first_local + n,first_mapped + n,NA
+independent,any,last_mapped + delta,common = +1
+dependent,last_local + 1,last_mapped + delta,common = +1
+random,any,random,NA
