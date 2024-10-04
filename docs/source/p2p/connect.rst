@@ -82,6 +82,8 @@ a multitude of NATs and port prediction strategies.
 
 ----
 
+.. _connect-turn-relaying:
+
 4. TURN Relaying
 ------------------
 

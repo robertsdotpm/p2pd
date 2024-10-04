@@ -90,9 +90,10 @@ class DestTup():
         return [self.af]
 
 class Address():
-    def __init__(self, host, port, conf=NET_CONF):
+    def __init__(self, host, port, nic=None, conf=NET_CONF):
         self.host = host
         self.port = port
+        self.nic = nic
         self.conf = conf
         self.IP6 = self.IP4 = None
         self.v6_ipr = self.v4_ipr = None
@@ -131,6 +132,11 @@ class Address():
             # Then it's an IP.
             ipr = IPRange(host)
             ipr.is_loopback = False
+
+            # Set route from NIC.
+            if self.nic is not None:
+                if route is None:
+                    route = self.nic.route()
 
             # Used to patch IPv6 private IPs.
             if route is not None:
@@ -180,6 +186,7 @@ class Address():
                 await self.res(route=route, host=ip)
 
         self.resolved = True
+        return self
 
     def __await__(self):
         return self.res().__await__()

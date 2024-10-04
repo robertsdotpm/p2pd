@@ -4,7 +4,7 @@ TURN_OFFSET = 0
 
 async def example():
     # Network interface details.
-    i = await Interface().start()
+    i = await Interface()
     r = await i.route().bind()
     #
     # Address of a TURN server.

@@ -56,6 +56,11 @@ from .route_defs import Route
 class STUNClient():
     def __init__(self, af, dest, nic, proto=UDP, mode=RFC3489, conf=NET_CONF):
         self.dest = dest
+        if isinstance(dest, Address):
+            dest = dest.select_ip(af)
+        if isinstance(dest, DestTup):
+            self.dest = dest.tup
+
         self.interface = nic
         self.af = af
         self.proto = proto

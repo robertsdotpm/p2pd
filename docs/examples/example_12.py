@@ -1,19 +1,23 @@
 from p2pd import *
 
+# NOTE: Servers may change IPs!
+# Try use IP4 for af with another IP if it doesn't work.
 async def example():
-    i = await Interface()
-    nat = await i.load_nat()
-    print(i)
-    #
-    # Test echo server with AF.
-    af = i.supported()[0]
-    stun_client = (await get_stun_clients(af, 1, i, TCP))[0]
-    wan_ip = await stun_client.get_wan_ip()
-    ret = await stun_client.get_mapping()
+    # Load default interface.
+    nic = await Interface()
+    dest = await Address("stun.hot-chilli.net", 3478, nic)
+
+    # Use the first address family support for your NIC.
+    af = nic.supported()[0]
+
+    # Load STUN client.
+    client = STUNClient(af, dest, nic, proto=UDP, mode=RFC3489)
+
+    # Make some BIND requests.
+    wan_ip = await client.get_wan_ip()
+    ret = await client.get_mapping()
     print(wan_ip)
     print(ret)
-    pipe = ret[-1]
-    await pipe.close()
 
 if __name__ == '__main__':
     async_test(example)
