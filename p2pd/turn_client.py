@@ -227,6 +227,11 @@ class TURNClient(PipeEvents):
 
         return self
 
+    async def get_tups(self):
+        client_tup = await self.client_tup_future
+        relay_tup = await self.relay_tup_future
+        return client_tup, relay_tup
+
     def __await__(self):
         return self.start().__await__()
 
@@ -321,7 +326,7 @@ class TURNClient(PipeEvents):
         )
         self.tasks.append(task)
 
-    async def recv(self, sub=None, timeout=2):
+    async def recv(self, sub=SUB_ALL, timeout=2):
         # Build a sub from the first accepted peer.
         if sub == SUB_ALL:
             sub = None

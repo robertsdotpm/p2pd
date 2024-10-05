@@ -6,13 +6,10 @@ from .ip_range import *
 
 def tup_to_sub(dest_tup):
     dest_tup = client_tup_norm(dest_tup)
-    return [
+    return (
         b"", # Any message.
-        re.escape(b'%s:%d' % ( # Specific IP:port.
-            to_b(dest_tup[0]), 
-            dest_tup[1]
-        ))
-    ]
+        dest_tup
+    )
 
 def norm_client_tup(client_tup):
     ip = ip_norm(client_tup[0])
@@ -66,7 +63,7 @@ class PipeClient(ACKUDP):
 
     def hash_sub(self, sub):
         h = hash(sub[0])
-        if len(sub[1]):
+        if sub[1] is not None:
             client_tup_str = f"{sub[1][0]}:{sub[1][1]}"
             h += hash(client_tup_str)
 
@@ -77,7 +74,8 @@ class PipeClient(ACKUDP):
     # optional: 3rd field in sub = example match
     def subscribe(self, sub, handler=None):
         b_msg_p, client_tup = sub
-        if len(client_tup):
+        if client_tup is not None:
+            assert(isinstance(client_tup[1], int))
             client_tup = norm_client_tup(client_tup)
             sub = (b_msg_p, client_tup)
 
@@ -134,8 +132,9 @@ class PipeClient(ACKUDP):
             b_msg_p, m_client_tup = sub[:2]
 
             # Check client_addr matches their host pattern.
-            if len(m_client_tup):
+            if m_client_tup is not None:
                 # Also check the source port.
+                assert(isinstance(m_client_tup[1], int))
                 if m_client_tup[1]:
                     if m_client_tup != client_tup:
                         continue
@@ -174,7 +173,8 @@ class PipeClient(ACKUDP):
     async def recv(self, sub=SUB_ALL, timeout=2, full=False):
         recv_timeout = timeout or self.conf["recv_timeout"]
         msg_p, addr_p = sub
-        if len(addr_p):
+        if addr_p is not None:
+            assert(isinstance(addr_p[1], int))
             addr_p = client_tup_norm(addr_p)
             sub = (msg_p, addr_p)
 

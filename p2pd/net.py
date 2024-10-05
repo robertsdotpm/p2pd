@@ -144,7 +144,7 @@ IP_PUBLIC = 4
 IP_APPEND = 5
 IP_BIND_TUP = 6
 NOT_WINDOWS = platform.system() != "Windows"
-SUB_ALL = [b"", b""]
+SUB_ALL = [None, None]
 
 # Fine tune various network settings.
 NET_CONF = {
