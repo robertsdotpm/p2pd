@@ -8,7 +8,7 @@ are very important [for peer-to-peer networking] because they allow for
 the determination of any NATs used by a home router.
 
 There are many public STUN servers that can be used for basic functionality.
-P2PD uses STUN to build route pools and NAT information for interfaces.
+P2PD uses STUN to determine WAN IPs, NAT details, and port mappings.
 Here is how to use the STUN client.
 
 .. literalinclude:: ../../examples/example_12.py
@@ -28,12 +28,6 @@ from a different IP or port. People writing STUN software should know about this
 It's not just about having the right protocol messages. Many public STUN
 servers will only support more recent versions of the protocol so that if you're
 not sending the magic cookie they won't even reply.
-
-Now, if you know about this you'll be able to write STUN software that can correctly
-classify what versions of the protocol they support and optimize how many servers
-your software can support. This is something I've had to do with P2PD and the
-p2pd/scripts folder has some code in there for how I did that. Bellow are the
-key takeaways from the RFC changes.
 
 .. csv-table::
     :file: ../../diagrams/stun_rfcs.csv
