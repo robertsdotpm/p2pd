@@ -199,7 +199,20 @@ class Address():
 
         return DestTup(af, ip, self.port, ipr)
 
-
+async def resolv_dest(af, dest, nic):
+    if isinstance(dest, DestTup):
+        return dest.tup
+    
+    if isinstance(dest, tuple):
+        try:
+            # An IP -- already resolved.
+            IPRange(dest[0], cidr=af_to_cidr(af))
+            return dest
+        except:
+            dest = await Address(*dest, nic)
+    
+    if isinstance(dest, Address):
+        return dest.select_ip(af).tup
 
 async def workstation():
     host = "google.com"

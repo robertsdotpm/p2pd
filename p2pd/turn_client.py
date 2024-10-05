@@ -37,13 +37,13 @@ from .pipe_utils import *
 class TURNClient(PipeEvents):
     def __init__(
         self,
-        route: any,
-        turn_addr: Address,
-        turn_user: bytes = None, # turn username
-        turn_pw: bytes = None, # turn password
-        turn_realm: bytes = None,
-        msg_cb: any = None,
-        conf: any = NET_CONF
+        af,
+        dest,
+        nic,
+        auth=(None, None),
+        realm=None,
+        msg_cb=None,
+        conf=NET_CONF
     ):
         # Can received relay messages have a blank header?
         self.blank_rudp_headers = False
@@ -51,15 +51,16 @@ class TURNClient(PipeEvents):
         # Remote address for the TURN server.
         # Username and password are optional.
         self.requires_auth = True
-        self.turn_addr = turn_addr
-        self.turn_user = to_b(turn_user)
-        self.turn_pw = to_b(turn_pw)
+        self.af = af
+        self.dest = dest
+        self.turn_user = to_b(auth[0])
+        self.turn_pw = to_b(auth[1])
         self.msg_cb = msg_cb
 
         # Set from attributes in replies.
-        self.realm = turn_realm
-        if turn_realm is not None:
-            self.realm = to_b(turn_realm)
+        self.realm = realm
+        if realm is not None:
+            self.realm = to_b(realm)
         """
         if turn_realm is None:
             self.realm = turn_addr.host
@@ -70,7 +71,7 @@ class TURNClient(PipeEvents):
         # The main UDP endpoint used to talk to the client.
         # route = NIC bind details to use for the pipe.
         self.turn_pipe = None
-        self.route = route
+        self.nic = nic
         self.conf = conf
 
         # Special attribute set to indicate expiry time of an allocation.
@@ -112,8 +113,8 @@ class TURNClient(PipeEvents):
 
     def get_turn_server(self, af=None):
         return {
-            "host": self.turn_addr[0],
-            "port": self.turn_addr[1],
+            "host": self.dest[0],
+            "port": self.dest[1],
             "afs": [af],
             "user": self.turn_user,
             "pass": self.turn_pw,
@@ -143,10 +144,12 @@ class TURNClient(PipeEvents):
             self.auth_event.set()
 
         # Connect to TURN server over UDP.
+        self.dest = await resolv_dest(self.af, self.dest, self.nic)
+        self.route = await self.nic.route(self.af).bind()
         self.turn_pipe = await pipe_open(
             route=self.route,
             proto=UDP,
-            dest=self.turn_addr
+            dest=self.dest
         )
         log(f"> Turn socket = {self.turn_pipe.sock}")
 
@@ -222,7 +225,7 @@ class TURNClient(PipeEvents):
             )
             self.tasks.append(self.allocate_refresher_task)
 
-        return relay_tup
+        return self
 
     def __await__(self):
         return self.start().__await__()
@@ -233,7 +236,7 @@ class TURNClient(PipeEvents):
         # Overwrite current state.
         self.__init__(
             route=self.route,
-            turn_addr=self.turn_addr,
+            turn_addr=self.dest,
             turn_user=self.turn_user,
             turn_pw=self.turn_pw,
             turn_realm=self.realm,
@@ -294,11 +297,11 @@ class TURNClient(PipeEvents):
         # Sanity checking on the dest IP.
         # If dest IP doesn't match this TURN server IP
         # it means maybe the wrong relay IP is used.
-        if dest_tup[0] != self.turn_addr[0]:
+        if dest_tup[0] != self.dest[0]:
             error = f"""
             The destination IP for TURN.send 
             is different to the IP address of the current 
-            server {dest_tup[0]} !+ {self.turn_addr[0]}
+            server {dest_tup[0]} !+ {self.dest[0]}
             this could indicate that an incorrect 
             address is being used for the send call 
             (like a peer address) or it may mean 
@@ -341,7 +344,7 @@ class TURNClient(PipeEvents):
                 buf.write_hmac(self.key)
 
         buf = buf.pack()
-        await self.turn_pipe.send(buf, self.turn_addr)
+        await self.turn_pipe.send(buf, self.dest)
 
     # Record TURN protocol messages by TXID.
     # Events are triggered on receipt.
@@ -379,11 +382,11 @@ class TURNClient(PipeEvents):
     # Allows a peer to send messages to our relay address.
     async def accept_peer(self, peer_tup, peer_relay_tup):
         # Basic validation for logging.
-        if peer_relay_tup[0] != self.turn_addr[0]:
+        if peer_relay_tup[0] != self.dest[0]:
             error = f"""
             TURN accept peer has a relay tup different 
             to the IP of the current server 
-            {peer_relay_tup[0]} != {self.turn_addr[0]}
+            {peer_relay_tup[0]} != {self.dest[0]}
             this may indicate an error or mean different 
             TURN servers are being mixed.
             """

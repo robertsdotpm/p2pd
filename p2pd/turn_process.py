@@ -97,12 +97,12 @@ def turn_proc_attrs(af, attr_code, attr_data, msg, self):
             self.relay_event.set()
 
             # Validate relay tup IP.
-            if self.relay_tup[0] != self.turn_addr[0]:
+            if self.relay_tup[0] != self.dest[0]:
                 error = f"""
                 Our XOR relay tup IP was decoded as 
                 {self.relay_tup[0]} which is different 
                 from the address of the TURN server 
-                {self.turn_addr[0]} which may 
+                {self.dest[0]} which may 
                 indicate a XOR decoding error.
                 """
                 log(error)

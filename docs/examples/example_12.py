@@ -5,7 +5,7 @@ from p2pd import *
 async def example():
     # Load default interface.
     nic = await Interface()
-    dest = await Address("stun.hot-chilli.net", 3478, nic)
+    dest = ("stun.hot-chilli.net", 3478)
 
     # Use the first address family support for your NIC.
     af = nic.supported()[0]
