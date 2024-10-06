@@ -350,6 +350,8 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
                     # Some security options are disabled for simplicity.
                     # TODO: explore this more.
                     ssl_context = ssl.create_default_context()
+                    #ssl_context.set_ciphers('DEFAULT@SECLEVEL=1')
+                    #ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
                     ssl_context.check_hostname = False 
                     ssl_context.verify_mode = ssl.CERT_NONE
                     server_hostname = ""

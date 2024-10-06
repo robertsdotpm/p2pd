@@ -257,6 +257,7 @@ async def do_web_req(addr, http_buf, do_close, route, conf=NET_CONF):
     log(f"{addr}")
 
     # Open TCP connection to HTTP server.
+    p = None
     try:
         p = await pipe_open(
             route=route,
@@ -360,8 +361,10 @@ class WebCurl():
             hdrs.append([b"Content-Type", b"application/json"])
 
         # Build a HTTP request to send to server.
+        af = self.route.af
+        nic = self.route.interface
         req_buf = http_req_buf(
-            af=self.route.af,
+            af=af,
             host=self.addr[0],
             path=path,
             method=method,
@@ -380,9 +383,10 @@ class WebCurl():
 
         # Make the HTTP request to the server.
         route = await self.route.bind()
+        addr = await resolv_dest(af, self.addr, nic)
         pipe, info = await do_web_req(
             route=route,
-            addr=self.addr, 
+            addr=addr, 
             http_buf=req_buf,
             do_close=self.do_close,
             conf=conf

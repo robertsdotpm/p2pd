@@ -253,6 +253,8 @@ class ToxiClient():
     def __init__(self, addr, route, conf=NET_CONF):
         self.addr = addr
         self.route = route
+        self.af = self.route.af
+        self.nic = self.route.interface
         self.conf = conf
         self.tunnels = []
 
@@ -265,6 +267,9 @@ class ToxiClient():
             raise Exception("Failed to connect to toxid.")
         
         return self
+    
+    def __await__(self):
+        return self.start().__await__()
 
     async def version(self):
         resp = await self.curl.vars().get("/version")
@@ -273,6 +278,7 @@ class ToxiClient():
 
     async def new_tunnel(self, addr, name=None, proto=TCP):
         name = name or to_s(rand_plain(10))
+        addr = await resolv_dest(self.af, addr, self.nic)
         listen_ip = self.addr[0]
         json_body = {
             "name": name,
