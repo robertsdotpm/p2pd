@@ -1,22 +1,18 @@
 Lightweight web framework
 ===========================
 
-If you're a Python developer you may have used popular web frameworks like Flask or Django.
-These projects can be complex and require many third-party dependencies to run. What's interesting about Python is that it's
-standard library already includes everything you need for a web framework.
-It's just not that well documented.
-
-For example: there's code that will process a HTTP request, parse URLs, and more.
-What I've done is wrap these components in an interface similar to flask with P2PD
-for the networking. The result is a light-weight, async web framework, that properly
-supports multiple interfaces, address families, and transports.
+If you're a Python developer you may have used frameworks like Flask before.
+These projects are useful for web developers but usually require many
+dependencies to use. What's interesting about Python is it's standard library
+includes everything for a web framework already. What I've done is wrap such
+components in a flask-like interface -- using P2PD for the networking. 
 
 .. literalinclude:: ../../examples/example_16.py
     :language: python3
 
-As you can see functions in the web framework are decorated with a REST method.
-They use async await, a pipe back to the client, and introduce a v parameter --
-with access to relevant HTTP information. The structure of v looks like this:
+Functions in the web framework are decorated with a REST method.
+Their parameters take a pipe back to the client and introduce a v parameter. The
+structure of v looks like this:
 
 .. code-block:: python
 
@@ -38,12 +34,10 @@ with access to relevant HTTP information. The structure of v looks like this:
         'body': b''
     }
 
-When you define your REST methods you can have a list of named arguments.
-These highlight what is added by name in a URL. For example: '/cat/meow' could
+When you define REST methods you can have a list of named arguments.
+These highlight what is named in the URL. For example: '/cat/meow' might
 be highlighted with @RESTD.GET(["cat"]) and 'name' would be {'cat': 'meow'}.
-Values in the URL path that aren't matched by named paths are added
-to an indexed dictionary (at keys 0 ... to len - 1.)
+Unnamed values are indexed by their position.
 
 The field 'body' is the binary content of a POST request. While req is a class
-that has processed the HTTP request of the client. There's fields are useful 
-for debugging server code.
+with the processed HTTP request. These fields are useful for debugging.

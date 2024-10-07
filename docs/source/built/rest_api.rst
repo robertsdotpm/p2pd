@@ -7,7 +7,7 @@ Starting the server
 Start the REST API server::
    python3 -m p2pd.rest_api
 
-Running this command will start the server on http://127.0.0.1:12333/
+Running this command will start the server on localhost:12333
 The server has no password and will only allow requests from
 an 'origin' of 127.0.0.1 or null. The null origin occurs when
 a HTML document is opened locally. If a website you visit tries
@@ -19,9 +19,8 @@ Making your first request
 
 To check the server you can visit the version resource.
 
-.. code-block:: shell
-
-   curl http://localhost:12333/version
+.. parsed-literal:: 
+   curl `<http://localhost:12333/version>`_
 
 You should see a JSON response.
 
@@ -30,7 +29,7 @@ You should see a JSON response.
    {
       "author": "Matthew@Roberts.PM",
       "title": "P2PD",
-      "version": "0.1.0"
+      "version": "3.0.0"
    }
 
 Looking up your peer's address
@@ -39,9 +38,8 @@ Looking up your peer's address
 You'll want to know how to get your peers address. The address is
 used to try connect to a peer.
 
-.. code-block:: shell
-
-   curl http://localhost:12333/p2p/addr
+.. parsed-literal:: 
+   curl `<http://localhost:12333/addr>`_ 
 
 Sample JSON response.
 
@@ -59,18 +57,16 @@ Peer addresses will be passed to the 'open' resource. A number of strategies
 are used to try establish connections. The order of success will define
 how fast connections can be opened.
 
-.. code-block:: shell
-
-   curl "http://localhost:12333/p2p/open/name_for_new_con/addr_of_node"
+.. parsed-literal:: 
+   curl `<http://localhost:12333/open/name_for_new_con/addr_of_node>`_
 
 Please note how the connection is given a name. The name is used to identify
 connections rather than using IDs. You will need to remember names
 for later API calls. Should you wish to test P2P connections you can
 also use 'self' to connect to yourself.
 
-.. code-block:: shell
-
-   curl http://localhost:12333/p2p/open/con_name/self
+.. parsed-literal:: 
+   curl `<http://localhost:12333/open/con_name/self>`_
 
 The JSON response shows information on the new connection.
 
@@ -111,9 +107,8 @@ The JSON response shows information on the new connection.
       "strategy": "direct connect"
    }
 
-You can see the information includes details like the file descriptor
-number of the socket, your external address for the socket, and
-the technique that worked to establish the connection.
+You can see the information includes details like the number of the socket, your external address, the network interface the connection
+belongs to, and so on.
 
 Text-based send and receive
 -----------------------------
@@ -125,12 +120,12 @@ but this is a good starting point.
 
 **Sending text:**
 
-The node server has a built-in echo server. We'll be using this
-protocol to test out some commands.
+The node server has a feature for echoing back a fixed string
+if the right sequence of bytes occur. We'll be using this
+feature to test out some commands.
 
-.. code-block:: shell
-
-   curl "http://localhost:12333/p2p/send/con_name/ECHO%20hello,%20world!"
+.. parsed-literal:: 
+   curl `<http://localhost:12333/send/con_name/long_p2pd_test_string_abcd123>`_
 
 .. code-block:: javascript
 
@@ -142,14 +137,13 @@ protocol to test out some commands.
 
 **Receiving text:**
 
-.. code-block:: shell
-
-   curl "http://localhost:12333/p2p/recv/con_name"
+.. parsed-literal:: 
+   curl `<http://localhost:12333/recv/con_name>`_
 
 .. code-block:: javascript
 
    {
-      "data": "hello, world!",
+      "data": "got p2pd test string",
       "error": 0,
       "client_tup": [
          "192.168.21.200",
@@ -160,40 +154,44 @@ protocol to test out some commands.
 Binary send and receive
 -------------------------
 
-So far all API methods have used the GET method. GET is ideal for regular,
-text-based data where you don't have to worry too much about encoding.
-But if you want a more flexible approach that can also deal with binary
-data it's necessary to visit the POST method. These next examples
-will be written in Javascript using the Jquery library.
+So far all API methods have used HTTP GET. GET is ideal for regular,
+text-based data where you don't have to worry bout encoding.
+But if you want more flexibility and want to support binary
+data it's necessary to use the POST method. The following JS
+examples require jQuery.
+
+.. code-block:: shell
+
+   curl -H 'Content-Type: application/octet-stream' -d 'long_p2pd_test_string_abcd123' -X POST "http://localhost:12333/binary/con_name"
 
 .. code-block:: javascript
 
    async function binary_push()
    {
-      // Binary data to send -- outside printable ASCII.
-      // Will send an echo request to the Node server.
-      var x = new Uint8Array(9);
-      x[0] = 69; // 'E'
-      x[1] = 67; // 'C'
-      x[2] = 72; // 'H'
-      x[3] = 79; // 'O'
-      x[4] = 32; // ' '
-      x[5] = 200; // ... binary codes,
-      x[6] = 201;
-      x[7] = 202;
-      x[8] = 203;
+      // Binary data to send (this could represent non-ASCII.)
+      // The encoder is used to covert it into uint8s.
+      var enc = new TextEncoder();
+      var enc_str = enc.encode("long_p2pd_test_string_abcd123");
+
+      // Copy encoded string into Uint8 buffer.
+      // Thank you chat-gpt. Never knew how to do this before.
+      var buf = new Uint8Array(29);
+      buf.set(enc_str);
 
       // Send as encoded binary data using POST to API.
       // This demonstrates that binary POST works.
-      var url = 'http://localhost/p2p/binary/con_name';
+      var url = 'http://localhost:12333/binary/con_name';
       var out = await $.ajax({
          url: url,
          type: "POST",
-         data: x,    
+         data: buf,    
          contentType: "application/octet-stream",
          dataType: "text",
          processData: false
       });
+
+      // Show the output in the console.
+      console.log(out);
    }
 
 .. code-block:: javascript
@@ -201,18 +199,21 @@ will be written in Javascript using the Jquery library.
    {
       "error": 0,
       "name": "con_name",
-      "sent": 9
+      "sent": 29
    }
 
 Here's what it looks like to receive the binary back again.
+
+.. parsed-literal:: 
+   curl `<http://localhost:12333/binary/con_name>`_
 
 .. code-block:: javascript
 
    async function binary_pull()
    {
       // Receive back binary buffer.
-      // Node server should echo back the last 4 bytes.
-      var url = 'http://localhost/p2p/binary/con_name';
+      // Node server should send back a test string.
+      var url = 'http://localhost:12333/binary/con_name';
       out = await $.ajax({
          url: url,
          type: 'GET',
@@ -230,10 +231,6 @@ Here's what it looks like to receive the binary back again.
       out_bytes = new Uint8Array(mem_view);
    }
 
-By the way: these examples use el8 async await syntax. This avoids callback
-hell which is low IQ. If you don't understand async-style code it's time
-for you to learn! All code in P2PD is async.
-
 Bidirectional relay pipes
 --------------------------
 
@@ -241,7 +238,7 @@ Theses simple send/receive calls are examples of push and pull APIs. In
 other words -- its up to you to check whether messages are available.
 Such an approach might be fine for simple scripts but it's a
 little inefficient having to constantly check or 'poll' for new
-messages. Fortunately, P2PD has you covered. There is a special API
+messages. For the REST API there is one other option: a special API
 method that converts a HTTP connection into a two-way relay.
 
 What I mean by this is if you make a HTTP request to a named
@@ -250,25 +247,17 @@ to the named connection and back again. This is very useful because
 it allows you to write asynchronous code that only has to handle data
 when it's available. Almost like a regular connection you made yourself.
 
-The catch is I can't write the code for you exactly as
-I don't know what language you'll be using with the API -- but
-so long as you know how to make a connection and send a HTTP request
-the process is quite straight-forwards.
-
-1. Make a **SOCK_STREAM** socket. Choose **AF_INET** for the address
-   family.
+1. Make a **SOCK_STREAM** socket.
 2. Connect the socket to **localhost** on port **12333**.
-3. Send a HTTP GET request to /p2p/pipe/con_name. Data to send:
+3. Send a HTTP GET request to /tunnel/con_name. Data to send:
 
 .. code-block:: text
 
-   GET /p2p/pipe/con_name HTTP/1.1\r\n
+   GET /tunnel/con_name HTTP/1.1\r\n
    Origin: null\r\n\r\n
 
 The connection is closed on error. You can test it works by
-sending 'ECHO hello world' down the connection and checking for
-the response. As this is a relay between an associated connection
-to a peer's node server which implements echo.
+sending 'long_p2pd_test_string_abcd123' down the connection and checking for the test string response. What results is a relay between an associated connection to a peer's node server.
 
 Publish-subscribe
 ------------------

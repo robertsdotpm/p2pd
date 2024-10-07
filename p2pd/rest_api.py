@@ -8,6 +8,8 @@ from .http_server_lib import *
 
 asyncio.set_event_loop_policy(SelectorEventPolicy())
 
+REST_API_PORT = 12333
+
 def con_info(self, con_name, con):
     # A socket might not be connected.
     try:
@@ -71,7 +73,7 @@ class P2PDServer(RESTD):
         return {
             "title": "P2PD",
             "author": "Matthew@Roberts.PM", 
-            "version": "0.1.0",
+            "version": "3.0.0",
             "error": 0
         }
     
@@ -89,7 +91,7 @@ class P2PDServer(RESTD):
                 "msg": "unable to convert ifs to dict."
             }
     
-    @RESTD.GET(["p2p"], ["addr"])
+    @RESTD.GET(["addr"])
     async def get_peer_addr(self, v, pipe):
         if self.node.addr_bytes is None:
             return {
@@ -102,7 +104,7 @@ class P2PDServer(RESTD):
                 "error": 0
             }
     
-    @RESTD.GET(["p2p"], ["open"])
+    @RESTD.GET(["open"])
     async def open_p2p_pipe(self, v, pipe):
         con_name = v["name"]["open"]
         dest_addr = v["pos"][0]
@@ -163,7 +165,7 @@ class P2PDServer(RESTD):
                 "error": 3
             }
 
-    @RESTD.GET(["p2p"], ["con"])
+    @RESTD.GET(["con"])
     async def get_con_info(self, v, pipe):
         con_name = v["name"]["con"]
         if con_name not in self.cons:
@@ -176,7 +178,7 @@ class P2PDServer(RESTD):
         con = self.cons[con_name]
         return con_info(self, con_name, con)
     
-    @RESTD.GET(["p2p"], ["send"])
+    @RESTD.GET(["send"])
     async def pipe_send_text(self, v, pipe):
         con_name = v["name"]["send"]
         en_msg = urldecode(v["pos"][0])
@@ -204,7 +206,7 @@ class P2PDServer(RESTD):
             "error": 0
         }
     
-    @RESTD.GET(["p2p"], ["recv"])
+    @RESTD.GET(["recv"])
     async def pipe_recv_text(self, v, pipe):
         con_name = v["name"]["recv"]
 
@@ -230,7 +232,7 @@ class P2PDServer(RESTD):
                 "error": 5
             }
 
-    @RESTD.GET(["p2p"], ["close"])
+    @RESTD.GET(["close"])
     async def pipe_close(self, v, pipe):
         con_name = v["name"]["close"]
 
@@ -244,7 +246,7 @@ class P2PDServer(RESTD):
             "error": 0
         }
     
-    @RESTD.POST(["p2p"], ["binary"])
+    @RESTD.POST(["binary"])
     async def pipe_send_binary(self, v, pipe):
         con_name = v["name"]["binary"]
 
@@ -266,7 +268,7 @@ class P2PDServer(RESTD):
             "error": 0
         }
 
-    @RESTD.GET(["p2p"], ["binary"])
+    @RESTD.GET(["binary"])
     async def pipe_get_binary(self, v, pipe):
         con_name = v["name"]["binary"]
 
@@ -285,9 +287,9 @@ class P2PDServer(RESTD):
             }
 
         # Send it if any.
-        return out
+        return out[1]
 
-    @RESTD.GET(["p2p"], ["pipe"])
+    @RESTD.GET(["tunnel"])
     async def http_tunnel_trick(self, v, pipe):
         con_name = v["name"]["pipe"]
 
@@ -340,9 +342,9 @@ class P2PDServer(RESTD):
             "unsub": f"{sub}",
             "error": 0
         }
-
+    
 # pragma: no cover
-async def start_p2pd_server(route, ifs=[], enable_upnp=False):
+async def start_p2pd_server(port=REST_API_PORT, ifs=[], enable_upnp=False):
     print("Loading interfaces...")
     print("If you've just connected a new NIC ")
     print("there can be a slight delay until it's online.")
@@ -375,26 +377,17 @@ async def start_p2pd_server(route, ifs=[], enable_upnp=False):
 
     # Start P2PD server.
     p2p_server = P2PDServer(ifs, node)
-    await p2p_server.add_listener(TCP, route)
+    for nic in ifs:
+        await p2p_server.listen_loopback(TCP, port, nic)
 
     # Stop this thread exiting.
     return p2p_server
 
 async def p2pd_workspace():
-    node = await start_p2pd_server(enable_upnp=False)
-
-    return
-
-    i = await Interface()
-    route = await i.route().bind(ips="127.0.0.1", port=8475)
     node = await start_p2pd_server()
-    server = P2PDServer2([i])
-    await server.listen_all([route], [8475], [TCP])
-
+    print(f"http://localhost:{REST_API_PORT}/")
     while 1:
         await asyncio.sleep(1)
 
 if __name__ == "__main__":
-
-
     async_test(p2pd_workspace)
