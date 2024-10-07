@@ -31,7 +31,7 @@ properties like pipe, out, and info - try exploring these fields!
 The HTTP client also supports custom HTTP headers. You can control
 underlying socket parameters with more detail by passing in a custom
 NET_CONFIG dictionary to the get, post, and delete methods. This
-structure is detailed at the bottom here: :doc:`here.<../python/pipes>`
+structure is detailed at the bottom here: :doc:`here.<../general/pipes>`
 
 .. code-block:: python
 
