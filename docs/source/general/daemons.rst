@@ -1,69 +1,44 @@
 Daemons
 ========
 
-In the :doc:`pipes` section I showed some simple examples of how servers
-can be built using the `pipe_open` function. Such an approach is fine if
-you only want to use one protocol or address type. But real-world servers
+In the :doc:`pipes` section I showed some examples of how servers can be built
+using the `pipe_open` function. Such an approach is fine if you only want 
+to use one protocol or address type. But real-world servers
 may need to run on multiple routes, address, and interfaces. The
-Daemon class offers a way to build such servers.
+Daemon class offers some convenience methods for servers.
 
-To use it you sub class it and define your own msg_cb function.
+.. HINT::
+    It's easy to use the Daemon class. Simply inherit from Daemon in a
+    child class. Your clas should have a msg_cb function for incoming messages.
+    The class can store any state you need.
 
-listen_all
------------
+async def add_listener(self, proto, route)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. literalinclude:: ../../examples/example_8.py
-    :language: python3
+Add a new service to the daemon. Proto is TCP or UDP. Route is a Route
+object returned from a route pool or the route function from Interface.
 
-The listen_all method of the Daemon class is as follows.
+async def listen_all(self, proto, port, nic):
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. code-block:: python
+Listen on all addresses on a machine. The need for the NIC parameter is
+as a standard function prototype for consistency. When you listen to
+all addresses the service may be accessible from the Internet
+and will be accessible on the LAN and loopback interface.
 
-    async def listen_all(self, targets, ports, protos, af=AF_ANY, msg_cb=None,  error_on_af=0)
+async def listen_loopback(self, proto, port, nic):
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Targets, ports, and protos are a list. The supported objects that can be used
-as targets are Interfaces and Routes. A range may be given as an entry in
-the ports list by using [start, stop] (inclusive.) The total number of
-servers created will be len(targets) * total_ports * len(protos) * total_afs.
-For example::
+Start listening on the loopback address. Whether it binds to IP4 / IP6
+is based on the supported address families for the NIC you provide.
+This function is useful for creating servers you want to make
+accessible on just that computer. P2PD's own rest_api and toxid
+uses this method.
 
-    targets = [i, r]
-    ports = [10000, [30000, 30100]]
-    protos = [TCP]
-    af = AF_ANY (use all supported address families of the related interface.)
+async def listen_local(self, proto, port, nic):
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Let's assume that i and r use duel-stack interface. The total servers would be
-2 * 101 * 1 * 2 = 404 so it can add up fast if you're not careful. It should
-be noted that any Route objects passed as targets will have their bound
-information ignored if they're already bound. But their NIC IPs and EXT IPs
-will still be used as a template to create routes for the servers
-based on the other parameters used for listen_all.
-
-.. note::
-
-    **IPv6 note**: P2PD has small differences in the way it handles IPv6
-    services compared to IPv4 which would be unexpected without learning
-    about them. In IPv4 to run a server on a network interface that can be reached
-    from the LAN and WAN you simply listen on one of the NICs IPs.
-    In IPv6 it has kind of split up LAN IPs and external IPs into
-    link-local addresses and global-scope addresses, respectively.
-    
-    I wanted the code to work the same with IPv6 so I start with the assumption that users want servers to be reachable internally and externally. Hence I don't just bind to a global-scope address. I also bind to a link-local address. That means that for IPv6 the final number of servers created
-    is multiplied by 2. Maybe this is a bad idea but I think it simplifies
-    a lot of things.
-
-listen_specific
-----------------
-
-The listen_all function is useful for applying the same AFs, protocols, and ports to the entries in the targets list. But sometimes you want to use the targets as-is if they're already 'bound.' Perhaps in the case where they've been specifically set to bind to a loopback adapter or even 'all addresses.'
-
-.. code-block:: python
-
-    async def listen_specific(self, targets, msg_cb=None)
-
-The format of targets here is given as **[[target, protocol], ...]**.
-
-.. literalinclude:: ../../examples/example_9.py
-    :language: python3
-
-The listen_specific code hasn't been tested too much so it's better to use **listen_all**.
+For IPv6 this function listens on a NICs link-local addresses. For
+IPv4 it will listen on the NICs private addresses. For the latter
+-- if there are forwarding rules setup or the node is not behind a
+NAT -- this could mean making the service public. 
