@@ -1,38 +1,34 @@
 Queues
 ========
 
-If you want to use the push and pull APIs over the relay pipes
-there are some additional details that you might find useful. In order
-to support pull API usage the software must be able to save messages.
-It does this by using in memory queues which for now have no set limit.
-What hasn't been mentioned is that these queues are organized around
-subscriptions -- regex patterns that match messages and remote peers.
+If you want to use the push / pull APIs there are some details
+you might find useful. In order to support these APIs the
+software must be able to save messages. It does this using queues.
+Each queue may be indexed by a message regex and a
+optional tuple for a reply address.
 
 These queues only exist when a subscription is made. **By default P2PD
 subscribes to all messages when a destination is provided for a pipe and
-so does the REST API.** This has the special format of a blank message pattern
-and a blank peer address pattern to match everything. The reason why this
-feature exists is because of the way UDP is designed.
+so does the REST API.**
 
-    **(Disclaimer: UDP really sucks.)**
+Why use message subscriptions?
+--------------------------------
 
-You may know that UDP offers no ordered delivery or indeed any
-kind of reliable delivery guarantee at all. In practice this means
-that UDP-focused protocols (like STUN) end up using randomized IDs in
-requests and responses as kind of an asynchronous form of 'ordering.'
-There is also the case that UDP is 'connectionless.' This means that
-you can have a single socket that you can use to send packets
-to multiple destinations.
+You may know already UDP offers no ordered delivery or indeed any
+reliable delivery guarantee at all. What this means is most UDP
+protocols (like STUN) end up using randomized IDs in
+requests / responses as kind of an asynchronous form of 'ordering.'
+There is also the case of UDP being 'connectionless.' This means
+you can have a single socket send packets to many destinations.
 
-What ends up happening is you get back messages [on the same socket] that:
+What ends up happening is you get messages [on the same socket] that:
 
-    1. **... Are from multiple different hosts and or ports.**
-    2. **... Are from multiple different requests.**
+    1. **... Are from different hosts and or ports.**
+    2. **... Match different requests.**
 
-And it's just a mess. So I had the idea of being able to sort messages
-and remote (IP + port) tuples using regex. Such an approach is flexible
-enough for any kind of protocol and is already in use in my STUN client.
-Now here's what that looks like in practice. First for API then Python.
+So I had the idea of being able to sort messages into queues.
+Such an approach is flexible and is already used by my STUN client.
+Here's what that looks like in practice.
 
 Javascript subscription example
 --------------------------------
@@ -43,14 +39,14 @@ Javascript subscription example
     async function p2pd_test(server) 
     {
         // Do these in order to test some P2PD APIs.
-        msg_p = en("[hH]e[l]+o");
-        addr_p = en("[\s\S]+");
+        msg_p = en("test");
+        //addr_p = en("('127.0.0.1', 0)"); 0 == any port.
         var paths = [
             "/version",
-            "/p2p/open/con_name/self",
-            "/p2p/sub/con_name/msg_p/" + msg_p + "addr_p" + addr_p,
-            "/p2p/send/con_name/" + en("ECHO Hello, world!"),
-            "/p2p/recv/con_name/msg_p/" + msg_p + "addr_p" + addr_p,
+            "/open/con_name/self",
+            "/sub/con_name/msg_p/" + msg_p, //+ "addr_p" + addr_p,
+            "/send/con_name/" + en("long_p2pd_test_string_abcd123"),
+            "/recv/con_name/sub_index/", // + "addr_p" + addr_p,
         ];
 
         // Make requests to the API.
@@ -63,6 +59,11 @@ Javascript subscription example
                 type: 'GET',
                 dataType: "text"
             });
+            
+            if(out.hasOwnProperty("index"))
+            {
+                paths[4] += out["index"].toString();
+            }
 
             console.log(out);
         }
@@ -74,7 +75,7 @@ Javascript subscription example
     {
         "error": 0,
         "name": "con_name",
-        "sub": "[b'[hH]e[l]+o', b'[\s\S]+']"
+        "sub": "[b'[hH]e[l]+o', None]"
     }
 
     // Send data.

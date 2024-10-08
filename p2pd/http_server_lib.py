@@ -59,6 +59,11 @@ def get_params(field_names, url_path):
     # Return it for use.
     return params
 
+
+#out = get_params(["sub", "msg_p", "addr_p"], "/sub/con_name/msg_p/test")
+#print(out)
+#exit(0) 
+
 def api_closure(url_path):
     # Fields list names a p result and is in a fixed order.
     # Get names matches named values and is in a variable order.
@@ -231,7 +236,7 @@ def api_route_closure(url_path):
             for i in range(len(schemes)):
                 # Use regex to check value.
                 scheme = schemes[i]
-                if len(schemes) == 3:
+                if len(scheme) == 3:
                     if scheme[2] == '*':
                         return (i, v, True)
                     

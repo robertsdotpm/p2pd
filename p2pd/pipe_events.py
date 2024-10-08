@@ -454,12 +454,10 @@ class PipeEvents(BaseACKProto):
     # Sync subscribe to a message.
     # Easy way to get a message from sync code too.
     def subscribe(self, sub=SUB_ALL, handler=None):
-        self.stream.subscribe(sub, handler)
-        return self
+        return self.stream.subscribe(sub, handler)
 
     def unsubscribe(self, sub):
-        self.stream.unsubscribe(sub)
-        return self
+        return self.stream.unsubscribe(sub)
 
     # Echo client just for testing.
     async def echo(self, msg, dest_tup):

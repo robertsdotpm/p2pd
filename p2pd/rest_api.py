@@ -46,16 +46,38 @@ def con_info(self, con_name, con):
         }
     }
 
+def get_opt_param(v, name):
+    for index in range(0, len(v["pos"])):
+        found_name = v["pos"][index]
+        if found_name != name:
+            continue
+
+        if (index + 1) not in v["pos"]:
+            break
+
+        return v["pos"][index + 1]
+
 def get_sub_params(v):
     # Messages are put into buckets.
     sub = SUB_ALL[:]
-    if hasattr(v["name"], "msg_p"):
+    if "msg_p" in v["name"]:
         sub[0] = v["name"]["msg_p"]
-    if hasattr(v["name"], "addr_p"):
-        sub[1] = v["name"]["addr_p"]
+    
+    addr = get_opt_param(v, "addr_p")
+    if addr is not None:
+        # Matches ('ip', port)
+        p = "^[\(\[] *['\"]{1}[0-9.:%]+['\"]"
+        p += "{1}| *[,] *[0-9]+ *[\)\]]$"
+        if re.match(p, addr) == None:
+            addr = "invalid addr tuple"
+        else:
+            addr = eval(addr)
+    
+        sub[1] = addr
+
 
     timeout = 2
-    if hasattr(v["name"], "timeout"):
+    if "timeout" in v["name"]:
         timeout = to_n(v["name"]["timeout"])
 
     return sub, timeout
@@ -165,7 +187,7 @@ class P2PDServer(RESTD):
                 "error": 3
             }
 
-    @RESTD.GET(["con"])
+    @RESTD.GET(["info"])
     async def get_con_info(self, v, pipe):
         con_name = v["name"]["con"]
         if con_name not in self.cons:
@@ -209,11 +231,19 @@ class P2PDServer(RESTD):
     @RESTD.GET(["recv"])
     async def pipe_recv_text(self, v, pipe):
         con_name = v["name"]["recv"]
+        sub_index = get_opt_param(v, "index")
 
         # Get something from recv buffer.
         con = self.cons[con_name]
+        if sub_index:
+            sub = con.subs[sub_index]
+        else:
+            sub = SUB_ALL
+
+        print(sub)
+
         try:
-            sub, timeout = get_sub_params(v)
+            _, timeout = get_sub_params(v)
             out = await con.recv(sub, timeout=timeout, full=True)
             if out is None:
                 return {
@@ -311,25 +341,28 @@ class P2PDServer(RESTD):
         # con <-----> pipe 
         return None
 
-    @RESTD.GET(["p2p"], ["sub"])
+    @RESTD.GET(["sub"], ["msg_p"])
     async def pipe_do_sub(self, v, pipe):
         con_name = v["name"]["sub"]
+        print("in sub")
+        print(v)
 
         # Send binary data from octet-stream POST.
         con = self.cons[con_name]
 
         # Messages are put into buckets.
         sub, _ = get_sub_params(v)
-        con.subscribe(sub)
+        sub_index = con.subscribe(sub)
 
         # Return results.
         return {
             "name": con_name,
             "sub": f"{sub}",
+            "index": sub_index,
             "error": 0
         }
 
-    @RESTD.DELETE(["p2p"], ["sub"])
+    @RESTD.DELETE(["sub"])
     async def pipe_do_unsub(self, v, pipe):
         con_name = v["name"]["sub"]
         con = self.cons[con_name]

@@ -87,7 +87,7 @@ class PipeClient(ACKUDP):
                 handler
             ]
 
-        return self
+        return offset
 
     # Remove a subscription.
     def unsubscribe(self, sub):
