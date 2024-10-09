@@ -1,6 +1,8 @@
 NAT prediction
 =========================
 
+
+
 .. image:: ../../diagrams/nat_workings.png
     :alt: How a NAT works on the socket level
 

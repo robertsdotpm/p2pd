@@ -44,9 +44,9 @@ Javascript subscription example
         var paths = [
             "/version",
             "/open/con_name/self",
-            "/sub/con_name/msg_p/" + msg_p, //+ "addr_p" + addr_p,
+            "/sub/con_name/name/sub_name/msg_p/" + msg_p, //+ "addr_p" + addr_p,
             "/send/con_name/" + en("long_p2pd_test_string_abcd123"),
-            "/recv/con_name/sub_index/", // + "addr_p" + addr_p,
+            "/recv/con_name/name/sub_name", // + "addr_p" + addr_p,
         ];
 
         // Make requests to the API.
@@ -60,14 +60,11 @@ Javascript subscription example
                 dataType: "text"
             });
             
-            if(out.hasOwnProperty("index"))
-            {
-                paths[4] += out["index"].toString();
-            }
-
             console.log(out);
         }
     }
+
+    p2pd_test();
 
 .. code-block:: javascript
 
@@ -75,37 +72,38 @@ Javascript subscription example
     {
         "error": 0,
         "name": "con_name",
-        "sub": "[b'[hH]e[l]+o', None]"
+        "sub": "[b'test', None]"
     }
 
     // Send data.
     {
         "error": 0,
         "name": "con_name",
-        "sent": 18
+        "sent": 29
     }
 
     // Receive data.
     {
-        "data": "Hello, world!",
-        "error": 0,
         "client_tup": [
-            "192.168.21.200",
-            54925
-        ]
+            "192.168.21.8",
+            10062
+        ],
+        "con_name": "con_name",
+        "data": "p2pd test string\r\n\r\n",
+        "error": 0
     }
 
 
 The URL encode method is used to make the data 'safe' to pass in a URL.
-A subscription consists of two regex patterns. The first regex matches
-a message while the second matches an 'IP:port'. Message queues are
-assigned to each subscription. When receiving messages from a queue the
-full subscription / regex pair must be included. In the example above
-a message pattern matches hello, Hello, helo, or Hello. The regex method
-is 'find_all' so any instance of the pattern returns a match. But
-you can always use the caret ^ and dollar $ characters to match a
-whole string::
+A subscription consists of a msg regex and an optional tuple matching
+a reply address of the client. The IP is normalized so IPv6 addresses
+are expanded. You can specify 'from any port' if you set the port to 0.
 
+The regex method used with the message regex is 'find_all' so any
+instance of the pattern returns a match. You can always use the caret
+^ and dollar $ characters to match a whole string
+
+.. HINT::
     Checkout https://regex101.com/ if you need help with your regexes!
 
 Python subscription example
@@ -118,32 +116,24 @@ from Python code.
 .. literalinclude:: ../../examples/example_7.py
     :language: python3
 
-Last words on queues
+Final conclusions
 ----------------------
 
-What you should understand about subscriptions and queues is messages are
-delivered to all matching subscription queues. So if you subscribe to
-SUB_ALL / any message and a more specific subscription you will end up
-with copies of every message on the ALL queue with only the matching
-messages on the second one. You may only be interested in a specific
-message but if you subscribe to everything it will mean these messages
-are still duplicated there. So you may have to flush messages you've
-already processed should you want to use that queue.
-
-**Recall that by default P2PD will subscribe to SUB_ALL if a pipe has a destination
-set.** If you don't want to queue such messages you will have to call unsubscribe.
-The way to unsubscribe is to use the delete method.
+Messages are delivered to any matching subscription queues. If you subscribe to
+more specific queues you will end up with copies of every message because by
+default pipes with a destination subscribe to all messages. To unsubscribe
+from all messages use the name "all".
 
 .. code-block:: shell
 
-    curl -X DELETE "http://localhost:12333/p2p/sub/con_name/msg_p/regex/addr_p/regex"
+    curl -X DELETE "http://localhost:12333/sub/con_name/name/all"
 
 .. code-block:: javascript
 
     async function p2pd_test(server) 
     {
         var out = await $.ajax({
-            url: "http://localhost:12333/p2p/sub/con_name/msg_p/regex/addr_p/regex",
+            url: "http://localhost:12333/sub/con_name/name/all",
             type: 'DELETE',
             dataType: "text"
         });
@@ -156,20 +146,5 @@ The way to unsubscribe is to use the delete method.
     {
         "error": 0,
         "name": "con_name",
-        "unsub": "[b'regex', b'regex']"
-    }
-
-By default the msg_p and addr_p are set to blank if they're not included.
-Therefore to unsubscribe from 'all messages' don't include them.
-
-.. code-block:: shell
-
-    curl -X DELETE "http://localhost:12333/p2p/sub/con_name"
-
-.. code-block:: javascript
-
-    {
-        "error": 0,
-        "name": "con_name",
-        "unsub": "[b'', b'']"
+        "unsub": "[None, None]"
     }

@@ -4,7 +4,7 @@ async def example():
     #
     # Start default interface.
     # Don't bother resolving external addresses.
-    i = await Interface().start()
+    i = await Interface()
     #
     # Echo server address.
     route = await i.route().bind()

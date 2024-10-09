@@ -61,7 +61,7 @@ def get_sub_params(v):
     # Messages are put into buckets.
     sub = SUB_ALL[:]
     if "msg_p" in v["name"]:
-        sub[0] = v["name"]["msg_p"]
+        sub[0] = to_b(v["name"]["msg_p"])
     
     addr = get_opt_param(v, "addr_p")
     if addr is not None:
@@ -75,12 +75,14 @@ def get_sub_params(v):
     
         sub[1] = addr
 
+    return sub
 
-    timeout = 2
-    if "timeout" in v["name"]:
-        timeout = to_n(v["name"]["timeout"])
+def load_sub_or_default(v, subs):
+    sub_name = get_opt_param(v, "name")
+    if sub_name in subs:
+        return subs[sub_name]
 
-    return sub, timeout
+    return SUB_ALL
 
 class P2PDServer(RESTD):
     def __init__(self, interfaces=[], node=None):
@@ -89,6 +91,7 @@ class P2PDServer(RESTD):
         self.interfaces = interfaces
         self.node = node
         self.cons = {}
+        self.subs = {}
 
     @RESTD.GET(["version"])
     async def get_version(self, v, pipe):
@@ -223,7 +226,7 @@ class P2PDServer(RESTD):
 
         # Return success.
         return {
-            "name": con_name,
+            "con_name": con_name,
             "sent": len(en_msg),
             "error": 0
         }
@@ -231,19 +234,12 @@ class P2PDServer(RESTD):
     @RESTD.GET(["recv"])
     async def pipe_recv_text(self, v, pipe):
         con_name = v["name"]["recv"]
-        sub_index = get_opt_param(v, "index")
 
         # Get something from recv buffer.
         con = self.cons[con_name]
-        if sub_index:
-            sub = con.subs[sub_index]
-        else:
-            sub = SUB_ALL
-
-        print(sub)
-
+        sub = load_sub_or_default(v, self.subs)
+        timeout = get_opt_param(v, "timeout") or 2
         try:
-            _, timeout = get_sub_params(v)
             out = await con.recv(sub, timeout=timeout, full=True)
             if out is None:
                 return {
@@ -252,6 +248,7 @@ class P2PDServer(RESTD):
                 }
 
             return {
+                "con_name": con_name,
                 "client_tup": out[0],
                 "data": to_s(out[1]),
                 "error": 0
@@ -293,7 +290,7 @@ class P2PDServer(RESTD):
 
         # Return status.
         return {
-            "name": con_name,
+            "con_name": con_name,
             "sent": len(v["body"]),
             "error": 0
         }
@@ -306,9 +303,10 @@ class P2PDServer(RESTD):
         con = self.cons[con_name]
 
         # Messages are put into buckets.
-        sub, timeout = get_sub_params(v)
+        sub = load_sub_or_default(v, self.subs)
 
         # Get binary from matching buffer.
+        timeout = get_opt_param(v, "timeout") or 2
         out = await con.recv(sub, timeout=timeout, full=True)
         if out is None:
             return {
@@ -341,37 +339,56 @@ class P2PDServer(RESTD):
         # con <-----> pipe 
         return None
 
-    @RESTD.GET(["sub"], ["msg_p"])
+    @RESTD.GET(["sub"], ["name"], ["msg_p"])
     async def pipe_do_sub(self, v, pipe):
+        # Get variable names.
         con_name = v["name"]["sub"]
-        print("in sub")
-        print(v)
+        sub_name = v["name"]["name"]
+        if sub_name == "all":
+            return {
+                "msg": "reserved sub name",
+                "error": 10
+            }
 
-        # Send binary data from octet-stream POST.
+        # Make sure sub is new.
+        if sub_name in self.subs:
+            return {
+                "msg": "sub name already exists.",
+                "error": 9,
+            }
+
+        # Connection ref.
         con = self.cons[con_name]
 
         # Messages are put into buckets.
-        sub, _ = get_sub_params(v)
-        sub_index = con.subscribe(sub)
+        sub = get_sub_params(v)
+        self.subs[sub_name] = sub
+        con.subscribe(sub)
 
         # Return results.
         return {
-            "name": con_name,
+            "con_name": con_name,
+            "sub_name": sub_name,
             "sub": f"{sub}",
-            "index": sub_index,
             "error": 0
         }
 
-    @RESTD.DELETE(["sub"])
+    @RESTD.DELETE(["sub"], ["name"])
     async def pipe_do_unsub(self, v, pipe):
         con_name = v["name"]["sub"]
+        sub_name = v["name"]["name"]
         con = self.cons[con_name]
-        sub, _ = get_sub_params(v)
-        con.unsubscribe(sub)
+        if sub_name == "all":
+            sub = SUB_ALL
+            con.unsubscribe(SUB_ALL)
+        else:
+            sub = self.subs[sub_name]
+            con.unsubscribe(sub)
+            del self.subs[sub_name]
 
         # Return results.
         return {
-            "name": con_name,
+            "con_name": con_name,
             "unsub": f"{sub}",
             "error": 0
         }
