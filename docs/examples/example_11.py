@@ -8,15 +8,15 @@ async def example():
         # Make sure node server uses different port.
         port=NODE_PORT + 50 + 12
     )
-    #
+    
     # Start node listening.
     await node.start()
-    #
+    
     # Strategies used to make a P2P connection.
     # Note that P2P_RELAY enables TURN.
     # (Coturn doesn't support self relay so removed.)
     strategies = [ P2P_DIRECT, P2P_REVERSE, P2P_PUNCH ]
-    #
+    
     """
     Spawns a new pipe from a P2P connection.
     In this case it's connecting to our own node server.
@@ -25,7 +25,7 @@ async def example():
     Feel free to experiment with how it works.
     """
     pipe = await node.connect(node.addr_bytes, strategies)
-    #
+    
     # Do some stuff on the pipe ...
     # Cleanup.
     await pipe.close()

@@ -4,7 +4,7 @@ class NetInfoServer(Daemon):
     async def msg_cb(self, msg, client_tup, pipe):
         # Parse HTTP message and handle CORS.
         req = await rest_service(msg, client_tup, pipe)
-        #
+
         async def get_response():
             # Show information of the connection to the peer.
             p = req.api("/mapping")
@@ -26,7 +26,7 @@ class NetInfoServer(Daemon):
                 "error": 2,
                 "msg": "method not implemented"
             }
-        #
+        
         resp = await get_response()
         if resp is not None:
             await send_json(
@@ -42,15 +42,15 @@ async def example():
     # if_names = await list_interfaces()
     # await load_interfaces(if_names) for a started list.
     nic = await Interface().start()
-    #
+    
     # Server object inherits from a standard Daemon.
     server = NetInfoServer()
-    #
+    
     # Defines addresses and protocols to listen on.
     # Feel free to switch this up.
     await server.listen_all(TCP, 20000, nic)
     await server.listen_all(UDP, 20000, nic)
-    #
+    
     # Do a while sleep loop ...
     # Instead we'll just close.
     await server.close()

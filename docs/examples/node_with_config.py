@@ -3,10 +3,10 @@ from p2pd import *
 node_conf = dict_child({
     # None == All interfaces by default.
     "listen_ip": None,
-    #
+    
     # Port forwarding (IPv4) and pin holes (IPv6)
     "enable_upnp": True,
-    #
+
     # MQTT server no -- need at least 1 for P2P connections.
     "sig_pipe_no": SIGNAL_PIPE_NO,
 }, NET_CONF)
