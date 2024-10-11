@@ -111,6 +111,7 @@ class TCPPuncher():
         self.preloaded_mappings = []
         self.listen_pipe = None
         self.ping_pong_task = None
+        self.active_punchers = 0
 
     def get_ntp_meet_time(self):
         return self.sys_clock.time() + Dec(NTP_MEET_STEP)

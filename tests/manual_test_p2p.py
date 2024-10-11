@@ -338,13 +338,14 @@ async def test_p2p_multi_node_ifs():
 async def test_p2p_register_connect():
     if_names = await list_interfaces()
     ifs = await load_interfaces(if_names)
-    
+    print(ifs)
+
     name = input("name: ")
     params = {
         "sig_pipe_no": 2,
         "addr_types": [EXT_BIND],
         "ifs": ifs,
-        "same_if": False if len(ifs) >= 2 else True,
+        "same_if": False,
         "multi_ifs": True,
     }
 
@@ -357,14 +358,16 @@ async def test_p2p_register_connect():
         """
         
 
-        pipe = await nodes.alice.connect(
+        pipe = await nodes.bob.connect(
             name,
             strategies=use_strats,
             conf=nodes.pp_conf,
         )
 
+        print(pipe)
+        print(pipe.sock)
         #assert(pipe is not None)
-        #assert(await check_pipe(pipe))
+        assert(await check_pipe(pipe))
         while 1:
             await asyncio.sleep(1)
         await pipe.close()

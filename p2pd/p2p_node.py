@@ -14,7 +14,6 @@ from .nickname import *
 
 NODE_CONF = dict_child({
     "reuse_addr": False,
-    "listen_ip": None,
     "enable_upnp": True,
     "sig_pipe_no": SIGNAL_PIPE_NO,
 }, NET_CONF)
@@ -169,7 +168,6 @@ class P2PNode(P2PNodeExtra, Daemon):
             self.ifs,
             list(self.signal_pipes),
             port=self.listen_port,
-            ip=self.conf["listen_ip"]
         )
 
         # Save a dict version of the address fields.
@@ -195,6 +193,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         if pnp_name_has_tld(addr_bytes):
             pkt = await self.nick_client.fetch(addr_bytes)
             addr_bytes = pkt.value
+            print(f"Loaded addr {addr_bytes}")
             addr = parse_peer_addr(addr_bytes)
             assert(isinstance(pkt.vkc, bytes))
             self.auth[addr["node_id"]] = {

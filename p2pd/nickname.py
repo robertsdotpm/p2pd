@@ -85,7 +85,7 @@ class Nickname():
         self.started = False
 
     # A client for each PNP server is loaded by index.
-    async def start(self):
+    async def start(self, n=0):
         # Prefer IP6.
         if IP6 in self.interface.supported():
             af = IP6
@@ -93,16 +93,14 @@ class Nickname():
             af = IP4
 
         # Uses direct IPs to avoid domain names.
+        count = 0
         for serv_info in PNP_SERVERS[af]:
-            try:
-                dest = (
-                    serv_info["ip"],
-                    serv_info["port"],
-                )
-            except:
-                log_exception()
-                self.clients.append(None)
-                continue
+
+            dest = (
+                serv_info["ip"],
+                serv_info["port"],
+            )
+
 
             self.clients.append(
                 PNPClient(
@@ -113,6 +111,11 @@ class Nickname():
                     self.sys_clock,
                 )
             )
+
+            count += 1
+            if n:
+                if count >= n:
+                    break
         
         self.started = True
         return self

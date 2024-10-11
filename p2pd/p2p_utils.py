@@ -144,32 +144,19 @@ async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=Non
     # TODO: index by id and not offset.
     turn_server = TURN_SERVERS[serv_id]
 
-    # Resolve the TURN address.
-    route = await interface.route(af).bind()
-    try:
-        turn_addr = (
-            turn_server["host"],
-            turn_server["port"],
-        )
-        turn_addr = Address(*turn_addr)
-        await turn_addr.res(route)
-        turn_addr = turn_addr.select_ip(af).tup
-    except:
-        turn_addr = (
-            turn_server[af],
-            turn_server["port"],
-        )
-        turn_addr = Address(*turn_addr)
-        await turn_addr.res(route)
-        turn_addr = turn_addr.select_ip(af).tup
+    # The TURN address.
+    turn_addr = (
+        turn_server["host"],
+        turn_server["port"],
+    )
 
     # Make a TURN client instance to whitelist them.
     turn_client = TURNClient(
-        route=route,
-        turn_addr=turn_addr,
-        turn_user=turn_server["user"],
-        turn_pw=turn_server["pass"],
-        turn_realm=turn_server["realm"],
+        af=af,
+        dest=turn_addr,
+        nic=interface,
+        auth=(turn_server["user"], turn_server["pass"]),
+        realm=turn_server["realm"],
         msg_cb=msg_cb,
     )
 
@@ -236,6 +223,8 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
     addressing is suitably local or remote.
     """
     async def try_addr_infos(addr_type, src_info, dest_info):
+        print(f"trying addr type {addr_type}")
+
         # Local addressing and/or remote.
         try:
             # Create a future for pending pipes.
@@ -286,6 +275,8 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                     has_set_bind,
                 )
             )
+
+            print(f"dest ip = {dest_info['ip']}")
 
             # Need a destination address.
             # Possibly a different address type will work.
@@ -371,7 +362,13 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
             if addr_type == NIC_BIND:
                 pair_order = overlap + unique
 
+            print(pair_order)
+
             for src_info, dest_info in pair_order:
+                print("trying ")
+                print(src_info)
+                print(dest_info)
+
                 # Only try up to N pairs per technique.
                 # Technique-specific N to avoid lengthy delays.
                 ret = await async_wrap_errors(
