@@ -2,6 +2,7 @@ Knowledge articles
 =======================
 
 .. toctree::
+    install
     running_examples
     problems
     how

@@ -3,8 +3,8 @@ Queues
 
 If you want to use the push / pull APIs there are some details
 you might find useful. In order to support these APIs the
-software must be able to save messages. It does this using queues.
-Each queue may be indexed by a message regex and a
+software must be able to save messages. It does this by using queues.
+Each queue may be indexed by a message regex and an
 optional tuple for a reply address.
 
 These queues only exist when a subscription is made. **By default P2PD
@@ -14,8 +14,7 @@ so does the REST API.**
 Why use message subscriptions?
 --------------------------------
 
-You may know already UDP offers no ordered delivery or indeed any
-reliable delivery guarantee at all. What this means is most UDP
+You may know already that UDP offers no delivery guarantees. What this means is most UDP
 protocols (like STUN) end up using randomized IDs in
 requests / responses as kind of an asynchronous form of 'ordering.'
 There is also the case of UDP being 'connectionless.' This means
@@ -27,7 +26,7 @@ What ends up happening is you get messages [on the same socket] that:
     2. **... Match different requests.**
 
 So I had the idea of being able to sort messages into queues.
-Such an approach is flexible and is already used by my STUN client.
+Such an approach is flexible and is already used by the STUN client.
 Here's what that looks like in practice.
 
 Javascript subscription example
@@ -96,7 +95,7 @@ Javascript subscription example
 
 The URL encode method is used to make the data 'safe' to pass in a URL.
 A subscription consists of a msg regex and an optional tuple matching
-a reply address of the client. The IP is normalized so IPv6 addresses
+a reply address of the client. IPs get normalized so IPv6 addresses
 are expanded. You can specify 'from any port' if you set the port to 0.
 
 The regex method used with the message regex is 'find_all' so any
@@ -109,9 +108,8 @@ instance of the pattern returns a match. You can always use the caret
 Python subscription example
 -----------------------------
 
-For brevity I won't go into using the library in this section.
-This is just an example to get a sense of what subscriptions look like
-from Python code.
+This example shows what subscriptions look like
+from Python.
 
 .. literalinclude:: ../../examples/example_7.py
     :language: python3
@@ -119,10 +117,14 @@ from Python code.
 Final conclusions
 ----------------------
 
-Messages are delivered to any matching subscription queues. If you subscribe to
-more specific queues you will end up with copies of every message because by
+Messages are delivered to every matching subscription queues. If you subscribe to
+a specific pattern / tup you may end up with copies of every message because by
 default pipes with a destination subscribe to all messages. To unsubscribe
-from all messages use the name "all".
+from all messages:
+
+.. code-block:: python
+
+    pipe.unsubscribe(SUB_ALL)
 
 .. code-block:: shell
 

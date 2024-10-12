@@ -28,28 +28,29 @@ be used for clients or servers.
         """
 
 Whether a pipe is for a client or server, UDP or TCP, IPv4 or IPv6, every
-pipe works the same. Pipes are able to process messages as they arrive.
-They pass these messages to any registered handlers (to process in real-time)
+pipe works the same. Pipes are able to queue messages or process them as they arrive.
+They pass such messages to any handlers (to process in real-time)
 or add them to a message queue (to be processed later).
 
 Interface selection
 ----------------------
 
-In network programming its very common to write code that doesn't specifically
+In network programming its very common to write code that doesn't manually
 choose a network interface. The reason for this is arguably because its hard
 to do; If you don't specify an interface the code will still work. But you'll
-have to be fine with the default chosen by the OS.
+have to be fine using the default chosen by the OS.
 
 For some applications this is fine. Maybe the only thing that matters is
 whether the code works. But other applications might want to be more nuanced.
 Imagine a server that has multiple interfaces and it wants to select what ones
 to listen on. Or perhaps a torrent client that wants to work across interfaces
-to improve theoretical download speed.
+(and Internet connections) to increase download speed.
 
 .. IMPORTANT::
     Normally in P2PD you would choose an interface and a route to use for a pipe.
     But to simplify these examples no route is given. In which case -- the
-    default interface is loaded for each pipe.
+    default interface is loaded for each pipe. This is very inefficient as
+    STUN will lookup external addressing each time! 
 
 TCP echo server example
 ------------------------
@@ -69,7 +70,7 @@ In Python if you want to do asynchronous networking you normally
 have to write different code for UDP and TCP. Python has decent enough
 classes for TCP clients (stream readers) -- though UDP has no such equivalent. 
 As for servers Python offers protocol classes. Wouldn't it be great if you
-could use either style on either protocol? P2PD can help here.
+could use either style on either protocol?
 
 Here's an example of how simple P2PD makes this. Here I'm using await for UDP
 which is based on message queues. Since there is no delivery guarantees for UDP it's
@@ -94,7 +95,7 @@ def add_msg_cb(self, msg_cb)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When a pipe receives a message it will also forward it to any installed message
-handlers. The format for a message handler is:
+handlers.
 
 .. TIP::
     async def msg_cb(msg, client_tup, pipe)
@@ -102,12 +103,12 @@ handlers. The format for a message handler is:
 The msg_cb also doesn't have to be an async callback but keep in mind if it's
 given as a regular function you will have to use asyncio.create_task
 to schedule any callbacks and you won't be able to await them. Since
-the whole library uses async await it's best just to use an async msg_cb.
+the whole library uses async await it's best to use an async method.
 
-Using message handlers like this is very useful because you can install them
+Using message handlers like this is useful because you can install them
 for either a server pipe or a client pipe and it will automatically be
 called when there's a new message. No need to run your own loop and
-call awaits on some object. The event loop handles it.
+call await on them The event loop handles it.
 
 ----
 
@@ -122,7 +123,7 @@ def add_end_cb(self, end_cb)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When a connection is closed manually or forcefully the end_cb handlers are
-called. These are useful for cleanup. The format is:
+called. 
 
 .. TIP::
     async def end_cb(msg, client_tup, pipe)
@@ -141,8 +142,7 @@ Removes a function reference designated by end_cb from the pipe's end_cb handler
 def add_pipe(self, pipe)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Pipes can be made to route messages to other pipes. You can connect
-two pipes together by adding each pipe to each other.
+Pipes can be made to route messages to other pipes.
 
 .. code-block:: python
 

@@ -49,7 +49,7 @@ its addresses and enumerates the NAT of its associated router.
 
 Repr shows a serializable dict representation of the interface after it's
 been loaded. You can see a list of interfaces available on your machine
-by using the **Interface.list()** function. Interfaces may be virtual,
+by using the **list_interfaces** function. Interfaces may be virtual,
 contain loopback devices, and other adapters that aren't directly
 useful for networking. Often we are only interested in the adapters
 that are usable for WAN or LAN networking.
@@ -65,12 +65,12 @@ learn about 'routes.'
 The addressing problem
 -----------------------
 
-Modern event loops makes it easy to write high-performance networking code.
+Modern event loops make it easy to write high-performance networking code.
 The engineers of today are spoiled by such elegant features compared to the
 tools available in the early days. But there is still something very basic
 missing from the networking toolbox:
 
-**The ability to easily know your external addressing information**
+**The ability to see your external addressing information**
 
 There are many cases where this information is needed. For example: imagine
 a server that listens on multiple IPs such that it is available on more
@@ -114,16 +114,16 @@ Each route is indexed by address family. Either IPv4 or IPv6.
         [8.8.0.0] -> [8.8.0.0]
 
 The software starts by grouping private IPs. It binds to the first
-and checks the external IP. The result is the external IP and a new route.
+and checks the external IP. The result is a new route with the external IP.
 If it finds a public IP for a NIC address it binds to the first IP
 in it's range (range if it's a block) and checks the external IP.
 If the IPs match it assumes the range is valid. If it matches the
 previous route it groups them as the same route. 
 
-The software finds when processing the block of IPs '8.8.0.0/16'
-the external address matches. It assumes this means the
-whole block is valid without checking every IP. This becomes a new
-route. This shows how some machines set their NIC IPs to their
+Example: the software finds a block of NIC IPs '8.8.0.0/16' with 'public IPs.'
+It binds to the first address and sees the external address matches. Seeing that
+it assumes this means the whole block is valid without checking every IP.
+This becomes a new route. This shows how some machines set their NIC IPs to their
 external addresses.
 
 ----
@@ -152,8 +152,15 @@ While every global address 'EXT' forms a new route.
 
 P2PD uses the EXT portion for IPv6 servers. While it uses the NIC portion
 for IPv4. It is assumed that all servers should be publicly reachable.
-Though this can be bypassed by specifying IPs directly for bind call
-which is indeed what the P2PD REST server does.
+Though this can be bypassed by specifying IPs directly for bind calls
+which is indeed what the P2PD REST server does. 
+
+If that sounds difficult :doc:`daemons` make this easier.
+
+.. HINT::
+    There's other 'types' of addresses in IPv6 though they're not
+    supported in P2PD for now. Just the equivalent of 'private' and
+    'public' addresses.
 
 ----
 
@@ -169,11 +176,33 @@ Look closely at the route part. What this code is doing is it's asking for
 the first route in the route pool for that address family. The route points
 to one or more external addresses (more if it's a block) and 'knowns'
 how to setup the tuples for bind to use that external address. Once a route
-is bound it can be used in the familiar open_pipe call to use a given interface
-and given external address.
+is bound it can be used in the familiar open_pipe call.
 
 .. HINT::
     You can see from this example that P2PD supports duel-stack networking,
     multiple network interface cards, external addressing, DNS / IP / target parsing,
     and publish-subscribe. But there are many more useful features for
     network programming.
+
+Route pools
+--------------
+
+Every interface with Internet access has at least one route in its
+route pool. If you don't care about what route you're using you can call the
+route function from an interface object. But through
+the RoutePool class every single possible external address can be used.
+
+.. code-block:: python
+
+    nic = await Interface()
+    x = nic.rp[IP4] # IP4 RoutePool
+    y = nic.rp[IP6] # IP6 RoutePool
+    print(len(x))
+    for r in x:
+        # A route to use a single external IP from the pool.
+        print(r)
+
+The route pool is designed to make it easy to group multiple external addresses
+that may be themselves either single addresses or blocks of IPs into one
+object that can be indexed, counted, iterated, and used. In this way its easy
+to 'grab an IP' and use it. 

@@ -9,7 +9,7 @@ Daemon class offers some convenience methods for servers.
 
 .. HINT::
     It's easy to use the Daemon class. Simply inherit from Daemon in a
-    child class. Your clas should have a msg_cb function for incoming messages.
+    child class. Your class should have a msg_cb function for incoming messages.
     The class can store any state you need.
 
 async def add_listener(self, proto, route)
@@ -33,7 +33,7 @@ Start listening on the loopback address. Whether it binds to IP4 / IP6
 is based on the supported address families for the NIC you provide.
 This function is useful for creating servers you want to make
 accessible on just that computer. P2PD's own rest_api and toxid
-uses this method.
+use this method.
 
 async def listen_local(self, proto, port, nic):
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
