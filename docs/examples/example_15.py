@@ -1,9 +1,9 @@
 from p2pd import *
 
 async def example():
-    i = await Interface()
+    nic = await Interface()
     addr = ("93.184.215.14", 80)
-    curl = WebCurl(addr, i.route(IP4))
+    curl = WebCurl(addr, nic.route(IP4))
     params = {"action": "upload"}
     payload = b"Data to POST!"
     resp = await curl.vars(

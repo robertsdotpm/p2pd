@@ -6,7 +6,7 @@ async def example():
     # The node implements your protocol.
     node = P2PNode(
         # Make sure node server uses different port.
-        port=NODE_PORT + 50 + 12
+        port=NODE_PORT + 50
     )
     
     # Start node listening.

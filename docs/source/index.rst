@@ -1,5 +1,5 @@
-P2PD Learning Portal
-===================================
+Documentation
+====================
 
 Have you ever tried to connect to a computer and it didn't work? Look no further.
 P2PD is a library designed to make it easier for developers to establish

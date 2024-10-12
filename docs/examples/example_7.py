@@ -3,10 +3,10 @@ from p2pd import *
 async def example():
     # Start default interface.
     # Don't bother resolving external addresses.
-    i = await Interface()
+    nic = await Interface()
     
     # Echo server address.
-    route = await i.route().bind()
+    route = await nic.route().bind()
     echo_dest = ("45.79.112.203", 4242)
     
     # Open a connection to the echo server.

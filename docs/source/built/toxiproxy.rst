@@ -1,29 +1,29 @@
 Toxiproxy client and server
 =============================
 
-Network programming is temperamental. The way algorithms perform ends up
-being decided by changing network conditions. If we are to write good
+Network programming is temperamental. The way algorithms perform is
+decided by changing networks. If we are to write good
 network code there is a need to write algorithms that can handle common
 and unexpected scenarios. But how to accomplish this?
 
 
-One cannot simply test code with an Internet connection. This does not
-lead to a reliable or systematic approach. What is needed is a way to
-model adverse network conditions deterministically. So that we may test how
+One cannot simply test code against the Internet. This does not
+lead to a reproducible result. What is needed is a way to
+model adverse conditions deterministically. So that we may test how
 our algorithms respond in the real world. One such design that seems well
 suited for this task is 'Toxiproxy' created by Shopify.
 
 Toxiproxy
 ^^^^^^^^^^^^
 
-Toxiproxy consists of a REST server that spawns tunnel servers that can be
-used as relays to different target machines. You can modify behaviors in these
-relays - allowing you to test everything from latency to packet
+Toxiproxy consists of a REST server that spawns tunnel servers. Each tunnel server
+can be used as a relay to a different target machine. You can even modify behaviors
+on these relays - allowing you to test everything from latency to packet
 recombination algorithms.
 
 Toxiproxy refers to the start of the relay (you) as the **downstream**
 while the point the relay connects to is called the **upstream**.
-The algorithms that induce various network behaviors are termed **toxics.**
+The algorithms that induce network behaviors are termed **toxics.**
 For example: you can spawn a tunnel server with example.com as the upstream
 and set a latency toxic on the upstream (to delay replies back to you.)
 
@@ -33,7 +33,7 @@ is written in Go but many clients are available for different programming langua
 Though: what I've found is their client for Python is incomplete;
 isn't async; and has no server implementation.
 
-P2PD includes an implementation of Toxiproxy server and a client to use it.
+P2PD now includes an implementation of Toxiproxy server with a client to use it.
 
 Adding a toxic
 ^^^^^^^^^^^^^^^^^
@@ -77,7 +77,7 @@ be delayed on this toxic is removed.
 add_reset_peer(ms)
 ^^^^^^^^^^^^^^^^^^^^^^
 Normally when you call close() on a socket it 'gracefully' closes the connection. So that unsent data is sent and it indicates the sender is finished. This toxic instead tears down a connection immediately (ms=0) or after
-a timeout. Unset data will be discarded.
+a timeout. Unsent data will be discarded.
 
 add_limit_data(n)
 ^^^^^^^^^^^^^^^^^^^^^
@@ -87,9 +87,8 @@ connection is closed.
 add_slicer(n, v, ug)
 ^^^^^^^^^^^^^^^^^^^^^^^^
 When you call recv on sockets with TCP you may receive some
-or all of your data. Some people assume that recv corresponds to
-each send but in reality TCP is a stream-oriented protocol. The
-slicer takes received data and splits them up into multiple sends.
+or all of your data. The slicer takes received data
+and splits them up into multiple sends.
 Where n is the average byte no of a packet, v is the variation in
 bytes of an average packet, and ug is the microseconds to sends by.
 

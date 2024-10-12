@@ -2,12 +2,12 @@ from p2pd import *
 
 async def example():
     # Load default interface.
-    i = await Interface()
+    nic = await Interface()
     
     # Get a route to use for sockets.
     # This will give you a copy of the first route for that address family.
     # Routes belong to an interface and include a reference to it.
-    route = await i.route(IP4).bind()
+    route = await nic.route(IP4).bind()
     
     # Lookup Google.com's IP address -- specify a specific address family.
     # Most websites support IPv4 but not always IPv6.
@@ -23,6 +23,7 @@ async def example():
     
     # Wait for any message response.
     out = await pipe.recv(timeout=3)
+    print(out)
     
     # Cleanup.
     await pipe.close()

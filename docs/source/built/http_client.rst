@@ -1,14 +1,8 @@
 Hyper-usable HTTP client
 ==========================
 
-When I built my own REST framework it's been necessary to also build
-a basic HTTP client. The reason I've done this is I wanted the client
-to be compatible with the existing capabilities this software offers
-like being able to easily leverage multiple network interfaces and
-utilize the external addresses they have access to.
-
 In my opinion one design that absolutely nailed building services
-for the web was PHP so my HTTP client takes inspiration from that.
+for the web was PHP so I built a client that takes inspiration from that.
 First lets start with a basic GET request.
 
 .. literalinclude:: ../../examples/example_14.py
@@ -16,8 +10,8 @@ First lets start with a basic GET request.
 
 The above code shows how you can send $_GET params to a website.
 Loosely speaking: the vars method is where $_GET and $_POST go.
-There is a method for get, post, and delete that cause such
-HTTP methods to occur. Here's an example for POST:
+There is a get, post, and delete method that cause these
+HTTP actions to occur. Here's an example for POST:
 
 .. literalinclude:: ../../examples/example_15.py
     :language: python3
@@ -25,8 +19,8 @@ HTTP methods to occur. Here's an example for POST:
 The design of this HTTP client results in copies of the objects
 properties being made for each call. This helps to encapsulate
 information and makes debugging a breeze. The return value of an API
-call is literally a new copy of the client but with additional
-properties like pipe, out, and info - try exploring these fields!
+call is a new copy of the client with additional
+properties like a pipe, output, and more.
 
 The HTTP client also supports custom HTTP headers. You can control
 underlying socket parameters with more detail by passing in a custom

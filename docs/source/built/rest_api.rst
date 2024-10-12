@@ -36,7 +36,7 @@ Looking up your peer's address
 -------------------------------
 
 You'll want to know how to get your peers address. The address is
-used to try connect to a peer.
+used to connect to a peer.
 
 .. parsed-literal:: 
    curl `<http://localhost:12333/addr>`_ 
@@ -54,7 +54,7 @@ Now lets try connect to it
 ---------------------------
 
 Peer addresses will be passed to the 'open' resource. A number of strategies
-are used to try establish connections. The order of success will define
+are used to establish connections. The order of success will define
 how fast connections can be opened.
 
 .. parsed-literal:: 
@@ -104,10 +104,9 @@ The JSON response shows information on the new connection.
                }
          ]
       },
-      "strategy": "direct connect"
    }
 
-You can see the information includes details like the number of the socket, your external address, the network interface the connection
+You can see the information includes details like the number of the socket, your external address, the interface the connection
 belongs to, and so on.
 
 Text-based send and receive
@@ -115,7 +114,7 @@ Text-based send and receive
 
 Let's start with something simple. For these examples I'll assume you
 want to work with a simple text-based protocol. In reality you may be
-building something far more complex and require more flexibility
+building something more complex and require more flexibility
 but this is a good starting point.
 
 **Sending text:**
@@ -154,11 +153,10 @@ feature to test out some commands.
 Binary send and receive
 -------------------------
 
-So far all API methods have used HTTP GET. GET is ideal for regular,
-text-based data where you don't have to worry bout encoding.
-But if you want more flexibility and want to support binary
-data it's necessary to use the POST method. The following JS
-examples require jQuery.
+So far all API methods have used HTTP GET. GET is ideal for 
+text-based data where you don't have to worry about encoding.
+But if you want to support arbitrary data it's necessary to
+use the POST method. The following JS examples require jQuery.
 
 .. code-block:: shell
 
@@ -238,8 +236,8 @@ Theses simple send/receive calls are examples of push and pull APIs. In
 other words -- its up to you to check whether messages are available.
 Such an approach might be fine for simple scripts but it's a
 little inefficient having to constantly check or 'poll' for new
-messages. For the REST API there is one other option: a special API
-method that converts a HTTP connection into a two-way relay.
+messages. For the REST API there is another neat option: a special API
+method that converts HTTP connections into two-way relays.
 
 What I mean by this is if you make a HTTP request to a named
 connection P2PD will relay data you send to that connection
@@ -257,7 +255,8 @@ when it's available. Almost like a regular connection you made yourself.
    Origin: null\r\n\r\n
 
 The connection is closed on error. You can test it works by
-sending 'long_p2pd_test_string_abcd123' down the connection and checking for the test string response. What results is a relay between an associated connection to a peer's node server.
+sending 'long_p2pd_test_string_abcd123' down the connection and checking for the test string response. What results is a relay between a named P2P connection (handled by the peers
+protocol handlers.)
 
 Publish-subscribe
 ------------------

@@ -48,14 +48,14 @@ Real world simulation
 
 There is a program designed to do a real-world simulation of all parts of
 the software. It is capable of simulating protocol message exchange between
-nodes (with and without networking); controlling the interfaces between nodes; simulating failures; simulating node protocol replies;
+nodes (with and without networking); controlling the interfaces used for a node; simulating failures; simulating node protocol replies;
 and more. The program is called 'manual_test_p2p.py'.
 
 A useful choice in this program is option 0. The code can be changed to make
 a node register its address at the name servers. Then connect to that node
-using whatever combination of techniques are desired. One way to use this 
+using whatever combination of techniques are desired. **One way to use this 
 approach is you can have any device you control run manual_test_p2p
-and register its name then connect to its name on another machine.
+and register its name then connect to its name on another machine.**
 
 .. parsed-literal:: 
     sig_pipe_no = number of MQTT server cons (0 for no networking)

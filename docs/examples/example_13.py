@@ -41,7 +41,7 @@ async def example():
     # netifaces.interfaces() for names or
     # if_names = await list_interfaces()
     # await load_interfaces(if_names) for a started list.
-    nic = await Interface().start()
+    nic = await Interface()
     
     # Server object inherits from a standard Daemon.
     server = NetInfoServer()

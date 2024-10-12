@@ -15,7 +15,7 @@ to the destination. TURNs UDP design reverses that which avoids these issues.
 .. TIP::
     When you go through the TURN protocol you get allocated a 'relay address'
     that another peer can use to route messages to you. As far as I know
-    this only works for UDP. But importantly it offers a reverse connect
+    this only works for UDP. But importantly it offers a reverse 'connect'
     design which is better for bypassing NATs. 
 
 ----

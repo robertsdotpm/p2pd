@@ -32,6 +32,8 @@ Here's what that looks like in practice.
 Javascript subscription example
 --------------------------------
 
+The REST server bellow is based on the module here: :doc:`/built/rest_api`
+
 .. code-block:: javascript
 
     en = encodeURIComponent;

@@ -12,11 +12,9 @@ major operating systems. Then give pipes handlers for such events.
 Firewall bypass
 -----------------
 
-Windows-based systems include firewalls that will interfere with many programs.
-Mac OS X has similar security measures. A user without much experience
-may not know what to do. It would be a good idea to automatically setup rules
+Windows-based systems include firewalls that can interfere with some programs.
+Mac OS X has similar security measures. It would be a good idea to automatically setup rules
 to allow P2PD to use the Internet on various platforms.
-I'd also like to put some work into packaging in the future.
 
 Pushing sockets
 ----------------
@@ -32,8 +30,8 @@ to other processes to use as they see fit.
 
 I think this could be a cool option because it would allow engineers to
 reuse existing networking code. Maybe they have a different event loop.
-Maybe they use a model based on threads and polling. They would be able to use
-the networking features they're already familiar with.
+Maybe they use a model based on threads and polling. If you could pass sockets around
+an engineer could use any networking features they're already familiar with.
 
 Error recovery code
 ---------------------

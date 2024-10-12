@@ -8,11 +8,10 @@ class EchoServer(Daemon):
         await pipe.send(msg, client_tup)
 
 async def example():
-    i = await Interface().start()
+    i = await Interface()
     
     # Daemon instance.
-    server_port = 10126
-    route = await i.route().bind(port=server_port)
+    route = await i.route().bind(port=10126)
     echod = EchoServer()
     await echod.add_listener(
         TCP,
