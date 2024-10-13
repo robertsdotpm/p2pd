@@ -205,6 +205,7 @@ class TCPPuncher():
             listen_tup,
             self.to_dict(),
             interface,
+            self.node.node_id[:8]
         )
 
         try:
@@ -303,6 +304,7 @@ def proc_do_punching(args):
         reverse_tup = args[0]
         d = args[1]
         interface = args[2]
+        node_id = args[3]
         puncher = TCPPuncher.from_dict(d)
 
         # Execute the punching in a new event loop.
@@ -318,7 +320,8 @@ def proc_do_punching(args):
                     puncher.start_time,
                     puncher.punch_mode,
                     interface,
-                    reverse_tup
+                    reverse_tup,
+                    node_id
                 )
             ),
             loop=loop

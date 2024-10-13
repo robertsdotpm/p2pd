@@ -5,9 +5,17 @@ from .p2p_addr import *
 from .tcp_punch_client import *
 from .p2p_utils import for_addr_infos, get_turn_client
 from .p2p_utils import get_first_working_turn_client
-from .p2p_utils import CON_ID_MSG
+from .p2p_utils import CON_ID_MSG, f_path_txt
 from .p2p_protocol import *
 from .tcp_punch_client import *
+
+def log_pipe(addr_type, func_txt, pipe):
+    path_txt = f_path_txt(addr_type)
+    local_tup = pipe.sock.getsockname()[:2]
+    remote_tup = pipe.sock.getpeername()[:2]
+    msg = f"<{func_txt}> Established {path_txt} {local_tup} -> {remote_tup}"
+    msg += f" on '{pipe.route.interface.name}'"
+    return msg
 
 """
 TCP 
@@ -36,16 +44,17 @@ class P2PPipe():
         # func, timeout, cleanup, same_if, max_pairs
         self.func_table = {
             # Short timeouts for direct TCP cons.
-            P2P_DIRECT: [self.direct_connect, 2, None, 1, 6],
-            P2P_REVERSE: [self.reverse_connect, 4, None, 1, 6],
+            P2P_DIRECT: [self.direct_connect, 2, None, 1, 6, "direct"],
+            P2P_REVERSE: [self.reverse_connect, 4, None, 1, 6, "reverse"],
 
             # Large timeout for meetings with a state cleanup.
             # <20 timeout can cause timeouts for punching.
-            P2P_PUNCH: [self.tcp_hole_punch, 20, self.tcp_punch_cleanup, 0, 4],
+            P2P_PUNCH: [self.tcp_hole_punch, 20,
+                        self.tcp_punch_cleanup, 0, 4, "punch"],
 
             # Large timeout, end refreshers, disable LAN cons.
             # <20 timeout can cause timeouts for relay setup.
-            P2P_RELAY: [self.udp_turn_relay, 20, self.turn_cleanup, 1, 2],
+            P2P_RELAY: [self.udp_turn_relay, 20, self.turn_cleanup, 1, 2, "relay"],
         }
 
     def route_msg(self, msg, reply=None, m=0):
@@ -65,10 +74,11 @@ class P2PPipe():
                 continue
 
             # Returns a pipe given comp addr info pairs.
-            func, timeout, cleanup, has_set_bind, max_pairs = \
+            func, timeout, cleanup, has_set_bind, max_pairs, func_txt = \
                 self.func_table[strategy]
-            pipe = await async_wrap_errors(
+            pipe, addr_type = await async_wrap_errors(
                 for_addr_infos(
+                    func_txt,
                     func,
                     timeout,
                     cleanup,
@@ -84,6 +94,9 @@ class P2PPipe():
             if not isinstance(pipe, PipeEvents):
                 continue
 
+            # Indicate success result (long.)
+            msg = log_pipe(addr_type, func_txt, pipe)
+            log_p2p(msg, self.node.node_id[:8])
             return pipe
             
     async def direct_connect(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
@@ -104,6 +117,7 @@ class P2PPipe():
             dest_info["port"],
         )
 
+    
         pipe = await pipe_open(
             route=route,
             proto=TCP,

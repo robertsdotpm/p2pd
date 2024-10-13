@@ -170,6 +170,10 @@ class P2PNode(P2PNodeExtra, Daemon):
             port=self.listen_port,
         )
 
+        # Log address.
+        msg = f"Starting node = '{self.addr_bytes}'"
+        log_p2p(msg, self.node_id[:8])
+
         # Save a dict version of the address fields.
         try:
             self.p2p_addr = parse_peer_addr(self.addr_bytes)
@@ -191,9 +195,15 @@ class P2PNode(P2PNodeExtra, Daemon):
     # Connect to a remote P2P node using a number of techniques.
     async def connect(self, addr_bytes, strategies=P2P_STRATEGIES, conf=P2P_PIPE_CONF):
         if pnp_name_has_tld(addr_bytes):
+            msg = f"Translating '{addr_bytes}'"
+            log_p2p(msg, self.node_id[:8])
+            name = addr_bytes
             pkt = await self.nick_client.fetch(addr_bytes)
             addr_bytes = pkt.value
             print(f"Loaded addr {addr_bytes}")
+
+            msg = f"Resolved '{name}' = '{addr_bytes}'"
+            log_p2p(msg, self.node_id[:8])
             addr = parse_peer_addr(addr_bytes)
             assert(isinstance(pkt.vkc, bytes))
             self.auth[addr["node_id"]] = {
@@ -201,6 +211,8 @@ class P2PNode(P2PNodeExtra, Daemon):
                 "sk": None,
             }
 
+        msg = f"Connecting to '{addr_bytes}'"
+        log_p2p(msg, self.node_id[:8])
         pp = self.p2p_pipe(addr_bytes)
         return await pp.connect(strategies, reply=None, conf=conf)
 
@@ -212,8 +224,12 @@ class P2PNode(P2PNodeExtra, Daemon):
     # Returns your nickname + a tld designating server.
     async def nickname(self, name, value=None):
         value = value or self.address()
-        return await self.nick_client.push(
+        name = await self.nick_client.push(
             name,
             value
         )
+
+        msg = f"Setting nickname '{name}' = '{value}'"
+        log_p2p(msg, self.node_id[:8])
+        return name
 

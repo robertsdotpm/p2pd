@@ -290,7 +290,7 @@ async def punch_close_msg(msg, client_tup, pipe):
         await asyncio.sleep(2)
         await pipe.close()
 
-async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, has_success):
+async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, has_success, node_id):
     try:
         """
         Punching is done in its own process.
@@ -340,6 +340,13 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         if sock is None:
             log("> tcp punch chosen sock is none")
             return None
+        
+        # Log punch upstream.
+        local_tup = sock.getsockname()[:2]
+        remote_tup = sock.getpeername()[:2]
+        msg = f"<punch> Upstream {local_tup} = {remote_tup}"
+        msg += f" on '{interface.name}'"
+        log_p2p(msg, node_id)
 
         # Punched hole to the remote node.
         route = await interface.route(af).bind(sock.getsockname()[1])
@@ -390,7 +397,7 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         log_exception()
 
 
-async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup):
+async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, node_id):
     has_success = asyncio.Event()
     task = create_task(
         async_wrap_errors(
@@ -405,6 +412,7 @@ async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, curre
                 interface,
                 reverse_tup,
                 has_success,
+                node_id,
             )
         )
     )

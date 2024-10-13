@@ -26,6 +26,8 @@ TRY_OVERLAP_EXTS = 1
 TRY_NOT_TO_OVERLAP_EXTS = 2
 CON_ID_MSG = b"P2P_CON_ID_EQ"
 
+f_path_txt = lambda x: "local" if x == NIC_BIND else "external"
+
 def init_process_pool():
     # Make selector default event loop.
     # On Windows this changes it from proactor to selector.
@@ -215,7 +217,7 @@ def sort_pairs_by_overlap(src_infos, dest_infos):
 
     return overlap, unique
 
-async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply, pp, conf=None):
+async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs, reply, pp, conf=None):
     """
     Given info on a local interface, a remote interface,
     and a chosen connectivity technique, attempt to create
@@ -224,6 +226,9 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
     """
     async def try_addr_infos(addr_type, src_info, dest_info):
         print(f"trying addr type {addr_type}")
+
+
+
 
         # Local addressing and/or remote.
         try:
@@ -282,6 +287,13 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
             # Possibly a different address type will work.
             if dest_info["ip"] == "None":
                 return
+            
+            # Detailed logging details.
+            path_txt = f_path_txt(addr_type)
+            src_ip = src_info["nic"] if addr_type == NIC_BIND else src_info["ext"]
+            msg = f"<{strat}> Trying {path_txt} {src_ip} -> "
+            msg += f"{dest_info['ip']} on '{interface.name}'"
+            log_p2p(msg, pp.node.node_id[:8])
 
             """
             With all the correct interfaces and IPs
@@ -342,7 +354,7 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
                     try_addr_infos(addr_type, src_info, dest_info)
                 )
 
-                return ret
+                return ret, addr_type
 
             # Get interface offset that supports this af.
             #for src_info, dest_info in if_info_iter:
@@ -377,16 +389,16 @@ async def for_addr_infos(func, timeout, cleanup, has_set_bind, max_pairs, reply,
 
                 # Success so return.
                 if ret is not None:
-                    return ret
+                    return ret, addr_type
                     
                 count += 1
                 if count > max_pairs:
-                    return None
+                    return None, None
                 
                 # Cleanup here?
                     
     # Failure.
-    return None
+    return None, None
 
 async def new_peer_signal_pipe(offset, p2p_dest, node):
     # Build a channel to relay signal messages to peer.
