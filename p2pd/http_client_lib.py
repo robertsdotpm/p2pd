@@ -137,8 +137,16 @@ async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, h
             headers=headers
         )
 
+        # Todo: use content-length here.
         await p.send(buf, dest)
-        out = await p.recv(SUB_ALL, timeout=conf["recv_timeout"])
+        out = b""
+        got = None
+        while 1:
+            got = await p.recv(SUB_ALL, timeout=conf["recv_timeout"])
+            if got is None:
+                break
+            else:
+                out += got
     except Exception:
         log_exception()
         await p.close()

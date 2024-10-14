@@ -62,141 +62,16 @@ from .net import *
 from .address import *
 from .pipe_utils import *
 from .http_client_lib import *
+from .upnp_utils import *
 
-UPNP_LEASE_TIME = 86399
-UPNP_PORT = 1900
-UPNP_IP   = {
-    IP4: b"239.255.255.250",
-    IP6: b"FF02::C"
-}
 
-"""
-Port forwarding should only be done once per interface
-address but each interface needs its own unique port.
-Otherwise there would be conflicts with past mappings.
-The function here associates a unique port with an
-interface IP from a high order port range to bind on.
-It's not perfects but it keeps post allocations
-deterministic yet somewhat unique per NIC IP.
-"""
-def get_port_by_ips(if_names, port_range=[10000, 65000]):
-    # Convert IP to int.
-    if_names = sorted(if_names)
-    as_str = ""
-    for if_name in if_names:
-        as_str += if_name
-    as_int = hash(as_str)
 
-    # Wrap int around finite field.
-    port = field_wrap(as_int, port_range)
 
-    return port
 
-def m_search_buf(af):
-    if af == IP4:
-        host = to_s(UPNP_IP[af])
-    if af == IP6:
-        host = f"[{to_s(UPNP_IP[af])}]"
 
-    buf = \
-    f'M-SEARCH * HTTP/1.1\r\n' \
-    f'HOST: {host}:{UPNP_PORT}\r\n' \
-    f'ST: upnp:rootdevice\r\n' \
-    f'MX: 5\r\n' \
-    f'MAN: "ssdp:discover"\r\n' \
-    f'\r\n'
 
-    return to_b(buf)
 
-def parse_root_xml(d, service_type):
-    results = []
-    for k, v in d.items():
-        if isinstance(v, list):
-            for e in v:
-                results += parse_root_xml(e, service_type)
-        elif isinstance(v, dict):
-            results += parse_root_xml(v, service_type)
-        else:
-            if k == "serviceType":
-                if service_type in v:
-                    results.append(d)
-                    break
-    #
-    return results
 
-async def port_forward_task(route, dest, service, lan_ip, lan_port, ext_port, proto, desc):
-    # Do port forwarding.
-    desc = to_s(desc)
-    if route.af == IP4:
-        soap_action = "AddPortMapping"
-        body = f"""
-<u:{soap_action} xmlns:u="{service["serviceType"]}">
-    <NewRemoteHost></NewRemoteHost>
-    <NewExternalPort>{ext_port}</NewExternalPort>
-    <NewProtocol>{proto}</NewProtocol>
-    <NewInternalPort>{lan_port}</NewInternalPort>
-    <NewInternalClient>{lan_ip}</NewInternalClient>
-    <NewEnabled>1</NewEnabled>
-    <NewPortMappingDescription>{desc}</NewPortMappingDescription>
-    <NewLeaseDuration>0</NewLeaseDuration>
-</u:{soap_action}>
-        """
-
-    # Add a hole in the firewall.
-    # Have not added UniqueID -- will it still work?
-    if route.af == IP6:
-        # Protocol field based on IANA protocol numbers.
-        proto_no = proto
-        if proto.lower() == "tcp":
-            proto_no = 6
-        if proto.lower() == "udp":
-            proto_no = 17
-
-        # https://github.com/miniupnp/miniupnp/issues/228
-        soap_action = "AddPinhole"
-        body = f"""
-<u:{soap_action} xmlns:u="{service["serviceType"]}">
-    <RemoteHost></RemoteHost>
-    <RemotePort>0</RemotePort>
-    <Protocol>{proto_no}</Protocol>
-    <InternalPort>{lan_port}</InternalPort>
-    <InternalClient>{lan_ip}</InternalClient>
-    <LeaseTime>{UPNP_LEASE_TIME}</LeaseTime>
-</u:{soap_action}>
-        """
-
-    
-
-    # Build the XML payload to send.
-    payload = f"""
-<?xml version="1.0"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-<s:Body>
-{body}
-</s:Body>
-</s:Envelope>
-    """
-
-    # Custom headers for soap.
-    headers = [
-        [
-            b"SOAPAction",
-            to_b(f"\"{service['serviceType']}#{soap_action}\"")
-        ],
-        [b"Connection", b"Close"],
-        [b"Content-Type", b"text/xml"],
-        [b"Content-Length", to_b(f"{len(payload)}")]
-    ]
-
-    return await http_req(
-        route,
-        dest,
-        service["controlURL"],
-        do_close=True,
-        method="POST",
-        payload=payload,
-        headers=headers
-    )
 
 async def add_fixed_paths(interface, af, get_root_desc):
     # List of hosts to try get a rootXML from.
@@ -243,7 +118,7 @@ async def add_fixed_paths(interface, af, get_root_desc):
     async def worker(host, port, path):
         route = await interface.route(af).bind()
         dest = (host, port)
-        return await get_root_desc(route, dest, path)
+        return await get_upnp_forwarding_services(route, dest, path)
 
     # Build list of tasks.
     for host in hosts:
@@ -264,23 +139,23 @@ async def add_fixed_paths(interface, af, get_root_desc):
 
     return out
 
-async def port_forward(af, interface, ext_port, src_addr, desc, proto="TCP"):
+
+async def discover_upnp_devices(af, nic):
     # Set protocol family for multicast socket.
-    if af == IP4:
-        sock_conf = dict_child({
-            "sock_proto": socket.IPPROTO_UDP
-        }, NET_CONF)
-    if af == IP6:
-        sock_conf = dict_child({
-            "sock_proto": socket.IPPROTO_UDP
-        }, NET_CONF)
+    sock_conf = dict_child({
+        "sock_proto": socket.IPPROTO_UDP
+    }, NET_CONF)
 
     # Make multicast socket for M-search.
-    route = interface.route(af)
+    route = nic.route(af)
     await route.bind(ips=route.nic())
     sock = await socket_factory(route, sock_type=UDP, conf=sock_conf)
     if af == IP6:
-        sock.setsockopt(socket.IPPROTO_IPV6, socket.IP_MULTICAST_TTL, 2)
+        sock.setsockopt(
+            socket.IPPROTO_IPV6,
+            socket.IP_MULTICAST_TTL,
+            2
+        )
 
     # Create async pipe wrapper for multicast socket.
     dest = (UPNP_IP[af], UPNP_PORT)
@@ -288,16 +163,16 @@ async def port_forward(af, interface, ext_port, src_addr, desc, proto="TCP"):
     pipe.subscribe()
 
     # Send m-search message.
-    buf = m_search_buf(af)
+    buf = build_upnp_discover_buf(af)
 
     # Multiple sends spaced apart because UDP is garbage.
-    for i in range(0, 3):
+    for _ in range(0, 3):
         await pipe.send(buf)
         await asyncio.sleep(0.1)
 
     # Get list of HTTP replies from M-Search message.
     replies = []
-    while 1:
+    for _ in range(0, 10):
         out = await pipe.recv(timeout=4)
         if out is None:
             break
@@ -311,111 +186,39 @@ async def port_forward(af, interface, ext_port, src_addr, desc, proto="TCP"):
 
     # Cleanup multicast socket.
     await pipe.close()
+    return replies
 
-    # Filter duplicate replies.
-    unique = {}
-    for reply in replies:
-        if "location" not in reply.hdrs:
-            continue
 
-        location = reply.hdrs["location"]
-        if location in unique:
-            continue
 
-        unique[location] = reply
+async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
 
-    # Save only unique replies.    
-    replies = list(unique.values())
 
-    # Main code that gets a list of port forward tasks for a device.
-    async def get_root_desc(route, dest, path):
-        # Service type lookup table.
-        service_types = {
-            IP4: "WANIPConnection",
-            IP6: "WANIPv6FirewallControl"
-        }
 
-        # Bind ip for http forwarding.
-        if af == IP6:
-            # The source address needs to match the internal client
-            # being forwarded for add pin hole.
-            ips = src_addr[0]
-        else:
-            # The source address doesn't matter in IPv6 port forwarding.
-            ips = src_addr[0]
 
-        # Get main XML for device.
-        tasks = []
-        try:
-            # Request rootDesc.xml.
-            _, http_resp = await http_req(route, dest, path, do_close=True)
-            if http_resp is None:
-                return []
 
-            xml = http_resp.out()
-            d = xmltodict.parse(xml)
 
-            # Convert to a list of services.
-            services = parse_root_xml(d, service_types[route.af])
-        except Exception:
-            log(f"Failed to get root xml {dest} {path}")
-            log_exception()
-            return tasks
+    replies = await discover_upnp_devices(af, interface)
+    replies = sort_upnp_replies_by_unique_location(replies)
 
-        # Get a task to port forward for each service.
-        for service in services:
-            forward_route = await interface.route(route.af).bind(ips=ips)
-            task = async_wrap_errors(
-                port_forward_task(
-                    forward_route,
-                    dest,
-                    service,
-                    src_addr[0],
-                    src_addr[1],
-                    ext_port,
-                    proto,
-                    desc
-                )
-            )
-            
-            # Save task.
-            tasks.append(task)
+    print(replies)
 
-        return tasks
 
-    """
-    for reply in replies:
-        if "location" not in reply.hdrs:
-            continue
+    out = await get_upnp_forwarding_services_for_replies(
+        af,
+        src_tup[0],
+        interface,
+        replies
+    )
 
-        print(reply.hdrs["location"])
-    """
+    print(out)
 
-    # Port forward on all devices that replied.
-    tasks = []
-    for req in replies:
-        # Location header points to rootDesc.xml.
-        url = urllib.parse.urlparse(req.hdrs["location"])
-        hostname = url.hostname
-        if af == IP6:
-            hostname = hostname.strip("[]")
+    # turn replies into (dest), path for get forwarding servers
+    # turn result url into a add forwarding rule
 
-        # Root XML address.
-        xml_dest = (
-            hostname,
-            url.port,
-        )
+    return
 
-        # Request rootDesc.xml.
-        http_route = await interface.route(af).bind(ips=src_addr[0])
-        results = await async_wrap_errors(
-            get_root_desc(http_route, xml_dest, url.path)
-        )
-        if results is None:
-            continue
-        
-        if len(results):
-            tasks += results
+
+
 
     # Generate fixed path attempts to increase success if m-search fails.
     tasks += await async_wrap_errors(
@@ -428,36 +231,25 @@ async def port_forward(af, interface, ext_port, src_addr, desc, proto="TCP"):
 
 if __name__ == "__main__":
     async def upnp_main():
-        from .interface import Interfaces, init_p2pd
-        i = await Interface()
-        port = 31375
-        desc = b"test 10003"
+        from .interface import Interface
+        nic = await Interface()
+        route = nic.route(IP4)
+        print(route.nic())
 
+        await port_forward(IP4, nic, 60000, (route.nic(), 2000), "test")
 
-        print(i.route(IP4).nic())
-
-        # respondes dont indicate success.
-
-        class F():
-            def __init__(self, i, af):
-                self.interface = i
-                self.af = af
-
-        f = F(i, IP4)
-        #src_addr = await Address("fe80::1131:b51a:3f8f:1f2d", port).res(f)
-        src_addr = ("192.168.21.21", port)
-        tasks = await port_forward(i, port, src_addr, desc)
-        results = await asyncio.gather(*tasks)
-
-        print(results)
-
-        for r in results:
-            print(r[1].out())
-
-        return
-
-        x = results[0][1].out()
-        print(x)
 
     async_test(upnp_main)
 
+"""
+multicast replies:
+http://192.168.21.1:56688/rootDesc.xml
+http://192.168.21.1:1990/WFADevice.xml
+http://192.168.21.5:80/description.xml
+
+- prioritize gw ip replies as primary
+- 
+- generated replies in background:
+    - if no primary 
+
+"""

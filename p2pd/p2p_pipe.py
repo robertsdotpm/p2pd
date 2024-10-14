@@ -307,6 +307,12 @@ class P2PPipe():
             # Protocol end.
             if already_accepted:
                 return PipeEvents(None)
+            else:
+                # Log white listing action.
+                our_relay = await client.relay_tup_future
+                m = f"Whitelist {dest_peer} -> {our_relay} to"
+                m += f" '{iface.name}'"
+                log_p2p(m, self.node.node_id[:8])
 
         # Return a new TURN request.
         msg = TURNMsg({

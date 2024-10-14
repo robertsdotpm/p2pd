@@ -18,6 +18,11 @@ In the terminal. The logs can then be viewed by either:
     cat program.log
     type program.log
 
+You can filter for just the P2P messages with grep:
+
+.. parsed-literal:: 
+    cat program.log | grep P2P:
+
 Running tests
 ----------------
 
