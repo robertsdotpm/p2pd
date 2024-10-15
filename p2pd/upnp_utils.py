@@ -10,6 +10,64 @@ UPNP_IP   = {
     IP6: b"FF02::C"
 }
 
+UPNP_PATHS = [
+    "/rootDesc.xml",
+    "/description.xml",
+    "/DeviceDescription.xml",
+    "/ssdp/desc-DSM-eth0.xml",
+    "/ssdp/desc-DSM-eth1.xml",
+    "/UPnP/IGD.xml",
+    "/IGD.xml",
+    "/igd.xml",
+    "/wps_device.xml",
+    "/gatedesc.xml",
+    "/bmlinks/ddf.xml",
+    "/MediaServerDevDesc.xml",
+    "/etc/linuxigd/gatedesc.xml",
+    "/ssdp/desc-DSM-ovs_eth0.xml",
+    "/ssdp/device-desc.xml",
+    "/WFADevice.xml",
+    "/cameradesc.xml",
+    "/upnp/BasicDevice.xml",
+    "/upnp.jsp",
+    "/simplecfg.xml",
+    "/rss/Starter_desc.xml",
+    "/devicedesc.xml",
+    "/desc/root.cs",
+    "/IGatewayDeviceDescDoc",
+    "/picsdesc.xml",
+    "/upnp/descr.xml",
+    "/upnpdevicedesc.xml",
+    "/upnp/IGD.xml",
+    "/allxml/",
+    "/XD/DeviceDescription.xml",
+    "/devdescr.xml",
+    "/dslf/IGD.xml",
+    "/Printer.xml",
+    "/ssdp/desc-DSM-bond0.xml",
+    "/upnp/BasicDevice.xml",
+    "/root.sxml",
+    "/gatedesc.xml",
+    "/upnp",
+    "/Printer.xml",
+    "/bmlinks/ddf.xml",
+    "/etc/linuxigd/gatedesc.xml",
+    "/gatedesc.xml",
+    "/picsdesc.xml",
+    "/root.sxml",
+    "/rootDesc.xml",
+    "/simplecfg.xml",
+    "/ssdp/desc-DSM-eth0.xml",
+    "/ssdp/desc-DSM-eth1.xml",
+    "/ssdp/desc-DSM-ovs_eth0.xml",
+    "/wps_device.xml",
+    '/DSDeviceDescription.xml',
+    '/device-desc.xml',
+    '/gateway.xml',
+    '/ssdp/desc-DSM-eth1.4000.xml',
+]
+
+
 """
 Creates a packet to send to the multicast address
 for discovering UPNP devices.
@@ -76,7 +134,7 @@ async def get_upnp_forwarding_services(route, dest, path):
         log(f"Failed to get root xml {dest} {path}")
         log_exception()
     
-async def get_upnp_forwarding_services_for_replies(af, src_ip, nic, replies):
+async def get_upnp_forwarding_services_for_replies(af, nic, replies):
     # Port forward on all devices that replied.
     tasks = []
     for req in replies:
@@ -93,7 +151,7 @@ async def get_upnp_forwarding_services_for_replies(af, src_ip, nic, replies):
         )
 
         # Request rootDesc.xml.
-        http_route = await nic.route(af).bind(ips=src_ip)
+        http_route = nic.route(af)
         task = async_wrap_errors(
             get_upnp_forwarding_services(
                 http_route,
@@ -106,10 +164,10 @@ async def get_upnp_forwarding_services_for_replies(af, src_ip, nic, replies):
     results = await asyncio.gather(*tasks)
     return strip_none(results)
 
-async def add_upnp_forwarding_rule(route, dest, service, lan_ip, lan_port, ext_port, proto, desc):
+async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext_port, proto, desc):
     # Do port forwarding.
     desc = to_s(desc)
-    if route.af == IP4:
+    if af == IP4:
         soap_action = "AddPortMapping"
         body = f"""
 <u:{soap_action} xmlns:u="{service["serviceType"]}">
@@ -126,7 +184,7 @@ async def add_upnp_forwarding_rule(route, dest, service, lan_ip, lan_port, ext_p
 
     # Add a hole in the firewall.
     # Have not added UniqueID -- will it still work?
-    if route.af == IP6:
+    if af == IP6:
         # Protocol field based on IANA protocol numbers.
         proto_no = proto
         if proto.lower() == "tcp":
@@ -168,6 +226,13 @@ async def add_upnp_forwarding_rule(route, dest, service, lan_ip, lan_port, ext_p
         [b"Content-Length", to_b(f"{len(payload)}")]
     ]
 
+    route = nic.route(af)
+
+    """
+    if af == IP6:
+        route = route.bind(ips=lan_ip)
+    """
+
     return await http_req(
         route,
         dest,
@@ -193,3 +258,35 @@ def sort_upnp_replies_by_unique_location(replies):
 
     return list(unique.values())
 
+async def use_upnp_forwarding_services(af, interface, ext_port, src_tup, desc, proto, service_infos):
+    for service_info in service_infos:
+        _, resp = await add_upnp_forwarding_rule(
+            af,
+            interface,
+            service_info[0],
+            service_info[1][0],
+            src_tup[0],
+            src_tup[1],
+            ext_port,
+            proto,
+            desc,
+        )
+
+        """
+        If you call mapping multiple times with the same details
+        you can get a conflict error even though the mapping succeeded.
+        So this is considered a 'success'
+        """
+        map_success_list = [
+            b"ConflictInMappingEntry",
+            b"AddPortMappingResponse"
+        ]
+
+        # Look for success indication in output.
+        out = resp.out()
+        print(out)
+        for map_success in map_success_list:
+            if map_success in out:
+                return True
+
+    return False

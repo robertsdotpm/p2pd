@@ -113,6 +113,7 @@ async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, h
         log_exception()
 
     if p is None:
+        log("http req p is none")
         return None, None
 
     try:

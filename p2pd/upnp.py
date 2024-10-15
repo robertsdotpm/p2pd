@@ -56,7 +56,6 @@ https://community.ui.com/questions/Ports-required-for-upnp2/6692d89e-1dd6-4abd-a
 """
 
 import socket
-import xmltodict
 from .utils import *
 from .net import *
 from .address import *
@@ -64,19 +63,58 @@ from .pipe_utils import *
 from .http_client_lib import *
 from .upnp_utils import *
 
+async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto):
+    # Check if a port is open.
+    async def try_connect(port, host):
+        dest = (host, port)
+        route = await interface.route(af).bind()
+        pipe = await pipe_open(TCP, dest, route)
+        if pipe is not None:
+            await pipe.close()
+            return dest
 
+    # Try to load forwarding services at path and use them.
+    async def try_service_path(path, dest):
+        # Get service URLs for port forwarding or pin hole.
+        route = interface.route(af)
+        service_info = await async_wrap_errors(
+            get_upnp_forwarding_services(
+                route,
+                dest,
+                path
+            )
+        )
 
+        # Failed.
+        if service_info is None:
+            return 0
 
+        # Attempt to forward port.
+        forward_success = await async_wrap_errors(
+            use_upnp_forwarding_services(
+                af,
+                interface,
+                ext_port,
+                src_tup,
+                desc,
+                proto,
+                (service_info,),
+            )
+        )
 
+        # Success so return.
+        if forward_success:
+            return 1
+        
+        return 0
 
-
-
-
-
-async def add_fixed_paths(interface, af, get_root_desc):
     # List of hosts to try get a rootXML from.
     hosts = []
-    gws = interface.netifaces.gateways()[af]
+    gws = interface.netifaces.gateways()
+    if af in gws:
+        gws = gws[af]
+    else:
+        gws = []
 
     # Add all gateways netiface knows about.
     if len(gws):
@@ -93,6 +131,9 @@ async def add_fixed_paths(interface, af, get_root_desc):
 
     # Ports to try.
     ports = [
+        # UPnP port.
+        1900,
+
         # MiniUPnP
         5000,
 
@@ -107,38 +148,42 @@ async def add_fixed_paths(interface, af, get_root_desc):
         8080
     ]
 
-    # List of control urls to try.
-    paths = [
-        "/rootDesc.xml",
-        "/"
-    ]
+    # Filter dests first by open ports.
+    # The point is to cut down the number to try.
+    dests = []
+    for host in hosts:
+        tasks = []
+        for port in ports:
+            tasks.append(
+                async_wrap_errors(
+                    try_connect(port, host)
+                )
+            )
 
-    # Used to carry out the work.
-    tasks = []
-    async def worker(host, port, path):
-        route = await interface.route(af).bind()
-        dest = (host, port)
-        return await get_upnp_forwarding_services(route, dest, path)
+        # Socket limit to port list * ifs.
+        results = await asyncio.gather(*tasks)
+        dests += strip_none(results)
 
     # Build list of tasks.
-    for host in hosts:
-        for port in ports:
-            for path in paths:
+    step = 10
+    for dest in dests:
+        for i in range(0, int(len(UPNP_PATHS) / step) + 1):
+            tasks = []
+            for path in UPNP_PATHS[i * step:(i  * step) + step]:
                 tasks.append(
                     async_wrap_errors(
-                        worker(host, port, path)
+                        try_service_path(path, dest)
                     )
                 )
 
-    # Execute fetch attempts.
-    results = await asyncio.gather(*tasks)
-    out = []
-    for result in results:
-        if len(result):
-            out += result
+            # Socket limit to path list * ifs.
+            results = await asyncio.gather(*tasks)
+            if 1 in results:
+                print("brute forward success")
+                return 1
 
-    return out
-
+    # All failed.
+    return 0
 
 async def discover_upnp_devices(af, nic):
     # Set protocol family for multicast socket.
@@ -188,55 +233,96 @@ async def discover_upnp_devices(af, nic):
     await pipe.close()
     return replies
 
+"""
+1. Attempt to forward or pin hole a service. Success is based on
+response from the first compatible UPnP service. Continue until
+exhausted or success.
 
-
+2. If continue then try to brute force forwarding or pin hole.
+A list of possible hosts and ports are probed for open ports.
+Then XML URLs are checked for services. Continue until success
+or every possibilities is exhausted. Concurrency is used for speed
+here by not excessively to avoid exhausting open socket limit.
+"""
 async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
+    # Account for errors in the main multicast code.
+    try:
+        # Get list of possible devices supporting UPNP.
+        # I think NAT-PMP devices also reply here.
+        replies = await discover_upnp_devices(af, interface)
+        replies = sort_upnp_replies_by_unique_location(replies)
 
+        # Get a list of service URLs that match forwarding or pin hole.
+        service_infos = await get_upnp_forwarding_services_for_replies(
+            af,
+            interface,
+            replies
+        )
 
+        # Try to use the service URLs for forwarding.
+        forward_success = await use_upnp_forwarding_services(
+            af,
+            interface,
+            ext_port,
+            src_tup,
+            desc,
+            proto,
+            service_infos,
+        )
+    except:
+        log_exception()
+        forward_success = False
 
+    print(f"default poward success = {forward_success}")
 
-
-
-    replies = await discover_upnp_devices(af, interface)
-    replies = sort_upnp_replies_by_unique_location(replies)
-
-    print(replies)
-
-
-    out = await get_upnp_forwarding_services_for_replies(
-        af,
-        src_tup[0],
-        interface,
-        replies
-    )
-
-    print(out)
-
-    # turn replies into (dest), path for get forwarding servers
-    # turn result url into a add forwarding rule
-
-    return
-
-
-
-
-    # Generate fixed path attempts to increase success if m-search fails.
-    tasks += await async_wrap_errors(
-        add_fixed_paths(interface, af, get_root_desc)
-    )
-
-    # Return port forward tasks.
-    if len(tasks):
-        return await asyncio.gather(*tasks)
+    """
+    If forwarding or pin hole was not successful using the standard
+    multicast process attempt to brute force possible service URLs.
+    This process is very slow and will be done in the background
+    incrementally. This is because there is a 64 socket max limit
+    on Windows selector event loop so async gather will cause an error.
+    """
+    if not forward_success:
+        return asyncio.create_task(
+            async_wrap_errors(
+                brute_force_port_forward(
+                    af,
+                    interface,
+                    ext_port,
+                    src_tup,
+                    desc,
+                    proto
+                )
+            )
+        )
+    else:
+        return 1
 
 if __name__ == "__main__":
     async def upnp_main():
         from .interface import Interface
-        nic = await Interface()
-        route = nic.route(IP4)
+        nic = await Interface("wlx00c0cab5760d")
+        af = IP6
+        route = nic.route(af)
         print(route.nic())
 
-        await port_forward(IP4, nic, 60000, (route.nic(), 2000), "test")
+        """
+        r = await nic.route(IP4).bind()
+        dest = ("192.168.0.1", 1900)
+        p = await pipe_open(route=r, proto=TCP, dest=dest, conf=NET_CONF)
+        print(p)
+
+        return
+        """
+
+        if af == IP4:
+            src_ip = route.nic()
+        else:
+            src_ip = route.ext()
+        
+        task = await port_forward(af, nic, 60001, (src_ip, 8000), "test")
+        while 1:
+            await asyncio.sleep(1)
 
 
     async_test(upnp_main)
@@ -247,9 +333,13 @@ http://192.168.21.1:56688/rootDesc.xml
 http://192.168.21.1:1990/WFADevice.xml
 http://192.168.21.5:80/description.xml
 
-- prioritize gw ip replies as primary
-- 
-- generated replies in background:
-    - if no primary 
 
+b'<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">\n<s:Body>\n<s:Fault>\n<faultcode>s:Client</faultcode>\n<faultstring>UPnPError</faultstring>\n<detail>\n<UPnPError xmlns="urn:schemas-upnp-org:control-1-0">\n<errorCode>718</errorCode>\n<errorDescription>ConflictInMappingEntry</errorDescription>\n</UPnPError>\n</detail>\n</s:Fault>\n</s:Body>\n</s:Envelope>\n'
+
+
+
+b'<?xml version="1.0"?>\r\n<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">\n<s:Body>\n<u:AddPortMappingResponse xmlns:u="urn:schemas-upnp-org:service:WANIPConnection:1"/></s:Body>\n</
+s:Envelope>\r\n'
+
+b'<?xml version="1.0"?>\r\n<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:AddPortMappingResponse xmlns:u="urn:schemas-upnp-org:service:WANIPConnection:1"></u:AddPortMappingResponse></s:Body></s:Envelope>\r\n'
 """
