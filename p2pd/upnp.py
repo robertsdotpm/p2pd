@@ -63,7 +63,7 @@ from .pipe_utils import *
 from .http_client_lib import *
 from .upnp_utils import *
 
-async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto):
+async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto, add_host=None):
     # Check if a port is open.
     async def try_connect(port, host):
         dest = (host, port)
@@ -76,7 +76,7 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
     # Try to load forwarding services at path and use them.
     async def try_service_path(path, dest):
         # Get service URLs for port forwarding or pin hole.
-        route = interface.route(af)
+        route = await interface.route(af).bind()
         service_info = await async_wrap_errors(
             get_upnp_forwarding_services(
                 route,
@@ -124,6 +124,10 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
     # Valid default gateway address in IPv6.
     if af == IP6:
         hosts.append("FE80::1")
+
+    # Add fixed test IP.
+    if add_host is not None:
+        hosts = [add_host]
 
     # Nothing to do.
     if not len(hosts):
@@ -179,7 +183,6 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
             # Socket limit to path list * ifs.
             results = await asyncio.gather(*tasks)
             if 1 in results:
-                print("brute forward success")
                 return 1
 
     # All failed.
@@ -192,20 +195,15 @@ async def discover_upnp_devices(af, nic):
     }, NET_CONF)
 
     # Make multicast socket for M-search.
-    route = nic.route(af)
-    await route.bind(ips=route.nic())
+    route = await nic.route(af).bind(ips="*")
     sock = await socket_factory(route, sock_type=UDP, conf=sock_conf)
     if af == IP6:
-        sock.setsockopt(
-            socket.IPPROTO_IPV6,
-            socket.IP_MULTICAST_TTL,
-            2
-        )
+        sock.setsockopt(socket.IPPROTO_IPV6, socket.IP_MULTICAST_TTL, 2)
+        sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_HOPS, 255)
 
     # Create async pipe wrapper for multicast socket.
     dest = (UPNP_IP[af], UPNP_PORT)
     pipe = await pipe_open(UDP, dest, route, sock, conf=sock_conf)
-    pipe.subscribe()
 
     # Send m-search message.
     buf = build_upnp_discover_buf(af)
@@ -217,11 +215,8 @@ async def discover_upnp_devices(af, nic):
 
     # Get list of HTTP replies from M-Search message.
     replies = []
-    for _ in range(0, 10):
-        out = await pipe.recv(timeout=4)
-        if out is None:
-            break
-
+    for _ in range(0, 5):
+        out = await pipe.recv(timeout=1)
         try:
             reply = ParseHTTPResponse(out)
         except Exception:
@@ -255,6 +250,7 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
         # Get a list of service URLs that match forwarding or pin hole.
         service_infos = await get_upnp_forwarding_services_for_replies(
             af,
+            src_tup,
             interface,
             replies
         )
@@ -272,8 +268,6 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
     except:
         log_exception()
         forward_success = False
-
-    print(f"default poward success = {forward_success}")
 
     """
     If forwarding or pin hole was not successful using the standard
@@ -304,7 +298,7 @@ if __name__ == "__main__":
         nic = await Interface("wlx00c0cab5760d")
         af = IP6
         route = nic.route(af)
-        print(route.nic())
+        print(route.ext())
 
         """
         r = await nic.route(IP4).bind()
@@ -319,7 +313,10 @@ if __name__ == "__main__":
             src_ip = route.nic()
         else:
             src_ip = route.ext()
+
+        #src_ip = route.ext()
         
+        print(src_ip)
         task = await port_forward(af, nic, 60001, (src_ip, 8000), "test")
         while 1:
             await asyncio.sleep(1)
@@ -328,6 +325,10 @@ if __name__ == "__main__":
     async_test(upnp_main)
 
 """
+ip6:
+    if it uses link local for announce use that for bind otherwise ext
+
+
 multicast replies:
 http://192.168.21.1:56688/rootDesc.xml
 http://192.168.21.1:1990/WFADevice.xml

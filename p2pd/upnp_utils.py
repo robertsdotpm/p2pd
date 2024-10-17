@@ -67,6 +67,27 @@ UPNP_PATHS = [
     '/ssdp/desc-DSM-eth1.4000.xml',
 ]
 
+"""
+For IPv6 -- if you bind to a global scope address and
+try request UPnP resources daemons like miniupnpd will
+drop the connection for coming from a 'public' address.
+Ensure we bind to link local scope and private IPs.
+"""
+async def get_upnp_route(af, nic, hostname=None):
+    if af == IP6:
+        route = nic.route(af)
+        if "fe80" == hostname[:4]:
+            # Link local src.
+            ip = str(route.link_locals[0])
+        else:
+            # Global scope src.
+            ip = route.ext()
+        
+        return await route.bind(
+            ips=ip
+        )
+    else:
+        return await nic.route(af).bind()
 
 """
 Creates a packet to send to the multicast address
@@ -78,6 +99,7 @@ def build_upnp_discover_buf(af):
     if af == IP6:
         host = f"[{to_s(UPNP_IP[af])}]"
 
+    #f'ST: upnp:rootdevice\r\n' \
     buf = \
     f'M-SEARCH * HTTP/1.1\r\n' \
     f'HOST: {host}:{UPNP_PORT}\r\n' \
@@ -134,7 +156,7 @@ async def get_upnp_forwarding_services(route, dest, path):
         log(f"Failed to get root xml {dest} {path}")
         log_exception()
     
-async def get_upnp_forwarding_services_for_replies(af, nic, replies):
+async def get_upnp_forwarding_services_for_replies(af, src_tup, nic, replies):
     # Port forward on all devices that replied.
     tasks = []
     for req in replies:
@@ -144,17 +166,12 @@ async def get_upnp_forwarding_services_for_replies(af, nic, replies):
         if af == IP6:
             hostname = hostname.strip("[]")
 
-        # Root XML address.
-        xml_dest = (
-            hostname,
-            url.port,
-        )
-
-        # Request rootDesc.xml.
-        http_route = nic.route(af)
+        
+        xml_dest = (hostname, url.port)
+        route = await get_upnp_route(af, nic, hostname)
         task = async_wrap_errors(
             get_upnp_forwarding_services(
-                http_route,
+                route,
                 xml_dest,
                 url.path
             )
@@ -196,7 +213,7 @@ async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext
         soap_action = "AddPinhole"
         body = f"""
 <u:{soap_action} xmlns:u="{service["serviceType"]}">
-    <RemoteHost></RemoteHost>
+    <RemoteHost>*</RemoteHost>
     <RemotePort>0</RemotePort>
     <Protocol>{proto_no}</Protocol>
     <InternalPort>{lan_port}</InternalPort>
@@ -226,12 +243,12 @@ async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext
         [b"Content-Length", to_b(f"{len(payload)}")]
     ]
 
-    route = nic.route(af)
-
-    """
-    if af == IP6:
-        route = route.bind(ips=lan_ip)
-    """
+    # Requests must come from IP:port for IPv6.
+    route = await get_upnp_route(
+        af,
+        nic,
+        dest[0],
+    )
 
     return await http_req(
         route,
@@ -279,12 +296,12 @@ async def use_upnp_forwarding_services(af, interface, ext_port, src_tup, desc, p
         """
         map_success_list = [
             b"ConflictInMappingEntry",
-            b"AddPortMappingResponse"
+            b"AddPortMappingResponse",
+            b"AddPinholeResponse",
         ]
 
         # Look for success indication in output.
         out = resp.out()
-        print(out)
         for map_success in map_success_list:
             if map_success in out:
                 return True

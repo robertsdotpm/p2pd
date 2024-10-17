@@ -102,16 +102,15 @@ def get_hdr(name, hdrs):
 
 async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, headers=None, conf=NET_CONF):
     # Get a new con 
-    r = copy.deepcopy(route)
-    r = await r.bind()
-    
+    assert(route.resolved)
     assert(dest is not None)
     log(f"{route} {dest}")
     try:
-        p = await pipe_open(route=r, proto=TCP, dest=dest, conf=conf)
+        p = await pipe_open(route=route, proto=TCP, dest=dest, conf=conf)
     except Exception:
         log_exception()
 
+    print(p.sock)
     if p is None:
         log("http req p is none")
         return None, None
