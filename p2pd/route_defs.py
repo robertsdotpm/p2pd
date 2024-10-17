@@ -104,17 +104,23 @@ class Route(Bind):
     async def forward(self, ip=None, port=None, proto="TCP"):
         assert(self.resolved)
         port = port or self.bind_port
-        ip = ip or self.nic()
-        src_addr = (
+        if ip is None:
+            if self.af == IP4:
+                ip = self.nic()
+            else:
+                ip = self.ext()
+        
+        src_tup = (
             ip,
             port,
         )
+
         return await port_forward(
             af=self.af,
             interface=self.interface,
             ext_port=port,
-            src_addr=src_addr,
-            desc=f"P2PD {hash(src_addr)}"[0:8],
+            src_tup=src_tup,
+            desc=f"P2PD {hash(src_tup)}"[0:8],
             proto=proto
         )
 

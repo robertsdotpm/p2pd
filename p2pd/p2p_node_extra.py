@@ -393,30 +393,11 @@ class P2PNodeExtra():
 
     # Accomplishes port forwarding and pin hole rules.
     async def forward(self, port):
-        tasks = []
-        for server in self.servers:
-            # Get the bind IP and interface for the route.
-            route = server[0]
+        async def forward_server(server):
+            await server.route.forward(port)
 
-            # Only forward to public IPv6 addresses.
-            ipr = IPRange(route.nic())
-            if route.af == IP6 and ipr.is_private:
-                continue
-
-            # Make task to forward this route.
-            task = route.forward(port)
-            tasks.append(task)
-
-        # Get a list of tasks to do forwarding or pin holes.
-        results = await asyncio.gather(*tasks)
-        tasks = []
-        for result in results:
-            if len(result):
-                tasks += result
-
-        # Now do that all at once since it might take a while.
-        if len(tasks):
-            await asyncio.gather(*tasks)
+        # Loop over all listen pipes for this node.
+        await self.for_server_in_self(forward_server)
 
     def p2p_pipe(self, dest_bytes):
         return P2PPipe(dest_bytes, self)
