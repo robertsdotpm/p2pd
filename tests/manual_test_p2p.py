@@ -141,7 +141,7 @@ async def add_echo_support(msg, client_tup, pipe):
 async def get_node(ifs=[], node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     conf = copy.deepcopy(NODE_CONF)
     conf["sig_pipe_no"] = sig_pipe_no
-    conf["enable_upnp"] = False
+    conf["enable_upnp"] = True
     node = P2PNode(ifs, port=node_port, conf=conf)
     await node.add_msg_cb(add_echo_support)
     return node
@@ -338,8 +338,6 @@ async def test_p2p_multi_node_ifs():
 async def test_p2p_register_connect():
     if_names = await list_interfaces()
     ifs = await load_interfaces(if_names)
-    print(ifs)
-
     name = input("name: ")
     params = {
         "sig_pipe_no": 2,
@@ -349,7 +347,7 @@ async def test_p2p_register_connect():
         "multi_ifs": True,
     }
 
-    use_strats = [P2P_PUNCH]
+    use_strats = [P2P_REVERSE]
     async with TestNodes(**params) as nodes:
         """
         name = await nodes.alice.nickname(name)

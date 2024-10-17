@@ -174,6 +174,9 @@ class P2PNodeExtra():
         return None
 
     async def listen_on_ifs(self, do_forward=False, protos=[TCP]):
+
+        print(f"Do forward = {do_forward}")
+
         # Port forwarding tasks.
         tasks = []
 
@@ -186,6 +189,8 @@ class P2PNodeExtra():
                     self.listen_port,
                     nic
                 )
+
+                print(outs)
 
                 # Optional port forwarding.
                 for port, pipe in outs:
@@ -394,7 +399,10 @@ class P2PNodeExtra():
     # Accomplishes port forwarding and pin hole rules.
     async def forward(self, port):
         async def forward_server(server):
-            await server.route.forward(port)
+            ret = await server.route.forward(port)
+            msg = f"Forwarded {server.route.ext()}:{port}"
+            if ret:
+                log_p2p(msg, self.node_id[:8])
 
         # Loop over all listen pipes for this node.
         await self.for_server_in_self(forward_server)
