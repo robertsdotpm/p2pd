@@ -129,6 +129,8 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
     if add_host is not None:
         hosts = [add_host]
 
+
+
     # Nothing to do.
     if not len(hosts):
         return []
@@ -167,6 +169,8 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
         # Socket limit to port list * ifs.
         results = await asyncio.gather(*tasks)
         dests += strip_none(results)
+
+    print(dests)
 
     # Build list of tasks.
     step = 10
@@ -269,6 +273,10 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
         log_exception()
         forward_success = False
 
+    print(src_tup)
+    print(ext_port)
+    print(forward_success)
+
     """
     If forwarding or pin hole was not successful using the standard
     multicast process attempt to brute force possible service URLs.
@@ -277,7 +285,7 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
     on Windows selector event loop so async gather will cause an error.
     """
     if not forward_success:
-        return asyncio.create_task(
+        return await asyncio.create_task(
             async_wrap_errors(
                 brute_force_port_forward(
                     af,
@@ -296,7 +304,7 @@ if __name__ == "__main__":
     async def upnp_main():
         from .interface import Interface
         nic = await Interface("wlx00c0cab5760d")
-        af = IP6
+        af = IP4
         route = nic.route(af)
         print(route.ext())
 
