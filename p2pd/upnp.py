@@ -151,7 +151,9 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
 
         # Default web server ports.
         80,
-        8080
+        8080,
+
+        56688,
     ]
 
     # Filter dests first by open ports.
@@ -303,7 +305,7 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
 if __name__ == "__main__":
     async def upnp_main():
         from .interface import Interface
-        nic = await Interface("wlx00c0cab5760d")
+        nic = await Interface("enp0s25")
         af = IP4
         route = nic.route(af)
         print(route.ext())

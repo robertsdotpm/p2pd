@@ -43,6 +43,9 @@ else:
     log = lambda m: None
 
 def log_p2p(m, node_id=""):
+    if not IS_DEBUG:
+        return
+    
     out = f"P2P: <{node_id}> {m}"
     with open('program.log', 'a') as fp:
         fp.write(out + '\n')

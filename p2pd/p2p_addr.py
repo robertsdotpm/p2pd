@@ -68,11 +68,16 @@ def make_peer_addr(node_id, machine_id, interface_list, signal_offsets, port=NOD
                 delta_type = interface.nat["delta"]["type"]
                 delta_value = interface.nat["delta"]["value"]
 
+            if af == IP4:
+                int_ip = ip or to_b(r.nic())
+            if af == IP6:
+                int_ip = ip or to_b(str(r.link_locals[0]))
+
             af_bufs.append(b"[%d,%d,%b,%b,%d,%d,%d,%d]" % (
                 interface.netiface_index,
                 if_index or i,
                 ip or to_b(r.ext()),
-                ip or to_b(r.nic()),
+                int_ip,
                 port,
                 nat_type,
                 delta_type,

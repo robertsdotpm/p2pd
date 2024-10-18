@@ -173,43 +173,26 @@ class P2PNodeExtra():
 
         return None
 
-    async def listen_on_ifs(self, do_forward=False, protos=[TCP]):
-        
-        # Port forwarding tasks.
-        tasks = []
-
+    async def listen_on_ifs(self):
         # Multi-iface connection facilitation.
         for nic in self.ifs:
-            # Default to listen to all on TCP.
-            for proto in protos:
-                outs = []
-                for af in nic.supported()[:]:
-                    route = await nic.route(af).bind(self.listen_port)
-                    out = await self.add_listener(proto, route)
-                    outs.append(out)
+            # Listen on first route for AFs.
+            outs = await self.listen_local(
+                TCP,
+                self.listen_port,
+                nic
+            )
 
-                print(outs)
-                print(nic.name)
+            # Add global address listener.
+            if IP6 in nic.supported():
+                route = await nic.route(IP6).bind(
+                    port=self.listen_port
+                )
 
-                # Optional port forwarding.
-                for port, pipe in outs:
-                    async def forwarder(port, pipe):
-                        route = copy.deepcopy(pipe.route)
-                        port = self.listen_port
-                        ret = await route.forward(port=port)
-                        msg = f"<upnp> Forwarded {route.ext()}:{port}"
-                        if ret:
-                            log_p2p(msg, self.node_id[:8])
+                out = await self.add_listener(TCP, route)
+                outs.append(out)
 
-                    if do_forward:
-                        tasks.append(
-                            async_wrap_errors(
-                                forwarder(port, pipe)
-                            )
-                        )
-
-        if len(tasks):
-            await asyncio.gather(*tasks)
+        print(self.servers)
 
     def pipe_future(self, pipe_id):
         if pipe_id not in self.pipes:
@@ -400,8 +383,8 @@ class P2PNodeExtra():
     # Accomplishes port forwarding and pin hole rules.
     async def forward(self, port):
         async def forward_server(server):
-            ret = await server.route.forward(port)
-            msg = f"Forwarded {server.route.ext()}:{port}"
+            ret = await server.route.forward(port=port)
+            msg = f"<upnp> Forwarded {server.route.ext()}:{port}"
             if ret:
                 log_p2p(msg, self.node_id[:8])
 

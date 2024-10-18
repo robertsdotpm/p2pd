@@ -184,9 +184,11 @@ class Daemon():
     link-local addresses and UNL. Perhaps a basic
     firewall could be a future feature.
     """
-    async def listen_local(self, proto, port, nic):
+    async def listen_local(self, proto, port, nic, limit=1):
         outs = []
         for af in nic.supported():
+            total = 0
+
             # Supports private IPv4 addresses.
             if af == IP4:
                 nic_iprs = []
@@ -198,6 +200,12 @@ class Daemon():
                             continue
                         else:
                             nic_iprs.append(nic_ipr)
+                            total += 1
+
+                        # Avoid bind limit.
+                        if limit is not None:
+                            if total > limit:
+                                return
 
                         # Don't modify the route table directly.
                         # Note: only binds to first IP.
@@ -205,6 +213,8 @@ class Daemon():
                         local = copy.deepcopy(route)
                         ips = ipr_norm(nic_ipr)
                         await local.bind(ips=ips, port=port)
+
+                        # Save add output.
                         outs.append(
                             await async_wrap_errors(
                                 self.add_listener(proto, local)
@@ -215,11 +225,19 @@ class Daemon():
             if af == IP6:
                 route = nic.route(af)
                 for link_local in route.link_locals:
+                    # Avoid bind limit.
+                    if limit is not None:
+                        if total > limit:
+                            return
+
+                    # Bind to link local.
                     local = nic.route(af)
                     ips = ipr_norm(link_local)
                     await async_wrap_errors(
                         local.bind(ips=ips, port=port)
                     )
+
+                    # Save listener output.
                     outs.append(
                         await async_wrap_errors(
                             self.add_listener(proto, local)
@@ -244,7 +262,9 @@ class Daemon():
                 for port in self.servers[af][proto]:
                     for ip in self.servers[af][proto][port]:
                         server = self.servers[af][proto][port][ip]
-                        await func(server)
+                        await async_wrap_errors(
+                            func(server)
+                        )
 
     async def add_msg_cb(self, msg_cb):
         async def func(server):

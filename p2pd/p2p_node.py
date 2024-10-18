@@ -159,7 +159,16 @@ class P2PNode(P2PNodeExtra, Daemon):
         )
 
         # Start the server for the node protocol.
-        await self.listen_on_ifs(self.conf["enable_upnp"])
+        await self.listen_on_ifs()
+
+        # Port forward all listen servers.
+        if self.conf["enable_upnp"]:
+            # Put slow forwarding task in the background.
+            forward = asyncio.create_task(
+                self.forward(self.listen_port)
+            )
+            self.tasks.append(forward)
+            await asyncio.sleep(2)
 
         # Build P2P address bytes.
         self.addr_bytes = make_peer_addr(
