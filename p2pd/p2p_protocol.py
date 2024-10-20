@@ -43,8 +43,8 @@ class SigProtoHandlers():
         self.node.tasks.append(task)
     
     # Receive a protocol message and validate it.
-    async def proto(self, buf):
-        buf = h_to_b(buf)
+    async def proto(self, h):
+        buf = h_to_b(h)
         is_enc = buf[0]
         if is_enc:
             try:
@@ -52,12 +52,15 @@ class SigProtoHandlers():
                     self.node.sk,
                     buf[1:]
                 )
+                self.node.log("net", f"Recv decrypted {buf}")
             except:
+                self.node.log("net", f"Failed to decrypt {h}")
                 log_exception()
         else:
             buf = buf[1:]
 
         if buf[0] not in SIG_PROTO:
+            self.node.log("net", f"Recv unknown sig msg {h}")
             return
 
         try:
@@ -70,13 +73,18 @@ class SigProtoHandlers():
             dest = msg.routing.dest
             node_id = to_s(self.node.p2p_addr["node_id"])
             if to_s(dest["node_id"]) != node_id:
+                m = f"Got msg for wrong node_id "
+                m += f"{dest['node_id']}"
+                self.node.log("net", m)
                 return
             
             # Old message?
-            if msg.meta.pipe_id in self.seen:
+            pipe_id = msg.meta.pipe_id
+            if pipe_id in self.seen:
+                self.node.log("net", "p id {pipe_id} already seen")
                 return
             else:
-                self.seen[msg.meta.pipe_id] = time.time()
+                self.seen[pipe_id] = time.time()
             
             # Updating routing dest with current addr.
             assert(msg is not None)
@@ -91,6 +99,7 @@ class SigProtoHandlers():
             # Take action based on message.
             return await self.handle_msg(msg_info, msg, conf)
         except:
+            self.node.log("net", f"unknown handling {buf}")
             log_exception()
     
 async def node_protocol(self, msg, client_tup, pipe):

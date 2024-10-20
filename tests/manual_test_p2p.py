@@ -34,17 +34,13 @@ def patch_msg_dispatcher(src_pp, src_node, dest_node):
             if x is None:
                 return
             else:
-                msg, _ = x
+                msg, vk, _ = x
 
             # Encrypt the message if the public key is known.
-            buf = b"\0" + msg.pack()
-            dest_node_id = msg.routing.dest["node_id"]
-            # or ... integrity portion...
-            if dest_node_id in src_node.auth:
-                buf = b"\1" + encrypt(
-                    dest_node.vk.to_string("compressed"),
-                    msg.pack(),
-                )
+            buf = b"\1" + encrypt(
+                dest_node.vk.to_string("compressed"),
+                msg.pack(),
+            )
             
             # UTF-8 messes up binary data in MQTT.
             buf = to_h(buf)
@@ -141,7 +137,7 @@ async def add_echo_support(msg, client_tup, pipe):
 async def get_node(ifs=[], node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     conf = copy.deepcopy(NODE_CONF)
     conf["sig_pipe_no"] = sig_pipe_no
-    conf["enable_upnp"] = True
+    conf["enable_upnp"] = False
     node = P2PNode(ifs, port=node_port, conf=conf)
     await node.add_msg_cb(add_echo_support)
     return node
@@ -340,14 +336,14 @@ async def test_p2p_register_connect():
     ifs = await load_interfaces(if_names)
     name = input("name: ")
     params = {
-        "sig_pipe_no": 2,
-        "addr_types": [EXT_BIND],
+        "sig_pipe_no": 0,
+        "addr_types": [NIC_BIND],
         "ifs": ifs,
         "same_if": False,
         "multi_ifs": True,
     }
 
-    use_strats = [P2P_REVERSE]
+    use_strats = [P2P_PUNCH]
     async with TestNodes(**params) as nodes:
         """
         name = await nodes.alice.nickname(name)

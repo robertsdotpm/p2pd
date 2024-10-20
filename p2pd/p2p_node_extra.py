@@ -13,6 +13,11 @@ import pathlib
 from ecdsa import SigningKey, SECP256k1
 
 class P2PNodeExtra():
+    def log(self, t, m):
+        node_id = self.node_id[:8]
+        msg = f"{t}: <{node_id}> {m}"
+        log(msg)
+
     def load_signing_key(self):
         # Make install dir if needed.
         install_root = get_p2pd_install_root()
@@ -51,9 +56,9 @@ class P2PNodeExtra():
         self.stun_clients = {IP4: {}, IP6: {}}
         for if_index in range(0, len(self.ifs)):
             interface = self.ifs[if_index]
-            if IP4 in interface.supported():
-                self.stun_clients[IP4][if_index] = await get_n_stun_clients(
-                    af=IP4,
+            for af in interface.supported():
+                self.stun_clients[af][if_index] = await get_n_stun_clients(
+                    af=af,
                     n=USE_MAP_NO + 2,
                     interface=interface,
                     proto=TCP,
@@ -191,8 +196,6 @@ class P2PNodeExtra():
 
                 out = await self.add_listener(TCP, route)
                 outs.append(out)
-
-        print(self.servers)
 
     def pipe_future(self, pipe_id):
         if pipe_id not in self.pipes:
@@ -385,6 +388,7 @@ class P2PNodeExtra():
         async def forward_server(server):
             ret = await server.route.forward(port=port)
             msg = f"<upnp> Forwarded {server.route.ext()}:{port}"
+            msg += f" on {server.route.interface.name}"
             if ret:
                 log_p2p(msg, self.node_id[:8])
 

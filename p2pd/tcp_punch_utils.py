@@ -97,9 +97,17 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
             await asyncio.sleep(ms_delay / 1000)
 
         # Bind to a specific port and interface.
-        route = await interface.route(af).bind(
-            mapping.local
-        )
+        #print(dest.tup)
+        if "fe80" == dest.tup[0][:4]:
+            route = interface.route(af)
+            await route.bind(
+                ips=str(route.link_locals[0]),
+                port=mapping.local
+            )
+        else:
+            route = await interface.route(af).bind(
+                mapping.local
+            )
 
         # Open connection -- return only sock.
         sock = await socket_factory(
@@ -143,6 +151,7 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
         mapping.sock = sock
         return mapping
     except:
+        #log_exception()
         return None
     
 """
@@ -226,7 +235,7 @@ def choose_same_punch_sock(our_wan, outs):
         for mapping in outs:
             sock = mapping.sock
             remote_port = mapping.remote
-            their_ip_host, their_r_port = sock.getpeername()
+            their_ip_host, their_r_port = sock.getpeername()[:2]
             their_ip_num = ip_str_to_int(
                 their_ip_host
             )
@@ -334,6 +343,8 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
             recv_mappings=recv_mappings,
             interface=interface,
         )
+
+        print("delayed punch out = ", outs)
 
         # Make both sides choose the same socket.
         sock = choose_same_punch_sock(our_wan, outs)

@@ -21,7 +21,7 @@ In the terminal. The logs can then be viewed by either:
 You can filter for just the P2P messages with grep:
 
 .. parsed-literal:: 
-    cat program.log | grep P2P:
+    cat program.log | grep p2p:
 
 Running tests
 ----------------

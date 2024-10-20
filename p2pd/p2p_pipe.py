@@ -158,15 +158,18 @@ class P2PPipe():
         return await self.node.pipes[pipe_id]
 
     async def tcp_hole_punch(self, af, pipe_id, src_info, dest_info, nic, addr_type, reply=None):
-        # Skip IP6 for now.
-        if af is IP6:
-            return None
-
         # Load TCP punch client for this pipe ID.
         if pipe_id in self.node.tcp_punch_clients:
             puncher = self.node.tcp_punch_clients[pipe_id]
             assert(src_info == puncher.src_info)
-            assert(dest_info == puncher.dest_info)
+            if dest_info != puncher.dest_info:
+                """
+                If an address fetch gets an old address a node replies
+                with its current address info in a reply which
+                is passed back to this function.
+                """
+                self.node.log("p2p", f"<punch> Updating dest info {dest_info}")
+                puncher.dest_info = dest_info
         else:
             # Create a new puncher for this pipe ID.
             if_index = src_info["if_index"]

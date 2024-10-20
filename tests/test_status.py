@@ -1,6 +1,19 @@
 from p2pd import *
 
 class TestStatus(unittest.IsolatedAsyncioTestCase):
+
+    async def test_stun_client(self):
+        nic = await Interface("wlx00c0cab5760d")
+        out = await get_stun_clients(IP6, 1, nic, TCP)
+        print(out)
+
+        return
+
+        dest = ("stunserver2024.stunprotocol.org", 3478)
+        client = STUNClient(IP6, dest, nic, proto=TCP)
+        out = await client.get_mapping()
+        print(out)
+
     async def test_pnp_client(self):
         nic = await Interface()
         af = nic.supported()[0]

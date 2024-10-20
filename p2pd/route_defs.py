@@ -264,10 +264,15 @@ class Route(Bind):
             for ipr in src_list:
                 dest_list.append(ipr.to_dict())
 
+        link_local_ips = []
+        for ipr in self.link_locals:
+            link_local_ips.append(ipr.to_dict())
+
         return {
             "af": int(self.af),
             "nic_ips": nic_ips,
             "ext_ips": ext_ips,
+            "link_local_ips": link_local_ips,
         }
 
     @staticmethod
@@ -281,11 +286,19 @@ class Route(Bind):
                 dest_list.append(ipr)
 
         af = IP4 if d["af"] == IP4 else IP6
-        return Route(
+        route = Route(
             af=af,
             nic_ips=nic_ips,
             ext_ips=ext_ips
         )
+
+        link_locals = []
+        for ipr_d in d["link_local_ips"]:
+            ipr = IPRange.from_dict(ipr_d)
+            link_locals.append(ipr)
+
+        route.link_locals = link_locals
+        return route
 
     # Pickle.
     def __getstate__(self):

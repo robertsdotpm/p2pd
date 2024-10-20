@@ -172,8 +172,6 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
         results = await asyncio.gather(*tasks)
         dests += strip_none(results)
 
-    print(dests)
-
     # Build list of tasks.
     step = 10
     for dest in dests:
@@ -274,10 +272,6 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
     except:
         log_exception()
         forward_success = False
-
-    print(src_tup)
-    print(ext_port)
-    print(forward_success)
 
     """
     If forwarding or pin hole was not successful using the standard
