@@ -13,6 +13,9 @@ SIG_PROTO = {
     SIG_CON: [ConMsg, P2P_DIRECT, 5],
     SIG_TCP_PUNCH: [TCPPunchMsg, P2P_PUNCH, 20],
     SIG_TURN: [TURNMsg, P2P_RELAY, 10],
+    SIG_GET_ADDR: [GetAddr, 0, 5],
+    SIG_RETURN_ADDR: [ReturnAddr, 0, 6],
+    #SIG_ADDR: [AddrMsg, 0, 5],
 }
 
 
@@ -31,6 +34,24 @@ class SigProtoHandlers():
         pp = self.node.p2p_pipe(
             msg.meta.src_buf
         )
+
+        # Get address.
+        if isinstance(msg, GetAddr):
+            reply = ReturnAddr({
+                "meta": {
+                    "pipe_id": msg.meta.pipe_id,
+                    "src_buf": self.node.addr_bytes,
+                },
+                "routing": {
+                    "dest_buf": msg.meta.src_buf,
+                },
+            })
+
+            # Our key for an encrypted reply.
+            reply.cipher.vk = to_h(self.node.vk.to_string("compressed"))
+
+            pp.route_msg(reply, reply=msg)
+            return
 
         # Connect to chosen address.
         task = create_task(
@@ -90,6 +111,23 @@ class SigProtoHandlers():
             assert(msg is not None)
             msg.set_cur_addr(self.node.addr_bytes)
             msg.routing.load_if_extra(self.node)
+
+            """
+            Only the dest and author knows the original msg
+            so if they reply with the right pipe_id and vkc
+            there's no need to check vkc.
+            """
+            if isinstance(msg, ReturnAddr):
+                print("got return addr")
+            
+                if pipe_id not in self.node.addr_futures:
+                    print("pipe id not in addr futures")
+                    print(self.node.addr_futures)
+                    print(pipe_id)
+                    return
+                
+                self.node.addr_futures[pipe_id].set_result(msg)
+                return
             
             # Toggle local and remote address support.
             conf = dict_child({

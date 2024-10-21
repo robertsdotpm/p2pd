@@ -74,6 +74,7 @@ class P2PNode(P2PNodeExtra, Daemon):
 
         # Set on start.
         self.addr_bytes = None
+        self.addr_futures = {}
 
     async def add_msg_cb(self, msg_cb):
         self.msg_cbs.append(msg_cb)
@@ -213,12 +214,52 @@ class P2PNode(P2PNodeExtra, Daemon):
 
             msg = f"Resolved '{name}' = '{addr_bytes}'"
             log_p2p(msg, self.node_id[:8])
+
+            # Parse address bytes to a dict.
             addr = parse_peer_addr(addr_bytes)
+
+            # Authorize this node for replies.
             assert(isinstance(pkt.vkc, bytes))
             self.auth[addr["node_id"]] = {
                 "vk": pkt.vkc,
                 "sk": None,
             }
+
+            # Reply must match this ID with this sender key.
+            pipe_id = to_s(rand_plain(10))
+            self.addr_futures[pipe_id] = asyncio.Future()
+
+            # Request most recent address from peer using MQTT.
+            msg = GetAddr({
+                "meta": {
+                    "pipe_id": pipe_id,
+                    "src_buf": self.addr_bytes,
+                },
+                "routing": {
+                    "dest_buf": addr_bytes,
+                },
+            })
+
+            # Our key for an encrypted reply.
+            msg.cipher.vk = to_h(self.vk.to_string("compressed"))
+
+            # Their key as loaded from PNS.
+            self.sig_msg_queue.put_nowait([msg, pkt.vkc, 0])
+
+            # Wait for an updated address.
+            try:
+                # Get a return addr reply.
+                reply = await asyncio.wait_for(
+                    self.addr_futures[pipe_id],
+                    5
+                )
+
+                # Use the src addr directly.
+                addr_bytes = reply.meta.src_buf
+                print(f"Loaded updated addr {addr_bytes}")
+            except asyncio.TimeoutError:
+                pass
+
 
         msg = f"Connecting to '{addr_bytes}'"
         log_p2p(msg, self.node_id[:8])

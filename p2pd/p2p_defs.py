@@ -10,6 +10,8 @@ from .p2p_addr import *
 SIG_CON = 1
 SIG_TCP_PUNCH = 2
 SIG_TURN = 3
+SIG_GET_ADDR = 4
+SIG_RETURN_ADDR = 5
 P2P_PIPE_CONF = {
     "addr_types": [EXT_BIND, NIC_BIND],
     "return_msg": False,
@@ -19,10 +21,12 @@ P2P_DIRECT = 1
 P2P_REVERSE = 2
 P2P_PUNCH = 3
 P2P_RELAY = 4
-DIRECT_FAIL = 5
-REVERSE_FAIL = 6
-PUNCH_FAIL = 7
-RELAY_FAIL = 8
+
+
+DIRECT_FAIL = 11
+REVERSE_FAIL = 12
+PUNCH_FAIL = 13
+RELAY_FAIL = 14
 
 # TURN is not included as a default strategy because it uses UDP.
 # It will need a special explanation for the developer.
@@ -332,4 +336,12 @@ class TURNMsg(SigMsg):
 
 class ConMsg(SigMsg):        
     def __init__(self, data, enum=SIG_CON):
+        super().__init__(data, enum)
+
+class GetAddr(SigMsg):        
+    def __init__(self, data, enum=SIG_GET_ADDR):
+        super().__init__(data, enum)
+
+class ReturnAddr(SigMsg):        
+    def __init__(self, data, enum=SIG_RETURN_ADDR):
         super().__init__(data, enum)
