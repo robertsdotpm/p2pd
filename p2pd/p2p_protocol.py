@@ -39,6 +39,7 @@ class SigProtoHandlers():
         if isinstance(msg, GetAddr):
             reply = ReturnAddr({
                 "meta": {
+                    "ttl": int(self.node.sys_clock.time()) + 5,
                     "pipe_id": msg.meta.pipe_id,
                     "src_buf": self.node.addr_bytes,
                 },
@@ -106,6 +107,11 @@ class SigProtoHandlers():
                 return
             else:
                 self.seen[pipe_id] = time.time()
+
+            # Check TTL.
+            if int(self.node.sys_clock.time()) >= msg.meta.ttl:
+                self.node.log("net", f"msg ttl reached {buf}")
+                return
             
             # Updating routing dest with current addr.
             assert(msg is not None)

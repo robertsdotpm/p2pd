@@ -141,6 +141,7 @@ class P2PPipe():
     async def reverse_connect(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
         msg = ConMsg({
             "meta": {
+                "ttl": int(self.node.sys_clock.time()) + 10,
                 "af": af,
                 "pipe_id": pipe_id,
                 "src_buf": self.src_bytes,
@@ -243,6 +244,7 @@ class P2PPipe():
         mappings = [m.toJSON() for m in ret[0]]
         msg = TCPPunchMsg({
             "meta": {
+                "ttl": int(self.node.sys_clock.time()) + 30,
                 "pipe_id": pipe_id,
                 "af": af,
                 "src_buf": self.src_bytes,
@@ -323,6 +325,7 @@ class P2PPipe():
         # Return a new TURN request.
         msg = TURNMsg({
             "meta": {
+                "ttl": int(self.node.sys_clock.time()) + 30,
                 "pipe_id": pipe_id,
                 "af": af,
                 "src_buf": self.src_bytes,

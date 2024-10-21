@@ -232,6 +232,7 @@ class P2PNode(P2PNodeExtra, Daemon):
             # Request most recent address from peer using MQTT.
             msg = GetAddr({
                 "meta": {
+                    "ttl": int(self.sys_clock.time()) + 5,
                     "pipe_id": pipe_id,
                     "src_buf": self.addr_bytes,
                 },

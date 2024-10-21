@@ -68,8 +68,9 @@ class SigMsg():
 
     # Information about the message sender.
     class Meta():
-        def __init__(self, pipe_id, af, src_buf, src_index=0, addr_types=[EXT_BIND, NIC_BIND]):
+        def __init__(self, ttl, pipe_id, af, src_buf, src_index=0, addr_types=[EXT_BIND, NIC_BIND]):
             # Load meta data about message.
+            self.ttl = to_n(ttl)
             self.pipe_id = to_s(pipe_id)
             self.src_buf = to_s(src_buf)
             self.src_index = to_n(src_index)
@@ -93,6 +94,7 @@ class SigMsg():
 
         def to_dict(self):
             return {
+                "ttl": self.ttl,
                 "pipe_id": self.pipe_id,
                 "af": int(self.af),
                 "src_buf": self.src_buf,
@@ -103,6 +105,7 @@ class SigMsg():
         @staticmethod
         def from_dict(d):
             return SigMsg.Meta(
+                d["ttl"],
                 d["pipe_id"],
                 d.get("af", IP4),
                 d["src_buf"],
