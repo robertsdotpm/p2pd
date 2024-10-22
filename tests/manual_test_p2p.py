@@ -337,7 +337,7 @@ async def test_p2p_register_connect():
     name = input("name: ")
     params = {
         "sig_pipe_no": 0,
-        "addr_types": [NIC_BIND],
+        "addr_types": [EXT_BIND, NIC_BIND],
         "ifs": ifs,
         "same_if": False,
         "multi_ifs": True,

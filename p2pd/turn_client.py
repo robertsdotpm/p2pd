@@ -40,7 +40,7 @@ class TURNClient(PipeEvents):
         af,
         dest,
         nic,
-        auth=(None, None),
+        auth=("", ""),
         realm=None,
         msg_cb=None,
         conf=NET_CONF

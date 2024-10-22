@@ -92,8 +92,8 @@
 81.82.206.117:3478
 129.153.212.128:3478
 143.198.60.79:3478
-stun1.p2pd.net
-stun2.p2pd.net
+stun1.p2pd.net:34780
+stun2.p2pd.net:34780
 stun.1cbit.ru
 stun.zepter.ru
 stun.globaltel.co.uk

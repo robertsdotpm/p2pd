@@ -345,7 +345,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
     # Use an AF supported by both.
     for addr_type in conf["addr_types"]:
         count = 1
-        for af in [IP6]:
+        for af in VALID_AFS:
             if reply is not None:
                 # Try select if info based on their chosen offset.
                 src_info = pp.src[af][reply.routing.dest_index]
