@@ -8,7 +8,7 @@ This is a server that allows anyone to store key-value records.
     - Since many people have dynamic IPs names must be
     periodically 'refreshed' which prevents expiry and ensures
     that they are associated with the right IP.
-    - New names past the limit per IP bump off olderest names.
+    - New names past the limit per IP bump off older names.
     - To prevent names being bumped before they can be refreshed
     each name is allowed to exist for a minimum period.
     - Thus, names are repeatedly migrated been IPs and refreshed

@@ -103,10 +103,6 @@ class SysClock:
                     self.clock_skew = self.calculate_clock_skew()
                 else:
                     break
-
-            # Raise exception.
-            if self.clock_skew == Dec(0):
-                raise Exception("Could not get clock skew.")
     
         return self
 

@@ -103,7 +103,7 @@ class SigProtoHandlers():
             # Old message?
             pipe_id = msg.meta.pipe_id
             if pipe_id in self.seen:
-                self.node.log("net", "p id {pipe_id} already seen")
+                self.node.log("net", f"p id {pipe_id} already seen")
                 return
             else:
                 self.seen[pipe_id] = time.time()

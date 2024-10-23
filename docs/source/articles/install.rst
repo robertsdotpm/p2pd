@@ -15,5 +15,4 @@ no harm in installing the extra dependencies.
     cd p2pd
     python3 -m pip install -r requirements.txt
     python3 -m pip install -r optional-debug-requirements.txt
-    python3 -m pip install -r optional-requirements.txt
-    python3 -m pip install -r pnp-server-requirements.txt
+    python3 -m pip install -r optional-server-requirements.txt

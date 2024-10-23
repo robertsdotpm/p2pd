@@ -172,6 +172,7 @@ class P2PNode(P2PNodeExtra, Daemon):
             await asyncio.sleep(2)
 
         # Build P2P address bytes.
+        assert(self.node_id is not None)
         self.addr_bytes = make_peer_addr(
             self.node_id,
             self.machine_id,
@@ -197,6 +198,7 @@ class P2PNode(P2PNodeExtra, Daemon):
             self.ifs,
             sys_clock,
         )
+
         return self
     
     def __await__(self):

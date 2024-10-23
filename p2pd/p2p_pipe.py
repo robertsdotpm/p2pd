@@ -8,11 +8,16 @@ from .p2p_utils import get_first_working_turn_client
 from .p2p_utils import CON_ID_MSG, f_path_txt
 from .p2p_protocol import *
 from .tcp_punch_client import *
+from .turn_client import TURNClient
 
-def log_pipe(addr_type, func_txt, pipe):
+async def log_pipe(addr_type, func_txt, pipe):
     path_txt = f_path_txt(addr_type)
-    local_tup = pipe.sock.getsockname()[:2]
-    remote_tup = pipe.sock.getpeername()[:2]
+    if isinstance(pipe, TURNClient):
+        remote_tup = list(pipe.peers.values())[0]
+        local_tup = await pipe.relay_tup_future
+    else:
+        local_tup = pipe.sock.getsockname()[:2]
+        remote_tup = pipe.sock.getpeername()[:2]
     msg = f"<{func_txt}> Established {path_txt} {local_tup} -> {remote_tup}"
     msg += f" on '{pipe.route.interface.name}'"
     return msg
@@ -95,7 +100,7 @@ class P2PPipe():
                 continue
 
             # Indicate success result (long.)
-            msg = log_pipe(addr_type, func_txt, pipe)
+            msg = await log_pipe(addr_type, func_txt, pipe)
             log_p2p(msg, self.node.node_id[:8])
             return pipe
             

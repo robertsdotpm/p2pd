@@ -4,6 +4,9 @@ return_msg False = use signal pipes
 
 from p2pd import *
 
+import sys
+import os
+import signal
 try:
     import aiomonitor
     from aiohttp import web
@@ -153,6 +156,10 @@ class TestNodes():
 
         self.addr_types = addr_types
         self.sig_pipe_no = sig_pipe_no
+        self.close_path = True
+
+    def stop_controller(self, signal, frame):
+        os._exit(0)
 
     async def __aenter__(self):
         # Load the default nic.
@@ -198,6 +205,8 @@ class TestNodes():
                     NODE_PORT + 1,
                     sig_pipe_no=self.sig_pipe_no,
                 )
+
+        
 
         # Build p2p con pipe config.
         self.pp_conf = {
@@ -269,9 +278,13 @@ class TestNodes():
             bob_start_sig()
 
         # Short reference var.
+        signal.signal(signal.SIGINT, self.stop_controller)
         return self
 
     async def __aexit__(self, exc_t, exc_v, exc_tb):
+        if not self.close_path:
+            return
+        
         await async_wrap_errors(self.alice.close())
         if TEST_NODE_NO > 1:
             await async_wrap_errors(self.bob.close())
@@ -342,6 +355,16 @@ async def test_p2p_register_connect():
         "same_if": False,
         "multi_ifs": True,
     }
+
+    # Start of node id is none. ???
+
+    """
+    deterministically choose sig pipe offsets based on node id
+    or at least use the same that were chosen
+    increase to 3 sig pipes
+    finish status tests
+    """
+    
 
     use_strats = [P2P_PUNCH]
     async with TestNodes(**params) as nodes:

@@ -129,8 +129,6 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
     if add_host is not None:
         hosts = [add_host]
 
-
-
     # Nothing to do.
     if not len(hosts):
         return []
