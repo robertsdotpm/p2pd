@@ -193,6 +193,5 @@ async def main():
 
 
 
-
-
-async_test(main)
+if __name__ == "__main__":
+    async_test(main)
