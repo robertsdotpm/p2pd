@@ -190,7 +190,7 @@ async def main():
                 print("Basic echo protocol.")
                 while 1:
                     choice = to_b(input("Echo (exit to quit): "))
-                    if choice in ("quit", "exit"):
+                    if choice in (b"quit", b"exit"):
                         choice = "4"
                         break
 
