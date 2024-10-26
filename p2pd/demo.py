@@ -88,7 +88,7 @@ async def main():
 
     choice = None
     while 1:
-        choice = input("Select option: ")
+        choice = input("Select menu option: ")
         if choice not in ("0", "1", "2", "3"):
             continue
 
@@ -132,7 +132,7 @@ async def main():
             print("TCP: (d)irect, (r)everse, (p)unch; UDP: (t)urn")
             strats = []
             while 1:
-                methods = input("Default (drp): ")
+                methods = input("Default in order (drp): ")
                 if not len(methods):
                     methods = P2P_STRATEGIES
                     break
@@ -153,7 +153,7 @@ async def main():
             print("WAN: (e)xternal, LAN: (l)ocal ")
             addr_types = []
             while 1:
-                pathway = input("Default (el): ")
+                pathway = input("Default in order (el): ")
                 if not len(pathway):
                     addr_types = [EXT_BIND, NIC_BIND]
                     break
@@ -188,10 +188,15 @@ async def main():
                 print(pipe.sock)
                 print()
                 print("Basic echo protocol.")
+                print("Enter back to return to menu or exit to quit.")
                 while 1:
-                    choice = to_b(input("Echo (exit to quit): "))
+                    choice = to_b(input("Echo: "))
                     if choice in (b"quit", b"exit"):
                         choice = "4"
+                        break
+                    if choice in (b"back"):
+                        choice = ""
+                        await pipe.close()
                         break
 
                     await pipe.send(b"ECHO " + choice + b"\n")
@@ -200,7 +205,8 @@ async def main():
 
         if choice == "4":
             print("Stopping nodes...")
-            print("May take a while...")
+            print("May take a while... work in progress")
+            print("(I usually just spam cnt + c)")
             for n in nodes:
                 await n.close()
             return
