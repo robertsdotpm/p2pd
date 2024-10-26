@@ -77,7 +77,7 @@ async def main():
 
     print(\
 """(0) Connect to a node using its nickname or address.
-(1) Start additional node for testing.
+(1) Start additional node for testing (for self punch.)
 (2) Register a unique nickname for your node.
 (3) Exit
 """)
