@@ -11,6 +11,9 @@ Log.log_p2p = patch_log_p2p
 
 async def add_echo_support(msg, client_tup, pipe):
     if b"ECHO" == msg[:4]:
+        print()
+        print(f"\tGot echo proto msg: {msg} from {client_tup}")
+        print()
         await pipe.send(msg[4:], client_tup)
 
 nat_txt = {
@@ -77,9 +80,10 @@ async def main():
 
     print(\
 """(0) Connect to a node using its nickname or address.
-(1) Start additional node for testing (for self punch.)
-(2) Register a unique nickname for your node.
-(3) Exit
+(1) Start accepting connections (this stops the input loop)
+(2) Start additional node for testing (for self punch.)
+(3) Register a unique nickname for your node.
+(4) Exit program.
 """)
 
     choice = None
@@ -88,7 +92,11 @@ async def main():
         if choice not in ("0", "1", "2", "3"):
             continue
 
-        if choice == "2":
+        if choice == "1":
+            while 1:
+                await asyncio.sleep(1)
+
+        if choice == "3":
             choice = input("Enter nickname: ")
             try:
                 ret = await node.nickname(choice)
@@ -99,7 +107,7 @@ async def main():
             continue
 
         addr = None
-        if choice == "1":
+        if choice == "2":
             alice = nodes[-1]
             bob = P2PNode(port=alice.listen_port + 1, ifs=ifs)
             bob.add_msg_cb(add_echo_support)
@@ -181,14 +189,20 @@ async def main():
                 print()
                 print("Basic echo protocol.")
                 while 1:
-                    choice = to_b(input("Echo: "))
+                    choice = to_b(input("Echo (exit to quit): "))
+                    if choice in ("quit", "exit"):
+                        choice = "4"
+                        break
+
                     await pipe.send(b"ECHO " + choice + b"\n")
                     buf = await pipe.recv(timeout=3)
                     print(f"recv = {buf}")
 
-        if choice == "3":
-            print("Stopping node...")
-            await node.close()
+        if choice == "4":
+            print("Stopping nodes...")
+            print("May take a while...")
+            for n in nodes:
+                await n.close()
             return
 
 
