@@ -266,11 +266,13 @@ class Daemon():
                             func(server)
                         )
 
-    async def add_msg_cb(self, msg_cb):
+    def add_msg_cb(self, msg_cb):
         async def func(server):
             server.add_msg_cb(msg_cb)
 
-        await self.for_server_in_self(func)
+        asyncio.create_task(
+            self.for_server_in_self(func)
+        )
 
     async def close(self):
         async def func(server):

@@ -142,7 +142,7 @@ async def get_node(ifs=[], node_port=NODE_PORT, sig_pipe_no=SIGNAL_PIPE_NO):
     conf["sig_pipe_no"] = sig_pipe_no
     conf["enable_upnp"] = False
     node = P2PNode(ifs, port=node_port, conf=conf)
-    await node.add_msg_cb(add_echo_support)
+    node.add_msg_cb(add_echo_support)
     return node
 
 class TestNodes():

@@ -17,7 +17,7 @@ async def computer_a():
         # Make sure node server uses different port.
         port=NODE_PORT + 50 + 1
     )
-    await node.add_msg_cb(msg_cb)
+    node.add_msg_cb(msg_cb)
     
     # Start the node listening.
     await node.start()

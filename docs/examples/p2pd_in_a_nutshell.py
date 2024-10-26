@@ -9,4 +9,4 @@ async def msg_cb(msg, client_tup, pipe):
 async def example():
     # Start a new P2P node with your protocol.
     node = await P2PNode()
-    await node.add_msg_cb(msg_cb)
+    node.add_msg_cb(msg_cb)

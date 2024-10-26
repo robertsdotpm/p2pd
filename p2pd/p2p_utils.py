@@ -225,11 +225,6 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
     addressing is suitably local or remote.
     """
     async def try_addr_infos(addr_type, src_info, dest_info):
-        print(f"trying addr type {addr_type}")
-
-
-
-
         # Local addressing and/or remote.
         try:
             # Create a future for pending pipes.
@@ -281,8 +276,6 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                 )
             )
 
-            print(f"dest ip = {dest_info['ip']}")
-
             # Need a destination address.
             # Possibly a different address type will work.
             if dest_info["ip"] == "None":
@@ -293,7 +286,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             src_ip = src_info["nic"] if addr_type == NIC_BIND else src_info["ext"]
             msg = f"<{strat}> Trying {path_txt} {src_ip} -> "
             msg += f"{dest_info['ip']} on '{interface.name}'"
-            log_p2p(msg, pp.node.node_id[:8])
+            Log.log_p2p(msg, pp.node.node_id[:8])
 
             """
             With all the correct interfaces and IPs
@@ -374,13 +367,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             if addr_type == NIC_BIND:
                 pair_order = overlap + unique
 
-            print(pair_order)
-
             for src_info, dest_info in pair_order:
-                print("trying ")
-                print(src_info)
-                print(dest_info)
-
                 # Only try up to N pairs per technique.
                 # Technique-specific N to avoid lengthy delays.
                 ret = await async_wrap_errors(

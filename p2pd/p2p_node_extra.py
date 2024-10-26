@@ -1,4 +1,6 @@
+
 from .settings import *
+from .utils import *
 from .machine_id import hashed_machine_id
 from .tcp_punch_client import PUNCH_CONF
 from .p2p_utils import *
@@ -59,7 +61,7 @@ class P2PNodeExtra():
             for af in interface.supported():
                 self.stun_clients[af][if_index] = await get_n_stun_clients(
                     af=af,
-                    n=USE_MAP_NO + 2,
+                    n=USE_MAP_NO,
                     interface=interface,
                     proto=TCP,
                     conf=PUNCH_CONF,
@@ -155,20 +157,38 @@ class P2PNodeExtra():
     bound to the wrong event loop.
 
     TODO: investigate this.
-    """
-    async def load_signal_pipes(self):
-        tasks = []
-        serv_len = len(MQTT_SERVERS)
-        offsets = shuffle(list(range(serv_len)))
-        sig_pipe_no = min(self.conf["sig_pipe_no"] + 1, serv_len)
-        for i in range(0, sig_pipe_no):
-            offset = offsets[i]
-            task = self.load_signal_pipe(offset)
-            tasks.append(task)
 
-        ret = await asyncio.gather(*tasks)
-        ret = strip_none(ret)
-        assert(len(ret))
+
+    """
+    async def load_signal_pipes(self, node_id):
+        # Offsets for MQTT servers.
+        offsets = [n for n in range(0, len(MQTT_SERVERS))]
+        shuffled = []
+
+        """
+        The server offsets are put in a deterministic order
+        based on the node_id. This is so restarting a server
+        lands on the same signal servers and peers with the
+        old address can still reach that node.
+        """
+        x = dhash(node_id)
+        while len(offsets):
+            pos = field_wrap(x, [0, len(offsets) - 1])
+            index = offsets[pos]
+            shuffled.append(index)
+            offsets.remove(index)
+
+        """
+        Load the signal pipes based on the limit.
+        """
+        success_no = 0
+        for index in shuffled:
+            ret = await self.load_signal_pipe(index)
+            if ret is not None:
+                success_no += 1
+
+            if success_no >= self.conf["sig_pipe_no"]:
+                return
     
     def find_signal_pipe(self, addr):
         our_offsets = list(self.signal_pipes)
@@ -390,7 +410,7 @@ class P2PNodeExtra():
             msg = f"<upnp> Forwarded {server.route.ext()}:{port}"
             msg += f" on {server.route.interface.name}"
             if ret:
-                log_p2p(msg, self.node_id[:8])
+                Log.log_p2p(msg, self.node_id[:8])
 
         # Loop over all listen pipes for this node.
         await self.for_server_in_self(forward_server)

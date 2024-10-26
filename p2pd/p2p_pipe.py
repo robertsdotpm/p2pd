@@ -101,7 +101,8 @@ class P2PPipe():
 
             # Indicate success result (long.)
             msg = await log_pipe(addr_type, func_txt, pipe)
-            log_p2p(msg, self.node.node_id[:8])
+            Log.log_p2p(msg, self.node.node_id[:8])
+            pipe.subscribe(SUB_ALL)
             return pipe
             
     async def direct_connect(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
@@ -325,7 +326,7 @@ class P2PPipe():
                 our_relay = await client.relay_tup_future
                 m = f"Whitelist {dest_peer} -> {our_relay} to"
                 m += f" '{iface.name}'"
-                log_p2p(m, self.node.node_id[:8])
+                Log.log_p2p(m, self.node.node_id[:8])
 
         # Return a new TURN request.
         msg = TURNMsg({

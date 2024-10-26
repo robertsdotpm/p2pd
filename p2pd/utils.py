@@ -42,14 +42,15 @@ else:
     IS_DEBUG = 0
     log = lambda m: None
 
-def log_p2p(m, node_id=""):
-    if not IS_DEBUG:
-        return
-    
-    out = f"p2p: <{node_id}> {m}"
-    with open('program.log', 'a') as fp:
-        fp.write(out + '\n')
-
+class Log():
+    @staticmethod
+    def log_p2p(m, node_id=""):
+        if not IS_DEBUG:
+            return
+        
+        out = f"p2p: <{node_id}> {m}"
+        with open('program.log', 'a') as fp:
+            fp.write(out + '\n')
 
 # Yoloswaggins.
 if not hasattr(asyncio, 'create_task'):
@@ -179,6 +180,7 @@ hash160 = lambda x: hashlib.new('ripemd160', to_b(x)).digest()
 sha3_256 = lambda x: to_s(hashlib.sha3_256(to_b(x)).hexdigest())
 b_sha3_256 = lambda x: hashlib.sha3_256(to_b(x)).digest()
 bind_str = lambda r: f"{r.bind_tup()[0]}:{r.bind_tup()[1]}"
+dhash = lambda x: b_to_i(hashlib.sha256(to_b(f"{x}")).digest())
 
 def list_clone_rand(the_list, n):
     the_clone = the_list[:]

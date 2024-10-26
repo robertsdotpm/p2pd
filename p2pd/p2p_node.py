@@ -4,6 +4,7 @@ Reusing address can hide socket errors and
 make servers appear broken when they're not.
 """
 import asyncio
+import hashlib
 from .interface import load_interfaces
 from .daemon import *
 from .daemon import *
@@ -20,10 +21,9 @@ NODE_CONF = dict_child({
 
 # Main class for the P2P node server.
 class P2PNode(P2PNodeExtra, Daemon):
-    def __init__(self, ifs=[], port=NODE_PORT, conf=NODE_CONF):
+    def __init__(self, ifs=[], port=None, conf=NODE_CONF):
         super().__init__()
         self.__name__ = "P2PNode"
-        assert(port)
         
         # Main variables for the class.
         self.conf = conf
@@ -53,21 +53,6 @@ class P2PNode(P2PNodeExtra, Daemon):
         # Fixed reference for long-running tasks.
         self.tasks = []
 
-        # Cryptography for authenticated messages.
-        self.sk = self.load_signing_key()
-        self.vk = self.sk.verifying_key
-        self.node_id = hashlib.sha256(
-            self.vk.to_string("compressed")
-        ).hexdigest()[:25]
-
-        # Table of authenticated users.
-        self.auth = {
-            self.node_id: {
-                "sk": self.sk,
-                "vk": self.vk.to_string("compressed"),
-            }
-        }
-
         # Watch for idle connections.
         self.last_recv_table = {} # [pipe] -> time
         self.last_recv_queue = [] # FIFO pipe ref
@@ -76,7 +61,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         self.addr_bytes = None
         self.addr_futures = {}
 
-    async def add_msg_cb(self, msg_cb):
+    def add_msg_cb(self, msg_cb):
         self.msg_cbs.append(msg_cb)
 
     # Used by the node servers.
@@ -110,7 +95,7 @@ class P2PNode(P2PNodeExtra, Daemon):
                 out.routing.dest["node_id"]
             )
 
-    async def start(self, sys_clock=None):
+    async def start(self, sys_clock=None, out=False):
         # Load ifs.
         t = time.time()
         if not len(self.ifs):
@@ -120,6 +105,9 @@ class P2PNode(P2PNodeExtra, Daemon):
             except:
                 log_exception()
                 self.ifs = []
+
+        # Make sure ifs are in the same order.
+        self.ifs = sorted(self.ifs, key=lambda x: x.name)
 
         # Managed to load IFs?
         if not len(self.ifs):
@@ -135,18 +123,54 @@ class P2PNode(P2PNodeExtra, Daemon):
         # Managed to load machine IDs?
         if self.machine_id in (None, ""):
             raise Exception("Could not load machine id.")
+        
+        """
+        The listen port is set deterministically to avoid conflicts
+        with port forwarding with multiple nodes in the LAN.
+        """
+        if self.listen_port is None:
+            self.listen_port = field_wrap(
+                dhash(self.machine_id),
+                [10000, 60000]
+            )
+
+        # Cryptography for authenticated messages.
+        self.sk = self.load_signing_key()
+        self.vk = self.sk.verifying_key
+        self.node_id = hashlib.sha256(
+            self.vk.to_string("compressed")
+        ).hexdigest()[:25]
+
+        # Table of authenticated users.
+        self.auth = {
+            self.node_id: {
+                "sk": self.sk,
+                "vk": self.vk.to_string("compressed"),
+            }
+        }
 
         # Used by TCP punch clients.
         t = time.time()
+        if out: print("\tLoading STUN clients...")
         await self.load_stun_clients()
+        if out: print("\t\tLoaded (done)")
 
         # MQTT server offsets for signal protocol.
         if self.conf["sig_pipe_no"]:
-            await self.load_signal_pipes()
+            if out: print("\tLoading MQTT clients...")
+            await self.load_signal_pipes(self.node_id)
+            if out:
+                buf = "\t\tmqtt = "
+                for index in list(self.signal_pipes):
+                    buf += f"{index}; "
+                print(buf)
 
         # Multiprocess support for TCP punching and NTP sync.
         t = time.time()
+        if out: print("\tLoading NTP clock skew...")
         await self.setup_punch_coordination(sys_clock)
+        clock_skew = str(self.sys_clock.clock_skew)
+        if out: print(f"\t\tClock skew = {clock_skew}")
             
         # Accept TCP punch requests.
         self.start_punch_worker()
@@ -164,6 +188,8 @@ class P2PNode(P2PNodeExtra, Daemon):
 
         # Port forward all listen servers.
         if self.conf["enable_upnp"]:
+            if out: print("\tStarting UPnP task...")
+
             # Put slow forwarding task in the background.
             forward = asyncio.create_task(
                 self.forward(self.listen_port)
@@ -183,7 +209,8 @@ class P2PNode(P2PNodeExtra, Daemon):
 
         # Log address.
         msg = f"Starting node = '{self.addr_bytes}'"
-        log_p2p(msg, self.node_id[:8])
+        if not out:
+            Log.log_p2p(msg, self.node_id[:8])
 
         # Save a dict version of the address fields.
         try:
@@ -196,7 +223,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         self.nick_client = await Nickname(
             self.sk,
             self.ifs,
-            sys_clock,
+            self.sys_clock,
         )
 
         return self
@@ -208,14 +235,14 @@ class P2PNode(P2PNodeExtra, Daemon):
     async def connect(self, addr_bytes, strategies=P2P_STRATEGIES, conf=P2P_PIPE_CONF):
         if pnp_name_has_tld(addr_bytes):
             msg = f"Translating '{addr_bytes}'"
-            log_p2p(msg, self.node_id[:8])
+            Log.log_p2p(msg, self.node_id[:8])
             name = addr_bytes
             pkt = await self.nick_client.fetch(addr_bytes)
             addr_bytes = pkt.value
             print(f"Loaded addr {addr_bytes}")
 
             msg = f"Resolved '{name}' = '{addr_bytes}'"
-            log_p2p(msg, self.node_id[:8])
+            Log.log_p2p(msg, self.node_id[:8])
 
             # Parse address bytes to a dict.
             addr = parse_peer_addr(addr_bytes)
@@ -265,9 +292,10 @@ class P2PNode(P2PNodeExtra, Daemon):
 
 
         msg = f"Connecting to '{addr_bytes}'"
-        log_p2p(msg, self.node_id[:8])
+        Log.log_p2p(msg, self.node_id[:8])
         pp = self.p2p_pipe(addr_bytes)
-        return await pp.connect(strategies, reply=None, conf=conf)
+        pipe = await pp.connect(strategies, reply=None, conf=conf)
+        return pipe
 
     # Get our node server's address.
     def address(self):
@@ -283,6 +311,6 @@ class P2PNode(P2PNodeExtra, Daemon):
         )
 
         msg = f"Setting nickname '{name}' = '{value}'"
-        log_p2p(msg, self.node_id[:8])
+        #Log.log_p2p(msg, self.node_id[:8])
         return name
 

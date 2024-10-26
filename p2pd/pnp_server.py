@@ -283,7 +283,7 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
         ret = await cur.execute(sql, 
             (
                 name,
-                value,
+                value, 
                 owner_pub,
                 int(af),
                 int(ip_id),

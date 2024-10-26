@@ -1,5 +1,6 @@
 from p2pd import *
 from ecdsa import SigningKey, SECP256k1
+import hashlib
 
 NIC_NAME = "wlx00c0cab5760d"
 
@@ -134,7 +135,7 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
 
         # Try all IPs and AFs.
         name = sk.verifying_key.to_string("compressed")
-        name = to_h(name)[:60]
+        name = hashlib.sha256(name).hexdigest()[:25]
         for af in nic.supported():
             for host in hosts:
                 serv = PNP_SERVERS[af][host]
@@ -164,6 +165,7 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         node_extra = P2PNodeExtra()
         node_extra.listen_port = NODE_PORT
         sk = node_extra.load_signing_key()
+        print(sk)
 
         # Load nickname client.
         nick = await Nickname(
@@ -175,7 +177,7 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         # Test push works.
         val = rand_plain(10)
         name = sk.verifying_key.to_string("compressed")
-        name = to_h(name)[:60]
+        name = hashlib.sha256(name).hexdigest()[:25]
         fqn_name = name + ".peer"
         fqn = await nick.push(name, val)
         if fqn != fqn_name:
@@ -208,15 +210,16 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         else:
             print(f"Encryption works")
 
+    async def test_start_node_server(self):
 
-"""
-- test proto serialization-deserialization
-- test node server start
-- test parts of node addrs?
-- check for duplicate python processes
-- test for old package version?
-- test cmd line works
-- test interface ifs work
-- maybe more specific tests for p2p_utils addr code
+        conf = dict_child({
+            "reuse_addr": False,
+            "enable_upnp": False,
+            "sig_pipe_no": 3,
+        }, NET_CONF)
 
-"""
+        n = await P2PNode(conf=conf)
+        print(n.ifs)
+        print(n.addr_bytes)
+        print(n.listen_port)
+        await n.close()
