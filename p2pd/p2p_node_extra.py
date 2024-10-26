@@ -55,6 +55,10 @@ class P2PNodeExtra():
         return sk
 
     async def load_stun_clients(self):
+        # Already loaded.
+        if hasattr(self, "stun_clients"):
+            return
+        
         self.stun_clients = {IP4: {}, IP6: {}}
         for if_index in range(0, len(self.ifs)):
             interface = self.ifs[if_index]
