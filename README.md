@@ -2,21 +2,28 @@
 
 ``[Coverage >= 82%] [Python >= 3.6] [Mac, Win, Nix, BSD, Android]``
 
-EDIT: There's been a major update. I have released version 3 but
-haven't written the new docs yet. Feel free to try it out.
-Node startup will be slow but the success of TCP P2P
-connectivity is now greater than any other library out there.
-Connectivity establishment is initially slow as many traversal
-techniques are tried. But once connected it is the same as any
-other TCP connection. Will update the docs over the coming weeks.
+Welcome to the new release of **P2PD.** P2PD is a library for doing
+peer-to-peer networking in Python. This release offers a new methodology
+for improving connectivity between hosts. It works on private networks, across
+the Internet, and even in-between nodes on the same machine.
 
-**P2PD** is a new async networking library for Python. It's based on solving some of the problems with Python's existing APIs and supports P2P networking among other features.
+Tens of thousands of lines of code have been updated. Most modules have been refactored or re-written. The protocol has been replaced and now supports encryption; TCP punching now works with IPv6; The STUN client supports hundreds more servers; UPnP is less noisy (and actually works); Networking code has been refreshed to reduce errors; Core connectivity methods have been redesigned (and tested quite thoroughly.)
+
+The new release also includes a simple domain system that offers open,
+authenticated, registration-free, domain names. The feature is free
+to use (though some resource limits apply.)
 
 ## Installation
 
 On non-windows systems make sure you have gcc and python3-devel installed.
 
    python3 -m pip install p2pd
+
+## Demo
+
+For an interactive demo type this in your terminal.
+
+  python3 -m p2pd.demo
 
 ## Documentation
 
@@ -60,7 +67,7 @@ P2PD offers engineers the following features:
    between a peer-to-peer connection.
 - **Minimal dependencies.** Most of the code in P2PD uses the Python
   standard library to improve portability and reduce packaging issues.
-- **Built on open protocols.** P2PD uses **IRC** as a name system,
+- **Built on open protocols.**
    **STUN** for address lookups, **MQTT** for signaling messages, and
    **TURN** for last resort message relaying.
    All of these protocols have public infrastructure.

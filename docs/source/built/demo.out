@@ -1,0 +1,57 @@
+Loading networking interfaces...
+	enp0s25 (v4)
+		symmetric nat; equal delta = 0
+	wlx00c0cab5760d (v4)(v6)
+		full cone nat; equal delta = 0
+Starting node...
+	Loading STUN clients...
+		Loaded (done)
+	Loading MQTT clients...
+		mqtt = 1; 2; 0; 
+	Loading NTP clock skew...
+		Clock skew = 0.05983363091945648193359375
+	Starting UPnP task...
+
+Node started = addr
+Node port = 47317
+Node nickname = your_addr.peer
+
+(0) Connect to a node using its nickname or address.
+(1) Start accepting connections (this stops the input loop)
+(2) Start additional node for testing (for self punch.)
+(3) Register a unique nickname for your node.
+(4) Exit program.
+
+Select option: 0
+Enter nodes nickname or address: some.peer
+
+Connection methods:
+TCP: (d)irect, (r)everse, (p)unch; UDP: (t)urn
+Default (drp): t
+
+Enabled connection pathways:
+WAN: (e)xternal, LAN: (l)ocal
+Default (el):
+
+Connection in progress... Please wait...
+p2p: <nodeid> Translating 'addr.peer'
+Loaded addr b'...'
+p2p: <nodeid> Resolved 'addr.peer' = '...'
+p2p: <nodeid> <upnp> Forwarded wan:14985 on Intel(R) Wi-Fi 6E AX211 160MHz
+got return addr
+Loaded updated addr ...
+p2p: <nodeid> Connecting to '...'
+p2p: <nodeid> <relay> Trying external wan1 -> wan2 on 'Intel(R) Wi-Fi 6E AX211 160MHz'
+p2p: <nodeid> <relay> Trying external wan2 -> wan1 on 'Intel(R) Wi-Fi 6E AX211 160MHz'
+p2p: <nodeid> Whitelist ['wan2', 59630] -> ('turn relay', 53249) to 'Intel(R) Wi-Fi 6E AX211 160MHz'
+p2p: <nodeid> <relay> Established external ('ip', 53249) -> ('ip', 65086) on 'Intel(R) Wi-Fi 6E AX211 160MHz'
+p2p: <nodeid> <relay> Established external ('ip', 53249) -> ('ip', 65086) on 'Intel(R) Wi-Fi 6E AX211 160MHz'
+Connection open.
+<socket.socket fd=1364, family=AddressFamily.AF_INET, type=SocketKind.SOCK_DGRAM, proto=0, laddr=('192.168.0.102', 53571)>
+
+Basic echo protocol.
+Echo: hello
+recv = b' hello\n'
+Echo: testt
+recv = b' testt\n'
+Echo:

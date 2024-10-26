@@ -303,13 +303,6 @@ class PipeEvents(BaseACKProto):
         # Norm IP.
         client_tup = norm_client_tup(client_tup)
 
-        # Record msg received.
-        
-        log(
-            'data recv {} = {}'.format(client_tup, to_s(binascii.hexlify(data)))
-        )
-        
-
         # Ack UDP msg if enabled.
         if self.is_ack and self.is_ackable:
             """

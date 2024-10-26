@@ -81,7 +81,7 @@ async def main():
     print(\
 """(0) Connect to a node using its nickname or address.
 (1) Start accepting connections (this stops the input loop)
-(2) Start additional node for testing (for self punch.)
+(2) Start additional node for testing (needed for self punch.)
 (3) Register a unique nickname for your node.
 (4) Exit program.
 """)

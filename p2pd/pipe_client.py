@@ -107,7 +107,6 @@ class PipeClient(ACKUDP):
     def add_msg(self, data, client_tup):
         # No subscriptions.
         if not len(self.subs):
-            log("no subs")
             return
         
         # Norm compressed IPv6 addresses.
@@ -152,7 +151,6 @@ class PipeClient(ACKUDP):
 
             # Execute message using handle instead of adding to queue.
             if handler is not None:
-                log("handler not none.")
                 run_handler(
                     self.pipe_events,
                     handler,
