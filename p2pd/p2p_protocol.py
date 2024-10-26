@@ -137,7 +137,7 @@ class SigProtoHandlers():
             
             # Toggle local and remote address support.
             conf = dict_child({
-                "addr_types": msg.meta.addr_types
+                "addr_types": msg.meta.addr_types,
             }, self.conf)
 
             # Take action based on message.

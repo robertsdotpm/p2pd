@@ -217,7 +217,7 @@ def sort_pairs_by_overlap(src_infos, dest_infos):
 
     return overlap, unique
 
-async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs, reply, pp, conf=None):
+async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs, reply, pp, conf):
     """
     Given info on a local interface, a remote interface,
     and a chosen connectivity technique, attempt to create
@@ -338,7 +338,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
     # Use an AF supported by both.
     for addr_type in conf["addr_types"]:
         count = 1
-        for af in VALID_AFS:
+        for af in conf["addr_families"]:
             if reply is not None:
                 # Try select if info based on their chosen offset.
                 src_info = pp.src[af][reply.routing.dest_index]

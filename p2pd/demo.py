@@ -128,11 +128,11 @@ async def main():
             
 
             print()
-            print("Connection methods:")
+            print("Connection methods (in order):")
             print("TCP: (d)irect, (r)everse, (p)unch; UDP: (t)urn")
             strats = []
             while 1:
-                methods = input("Default in order (drp): ")
+                methods = input("Enter for default (drp): ")
                 if not len(methods):
                     methods = P2P_STRATEGIES
                     break
@@ -149,11 +149,11 @@ async def main():
                     break
 
             print()
-            print("Enabled connection pathways:")
+            print("Enabled connection pathways (in order):")
             print("WAN: (e)xternal, LAN: (l)ocal ")
             addr_types = []
             while 1:
-                pathway = input("Default in order (el): ")
+                pathway = input("Enter for default (el): ")
                 if not len(pathway):
                     addr_types = [EXT_BIND, NIC_BIND]
                     break
@@ -173,9 +173,33 @@ async def main():
                     break
 
             print()
+            print("Address family priority (in order):")
+            print("(4) IPv4, (6) IPv6")
+            af_priority = []
+            while 1:
+                afs = input("Enter for default (46): ")
+                if not len(afs):
+                    af_priority = (IP4, IP6)
+                    break
+
+                af_priority = []
+                for c in afs:
+                    c  = c.lower()
+                    if c == '4':
+                        af_priority.append(IP4)
+                    if c == '6':
+                        af_priority.append(IP6)
+
+                if not len(af_priority):
+                    continue
+                else:
+                    break
+
+            print()
             print("Connection in progress... Please wait...")
             pipe_conf = {
                 "addr_types": addr_types,
+                "addr_families": af_priority,
                 "return_msg": False,
             }
 
@@ -188,13 +212,13 @@ async def main():
                 print(pipe.sock)
                 print()
                 print("Basic echo protocol.")
-                print("Enter back to return to menu or exit to quit.")
+                print("Enter menu to return to menu or exit to quit.")
                 while 1:
                     choice = to_b(input("Echo: "))
                     if choice in (b"quit", b"exit"):
                         choice = "4"
                         break
-                    if choice in (b"back"):
+                    if choice in (b"menu"):
                         choice = ""
                         await pipe.close()
                         break
