@@ -194,10 +194,10 @@ async def process_replies(self):
         Attempt to look for these attributes and process them if found.
         """
         msg_data, peer_tup = turn_get_data_attr(turn_msg, self.turn_pipe.route.af, self)
-        peer_tup = norm_client_tup(peer_tup)
 
         if msg_data is not None and peer_tup is not None:
             # Not a peer we white listed.
+            peer_tup = norm_client_tup(peer_tup)
             if peer_tup not in self.peers:
                 error = f"""
                 Got a TURN data message from an 
