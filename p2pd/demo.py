@@ -86,11 +86,15 @@ async def main():
 (4) Exit program.
 """)
 
+    last_addr = ""
     choice = None
     while 1:
         choice = input("Select menu option: ")
-        if choice not in ("0", "1", "2", "3"):
+        if choice not in ("0", "1", "2", "3", "exit", "quit"):
             continue
+
+        if choice in ("exit", "quit"):
+            choice = "4"
 
         if choice == "1":
             while 1:
@@ -124,7 +128,15 @@ async def main():
 
         if choice == "0":
             if addr is None:
-                addr = input("Enter nodes nickname or address: ")
+                prefix = ""
+                if len(last_addr):
+                    prefix = f" (enter for {last_addr})"
+
+                addr = input(f"Enter nodes nickname or address{prefix}: ")
+                if addr == "":
+                    addr = last_addr
+                else:
+                    last_addr = addr
             
 
             print()
@@ -134,7 +146,7 @@ async def main():
             while 1:
                 methods = input("Enter for default (drp): ")
                 if not len(methods):
-                    methods = P2P_STRATEGIES
+                    strats = P2P_STRATEGIES
                     break
 
                 strats = []
@@ -147,6 +159,8 @@ async def main():
                     continue
                 else:
                     break
+
+            print(strats)
 
             print()
             print("Enabled connection pathways (in order):")
