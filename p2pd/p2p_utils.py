@@ -261,6 +261,8 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                 use_addr_type = addr_type
                 do_fail = False
 
+            print(f"try addr infos {af} {pp.same_machine} {use_addr_type} {has_set_bind} {src_info} {dest_info}")
+
             """
             Determine the best destination IP to use
             for the connectivity technique based on
