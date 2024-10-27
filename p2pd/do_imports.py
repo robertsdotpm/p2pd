@@ -44,7 +44,7 @@ if __name__ != '__main__':
     try:
         from .pnp_server import *
     except:
-        log_exception()
+        pass
 
     from .pnp_client import *
     from .nickname import *
