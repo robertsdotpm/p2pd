@@ -86,11 +86,11 @@ class Nickname():
 
     # A client for each PNP server is loaded by index.
     async def start(self, n=0):
-        # Prefer IP6.
-        if IP6 in self.interface.supported():
-            af = IP6
-        else:
+        # Prefer IP4 -- better for old stacks.
+        if IP4 in self.interface.supported():
             af = IP4
+        else:
+            af = IP6
 
         # Uses direct IPs to avoid domain names.
         count = 0
