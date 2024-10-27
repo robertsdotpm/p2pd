@@ -290,11 +290,16 @@ class P2PNode(P2PNodeExtra, Daemon):
             except asyncio.TimeoutError:
                 pass
 
-
         msg = f"Connecting to '{addr_bytes}'"
         Log.log_p2p(msg, self.node_id[:8])
         pp = self.p2p_pipe(addr_bytes)
-        pipe = await pp.connect(strategies, reply=None, conf=conf)
+        for af in conf["addr_families"]:
+            af_conf = copy.deepcopy(conf)
+            af_conf["addr_families"] = [af]
+            pipe = await pp.connect(strategies, reply=None, conf=af_conf)
+            if pipe is not None:
+                return pipe
+            
         return pipe
 
     # Get our node server's address.
