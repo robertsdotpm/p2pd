@@ -229,7 +229,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
     a connection. Adapt the technique depending on whether
     addressing is suitably local or remote.
     """
-    async def try_addr_infos(af, addr_type, src_info, dest_info):
+    async def try_addr_infos(addr_type, src_info, dest_info):
         # Local addressing and/or remote.
         try:
             # Create a future for pending pipes.
@@ -260,8 +260,6 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             else:
                 use_addr_type = addr_type
                 do_fail = False
-
-            print(f"try addr infos {af} {pp.same_machine} {use_addr_type} {has_set_bind} {src_info} {dest_info}")
 
             """
             Determine the best destination IP to use
@@ -353,9 +351,6 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
     for addr_type in conf["addr_types"]:
         count = 1
         for af in conf["addr_families"]:
-            print("af = ")
-            print(af)
-
             if reply is not None:
                 # Try select if info based on their chosen offset.
                 src_info = pp.src[af][reply.routing.dest_index]
@@ -391,12 +386,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                 # Only try up to N pairs per technique.
                 # Technique-specific N to avoid lengthy delays.
                 ret = await async_wrap_errors(
-                    try_addr_infos(
-                        af,
-                        addr_type,
-                        src_info,
-                        dest_info
-                    )
+                    try_addr_infos(addr_type, src_info, dest_info)
                 )
 
                 # Success so return.
