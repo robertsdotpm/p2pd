@@ -13,7 +13,7 @@ SIG_TURN = 3
 SIG_GET_ADDR = 4
 SIG_RETURN_ADDR = 5
 P2P_PIPE_CONF = {
-    "addr_families": (IP4, IP6),
+    "addr_families": [IP4, IP6],
     "addr_types": [EXT_BIND, NIC_BIND],
     "return_msg": False,
 }

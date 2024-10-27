@@ -346,7 +346,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
     # Use an AF supported by both.
     print(conf)
     if reply is not None:
-        conf["addr_families"] = (reply.meta.af)
+        conf["addr_families"] = [reply.meta.af]
 
     for addr_type in conf["addr_types"]:
         count = 1
