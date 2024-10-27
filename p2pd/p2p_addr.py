@@ -71,7 +71,11 @@ def make_peer_addr(node_id, machine_id, interface_list, signal_offsets, port=NOD
             if af == IP4:
                 int_ip = ip or to_b(r.nic())
             if af == IP6:
-                int_ip = ip or to_b(str(r.link_locals[0]))
+                int_ip = r.ext()
+                if len(r.link_locals):
+                    int_ip = to_b(str(r.link_locals[0]))
+                if ip is not None:
+                    int_ip = ip
 
             af_bufs.append(b"[%d,%d,%b,%b,%d,%d,%d,%d]" % (
                 interface.netiface_index,

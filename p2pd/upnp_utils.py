@@ -78,7 +78,10 @@ async def get_upnp_route(af, nic, hostname=None):
         route = nic.route(af)
         if "fe80" == hostname[:4]:
             # Link local src.
-            ip = str(route.link_locals[0])
+            if len(route.link_locals):
+                ip = str(route.link_locals[0])
+            else:
+                ip = route.ext()
         else:
             # Global scope src.
             ip = route.ext()
