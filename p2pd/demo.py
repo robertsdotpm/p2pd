@@ -193,7 +193,7 @@ async def main():
             while 1:
                 afs = input("Enter for default (46): ")
                 if not len(afs):
-                    af_priority = (IP4, IP6)
+                    af_priority = [IP4, IP6]
                     break
 
                 af_priority = []
