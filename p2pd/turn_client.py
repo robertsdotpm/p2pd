@@ -386,6 +386,9 @@ class TURNClient(PipeEvents):
     # Retry up to 3 times if no response to the packet.
     # Allows a peer to send messages to our relay address.
     async def accept_peer(self, peer_tup, peer_relay_tup):
+        # Fixed 'compressed' IPv6 addresses.
+        peer_tup = norm_client_tup(peer_tup)
+
         # Basic validation for logging.
         if peer_relay_tup[0] != self.dest[0]:
             error = f"""
