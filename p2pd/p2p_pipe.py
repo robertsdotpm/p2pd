@@ -112,6 +112,8 @@ class P2PPipe():
             dest_info["port"],
         )
 
+        print(f"direct connect {dest} {af}")
+
         # (1) Get first interface for AF.
         # (2) Build a 'route' from it with it's main NIC IP.
         # (3) Bind to the route at port 0. Return itself.

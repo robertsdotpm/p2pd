@@ -92,6 +92,11 @@ def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=T
         # Compares the first n bits for typical v6 subnet.
         # Todo: need to know the subnet bits for this.
         same_lan = src_info["ext"] == dest_info["ext"]
+        same_lan = 1
+
+    # Try any local address for now.
+    # Todo: write a better algorithm for this.
+    same_lan = 1
 
     # Makes long conditions slightly more readable.
     same_if = src_nid == dest_nid
@@ -244,6 +249,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             # remote peer wanted to use for the technique.
             if reply is not None:
                 if reply.routing.dest_index != if_index:
+                    print("tai di != ifi")
                     return
 
             # Support testing addr type failures.
@@ -279,6 +285,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             # Need a destination address.
             # Possibly a different address type will work.
             if dest_info["ip"] == "None":
+                print("ip is None")
                 return
             
             # Detailed logging details.
@@ -312,6 +319,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
 
             # Success result from function.
             if result is not None:
+                print("method result is none")
                 return result
             
             """
@@ -336,6 +344,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             log_exception()
 
     # Use an AF supported by both.
+    print(conf)
     for addr_type in conf["addr_types"]:
         count = 1
         for af in conf["addr_families"]:
@@ -367,6 +376,9 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             if addr_type == NIC_BIND:
                 pair_order = overlap + unique
 
+            if not len(pair_order):
+                print("pair order list is empty!")
+
             for src_info, dest_info in pair_order:
                 # Only try up to N pairs per technique.
                 # Technique-specific N to avoid lengthy delays.
@@ -380,6 +392,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                     
                 count += 1
                 if count > max_pairs:
+                    print("count > max pairs")
                     return None, None
                 
                 # Cleanup here?
