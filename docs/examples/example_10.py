@@ -3,8 +3,8 @@ from p2pd import *
 
 async def example():
     # TURN server config.
-    dest = ("turn.quickblox.com", 3478)
-    auth = ("quickblox", "baccb97ba2d92d71e26eb9886da5f1e0")
+    dest = ("turn1.p2pd.net", 3478)
+    auth = ("", "")
 
     # Each interface has a different external IP.
     # Imagine these are two different computers.
