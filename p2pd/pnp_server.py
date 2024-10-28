@@ -67,7 +67,7 @@ async def v6_exists(cur, v6_glob_main, v6_glob_extra, v6_lan_id, v6_iface_id):
     # Return results.
     return v6_lan_exists, v6_record
 
-async def v6_insert(cur, v6_glob_main, v6_glob_extra, v6_lan_id, v6_iface_id):
+async def v6_insert(cur, v6_glob_main, v6_glob_extra, v6_lan_id, v6_iface_id, sys_clock):
     # Insert a new IPv6 IP.
     sql = """INSERT INTO ipv6s
         (
@@ -80,7 +80,7 @@ async def v6_insert(cur, v6_glob_main, v6_glob_extra, v6_lan_id, v6_iface_id):
         VALUES (%s, %s, %s, %s, %s)
     """
     sql_params = (int(v6_glob_main), int(v6_glob_extra), int(v6_lan_id),)
-    sql_params += (int(v6_iface_id), int(time.time()),)
+    sql_params += (int(v6_iface_id), int(sys_clock.time()),)
     await cur.execute(sql, sql_params)
 
     # Return the new row index.
@@ -97,7 +97,7 @@ def get_v6_parts(ipr):
 
     return v6_parts
 
-async def record_v6(params, serv):
+async def record_v6(params, serv, sys_clock):
     # Replace ipr parameter with v6_parts.
     params = (params[0],) + get_v6_parts(params[1])
 
@@ -119,14 +119,14 @@ async def record_v6(params, serv):
             raise Exception("IPv6 iface limit reached.")
         
         # IP row ID.
-        ip_id = await v6_insert(*params)
+        ip_id = await v6_insert(*params, sys_clock)
     else:
         # IP row ID.
         ip_id = v6_record[0]
 
     return ip_id
 
-async def record_v4(params, serv):
+async def record_v4(params, serv, sys_clock):
     # Main params.
     cur, ipr = params
 
@@ -141,18 +141,18 @@ async def record_v4(params, serv):
         # Otherwise insert the new IP and return its row ID.
         sql  = "INSERT INTO ipv4s (v4_val, timestamp) "
         sql += "VALUES (%s, %s)"
-        await cur.execute(sql, (int(ipr), int(time.time()),))
+        await cur.execute(sql, (int(ipr), int(sys_clock.time()),))
         ip_id = cur.lastrowid
 
     return ip_id
 
-async def record_ip(af, params, serv):
+async def record_ip(af, params, serv, sys_clock):
     if af == IP6:
-        ip_id = await record_v6(params, serv)
+        ip_id = await record_v6(params, serv, sys_clock)
     
     # Load existing ip_id or create it - V4.
     if af == IP4:
-        ip_id = await record_v4(params, serv)
+        ip_id = await record_v4(params, serv, sys_clock)
 
     return ip_id
 
@@ -165,8 +165,8 @@ def name_limit_by_af(af, serv):
         return serv.v6_name_limit
 
 # Used to check if a new insert for an IP bumps old names.
-async def will_bump_names(af, cur, serv, ip_id):
-    current_time = time.time()
+async def will_bump_names(af, cur, serv, ip_id, sys_clock):
+    current_time = sys_clock.time()
     min_name_duration = serv.min_name_duration
     sql = f"""
     SELECT COUNT(id)
@@ -185,10 +185,10 @@ async def will_bump_names(af, cur, serv, ip_id):
     else:
         return False
 
-async def bump_name_overflows(af, cur, serv, ip_id):
+async def bump_name_overflows(af, cur, serv, ip_id, sys_clock):
     # Set number of names allowed per IP.
     name_limit = name_limit_by_af(af, serv)
-    current_time = time.time()
+    current_time = sys_clock.time()
     min_name_duration = serv.min_name_duration
     sql = f"""
     DELETE FROM names
@@ -218,7 +218,7 @@ async def fetch_name(cur, name, lock=DB_WRITE_LOCK):
     row = await cur.fetchone()
     return row
 
-async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
+async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated, sys_clock):
     # Does name already exist.
     row = await fetch_name(cur, name)
     name_exists = row is not None
@@ -258,7 +258,7 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated):
         # Ensure name limit is respected.
         # [ ... active names, ? ]
         penalty = 0
-        will_bump = await will_bump_names(af, cur, serv, ip_id)
+        will_bump = await will_bump_names(af, cur, serv, ip_id, sys_clock)
         if not will_bump:
             sql  = "SELECT COUNT(id) FROM names WHERE af=%s "
             sql += "AND ip_id=%s FOR UPDATE"
@@ -366,26 +366,26 @@ async def verified_pruning(db_con, cur, serv, updated):
     await db_con.commit()
 
 
-async def verified_write_name(db_con, cur, serv, behavior, updated, name, value, owner_pub, af, ip_str):
+async def verified_write_name(db_con, cur, serv, behavior, updated, name, value, owner_pub, af, ip_str, sys_clock):
     # Convert ip_str into an IPRange instance.
     cidr = 32 if af == IP4 else 128
     ipr = IPRange(ip_str, cidr=cidr)
 
     # Record IP if needed and get its ID.
     # If it's V6 allocation limits are enforced on subnets.
-    ip_id = await record_ip(af, (cur, ipr,), serv)
+    ip_id = await record_ip(af, (cur, ipr,), serv, sys_clock)
     if ip_id is None:
         return
 
     # Polite mode: only insert if it doesn't bump others.
     if behavior == BEHAVIOR_DONT_BUMP:
-        will_bump = await will_bump_names(af, cur, serv, ip_id)
+        will_bump = await will_bump_names(af, cur, serv, ip_id, sys_clock)
         if will_bump:
             return
 
     # Record name if needed and get its ID.
     # Also supports transferring a name to a new IP.
-    name_row = await record_name(cur, serv, af, ip_id, name, value, owner_pub, updated)
+    name_row = await record_name(cur, serv, af, ip_id, name, value, owner_pub, updated, sys_clock)
     if name_row is None:
         return
 
@@ -394,7 +394,7 @@ async def verified_write_name(db_con, cur, serv, behavior, updated, name, value,
     # - V6 has 1 per IP (and multiple IPs per user.)
     # - V4 has multiple names per IP (and 1 IP per user.)
     if name_row is None or name_row[-1] != ip_id:
-        await bump_name_overflows(af, cur, serv, ip_id)
+        await bump_name_overflows(af, cur, serv, ip_id, sys_clock)
 
     # Save current changes.
     await db_con.commit()
@@ -408,7 +408,6 @@ class PNPServer(Daemon):
         self.reply_sk = SigningKey.from_string(reply_sk, curve=SECP256k1)
         self.reply_pk = reply_pk
         self.sys_clock = sys_clock
-        time.time = lambda: int(sys_clock.time())
         self.v4_name_limit = v4_name_limit
         self.v6_name_limit = v6_name_limit
         self.min_name_duration = min_name_duration
@@ -524,7 +523,8 @@ class PNPServer(Daemon):
                     pkt.value,
                     pkt.vkc,
                     pipe.route.af,
-                    str(IPRange(client_tup[0], cidr=cidr))
+                    str(IPRange(client_tup[0], cidr=cidr)),
+                    self.sys_clock
                 )
 
                 buf = self.serv_resp(pkt)
