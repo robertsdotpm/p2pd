@@ -70,7 +70,6 @@ async def check_pipe(pipe, dest_tup=None):
 
     # May not have echo process hooked up.
     if data in buf:
-        print(f"check pipe got {data}")
         return True
     else:
         log(f"Check pipe: invalid recv buf {buf}")

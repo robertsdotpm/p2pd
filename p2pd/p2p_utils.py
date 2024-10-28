@@ -249,7 +249,6 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             # remote peer wanted to use for the technique.
             if reply is not None:
                 if reply.routing.dest_index != if_index:
-                    print("tai di != ifi")
                     return
 
             # Support testing addr type failures.
@@ -285,7 +284,6 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             # Need a destination address.
             # Possibly a different address type will work.
             if dest_info["ip"] == "None":
-                print("ip is None")
                 return
             
             # Detailed logging details.
@@ -319,7 +317,6 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
 
             # Success result from function.
             if result is not None:
-                print("method result is none")
                 return result
             
             """
@@ -344,7 +341,6 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             log_exception()
 
     # Use an AF supported by both.
-    print(conf)
     if reply is not None:
         conf["addr_families"] = [reply.meta.af]
 
@@ -380,7 +376,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                 pair_order = overlap + unique
 
             if not len(pair_order):
-                print("pair order list is empty!")
+                log("pair order list is empty!")
 
             for src_info, dest_info in pair_order:
                 # Only try up to N pairs per technique.
@@ -399,7 +395,6 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                     
                 count += 1
                 if count > max_pairs:
-                    print("count > max pairs")
                     return None, None
                 
                 # Cleanup here?

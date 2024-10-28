@@ -179,7 +179,6 @@ async def validate_stun_server(af, host, port, proto, interface, mode, timeout, 
     
     reply = validate_stun_reply(reply, mode)
     if reply is None:
-        log(f"{af} {host} valid stun reply is none")
         return
     # Cleanup.
     if hasattr(reply, "pipe"):

@@ -124,12 +124,8 @@ class SigProtoHandlers():
             there's no need to check vkc.
             """
             if isinstance(msg, ReturnAddr):
-                print("got return addr")
-            
                 if pipe_id not in self.node.addr_futures:
-                    print("pipe id not in addr futures")
-                    print(self.node.addr_futures)
-                    print(pipe_id)
+                    log("pipe id not in addr futures")
                     return
                 
                 self.node.addr_futures[pipe_id].set_result(msg)

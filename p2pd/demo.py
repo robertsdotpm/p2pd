@@ -42,10 +42,11 @@ method_txt = {
     "t": P2P_RELAY,
 }
 
-# Generate a deterministic address for the node id
-# for convienence. display it alongside the nodes addr.
 async def main():
-
+    print("Universal reachability demo")
+    print("Coded by matthew@roberts.pm")
+    print("-----------------------------")
+    print()
     print("Loading networking interfaces...")
     if_names = await list_interfaces()
     ifs = await load_interfaces(if_names)

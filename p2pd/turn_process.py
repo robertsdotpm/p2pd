@@ -249,8 +249,7 @@ async def process_replies(self):
         """
         txid = turn_msg.txn_id
         if txid not in self.msgs:
-            print(txid)
-            print("Got turn message with unknown TXID.")
+            log("Got turn message with unknown TXID.")
             continue
 
         # A few important attributes are saved into the client for future use.

@@ -344,8 +344,6 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
             interface=interface,
         )
 
-        print("delayed punch out = ", outs)
-
         # Make both sides choose the same socket.
         sock = choose_same_punch_sock(our_wan, outs)
         if sock is None:

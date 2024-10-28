@@ -112,8 +112,6 @@ class P2PPipe():
             dest_info["port"],
         )
 
-        print(f"direct connect {dest} {af}")
-
         # (1) Get first interface for AF.
         # (2) Build a 'route' from it with it's main NIC IP.
         # (3) Bind to the route at port 0. Return itself.
@@ -170,8 +168,6 @@ class P2PPipe():
         # Load TCP punch client for this pipe ID.
         if pipe_id in self.node.tcp_punch_clients:
             puncher = self.node.tcp_punch_clients[pipe_id]
-            print(src_info)
-            print(puncher.src_info)
             assert(src_info == puncher.src_info)
             if dest_info != puncher.dest_info:
                 """

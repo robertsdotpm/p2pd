@@ -85,37 +85,48 @@ class Nickname():
         self.started = False
 
     # A client for each PNP server is loaded by index.
-    async def start(self, n=0):
-        # Prefer IP4 -- better for old stacks.
-        if IP4 in self.interface.supported():
-            af = IP4
-        else:
-            af = IP6
+    async def start(self):
+        for index in range(0, len(PNP_SERVERS[IP4])):
+            """
+            Prefer IPv6 -- the reason is v6 blocks are more likely
+            to be unique per customer meaning names won't get
+            spammed forcing an expiry wait for usage.
+            """
+            for af in [IP6, IP4]:
+                # Skip AF if not supported.
+                if af not in self.interface.supported():
+                    continue
 
-        # Uses direct IPs to avoid domain names.
-        count = 0
-        for serv_info in PNP_SERVERS[af]:
+                # Uses direct IPs to avoid domain names.
+                serv_info = PNP_SERVERS[af][index]
+                dest = (
+                    serv_info["ip"],
+                    serv_info["port"],
+                )
 
-            dest = (
-                serv_info["ip"],
-                serv_info["port"],
-            )
-
-
-            self.clients.append(
-                PNPClient(
+                # Single PNP client for dest.
+                client = PNPClient(
                     self.sk,
                     dest,
                     h_to_b(serv_info["pk"]),
                     self.interface,
                     self.sys_clock,
                 )
-            )
 
-            count += 1
-            if n:
-                if count >= n:
-                    break
+                # Test connectivity.
+                try:
+                    pipe = await client.get_dest_pipe()
+                    if pipe is None:
+                        continue
+                    else:
+                        await pipe.close()
+                except:
+                    what_exception()
+                    continue
+
+                # Good client so save.
+                self.clients.append(client)
+                break
         
         self.started = True
         return self

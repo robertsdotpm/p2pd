@@ -8,13 +8,14 @@ from .utils import *
 PNP_PORT = 5300
 PNP_NAME_LEN = 50 # 10
 PNP_VAL_LEN = 500
-V4_NAME_LIMIT = 10 #4
-V6_NAME_LIMIT = 10 #1
+V4_NAME_LIMIT = 50 #4
+V6_NAME_LIMIT = 50 #1
 V6_GLOB_LIMIT = 3
 V6_SUBNET_LIMIT = 15000
 V6_IFACE_LIMIT = 10
-V6_ADDR_EXPIRY = 60 * 60 * 24 * 30 # 30 days no change expiry.
-MIN_NAME_DURATION = 60 * 60 * 24 * 7 # 7 days to migrate names.
+V6_ADDR_EXPIRY = 259200 # 3 days no change expiry.
+MIN_NAME_DURATION = 604800 # 7 days to migrate names.
+MIN_DURATION_PENALTY = 60 # 1 min.
 BEHAVIOR_DO_BUMP = 1
 BEHAVIOR_DONT_BUMP = 0
 

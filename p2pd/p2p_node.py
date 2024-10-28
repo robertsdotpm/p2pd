@@ -163,7 +163,6 @@ class P2PNode(P2PNodeExtra, Daemon):
                 buf = "\t\tmqtt = "
                 for index in list(self.signal_pipes):
                     buf += f"{index}; "
-                print(buf)
 
         # Multiprocess support for TCP punching and NTP sync.
         t = time.time()
@@ -239,7 +238,6 @@ class P2PNode(P2PNodeExtra, Daemon):
             name = addr_bytes
             pkt = await self.nick_client.fetch(addr_bytes)
             addr_bytes = pkt.value
-            print(f"Loaded addr {addr_bytes}")
 
             msg = f"Resolved '{name}' = '{addr_bytes}'"
             Log.log_p2p(msg, self.node_id[:8])
@@ -286,7 +284,6 @@ class P2PNode(P2PNodeExtra, Daemon):
 
                 # Use the src addr directly.
                 addr_bytes = reply.meta.src_buf
-                print(f"Loaded updated addr {addr_bytes}")
             except asyncio.TimeoutError:
                 pass
 

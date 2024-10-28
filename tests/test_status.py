@@ -157,8 +157,10 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                     print(f"pnp {af} {dest} success")
 
     async def test_nickname(self):
+        print(PNP_SERVERS)
         nic = await Interface(NIC_NAME)
         sys_clock = await SysClock(nic, clock_skew=Dec(0))
+        print(nic)
 
         # Pub key crap -- used for signing PNP messages.
         # Pub key will be used as a static name for testing too.
