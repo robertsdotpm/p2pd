@@ -160,7 +160,7 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
 
                 out = await client.delete(name)
                 out = await client.fetch(name)
-                #assert(out.value is None)
+                print(out.value)
 
 
 
