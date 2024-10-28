@@ -273,7 +273,7 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated, sys
 
         # Insert a brand new name.
         updated = int(updated)
-        updated += max(penalty, 0)
+        updated -= max(penalty, 0)
         sql = """
         INSERT INTO names
         (

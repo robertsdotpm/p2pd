@@ -151,10 +151,18 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                 val = rand_plain(10)
                 out = await client.push(name, val)
                 out = await client.fetch(name)
+                
+                
                 if out.value != val:
                     print(f"pnp {af} {dest} failed")
                 else:
                     print(f"pnp {af} {dest} success")
+
+                out = await client.delete(name)
+                out = await client.fetch(name)
+                #assert(out.value is None)
+
+
 
     async def test_nickname(self):
         print(PNP_SERVERS)
