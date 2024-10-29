@@ -223,6 +223,22 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated, sys
     row = await fetch_name(cur, name)
     name_exists = row is not None
 
+    # Get names used and limit.
+    sql  = "SELECT COUNT(id) FROM names WHERE af=%s "
+    sql += "AND ip_id=%s FOR UPDATE"
+    await cur.execute(sql, (int(af), int(ip_id),))
+    names_used = (await cur.fetchone())[0]
+    name_limit = name_limit_by_af(af, serv)
+    if names_used:
+        penalty = ((names_used / name_limit) * MIN_NAME_DURATION) + 1
+        penalty = max(penalty, MIN_DURATION_PENALTY)
+    else:
+        penalty = 0
+
+    # Apply penalty to updated.
+    updated = int(updated)
+    updated -= max(penalty, 0)
+
     # Update an existing name.
     if name_exists:
         if row[6] >= updated:
@@ -257,23 +273,12 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated, sys
     if not name_exists:
         # Ensure name limit is respected.
         # [ ... active names, ? ]
-        penalty = 0
         will_bump = await will_bump_names(af, cur, serv, ip_id, sys_clock)
         if not will_bump:
-            sql  = "SELECT COUNT(id) FROM names WHERE af=%s "
-            sql += "AND ip_id=%s FOR UPDATE"
-            await cur.execute(sql, (int(af), int(ip_id),))
-            names_used = (await cur.fetchone())[0]
-            name_limit = name_limit_by_af(af, serv)
-            if names_used:
-                penalty = ((names_used / name_limit) * MIN_NAME_DURATION) + 1
-                penalty = max(penalty, MIN_DURATION_PENALTY)
             if names_used >= name_limit:
                 raise Exception("insert name limit reached.")
 
         # Insert a brand new name.
-        updated = int(updated)
-        updated -= max(penalty, 0)
         sql = """
         INSERT INTO names
         (
