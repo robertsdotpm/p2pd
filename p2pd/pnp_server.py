@@ -235,14 +235,14 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated, sys
     else:
         penalty = 0
 
-    # Apply penalty to updated.
-    updated = int(updated)
-    updated -= max(penalty, 0)
-
     # Update an existing name.
     if name_exists:
         if row[6] >= updated:
             raise Exception("Replay attack for name update.")
+        
+        # Apply penalty to updated.
+        updated = int(updated)
+        updated -= max(penalty, 0)
 
         sql  = """
         UPDATE names SET 
