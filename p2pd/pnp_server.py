@@ -231,7 +231,7 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated, sys
     name_limit = name_limit_by_af(af, serv)
     if names_used:
         penalty = ((names_used / name_limit) * MIN_NAME_DURATION) + 1
-        penalty = max(penalty, MIN_DURATION_PENALTY)
+        penalty = min(penalty, (MIN_NAME_DURATION - MIN_DURATION_PENALTY))
     else:
         penalty = 0
 
