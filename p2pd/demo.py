@@ -74,10 +74,14 @@ async def main():
     print(f"Node started = {to_s(node.addr_bytes)}")
     print(f"Node port = {node.listen_port}")
     
-
-    nick = await node.nickname(node.node_id)
-    print(f"Node nickname = {nick}")
-    print()
+    try:
+        nick = await node.nickname(node.node_id)
+        print(f"Node nickname = {nick}")
+        print()
+    except:
+        log_exception()
+        print("node id default nickname didnt load")
+        print("might have been taken over or all servers down.")
 
     print(\
 """(0) Connect to a node using its nickname or address.
