@@ -5,11 +5,16 @@ Your P2P node has an address that lists information on your network
 interface cards and meta data useful for encrypted communication.
 The address is very long. Similar, to an IP addresses, so that
 working with them directly can be cumbersome. You can imagine having to read
-many numbers to a friend and hoping they enter them correct. Fortunately,
-P2PD has a simple solution: nicknames.
+many numbers to a friend and hoping they enter them correct.
 
-Nicknames give you the ability to give your node a short memorable name. The name can then be easily shared and used to lookup
-your nodes address information. What's cool about this system is it requires no registration to use. Instead, there's a fixed limit
+.. HINT::
+    See :doc:`../articles/how` for a more in-depth look at the
+    address format in P2PD.
+
+Fortunately, P2PD has a simple solution: nicknames. Nicknames give you the
+ability to give your node a short memorable name. The name can then be
+easily shared and used to lookup your nodes address information. What's cool
+about this system is it requires no registration to use. Instead, there's a fixed limit
 of names that can be registered per IP address and the limit acts as a queue.
 
 .. image:: ../../diagrams/nicknames.png
