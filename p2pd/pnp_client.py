@@ -46,9 +46,16 @@ class PNPClient():
         addr = Address(self.dest[0], self.dest[1])
         await addr.res(self.nic.route())
         ipr = addr.v4_ipr or addr.v6_ipr
+        print(ipr)
+        print(ipr.af)
         route = self.nic.route(ipr.af)
-        route = await route.bind()
+        if self.dest[0] in VALID_LOCALHOST:
+            route = await route.bind(ips=self.dest[0])
+        else:
+            route = await route.bind()
         pipe = await pipe_open(self.proto, self.dest, route)
+        print(pipe)
+        print(pipe.sock)
         return pipe
 
     async def return_resp(self, pipe):
@@ -94,6 +101,7 @@ class PNPClient():
     async def push(self, name, value, behavior=BEHAVIOR_DO_BUMP):
         t = await self.get_updated(name)
         pipe = await self.get_dest_pipe()
+        print("push", pipe)
         pkt = PNPPacket(name, value, self.vkc, None, t, behavior)
         await self.send_pkt(pipe, pkt)
         return await self.return_resp(pipe)
