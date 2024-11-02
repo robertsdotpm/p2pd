@@ -164,50 +164,6 @@ def name_limit_by_af(af, serv):
     if af == IP6:
         return serv.v6_name_limit
 
-# Used to check if a new insert for an IP bumps old names.
-async def will_bump_names(af, cur, serv, ip_id, sys_clock):
-    current_time = sys_clock.time()
-    min_name_duration = serv.min_name_duration
-    sql = f"""
-    SELECT COUNT(id)
-    FROM names
-    WHERE ip_id = %s
-    AND af = %s
-    AND ((%s - timestamp) >= %s)
-    FOR UPDATE
-    """
-
-    name_limit = name_limit_by_af(af, serv)
-    await cur.execute(sql, (int(ip_id), int(af), int(current_time), int(min_name_duration),))
-    names_used = (await cur.fetchone())[0]
-    if names_used >= name_limit:
-        return True
-    else:
-        return False
-
-async def bump_name_overflows(af, cur, serv, ip_id, sys_clock):
-    # Set number of names allowed per IP.
-    name_limit = name_limit_by_af(af, serv)
-    current_time = sys_clock.time()
-    min_name_duration = serv.min_name_duration
-    sql = f"""
-    DELETE FROM names
-    WHERE id IN (
-        SELECT id
-        FROM (
-            SELECT id
-            FROM names 
-            WHERE ip_id = %s
-            AND af = %s
-            AND ((%s - timestamp) >= %s)
-            ORDER BY timestamp DESC 
-            LIMIT 100 OFFSET %s
-            FOR UPDATE
-        ) AS rows_to_delete
-    );
-    """
-    await cur.execute(sql, (int(ip_id), int(af), int(current_time), int(min_name_duration), int(name_limit),))
-
 async def fetch_name(cur, name, lock=DB_WRITE_LOCK):
     # Does name already exist.
     sql = "SELECT * FROM names WHERE name=%s "
@@ -273,10 +229,8 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated, sys
     if not name_exists:
         # Ensure name limit is respected.
         # [ ... active names, ? ]
-        will_bump = await will_bump_names(af, cur, serv, ip_id, sys_clock)
-        if not will_bump:
-            if names_used >= name_limit:
-                raise Exception("insert name limit reached.")
+        if names_used >= name_limit:
+            raise Exception("insert name limit reached.")
 
         # Insert a brand new name.
         sql = """
@@ -321,6 +275,11 @@ async def verified_delete_name(db_con, cur, name, updated):
 
 # Prunes unneeded records from the DB.
 async def verified_pruning(db_con, cur, serv, updated):
+    print(updated)
+    print(serv.v6_addr_expiry)
+    print(serv.min_name_duration)
+
+
     # Delete all ipv6s that haven't been updated for X seconds.
     sql = """
     DELETE FROM ipv6s
@@ -353,7 +312,7 @@ async def verified_pruning(db_con, cur, serv, updated):
 
     Note: this query could get slow with many names.
     """
-    for table, af in [["ipv4s", 2], ["ipv6s", 10]]:
+    for table, af in [["ipv4s", "2"], ["ipv6s", "23"]]:
         sql = f"""
         DELETE FROM {table} WHERE id NOT IN (
             SELECT ip_id as id
@@ -370,11 +329,16 @@ async def verified_pruning(db_con, cur, serv, updated):
 
     await db_con.commit()
 
-
 async def verified_write_name(db_con, cur, serv, behavior, updated, name, value, owner_pub, af, ip_str, sys_clock):
     # Convert ip_str into an IPRange instance.
     cidr = 32 if af == IP4 else 128
     ipr = IPRange(ip_str, cidr=cidr)
+
+    print("Behavior = ", behavior)
+
+    # Unneeded records get deleted.
+    if behavior != BEHAVIOR_DONT_BUMP:
+        await verified_pruning(db_con, cur, serv, sys_clock.time())
 
     # Record IP if needed and get its ID.
     # If it's V6 allocation limits are enforced on subnets.
@@ -382,24 +346,11 @@ async def verified_write_name(db_con, cur, serv, behavior, updated, name, value,
     if ip_id is None:
         return
 
-    # Polite mode: only insert if it doesn't bump others.
-    if behavior == BEHAVIOR_DONT_BUMP:
-        will_bump = await will_bump_names(af, cur, serv, ip_id, sys_clock)
-        if will_bump:
-            return
-
     # Record name if needed and get its ID.
     # Also supports transferring a name to a new IP.
     name_row = await record_name(cur, serv, af, ip_id, name, value, owner_pub, updated, sys_clock)
     if name_row is None:
         return
-
-    # Prune any names over the limit for an IP.
-    # - Prioritize removing the oldest first.
-    # - V6 has 1 per IP (and multiple IPs per user.)
-    # - V4 has multiple names per IP (and 1 IP per user.)
-    if name_row is None or name_row[-1] != ip_id:
-        await bump_name_overflows(af, cur, serv, ip_id, sys_clock)
 
     # Save current changes.
     await db_con.commit()

@@ -45,6 +45,8 @@ async def pnp_get_test_client_serv(v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6
 
     sys_clock = SysClock(i, clock_skew=Dec(0))
     sys_clock.time = time.time
+
+
     serv = PNPServer(
         PNP_TEST_DB_USER,
         PNP_TEST_DB_PASS,
@@ -284,25 +286,21 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
         # 1, 2, 3 (oldest is popped)
         for af, name_limit in vectors:
             await pnp_clear_tables()
-            clients, serv = await pnp_get_test_client_serv(3, 3, 0)
+            clients, serv = await pnp_get_test_client_serv(3, 3, 4)
 
             # Fill the stack.
+            print(name_limit)
             for i in range(0, name_limit):
                 await clients[af].push(f"{i}", "val")
                 await asyncio.sleep(1)
 
+            # Other names expire here.
+            await asyncio.sleep(3)
+
             # Now pop the oldest.
             await clients[af].push(f"3", "val")
-            await asyncio.sleep(1)
-
-            # Now validate the values.
-            for i in range(1, name_limit + 1):
-                ret = await clients[af].fetch(f"{i}")
-                assert(ret.value == b"val")
-
-            # Oldest should be popped.
-            ret = await clients[af].fetch(f"0")
-            assert(ret.value == None)
+            ret = await clients[af].fetch(f"3")
+            assert(ret.value == b"val")
 
             # Cleanup server.
             await serv.close()
@@ -325,6 +323,7 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
 
             # Check insert over limit rejected.
             ret = await clients[af].fetch("4")
+            print(ret.value)
             assert(ret.value == None)
             await serv.close()
 
@@ -363,21 +362,26 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
         name_limit = 3
         for af in VALID_AFS:
             await pnp_clear_tables()
-            clients, serv = await pnp_get_test_client_serv(name_limit, name_limit, 0)
+            clients, serv = await pnp_get_test_client_serv(name_limit, name_limit, 4)
 
             # Fill up the name queue.
             for i in range(0, name_limit):
-                await clients[af].push(f"{i}", f"{i}")
+                await clients[af].push(f"{i}", f"{i}", BEHAVIOR_DONT_BUMP)
                 await asyncio.sleep(2)
+
+            # Ols names expire.
+            await asyncio.sleep(3)
 
             # Normally this would bump one.
             await clients[af].push(f"3", f"3", BEHAVIOR_DONT_BUMP)
             ret = await clients[af].fetch(f"3")
+            print(ret.value)
             assert(ret.value == None)
 
             # All original values should exist.
             for i in range(0, name_limit):
                 ret = await clients[af].fetch(f"{i}")
+                print(ret.value)
                 assert(ret.value == to_b(f"{i}"))
 
             await serv.close() 
