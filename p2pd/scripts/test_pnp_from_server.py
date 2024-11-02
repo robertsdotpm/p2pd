@@ -58,7 +58,12 @@ async def pnp_get_test_client_serv(v4_name_limit=V4_NAME_LIMIT, v6_name_limit=V6
         v6_addr_expiry
     )
     
-    print(await serv.listen_loopback(TCP, PNP_TEST_PORT, i))
+    # Bind to loop back or specific IP6.
+    if v6_serv_ips is None:
+        print(await serv.listen_loopback(TCP, PNP_TEST_PORT, i))
+    else:
+        route = await i.route(IP6).bind(ips=v6_serv_ips, port=PNP_TEST_PORT)
+        print(await serv.add_listener(TCP, route))
     #await serv.listen_all(UDP, PNP_TEST_PORT, i)
 
 
@@ -201,10 +206,10 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
             update_y = ret.updated
             assert(ret.value == (PNP_TEST_VALUE + b"changed"))
             assert(ret.vkc == clients[af].vkc)
-            print(update_x)
-            print(update_y)
-            #assert(update_y > update_x)
-            # TODO
+
+            # NOTE: Later update times are less due to penalty calculations.
+            # Expected behavior as far as I can think.
+            #assert(update_y < update_x)
 
             # Now delete the value.
             ret = await clients[af].delete(PNP_TEST_NAME)
@@ -453,11 +458,13 @@ New-NetIPAddress -InterfaceIndex 4 -IPAddress "fe80:3456:7890:3333:0000:0000:000
                 await route.bind(ips=src_ip)
 
                 # Return a pipe to the PNP server.
-                return await pipe_open(
+                pipe = await pipe_open(
                     client.proto,
                     client.dest,
                     route
                 )
+
+                return pipe
 
             # Patch the client to use specific src ip.
             client.get_dest_pipe = get_dest_pipe

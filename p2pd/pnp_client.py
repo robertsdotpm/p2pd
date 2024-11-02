@@ -43,6 +43,7 @@ class PNPClient():
                 return t
 
     async def get_dest_pipe(self):
+        print("In unpatched method.")
         addr = Address(self.dest[0], self.dest[1])
         await addr.res(self.nic.route())
         ipr = addr.v4_ipr or addr.v6_ipr
