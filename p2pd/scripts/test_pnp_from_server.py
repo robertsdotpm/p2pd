@@ -273,6 +273,10 @@ class TestPNPFromServer(unittest.IsolatedAsyncioTestCase):
                 is_valid = await is_af_valid(af_y)
                 assert(is_valid)
 
+                # Test fetch.
+                ret = await clients[af_y].fetch(PNP_TEST_NAME)
+                assert(ret.value == PNP_TEST_VALUE)
+
         await serv.close()
 
     async def test_pnp_name_pop_works(self):
@@ -485,8 +489,99 @@ New-NetIPAddress -InterfaceIndex 4 -IPAddress "fe80:3456:7890:3333:0000:0000:000
         # Cleanup.
         await serv.close()
 
-# Prune admin code?
-# make sure your pub key is returned
+    async def test_v6_no_name_ip_prune(self):
+        await pnp_clear_tables()
+        clients, serv = await pnp_get_test_client_serv(
+            v6_serv_ips="fe80:3456:7890:1111:0000:0000:0000:0001",
+            v6_name_limit=10
+        )
+        serv.set_v6_limits(3, 3)
+
+        vectors = [
+            # Exhaust subnet limit.
+            [
+                # glob          net  iface
+                "fe80:3456:7890:2222:0000:0000:0000:0001",
+                b"0"
+            ],
+            [
+                # glob          net  iface
+                "fe80:3456:7890:2222:0000:0000:0000:0002",
+                b"1"
+            ],
+            [
+                # glob          net  iface
+                "fe80:3456:7890:2222:0000:0000:0000:0003",
+                b"2"
+            ],
+        ]
+
+        client = clients[IP6]
+        for offset in range(0, len(vectors)):
+            src_ip, expect = vectors[offset]
+
+            # Patch client pipe to use a specific fixed IP.
+            async def get_dest_pipe():
+                # Bind to specific local IP.
+                route = client.nic.route(IP6)
+                await route.bind(ips=src_ip)
+
+                # Return a pipe to the PNP server.
+                pipe = await pipe_open(
+                    client.proto,
+                    client.dest,
+                    route
+                )
+
+                return pipe
+
+            # Patch the client to use specific src ip.
+            client.get_dest_pipe = get_dest_pipe
+
+            # Test out the vector.
+            await client.push(f"{offset}", f"{offset}")
+            await asyncio.sleep(2)
+            ret = await client.fetch(f"{offset}")
+            if ret.value is None:
+                assert(expect is None)
+            else:
+                assert(expect == to_b(f"{offset}"))
+
+        db_con = await aiomysql.connect(
+            user=PNP_TEST_DB_USER, 
+            password=PNP_TEST_DB_PASS,
+            db=PNP_TEST_DB_NAME
+        )
+
+        async with db_con.cursor() as cur:
+            await cur.execute("SELECT COUNT(id)FROM ipv6s WHERE 1=1")
+            ret = (await cur.fetchone())[0]
+            assert(ret == len(vectors))
+
+        db_con.close()
+
+        for offset in range(0, len(vectors)):
+            await client.delete(f"{offset}")
+
+        # Should delete all past ipv6s not associated with a name.
+        await client.push("new", "something")
+
+        db_con = await aiomysql.connect(
+            user=PNP_TEST_DB_USER, 
+            password=PNP_TEST_DB_PASS,
+            db=PNP_TEST_DB_NAME
+        )
+
+        async with db_con.cursor() as cur:
+            await cur.execute("SELECT COUNT(id)FROM ipv6s WHERE 1=1")
+            ret = (await cur.fetchone())[0]
+            assert(ret == 1)
+
+        db_con.close()
+
+        # Cleanup.
+        await serv.close()
+
 if __name__ == '__main__':
     # Load mysql root password details.
     if "PNP_DB_PW" in os.environ:

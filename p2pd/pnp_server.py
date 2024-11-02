@@ -8,16 +8,13 @@ This is a server that allows anyone to store key-value records.
     - Since many people have dynamic IPs names must be
     periodically 'refreshed' which prevents expiry and ensures
     that they are associated with the right IP.
-    - New names past the limit per IP bump off older names.
-    - To prevent names being bumped before they can be refreshed
-    each name is allowed to exist for a minimum period.
+    - Names that expire are removed and unneeded IPs are deleted.
+    - The alive duration for a name drops based on name usage per IP.
     - Thus, names are repeatedly migrated been IPs and refreshed
     as they are needed. Or allowed to expire automatically.
 
 This is a registration-less, permissioned, key-value store
 that uses IP limits to reduce spam.
-
-Todo: test IPv6 works - setup home for it again.
 """
 
 from .ecies import encrypt, decrypt
@@ -275,11 +272,6 @@ async def verified_delete_name(db_con, cur, name, updated):
 
 # Prunes unneeded records from the DB.
 async def verified_pruning(db_con, cur, serv, updated):
-    print(updated)
-    print(serv.v6_addr_expiry)
-    print(serv.min_name_duration)
-
-
     # Delete all ipv6s that haven't been updated for X seconds.
     sql = """
     DELETE FROM ipv6s
@@ -333,8 +325,6 @@ async def verified_write_name(db_con, cur, serv, behavior, updated, name, value,
     # Convert ip_str into an IPRange instance.
     cidr = 32 if af == IP4 else 128
     ipr = IPRange(ip_str, cidr=cidr)
-
-    print("Behavior = ", behavior)
 
     # Unneeded records get deleted.
     if behavior != BEHAVIOR_DONT_BUMP:
