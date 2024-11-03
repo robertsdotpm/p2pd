@@ -70,7 +70,7 @@ class Nickname():
         self.sys_clock = sys_clock
 
         # Select best NIC from if list to be primary NIC.
-        for preferred_stack in [DUEL_STACK, IP6, IP4]:
+        for preferred_stack in [DUEL_STACK, IP4, IP6]:
             break_all = False
             for nic in self.ifs:
                 if nic.stack == preferred_stack:
@@ -81,20 +81,21 @@ class Nickname():
             if break_all:
                 break
 
-        self.clients = []
+        self.clients = {IP4: {}, IP6: {}}
         self.started = False
 
     # A client for each PNP server is loaded by index.
     async def start(self):
         for index in range(0, len(PNP_SERVERS[IP4])):
             """
-            Prefer IPv6 -- the reason is v6 blocks are more likely
+            Prefer IPv4 -- the reason is v6 blocks are more likely
             to be unique per customer meaning names won't get
             spammed forcing an expiry wait for usage.
             """
-            for af in [IP6, IP4]:
+            for af in [IP4, IP6]:
                 # Skip AF if not supported.
                 if af not in self.interface.supported():
+                    self.clients[af][index] = None
                     continue
 
                 # Uses direct IPs to avoid domain names.
@@ -117,6 +118,7 @@ class Nickname():
                 try:
                     pipe = await client.get_dest_pipe()
                     if pipe is None:
+                        self.clients[af][index] = None
                         continue
                     else:
                         await pipe.close()
@@ -125,8 +127,7 @@ class Nickname():
                     continue
 
                 # Good client so save.
-                self.clients.append(client)
-                break
+                self.clients[af][index] = client
         
         self.started = True
         return self
@@ -137,14 +138,16 @@ class Nickname():
 
         # Single coro for storing at one server.
         async def worker(offset):
-            try:
-                client = self.clients[offset]
-                if client is None: return
-                ret = await client.push(name, value, behavior)
-                if ret.value is not None:
-                    return offset
-            except:
-                log_exception()
+            for af in VALID_AFS:
+                try:
+                    client = self.clients[af][offset]
+                    if client is None: continue
+                    ret = await client.push(name, value, behavior)
+                    if ret is None: continue
+                    if ret.value is not None:
+                        return offset
+                except:
+                    log_exception()
 
         # Schedule store tasks at all PNP servers.
         tasks = []
@@ -170,9 +173,15 @@ class Nickname():
         assert(self.started)
 
         async def worker(offset, name):
-            client = self.clients[offset]
-            if client is None: return
-            return await client.fetch(name)
+            for af in VALID_AFS:
+                try:
+                    client = self.clients[af][offset]
+                    if client is None: continue
+                    ret = await client.fetch(name)
+                    if ret is not None:
+                        return ret
+                except:
+                    log_exception()
 
         # Convert TLD to client offset list.
         tld = "." + name.split(".")[-1]
@@ -204,9 +213,15 @@ class Nickname():
         name = pnp_strip_tlds(name)
 
         async def worker(offset):
-            client = self.clients[offset]
-            if client is None: return
-            return await client.delete(name)
+            for af in VALID_AFS:
+                try:
+                    client = self.clients[af][offset]
+                    if client is None: continue
+                    ret = await client.delete(name)
+                    if ret is not None:
+                        return ret
+                except:
+                    log_exception()
 
         tasks = []
         for offset in range(0, len(self.clients)):

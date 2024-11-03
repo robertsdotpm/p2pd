@@ -2,7 +2,7 @@ from p2pd import *
 from ecdsa import SigningKey, SECP256k1
 import hashlib
 
-NIC_NAME = "wlx00c0cab5760d"
+NIC_NAME = "Intel(R) Wi-Fi 6E AX211 160MHz"
 
 class TestStatus(unittest.IsolatedAsyncioTestCase):
     async def test_address(self):
@@ -201,6 +201,16 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
             print(f"register store failed")
         else:
             print(f"register store success")
+
+        await nick.delete(fqn_name)
+
+        # Test pull works.
+        try:
+            out = await nick.fetch(fqn_name)
+            print(f"delete name failure")
+        except:
+            print(f"delete name success")
+
 
     async def test_encryption(self):
         # Pub key crap -- used for signing PNP messages.
