@@ -150,6 +150,8 @@ def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=T
 async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=None, msg_cb=None):
     # TODO: index by id and not offset.
     turn_server = TURN_SERVERS[serv_id]
+    if turn_server[af] is None:
+        raise Exception("Turn server does not support this AF.")
 
     # The TURN address.
     turn_addr = (
@@ -168,14 +170,11 @@ async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=Non
     )
 
     # Start the TURN client.
-    try:
-        await asyncio.wait_for(
-            turn_client.start(),
-            10
-        )
-    except asyncio.TimeoutError:
-        log("Turn client start timeout in node.")
-        return
+    # Raise timeout if it takes too long.
+    await asyncio.wait_for(
+        turn_client.start(),
+        10
+    )
     
     # Wait for our details.
     peer_tup  = await turn_client.client_tup_future

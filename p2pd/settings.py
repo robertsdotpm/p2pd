@@ -336,7 +336,7 @@ TURN_SERVERS = [
         "host": "turn.threema.ch",
         "port": 443,
         "afs": [IP4],
-        IP4: "185.88.236.76",
+        IP4: "212.103.68.7",
         IP6: None,
         "user": "threema-angular",
         "pass": "Uv0LcCq3kyx6EiRwQW5jVigkhzbp70CjN2CJqzmRxG3UGIdJHSJV6tpo7Gj7YnGB",
