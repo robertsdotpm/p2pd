@@ -2,6 +2,8 @@
 
 ``[Coverage >= 82%] [Python >= 3.6] [Mac, Win, Nix, BSD, Android]``
 
+[![asciicast](https://asciinema.org/a/EhADOwnoPt5KBiQDbwR69bNHS.svg)](https://asciinema.org/a/EhADOwnoPt5KBiQDbwR69bNHS)
+
 Welcome to the new release of **P2PD.** P2PD is a library for doing
 peer-to-peer networking in Python. This release offers a new methodology
 for improving connectivity between hosts. It works on private networks, across
