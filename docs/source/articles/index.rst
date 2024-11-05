@@ -7,4 +7,5 @@ Knowledge articles
     problems
     how
     nat_classification
+    architecture
     future_work

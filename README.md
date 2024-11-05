@@ -2,7 +2,10 @@
 
 ``[Coverage >= 82%] [Python >= 3.6] [Mac, Win, Nix, BSD, Android]``
 
-[![asciicast](https://asciinema.org/a/EhADOwnoPt5KBiQDbwR69bNHS.svg)](https://asciinema.org/a/EhADOwnoPt5KBiQDbwR69bNHS)
+<a href="https://github.com/robertsdotpm/p2pd/demo.gif" target="_blank">
+  <img src="https://github.com/robertsdotpm/p2pd/demo.gif" width="600" height="300" alt="p2pd demo">
+</a>
+
 
 Welcome to the new release of **P2PD.** P2PD is a library for doing
 peer-to-peer networking in Python. This release offers a new methodology
