@@ -3,6 +3,7 @@
 ``[Coverage >= 82%] [Python >= 3.6] [Mac, Win, Nix, BSD, Android]``
 
 [![Demo image](https://github.com/robertsdotpm/p2pd/blob/main/demo_small.gif?raw=true)](https://github.com/robertsdotpm/p2pd/blob/main/demo_large.gif)
+
 [Watch demo on Asciinema](https://asciinema.org/a/EhADOwnoPt5KBiQDbwR69bNHS)
 
 Welcome to the new release of **P2PD.** P2PD is a library for doing
