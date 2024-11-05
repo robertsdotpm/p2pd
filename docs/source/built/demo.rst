@@ -14,4 +14,8 @@ Or run the software on another machine, get its address, and try that.
 Should be a good way to see what the project is about. Output is similar
 to the capture listed bellow.
 
+.. image:: ../../../demo_small.gif
+    :target: ../../../demo_large.gif
+    :alt: P2PD demo gif
+
 .. literalinclude:: demo.out
