@@ -100,16 +100,16 @@ def build_upnp_discover_buf(af):
     if af == IP4:
         host = to_s(UPNP_IP[af])
     if af == IP6:
-        host = f"[{to_s(UPNP_IP[af])}]"
+        host = fstr("[{to_s(UPNP_IP[af])}]")
 
     #f'ST: upnp:rootdevice\r\n' \
     buf = \
-    f'M-SEARCH * HTTP/1.1\r\n' \
-    f'HOST: {host}:{UPNP_PORT}\r\n' \
-    f'ST: upnp:rootdevice\r\n' \
-    f'MX: 5\r\n' \
-    f'MAN: "ssdp:discover"\r\n' \
-    f'\r\n'
+    fstr('M-SEARCH * HTTP/1.1\r\n') + \
+    fstr('HOST: {host}:{UPNP_PORT}\r\n') + \
+    fstr('ST: upnp:rootdevice\r\n') + \
+    fstr('MX: 5\r\n') + \
+    fstr('MAN: "ssdp:discover"\r\n') + \
+    fstr('\r\n')
 
     return to_b(buf)
 
@@ -156,7 +156,7 @@ async def get_upnp_forwarding_services(route, dest, path):
         if len(services):
             return (dest, services)
     except Exception:
-        log(f"Failed to get root xml {dest} {path}")
+        log(fstr("Failed to get root xml {dest} {path}"))
         log_exception()
     
 async def get_upnp_forwarding_services_for_replies(af, src_tup, nic, replies):
@@ -189,7 +189,7 @@ async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext
     desc = to_s(desc)
     if af == IP4:
         soap_action = "AddPortMapping"
-        body = f"""
+        body = fstr("""
 <u:{soap_action} xmlns:u="{service["serviceType"]}">
     <NewRemoteHost></NewRemoteHost>
     <NewExternalPort>{ext_port}</NewExternalPort>
@@ -200,7 +200,7 @@ async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext
     <NewPortMappingDescription>{desc}</NewPortMappingDescription>
     <NewLeaseDuration>0</NewLeaseDuration>
 </u:{soap_action}>
-        """
+        """)
 
     # Add a hole in the firewall.
     # Have not added UniqueID -- will it still work?
@@ -214,7 +214,7 @@ async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext
 
         # https://github.com/miniupnp/miniupnp/issues/228
         soap_action = "AddPinhole"
-        body = f"""
+        body = fstr("""
 <u:{soap_action} xmlns:u="{service["serviceType"]}">
     <RemoteHost>*</RemoteHost>
     <RemotePort>0</RemotePort>
@@ -223,27 +223,27 @@ async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext
     <InternalClient>{lan_ip}</InternalClient>
     <LeaseTime>{UPNP_LEASE_TIME}</LeaseTime>
 </u:{soap_action}>
-        """
+        """)
 
     # Build the XML payload to send.
-    payload = f"""
+    payload = fstr("""
 <?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
 <s:Body>
 {body}
 </s:Body>
 </s:Envelope>
-    """
+    """)
 
     # Custom headers for soap.
     headers = [
         [
             b"SOAPAction",
-            to_b(f"\"{service['serviceType']}#{soap_action}\"")
+            to_b(fstr("\"{service['serviceType']}#{soap_action}\""))
         ],
         [b"Connection", b"Close"],
         [b"Content-Type", b"text/xml"],
-        [b"Content-Length", to_b(f"{len(payload)}")]
+        [b"Content-Length", to_b(fstr("{len(payload)}"))]
     ]
 
     # Requests must come from IP:port for IPv6.

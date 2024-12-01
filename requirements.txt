@@ -8,5 +8,8 @@ pyroute2; platform_system != "Windows" and platform_system != "Darwin" # Fallbac
 
 # These are the dependencies for ECIES.
 winregistry; platform_system == "Windows"
-fasteners
-aiodns # Used for DNS queries.
+
+# Python 3.5 runs on XP
+# though these optional packages won't install on it.
+fasteners; python_version >= "3.6" or platform_system != "Windows"
+aiodns; python_version >= "3.6" or platform_system != "Windows" # Used for DNS queries.

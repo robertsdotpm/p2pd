@@ -120,7 +120,7 @@ class Route(Bind):
             interface=self.interface,
             ext_port=port,
             src_tup=src_tup,
-            desc=f"P2PD {hash(src_tup)}"[0:8],
+            desc=fstr("P2PD {hash(src_tup)}")[0:8],
             proto=proto
         )
 
@@ -346,7 +346,7 @@ class Route(Bind):
             return len(self.ext_ips[0])
 
     def __repr__(self):
-        return f"Route.from_dict({str(self)})"
+        return fstr("Route.from_dict({str(self)})")
 
     def __str__(self):
         return pprint.pformat(self.to_dict())

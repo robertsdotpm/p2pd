@@ -53,7 +53,7 @@ def get_serv_lock(af, proto, serv_port, serv_ip):
     pidfile_path = os.path.realpath(
         os.path.join(
             get_p2pd_install_root(),
-            f"{af}_{proto}_{serv_port}_{serv_ip}_pid.txt"
+            fstr("{af}_{proto}_{serv_port}_{serv_ip}_pid.txt")
         )
     )
 
@@ -104,13 +104,13 @@ class Daemon():
             lock = get_serv_lock(route.af, proto, port, ip)
             if lock is not None:
                 if not lock.acquire(blocking=False):
-                    error = f"{proto}:{bind_str(route)} zombie pid"
+                    error = fstr("{proto}:{bind_str(route)} zombie pid")
                     raise Exception(error)
 
             # Is the server already listening.
             is_listening = await is_serv_listening(proto, route)
             if is_listening:
-                error = f"{proto}:{bind_str(route)} listen conflict."
+                error = fstr("{proto}:{bind_str(route)} listen conflict.")
                 raise Exception(error)
             
         
@@ -249,7 +249,7 @@ class Daemon():
     # On message received (placeholder.)
     async def msg_cb(self, msg, client_tup, pipe):
         print("Specify your own msg_cb in a child class.")
-        print(f"{msg} {client_tup}")
+        print(fstr("{msg} {client_tup}"))
         await pipe.send(msg, client_tup)
 
     # On connection success(placeholder.)

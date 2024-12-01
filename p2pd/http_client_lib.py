@@ -26,7 +26,7 @@ def http_req_buf(af, host, path=b"/", method=b"GET", payload=b"", headers=None):
     if af == IP4:
         host = to_b(host)
     else:
-        host = to_b(f"[{to_s(host)}]")
+        host = to_b(fstr("[{to_s(host)}]"))
     buf += b"Host: %s\r\n" % (host)
     for header in headers:
         n, v = header
@@ -42,7 +42,7 @@ def http_req_buf(af, host, path=b"/", method=b"GET", payload=b"", headers=None):
 
     # Add content length for payload.
     if payload is not None:
-        buf += to_b(f"Content-Length: {len(payload)}\r\n")
+        buf += to_b(fstr("Content-Length: {len(payload)}\r\n"))
     
     # Terminate headers.
     buf = buf[:-2]
@@ -104,7 +104,7 @@ async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, h
     # Get a new con 
     assert(route.resolved)
     assert(dest is not None)
-    log(f"{route} {dest}")
+    log(fstr("{route} {dest}"))
     try:
         p = await pipe_open(route=route, proto=TCP, dest=dest, conf=conf)
     except Exception:
@@ -225,11 +225,11 @@ async def url_open(route, url, params={}, timeout=3, throttle=0, headers=[], con
 
         # Pass the params in the URL.
         n = to_s(urlencode(name))
-        get_vars += f"&{n}={v}"
+        get_vars += fstr("&{n}={v}")
 
     # Request path.
     if len(get_vars):
-        path = f"{url_parts['path']}?{get_vars}"
+        path = fstr("{url_parts['path']}?{get_vars}")
     else:
         path = url_parts["path"]
 
@@ -261,7 +261,7 @@ def Payload(f, url={}, body=b""):
 
 # Returns pipe, ParseHTTPResponse
 async def do_web_req(addr, http_buf, do_close, route, conf=NET_CONF):
-    log(f"{addr}")
+    log(fstr("{addr}"))
 
     # Open TCP connection to HTTP server.
     p = None
@@ -359,7 +359,7 @@ class WebCurl():
 
         # Append url encoded path if present.
         if len(self.url_params):
-            path += f'?{self.url_params["safe"]}'
+            path += fstr('?{self.url_params["safe"]}')
 
         # If payload is a dict convert to json buf.
         hdrs = hdrs or self.hdrs

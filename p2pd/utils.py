@@ -24,6 +24,25 @@ import multiprocessing
 from ecdsa.curves import NIST192p
 from decimal import Decimal as Dec
 
+to_b = lambda x: x if type(x) == bytes else x.encode("ascii", errors='ignore')
+to_s = lambda x: x if type(x) == str else x.decode("utf-8", errors='ignore')
+
+# Older Pythons.
+def fstr(hey):
+    key_vals = {}
+    var_names = re.findall("(?:{([^{}]+)})", hey)
+    for var_name in var_names:
+        # Lookup value at variable.
+        key_vals[var_name] = eval(var_name)
+    
+    # Replace named variables in format string with values.
+    for var_name in var_names:
+        p = '{' + var_name + '}'
+        value = to_s(key_vals[var_name])
+        hey = hey.replace(p, value)
+        
+    return hey
+
 if "P2PD_DEBUG" in os.environ: 
     IS_DEBUG = 1
     logging.basicConfig(
@@ -48,7 +67,7 @@ class Log():
         if not IS_DEBUG:
             return
         
-        out = f"p2p: <{node_id}> {m}"
+        out = fstr("p2p: <{node_id}> {m}")
         with open('program.log', 'a') as fp:
             fp.write(out + '\n')
 
@@ -140,8 +159,6 @@ STATUS_FAILURE = 3
 MAX_PORT = 65535
 
 re.unescape = lambda x: re.sub(r'\\(.)', r'\1', x)
-to_b = lambda x: x if type(x) == bytes else x.encode("ascii", errors='ignore')
-to_s = lambda x: x if type(x) == str else x.decode("utf-8", errors='ignore')
 to_hs = lambda x: to_s(binascii.hexlify(to_b(x)))
 to_h = lambda x: to_hs(x) if len(x) else "00"
 to_i = lambda x: x if isinstance(x, int) else int(x, 16)
@@ -179,8 +196,8 @@ sha256 = lambda x: to_s(hashlib.sha256(to_b(x)).hexdigest())
 hash160 = lambda x: hashlib.new('ripemd160', to_b(x)).digest()
 sha3_256 = lambda x: to_s(hashlib.sha3_256(to_b(x)).hexdigest())
 b_sha3_256 = lambda x: hashlib.sha3_256(to_b(x)).digest()
-bind_str = lambda r: f"{r.bind_tup()[0]}:{r.bind_tup()[1]}"
-dhash = lambda x: b_to_i(hashlib.sha256(to_b(f"{x}")).digest())
+bind_str = lambda r: fstr("{r.bind_tup()[0]}:{r.bind_tup()[1]}")
+dhash = lambda x: b_to_i(hashlib.sha256(to_b(fstr("{x}"))).digest())
 
 def list_clone_rand(the_list, n):
     the_clone = the_list[:]
@@ -525,7 +542,7 @@ def handler_done_builder(pipe, handler, task=None):
             # Error code.
             if result:
                 # Log the error.
-                out = f"> {handler} = error {result}."
+                out = fstr("> {handler} = error {result}.")
                 log(out)
 
         # If it returns a task then save it.

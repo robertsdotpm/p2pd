@@ -307,7 +307,7 @@ class IPRange():
             raise TypeError('Invalid argument type: {}'.format(type(key)))
 
     def __repr__(self):
-        return f"{str(self)}"
+        return fstr("{str(self)}")
 
     # Get an IPAddress obj at start of range.
     # Convert to a string.

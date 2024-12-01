@@ -31,10 +31,10 @@ def get_params(field_names, url_path):
 
         # (/ field name / non dir chars )
         # All are marked as optional.
-        p += f"(?:/({as_literal})/([^/]+))|"
+        p += fstr("(?:/({as_literal})/([^/]+))|")
 
     # Repeat to match optional instances of the params.
-    p = f"(?:{p[:-1]})+"
+    p = fstr("(?:{p[:-1]})+")
 
     # Convert the marked pairs to a dict.
     params = {}

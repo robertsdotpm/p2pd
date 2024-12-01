@@ -83,7 +83,7 @@ class PNPClient():
         for _ in range(0, end):
             send_success = await pipe.send(enc_msg, self.dest)
             if not send_success:
-                log(f"pnp client send pkt failure.")
+                log(fstr("pnp client send pkt failure."))
 
             if end > 1:
                 await asyncio.sleep(0.5)

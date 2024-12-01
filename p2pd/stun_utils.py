@@ -150,7 +150,7 @@ def validate_stun_reply(reply, mode):
     # Check attrs exist in the reply.
     for req_attr in extra_attrs:
         if not hasattr(reply, req_attr):
-            log(f'{to_h(reply.txn_id)}: no attr {req_attr}')
+            log(fstr('{to_h(reply.txn_id)}: no attr {req_attr}'))
             return None
 
     # The follow tups should all have pub IPs.
@@ -159,10 +159,10 @@ def validate_stun_reply(reply, mode):
         cidr = af_to_cidr(reply.af)
         ipr = IPRange(tup_ip, cidr=cidr)
         if ipr.is_private:
-            log(f'{req_attr} {to_h(reply.txn_id)}: {tup_ip} priv')
+            log(fstr('{req_attr} {to_h(reply.txn_id)}: {tup_ip} priv'))
             return None
         if not valid_port(tup_port):
-            log(f'{req_attr} {to_h(reply.txn_id)}: {tup_port} bad')
+            log(fstr('{req_attr} {to_h(reply.txn_id)}: {tup_port} bad'))
             return None
 
     return reply

@@ -352,7 +352,12 @@ async def delta_test(stun_clients, test_no=8, threshold=5, concurrency=True):
 
     # Close previous sockets.
     get_delta_value(delta_no, dist_no, local_dist, preserv_dist, results)
-    [await p.close() for p in socks if p is not None]
+    for p in socks:
+        if p is None:
+            continue
+            
+        await p.close()
+        
     socks = []
 
     # See if any of the above tests succeeded.

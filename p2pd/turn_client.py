@@ -151,7 +151,7 @@ class TURNClient(PipeEvents):
             proto=UDP,
             dest=self.dest
         )
-        log(f"> Turn socket = {self.turn_pipe.sock}")
+        log(fstr("> Turn socket = {self.turn_pipe.sock}"))
 
         # If con was unncessessful raise exception.
         if self.turn_pipe is None:
@@ -182,19 +182,19 @@ class TURNClient(PipeEvents):
 
         # expect 'Unauthorized'.
         await async_retry(lambda: self.allocate_relay(sign=False), count=5)
-        log(f"Turn expect unauth success")
+        log(fstr("Turn expect unauth success"))
 
         # Wait for client to be ready.
         await self.auth_event.wait() # Authentication success.
-        log(f"Turn auth success")
+        log(fstr("Turn auth success"))
         await self.relay_event.wait() # Our relay address available.
-        log(f"Turn relay event success")
+        log(fstr("Turn relay event success"))
 
         # Return our relay tup.
         relay_tup = await self.relay_tup_future
-        log(f"Turn tup future success")
+        log(fstr("Turn tup future success"))
         client_tup = await self.client_tup_future
-        log(f"Turn client tup success")
+        log(fstr("Turn client tup success"))
 
         # White list ourselves.
         #await self.accept_peer(client_tup, relay_tup)
@@ -289,12 +289,12 @@ class TURNClient(PipeEvents):
                 found_relay = True
                 break
         if not found_relay:
-            error = f"""
+            error = fstr("""
             In TURN.send() the dest_tup does not 
             correspond to any accepted peers 
             this mind indicate an invalid send addr 
             bad addr was {dest_tup} 
-            """
+            """)
             log(error)
 
         assert(type(dest_tup) == tuple)
@@ -303,7 +303,7 @@ class TURNClient(PipeEvents):
         # If dest IP doesn't match this TURN server IP
         # it means maybe the wrong relay IP is used.
         if dest_tup[0] != self.dest[0]:
-            error = f"""
+            error = fstr("""
             The destination IP for TURN.send 
             is different to the IP address of the current 
             server {dest_tup[0]} !+ {self.dest[0]}
@@ -312,7 +312,7 @@ class TURNClient(PipeEvents):
             (like a peer address) or it may mean 
             different relay servers are being mixed 
             (in which case disregard this error.
-            """
+            """)
             log(error)
 
         # Make sure the channel is setup before continuing.
@@ -391,13 +391,13 @@ class TURNClient(PipeEvents):
 
         # Basic validation for logging.
         if peer_relay_tup[0] != self.dest[0]:
-            error = f"""
+            error = fstr("""
             TURN accept peer has a relay tup different 
             to the IP of the current server 
             {peer_relay_tup[0]} != {self.dest[0]}
             this may indicate an error or mean different 
             TURN servers are being mixed.
-            """
+            """)
             log(error)
 
         #peer_tup = (peer_tup[0], 0)
@@ -487,11 +487,11 @@ class TURNClient(PipeEvents):
         attr_data.tup = None
         attr_data.decode(attr_code, attr_data.encode(attr_code))
         if attr_data.tup != src_tup:
-            error = f"""
+            error = fstr("""
             The decode of the white listed 
             peer addr in TURN did not match the src tup 
             this might indicate an encoding error 
-            {src_tup} != {attr_data.tup}"""
+            {src_tup} != {attr_data.tup}""")
             log(error)
 
         return reply

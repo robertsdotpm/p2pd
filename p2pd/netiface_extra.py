@@ -12,17 +12,17 @@ async def get_mac_mixed(if_name):
     vectors = {
         "Linux": [
             [
-                f"cat /sys/class/net/{if_name}/address",
+                fstr("cat /sys/class/net/{if_name}/address"),
                 lambda x: x
             ],
             [
-                f"ip addr show {if_name} | {grep_p}",
+                fstr("ip addr show {if_name} | {grep_p}"),
                 lambda x: re.findall(mac_p, x)[0]
             ]
         ],
         "OpenBSD": [
             [
-                f"ifconfig {if_name} | {grep_p}",
+                fstr("ifconfig {if_name} | {grep_p}"),
                 lambda x: re.findall(r"\s+[a-zA-Z]+\s+([^\s]+)", x)[0]
             ]
         ],
@@ -107,7 +107,7 @@ async def netiface_addr_to_ipr(af, nic_id, info):
         return None
     
     #info["addr"] = ip_strip_if
-    log(f"Netiface loaded nic ipr {af} {nic_id} {info['addr']} {info['netmask']}")
+    log(fstr("Netiface loaded nic ipr {af} {nic_id} {info['addr']} {info['netmask']}"))
     nic_ipr = IPRange(info["addr"], cidr=max_cidr(af))
 
     """
@@ -142,9 +142,9 @@ async def netiface_addr_to_ipr(af, nic_id, info):
                 s.bind(bind_tup)
             except Exception:
                 log_exception()
-                log(f"af = {af}, bind_ip = {bind_ip}")
-                log(f"{bind_tup}")
-                log(f"{s}")
+                log(fstr("af = {af}, bind_ip = {bind_ip}"))
+                log(fstr("{bind_tup}"))
+                log(fstr("{s}"))
                 log(">get routes invalid subnet for {}".format(str(nic_ipr)))
             finally:
                 s.close()
@@ -197,7 +197,7 @@ def netiface_gateways(netifaces, get_interface_type, preference=AF_ANY):
         # Check the address families of related GWs.
         for af in afs:
             # No entry for AF found in GW info.
-            log(f"Trying {af} in netiface_gateways")
+            log(fstr("Trying {af} in netiface_gateways"))
             if af not in gws:
                 continue
                 

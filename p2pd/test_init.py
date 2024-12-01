@@ -72,7 +72,7 @@ async def check_pipe(pipe, dest_tup=None):
     if data in buf:
         return True
     else:
-        log(f"Check pipe: invalid recv buf {buf}")
+        log(fstr("Check pipe: invalid recv buf {buf}"))
         return False
 
 # If a random node ID is generated and subbed to over and over.
@@ -81,7 +81,7 @@ async def check_pipe(pipe, dest_tup=None):
 # Hence generate a unique IQ deterministically.
 def node_name(x, i):
     assert(i.resolved)
-    name_base = to_b(f"{i.mac} {socket.gethostname()}")
+    name_base = to_b(fstr("{i.mac} {socket.gethostname()}"))
     node_name = hashlib.sha256(x + name_base).hexdigest()
     return to_b(node_name)[:10]
 

@@ -53,11 +53,11 @@ def turn_get_data_attr(msg, af, client):
             # Validate the peer addr.
             ext = client.turn_pipe.route.ext()
             if peer_tup[0] == ext:
-                error = f"""
+                error = fstr("""
                 We received a TURN message from ourselves
                 this might indicate bad logic
                 msg peer_tup 0 == {ext}
-                """
+                """)
                 log(error)
 
     # Reset attribute pointer to start.
@@ -94,18 +94,18 @@ def turn_proc_attrs(af, attr_code, attr_data, msg, self):
 
             # Indicate the tup has been set.
             self.relay_tup_future.set_result(self.relay_tup)
-            log(f"> Turn setting relay addr = {self.relay_tup}")
+            log(fstr("> Turn setting relay addr = {self.relay_tup}"))
             self.relay_event.set()
 
             # Validate relay tup IP.
             if self.relay_tup[0] != self.dest[0]:
-                error = f"""
+                error = fstr("""
                 Our XOR relay tup IP was decoded as 
                 {self.relay_tup[0]} which is different 
                 from the address of the TURN server 
                 {self.dest[0]} which may 
                 indicate a XOR decoding error.
-                """
+                """)
                 log(error)
 
     # Handle authentication.
@@ -199,11 +199,11 @@ async def process_replies(self):
             # Not a peer we white listed.
             peer_tup = norm_client_tup(peer_tup)
             if peer_tup not in self.peers:
-                error = f"""
+                error = fstr("""
                 Got a TURN data message from an 
                 unknown peer = {peer_tup} which 
                 may indicate a decoding error.
-                """
+                """)
                 log(error)
                 continue
 
@@ -225,7 +225,7 @@ async def process_replies(self):
             will be unknown so we skip it.
             """
             if payload is None:
-                log(f"Payload from turn was None but msg data = {msg_data}")
+                log(fstr("Payload from turn was None but msg data = {msg_data}"))
                 if not self.blank_rudp_headers:
                     continue
                 else:
@@ -263,11 +263,11 @@ async def process_replies(self):
         # Log any error messages.
         if turn_status == STUNMsgCodes.ErrorResp:
             log('Turn error {}: {}'.format(error_code, error_msg))
-            log(f"turn hex msg: {to_h(turn_msg.pack())}")
+            log(fstr("turn hex msg: {to_h(turn_msg.pack())}"))
 
             # Stale nonce.
             if error_code == 438:
-                log(f"stole nonce. retransmit for {txid}")
+                log(fstr("stole nonce. retransmit for {txid}"))
                 self.msgs[txid]["status"].set_result(STATUS_RETRY)
                 continue
 
@@ -313,8 +313,8 @@ async def process_replies(self):
                 self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
             else:
                 error = \
-                f"Error in TURN create permission = "
-                f"{to_h(turn_msg.pack())}"
+                fstr("Error in TURN create permission = ") + \
+                fstr("{to_h(turn_msg.pack())}")
                 log(error)
 
             continue

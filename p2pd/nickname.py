@@ -167,7 +167,7 @@ class Nickname():
         
         # Translate success offsets into specific TLD.
         tld = pnp_get_tld(offsets)
-        return f"{name}{tld}"
+        return fstr("{name}{tld}")
 
     async def fetch(self, name, timeout=NAMING_TIMEOUT):
         assert(self.started)
@@ -206,7 +206,7 @@ class Nickname():
             if ret.value is not None:
                 return ret
             
-        raise FullNameFailure(f"Could not fetch {name}")
+        raise FullNameFailure(fstr("Could not fetch {name}"))
         
     async def delete(self, name, timeout=NAMING_TIMEOUT):
         assert(self.started)

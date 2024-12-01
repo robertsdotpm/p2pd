@@ -238,7 +238,7 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
         assert(int(nic_ipr[0]))
         if ip_norm(nic_ipr[0])[:2] in ["fe", "fd"]:
             link_locals.append(nic_ipr)
-            log(f"Addr is link local so skipping")
+            log(fstr("Addr is link local so skipping"))
             continue
 
         if nic_ipr.is_private:
@@ -309,7 +309,7 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
         af_default_nic_ipr = IPRange(af_default_nic_ip, cidr=cidr)
         if af_default_nic_ipr not in nic_iprs:
             default_route = None
-            log(f"Route error {af} disabling default route.")
+            log(fstr("Route error {af} disabling default route."))
     else:
         default_route = None
 

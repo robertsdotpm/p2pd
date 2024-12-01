@@ -259,7 +259,8 @@ class RC6Encryption:
                 binary_blocks.append(block)
                 integer_blocks.append(basetwo(block))
                 block = ""
-            block = f"{char:0>8b}{block}"
+                
+            block = "{:0>8b}".format(char) + block
 
         binary_blocks.append(block)
         integer_blocks.append(basetwo(block))

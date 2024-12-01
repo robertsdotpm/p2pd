@@ -347,7 +347,7 @@ class PipeEvents(BaseACKProto):
     def datagram_received(self, data, client_tup):
         #log(f"Base proto recv udp = {client_tup} {data}")
         if self.transport is None:
-            log(f"Skipping process data cause transport none 1.")
+            log(fstr("Skipping process data cause transport none 1."))
             return
 
         self.handle_data(data, client_tup)
@@ -357,7 +357,7 @@ class PipeEvents(BaseACKProto):
         try:
             #log(f"Base proto recv tcp = {data}")
             if self.transport is None:
-                log(f"Skipping process data cause transport none 2.")
+                log(fstr("Skipping process data cause transport none 2."))
                 return
 
             client_tup = self.transport.get_extra_info('socket').getpeername()
