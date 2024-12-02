@@ -176,6 +176,17 @@ async def do_netsh_cmds():
                 IP6: "interfaces"
             }
         ],
+        
+        # Backup if the above fails.
+        [
+            parser.show_interface2,
+            {
+                IP4: "wmic nic get Name, Index",
+                IP6: "wmic nic get Name, Index"
+            },
+            False
+        ],
+        
         [
             parser.show_addresses,
             {
@@ -231,12 +242,20 @@ async def do_netsh_cmds():
     for result in results:
         af, k, v = result
         if k == "ifs":
+            print('k == ifs: ', v)
             info["ifs"] = v
             continue
 
+        # Create key name.
         if k not in info:
             info[k] = {}
-
+ 
+        # Already set by another func.
+        # Allows for backup functions.
+        if af in info[k]:
+            if info[k][af] != {}:
+                continue
+                
         info[k][af] = v
 
     return info
@@ -346,7 +365,12 @@ def get_cidr_from_route_infos(needle_ip, route_infos):
 
 async def if_infos_from_netsh():
     con_table = win_con_name_lookup()
+    print("guid con table: ", con_table)
+    
     out = await do_netsh_cmds()
+    
+    
+    print("do netsh cmds out: ", out)
 
     if_infos = []
     for if_index in out["ifs"]:
@@ -356,6 +380,7 @@ async def if_infos_from_netsh():
         addr_info = {IP4: [], IP6: []}
         for af in [IP4, IP6]:
             if if_index not in out["addrs"][af]:
+                print('a')
                 continue
 
             for found_addr in out["addrs"][af][if_index]:
@@ -373,13 +398,16 @@ async def if_infos_from_netsh():
                 addr_info[af].append(addr)
 
         if con_name not in con_table:
+            print('b')
             continue
 
         if if_index not in out["macs"][IP4]:
+            print('c')
             continue
 
         mac = out["macs"][IP4][if_index]["mac"].rstrip().lower()
         if mac not in out["gws"][IP4]:
+            print('d')
             continue
         gws = out["gws"][IP4][mac]
 
@@ -388,10 +416,12 @@ async def if_infos_from_netsh():
         for test_af in [IP4, IP6]:
             af_default = out["macs"][IP4]["default"][test_af]
             if af_default is None:
+                print('e')
                 continue
 
             af_gw = gws[test_af]
             if af_gw is None:
+                print('f')
                 continue
 
             if IPRange(af_gw) == IPRange(af_default["gw_ip"]):

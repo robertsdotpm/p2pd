@@ -487,6 +487,7 @@ class Netifaces():
                 if_infos_from_netsh(),
                 CMD_TIMEOUT
             )
+            print(if_infos)
             log_exception()
             print("After netsh")
 
