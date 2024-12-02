@@ -474,17 +474,21 @@ class Netifaces():
         but on newer versions its being phased out.
         """
         try:
+            print("before ps1")
             if_infos = await asyncio.wait_for(
                 load_ifs_from_ps1(),
                 CMD_TIMEOUT
             )
+            print("After ps1")
             log_exception()
         except:
+            print("before netsh")
             if_infos = await asyncio.wait_for(
                 if_infos_from_netsh(),
                 CMD_TIMEOUT
             )
             log_exception()
+            print("After netsh")
 
         self.by_guid_index = {}
         for if_info in if_infos:

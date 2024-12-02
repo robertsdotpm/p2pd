@@ -198,6 +198,8 @@ async def cmd(value, io=None, er=True, timeout=10):
         else:
             stdout, stderr = await proc.communicate(input=io)
     except NotImplementedError:
+        print("not implemented cmd 1")
+    
         # Backup function for old Python versions.
         @run_in_executor
         def blocking_cmd(er):
@@ -211,6 +213,7 @@ async def cmd(value, io=None, er=True, timeout=10):
                 stdout = proc.stdout
                 stderr = proc.stderr
             except subprocess.TimeoutExpired:
+                print("sub process timeout expired")
                 log(fstr("command {value} timed out"))
                 return null_out
 

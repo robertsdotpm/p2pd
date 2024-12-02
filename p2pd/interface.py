@@ -87,6 +87,7 @@ async def init_p2pd():
 
     # Attempt to get monkey patched netifaces.
     netifaces = Interface.get_netifaces()
+    print(netifaces)
     if netifaces is None:
         if sys.platform == "win32":
             """
@@ -98,6 +99,7 @@ async def init_p2pd():
                 import nest_asyncio
                 nest_asyncio.apply()
             """
+            print("netifaces . start")
             netifaces = await Netifaces().start()
         else:
             netifaces = sys.modules["netifaces"]
@@ -401,7 +403,8 @@ class Interface():
 
     # Show a representation of this object.
     def __repr__(self):
-        return fstr("Interface.from_dict({str(self)})")
+        nic_info = str(self)
+        return fstr("Interface.from_dict({nic_info})")
 
     # Pickle.
     def __getstate__(self):
@@ -413,7 +416,9 @@ class Interface():
         self.__dict__ = o.__dict__
 
     async def do_start(self, netifaces=None, min_agree=3, max_agree=6, timeout=2):
-        log(fstr("Starting resolve with stack type = {self.stack}"))
+        stack = self.stack
+        log(fstr("Starting resolve with stack type = {stack}"))
+        
 
         # Load internal interface details.
         if Interface.get_netifaces() is None:

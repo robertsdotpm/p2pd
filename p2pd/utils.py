@@ -23,25 +23,10 @@ import ecdsa
 import multiprocessing
 from ecdsa.curves import NIST192p
 from decimal import Decimal as Dec
+from .fstr import fstr
 
 to_b = lambda x: x if type(x) == bytes else x.encode("ascii", errors='ignore')
 to_s = lambda x: x if type(x) == str else x.decode("utf-8", errors='ignore')
-
-# Older Pythons.
-def fstr(hey):
-    key_vals = {}
-    var_names = re.findall("(?:{([^{}]+)})", hey)
-    for var_name in var_names:
-        # Lookup value at variable.
-        key_vals[var_name] = eval(var_name)
-    
-    # Replace named variables in format string with values.
-    for var_name in var_names:
-        p = '{' + var_name + '}'
-        value = to_s(key_vals[var_name])
-        hey = hey.replace(p, value)
-        
-    return hey
 
 if "P2PD_DEBUG" in os.environ: 
     IS_DEBUG = 1
@@ -56,6 +41,7 @@ if "P2PD_DEBUG" in os.environ:
         if "P2PD_DEBUG" not in os.environ:
             return
 
+        print(m)
         logging.info(m)
 else:
     IS_DEBUG = 0
@@ -68,6 +54,7 @@ class Log():
             return
         
         out = fstr("p2p: <{node_id}> {m}")
+
         with open('program.log', 'a') as fp:
             fp.write(out + '\n')
 
@@ -604,6 +591,19 @@ def run_in_executor(f):
 
             loop = asyncio.get_event_loop()
             return loop.run_in_executor(None, helper)
+
+    return inner
+    
+def run_in_executor2(f):
+    @functools.wraps(f)
+    def inner(*args, **kwargs):
+        loop = asyncio.get_event_loop()
+        if inspect.iscoroutinefunction(f):
+            # Run coroutine function directly in the existing event loop
+            return loop.create_task(f(*args, **kwargs))
+        else:
+            # Run synchronous function in the executor
+            return loop.run_in_executor(None, lambda: f(*args, **kwargs))
 
     return inner
 
