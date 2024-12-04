@@ -26,6 +26,7 @@ from .pipe_events import *
 from .address import Address
 from .ip_range import IPRange
 from .address import *
+from .asyncio_patches import *
 
 """
 StreamReaderProtocol provides a way to "translate" between
@@ -290,7 +291,8 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
 
         # Start processing messages for UDP.
         if proto in [UDP, RUDP]:
-            transport, _ = await loop.create_datagram_endpoint(
+            transport, _ = await create_datagram_endpoint(
+                loop,
                 lambda: pipe_events,
                 sock=sock
             )

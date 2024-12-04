@@ -1,21 +1,16 @@
-#from p2pd import *
-#from p2pd.win_wmic import *
-
-
+from p2pd import *
 import asyncio
 import re
 
 
 async def main():
     print("hello")
-    return
-
-
-
     netifaces = await init_p2pd()
     print(netifaces)
-    return
-    
+    print(netifaces.gateways())
+    print(netifaces.interfaces())
+    print(netifaces.ifaddresses("AMD PCNET Family PCI Ethernet Adapter - Packet Scheduler Miniport"))
+
     nic = await Interface()
     print("after load nic")
     print(nic)

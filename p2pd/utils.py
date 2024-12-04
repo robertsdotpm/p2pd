@@ -825,6 +825,23 @@ def xor_bufs(a, b):
 
     # Return cookie as bytearray to avoid making a copy.
     return bytes(r)[:min(a_len, b_len)]
+    
+"""
+On older platforms if many concurrent cmds execute with async
+gather they will most likely fill the executor pool.
+Normally this would be fine but older Python versions are buggy
+and so should avoid asyncio gather.
+"""
+async def safe_gather(*args):
+    results = []
+    if sys.version_info[1] <= 5: # Python <= 3.5.*
+        for task in args:
+            result = await task
+            results.append(result)
+    else:
+        results = await asyncio.gather(*args)
+        
+    return results
 
 if __name__ == "__main__": # pragma: no cover
     x = [1, 1]

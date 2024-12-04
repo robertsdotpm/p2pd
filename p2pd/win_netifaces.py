@@ -64,6 +64,7 @@ import re
 from .ip_range import *
 from .cmd_tools import *
 from .win_netsh import if_infos_from_netsh
+from .win_wmic import if_infos_from_wmic
 
 CMD_TIMEOUT = 10
 
@@ -465,31 +466,37 @@ class Netifaces():
         pass
 
     async def start(self):
-        """
-        At first powershell is attempted to load the network
-        information - however the 'cmdlets' needed for this are
-        only available when the version is >= Windows 8.1.
-        Hence, where this fails, and on older versions the netsh
-        client is used. Netsh is well-supported on older versions
-        but on newer versions its being phased out.
-        """
-        try:
-            print("before ps1")
-            if_infos = await asyncio.wait_for(
-                load_ifs_from_ps1(),
-                CMD_TIMEOUT
-            )
-            print("After ps1")
-            log_exception()
-        except:
-            print("before netsh")
-            if_infos = await asyncio.wait_for(
-                if_infos_from_netsh(),
-                CMD_TIMEOUT
-            )
-            print(if_infos)
-            log_exception()
-            print("After netsh")
+        # Different approaches for getting NIC info on Windows.
+        # All of which use shell commands to keep it portable.
+        vectors = [
+            # WMIC is well supported on all Windows versions but
+            # needs 3 commands to get all information.
+            if_infos_from_wmic(),
+            
+            # Powershell can do everything in one command but
+            # the 'cmdlets' are only on Windows >= 8.1.
+            # Needs permissions to run PS1 scripts.
+            load_ifs_from_ps1(),
+            
+            # Netsh works well in some cases but older OSes
+            # need a special routing service manually enabled.
+            if_infos_from_netsh(),
+        ]
+        
+        # Try different funcs to load IF info.
+        for load_if_info in vectors:
+            try:
+                if_infos = await asyncio.wait_for(
+                   load_if_info,
+                    CMD_TIMEOUT
+                )
+                
+                if not len(if_infos):
+                    continue
+                    
+                break
+            except:
+                log_exception()
 
         self.by_guid_index = {}
         for if_info in if_infos:
