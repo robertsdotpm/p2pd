@@ -205,9 +205,11 @@ async def if_infos_from_wmic():
     # Show results.
     return ret
         
+"""
 async def workspace():
     results = await if_infos_from_wmic()
     print(results)
+"""
     
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()

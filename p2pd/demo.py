@@ -4,7 +4,7 @@ from .do_imports import *
 IS_DEBUG = 2
 
 def patch_log_p2p(m, node_id=""):
-    out = f"p2p: <{node_id}> {m}"
+    out = fstr("p2p: <{node_id}> ") + to_s(m)
     print(out)
 
 Log.log_p2p = patch_log_p2p
@@ -12,7 +12,7 @@ Log.log_p2p = patch_log_p2p
 async def add_echo_support(msg, client_tup, pipe):
     if b"ECHO" == msg[:4]:
         print()
-        print(f"\tGot echo proto msg: {msg} from {client_tup}")
+        print("\tGot echo proto msg: " + to_s(msg) + fstr(" from {client_tup}"))
         print()
         await pipe.send(msg[4:], client_tup)
 
@@ -52,15 +52,15 @@ async def main():
     ifs = await load_interfaces(if_names)
     buf = ""
     for nic in ifs:
-        buf += f"\t{nic.name} "
+        buf += fstr("\t{nic.name} ")
         for af in nic.supported():
             if af == IP4:
                 buf += "(v4)"
             if af == IP6:
                 buf += "(v6)"
-        buf += f"\n\t\t{nat_txt[nic.nat['type']]} nat; "
-        buf += f"{delta_txt[nic.nat['delta']['type']]} delta = "
-        buf += f"{nic.nat['delta']['value']}"
+        buf += fstr("\n\t\t{nat_txt[nic.nat['type']]} nat; ")
+        buf += fstr("{delta_txt[nic.nat['delta']['type']]} delta = ")
+        buf += fstr("{nic.nat['delta']['value']}")
         buf += "\n"
     print(buf[:-1])
     print("Starting node...")
@@ -71,12 +71,12 @@ async def main():
     await node.start(out=True)
     nodes.append(node)
     print()
-    print(f"Node started = {to_s(node.addr_bytes)}")
-    print(f"Node port = {node.listen_port}")
+    print(fstr("Node started = {to_s(node.addr_bytes)}"))
+    print(fstr("Node port = {node.listen_port}"))
     
     try:
         nick = await node.nickname(node.node_id)
-        print(f"Node nickname = {nick}")
+        print(fstr("Node nickname = {nick}"))
         print()
     except:
         log_exception()
@@ -109,7 +109,7 @@ async def main():
             choice = input("Enter nickname: ")
             try:
                 ret = await node.nickname(choice)
-                print(f"Nickname registered = {ret}")
+                print(fstr("Nickname registered = {str(ret)}"))
             except:
                 print("Nickname taken.")
 
@@ -123,10 +123,10 @@ async def main():
             bob.stun_clients = alice.stun_clients
             await bob.start(sys_clock=alice.sys_clock, out=True)
             print()
-            print(f"New node addr = {to_s(bob.addr_bytes)}")
+            print(fstr("New node addr = {to_s(bob.addr_bytes)}"))
             ret = await bob.nickname(bob.node_id)
-            print(f"New node port = {bob.listen_port}")
-            print(f"New node nickname = {ret}")
+            print(fstr("New node port = {bob.listen_port}"))
+            print(fstr("New node nickname = {ret}"))
             nodes.append(bob)
             print()
             continue
@@ -135,9 +135,9 @@ async def main():
             if addr is None:
                 prefix = ""
                 if len(last_addr):
-                    prefix = f" (enter for {last_addr})"
+                    prefix = fstr(" (enter for {last_addr})")
 
-                addr = input(f"Enter nodes nickname or address{prefix}: ")
+                addr = input(fstr("Enter nodes nickname or address{prefix}: "))
                 if addr == "":
                     addr = last_addr
                 else:
@@ -244,7 +244,7 @@ async def main():
 
                     await pipe.send(b"ECHO " + choice + b"\n")
                     buf = await pipe.recv(timeout=3)
-                    print(f"recv = {buf}")
+                    print(b"recv = ", buf)
 
         if choice == "4":
             print("Stopping nodes...")

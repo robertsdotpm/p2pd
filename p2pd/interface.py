@@ -87,7 +87,6 @@ async def init_p2pd():
 
     # Attempt to get monkey patched netifaces.
     netifaces = Interface.get_netifaces()
-    print(netifaces)
     if netifaces is None:
         if sys.platform == "win32":
             """
@@ -99,7 +98,6 @@ async def init_p2pd():
                 import nest_asyncio
                 nest_asyncio.apply()
             """
-            print("netifaces . start")
             netifaces = await Netifaces().start()
         else:
             netifaces = sys.modules["netifaces"]

@@ -41,7 +41,7 @@ if "P2PD_DEBUG" in os.environ:
         if "P2PD_DEBUG" not in os.environ:
             return
 
-        print(m)
+        #print(m)
         logging.info(m)
 else:
     IS_DEBUG = 0

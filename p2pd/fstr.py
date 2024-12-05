@@ -5,36 +5,21 @@ import inspect
 import re
 
 def fstr(expr):
-
     # Capture variables from the calling frame
-
     frame = inspect.currentframe().f_back
-
     variables = frame.f_globals.copy()
-
     variables.update(frame.f_locals)
 
-
-
     # Replace each {expression} with the evaluated result of that expression
-
     def replacer(match):
-
         expression = match.group(1)
-
         try:
-
             return str(eval(expression, variables))
-
         except Exception as e:
-
             raise ValueError("Error evaluating expression " + expression + str(e))
 
-
     out = re.sub(r'\{([^}]*)\}', replacer, expr)
-    print(out)
     return out
-
 
 class fstr2(object):
     """String formatter based on Python 3.6 'f' strings

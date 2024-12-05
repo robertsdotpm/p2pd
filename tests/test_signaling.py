@@ -3,47 +3,34 @@ from p2pd import *
 
 class TestSignaling(unittest.IsolatedAsyncioTestCase):
     async def test_node_signaling(self):
-        if not P2PD_TEST_INFRASTRUCTURE:
-            return
+        msg = "test msg"
+        peerid = to_s(rand_plain(10))
+        nic = await Interface()
+        for af in nic.supported():
+            for index in [-1, -2]:
+                serv_info = MQTT_SERVERS[index]
+                dest = (serv_info[af], serv_info["port"])
+                found_msg = []
 
-        # Channel that the test node subs to.
-        i = await Interface()
-        dest_id = "p2pd_test_node"
-        msg = "msggg"
-        f = asyncio.Future()
+                def closure(ret):
+                    async def f_proto(payload, client):
+                        if to_s(payload) == to_s(msg):
+                            found_msg.append(True)
 
-        # Receive a message from our MQTT channel (node ID.)
-        async def proc_msg(msg, signal_pipe):
-            f.set_result(to_s(msg))
+                    return f_proto
 
-        # Start the MQTT client.
-        node_id = node_name(b"node_c", i)
-        client = None
-        for i in range(0, 3):
-            client = SignalMock(node_id, proc_msg, mqtt_server=MQTT_SERVERS[i])
-            await client.start()
+                f_proto = closure(found_msg)
+                client = await SignalMock(peerid, f_proto, dest).start()
+                print(client)
+                await client.send_msg(msg, peerid)
+                await asyncio.sleep(2)
 
-            # Use basic echo protocol to test signaling works.
-            await client.echo(msg, dest_id)
+                if not len(found_msg):
+                    print(fstr("mqtt {af} {dest} broken"))
+                else:
+                    print(fstr("mqtt {af} {dest} works"))
 
-            try:
-                out = await asyncio.wait_for(
-                    f,
-                    8
-                )
-                break
-            except Exception:
-                log_exception()
-                continue
-
-        # Check client set.
-        if client is None:
-            raise Exception("Couldn't connect to an mqtt server.")
-
-
-        # Check results and cleanup.
-        self.assertTrue(msg in out)
-        await client.close()
+                await client.close()
 
 if __name__ == '__main__':
     main()

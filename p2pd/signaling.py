@@ -1,5 +1,5 @@
 import asyncio
-#from gmqtt import Client as MQTTClient
+from .gmqtt import Client as MQTTClient
 from .net import *
 from .settings import *
 
@@ -78,7 +78,6 @@ class SignalMock():
         await self.send_msg(to_s(out), to_s(dest_chan))
 
     async def get_client(self, mqtt_server):
-        return
         client = MQTTClient(self.peer_id)
         client.set_config({
             'reconnect_retries': -1,

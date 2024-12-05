@@ -105,8 +105,8 @@ class TURNClient(PipeEvents):
 
         # Futures to return from start.
         self.turn_client_stopped = asyncio.Event()
-        self.client_tup_future = loop.create_future()
-        self.relay_tup_future = loop.create_future()
+        self.client_tup_future = asyncio.futures.Future()
+        self.relay_tup_future = asyncio.futures.Future()
         self.auth_event = asyncio.Event()
         self.relay_event = asyncio.Event()
         self.node_events = {} # by node_id
