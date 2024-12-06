@@ -228,7 +228,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
     a connection. Adapt the technique depending on whether
     addressing is suitably local or remote.
     """
-    async def try_addr_infos(addr_type, src_info, dest_info):
+    async def try_addr_infos(strat, addr_type, src_info, dest_info):
         # Local addressing and/or remote.
         try:
             # Create a future for pending pipes.
@@ -351,7 +351,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                 src_info = pp.src[af][reply.routing.dest_index]
                 dest_info = pp.dest[af][reply.meta.src_index]
                 ret = await async_wrap_errors(
-                    try_addr_infos(addr_type, src_info, dest_info)
+                    try_addr_infos(strat, addr_type, src_info, dest_info)
                 )
 
                 return ret, addr_type
@@ -382,6 +382,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                 # Technique-specific N to avoid lengthy delays.
                 ret = await async_wrap_errors(
                     try_addr_infos(
+                        strat,
                         addr_type,
                         src_info,
                         dest_info
