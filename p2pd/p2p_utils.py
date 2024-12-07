@@ -288,8 +288,8 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             # Detailed logging details.
             path_txt = f_path_txt(addr_type)
             src_ip = src_info["nic"] if addr_type == NIC_BIND else src_info["ext"]
-            msg = fstr("<{strat}> Trying {path_txt} {src_ip} -> ")
-            msg += fstr("{dest_info['ip']} on '{interface.name}'")
+            msg = fstr("<{0}> Trying {1} {2} -> ", (strat, path_txt, src_ip,))
+            msg += fstr("{0} on '{1}'", (dest_info['ip'], interface.name,))
             Log.log_p2p(msg, pp.node.node_id[:8])
 
             """
@@ -424,6 +424,6 @@ async def fallback_machine_id(netifaces, app_id="p2pd"):
     host = socket.gethostname()
     if_name = get_default_iface(netifaces)
     mac = await get_mac_address(if_name, netifaces)
-    buf = fstr("{app_id} {host} {if_name} {mac}")
+    buf = fstr("{0} {1} {2} {3}", (app_id, host, if_name, mac,))
     return to_s(hashlib.sha256(to_b(buf)).hexdigest())
 

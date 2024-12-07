@@ -67,7 +67,7 @@ class NetshParse():
                 # Remove the interface address line from the string.
                 # Otherwise the regex will match the same result.
                 #print(msg)
-                msg = re.sub(p, fstr("Interface {if_index}\r\n"), msg, count=1)
+                msg = re.sub(p, fstr("Interface {0}\r\n", (if_index,)), msg, count=1)
 
         return [af, "addrs", results]
     
@@ -219,7 +219,7 @@ async def do_netsh_cmds():
                 if len(cmd_vector) > 2:
                     cmd_val = show_val
                 else:
-                    cmd_val = fstr("netsh interface {af_val} show {show_val}")
+                    cmd_val = fstr("netsh interface {0} show {1}", (af_val, show_val,))
 
                 tasks.append(helper(af, cmd_val, cmd_vector[0]))
 

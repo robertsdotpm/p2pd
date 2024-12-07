@@ -18,8 +18,8 @@ async def log_pipe(addr_type, func_txt, pipe):
     else:
         local_tup = pipe.sock.getsockname()[:2]
         remote_tup = pipe.sock.getpeername()[:2]
-    msg = fstr("<{func_txt}> Established {path_txt} {local_tup} -> {remote_tup}")
-    msg += fstr(" on '{pipe.route.interface.name}'")
+    msg = fstr("<{0}> Established {1} {2} -> {3}", (func_txt, path_txt, local_tup, remote_tup,))
+    msg += fstr(" on '{0}'", (pipe.route.interface.name,))
     return msg
 
 """
@@ -140,7 +140,7 @@ class P2PPipe():
         if pipe.sock is None:
             return
 
-        await pipe.send(CON_ID_MSG + to_b(fstr(" {pipe_id}")))
+        await pipe.send(CON_ID_MSG + to_b(fstr(" {0}", (pipe_id,))))
         self.node.pipe_ready(pipe_id, pipe)
         return pipe
 
@@ -175,7 +175,7 @@ class P2PPipe():
                 with its current address info in a reply which
                 is passed back to this function.
                 """
-                self.node.log("p2p", fstr("<punch> Updating dest info {dest_info}"))
+                self.node.log("p2p", fstr("<punch> Updating dest info {0}", (dest_info,)))
                 puncher.dest_info = dest_info
         else:
             # Create a new puncher for this pipe ID.
@@ -324,8 +324,8 @@ class P2PPipe():
             else:
                 # Log white listing action.
                 our_relay = await client.relay_tup_future
-                m = fstr("Whitelist {dest_peer} -> {our_relay} to")
-                m += fstr(" '{iface.name}'")
+                m = fstr("Whitelist {0} -> {1} to", (dest_peer, our_relay,))
+                m += fstr(" '{iface.name}'", (iface.name,))
                 Log.log_p2p(m, self.node.node_id[:8])
 
         # Return a new TURN request.

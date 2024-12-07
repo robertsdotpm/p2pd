@@ -459,7 +459,7 @@ class ToxiMainServer(RESTD):
         except:
             log_exception()
             return {
-                "error": fstr("cant bind to {bind_ip}:{bind_port}")
+                "error": fstr("cant bind to {0}:{1}", (bind_ip, bind_port,))
             }
 
         # Extract destination IP.
@@ -502,13 +502,13 @@ class ToxiMainServer(RESTD):
             )
         except:
             return {
-                "error": fstr("upstream res failure {dest_ip}:{dest_port}")
+                "error": fstr("upstream res failure {0}:{1}", (dest_ip, dest_port,))
             }
 
         # Did the endpoint succeed.
         if upstream is None:
             return {
-                "error": fstr("upstream failure {dest_ip}:{dest_port}")
+                "error": fstr("upstream failure {0}:{1}", (dest_ip, dest_port,))
             }
 
         # Add upstream to tunnel server.
@@ -520,7 +520,7 @@ class ToxiMainServer(RESTD):
         # Return response
         return {
             "name": j["name"],
-            "listen": fstr("{bind_ip}:{bind_port}"),
+            "listen": fstr("{0}:{1}", (bind_ip, bind_port,)),
             "upstream": j["upstream"],
             "proto": int(proto),
             "enabled": True,

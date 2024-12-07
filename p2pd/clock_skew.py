@@ -113,7 +113,7 @@ class SysClock:
         return '{0:f}'.format(self.clock_skew)
 
     def __repr__(self):
-        return fstr('Dec("{str(self)}")')
+        return fstr('Dec("{0}")', (str(self),))
 
     def time(self):
         return Dec(timestamp(1)) - self.clock_skew

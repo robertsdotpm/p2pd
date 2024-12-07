@@ -186,21 +186,21 @@ class ToxiTunnel():
         self.af = self.client.route.af
 
     async def new_toxic(self, toxic):
-        path = fstr("/proxies/{self.name}/toxics")
+        path = fstr("/proxies/{0}/toxics", (self.name,))
         resp = await self.curl.vars(body=toxic.body).post(path)
         assert(resp.info is not None)
         assert(b"error" not in resp.out)
         self.toxics.append(toxic)
 
     async def remove_toxic(self, toxic):
-        path = fstr("/proxies/{self.name}/toxics/{toxic.name}")
+        path = fstr("/proxies/{0}/toxics/{1}", (self.name, toxic.name,))
         resp = await self.curl.vars().delete(path)
         assert(resp.info is not None)
         assert(resp.out == b'')
         self.toxics.remove(toxic)
 
     async def test_list(self):
-        path = fstr("/proxies/{self.name}")
+        path = fstr("/proxies/{0}", (self.name,))
         resp = await self.curl.vars().get(path)
         assert(resp.info is not None)
         return resp.out
@@ -243,7 +243,7 @@ class ToxiTunnel():
             "enabled": False
         }
 
-        path = fstr("/proxies/{self.name}")
+        path = fstr("/proxies/{0}", (self.name,))
         resp = await self.curl.vars(body=json_body).post(path)
         assert(resp.info is not None)
         self.client.tunnels.remove(self)
@@ -282,8 +282,8 @@ class ToxiClient():
         listen_ip = self.addr[0]
         json_body = {
             "name": name,
-            "listen": fstr("{listen_ip}:0"),
-            "upstream": fstr("{addr[0]}:{addr[1]}"),
+            "listen": fstr("{0}:0", (listen_ip,)),
+            "upstream": fstr("{0}:{1}", (addr[0], addr[1],)),
             "proto": proto,
             "enabled": True
         }

@@ -151,7 +151,7 @@ class TURNClient(PipeEvents):
             proto=UDP,
             dest=self.dest
         )
-        log(fstr("> Turn socket = {self.turn_pipe.sock}"))
+        log(fstr("> Turn socket = {0}", (self.turn_pipe.sock,)))
 
         # If con was unncessessful raise exception.
         if self.turn_pipe is None:
@@ -293,8 +293,8 @@ class TURNClient(PipeEvents):
             In TURN.send() the dest_tup does not 
             correspond to any accepted peers 
             this mind indicate an invalid send addr 
-            bad addr was {dest_tup} 
-            """)
+            bad addr was {0} 
+            """, (dest_tup,))
             log(error)
 
         assert(type(dest_tup) == tuple)
@@ -306,13 +306,13 @@ class TURNClient(PipeEvents):
             error = fstr("""
             The destination IP for TURN.send 
             is different to the IP address of the current 
-            server {dest_tup[0]} !+ {self.dest[0]}
+            server {0} != {1}
             this could indicate that an incorrect 
             address is being used for the send call 
             (like a peer address) or it may mean 
             different relay servers are being mixed 
             (in which case disregard this error.
-            """)
+            """, (dest_tup[0], self.dest[0],))
             log(error)
 
         # Make sure the channel is setup before continuing.
@@ -394,10 +394,10 @@ class TURNClient(PipeEvents):
             error = fstr("""
             TURN accept peer has a relay tup different 
             to the IP of the current server 
-            {peer_relay_tup[0]} != {self.dest[0]}
+            {0} != {1}
             this may indicate an error or mean different 
             TURN servers are being mixed.
-            """)
+            """, (peer_relay_tup[0], self.dest[0],))
             log(error)
 
         #peer_tup = (peer_tup[0], 0)
@@ -491,7 +491,7 @@ class TURNClient(PipeEvents):
             The decode of the white listed 
             peer addr in TURN did not match the src tup 
             this might indicate an encoding error 
-            {src_tup} != {attr_data.tup}""")
+            {0} != {1}""", (src_tup, attr_data.tup,))
             log(error)
 
         return reply

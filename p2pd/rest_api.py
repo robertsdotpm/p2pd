@@ -186,7 +186,7 @@ class P2PDServer(RESTD):
         # Failed to connect.
         if con is None:
             return {
-                "msg": fstr("Con {con_name} failed connect."),
+                "msg": fstr("Con {0} failed connect.", (con_name,)),
                 "error": 3
             }
 
@@ -196,7 +196,7 @@ class P2PDServer(RESTD):
         if con_name not in self.cons:
             return {
                 "error": 7,
-                "msg": fstr("con {con_name} does not exist")
+                "msg": fstr("con {0} does not exist", (con_name,))
             }
 
         # Check con exists.
@@ -243,7 +243,7 @@ class P2PDServer(RESTD):
             out = await con.recv(sub, timeout=timeout, full=True)
             if out is None:
                 return {
-                    "msg": fstr("recv buffer {sub} empty."),
+                    "msg": fstr("recv buffer {0} empty.", (sub,)),
                     "error": 6
                 }
 
@@ -310,7 +310,7 @@ class P2PDServer(RESTD):
         out = await con.recv(sub, timeout=timeout, full=True)
         if out is None:
             return {
-                "msg": fstr("recv buffer {sub} empty."),
+                "msg": fstr("recv buffer {0} empty.", (sub,)),
                 "error": 6
             }
 
@@ -369,7 +369,7 @@ class P2PDServer(RESTD):
         return {
             "con_name": con_name,
             "sub_name": sub_name,
-            "sub": fstr("{sub}"),
+            "sub": fstr("{0}", (sub,)),
             "error": 0
         }
 
@@ -389,7 +389,7 @@ class P2PDServer(RESTD):
         # Return results.
         return {
             "con_name": con_name,
-            "unsub": fstr("{sub}"),
+            "unsub": fstr("{0}", (sub,)),
             "error": 0
         }
     
@@ -435,7 +435,7 @@ async def start_p2pd_server(port=REST_API_PORT, ifs=[], enable_upnp=False):
 
 async def p2pd_workspace():
     node = await start_p2pd_server()
-    print(fstr("http://localhost:{REST_API_PORT}/"))
+    print(fstr("http://localhost:{0}/", (REST_API_PORT,)))
     while 1:
         await asyncio.sleep(1)
 

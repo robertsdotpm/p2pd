@@ -58,7 +58,7 @@ class SignalMock():
         await self.send_msg(data, client_tup)
 
     async def send_msg(self, msg, peer_id):
-        log(fstr("> Send signal to {peer_id} = {msg}."))        
+        log(fstr("> Send signal to {0} = {1}.", (peer_id, msg,)))        
         self.client.publish(
             to_s(peer_id),
             to_s(msg),
@@ -74,7 +74,7 @@ class SignalMock():
 
 
     async def echo(self, msg, dest_chan):
-        out = fstr("ECHO {self.peer_id} {msg}")
+        out = fstr("ECHO {0} {1}", (self.peer_id, msg,))
         await self.send_msg(to_s(out), to_s(dest_chan))
 
     async def get_client(self, mqtt_server):

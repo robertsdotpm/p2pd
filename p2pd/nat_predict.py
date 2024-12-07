@@ -13,8 +13,8 @@ class NATMapping():
         self.sock = sock
 
     def __str__(self):
-        buf = fstr("{self.local} {self.reply} ")
-        buf += fstr("{self.remote} {self.sock}")
+        buf = fstr("{0} {1} ", (self.local, self.reply,))
+        buf += fstr("{0} {1}", (self.remote, self.sock,))
         return buf
 
     def toJSON(self):

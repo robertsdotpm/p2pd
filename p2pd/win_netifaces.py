@@ -138,7 +138,7 @@ async def load_ifs_from_ps1():
 
         # Regex to extract the interface no for the AF.
         delim = str(v) * 10
-        p = fstr("{delim}[\s\S]*ifIndex\s*:\s*([0-9]+)[\s\S]*{delim}")
+        p = fstr("{0}[\s\S]*ifIndex\s*:\s*([0-9]+)[\s\S]*{1}", (delim, delim,))
         if_index = re.findall(p, out)
 
         # Save it in a loopup table.
@@ -241,7 +241,7 @@ async def get_default_gw_by_if_index(af, if_index):
         ip_f(out)
         return out
     except:
-        log(fstr("{out}"))
+        log(out)
         return None
 
 async def get_addr_info_by_if_index(if_index):
@@ -337,7 +337,12 @@ async def get_ifaces():
     ps_path = get_powershell_path()
     try:
         out = await asyncio.wait_for(
-            cmd(fstr('{ps_path} "Get-NetAdapter -physical | where status -eq up  | Format-List -Property InterfaceDescription,ifIndex,InterfaceGuid,MacAddress"')),
+            cmd(
+                fstr(
+                    '{0} "Get-NetAdapter -physical | where status -eq up  | Format-List -Property InterfaceDescription,ifIndex,InterfaceGuid,MacAddress"',
+                    (ps_path,)
+                )
+            ),
             CMD_TIMEOUT
         )
         if "InterfaceDescription" not in out:
@@ -520,7 +525,7 @@ class Netifaces():
                 count = name_counts[name] 
 
                 # Update the name associated with if details.
-                name = fstr("{name} #{count}")
+                name = fstr("{0} #{1}", (name, count,))
                 if_info["name"] = name
             else:
                 # Record first use of this name.

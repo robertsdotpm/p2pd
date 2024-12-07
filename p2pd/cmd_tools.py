@@ -193,7 +193,7 @@ async def cmd(value, io=None, er=True, timeout=10):
                 task = proc.communicate(input=io)
                 stdout, stderr = await asyncio.wait_for(task, timeout)
             except asyncio.TimeoutError:
-                log(fstr("command {value} timed out"))
+                log(fstr("command {0} timed out", (value,)))
                 return null_out
         else:
             stdout, stderr = await proc.communicate(input=io)
@@ -211,7 +211,7 @@ async def cmd(value, io=None, er=True, timeout=10):
                 stdout = proc.stdout
                 stderr = proc.stderr
             except subprocess.TimeoutExpired:
-                log(fstr("command {value} timed out"))
+                log(fstr("command {0} timed out", (value,)))
                 return null_out
 
             return stdout, stderr
@@ -221,7 +221,7 @@ async def cmd(value, io=None, er=True, timeout=10):
 
     # Log any visible errors.
     if stderr is not None and len(stderr):
-        log(fstr("cmd {value} stderr = {stderr}"))
+        log(fstr("cmd {0} stderr = {1}", (value, stderr,)))
 
     # Return command output.
     if stdout is None:
@@ -237,7 +237,7 @@ def powershell_encoded_cmd(ps1):
 async def ps1_exec_trick(ps1):
     param = powershell_encoded_cmd(ps1)
     ps_path = get_powershell_path()
-    out = await cmd(fstr("{ps_path} -encodedCommand {param}"), timeout=None)
+    out = await cmd(fstr("{0} -encodedCommand {1}", (ps_path, param,)), timeout=None)
     log(out)
     return out
 

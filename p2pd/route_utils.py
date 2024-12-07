@@ -309,7 +309,7 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
         af_default_nic_ipr = IPRange(af_default_nic_ip, cidr=cidr)
         if af_default_nic_ipr not in nic_iprs:
             default_route = None
-            log(fstr("Route error {af} disabling default route."))
+            log(fstr("Route error {0} disabling default route.", (af,)))
     else:
         default_route = None
 

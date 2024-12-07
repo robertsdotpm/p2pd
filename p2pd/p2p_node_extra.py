@@ -17,7 +17,7 @@ from ecdsa import SigningKey, SECP256k1
 class P2PNodeExtra():
     def log(self, t, m):
         node_id = self.node_id[:8]
-        msg = fstr("{t}: <{node_id}> {m}")
+        msg = fstr("{0}: <{1}> {2}", (t, node_id, m,))
         log(msg)
 
     def load_signing_key(self):
@@ -32,7 +32,7 @@ class P2PNodeExtra():
         sk_path = os.path.realpath(
             os.path.join(
                 install_root,
-                fstr("SECRET_KEY_DONT_SHARE_{self.listen_port}.hex")
+                fstr("SECRET_KEY_DONT_SHARE_{0}.hex", (self.listen_port,))
             )
         )
 
@@ -229,7 +229,7 @@ class P2PNodeExtra():
 
     def pipe_ready(self, pipe_id, pipe):
         if pipe_id not in self.pipes:
-            log(fstr("pipe ready for non existing pipe {pipe_id}!"))
+            log(fstr("pipe ready for non existing pipe {0}!", (pipe_id,)))
             return
         
         if not self.pipes[pipe_id].done():
@@ -411,8 +411,8 @@ class P2PNodeExtra():
     async def forward(self, port):
         async def forward_server(server):
             ret = await server.route.forward(port=port)
-            msg = fstr("<upnp> Forwarded {server.route.ext()}:{port}")
-            msg += fstr(" on {server.route.interface.name}")
+            msg = fstr("<upnp> Forwarded {0}:{1}", (server.route.ext(), port,))
+            msg += fstr(" on {0}", (server.route.interface.name,))
             if ret:
                 Log.log_p2p(msg, self.node_id[:8])
 

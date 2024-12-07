@@ -12,17 +12,17 @@ async def get_mac_mixed(if_name):
     vectors = {
         "Linux": [
             [
-                fstr("cat /sys/class/net/{if_name}/address"),
+                fstr("cat /sys/class/net/{0}/address", (if_name,)),
                 lambda x: x
             ],
             [
-                fstr("ip addr show {if_name} | {grep_p}"),
+                fstr("ip addr show {0} | {1}", (if_name, grep_p,)),
                 lambda x: re.findall(mac_p, x)[0]
             ]
         ],
         "OpenBSD": [
             [
-                fstr("ifconfig {if_name} | {grep_p}"),
+                fstr("ifconfig {0} | {1}", (if_name, grep_p,)),
                 lambda x: re.findall(r"\s+[a-zA-Z]+\s+([^\s]+)", x)[0]
             ]
         ],
@@ -107,7 +107,12 @@ async def netiface_addr_to_ipr(af, nic_id, info):
         return None
     
     #info["addr"] = ip_strip_if
-    log(fstr("Netiface loaded nic ipr {af} {nic_id} {info['addr']} {info['netmask']}"))
+    log(
+        fstr(
+            "Netiface loaded nic ipr {0} {1} {2} {3}",
+            (af, nic_id, info["addr"], info["netmask"],)
+        )
+    )
     nic_ipr = IPRange(info["addr"], cidr=max_cidr(af))
 
     """
@@ -142,9 +147,9 @@ async def netiface_addr_to_ipr(af, nic_id, info):
                 s.bind(bind_tup)
             except Exception:
                 log_exception()
-                log(fstr("af = {af}, bind_ip = {bind_ip}"))
-                log(fstr("{bind_tup}"))
-                log(fstr("{s}"))
+                log(fstr("af = {0}, bind_ip = {1}", (af, bind_ip,)))
+                log(fstr("{0}", (bind_tup,)))
+                log(fstr("{0}", (s,)))
                 log(">get routes invalid subnet for {}".format(str(nic_ipr)))
             finally:
                 s.close()
@@ -197,7 +202,7 @@ def netiface_gateways(netifaces, get_interface_type, preference=AF_ANY):
         # Check the address families of related GWs.
         for af in afs:
             # No entry for AF found in GW info.
-            log(fstr("Trying {af} in netiface_gateways"))
+            log(fstr("Trying {0} in netiface_gateways", (af,)))
             if af not in gws:
                 continue
                 

@@ -266,7 +266,7 @@ async def nat_test_main():
 
     # How long the NAT type took.
     t2 = timestamp(1) - t1
-    print(fstr("nat time = {t2}"))
+    print(fstr("nat time = {0}", (t2,)))
     await pipe.close()
     # 0.8
 
@@ -279,7 +279,7 @@ async def nat_test_main():
     netifaces = await init_p2pd()
     t2 = timestamp(1)
     duration = t2 - t1
-    print(fstr("init_p2pd() = {duration}"))
+    print(fstr("init_p2pd() = {0}", (duration,)))
 
     # Start interface time.
     i = await Interface("ens33", netifaces=netifaces) # ens37
@@ -288,7 +288,7 @@ async def nat_test_main():
     print(nat)
     t2 = timestamp(1)
     duration = t2 - t1
-    print(fstr("Interface() load_nat = {duration}"))
+    print(fstr("Interface() load_nat = {0}", (duration,)))
     await asyncio.sleep(NAT_TEST_NO)
     return
 

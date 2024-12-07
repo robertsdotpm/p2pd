@@ -122,7 +122,7 @@ async def binder(af, ip="", port=0, nic_id=None, loop=None, plat=platform.system
         # Do logic specific to IP_APPEND.
         if bind_rule.change is not None:
             if bind_rule.change == "nic_id":
-                ip += fstr("%{nic_id}")
+                ip += fstr("%{0}", (nic_id,))
             else:
                 ip += bind_rule.change
 
@@ -137,7 +137,7 @@ async def binder(af, ip="", port=0, nic_id=None, loop=None, plat=platform.system
         addr_infos = []
 
     if not len(addr_infos):
-        raise Exception(fstr("Can't resolve {ip} for bind."))
+        raise Exception(fstr("Can't resolve {0} for bind.", (ip,)))
     
     # Set initial bind tup.
     bind_tup = addr_infos[0][4]
@@ -356,10 +356,10 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
     except Exception:
         error = fstr("""
         Could not bind to interface
-        af = {route.af}
-        sock = {sock}"
-        bind_tup = {bind_tup}
-        """)
+        af = {0}
+        sock = {1}"
+        bind_tup = {2}
+        """, (route.af, sock, bind_tup,))
         log(error)
         log_exception()
         if sock is not None:

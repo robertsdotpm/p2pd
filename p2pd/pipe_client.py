@@ -64,7 +64,7 @@ class PipeClient(ACKUDP):
     def hash_sub(self, sub):
         h = hash(sub[0])
         if sub[1] is not None:
-            client_tup_str = fstr("{sub[1][0]}:{sub[1][1]}")
+            client_tup_str = fstr("{0}:{1}", (sub[1][0], sub[1][1],))
             h += hash(client_tup_str)
 
         return h
@@ -165,7 +165,7 @@ class PipeClient(ACKUDP):
             do_add(q)
 
         if not msg_added:
-            log(fstr("Discarded {client_tup} = {data}"))
+            log(fstr("Discarded {0} = {1}", (client_tup, data,)))
 
     # Async wait for a message that matches a pattern in a queue.
     async def recv(self, sub=SUB_ALL, timeout=2, full=False):
@@ -251,6 +251,6 @@ class PipeClient(ACKUDP):
 
             return 0
         except Exception as e:
-            log(fstr(" send error {self.handle}"))
+            log(fstr(" send error {0}", (self.handle,)))
             log_exception()
             return 0

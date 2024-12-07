@@ -107,7 +107,7 @@ def get_machine_id(winregistry=True):
             x = __exec__('kenv -q smbios.system.uuid')
 
     if not x:
-        raise Exception(fstr('failed to obtain id on {platform}'))
+        raise Exception(fstr('failed to obtain id on {0}', (platform,)))
 
     return __sanitize__(x)
 

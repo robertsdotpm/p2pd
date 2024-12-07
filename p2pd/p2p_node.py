@@ -162,14 +162,14 @@ class P2PNode(P2PNodeExtra, Daemon):
             if out:
                 buf = "\t\tmqtt = "
                 for index in list(self.signal_pipes):
-                    buf += fstr("{index}; ")
+                    buf += fstr("{0}; ", (index,))
 
         # Multiprocess support for TCP punching and NTP sync.
         t = time.time()
         if out: print("\tLoading NTP clock skew...")
         await self.setup_punch_coordination(sys_clock)
         clock_skew = str(self.sys_clock.clock_skew)
-        if out: print(fstr("\t\tClock skew = {clock_skew}"))
+        if out: print(fstr("\t\tClock skew = {0}", (clock_skew,)))
             
         # Accept TCP punch requests.
         self.start_punch_worker()
@@ -207,7 +207,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         )
 
         # Log address.
-        msg = fstr("Starting node = '{self.addr_bytes}'")
+        msg = fstr("Starting node = '{0}'", (self.addr_bytes,))
         if not out:
             Log.log_p2p(msg, self.node_id[:8])
 
@@ -233,13 +233,13 @@ class P2PNode(P2PNodeExtra, Daemon):
     # Connect to a remote P2P node using a number of techniques.
     async def connect(self, addr_bytes, strategies=P2P_STRATEGIES, conf=P2P_PIPE_CONF):
         if pnp_name_has_tld(addr_bytes):
-            msg = fstr("Translating '{addr_bytes}'")
+            msg = fstr("Translating '{0}'", (addr_bytes,))
             Log.log_p2p(msg, self.node_id[:8])
             name = addr_bytes
             pkt = await self.nick_client.fetch(addr_bytes)
             addr_bytes = pkt.value
 
-            msg = fstr("Resolved '{name}' = '{addr_bytes}'")
+            msg = fstr("Resolved '{0}' = '{1}'", (name, addr_bytes,))
             Log.log_p2p(msg, self.node_id[:8])
 
             # Parse address bytes to a dict.
@@ -287,7 +287,7 @@ class P2PNode(P2PNodeExtra, Daemon):
             except asyncio.TimeoutError:
                 pass
 
-        msg = fstr("Connecting to '{addr_bytes}'")
+        msg = fstr("Connecting to '{0}'", (addr_bytes,))
         Log.log_p2p(msg, self.node_id[:8])
         pp = self.p2p_pipe(addr_bytes)
         for af in conf["addr_families"]:
@@ -312,7 +312,7 @@ class P2PNode(P2PNodeExtra, Daemon):
             value
         )
 
-        msg = fstr("Setting nickname '{name}' = '{value}'")
+        msg = fstr("Setting nickname '{0}' = '{1}'", (name, value,))
         #Log.log_p2p(msg, self.node_id[:8])
         return name
 

@@ -13,7 +13,8 @@ async def create_datagram_endpoint(loop, protocol_factory,
     if sock is not None:
         if sock.type == socket.SOCK_STREAM:
             raise ValueError(
-                fstr('A datagram socket was expected, got {sock!r}'))
+                fstr('A datagram socket was expected, got {0}', (sock,))
+            )
         if (local_addr or remote_addr or
                 family or proto or flags or
                 reuse_port or allow_broadcast):
@@ -22,10 +23,10 @@ async def create_datagram_endpoint(loop, protocol_factory,
                         family=family, proto=proto, flags=flags,
                         reuse_port=reuse_port,
                         allow_broadcast=allow_broadcast)
-            problems = ', '.join(fstr('{k}={v}') for k, v in opts.items() if v)
+            problems = ', '.join(fstr('{0}={1}', (k, v,)) for k, v in opts.items() if v)
             raise ValueError(
                 fstr('socket modifier keyword arguments can not be used ') +
-                fstr('when sock is specified. ({problems})'))
+                fstr('when sock is specified. ({0})', (problems,)))
         sock.setblocking(False)
         r_addr = None
     else:
@@ -47,7 +48,10 @@ async def create_datagram_endpoint(loop, protocol_factory,
                 except OSError as err:
                     # Directory may have permissions only to create socket.
                     log(
-                        fstr('socket {local_addr} {str(err)}')
+                        fstr(
+                            'socket {0} {1)',
+                            (local_addr, str(err),)
+                        )
                     )
 
             addr_pairs_info = (((family, proto),
@@ -130,10 +134,10 @@ async def create_datagram_endpoint(loop, protocol_factory,
     transport = loop._make_datagram_transport(
         sock, protocol, r_addr, waiter)
     if loop._debug:
-        err_str = fstr("remote_addr={remote_addr} ")
-        err_str += fstr("created: {str(transport)} {str(protocol)} ")
+        err_str = fstr("remote_addr={0} ", (remote_addr,))
+        err_str += fstr("created: {0} {1} ", (str(transport), str(protocol),))
         if local_addr:
-            err_str += fstr("Datagram endpoint local_addr={local_addr} ")
+            err_str += fstr("Datagram endpoint local_addr={0} ", (local_addr,))
         
         log(err_str)
     try:

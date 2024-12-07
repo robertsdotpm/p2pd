@@ -252,7 +252,7 @@ def choose_same_punch_sock(our_wan, outs):
             str_to_hash = ""
             socket_quad_list = sorted([our_ip_num, their_ip_num, remote_port, their_r_port])
             for entry in socket_quad_list:
-                str_to_hash += fstr("{entry} ")
+                str_to_hash += fstr("{0} ", (entry,))
 
             # Mix values into a somewhat unique result.
             str_hash = hashlib.sha256(to_b(str_to_hash)).hexdigest()
@@ -282,14 +282,14 @@ def punching_sanity_check(mode, our_wan, dest_addr, send_mappings, recv_mappings
                 if sm.local == rm.local:
                     error = \
                     fstr("punch self local port conflict ")
-                    fstr("{sm.local} {rm.local}")
+                    fstr("{0} {1}", (sm.local, rm.local,))
                     log(error)
 
     if mode == TCP_PUNCH_REMOTE:
         if our_wan == dest_addr:
             error = \
             fstr("punch remote but dest is the same ")
-            fstr("as our ext {our_wan}")
+            fstr("as our ext {0}", (our_wan,))
             log(error)
             
 # Not really the best approach but process communication is a pain.
@@ -353,8 +353,8 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
         # Log punch upstream.
         local_tup = sock.getsockname()[:2]
         remote_tup = sock.getpeername()[:2]
-        msg = fstr("<punch> Upstream {local_tup} = {remote_tup}")
-        msg += fstr(" on '{interface.name}'")
+        msg = fstr("<punch> Upstream {0} = {1}", (local_tup, remote_tup,))
+        msg += fstr(" on '{0}'", (interface.name,))
         Log.log_p2p(msg, node_id)
 
         # Punched hole to the remote node.

@@ -4,20 +4,14 @@ from __future__ import print_function
 import inspect
 import re
 
-def fstr(expr):
-    # Capture variables from the calling frame
-    frame = inspect.currentframe().f_back
-    variables = frame.f_globals.copy()
-    variables.update(frame.f_locals)
-
-    # Replace each {expression} with the evaluated result of that expression
+def fstr(expr, params=()):
+    # Replace each {expression} with the variable value.
     def replacer(match):
-        expression = match.group(1)
+        index = int(match.group(1))
         try:
-            return str(eval(expression, variables))
+            return str(params[index])
         except Exception as e:
-            raise ValueError("Error evaluating expression " + expression + str(e))
-
+            raise ValueError("Error evaluating expression " + str(index) + str(e))
     out = re.sub(r'\{([^}]*)\}', replacer, expr)
     return out
 

@@ -80,7 +80,7 @@ class TCPEvents(asyncio.StreamReaderProtocol):
         )
 
         # Log connection details.
-        log(fstr("New TCP client l={self.sock.getsockname()}, r={self.remote_tup}"))
+        log(fstr("New TCP client l={0}, r={1}", (self.sock.getsockname(), self.remote_tup,)))
 
         # Setup stream object.
         self.client_events.set_endpoint_type(TYPE_TCP_CLIENT)
@@ -139,7 +139,7 @@ class TCPEvents(asyncio.StreamReaderProtocol):
         pass
 
     def data_received(self, data):
-        log(fstr("Base proto recv tcp client = {data}"))
+        log(fstr("Base proto recv tcp client = {0}", (data,)))
         # This just adds data to reader which we are handling ourselves.
         #super().connection_lost(exc)
         if self.client_events is None:
@@ -395,7 +395,7 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
         """
         if conf["do_close"]:
             if sock is not None:
-                log(fstr("closing socket. {sock.getsockname()}"))
+                log(fstr("closing socket. {0}", (sock.getsockname(),)))
                 sock.close()
             
             if pipe_events is not None:

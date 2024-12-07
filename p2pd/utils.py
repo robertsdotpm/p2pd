@@ -53,7 +53,7 @@ class Log():
         if not IS_DEBUG:
             return
         
-        out = fstr("p2p: <{node_id}> {m}")
+        out = fstr("p2p: <{0}> {1}", (node_id, m,))
 
         with open('program.log', 'a') as fp:
             fp.write(out + '\n')
@@ -183,8 +183,8 @@ sha256 = lambda x: to_s(hashlib.sha256(to_b(x)).hexdigest())
 hash160 = lambda x: hashlib.new('ripemd160', to_b(x)).digest()
 sha3_256 = lambda x: to_s(hashlib.sha3_256(to_b(x)).hexdigest())
 b_sha3_256 = lambda x: hashlib.sha3_256(to_b(x)).digest()
-bind_str = lambda r: fstr("{r.bind_tup()[0]}:{r.bind_tup()[1]}")
-dhash = lambda x: b_to_i(hashlib.sha256(to_b(fstr("{x}"))).digest())
+bind_str = lambda r: fstr("{0}:{1}", (r.bind_tup()[0], r.bind_tup()[1],))
+dhash = lambda x: b_to_i(hashlib.sha256(to_b(fstr("{}", (x,)))).digest())
 
 def list_clone_rand(the_list, n):
     the_clone = the_list[:]
@@ -529,7 +529,7 @@ def handler_done_builder(pipe, handler, task=None):
             # Error code.
             if result:
                 # Log the error.
-                out = fstr("> {handler} = error {result}.")
+                out = fstr("> {0} = error {1}.", (handler, result,))
                 log(out)
 
         # If it returns a task then save it.

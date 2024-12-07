@@ -227,7 +227,7 @@ class Interface():
 
         # No name specified.
         # Get name of default interface.
-        log(fstr("Load if info = {self.name}"))
+        log(fstr("Load if info = {0}", (self.name,)))
         if self.name is None or self.name == "":
             # Windows -- default interface name is a GUID.
             # This is ugly AF.
@@ -239,13 +239,13 @@ class Interface():
                 self.name = iface_name
 
             # Allow blank interface names to be used for testing.
-            log(fstr("> default interface loaded = {iface_name}"))
+            log(fstr("> default interface loaded = {0}", (iface_name,)))
 
             # May not be accurate.
             # Start() is the best way to set this.
             if self.stack == DUEL_STACK:
                 self.stack = iface_af
-                log(fstr("if load changing stack to {self.stack}"))
+                log(fstr("if load changing stack to {0}", (self.stack,)))
 
         # Windows NIC descriptions are used for the name
         # if the interfaces are detected as all hex.
@@ -256,7 +256,7 @@ class Interface():
         if self.netifaces is not None:
             if_names = self.netifaces.interfaces()
             if self.name not in if_names:
-                log(fstr("interface name {self.name} not in {if_names}"))
+                log(fstr("interface name {0} not in {1}", (self.name, if_names,)))
                 raise InterfaceNotFound
             self.type = get_interface_type(self.name)
             self.nic_no = 0
@@ -402,7 +402,7 @@ class Interface():
     # Show a representation of this object.
     def __repr__(self):
         nic_info = str(self)
-        return fstr("Interface.from_dict({nic_info})")
+        return fstr("Interface.from_dict({0})", (nic_info,))
 
     # Pickle.
     def __getstate__(self):
@@ -415,7 +415,7 @@ class Interface():
 
     async def do_start(self, netifaces=None, min_agree=3, max_agree=6, timeout=2):
         stack = self.stack
-        log(fstr("Starting resolve with stack type = {stack}"))
+        log(fstr("Starting resolve with stack type = {0}", (stack,)))
         
 
         # Load internal interface details.
@@ -437,7 +437,7 @@ class Interface():
         # Get routes for AF.
         tasks = []
         for af in VALID_AFS:
-            log(fstr("Attempting to resolve {af}"))
+            log(fstr("Attempting to resolve {0}", (af,)))
 
             # Initialize with blank RP.
             self.rp[af] = RoutePool()
@@ -455,7 +455,7 @@ class Interface():
                 # If it's poorly supported allow default NIC behavior.
                 log_exception()
                 enable_default = True
-            log(fstr("{self.name} {af} {enable_default}"))
+            log(fstr("{0} {1} {2}", (self.name, af, enable_default,)))
 
             tasks.append(
                 async_wrap_errors(
@@ -603,7 +603,7 @@ class Interface():
             if len(self.rp[af].routes):
                 return copy.deepcopy(self.rp[af].routes[0])
 
-        raise Exception(fstr("No route for {af} found."))
+        raise Exception(fstr("No route for {0} found.", (af,)))
 
     async def route_test(self, af):
         # Return route with no external address info set.
@@ -725,9 +725,9 @@ def log_interface_rp(interface):
             continue
 
         route_s = str(interface.rp[af].routes)
-        log(fstr("> AF {af} = {route_s}"))
-        log(fstr("> nic() = {interface.route(af).nic()}"))
-        log(fstr("> ext() = {interface.route(af).ext()}"))
+        log(fstr("> AF {0} = {1}", (af, route_s,)))
+        log(fstr("> nic() = {0}", (interface.route(af).nic(),)))
+        log(fstr("> ext() = {0}", (interface.route(af).ext(),)))
 
 def get_ifs_by_af_intersect(if_list):
     largest = []
@@ -764,8 +764,8 @@ async def list_interfaces(netifaces=None):
     tasks = []
     for if_name in ifs:
         if_info = str(netifaces.ifaddresses(if_name))
-        log(fstr("Attempt to start if name {if_name}"))
-        log(fstr("Net iface results for that if = {if_info}"))
+        log(fstr("Attempt to start if name {0}", (if_name,)))
+        log(fstr("Net iface results for that if = {0}", (if_info,)))
         async def worker(if_name):
             try:
                 interface = await Interface(if_name, netifaces=netifaces).start()
@@ -800,7 +800,7 @@ async def list_interfaces(netifaces=None):
     # Log interfaces and routes.
     log("> Loaded interfaces.")
     for if_no, interface in enumerate(good_ifs):
-        log(fstr("> Routes for interface {if_no}:"))
+        log(fstr("> Routes for interface {0}:", (if_no,)))
         log_interface_rp(interface)
 
     return good_ifs

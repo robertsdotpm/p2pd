@@ -100,12 +100,12 @@ def build_upnp_discover_buf(af):
     if af == IP4:
         host = to_s(UPNP_IP[af])
     if af == IP6:
-        host = fstr("[{to_s(UPNP_IP[af])}]")
+        host = fstr("[{0}]", (to_s(UPNP_IP[af]),))
 
     #f'ST: upnp:rootdevice\r\n' \
     buf = \
     fstr('M-SEARCH * HTTP/1.1\r\n') + \
-    fstr('HOST: {host}:{UPNP_PORT}\r\n') + \
+    fstr('HOST: {0}:{1}\r\n', (host, UPNP_PORT,)) + \
     fstr('ST: upnp:rootdevice\r\n') + \
     fstr('MX: 5\r\n') + \
     fstr('MAN: "ssdp:discover"\r\n') + \
@@ -156,7 +156,7 @@ async def get_upnp_forwarding_services(route, dest, path):
         if len(services):
             return (dest, services)
     except Exception:
-        log(fstr("Failed to get root xml {dest} {path}"))
+        log(fstr("Failed to get root xml {0} {1}", (dest, path,)))
         log_exception()
     
 async def get_upnp_forwarding_services_for_replies(af, src_tup, nic, replies):
@@ -192,15 +192,15 @@ async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext
         body = fstr("""
 <u:{soap_action} xmlns:u="{service["serviceType"]}">
     <NewRemoteHost></NewRemoteHost>
-    <NewExternalPort>{ext_port}</NewExternalPort>
-    <NewProtocol>{proto}</NewProtocol>
-    <NewInternalPort>{lan_port}</NewInternalPort>
-    <NewInternalClient>{lan_ip}</NewInternalClient>
+    <NewExternalPort>{0}</NewExternalPort>
+    <NewProtocol>{1}</NewProtocol>
+    <NewInternalPort>{2}</NewInternalPort>
+    <NewInternalClient>{3}</NewInternalClient>
     <NewEnabled>1</NewEnabled>
-    <NewPortMappingDescription>{desc}</NewPortMappingDescription>
+    <NewPortMappingDescription>{4}</NewPortMappingDescription>
     <NewLeaseDuration>0</NewLeaseDuration>
 </u:{soap_action}>
-        """)
+        """, (ext_port, proto, lan_port, lan_ip, desc,))
 
     # Add a hole in the firewall.
     # Have not added UniqueID -- will it still work?
@@ -218,32 +218,32 @@ async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext
 <u:{soap_action} xmlns:u="{service["serviceType"]}">
     <RemoteHost>*</RemoteHost>
     <RemotePort>0</RemotePort>
-    <Protocol>{proto_no}</Protocol>
-    <InternalPort>{lan_port}</InternalPort>
-    <InternalClient>{lan_ip}</InternalClient>
-    <LeaseTime>{UPNP_LEASE_TIME}</LeaseTime>
+    <Protocol>{0}</Protocol>
+    <InternalPort>{1}</InternalPort>
+    <InternalClient>{2}</InternalClient>
+    <LeaseTime>{3}</LeaseTime>
 </u:{soap_action}>
-        """)
+        """, (proto_no, lan_port, lan_ip, UPNP_LEASE_TIME,))
 
     # Build the XML payload to send.
     payload = fstr("""
 <?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
 <s:Body>
-{body}
+{0}
 </s:Body>
 </s:Envelope>
-    """)
+    """, (body,))
 
     # Custom headers for soap.
     headers = [
         [
             b"SOAPAction",
-            to_b(fstr("\"{service['serviceType']}#{soap_action}\""))
+            to_b(fstr("\"{0}#{1}\"", (service['serviceType'], soap_action,)))
         ],
         [b"Connection", b"Close"],
         [b"Content-Type", b"text/xml"],
-        [b"Content-Length", to_b(fstr("{len(payload)}"))]
+        [b"Content-Length", to_b(fstr("{0}", (len(payload),)))]
     ]
 
     # Requests must come from IP:port for IPv6.

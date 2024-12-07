@@ -48,7 +48,7 @@ class SigMsg():
 
         # Validate src if index.
         if if_index not in addr[af]:
-            raise Exception(fstr("bad if_i {if_index}"))
+            raise Exception(fstr("bad if_i {0}", (if_index,)))
         
         return af, addr
     
@@ -283,7 +283,7 @@ class TCPPunchMsg(SigMsg):
         if punch_mode == TCP_PUNCH_REMOTE:
             # Private address indicate for remote punching?
             if ipr.is_private:
-                raise Exception(fstr("{dest_s} is priv in punch remote"))
+                raise Exception(fstr("{0} is priv in punch remote", (dest_s,)))
             
             """
             # Punching our own external address?
@@ -295,7 +295,7 @@ class TCPPunchMsg(SigMsg):
         if punch_mode in [TCP_PUNCH_SELF, TCP_PUNCH_LAN]:
             # Public address indicate for private?
             if ipr.is_public:
-                raise Exception(fstr("{dest_s} is pub for punch $priv"))
+                raise Exception(fstr("{0} is pub for punch $priv", (dest_s,)))
             
         """
         # Should be another computer's IP.
@@ -308,7 +308,7 @@ class TCPPunchMsg(SigMsg):
         if punch_mode == TCP_PUNCH_SELF:
             # May be another nic ip.
             if dest_s != nic:
-                log(fstr("{dest_s} !ourself {nic} in punch self"))
+                log(fstr("{0} !ourself {1} in punch self", (dest_s, nic,)))
 
     def __init__(self, data, enum=SIG_TCP_PUNCH):
         super().__init__(data, enum)
