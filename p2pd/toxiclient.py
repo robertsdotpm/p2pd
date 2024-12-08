@@ -215,7 +215,7 @@ class ToxiTunnel():
         try:
             dest = (self.ip, self.port)
         except:
-            raise Exception("addr res tunnel client {self.port}")
+            raise Exception(fstr("addr res tunnel client {0}", (self.port,)))
         
         # Connect to the listen server for this tunnel.
         pipe = await pipe_open(TCP, dest, route, conf=conf)

@@ -184,7 +184,7 @@ hash160 = lambda x: hashlib.new('ripemd160', to_b(x)).digest()
 sha3_256 = lambda x: to_s(hashlib.sha3_256(to_b(x)).hexdigest())
 b_sha3_256 = lambda x: hashlib.sha3_256(to_b(x)).digest()
 bind_str = lambda r: fstr("{0}:{1}", (r.bind_tup()[0], r.bind_tup()[1],))
-dhash = lambda x: b_to_i(hashlib.sha256(to_b(fstr("{}", (x,)))).digest())
+dhash = lambda x: b_to_i(hashlib.sha256(to_b(fstr("{0}", (x,)))).digest())
 
 def list_clone_rand(the_list, n):
     the_clone = the_list[:]

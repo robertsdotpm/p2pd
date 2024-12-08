@@ -143,7 +143,7 @@ class SigProtoHandlers():
             log_exception()
     
 async def node_protocol(self, msg, client_tup, pipe):
-    log(fstr("> node proto = {msg}, {client_tup}", (msg, client_tup,)))
+    log(fstr("> node proto = {0}, {1}", (msg, client_tup,)))
 
     # Simplified echo proto.
     if msg == b"long_p2pd_test_string_abcd123":

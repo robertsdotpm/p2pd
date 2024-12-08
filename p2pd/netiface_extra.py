@@ -222,7 +222,7 @@ def netiface_gateways(netifaces, get_interface_type, preference=AF_ANY):
                 
                 # Unknown / bad interface type.
                 if if_type == INTERFACE_UNKNOWN:
-                    log("iface type unknown {if_name}")
+                    log(fstr("iface type unknown {0}", (if_name,)))
                     continue
                     
                 # Use this interface GW info as the default.

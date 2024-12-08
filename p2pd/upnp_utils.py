@@ -190,17 +190,17 @@ async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext
     if af == IP4:
         soap_action = "AddPortMapping"
         body = fstr("""
-<u:{soap_action} xmlns:u="{service["serviceType"]}">
+<u:{0} xmlns:u="{1}">
     <NewRemoteHost></NewRemoteHost>
-    <NewExternalPort>{0}</NewExternalPort>
-    <NewProtocol>{1}</NewProtocol>
-    <NewInternalPort>{2}</NewInternalPort>
-    <NewInternalClient>{3}</NewInternalClient>
+    <NewExternalPort>{2}</NewExternalPort>
+    <NewProtocol>{3}</NewProtocol>
+    <NewInternalPort>{4}</NewInternalPort>
+    <NewInternalClient>{5}</NewInternalClient>
     <NewEnabled>1</NewEnabled>
-    <NewPortMappingDescription>{4}</NewPortMappingDescription>
+    <NewPortMappingDescription>{6}</NewPortMappingDescription>
     <NewLeaseDuration>0</NewLeaseDuration>
-</u:{soap_action}>
-        """, (ext_port, proto, lan_port, lan_ip, desc,))
+</u:{7}>
+        """, (soap_action, service["serviceType"], ext_port, proto, lan_port, lan_ip, desc, soap_action,))
 
     # Add a hole in the firewall.
     # Have not added UniqueID -- will it still work?
@@ -215,15 +215,15 @@ async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext
         # https://github.com/miniupnp/miniupnp/issues/228
         soap_action = "AddPinhole"
         body = fstr("""
-<u:{soap_action} xmlns:u="{service["serviceType"]}">
+<u:{0} xmlns:u="{1}">
     <RemoteHost>*</RemoteHost>
     <RemotePort>0</RemotePort>
-    <Protocol>{0}</Protocol>
-    <InternalPort>{1}</InternalPort>
-    <InternalClient>{2}</InternalClient>
-    <LeaseTime>{3}</LeaseTime>
-</u:{soap_action}>
-        """, (proto_no, lan_port, lan_ip, UPNP_LEASE_TIME,))
+    <Protocol>{2}</Protocol>
+    <InternalPort>{3}</InternalPort>
+    <InternalClient>{4}</InternalClient>
+    <LeaseTime>{5}</LeaseTime>
+</u:{6}>
+        """, (soap_action, service["serviceType"], proto_no, lan_port, lan_ip, UPNP_LEASE_TIME, soap_action,))
 
     # Build the XML payload to send.
     payload = fstr("""

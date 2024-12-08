@@ -71,7 +71,7 @@ async def main():
     await node.start(out=True)
     nodes.append(node)
     print()
-    print(fstr("Node started = {0)}", (to_s(node.addr_bytes),)))
+    print(fstr("Node started = {0}", (to_s(node.addr_bytes),)))
     print(fstr("Node port = {0}", (node.listen_port,)))
     
     try:

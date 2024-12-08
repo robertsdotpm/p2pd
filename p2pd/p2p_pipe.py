@@ -325,7 +325,7 @@ class P2PPipe():
                 # Log white listing action.
                 our_relay = await client.relay_tup_future
                 m = fstr("Whitelist {0} -> {1} to", (dest_peer, our_relay,))
-                m += fstr(" '{iface.name}'", (iface.name,))
+                m += fstr(" '{0}'", (iface.name,))
                 Log.log_p2p(m, self.node.node_id[:8])
 
         # Return a new TURN request.

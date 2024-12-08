@@ -305,8 +305,8 @@ async def verified_pruning(db_con, cur, serv, updated):
     Note: this query could get slow with many names.
     """
     for table, af in [["ipv4s", "2"], ["ipv6s", "23"]]:
-        sql = f"""
-        DELETE FROM {table} WHERE id NOT IN (
+        sql = fstr("""
+        DELETE FROM {0} WHERE id NOT IN (
             SELECT ip_id as id
             FROM (
                 SELECT ip_id
@@ -314,7 +314,7 @@ async def verified_pruning(db_con, cur, serv, updated):
                 WHERE af=%s
             ) AS results
         );
-        """
+        """, (table, ))
         ret = await cur.execute(sql, (
             af,
         ))
@@ -441,7 +441,7 @@ class PNPServer(Daemon):
 
                 # A fetch failed.
                 if pkt.sig is None or not len(pkt.sig):
-                    log(f"Error: fetch {pkt.name} failed!")
+                    log(fstr("Error: fetch {0} failed!", (pkt.name,)))
                     resp = PNPPacket(
                         name=pkt.name,
                         value=b"",

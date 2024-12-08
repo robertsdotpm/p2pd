@@ -7,5 +7,5 @@ reply_pk = secp_k.public_key.format(True)
 reply_pk_hex = to_h(reply_pk)
 reply_sk_hex = to_h(reply_sk)
 
-print(f"reply pk hex = {reply_pk_hex}")
-print(f"reply sk hex = {reply_sk_hex}")
+print(fstr("reply pk hex = {0}", (reply_pk_hex,)))
+print(fstr("reply sk hex = {0}", (reply_sk_hex,)))
