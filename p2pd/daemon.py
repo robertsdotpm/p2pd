@@ -111,11 +111,13 @@ class Daemon():
                     raise Exception(error)
 
             # Is the server already listening.
-            is_listening = await is_serv_listening(proto, route)
+            is_listening = await async_wrap_errors(
+                is_serv_listening(proto, route)
+            )
+
             if is_listening:
                 error = fstr("{0}:{1} listen conflict.", (proto, bind_str(route),))
                 raise Exception(error)
-            
         
         # Start a new server listening.
         pipe = await pipe_open(

@@ -121,7 +121,9 @@ async def main():
             bob = P2PNode(port=alice.listen_port + 1, ifs=ifs)
             bob.add_msg_cb(add_echo_support)
             bob.stun_clients = alice.stun_clients
-            await bob.start(sys_clock=alice.sys_clock, out=True)
+            await asyncio.create_task(
+                bob.start(sys_clock=alice.sys_clock, out=True)
+            )
             print()
             print(fstr("New node addr = {0}", (to_s(bob.addr_bytes),)))
             ret = await bob.nickname(bob.node_id)

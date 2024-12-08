@@ -1,6 +1,13 @@
+try:
+    import ssl
+except ImportError:  # pragma: no cover
+    ssl = None
+
 import asyncio
 import socket
 import os
+import stat
+
 from .utils import *
 
 
@@ -103,7 +110,7 @@ async def create_datagram_endpoint(loop, protocol_factory,
                 sock = socket.socket(
                     family=family, type=socket.SOCK_DGRAM, proto=proto)
                 if reuse_port:
-                    _set_reuseport(sock)
+                    asyncio.base_events._set_reuseport(sock)
                 if allow_broadcast:
                     sock.setsockopt(
                         socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -147,7 +154,119 @@ async def create_datagram_endpoint(loop, protocol_factory,
         raise
 
     return transport, protocol
+
+def _check_ssl_socket(sock):
+    if ssl is not None and isinstance(sock, ssl.SSLSocket):
+        raise TypeError("Socket cannot be of type SSLSocket")
+
+def _ensure_fd_no_transport(loop, fd):
+    fileno = fd
+    if not isinstance(fileno, int):
+        try:
+            fileno = int(fileno.fileno())
+        except (AttributeError, TypeError, ValueError):
+            # This code matches selectors._fileobj_to_fd function.
+            raise ValueError(fstr("Invalid file object: {0}", (fd,))) from None
+    transport = loop._transports.get(fileno)
+    if transport and not transport.is_closing():
+        raise RuntimeError(
+            fstr('File descriptor {0} is used by transport ', (fd,)) +
+            fstr('{0}', (transport,))
+        )
+
+def remove_writer(loop, fd):
+    """Remove a writer callback."""
+    _ensure_fd_no_transport(loop, fd)
+    return loop._remove_writer(fd)
+
+def _sock_write_done(fd, fut, handle=None):
+    loop = asyncio.get_event_loop()
+    if handle is None or not handle.cancelled():
+        remove_writer(loop, fd)
+
+def _sock_connect_cb(fut, sock, address):
+    if fut.done():
+        return
+
+    try:
+        err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+        if err != 0:
+            # Jump to any except clause below.
+            raise OSError(err, fstr('Connect call failed {0}', (address,)))
+    except (BlockingIOError, InterruptedError):
+        # socket is still registered, the callback will be retried later
+        pass
+    except (SystemExit, KeyboardInterrupt):
+        raise
+    except BaseException as exc:
+        fut.set_exception(exc)
+    else:
+        fut.set_result(None)
+    finally:
+        fut = None
+
+def _sock_connect(loop, fut, sock, address):
+    fd = sock.fileno()
+    try:
+        sock.connect(address)
+    except (BlockingIOError, InterruptedError):
+        # Issue #23618: When the C function connect() fails with EINTR, the
+        # connection runs in background. We have to wait until the socket
+        # becomes writable to be notified when the connection succeed or
+        # fails.
+        _ensure_fd_no_transport(loop, fd)
+        handle = loop._add_writer(
+            fd, _sock_connect_cb, fut, sock, address)
+
+        fut.add_done_callback(
+            functools.partial(_sock_write_done, fd, handle=handle))
+    except (SystemExit, KeyboardInterrupt):
+        raise
+    except BaseException as exc:
+        fut.set_exception(exc)
+    else:
+        fut.set_result(None)
+    finally:
+        fut = None
+
+
+def sock_connect(loop, sock, address):
+    """Connect to a remote socket at address.
+
+    This method is a coroutine.
+    """
+    _check_ssl_socket(sock)
+    if loop._debug and sock.gettimeout() != 0:
+        raise ValueError("the socket must be non-blocking")
     
+    if not hasattr(socket, 'AF_UNIX') or sock.family != socket.AF_UNIX:
+        resolved = asyncio.base_events._ensure_resolved(
+            address, family=sock.family, proto=sock.proto, loop=loop)
+        if not resolved.done():
+            yield from resolved
+        _, _, _, _, address = resolved.result()[0]
+
+    fut = loop.create_future()
+    _sock_connect(loop, fut, sock, address)
+    return (yield from fut)
+
+    """
+
+    if sock.family == socket.AF_INET or sock.family == socket.AF_INET6:
+        resolved = await loop.getaddrinfo(
+            *address, family=sock.family, type=sock.type, proto=sock.proto
+        )
+        _, _, _, _, address = resolved[0]
+
+    fut = asyncio.futures.Future()
+    _sock_connect(loop, fut, sock, address)
+    try:
+        return await fut
+    finally:
+        # Needed to break cycles when an exception occurs.
+        fut = None
+    """
+
 class EchoServerProtocol:
     def connection_made(self, transport):
         self.transport = transport

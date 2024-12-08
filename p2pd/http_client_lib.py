@@ -152,7 +152,8 @@ async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, h
         return None, None
 
     if do_close:
-        await p.close()
+        if p is not None:
+            await p.close()
         p = None
 
     if out is not None:

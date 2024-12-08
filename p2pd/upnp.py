@@ -199,6 +199,9 @@ async def discover_upnp_devices(af, nic):
     # Make multicast socket for M-search.
     route = await nic.route(af).bind(ips="*")
     sock = await socket_factory(route, sock_type=UDP, conf=sock_conf)
+    if sock is None:
+        log(fstr("discover upnp sock none {0}", (af,)))
+
     if af == IP6:
         sock.setsockopt(socket.IPPROTO_IPV6, socket.IP_MULTICAST_TTL, 2)
         sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_HOPS, 255)
@@ -206,6 +209,9 @@ async def discover_upnp_devices(af, nic):
     # Create async pipe wrapper for multicast socket.
     dest = (UPNP_IP[af], UPNP_PORT)
     pipe = await pipe_open(UDP, dest, route, sock, conf=sock_conf)
+    if pipe is None:
+        log(fstr("discover upnp pipe none {0} {1}", (af, nic.name,)))
+        return
 
     # Send m-search message.
     buf = build_upnp_discover_buf(af)

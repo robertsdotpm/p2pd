@@ -364,6 +364,7 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
         log_exception()
         if sock is not None:
             sock.close()
+        return None
 
 async def get_high_port_socket(route, sock_type=TCP):
     # Minimal config to pass socket factory.

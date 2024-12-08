@@ -15,6 +15,8 @@ I wasn't even able to get Python 3 to run on XP so for now it
 isn't supported. Trying to merge Python fixes for older OSes
 isn't a priority so these users should be told to upgrade
 Python versions if they get bugs with the event loop.
+
+https://bugs.python.org/issue34795
 """
 
 

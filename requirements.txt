@@ -1,7 +1,5 @@
 netifaces == 0.11.0; sys_platform != 'win32' # Used for NIC info.
-gmqtt == 0.6.11 # MQTT is used for signaling messages.
-ntplib == 0.4.0 # Used for synchronization in TCP hole punching.
-aiounittest == 1.4.2 # Needed for unit tests on some Python versions.
+ntplib # Used for synchronization in TCP hole punching.
 xmltodict # Needed for UPnP SOAP protocol stuff.
 ecdsa # Used for signing messages.
 pyroute2; platform_system != "Windows" and platform_system != "Darwin" # Fallback for interface on Android with netlink.
@@ -13,3 +11,5 @@ winregistry; platform_system == "Windows"
 # though these optional packages won't install on it.
 fasteners; python_version >= "3.6" or platform_system != "Windows"
 aiodns; python_version >= "3.6" or platform_system != "Windows" # Used for DNS queries.
+
+aiounittest == 1.4.2 # Needed for unit tests on some Python versions.
