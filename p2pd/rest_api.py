@@ -66,8 +66,8 @@ def get_sub_params(v):
     addr = get_opt_param(v, "addr_p")
     if addr is not None:
         # Matches ('ip', port)
-        p = "^[\(\[] *['\"]{1}[0-9.:%]+['\"]"
-        p += "{1}| *[,] *[0-9]+ *[\)\]]$"
+        p = r"^[\(\[] *['\"]{1}[0-9.:%]+['\"]"
+        p += r"{1}| *[,] *[0-9]+ *[\)\]]$"
         if re.match(p, addr) == None:
             addr = "invalid addr tuple"
         else:

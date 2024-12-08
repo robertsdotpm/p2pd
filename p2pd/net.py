@@ -385,7 +385,7 @@ async def get_v4_lan_ips(bcast_ip, timeout=4): # pragma: no cover
                 win_arg_escape(bcast_ip), 
                 int(timeout / 2) or 2
             ),
-            "r": "(([0-9]+[.]?){4})+"
+            "r": r"(([0-9]+[.]?){4})+"
         },
         "Linux": {
             "ping": 'ping %s -b -w %d' % (
@@ -393,7 +393,7 @@ async def get_v4_lan_ips(bcast_ip, timeout=4): # pragma: no cover
                 nix_arg_escape(bcast_ip),
                 timeout
             ),
-            "r": "[(](([0-9]+[.]?){4})[)]"
+            "r": r"[(](([0-9]+[.]?){4})[)]"
         },
         "Darwin": {
             # Surrounds with double-quotes.
@@ -401,7 +401,7 @@ async def get_v4_lan_ips(bcast_ip, timeout=4): # pragma: no cover
                 mac_arg_escape(bcast_ip),
                 timeout
             ),
-            "r": "[(](([0-9]+[.]?){4})[)]"
+            "r": r"[(](([0-9]+[.]?){4})[)]"
         },
     }
 

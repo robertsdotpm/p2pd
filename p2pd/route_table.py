@@ -10,7 +10,7 @@ async def windows_get_route_table(af):
         cmd_buf = 'powershell "Get-NetRoute -AddressFamily IPv6"'
 
     out = await cmd(cmd_buf, timeout=4)
-    p = "([0-9]+)\s+([^\s]+)\s+([^\s]+)\s+([0-9]+)\s+([0-9]+)\s+([^\s]+)[\r\n]*"
+    p = r"([0-9]+)\s+([^\s]+)\s+([^\s]+)\s+([0-9]+)\s+([0-9]+)\s+([^\s]+)[\r\n]*"
     results = re.findall(p, out)
     for result in results:
         entry = {
@@ -33,7 +33,7 @@ async def linux_get_route_table(af):
     if af == IP4:
         cmd_buf = "{} -4".format(bin_path)
         out = await cmd(cmd_buf, timeout=4)
-        p = "([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([-0-9]+)\s+([-0-9]+)\s+([-0-9]+)\s+([^\r\n]+)[\r\n]*"
+        p = r"([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([-0-9]+)\s+([-0-9]+)\s+([-0-9]+)\s+([^\r\n]+)[\r\n]*"
         results = re.findall(p, out)
         for result in results:
             entry = {
@@ -52,7 +52,7 @@ async def linux_get_route_table(af):
     if af == IP6:
         cmd_buf = "{} -6".format(bin_path)
         out = await cmd(cmd_buf, timeout=4)
-        p = "([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([-0-9]+)\s+([-0-9]+)\s+([-0-9]+)\s+([^\r\n]+)[\r\n]*"
+        p = r"([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([-0-9]+)\s+([-0-9]+)\s+([-0-9]+)\s+([^\r\n]+)[\r\n]*"
         results = re.findall(p, out)
         for result in results:
             entry = {
@@ -71,7 +71,7 @@ async def linux_get_route_table(af):
 
 async def darwin_get_route_table(af):
     table = []
-    p = "([^\r\n]+?)[ ]+([^\r\n]+?)[ ]+([^\r\n]+?)[ ]+([^\r\n ]+)[ ]*(([^\r\n]+)[ ]*)?[\r\n]+"
+    p = r"([^\r\n]+?)[ ]+([^\r\n]+?)[ ]+([^\r\n]+?)[ ]+([^\r\n ]+)[ ]*(([^\r\n]+)[ ]*)?[\r\n]+"
     if af == IP4:
         cmd_buf = "netstat -rn -f inet"
     if af == IP6:

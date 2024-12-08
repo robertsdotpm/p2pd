@@ -226,7 +226,7 @@ def api_route_closure(url_path):
     # Get names matches named values and is in a variable order.
     def api(schemes): 
         # Break up the URL based on slashes.
-        out = re.findall("(?:/([^/]+))", url_path)
+        out = re.findall(r"(?:/([^/]+))", url_path)
         as_dict = {}
         unnamed = {}
         out = list(out)

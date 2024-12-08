@@ -426,7 +426,7 @@ class ToxiMainServer(RESTD):
         
         # Otherwise it's a new create call.
         try:
-            tup_pattern = "([\s\S]+):([0-9]+)$"
+            tup_pattern = r"([\s\S]+):([0-9]+)$"
             bind_ip, bind_port = re.findall(
                 tup_pattern,
                 j["listen"]

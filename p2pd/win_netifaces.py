@@ -61,6 +61,7 @@ Notes:
 """
 
 import re
+import platform
 from .ip_range import *
 from .cmd_tools import *
 from .win_netsh import if_infos_from_netsh
@@ -138,7 +139,7 @@ async def load_ifs_from_ps1():
 
         # Regex to extract the interface no for the AF.
         delim = str(v) * 10
-        p = fstr("{0}[\s\S]*ifIndex\s*:\s*([0-9]+)[\s\S]*{1}", (delim, delim,))
+        p = fstr(r"{0}[\s\S]*ifIndex\s*:\s*([0-9]+)[\s\S]*{1}", (delim, delim,))
         if_index = re.findall(p, out)
 
         # Save it in a loopup table.
@@ -156,7 +157,7 @@ async def load_ifs_from_ps1():
             if_defaults_by_index[if_index].append(af)
 
     # Extract interface details.
-    p = "InterfaceDescription *: *([^\r\n]+?) *[\r\n]+ifIndex *: *([0-9]+?) *[\r\n]+InterfaceGuid *: *([^\r\n]+?) *[\r\n]+MacAddress *: *([^\r\n]+?) *[\r\n]+v4GW *: *([^\r\n]+?) *[\r\n]+v6GW *: *([^ ]+?)[\s]+((?:[0-9a-f.:%]+ *[\r\n]*)+)"
+    p = r"InterfaceDescription *: *([^\r\n]+?) *[\r\n]+ifIndex *: *([0-9]+?) *[\r\n]+InterfaceGuid *: *([^\r\n]+?) *[\r\n]+MacAddress *: *([^\r\n]+?) *[\r\n]+v4GW *: *([^\r\n]+?) *[\r\n]+v6GW *: *([^ ]+?)[\s]+((?:[0-9a-f.:%]+ *[\r\n]*)+)"
     re_results = re.findall(p, out)
 
     # Index the results into a dict.
@@ -255,7 +256,7 @@ async def get_addr_info_by_if_index(if_index):
 
     try:
         addr_infos = re.findall(
-            "IPAddress\s*:\s*([^\s]*)[\s\S]*?AddressFamily\s*:\s*([^\s]+)[\s\S]*?PrefixLength\s*:\s([0-9]+)",
+            r"IPAddress\s*:\s*([^\s]*)[\s\S]*?AddressFamily\s*:\s*([^\s]+)[\s\S]*?PrefixLength\s*:\s([0-9]+)",
             out
         )
 
@@ -294,7 +295,7 @@ async def get_default_iface_by_af(af):
         return None
 
     try:
-        if_index_str = re.findall("InterfaceIndex\s*:\s*([0-9]+)", out)
+        if_index_str = re.findall(r"InterfaceIndex\s*:\s*([0-9]+)", out)
         if len(if_index_str):
             return int(if_index_str[0])
         else:
@@ -308,7 +309,7 @@ async def get_default_iface_by_af(af):
 def extract_if_fields(ifs_str):
     results = []
     try:
-        if_info_matches = re.findall("InterfaceDescription\s*:\s([^\r\n]*?)[\r\n]+ifIndex\s*:\s*([0-9]+)\s*InterfaceGuid\s*:\s*([^\r\n]+)\s*MacAddress\s*:\s*([^\s]+)\s*", ifs_str)
+        if_info_matches = re.findall(r"InterfaceDescription\s*:\s([^\r\n]*?)[\r\n]+ifIndex\s*:\s*([0-9]+)\s*InterfaceGuid\s*:\s*([^\r\n]+)\s*MacAddress\s*:\s*([^\s]+)\s*", ifs_str)
         if len(if_info_matches):
             for if_info_match in if_info_matches:
                 if_desc, if_index, guid, mac_addr = if_info_match
@@ -476,23 +477,30 @@ class Netifaces():
         vectors = [
             # WMIC is well supported on all Windows versions but
             # needs 3 commands to get all information.
-            if_infos_from_wmic(),
-            
-            # Powershell can do everything in one command but
-            # the 'cmdlets' are only on Windows >= 8.1.
-            # Needs permissions to run PS1 scripts.
-            load_ifs_from_ps1(),
+            if_infos_from_wmic,
             
             # Netsh works well in some cases but older OSes
             # need a special routing service manually enabled.
-            if_infos_from_netsh(),
+            if_infos_from_netsh,
         ]
+
+        # Get platform version.
+        vmaj, vmin, vpatch = [int(x) for x in platform.version().split(".")]
+
+        # Add powershell first if its a recent OS.
+        if (vmaj == 8 and vmin >= 1) or (vmaj > 8):
+            vectors = [
+                # Powershell can do everything in one command but
+                # the 'cmdlets' are only on Windows >= 8.1.
+                # Needs permissions to run PS1 scripts.
+                load_ifs_from_ps1,
+            ] + vectors
         
         # Try different funcs to load IF info.
         for load_if_info in vectors:
             try:
                 if_infos = await asyncio.wait_for(
-                   load_if_info,
+                    load_if_info(),
                     CMD_TIMEOUT
                 )
                 
@@ -589,3 +597,18 @@ class Netifaces():
 
         ifs = sorted(ifs)
         return ifs
+    
+async def workspace():
+    netifaces = Netifaces()
+    await netifaces.start()
+    print(netifaces.interfaces())
+    print(netifaces.by_guid_index)
+
+    
+if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(workspace())
+        
+        
+
+    

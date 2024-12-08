@@ -146,7 +146,7 @@ async def init_p2pd():
 
 def get_interface_type(name):
     name = name.lower()
-    if re.match("en[0-9]+", name) != None:
+    if re.match(r"en[0-9]+", name) != None:
         return INTERFACE_ETHERNET
 
     eth_names = ["eth", "eno", "ens", "enp", "enx", "ethernet"]

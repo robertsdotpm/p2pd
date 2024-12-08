@@ -10,8 +10,13 @@ def parse_wmic_list(entry):
     if not len(entry):
         return []
         
+    if entry[0] == "{":
+        if entry[1] not in ("'", '"'):
+            entry = '{"' + entry[1:-1] + '"}'
+
     entry = entry.replace('{', '[')
     entry = entry.replace('}', ']')
+
     return eval(entry)
     
 def parse_wmic_addrs(addrs):
@@ -33,7 +38,8 @@ def parse_wmic_addrs(addrs):
 class WMICParse():
     @staticmethod
     def show_main(af, msg):
-        p = "({[^{}]+})\s+(.+? {0}) {2,}([0-9]+)\s+({[^{}]+})\s+([^\s]+)\s+({[^{}]+})"
+        p = r"({[^{}]+})?\s{2,}([^{}\r\n]+?) {2,}([0-9]+)\s+"
+        p += r"({[^{}]+})\s+([^\s]+)\s+({[^{}]+})"
         out = re.findall(p, msg)
         results = []
         for match_group in out:
@@ -68,7 +74,7 @@ class WMICParse():
         
     @staticmethod
     def show_con_names(af, msg):
-        p = "\s{0}([0-9]+)\s+([^\r\n]+?) {2,}\s*"
+        p = r"\s{0}([0-9]+)\s+([^\r\n]+?) {2,}\s*"
         out = re.findall(p, msg)
         results = {}
         for match_group in out:
@@ -86,7 +92,7 @@ class WMICParse():
     # if_index: ... if_name, mac
     @staticmethod
     def show_routes(af, msg):
-        p = "([0-9]+)\s*[.]{2,}([0-9a-fA-F ]+)[ .]+([^\r\n]+)[\r\n]"
+        p = r"([0-9]+)\s*[.]{2,}([0-9a-fA-F ]+)[ .]+([^\r\n]+)[\r\n]"
         out = re.findall(p, msg)
         results = {"default": {IP4: None, IP6: None}}
         for match_group in out:
@@ -99,7 +105,7 @@ class WMICParse():
             }
 
         # Setup entries for default gateways IP4.
-        p = "0[.]0[.]0[.]0\s+0[.]0[.]0[.]0\s+([^\s]+)\s+([^\s]+)\s+[0-9]+"
+        p = r"0[.]0[.]0[.]0\s+0[.]0[.]0[.]0\s+([^\s]+)\s+([^\s]+)\s+[0-9]+"
         out = re.findall(p, msg)
         if len(out):
             gw_ip, if_ip = out[0]
@@ -109,7 +115,7 @@ class WMICParse():
             }
 
         # Setup entries for default gateways IP6.
-        p = "[0-9]+\s+[0-9]+\s+::\/0\s+([^\s]+)"
+        p = r"[0-9]+\s+[0-9]+\s+::\/0\s+([^\s]+)"
         out = re.findall(p, msg)
         if len(out):
             gw_ip = out[0]
@@ -205,11 +211,12 @@ async def if_infos_from_wmic():
     # Show results.
     return ret
         
-"""
+
 async def workspace():
+
     results = await if_infos_from_wmic()
     print(results)
-"""
+
     
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()

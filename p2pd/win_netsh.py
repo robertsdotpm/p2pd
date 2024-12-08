@@ -12,7 +12,7 @@ class NetshParse():
     # if_index: 
     @staticmethod
     def show_interfaces(af, msg):
-        p = "([0-9]+)\s+([0-9]+)\s+([0-9]+)\s+([a-z0-9]+)\s+([^\r\n]+)"
+        p = r"([0-9]+)\s+([0-9]+)\s+([0-9]+)\s+([a-z0-9]+)\s+([^\r\n]+)"
         out = re.findall(p, msg)
         results = {}
         for match_group in out:
@@ -33,12 +33,12 @@ class NetshParse():
     # if_index: ...
     @staticmethod
     def show_addresses(af, msg):
-        msg = re.sub("%[0-9]+", "", msg)
+        msg = re.sub(r"%[0-9]+", "", msg)
 
         # Regex patterns that can match address information.
         # The pattern looks for the start of the interface line.
         # To tether it so it doesn't just match all text.
-        p = "[Ii]nterface\s+([0-9]+)[\s\S]+?[\r\n]([a-zA-Z0-9]+)\s+([a-zA-Z0-9]+)\s+([a-zA-Z0-9]+)\s+([a-zA-Z0-9]+)\s+((?=\S*[0-9]+\S*)([a-fA-F0-9:.]+))"
+        p = r"[Ii]nterface\s+([0-9]+)[\s\S]+?[\r\n]([a-zA-Z0-9]+)\s+([a-zA-Z0-9]+)\s+([a-zA-Z0-9]+)\s+([a-zA-Z0-9]+)\s+((?=\S*[0-9]+\S*)([a-fA-F0-9:.]+))"
 
         # Build a table of all address info for each interface.
         # The table is indexed by interface no / if_index.
@@ -76,7 +76,7 @@ class NetshParse():
     # Routes also show subnet for interface addresses.
     @staticmethod
     def show_route(af, msg):
-        p = "([a-zA-Z0-9]+)\s+([a-zA-Z0-9]+)\s+([0-9]+)\s+([a-zA-Z0-9.:%\/]+)\s+([0-9]+)\s+([^\r\n]+)"
+        p = r"([a-zA-Z0-9]+)\s+([a-zA-Z0-9]+)\s+([0-9]+)\s+([a-zA-Z0-9.:%\/]+)\s+([0-9]+)\s+([^\r\n]+)"
         out = re.findall(p, msg)
         results = {}
         for match_group in out:
@@ -99,7 +99,7 @@ class NetshParse():
     # if_index: ... if_name, mac
     @staticmethod
     def show_mac(af, msg):
-        p = "([0-9]+)\s*[.]{2,}([0-9a-fA-F ]+)[ .]+([^\r\n]+)[\r\n]"
+        p = r"([0-9]+)\s*[.]{2,}([0-9a-fA-F ]+)[ .]+([^\r\n]+)[\r\n]"
         out = re.findall(p, msg)
         results = {"default": {IP4: None, IP6: None}}
         for match_group in out:
@@ -112,7 +112,7 @@ class NetshParse():
             }
 
         # Setup entries for default gateways IP4.
-        p = "0[.]0[.]0[.]0\s+0[.]0[.]0[.]0\s+([^\s]+)\s+([^\s]+)\s+[0-9]+"
+        p = r"0[.]0[.]0[.]0\s+0[.]0[.]0[.]0\s+([^\s]+)\s+([^\s]+)\s+[0-9]+"
         out = re.findall(p, msg)
         if len(out):
             gw_ip, if_ip = out[0]
@@ -122,7 +122,7 @@ class NetshParse():
             }
 
         # Setup entries for default gateways IP6.
-        p = "[0-9]+\s+[0-9]+\s+::\/0\s+([^\s]+)"
+        p = r"[0-9]+\s+[0-9]+\s+::\/0\s+([^\s]+)"
         out = re.findall(p, msg)
         if len(out):
             gw_ip = out[0]
@@ -136,7 +136,7 @@ class NetshParse():
     # mac: {ip4: ..., IP6: ...}
     @staticmethod
     def show_gws(af, msg):
-        p = "[pP]hysical[ ]+[aA]ddress[^:]+:([^\r\n]+)[\r\n][\s\S]+?[dD]efault[ ]+[gG]ateway[^:]+:((?:\s*[a-fA-F0-9:.%]+[\r\n])(?:\s*[a-fA-F0-9:.%]+[\r\n])?)"
+        p = r"[pP]hysical[ ]+[aA]ddress[^:]+:([^\r\n]+)[\r\n][\s\S]+?[dD]efault[ ]+[gG]ateway[^:]+:((?:\s*[a-fA-F0-9:.%]+[\r\n])(?:\s*[a-fA-F0-9:.%]+[\r\n])?)"
         sections = msg.split("\r\n\r\n")
 
         results = {}
@@ -268,7 +268,7 @@ def win_con_name_lookup():
                     con_name = winreg.QueryValueEx(sub_key, "Name")[0]
                     results.append([con_name, guid])
                 else:
-                    if re.match("{[^{}]+}", sub_name) == None:
+                    if re.match(r"{[^{}]+}", sub_name) == None:
                         continue
 
                     results += recurse_search(
