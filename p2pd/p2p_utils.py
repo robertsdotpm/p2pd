@@ -1,13 +1,3 @@
-"""
-On ancient versions of Windows (like Vista),
-on older versions of Python (3.7 <= ?) there are socket bugs
-that can crash the event loop without being able to catch
-the exceptions. Trying to merge such patches into the project
-for these rare edge cases isn't a productive use of time
-(without much requests) -- instead, users should try upgrade
-OS or Python versions if possible.
-"""
-
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 import hashlib

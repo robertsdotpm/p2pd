@@ -7,9 +7,21 @@ import asyncio
 import socket
 import os
 import stat
+import select
+from selectors import SelectSelector
 
 from .utils import *
 
+def patched_select(self, r, w, _, timeout=None):
+    try:
+        r, w, x = select.select(r, w, w, timeout)
+    except OSError as e:
+        if hasattr(e, 'winerror') and e.winerror == 10038:
+            # descriptors may already be closed
+            return [], [], []
+        raise
+    else:
+        return r, w + x, []
 
 async def create_datagram_endpoint(loop, protocol_factory,
                                    local_addr=None, remote_addr=None, *,
