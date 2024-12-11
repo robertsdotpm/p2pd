@@ -1,6 +1,6 @@
 # P2PD
 
-``[Coverage >= 82%] [Python >= 3.6] [Mac, Win, Nix, BSD, Android]``
+``[Python >= 3.5] [Mac, Win, Nix, BSD, Android]``
 
 [![Demo image](https://github.com/robertsdotpm/p2pd/blob/main/demo_small.gif?raw=true)](https://github.com/robertsdotpm/p2pd/blob/main/demo_large.gif)
 
@@ -58,17 +58,11 @@ P2PD offers engineers the following features:
    NAT configurations for the best results possible.
 - **Port forwarding (IPv4) and pin hole (IPv6.)** Automatically
    handles opening ports on the router to increase reachability.
-- **IPv6 ready from day 1.** Supports IPv4 and IPv6. Introduces a new
-   format for addresses that offers insight into a peer's
-   NIC cards, internal network, and NAT devices.
-- **A new way to do network programming.** Focuses on NICs as the
-   starting point for building services. Introduces 'routes' as a
+- **Multi-interface.** Focuses on NICs as the starting point
+   for building services. Introduces 'routes' as a
    way to provide visibility into external addresses. You can build
    services that support IPv4, IPv6, TCP, and UDP without writing
    different code for each of them.
-- **Language-agnostic REST API.** You can call **/p2p/open/name/addr**
-   then **/p2p/pipe/name** to turn any HTTP connection into a two-way relay
-   between a peer-to-peer connection.
 - **Minimal dependencies.** Most of the code in P2PD uses the Python
   standard library to improve portability and reduce packaging issues.
 - **Built on open protocols.**
