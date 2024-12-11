@@ -2,16 +2,25 @@
 from setuptools import setup, find_packages
 from codecs import open
 from os import path
+import sys
 
 
 here = path.abspath(path.dirname(__file__))
-install_reqs = None
-with open('requirements.txt') as f:
-    install_reqs = f.read().splitlines()
 
 # Get the long description from the README file
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
+
+install_reqs = ["ntplib", "xmltodict", "ecdsa", "aiounittest"]
+if (sys.version_info >= (3, 6)) or sys.platform != "win32":
+    install_reqs += ["fasteners", "aiodns"]
+
+if sys.platform != "win32":
+    install_reqs += ["netifaces"]
+    if sys.platform != "darwin":
+        install_reqs += ["pyroute2"]
+else:
+    install_reqs += ["winregistry"]
 
 setup(
     version='3.0.2',
