@@ -13,7 +13,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 install_reqs = ["ntplib", "xmltodict", "ecdsa", "aiounittest"]
 if (sys.version_info >= (3, 6)) or sys.platform != "win32":
-    install_reqs += ["fasteners", "aiodns"]
+    install_reqs += ["fasteners"]
 
 if sys.platform != "win32":
     install_reqs += ["netifaces"]
@@ -23,7 +23,7 @@ else:
     install_reqs += ["winregistry"]
 
 setup(
-    version='3.0.3',
+    version='3.0.4',
     name='p2pd',
     description='Asynchronous P2P networking library and service',
     keywords=('NAT traversal, TCP hole punching, simultaneous open, UPnP, STUN, TURN, SIP, DHCP, add IP to interface, NATPMP, P2P, Peer-to-peer networking library, python'),
