@@ -1,4 +1,4 @@
-# Python version 3.6 and up.
+# Python version 3.5 and up.
 from setuptools import setup, find_packages
 from codecs import open
 from os import path
