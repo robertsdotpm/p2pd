@@ -1,3 +1,4 @@
+aiounittest
 aiomonitor
 
 # This has C-based deps -- need to fork and fix this
