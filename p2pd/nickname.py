@@ -145,6 +145,7 @@ class Nickname():
                     ret = await client.push(name, value, behavior)
                     if ret is None: continue
                     if ret.value is not None:
+                        print(ret.value)
                         return offset
                 except:
                     log_exception()

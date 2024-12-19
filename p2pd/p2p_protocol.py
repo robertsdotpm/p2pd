@@ -149,7 +149,7 @@ async def node_protocol(self, msg, client_tup, pipe):
     if msg == b"long_p2pd_test_string_abcd123":
         await pipe.send(b"p2pd test string\r\n\r\n", client_tup)
         return
-
+    
     # Execute basic services of the node protocol.
     parts = msg.split(b" ")
     cmd = parts[0]

@@ -212,6 +212,15 @@ class FakeSocket():
 
     def makefile(self, *args, **kwargs):
         return self._file
+    
+    def close(self):
+        return
+    
+    def _close_conn(self):
+        return
+    
+    def flush(self):
+        return
 
 def af_from_ip_s(ip_s):
     ip_s = to_s(ip_s)

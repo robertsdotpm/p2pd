@@ -71,17 +71,21 @@ class P2PNode(P2PNodeExtra, Daemon):
         New lines end messages. So multiple messages can
         be read by splitting at a new line. Excluding
         complex cases of partial replies (who cares for now.)
+
+        TODO: implement actual buffered protocol.
         """
 
         # Recv a message for a pipe being monitored for idleness.
         if pipe in self.last_recv_queue:
             self.last_recv_table[pipe.sock] = time.time()
 
-        # Pass messages directly to clients own handlers.
-        # Don't interfere so they can write their own protocol.
-        await node_protocol(self, msg, client_tup, pipe)
-        for msg_cb in self.msg_cbs:
-            run_handler(pipe, msg_cb, client_tup, msg)
+        msgs = msg.split(b"\n")
+        for msg in msgs:
+            # Pass messages directly to clients own handlers.
+            # Don't interfere so they can write their own protocol.
+            await node_protocol(self, msg, client_tup, pipe)
+            for msg_cb in self.msg_cbs:
+                run_handler(pipe, msg_cb, client_tup, msg)
     
     # Used by the MQTT clients.
     async def signal_protocol(self, msg, signal_pipe):

@@ -74,7 +74,7 @@ def http_parse_headers(self):
 class ParseHTTPResponse(HTTPResponse):
     def __init__(self, resp_text):
         self.resp_len = len(resp_text)
-        self.sock = FakeSocket(resp_text)
+        self.fp = self.sock = FakeSocket(resp_text)
         super().__init__(self.sock)
         self.begin()
         http_parse_headers(self)

@@ -39,8 +39,21 @@ a client connection to a TCP server in a BaseProto object.
 """
 class TCPEvents(asyncio.StreamReaderProtocol):
     def __init__(self, stream_reader, pipe_events, loop, conf=NET_CONF):
+        """
+        Patch for Python 3.13. Would be SOOOO fun if the Python
+        brainlets stopped randomly breaking the whole f***ing project. 
+        """
+        def set_streams(_reader, _writer):
+            if not hasattr(self, "_stream_reader"):
+                self._stream_reader = _reader
+
+            if not hasattr(self, "_stream_writer"):
+                self._stream_writer = _writer
+                
+            return 1
+
         # Setup stream reader / writers.
-        super().__init__(stream_reader, lambda x, y: 1, loop=loop)
+        super().__init__(stream_reader, set_streams, loop=loop)
 
         # This is the server that spawns these client connections.
         self.pipe_events = pipe_events
