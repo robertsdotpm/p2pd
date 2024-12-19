@@ -1,0 +1,2 @@
+stun1.p2pd.net has only 1 IPv4 / IPv6.
+It needs 2 so it can be used as a 'change' server. There's only one offical p2pd server at the moment for that.
