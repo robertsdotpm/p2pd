@@ -94,6 +94,7 @@ class P2PNodeExtra():
                 self.punch_queue_worker()
             )
         except RuntimeError:
+            log_exception()
             return
         except:
             log_exception()

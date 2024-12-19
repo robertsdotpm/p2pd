@@ -124,7 +124,7 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
 
         # Add pings in the background.
         # This helps the process pool stay clean.
-        set_keep_alive(sock)
+        #set_keep_alive(sock)
 
         # Sanity check for the sock option.
         if not reuse_set:
@@ -171,14 +171,22 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
         tasks = []
         steps = int((secs * 1000) / ms_spacing)
 
-        assert(steps > 0)
+        assert(steps > 1)
         assert(steps)
         assert(len(send_mappings))
         for i in range(0, 1):
             # Validate IP address.
             dest = Address(dest_addr, recv_mappings[i].remote)
-            await dest.res(interface.route(af))
-            dest = dest.select_ip(af)
+            print(dest_addr, recv_mappings[i].remote, send_mappings[i].local)
+            try:
+                print(interface)
+                interface.route(af)
+                await dest.res(interface.route(af))
+                dest = dest.select_ip(af)
+            except:
+                log_exception()
+
+
             for sleep_time in range(0, steps):
                 task = delayed_punch(
                     # Address family for the con.
@@ -205,11 +213,14 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
                 
 
         # Start running tasks.
+        print(tasks)
         all_tasks = asyncio.gather(*tasks)
+        print(all_tasks)
         outs = await all_tasks
         outs = strip_none(outs)
         return outs
     except:
+        #what_exception()
         log_exception()
 
 async def wait_for_punch_time(current_ntp, ntp_meet):
@@ -300,6 +311,7 @@ async def punch_close_msg(msg, client_tup, pipe):
         await pipe.close()
 
 async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, has_success, node_id):
+    print("in do punching")
     try:
         """
         Punching is done in its own process.
@@ -315,7 +327,11 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
 
         # Wait for NTP punching time.
         if ntp_meet:
+            assert(current_ntp)
             await wait_for_punch_time(current_ntp, ntp_meet)
+        else:
+            log_exception("ntp meet time is 0!")
+
 
         """
         If punching to our self or a machine on the LAN
@@ -334,6 +350,10 @@ async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, 
             send_mappings=send_mappings,
             recv_mappings=recv_mappings,
         )
+
+        #print(interface)
+        #print("schedule delayed punching", 
+        #send_mappings, recv_mappings)
 
         # Carry out TCP punching.
         outs = await schedule_delayed_punching(

@@ -351,9 +351,7 @@ class Interface():
                 return ret
             
         self.netifaces = NetifaceShim(if_addrs)
-
-        # Patch is default.
-        self.is_default = lambda x, y: True
+        self.is_default = self.is_default_patch
 
     def to_dict(self):
         from .var_names import TXT
@@ -364,8 +362,8 @@ class Interface():
             "id": self.id,
             "mac": self.mac,
             "is_default": {
-                int(IP4): self.is_default(IP4),
-                int(IP6): self.is_default(IP6)
+                int(IP4): self.is_default(IP4, None),
+                int(IP6): self.is_default(IP6, None)
             },
             "nat": {
                 "type": self.nat["type"],
@@ -394,9 +392,9 @@ class Interface():
         i.nic_no = d["nic_no"]
         i.id = d["id"]
         i.mac = d["mac"]
-        def is_default_wrapper(af, gws=None):
-            return d["is_default"][af]
-        i.is_default = is_default_wrapper
+
+
+        i.is_default = lambda af, gws=None: d["is_default"][af]
 
         # Set the interface route pool.
         i.rp = {
@@ -428,7 +426,7 @@ class Interface():
     # Show a representation of this object.
     def __repr__(self):
         nic_info = str(self)
-        return fstr("Interface.from_dict({0})", (nic_info,))
+        return "Interface.from_dict(%s)".format(nic_info)
 
     # Pickle.
     def __getstate__(self):
@@ -528,7 +526,7 @@ class Interface():
         # If there's only 1 interface set is_default.   
         ifs = clean_if_list(self.netifaces.interfaces())
         if len(ifs) == 1:
-            self.is_default = lambda af, gws=None: True
+            self.is_default = self.is_default_patch
     
         return self
 
@@ -680,6 +678,9 @@ class Interface():
             ext_ips=[IPRange(BLACK_HOLE_IPS[af])],
             interface=self
         )
+    
+    def is_default_patch(self, af, gws=None):
+        return True
 
     """
     Using a default list of gateways like this has a small

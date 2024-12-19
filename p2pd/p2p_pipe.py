@@ -165,8 +165,13 @@ class P2PPipe():
         return await self.node.pipes[pipe_id]
 
     async def tcp_hole_punch(self, af, pipe_id, src_info, dest_info, nic, addr_type, reply=None):
+        print("tcp punch f")
+        print(pipe_id)
+
+
         # Load TCP punch client for this pipe ID.
         if pipe_id in self.node.tcp_punch_clients:
+            print("client exists")
             puncher = self.node.tcp_punch_clients[pipe_id]
             assert(src_info == puncher.src_info)
             if dest_info != puncher.dest_info:
@@ -184,6 +189,7 @@ class P2PPipe():
 
             # Skip if no STUN clients loaded.
             if not len(stuns):
+                print("no stuns")
                 return None
             
             # Create a new puncher for this pipe ID.
@@ -208,8 +214,10 @@ class P2PPipe():
             self.node.tcp_punch_clients[pipe_id] = puncher
 
         # Extract any received payload attributes.
+        print(reply)
         if reply is not None:
             recv_mappings = reply.payload.mappings
+            print(reply.payload)
             recv_mappings = [NATMapping(m) for m in recv_mappings]
             start_time = reply.payload.ntp
             assert(recv_mappings)

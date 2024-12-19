@@ -78,7 +78,6 @@ async def main():
         nick = await node.nickname(node.node_id)
         print(fstr("Node nickname = {0}", (nick,)))
         print()
-        return
     except:
         log_exception()
         print("node id default nickname didnt load")
