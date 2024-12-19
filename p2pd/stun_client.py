@@ -173,19 +173,22 @@ class STUNClient():
         if hasattr(reply, "rtup"):
             return (ltup[1], reply.rtup[1], reply.pipe)
 
-async def get_stun_clients(af, max_agree, interface, proto=UDP, conf=NET_CONF):
+async def get_stun_clients(af, max_agree, interface, proto=UDP, servs=None, conf=NET_CONF):
     class MockRoute:
         def __init__(self):
             self.af = af
             self.interface = interface
 
     # Copy random STUN servers to use.
-    if proto == UDP:
-        stun_servs = STUN_CHANGE_SERVERS[proto][af]
-    else:
-        stun_servs = STUN_MAP_SERVERS[proto][af]
+    if servs is None:
+        if proto == UDP:
+            stun_servs = STUN_CHANGE_SERVERS[proto][af]
+        else:
+            stun_servs = STUN_MAP_SERVERS[proto][af]
         
-    serv_list = list_clone_rand(stun_servs, max_agree)
+        serv_list = list_clone_rand(stun_servs, max_agree)
+    else:
+        serv_list = servs
 
     mock_route = MockRoute()
     stun_clients = []

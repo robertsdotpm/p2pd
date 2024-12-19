@@ -190,6 +190,32 @@ def clean_if_list(ifs):
 
     return clean_ifs
 
+# Resolve the external addresses for an interface.
+# Tries with public STUN servers first.
+# Otherwise uses official p2pd servers.
+async def route_res_with_fallback(af, is_default, nic, main_res):
+    # Try the main 'decentralized' approach first.
+    out = await async_wrap_errors(main_res)
+    if out is not None:
+        return out
+    
+    # Select fallback server if it fails.
+    dest_info = random.choice(STUN_MAP_P2PD[TCP][af])["primary"]
+    dest = (dest_info["ip"], dest_info["port"])
+    client = STUNClient(af, dest, nic, proto=TCP)
+
+    # Run the fallback code.
+    return await async_wrap_errors(
+        get_routes_with_res(
+            af,
+            1,
+            is_default,
+            nic,
+            [client],
+            nic.netifaces
+        )
+    )
+
 # Used for specifying the interface for sending out packets on
 # in TCP streams and UDP streams.
 class Interface():
@@ -457,16 +483,25 @@ class Interface():
                 enable_default = True
             log(fstr("{0} {1} {2}", (self.name, af, enable_default,)))
 
+            # Use a threshold of pub servers for res.
+            main_res = get_routes_with_res(
+                af,
+                min_agree,
+                enable_default,
+                self,
+                stun_clients,
+                netifaces,
+                timeout=timeout,
+            )
+
+            # If it fails use 'official' servers.
             tasks.append(
                 async_wrap_errors(
-                    get_routes_with_res(
+                    route_res_with_fallback(
                         af,
-                        min_agree,
                         enable_default,
                         self,
-                        stun_clients,
-                        netifaces,
-                        timeout=timeout,
+                        main_res
                     )
                 )
             )
@@ -513,8 +548,8 @@ class Interface():
         assert(nat.keys() == nat_info().keys())
         self.nat = nat
         return nat
-
-    async def load_nat(self, nat_tests=5, delta_tests=12, timeout=4):
+    
+    async def do_load_nat(self, nat_tests=5, delta_tests=12, servs=None, timeout=4):
         # Try to avoid circular imports.
         from .pipe_utils import pipe_open
         
@@ -531,7 +566,8 @@ class Interface():
         stun_clients = await get_stun_clients(
             af,
             test_no,
-            self
+            self,
+            servs=servs
         )
 
         # Pipe is used for NAT tests using multiplexing.
@@ -569,7 +605,34 @@ class Interface():
         # Sanity check nat / delta details.
         if None in [nat_type, delta]:
             raise ErrorCantLoadNATInfo("Unable to load nat.")
+        
+        return nat_type, delta
 
+    async def load_nat(self, nat_tests=5, delta_tests=12, timeout=4):
+        try:
+            # Try main decentralized NAT test approach.
+            nat_type, delta = await self.do_load_nat(
+                nat_tests,
+                delta_tests,
+                timeout
+            )
+        except:
+            # Otherwise fallback to official servs.
+            servs = []
+            test_no = max(nat_tests, delta_tests)
+            for _ in range(0, test_no):
+                serv = random.choice(
+                    STUN_CHANGE_P2PD[UDP][IP4]
+                )
+                servs.append(serv)
+
+            nat_type, delta = await self.do_load_nat(
+                nat_tests,
+                delta_tests,
+                servs,
+                timeout
+            )
+            
         # Load NAT type and delta info.
         # On a server should be open.
         nat = nat_info(nat_type, delta)
@@ -648,8 +711,12 @@ class Interface():
             
             return self.name == if_name
         
-        ret = try_sock_trick(af) or try_netiface_check(af, gws)
-        return ret
+        try:
+            ret = try_sock_trick(af) or try_netiface_check(af, gws)
+            return ret
+        except:
+            log_exception()
+            return False
     
     def supported(self, skip_resolve=0):
         if not skip_resolve:
