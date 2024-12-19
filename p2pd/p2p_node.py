@@ -190,7 +190,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         await self.listen_on_ifs()
 
         # Port forward all listen servers.
-        if self.conf["enable_upnp"]:
+        if self.conf["enable_upnp"] and 0:
             if out: print("\tStarting UPnP task...")
 
             # Put slow forwarding task in the background.

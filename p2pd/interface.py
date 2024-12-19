@@ -426,7 +426,8 @@ class Interface():
     # Show a representation of this object.
     def __repr__(self):
         nic_info = str(self)
-        return "Interface.from_dict(%s)".format(nic_info)
+
+        return "Interface.from_dict(%s)" % (nic_info)
 
     # Pickle.
     def __getstate__(self):

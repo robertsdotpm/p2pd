@@ -84,7 +84,10 @@ delta N will be timing sensitive. If timing info
 is available the protocol should try use that.
 """
 async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH_CONF):
+    print("delayed")
     try:
+        print(interface)
+
         """
         Schedule connection to run across time.
 
@@ -151,7 +154,7 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
         mapping.sock = sock
         return mapping
     except:
-        #log_exception()
+        log_exception()
         return None
     
 """
@@ -169,54 +172,55 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
 
         # Create punching async task list.
         tasks = []
-        steps = int((secs * 1000) / ms_spacing)
+        steps = min(int((secs * 1000) / ms_spacing), 50)
 
         assert(steps > 1)
         assert(steps)
         assert(len(send_mappings))
+        loop = asyncio.get_event_loop()
         for i in range(0, 1):
             # Validate IP address.
             dest = Address(dest_addr, recv_mappings[i].remote)
             print(dest_addr, recv_mappings[i].remote, send_mappings[i].local)
             try:
-                print(interface)
                 interface.route(af)
                 await dest.res(interface.route(af))
                 dest = dest.select_ip(af)
             except:
                 log_exception()
+                exit(0)
 
 
             for sleep_time in range(0, steps):
-                task = delayed_punch(
-                    # Address family for the con.
-                    af,
+                task = async_wrap_errors(
+                    delayed_punch(
+                        # Address family for the con.
+                        af,
 
-                    # Wait until ms to do punching.
-                    # Punches are split up over time
-                    # to increase chances of success.
-                    sleep_time * ms_spacing,
+                        # Wait until ms to do punching.
+                        # Punches are split up over time
+                        # to increase chances of success.
+                        sleep_time * ms_spacing,
 
-                    # Local mapping.
-                    send_mappings[i],
+                        # Local mapping.
+                        send_mappings[i],
 
-                    # Destination addr to connect to.
-                    dest,
+                        # Destination addr to connect to.
+                        dest,
 
-                    # Event loop for this process.
-                    asyncio.get_event_loop(),
+                        # Event loop for this process.
+                        loop,
 
-                    # Punch from this interface.
-                    interface,
+                        # Punch from this interface.
+                        interface
+                    )
                 )
                 tasks.append(task)
                 
 
         # Start running tasks.
         print(tasks)
-        all_tasks = asyncio.gather(*tasks)
-        print(all_tasks)
-        outs = await all_tasks
+        outs = await asyncio.gather(*tasks)
         outs = strip_none(outs)
         return outs
     except:

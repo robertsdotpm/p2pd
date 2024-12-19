@@ -309,29 +309,30 @@ def proc_do_punching(args):
         puncher = TCPPuncher.from_dict(d)
 
         # Execute the punching in a new event loop.
-        loop = asyncio.get_event_loop()
-        f = create_task(
-            async_wrap_errors(
-                do_punching_wrapper(
-                    puncher.af,
-                    puncher.dest_info["ip"],
-                    puncher.send_mappings,
-                    puncher.recv_mappings,
-                    puncher.sys_clock.time(),
-                    puncher.start_time,
-                    puncher.punch_mode,
-                    interface,
-                    reverse_tup,
-                    node_id
-                )
-            ),
-            loop=loop
+        
+        f = async_wrap_errors(
+            do_punching_wrapper(
+                puncher.af,
+                puncher.dest_info["ip"],
+                puncher.send_mappings,
+                puncher.recv_mappings,
+                puncher.sys_clock.time(),
+                puncher.start_time,
+                puncher.punch_mode,
+                interface,
+                reverse_tup,
+                node_id
+            )
         )
+        #oop=loop
+
+
+        return asyncio.run(f)
 
         # The moment the function is done save its result to the queue.
         # The queue is sharable and works with basic types.
         #f.add_done_callback(lambda t: q.put(t.result()))
-        return loop.run_until_complete(f)
+        #return loop.run_until_complete(f)
     except:
         log_exception()
 

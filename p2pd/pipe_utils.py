@@ -196,9 +196,11 @@ You can execute code on new messages or connection disconnects.
 """
 async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=None, conf=NET_CONF):
     # Patch _select if needed.
+    """
     if sys.platform == 'win32':
         if SelectSelector._select != patched_select:
             SelectSelector._select = patched_select
+    """
 
     # Covers the case where passed in route is an Interface.
     # In that case -- just use first route at first supported AF.
