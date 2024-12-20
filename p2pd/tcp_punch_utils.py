@@ -184,7 +184,6 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
         for i in range(0, 1):
             # Validate IP address.
             dest = Address(dest_addr, recv_mappings[i].remote)
-            print(dest_addr, recv_mappings[i].remote, send_mappings[i].local)
             interface.route(af)
             await dest.res(interface.route(af))
             dest = dest.select_ip(af)
@@ -216,7 +215,6 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
                 
 
         # Start running tasks.
-        print(tasks)
         outs = await asyncio.gather(*tasks)
         outs = strip_none(outs)
         return outs
@@ -312,7 +310,6 @@ async def punch_close_msg(msg, client_tup, pipe):
         await pipe.close()
 
 async def do_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, has_success, node_id):
-    print("in do punching")
     try:
         """
         Punching is done in its own process.

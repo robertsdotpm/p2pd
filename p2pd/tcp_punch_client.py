@@ -296,7 +296,6 @@ def proc_do_punching(args):
         fixes the issue. However, this may mean breaking some of
         my command execution code on Windows -- test this.
         """
-        print("in proc do punching")
         asyncio.set_event_loop_policy(SelectorEventPolicy())
 
         # Build a puncher from a dictionary.
