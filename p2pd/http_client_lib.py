@@ -279,16 +279,51 @@ async def do_web_req(addr, http_buf, do_close, route, conf=NET_CONF):
     # Error return empty.
     if p is None:
         return None, None
-
-    # Send HTTP request.
     try:
         p.subscribe(SUB_ALL)
         await p.send(http_buf, addr)
-        out = await p.recv(SUB_ALL, timeout=conf['recv_timeout'])
     except Exception as e:
         log_exception()
         await p.close()
         return None, None
+
+    # Read TCP stream until content-len portion.
+    out = b""
+    content_len = 0
+    while 1:
+        buf = await p.recv(SUB_ALL, timeout=conf['recv_timeout'])
+        if buf is None:
+            break
+        else:
+            out += buf
+
+        # Check if content len header exists.
+        # Line-endings determine full header.
+        con_len_match = re.findall(b"[cC]ontent-[lL]ength: *([0-9]+)[\n\r]+", out)
+        if len(con_len_match):
+            content_len = int(con_len_match[0])
+            break
+
+    # Determine pre-existing content buffer.
+    content = b""
+    if content_len:
+        while 1:
+            # Stream more content from the HTTP con.
+            buf = await p.recv(SUB_ALL, timeout=conf['recv_timeout'])
+            if buf is None:
+                break
+            else:
+                out += buf
+
+            # Try find start of content portion.
+            hdr_content = out.split(b"\r\n\r\n")
+            if len(hdr_content) != 2:
+                continue
+
+            # Check if the full content is downloaded.
+            content = hdr_content[1]
+            if len(content) >= content_len:
+                break
 
     # Some connections may be left open.
     if do_close:
