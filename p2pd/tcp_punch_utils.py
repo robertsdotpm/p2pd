@@ -84,10 +84,7 @@ delta N will be timing sensitive. If timing info
 is available the protocol should try use that.
 """
 async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH_CONF):
-    print("delayed")
     try:
-        print(interface)
-
         """
         Schedule connection to run across time.
 
@@ -127,7 +124,7 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
 
         # Add pings in the background.
         # This helps the process pool stay clean.
-        #set_keep_alive(sock)
+        set_keep_alive(sock)
 
         # Sanity check for the sock option.
         if not reuse_set:
@@ -154,7 +151,7 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
         mapping.sock = sock
         return mapping
     except:
-        log_exception()
+        #log_exception()
         return None
     
 """
@@ -172,7 +169,7 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
 
         # Create punching async task list.
         tasks = []
-        steps = min(int((secs * 1000) / ms_spacing), 50)
+        steps = min(int((secs * 1000) / ms_spacing), 200)
 
         assert(steps > 1)
         assert(steps)
@@ -182,15 +179,10 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
             # Validate IP address.
             dest = Address(dest_addr, recv_mappings[i].remote)
             print(dest_addr, recv_mappings[i].remote, send_mappings[i].local)
-            try:
-                interface.route(af)
-                await dest.res(interface.route(af))
-                dest = dest.select_ip(af)
-            except:
-                log_exception()
-                exit(0)
 
-
+            interface.route(af)
+            await dest.res(interface.route(af))
+            dest = dest.select_ip(af)
             for sleep_time in range(0, steps):
                 task = async_wrap_errors(
                     delayed_punch(
@@ -219,7 +211,6 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
                 
 
         # Start running tasks.
-        print(tasks)
         outs = await asyncio.gather(*tasks)
         outs = strip_none(outs)
         return outs

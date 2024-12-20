@@ -104,17 +104,22 @@ async def safe_run(f, args=[]):
     await asyncio.gather(*tasks - {cur_task})
 
 if not hasattr(unittest, "IsolatedAsyncioTestCase"):
-    import aiounittest
-    unittest.IsolatedAsyncioTestCase = aiounittest.AsyncTestCase
+    try:
+        import aiounittest
+        unittest.IsolatedAsyncioTestCase = aiounittest.AsyncTestCase
 
-    def safe_run_patch(self):
-        loop = asyncio.get_event_loop()
-        run_wrap = loop.run_until_complete
-        loop.run_until_complete = lambda f: run_wrap(safe_run(f))
-        loop.set_debug(False)
+        def safe_run_patch(self):
+            loop = asyncio.get_event_loop()
+            run_wrap = loop.run_until_complete
+            loop.run_until_complete = lambda f: run_wrap(safe_run(f))
+            loop.set_debug(False)
 
-    unittest.IsolatedAsyncioTestCase.get_event_loop = safe_run_patch
-    #sys.excepthook = my_except_hook
+        unittest.IsolatedAsyncioTestCase.get_event_loop = safe_run_patch
+        #sys.excepthook = my_except_hook
+    except:
+        pass
+
+
 
 
 def proactorfy(self=None):
@@ -710,41 +715,21 @@ def get_running_loop():
         return None
 
 # Will be used in sample code to avoid boilerplate.
-def async_test(f, args=[], loop=None):
-    """
-    try:
-        loop = asyncio.get_event_loop()
-        if loop is None:
-            raise Exception("Creating event loop.")
-    except:
-        #uvloop.install()
-    """
-
-        # Create an event loop if one isn't running.
-    loop = get_loop(loop)
-
-    #if IS_DEBUG:
-    #    loop.set_debug(True)
-    loop.set_debug(False)
+def async_test(coro, loop=None):
+    # Coroutine function passed instead.
+    if inspect.iscoroutinefunction(coro):
+        coro = coro()
 
     if hasattr(asyncio, "run"):
         runner = asyncio.run
     else:
+        loop = loop or asyncio.get_event_loop()
         runner = loop.run_until_complete
 
     # Can have cleanup errors.
-    if len(args):
-        #loop.run_until_complete(f(*args))
-        runner(f(*args))
-        #loop.run_until_complete(f(*args))
-    else:
-        runner(f())
-        #loop.run_until_complete(f())
+    runner(coro)
 
-    #asyncio.run(main(), debug=False)
-
-    #loop.close()
-
+async_run = async_test
 
 async def return_true(result=None):
     return True

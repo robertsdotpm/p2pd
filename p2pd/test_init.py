@@ -27,17 +27,20 @@ P2PD_NET_ADDR_BYTES = b'0,3-[0,149.56.128.148,149.56.128.148,10001,1,1,0]-[0,260
 # Otherwise the name (probably) won't exist.
 P2PD_IFS = []
 
-class PatchedAsyncTest(unittest.IsolatedAsyncioTestCase):
-    def _setupAsyncioLoop(self):
-        assert self._asyncioTestLoop is None
-        loop = asyncio.new_event_loop()
+PatchedAsyncTest = None
 
-        asyncio.set_event_loop(loop)
-        loop.set_debug(False)
-        self._asyncioTestLoop = loop
-        fut = loop.create_future()
-        self._asyncioCallsTask = loop.create_task(self._asyncioLoopRunner(fut))
-        loop.run_until_complete(safe_run(fut))
+if hasattr(unittest, "IsolatedAsyncioTestCase"):
+    class PatchedAsyncTest(unittest.IsolatedAsyncioTestCase):
+        def _setupAsyncioLoop(self):
+            assert self._asyncioTestLoop is None
+            loop = asyncio.new_event_loop()
+
+            asyncio.set_event_loop(loop)
+            loop.set_debug(False)
+            self._asyncioTestLoop = loop
+            fut = loop.create_future()
+            self._asyncioCallsTask = loop.create_task(self._asyncioLoopRunner(fut))
+            loop.run_until_complete(safe_run(fut))
 
 # Basic echo client test.
 async def check_pipe(pipe, dest_tup=None):

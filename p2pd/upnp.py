@@ -104,7 +104,6 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
 
         # Success so return.
         if forward_success:
-            print("forward success b")
             return 1
         
         return 0
@@ -278,8 +277,6 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
             proto,
             service_infos,
         )
-
-        forward_success = False
     except:
         log_exception()
         forward_success = False

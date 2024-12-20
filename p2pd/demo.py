@@ -259,7 +259,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    #loop = asyncio.get_event_loop()
-    asyncio.run(main())
-    #loop.run_until_complete(main())
-    #async_test(main)
+    async_run(main())

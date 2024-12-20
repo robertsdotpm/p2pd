@@ -289,8 +289,6 @@ class TCPPuncher():
 # Started in a new process.
 def proc_do_punching(args):
     try:
-
-
         """
         On Windows it seems like using the default 'proactor event loop'
         prevents the TCP hole punching code from working. It seems that
@@ -308,31 +306,48 @@ def proc_do_punching(args):
         node_id = args[3]
         puncher = TCPPuncher.from_dict(d)
 
-        # Execute the punching in a new event loop.
-        
-        f = async_wrap_errors(
-            do_punching_wrapper(
-                puncher.af,
-                puncher.dest_info["ip"],
-                puncher.send_mappings,
-                puncher.recv_mappings,
-                puncher.sys_clock.time(),
-                puncher.start_time,
-                puncher.punch_mode,
-                interface,
-                reverse_tup,
-                node_id
+        # Allow more recent Pythons to do punching.
+        if hasattr(asyncio, "run"):
+            f = async_wrap_errors(
+                do_punching_wrapper(
+                    puncher.af,
+                    puncher.dest_info["ip"],
+                    puncher.send_mappings,
+                    puncher.recv_mappings,
+                    puncher.sys_clock.time(),
+                    puncher.start_time,
+                    puncher.punch_mode,
+                    interface,
+                    reverse_tup,
+                    node_id
+                )
             )
-        )
-        #oop=loop
 
+            # Start a  new event loop and run the coroutine.
+            return asyncio.run(f)
+        else:
+            # Use older deprecated functions.
+            loop = asyncio.get_event_loop()
+            f = create_task(
+                async_wrap_errors(
+                    do_punching_wrapper(
+                        puncher.af,
+                        puncher.dest_info["ip"],
+                        puncher.send_mappings,
+                        puncher.recv_mappings,
+                        puncher.sys_clock.time(),
+                        puncher.start_time,
+                        puncher.punch_mode,
+                        interface,
+                        reverse_tup,
+                        node_id
+                    )
+                ),
+                loop=loop
+            )
 
-        return asyncio.run(f)
-
-        # The moment the function is done save its result to the queue.
-        # The queue is sharable and works with basic types.
-        #f.add_done_callback(lambda t: q.put(t.result()))
-        #return loop.run_until_complete(f)
+            # Workers better for older Python versions.
+            return loop.run_until_complete(f)
     except:
         log_exception()
 

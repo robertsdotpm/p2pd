@@ -144,14 +144,11 @@ async def get_upnp_forwarding_services(route, dest, path):
     # Get main XML for device.
     try:
         # Request rootDesc.xml.
-        print(dest)
-        print(path)
         http_resp = await WebCurl(dest, route).vars().get(path)
         if http_resp is None:
             return []
 
         xml = http_resp.out
-        print(xml)
         d = xmltodict.parse(xml)
 
         # Convert to a list of services.
@@ -237,8 +234,6 @@ async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext
 </s:Body>
 </s:Envelope>
     """, (body,))
-
-    print(payload)
 
     # Custom headers for soap.
     headers = [
