@@ -24,7 +24,7 @@ if __name__ != '__main__':
     from .tcp_punch_client import TCPPuncher
     from .daemon import Daemon
     from .echo_server import *
-    from .http_client_lib import http_req, ParseHTTPResponse, WebCurl
+    from .http_client_lib import ParseHTTPResponse, WebCurl
     from .http_client_lib import http_req_buf
     from .http_server_lib import rest_service, send_json, send_binary, RESTD, api_route_closure
     from .http_server_lib import ParseHTTPRequest

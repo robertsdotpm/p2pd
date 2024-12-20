@@ -144,11 +144,11 @@ async def get_upnp_forwarding_services(route, dest, path):
     # Get main XML for device.
     try:
         # Request rootDesc.xml.
-        _, http_resp = await http_req(route, dest, path, do_close=True)
+        http_resp = await WebCurl(dest, route).get(path)
         if http_resp is None:
             return []
 
-        xml = http_resp.out()
+        xml = http_resp.out
         d = xmltodict.parse(xml)
 
         # Convert to a list of services.
@@ -253,14 +253,8 @@ async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext
         dest[0],
     )
 
-    return await http_req(
-        route,
-        dest,
-        service["controlURL"],
-        do_close=True,
-        method="POST",
-        payload=payload,
-        headers=headers
+    return await WebCurl(dest, route, hdrs=headers).vars().post(
+        service["controlURL"]
     )
 
 def sort_upnp_replies_by_unique_location(replies):

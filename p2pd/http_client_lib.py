@@ -100,67 +100,6 @@ def get_hdr(name, hdrs):
     # Not found.
     return (-1, None)
 
-async def http_req(route, dest, path, do_close=1, method=b"GET", payload=None, headers=None, conf=NET_CONF):
-    # Get a new con 
-    assert(route.resolved)
-    assert(dest is not None)
-    log(fstr("{0} {1}", (route, dest,)))
-    try:
-        p = await pipe_open(route=route, proto=TCP, dest=dest, conf=conf)
-    except Exception:
-        log_exception()
-
-    if p is None:
-        log("http req p is none")
-        return None, None
-
-    try:
-        p.subscribe(SUB_ALL)
-
-        # Set host and port from con service.
-        host, port = dest
-
-        # But overwrite host if it's set.
-        hdr_index, new_host = get_hdr(b"Host", headers)
-        if new_host is not None:
-            host = new_host
-            del headers[hdr_index]
-
-        # Build raw HTTP request.
-        buf = http_req_buf(
-            route.af,
-            host,
-            path,
-            method=method,
-            payload=payload,
-            headers=headers
-        )
-
-        # Todo: use content-length here.
-        await p.send(buf, dest)
-        out = b""
-        got = None
-        while 1:
-            got = await p.recv(SUB_ALL, timeout=conf["recv_timeout"])
-            if got is None:
-                break
-            else:
-                out += got
-    except Exception:
-        log_exception()
-        await p.close()
-        return None, None
-
-    if do_close:
-        if p is not None:
-            await p.close()
-        p = None
-
-    if out is not None:
-        out = ParseHTTPResponse(out)
-        
-    return p, out
-
 """
 Break up a URL into it's host, port, file path,
 and resolve it's domain as an address for use with
@@ -192,64 +131,6 @@ async def url_res(route, url, timeout=3):
         "dest": dest
     }
 
-"""
-The purpose of this function is to provide something simple for
-fetching a remote URL. The URL param may be pre-resolved using url_res,
-otherwise it can be a URL string to fetch. The function accepts optional
-GET params. The post method is not supported.
-"""
-async def url_open(route, url, params={}, timeout=3, throttle=0, headers=[], conf=NET_CONF):
-    # Other types for url are not supported.
-    url_parts = Exception("url param type is not supported.")
-
-    # url is a URL so break into parts.
-    if isinstance(url, str):
-        url_parts = await url_res(route, url, timeout=timeout)
-
-    # URL is provided as parts already.
-    if isinstance(url, dict):
-        url_parts = url
-
-    # Throttle request.
-    if throttle:
-        await asyncio.sleep(throttle)
-
-    # Encode GET params.
-    get_vars = ""
-    for name in params:
-        # Encode the value.
-        v = to_s(
-            urlencode(
-                params[name]
-            )
-        )
-
-        # Pass the params in the URL.
-        n = to_s(urlencode(name))
-        get_vars += fstr("&{0}={1}", (n, v,))
-
-    # Request path.
-    if len(get_vars):
-        path = fstr("{0}?{1}", (url_parts['path'], get_vars,))
-    else:
-        path = url_parts["path"]
-
-    # Make req.
-    conf["con_timeout"] = timeout
-    conf["recv_timeout"] = timeout
-    headers += [[b"Host", to_b(url_parts["host"])]]
-    _, resp = await http_req(
-        route,
-        url_parts["dest"],
-        path,
-
-        # Specify the right sub/domain.
-        headers=headers,
-        conf=conf
-    )
-
-    # Return API output as string.
-    return to_s(resp.out())
 
 # Web payload decorators
 def Payload(f, url={}, body=b""):
