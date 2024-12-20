@@ -1,4 +1,5 @@
 import warnings
+import sys
 from .ip_range import *
 from .nat_utils import *
 from .interface import *
@@ -122,10 +123,6 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
             socket.SO_REUSEADDR
         )
 
-        # Add pings in the background.
-        # This helps the process pool stay clean.
-        set_keep_alive(sock)
-
         # Sanity check for the sock option.
         if not reuse_set:
             log("Punch socket missing reuse addr opt.")
@@ -141,6 +138,10 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
         # We strip None responses out.
         if sock is None:
             return None
+        
+        # Add pings in the background.
+        # This helps the process pool stay clean.
+        set_keep_alive(sock)
 
         """
         At some point I expect errors to be made if a
@@ -169,7 +170,12 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
 
         # Create punching async task list.
         tasks = []
-        steps = min(int((secs * 1000) / ms_spacing), 200)
+        if sys.version_info.minor >= 13:
+            # Recent python versions are more efficient with less tasks.
+            steps = 50
+        else:
+            steps = int((secs * 1000) / ms_spacing)
+
 
         assert(steps > 1)
         assert(steps)
@@ -179,7 +185,6 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
             # Validate IP address.
             dest = Address(dest_addr, recv_mappings[i].remote)
             print(dest_addr, recv_mappings[i].remote, send_mappings[i].local)
-
             interface.route(af)
             await dest.res(interface.route(af))
             dest = dest.select_ip(af)
@@ -211,6 +216,7 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
                 
 
         # Start running tasks.
+        print(tasks)
         outs = await asyncio.gather(*tasks)
         outs = strip_none(outs)
         return outs
