@@ -265,7 +265,7 @@ class WebCurl():
                 "unsafe": url_params
             }
 
-        client.body_payload = body
+        client.body = body
         return client
     
     async def api(self, method, path, hdrs, conf):
@@ -280,8 +280,8 @@ class WebCurl():
 
         # If payload is a dict convert to json buf.
         hdrs = hdrs or self.hdrs
-        if isinstance(self.body_payload, dict):
-            self.body_payload = json.dumps(self.body_payload)
+        if isinstance(self.body, dict):
+            self.body = json.dumps(self.body)
             hdrs.append([b"Content-Type", b"application/json"])
 
         # Build a HTTP request to send to server.
@@ -292,7 +292,7 @@ class WebCurl():
             host=self.addr[0],
             path=path,
             method=method,
-            payload=self.body_payload,
+            payload=self.body,
             headers=hdrs
         )
 
@@ -308,13 +308,20 @@ class WebCurl():
         # Make the HTTP request to the server.
         route = await self.route.bind()
         addr = await resolv_dest(af, self.addr, nic)
-        pipe, info = await do_web_req(
-            route=route,
-            addr=addr, 
-            http_buf=req_buf,
-            do_close=self.do_close,
-            conf=conf
+        ret = await async_wrap_errors(
+            do_web_req(
+                route=route,
+                addr=addr, 
+                http_buf=req_buf,
+                do_close=self.do_close,
+                conf=conf
+            )
         )
+
+        # Unpack ret value.
+        pipe = info = None
+        if ret is not None:
+            pipe, info = ret
 
         # Save output.
         client.pipe = pipe

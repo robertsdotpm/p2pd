@@ -104,6 +104,7 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
 
         # Success so return.
         if forward_success:
+            print("forward success b")
             return 1
         
         return 0
@@ -225,9 +226,13 @@ async def discover_upnp_devices(af, nic):
     replies = []
     for _ in range(0, 5):
         out = await pipe.recv(timeout=1)
+        if out is None:
+            continue
+
         try:
             reply = ParseHTTPResponse(out)
-        except Exception:
+        except:
+            log_exception()
             continue
 
         replies.append(reply)
@@ -273,6 +278,8 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
             proto,
             service_infos,
         )
+
+        forward_success = False
     except:
         log_exception()
         forward_success = False

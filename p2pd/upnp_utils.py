@@ -144,11 +144,14 @@ async def get_upnp_forwarding_services(route, dest, path):
     # Get main XML for device.
     try:
         # Request rootDesc.xml.
-        http_resp = await WebCurl(dest, route).get(path)
+        print(dest)
+        print(path)
+        http_resp = await WebCurl(dest, route).vars().get(path)
         if http_resp is None:
             return []
 
         xml = http_resp.out
+        print(xml)
         d = xmltodict.parse(xml)
 
         # Convert to a list of services.
@@ -235,6 +238,8 @@ async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext
 </s:Envelope>
     """, (body,))
 
+    print(payload)
+
     # Custom headers for soap.
     headers = [
         [
@@ -253,7 +258,7 @@ async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext
         dest[0],
     )
 
-    return await WebCurl(dest, route, hdrs=headers).vars().post(
+    return await WebCurl(dest, route, hdrs=headers).vars(body=payload).post(
         service["controlURL"]
     )
 
@@ -274,7 +279,7 @@ def sort_upnp_replies_by_unique_location(replies):
 
 async def use_upnp_forwarding_services(af, interface, ext_port, src_tup, desc, proto, service_infos):
     for service_info in service_infos:
-        _, resp = await add_upnp_forwarding_rule(
+        resp = await add_upnp_forwarding_rule(
             af,
             interface,
             service_info[0],
@@ -298,7 +303,7 @@ async def use_upnp_forwarding_services(af, interface, ext_port, src_tup, desc, p
         ]
 
         # Look for success indication in output.
-        out = resp.out()
+        out = resp.out
         for map_success in map_success_list:
             if map_success in out:
                 return True
