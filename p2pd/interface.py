@@ -613,7 +613,7 @@ class Interface():
             nat_type, delta = await self.do_load_nat(
                 nat_tests,
                 delta_tests,
-                timeout
+                timeout=timeout
             )
         except:
             # Otherwise fallback to official servs.
