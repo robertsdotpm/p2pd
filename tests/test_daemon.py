@@ -15,7 +15,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         i = 0
         interface = await Interface()
         for af in interface.supported():
-            log(fstr("Test daemon af = {af}"))
+            log(fstr("Test daemon af = {0}", (af,)))
 
             """
             (1) Get first route for AF type.
@@ -36,10 +36,10 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
             addrs = [route.nic()]
             for addr in addrs:
-                log(fstr("test daemon addr = {addr}"))
+                log(fstr("test daemon addr = {0}", (addr,)))
                 msg = b"hello world ay lmaoo"
                 for proto in [UDP, TCP]:
-                    log(fstr("test daemon proto = {proto}"))
+                    log(fstr("test daemon proto = {0}", (proto,)))
                     #print()
                     #print(proto)
                     #print(addr)

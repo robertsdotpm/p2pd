@@ -57,7 +57,8 @@ class TestInterface(unittest.IsolatedAsyncioTestCase):
     async def test_invalid_interface_name(self):
         test_passes = False
         try:
-            await Interface("meow")
+            out = await Interface("meow")
+            print(out)
         except InterfaceNotFound:
             test_passes = True
 

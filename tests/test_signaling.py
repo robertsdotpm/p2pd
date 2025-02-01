@@ -26,9 +26,9 @@ class TestSignaling(unittest.IsolatedAsyncioTestCase):
                 await asyncio.sleep(2)
 
                 if not len(found_msg):
-                    print(fstr("mqtt {af} {dest} broken"))
+                    print(fstr("mqtt {0} {1} broken", (af, dest,)))
                 else:
-                    print(fstr("mqtt {af} {dest} works"))
+                    print(fstr("mqtt {0} {1} works", (af, dest,)))
 
                 await client.close()
 

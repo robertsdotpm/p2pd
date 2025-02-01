@@ -299,7 +299,7 @@ class Interface():
     def load_if_info_fallback(self):
         # Just guess name.
         # Getting this wrong will only break IPv6 link-local binds.
-        self.id = self.name = "eth0"
+        self.id = self.name = self.name or "eth0"
         self.netiface_index = 0
         self.type = INTERFACE_ETHERNET
 
@@ -450,9 +450,10 @@ class Interface():
         # Process interface name in right format.
         try:
             self.load_if_info()
+        except InterfaceNotFound:
+            raise InterfaceNotFound
         except:
             log_exception()
-
             self.load_if_info_fallback()
 
         # This will be used for the routes call.

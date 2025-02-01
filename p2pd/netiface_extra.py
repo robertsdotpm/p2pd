@@ -89,7 +89,7 @@ def is_af_routable(af, netifaces):
     return af in netifaces.gateways()
 
 async def get_mac_address(name, netifaces):
-    if netifaces.AF_LINK not in netifaces.ifaddresses(name):
+    if not hasattr(netifaces.ifaddresses(name), "AF_LINK"):
         try:
             return await get_mac_mixed(name)
         except:

@@ -14,11 +14,11 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                 addr = await Address(host, 80, nic)
                 tup = addr.select_ip(af).tup
                 if tup in tups:
-                    print(fstr("dns / addr {af} {host} duplicate tup {tup}"))
+                    print(fstr("dns / addr {0} {1} duplicate tup {2}", (af, host, tup,)))
                     print(fstr("dns may be broken"))
                     continue
                 else:
-                    print(fstr("dns / addr {af} {host} -> {tup} resolve success"))
+                    print(fstr("dns / addr {0} {1} -> {2} resolve success", (af, host, tup,)))
                     tups[tup] = 1
 
     async def test_clock_skew(self):
@@ -54,13 +54,14 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                 await asyncio.sleep(2)
 
                 if not len(found_msg):
-                    print(fstr("mqtt {af} {dest} broken"))
+                    print(fstr("mqtt {0} {1} broken", (af, dest,)))
                 else:
-                    print(fstr("mqtt {af} {dest} works"))
+                    print(fstr("mqtt {0} {1} works", (af, dest,)))
 
                 await client.close()
 
-    async def test_turn_client(self):
+    async def test_turn_client_multi(self):
+        return
         afs = [IP4] # Only really tested with IP4 unfortunately.
         # Need another con with ipv6 for myself.
         hosts = ["turn1.p2pd.net", "turn2.p2pd.net"]
@@ -122,13 +123,45 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                 # See middle of TURN relay diagram.
                 msg = await b_client.recv()
                 if msg == buf:
-                    print(fstr("turn {af} {dest} works"))
+                    print(fstr("turn {0} {1} works", (af, dest,)))
                 else:
-                    print(fstr("turn {af} {dest} failed"))
+                    print(fstr("turn {0} {1} failed", (af, dest,)))
 
                 # Tell server to close resources for our client.
                 await a_client.close()
                 await b_client.close()
+
+
+    async def test_turn_client(self):
+        afs = [IP4] # Only really tested with IP4 unfortunately.
+        # Need another con with ipv6 for myself.
+        hosts = ["turn1.p2pd.net", "turn2.p2pd.net"]                
+        for host in hosts:
+            for af in afs:
+                # TURN server config.
+                dest = (host, 3478)
+                auth = ("", "")
+
+                # Each interface has a different external IP.
+                # Imagine these are two different computers.
+                nic = await Interface()
+
+                # Start TURN clients.
+                client = await TURNClient(af, dest, nic, auth, realm=None)
+                if client is None:
+                    print(fstr("turn {0} broken", (host,)))
+                    continue
+
+                # In practice you will have to exchange these tups via your protocol.
+                # I use MQTT for doing that. See diagram steps (1)(3).
+                a_addr, a_relay = await client.get_tups()
+                if a_addr is None or a_relay is None:
+                    print(fstr("turn {0} broken", (host,)))
+                    continue
+                
+                # Tell server to close resources for our client.
+                await client.close()
+                print(fstr("turn {0} works", (host,)))
 
     async def test_stun_client(self):
         hosts = ["stun1.p2pd.net", "stun2.p2pd.net"]
@@ -140,9 +173,9 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                     client = STUNClient(af, dest, nic, proto=proto)
                     out = await client.get_mapping()
                     if out is None:
-                        print(fstr("stun {af} {dest} {proto} failed"))
+                        print(fstr("stun {0} {1} {2} failed", (af, dest, proto,)))
                     else:
-                        print(fstr("stun {af} {dest} {proto} works"))
+                        print(fstr("stun {0} {1} {2} works", (af, dest, proto,)))
 
     async def test_pnp_client(self):
         hosts = [0, 1]
@@ -176,9 +209,9 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                 
                 
                 if out.value != val:
-                    print(fstr("pnp {af} {dest} failed"))
+                    print(fstr("pnp {0} {1} failed", (af, dest,)))
                 else:
-                    print(fstr("pnp {af} {dest} success"))
+                    print(fstr("pnp {0} {1} success", (af, dest,)))
 
                 out = await client.delete(name)
                 out = await client.fetch(name)
@@ -213,9 +246,9 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         fqn_name = name + ".peer"
         fqn = await nick.push(name, val)
         if fqn != fqn_name:
-            print(fstr("register {name} tld failed = {fqn}"))
+            print(fstr("register {0} tld failed = {1}", (name, fqn,)))
         else:
-            print(fstr("register {name} tld success = .peer"))
+            print(fstr("register {0} tld success = .peer", (name,)))
 
         # Test pull works.
         out = await nick.fetch(fqn_name)

@@ -9,11 +9,11 @@ class TestRUDP(unittest.IsolatedAsyncioTestCase):
         r = await i.route(af).bind(port)
         dest_tup = (r.nic(), port)
         dest = dest_tup
-        pipe = (await pipe_open(
+        pipe = await pipe_open(
             route=r,
             proto=RUDP,
             dest=dest
-        )).subscribe(SUB_ALL)
+        )
 
 
         msg = b"test meow"
