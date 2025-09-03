@@ -6,14 +6,22 @@
 
 [Watch demo on Asciinema](https://asciinema.org/a/EhADOwnoPt5KBiQDbwR69bNHS)
 
-Welcome to the new release of **P2PD.** P2PD is a library for doing
-peer-to-peer networking in Python. This release offers a new methodology
-for improving connectivity between hosts. It works on private networks, across
-the Internet, and even in-between nodes on the same machine.
+Update: Great news everyone! I am over my burn out and feel inspired to hack again. Some things I want to do now:
 
-Tens of thousands of lines of code have been updated. Most modules have been refactored or re-written. The protocol has been replaced and now supports encryption; TCP punching now works with IPv6; The STUN client supports hundreds more servers; UPnP is less noisy (and actually works); Networking code has been refreshed to reduce errors; Core connectivity methods have been redesigned (and tested quite thoroughly.)
+- Improve docs and make videos so people know more what the project is about. People are still confused I think.
+- Improve how interfaces are done in this library -- abstract them out more. This will make the software more robust to failure in the event that interface detection fails.
+- More tests for loading nodes -- try to speed that up as people's time is very limited.
+- Lets take on the mobile network now and break symmetric NATs. I'm in a rare position now to do that as I'm now behind a CGNAT.
+- **Contributors:** You don't even have to write code to help me with this project. I'd love for people who are interested in the project to let me test connectivity from their network. I'm sure we can learn and improve the software.
+- I have an idea for something new that could be extremely useful if I can get it to work. You'll have to speculate what it is for nao ;)
 
-The new release also includes a simple domain system that offers open,
+P2PD is a library for doing NAT traversal in Python. If you're behind a router and want to connect to another computer behind a router the software is for that.
+It accomplishes that by using multiple techniques that it tries to get a connection going. I think there was some confusion before with people thinking that this
+library was for making P2P networks (like Bitcoins P2P network.) Yes, you --could-- do that, but you would still have to write the bootstrapping code yourself.
+The core feature of this library is to make direct connectivity just work regardless of the relationship between two computers. The computers could even be on
+the same LAN and the software is still smart enough to facilitate that.
+
+The new release includes a simple domain system that offers open,
 authenticated, registration-free, domain names. The feature is free
 to use (though some resource limits apply.)
 
