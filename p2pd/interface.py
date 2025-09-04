@@ -218,8 +218,10 @@ async def route_res_with_fallback(af, is_default, nic, main_res):
 
 # Used for specifying the interface for sending out packets on
 # in TCP streams and UDP streams.
+# Note: number of bad STUN servers means timeout should be higher.
+# Maybe make this proportional to last server freshness age.
 class Interface():
-    def __init__(self, name=None, stack=DUEL_STACK, nat=None, netifaces=None):
+    def __init__(self, name=None, stack=DUEL_STACK, nat=None, netifaces=None, timeout=4):
         super().__init__()
         self.__name__ = "Interface"
         self.resolved = False
@@ -231,6 +233,7 @@ class Interface():
         self.v4_lan_ips = []
         self.guid = None
         self.netifaces = netifaces or Interface.get_netifaces()
+        self.timeout = timeout
 
         # Check NAT is valid if set.
         if nat is not None:
@@ -541,7 +544,7 @@ class Interface():
         )
 
     def __await__(self):
-        return self.start().__await__()
+        return self.start(timeout=self.timeout).__await__()
 
     def set_nat(self, nat):
         assert(isinstance(nat, dict))
@@ -876,11 +879,21 @@ async def list_interfaces(netifaces=None):
     return good_ifs
 
 async def load_interfaces(if_names):
+    """
+When an interface is loaded, it is placed into a clearing queue.
+The event loop cycles through this queue, switching between tasks as they
+become eligible to run. Because completion time depends on how many other
+interfaces are also pending, timeouts are set relative to the total number of
+active interfaces rather than per task in isolation. This ensures that delays from
+other tasks are accounted for and no single timeout is miscalculated by
+assuming immediate execution.
+    """
     nics = []
+    if_len = len(if_names)
     for if_name in if_names:
         try:
-            nic = await Interface(if_name)
-            await nic.load_nat()
+            nic = await Interface(if_name, timeout=if_len * 4)
+            await nic.load_nat(timeout=if_len * 4)
             nics.append(nic)
         except:
             log_exception()

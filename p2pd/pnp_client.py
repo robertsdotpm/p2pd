@@ -89,21 +89,30 @@ class PNPClient():
                 await asyncio.sleep(0.5)
 
     async def fetch(self, name):
-        pipe = await self.get_dest_pipe()
-        pkt = PNPPacket(name, vkc=self.vkc)
-        await self.send_pkt(pipe, pkt, sign=False)
-        return await self.return_resp(pipe)
+        try:
+            pipe = await self.get_dest_pipe()
+            pkt = PNPPacket(name, vkc=self.vkc)
+            await self.send_pkt(pipe, pkt, sign=False)
+            return await self.return_resp(pipe)
+        except:
+            log_exception()
 
     async def push(self, name, value, behavior=BEHAVIOR_DO_BUMP):
-        t = await self.get_updated(name)
-        pipe = await self.get_dest_pipe()
-        pkt = PNPPacket(name, value, self.vkc, None, t, behavior)
-        await self.send_pkt(pipe, pkt)
-        return await self.return_resp(pipe)
+        try:
+            t = await self.get_updated(name)
+            pipe = await self.get_dest_pipe()
+            pkt = PNPPacket(name, value, self.vkc, None, t, behavior)
+            await self.send_pkt(pipe, pkt)
+            return await self.return_resp(pipe)
+        except:
+            log_exception()
 
     async def delete(self, name):
-        t = await self.get_updated(name)
-        pipe = await self.get_dest_pipe()
-        pkt = PNPPacket(name, vkc=self.vkc, updated=t)
-        await self.send_pkt(pipe, pkt)
-        return await self.return_resp(pipe)
+        try:
+            t = await self.get_updated(name)
+            pipe = await self.get_dest_pipe()
+            pkt = PNPPacket(name, vkc=self.vkc, updated=t)
+            await self.send_pkt(pipe, pkt)
+            return await self.return_resp(pipe)
+        except:
+            log_exception()

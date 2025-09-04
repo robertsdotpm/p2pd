@@ -15,11 +15,11 @@ Update: Great news everyone! I am over my burn out and feel inspired to hack aga
 - **Contributors:** You don't even have to write code to help me with this project. I'd love for people who are interested in the project to let me test connectivity from their network. I'm sure we can learn and improve the software.
 - I have an idea for something new that could be extremely useful if I can get it to work. You'll have to speculate what it is for nao ;)
 
-P2PD is a library for doing NAT traversal in Python. If you're behind a router and want to connect to another computer behind a router the software is for that.
+**P2PD is a library for doing NAT traversal in Python.** If you're behind a router and want to connect to another computer behind a router the software is for that.
 It accomplishes that by using multiple techniques that it tries to get a connection going. I think there was some confusion before with people thinking that this
-library was for making P2P networks (like Bitcoins P2P network.) Yes, you --could-- do that, but you would still have to write the bootstrapping code yourself.
-The core feature of this library is to make direct connectivity just work regardless of the relationship between two computers. The computers could even be on
-the same LAN and the software is still smart enough to facilitate that.
+library was for making P2P networks (like Bitcoins P2P network.) Yes, you --could-- do that, but you would still have to write the bootstrapping code yourself
+(I should prob rename ths library at some point tbh, sorry.) The core feature of this library is to make direct connectivity just work regardless of the
+relationship between two computers. The computers could even be on the same LAN and the software is still smart enough to facilitate that.
 
 The new release includes a simple domain system that offers open,
 authenticated, registration-free, domain names. The feature is free

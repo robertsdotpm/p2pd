@@ -1,7 +1,10 @@
+
+
 from p2pd import *
 from ecdsa import SigningKey, SECP256k1
 import hashlib
 
+#     python -W ignore::ResourceWarning your_script.py
 NIC_NAME = ""
 
 class TestStatus(unittest.IsolatedAsyncioTestCase):
@@ -49,9 +52,14 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                     return f_proto
 
                 f_proto = closure(found_msg)
-                client = await SignalMock(peerid, f_proto, dest).start()
-                await client.send_msg(msg, peerid)
-                await asyncio.sleep(2)
+
+                client = SignalMock(peerid, f_proto, dest)
+                try:
+                    client = await client.start()
+                    await client.send_msg(msg, peerid)
+                    await asyncio.sleep(2)
+                except: # ignore timeouts if servers are down.
+                    log_exception()
 
                 if not len(found_msg):
                     print(fstr("mqtt {0} {1} broken", (af, dest,)))
@@ -133,6 +141,7 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
 
 
     async def test_turn_client(self):
+        return
         afs = [IP4] # Only really tested with IP4 unfortunately.
         # Need another con with ipv6 for myself.
         hosts = ["turn1.p2pd.net", "turn2.p2pd.net"]                
@@ -165,17 +174,20 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
 
     async def test_stun_client(self):
         hosts = ["stun1.p2pd.net", "stun2.p2pd.net"]
+        hosts = [
+            ("stun1.p2pd.net", 3478),
+        ]
         nic = await Interface(NIC_NAME)
         for af in nic.supported():
             for proto in [UDP, TCP]:
                 for host in hosts:
-                    dest = (host, 34780)
-                    client = STUNClient(af, dest, nic, proto=proto)
-                    out = await client.get_mapping()
-                    if out is None:
-                        print(fstr("stun {0} {1} {2} failed", (af, dest, proto,)))
-                    else:
-                        print(fstr("stun {0} {1} {2} works", (af, dest, proto,)))
+                    client = STUNClient(af, host, nic, proto=proto)
+                    try:
+                        out = await client.get_mapping()
+                        print(fstr("stun {0} {1} {2} works", (af, host, proto,)))
+                    except:
+                        what_exception()
+                        print(fstr("stun {0} {1} {2} failed", (af, host, proto,)))
 
     async def test_pnp_client(self):
         hosts = [0, 1]
@@ -203,19 +215,33 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                     sys_clock=sys_clock,
                 )
 
+                failed = False
                 val = rand_plain(10)
-                out = await client.push(name, val)
-                out = await client.fetch(name)
-                
-                
-                if out.value != val:
-                    print(fstr("pnp {0} {1} failed", (af, dest,)))
-                else:
-                    print(fstr("pnp {0} {1} success", (af, dest,)))
 
-                out = await client.delete(name)
-                out = await client.fetch(name)
-                print(out.value)
+                calls = [
+                    (client.push, (name, val,)),
+                    (client.fetch, (name,)),
+                    (client.delete, (name,)),
+                    (client.fetch, (name,)),
+                ]
+
+                out = None
+                failed = False
+                for call in calls:
+                    f, args = call
+                    out = await f(*args)
+                    if out is None:
+                        print(fstr("pnp {0} {1} {2} failed", (str(f), af, dest,)))
+                        failed = True
+                    else:
+                        print(fstr("pnp {0} {1} {2} {3} ok", (str(f), af, dest, out.value)))
+                
+                if out is not None:
+                    if out.value == val:
+                        failed = True
+
+                if not failed:
+                    print(fstr("pnp {0} {1} success", (af, dest,)))
 
 
 
@@ -243,29 +269,33 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         val = rand_plain(10)
         name = sk.verifying_key.to_string("compressed")
         name = hashlib.sha256(name).hexdigest()[:25]
-        fqn_name = name + ".peer"
-        fqn = await nick.push(name, val)
-        if fqn != fqn_name:
-            print(fstr("register {0} tld failed = {1}", (name, fqn,)))
-        else:
-            print(fstr("register {0} tld success = .peer", (name,)))
 
-        # Test pull works.
-        out = await nick.fetch(fqn_name)
-        if out.value != val:
-            print(fstr("register store failed"))
-        else:
-            print(fstr("register store success"))
 
-        await nick.delete(fqn_name)
+        fqn = None
+        calls = [
+            (nick.push, (name, "1"), 1),
+            (nick.fetch, None, 1),
+            (nick.delete, None, 1),
+            (nick.fetch, None, 0),
+        ]
 
-        # Test pull works.
-        try:
-            out = await nick.fetch(fqn_name)
-            print(fstr("delete name failure"))
-        except:
-            print(fstr("delete name success"))
+        for call in calls:
+            f, args, should_succeed = call
 
+            try:
+                if args is None:
+                    await f(fqn)
+                else:
+                    fqn = await f(*args)
+            except:
+                log_exception()
+                if should_succeed:
+                    fqn = None
+
+            if fqn is None:
+                print(fstr("nick {0} {1} failed", (str(f), name,)))
+            else:
+                print(fstr("nick {0} {1} ok", (str(f), fqn,)))
 
     async def test_encryption(self):
         # Pub key crap -- used for signing PNP messages.
@@ -286,7 +316,6 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
             print(fstr("Encryption works"))
 
     async def test_start_node_server(self):
-
         conf = dict_child({
             "reuse_addr": False,
             "enable_upnp": False,

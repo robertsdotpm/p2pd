@@ -1,6 +1,7 @@
 
 import sys
 
+
 """
 This is a hack to avoid double-imports of a module when using
 the -m switch to run a module directly. Python modules are lolz.
