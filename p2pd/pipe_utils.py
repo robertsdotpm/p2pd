@@ -304,6 +304,7 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
         # Main protocol instance for routing messages.
         #if base_proto is None:
         pipe_events = PipeEvents(sock=sock, route=route, loop=loop, conf=conf)
+        pipe_events.proto = proto
 
         # Add message handler.
         if msg_cb is not None:

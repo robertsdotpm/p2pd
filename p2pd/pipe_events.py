@@ -53,6 +53,7 @@ class PipeEvents(BaseACKProto):
         self.tcp_server = None
         self.tcp_server_task = None
         self.endpoint_type = None
+        self.proto = None
 
         # Used for TCP server awaitable.
         self.p_client_entry = 0 # Location of the pipe in client futures.
@@ -345,7 +346,7 @@ class PipeEvents(BaseACKProto):
 
     # UDP packets.
     def datagram_received(self, data, client_tup):
-        #log(f"Base proto recv udp = {client_tup} {data}")
+        log(f"Base proto recv udp = {client_tup} {data}")
         if self.transport is None:
             log(fstr("Skipping process data cause transport none 1."))
             return
