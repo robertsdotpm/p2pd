@@ -12,7 +12,7 @@ if __name__ != '__main__':
     from .net import *
     from .bind import *
     from .address import Address
-    from .ip_range import IPRange
+    from .ip_range import IPRange, IPR
     from .upnp import port_forward
     from .route_defs import Route, RoutePool
     from .route_utils import get_routes_with_res

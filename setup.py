@@ -23,7 +23,7 @@ else:
     install_reqs += ["winregistry"]
 
 setup(
-    version='3.1.2',
+    version='3.1.3',
     name='p2pd',
     description='Asynchronous P2P networking library and service',
     keywords=('NAT traversal, TCP hole punching, simultaneous open, UPnP, STUN, TURN, SIP, DHCP, add IP to interface, NATPMP, P2P, Peer-to-peer networking library, python'),
