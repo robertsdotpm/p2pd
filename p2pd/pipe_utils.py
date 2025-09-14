@@ -195,6 +195,10 @@ You can pull data from it based on a regex pattern.
 You can execute code on new messages or connection disconnects.
 """
 async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=None, conf=NET_CONF):
+    # Check proto.
+    if proto not in (UDP, TCP, RUDP):
+        raise Exception("Transport proto for pipe_open not supported.")
+
     # Patch _select if needed.
     if sys.platform == 'win32':
         if SelectSelector._select != patched_select:

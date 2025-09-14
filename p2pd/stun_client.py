@@ -103,9 +103,13 @@ class STUNClient():
     
     # Use a different port for the reply.
     async def get_change_port_reply(self, ctup, pipe=None):
+        """
+        With RFC 5389 the change request feature was deprecated.
+        Servers aren't required to support it and I've yet to see any that do.
+        """
         # Sanity check against expectations.
         if self.mode != RFC3489:
-            error = "STUN change port only supported in RFC3480 mode."
+            error = "STUN change port only supported in RFC3489 mode."
             raise ErrorFeatureDeprecated(error)
 
         # Expect a reply from this address.
@@ -131,7 +135,7 @@ class STUNClient():
     async def get_change_tup_reply(self, ctup, pipe=None):
         # Sanity check against expectations.
         if self.mode != RFC3489:
-            error = "STUN change port only supported in RFC3480 mode."
+            error = "STUN change port only supported in RFC3489 mode."
             raise ErrorFeatureDeprecated(error)
 
         # Flag to make the tup change request.
@@ -319,8 +323,12 @@ async def test_con_stun_client():
 
     await asyncio.sleep(2)
 
+
+
+
 if __name__ == "__main__":
-    async_test(test_con_stun_client)
+    pass
+    #async_test(change_server_bind_experiment)
 
 
 
