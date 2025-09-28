@@ -30,8 +30,16 @@ to_s = lambda x: x if type(x) == str else x.decode("utf-8", errors='ignore')
 
 if "P2PD_DEBUG" in os.environ: 
     IS_DEBUG = 1
+
+    log_path = 'program.log'
+    for arg in sys.argv:
+        if "--log_path=" in arg:
+            log_path = arg.split("--log_path=")[1]
+            break
+
+    log_path = os.path.abspath(log_path)
     logging.basicConfig(
-        filename='program.log',
+        filename=log_path,
         level=logging.DEBUG,
         format='[%(filename)s:%(lineno)d] %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
