@@ -168,43 +168,38 @@ async def do_web_req(addr, http_buf, do_close, route, conf=NET_CONF):
         await p.close()
         return None, None
 
-    # Read TCP stream until content-len portion.
+
+    # Read TCP stream until headers contain Content-Length
     out = b""
     content_len = 0
-    while 1:
+    hdr_ended = False
+    while True:
         buf = await p.recv(SUB_ALL, timeout=conf['recv_timeout'])
-        if buf is None:
+        if not buf:
             break
-        else:
-            out += buf
+        out += buf
 
-        # Check if content len header exists.
-        # Line-endings determine full header.
-        con_len_match = re.findall(b"[cC]ontent-[lL]ength: *([0-9]+)[\n\r]+", out)
-        if len(con_len_match):
-            content_len = int(con_len_match[0])
+        # Check if headers end and find Content-Length
+        if b"\r\n\r\n" in out or b"\n\n" in out:
+            hdr_ended = True
+            content_len_search = re.search(b"[cC]ontent-[lL]ength: *([0-9]+)", out)
+            if content_len_search:
+                content_len = int(content_len_search.group(1))
             break
 
-    # Determine pre-existing content buffer.
+    # Extract headers and pre-existing content
     content = b""
+    if hdr_ended:
+        parts = re.split(b"\r\n\r\n|\n\n", out, maxsplit=1)
+        headers, content = parts[0], parts[1] if len(parts) > 1 else b""
+
+    # Read remaining content if needed
     if content_len:
-        while 1:
-            # Stream more content from the HTTP con.
+        while len(content) < content_len:
             buf = await p.recv(SUB_ALL, timeout=conf['recv_timeout'])
-            if buf is None:
+            if not buf:
                 break
-            else:
-                out += buf
-
-            # Try find start of content portion.
-            hdr_content = out.split(b"\r\n\r\n")
-            if len(hdr_content) != 2:
-                continue
-
-            # Check if the full content is downloaded.
-            content = hdr_content[1]
-            if len(content) >= content_len:
-                break
+            content += buf
 
     # Some connections may be left open.
     if do_close:
@@ -251,7 +246,7 @@ class WebCurl():
         client.out = self.out
         client.req_buf = self.req_buf
         client.throttle = self.throttle
-        client.do_client = self.do_close
+        client.do_close = self.do_close
         return client
 
     def vars(self, url_params={}, body=b""):
@@ -275,24 +270,24 @@ class WebCurl():
         client.hdrs = hdrs
 
         # Append url encoded path if present.
-        if len(self.url_params):
-            path += fstr('?{0}', (self.url_params["safe"],))
+        if len(client.url_params):
+            path += fstr('?{0}', (client.url_params["safe"],))
 
         # If payload is a dict convert to json buf.
         hdrs = hdrs or self.hdrs
         if isinstance(self.body, dict):
-            self.body = json.dumps(self.body)
+            client.body = json.dumps(client.body)
             hdrs.append([b"Content-Type", b"application/json"])
 
         # Build a HTTP request to send to server.
-        af = self.route.af
-        nic = self.route.interface
+        af = client.route.af
+        nic = client.route.interface
         req_buf = http_req_buf(
             af=af,
-            host=self.addr[0],
+            host=client.addr[0],
             path=path,
             method=method,
-            payload=self.body,
+            payload=client.body,
             headers=hdrs
         )
 
@@ -303,17 +298,17 @@ class WebCurl():
 
         # Throttle request.
         if self.throttle:
-            await asyncio.sleep(self.throttle)
+            await asyncio.sleep(client.throttle)
 
         # Make the HTTP request to the server.
-        route = await self.route.bind()
-        addr = await resolv_dest(af, self.addr, nic)
+        route = await client.route.bind()
+        addr = await resolv_dest(af, client.addr, nic)
         ret = await async_wrap_errors(
             do_web_req(
                 route=route,
                 addr=addr, 
                 http_buf=req_buf,
-                do_close=self.do_close,
+                do_close=client.do_close,
                 conf=conf
             )
         )
