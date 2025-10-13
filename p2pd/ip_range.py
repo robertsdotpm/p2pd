@@ -340,6 +340,15 @@ def IPR(ip, af):
     cidr = af_to_cidr(af)
     return IPRange(ip, cidr=cidr)
 
+def ensure_ip_is_public(ip):
+    ip = ip_norm(ip)
+    af = IP4 if "." in ip else IP6
+    ipr = IPRange(ip, af_to_cidr(af))
+    if ipr.is_private:
+        raise Exception("IP must be public.")
+
+    return ip
+
 if __name__ == "__main__": # pragma: no cover
     # Blank host = range.
     x = IPRange("192.168.1.0", "255.255.255.0")

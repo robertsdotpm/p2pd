@@ -208,6 +208,7 @@ async def do_web_req(addr, http_buf, do_close, route, conf=NET_CONF):
 
     # Parse HTTP response.
     if out is not None:
+        log(out)
         out = ParseHTTPResponse(out)
         
     return p, out

@@ -127,9 +127,6 @@ if not hasattr(unittest, "IsolatedAsyncioTestCase"):
     except:
         pass
 
-
-
-
 def proactorfy(self=None):
     """
     The func is called once to set the main event loop
@@ -198,6 +195,7 @@ sha3_256 = lambda x: to_s(hashlib.sha3_256(to_b(x)).hexdigest())
 b_sha3_256 = lambda x: hashlib.sha3_256(to_b(x)).digest()
 bind_str = lambda r: fstr("{0}:{1}", (r.bind_tup()[0], r.bind_tup()[1],))
 dhash = lambda x: b_to_i(hashlib.sha256(to_b(fstr("{0}", (x,)))).digest())
+list_x_to_dict = lambda x: [v.dict() for v in x]
 
 def list_clone_rand(the_list, n):
     the_clone = the_list[:]
@@ -835,6 +833,11 @@ async def safe_gather(*args):
         results = await asyncio.gather(*args)
         
     return results
+
+async def sleep_random(min_ms=100, max_ms=2000):
+    delay = random.randrange(min_ms, max_ms + 1) / 1000.0
+    await asyncio.sleep(delay)
+
 
 if __name__ == "__main__": # pragma: no cover
     x = [1, 1]
