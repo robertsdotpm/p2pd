@@ -7,6 +7,31 @@ import hashlib
 #     python -W ignore::ResourceWarning your_script.py
 NIC_NAME = ""
 
+"""
+While I update the list of servers, loading WAN addresses is going to be broken.
+So I'll manually set this for both speed and reliability.
+"""
+if_info = {'id': 'eno1',
+ 'is_default': {2: True, 10: True},
+ 'mac': '00-1e-67-fa-5d-42',
+ 'name': 'eno1',
+ 'nat': {'delta': {'type': 1, 'value': 0},
+         'delta_info': 'not applicable',
+         'nat_info': 'open internet',
+         'type': 1},
+ 'netiface_index': 1,
+ 'nic_no': 0,
+ 'rp': {2: [{'af': 2,
+             'ext_ips': [{'af': 2, 'cidr': 32, 'ip': '158.69.27.176'}],
+             'link_local_ips': [],
+             'nic_ips': [{'af': 2, 'cidr': 32, 'ip': '158.69.27.176'}]}],
+        10: [{'af': 10,
+             'ext_ips': [{'af': 10, 'cidr': 128, 'ip': '2607:5300:60:80b0::1'}],
+             'link_local_ips': [],
+             'nic_ips': [{'af': 10, 'cidr': 128, 'ip': '2607:5300:60:80b0::1'}]}]
+        }
+}
+
 class TestStatus(unittest.IsolatedAsyncioTestCase):
     async def test_address(self):
         nic = await Interface(NIC_NAME)
@@ -142,21 +167,22 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
 
     async def test_turn_client(self):
         return
-        afs = [IP4] # Only really tested with IP4 unfortunately.
+        afs = [IP4,] # Only really tested with IP4 unfortunately.
         # Need another con with ipv6 for myself.
-        hosts = ["turn1.p2pd.net", "turn2.p2pd.net"]                
+        hosts = ["203.56.114.226"]                
         for host in hosts:
             for af in afs:
                 # TURN server config.
-                dest = (host, 3478)
-                auth = ("", "")
+                dest = (host, 443)
+                auth = ("three", "")
 
                 # Each interface has a different external IP.
                 # Imagine these are two different computers.
                 nic = await Interface()
+                print(nic)
 
                 # Start TURN clients.
-                client = await TURNClient(af, dest, nic, auth, realm=None)
+                client = await TURNClient(IP4, dest, nic, auth, realm=None)
                 if client is None:
                     print(fstr("turn {0} broken", (host,)))
                     continue
@@ -177,7 +203,19 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         hosts = [
             ("stun1.p2pd.net", 3478),
         ]
-        nic = await Interface(NIC_NAME)
+        nic = await Interface()
+        print(nic)
+        return
+        #nic = Interface.from_dict(if_info)
+        host = ("2001:1538:0001:0000:0000:0000:0224:0074", 3478)
+        client = STUNClient(IP6, host, nic, proto=UDP)
+        addr = await client.get_wan_ip()
+        print(addr)
+
+        print( nic.supported() )
+        return
+
+        
         for af in nic.supported():
             for proto in [UDP, TCP]:
                 for host in hosts:

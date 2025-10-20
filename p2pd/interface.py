@@ -198,23 +198,6 @@ async def route_res_with_fallback(af, is_default, nic, main_res):
     out = await async_wrap_errors(main_res)
     if out is not None:
         return out
-    
-    # Select fallback server if it fails.
-    dest_info = random.choice(STUN_MAP_P2PD[TCP][af])["primary"]
-    dest = (dest_info["ip"], dest_info["port"])
-    client = STUNClient(af, dest, nic, proto=TCP)
-
-    # Run the fallback code.
-    return await async_wrap_errors(
-        get_routes_with_res(
-            af,
-            1,
-            is_default,
-            nic,
-            [client],
-            nic.netifaces
-        )
-    )
 
 # Used for specifying the interface for sending out packets on
 # in TCP streams and UDP streams.
@@ -441,7 +424,7 @@ class Interface():
         o = self.from_dict(state)
         self.__dict__ = o.__dict__
 
-    async def do_start(self, netifaces=None, min_agree=3, max_agree=6, timeout=2):
+    async def do_start(self, netifaces=None, min_agree=2, max_agree=6, timeout=2):
         stack = self.stack
         log(fstr("Starting resolve with stack type = {0}", (stack,)))
         
@@ -472,7 +455,14 @@ class Interface():
             self.rp[af] = RoutePool()
 
             # Used to resolve nic addresses.
-            stun_clients = await get_stun_clients(af, max_agree, self)
+            servs = STUN_MAP_SERVERS[UDP][af]
+            random.shuffle(servs[:max(20, max_agree)])
+            stun_clients = await get_stun_clients(
+                af,
+                max_agree,
+                self,
+                servs=servs
+            )
 
             # Is this default iface for this AF?
             try:
@@ -535,7 +525,7 @@ class Interface():
     
         return self
 
-    async def start(self, netifaces=None, min_agree=3, max_agree=6, timeout=2):
+    async def start(self, netifaces=None, min_agree=2, max_agree=6, timeout=2):
         return await self.do_start(
             netifaces=netifaces,
             min_agree=min_agree,
@@ -559,7 +549,7 @@ class Interface():
         # IPv6 only has no NAT!
         if IP4 not in self.supported():
             af = IP6
-            nat = nat_info(OPEN_INTERNET, EQUAL_DELTA)
+            nat = nat_info(SYMMETRIC_NAT, RANDOM_DELTA)
             return self.set_nat(nat)
         else:
             af = IP4
@@ -612,29 +602,12 @@ class Interface():
         return nat_type, delta
 
     async def load_nat(self, nat_tests=5, delta_tests=12, timeout=4):
-        try:
-            # Try main decentralized NAT test approach.
-            nat_type, delta = await self.do_load_nat(
-                nat_tests,
-                delta_tests,
-                timeout=timeout
-            )
-        except:
-            # Otherwise fallback to official servs.
-            servs = []
-            test_no = max(nat_tests, delta_tests)
-            for _ in range(0, test_no):
-                serv = random.choice(
-                    STUN_CHANGE_P2PD[UDP][IP4]
-                )
-                servs.append(serv)
-
-            nat_type, delta = await self.do_load_nat(
-                nat_tests,
-                delta_tests,
-                servs,
-                timeout
-            )
+        # Try main decentralized NAT test approach.
+        nat_type, delta = await self.do_load_nat(
+            nat_tests,
+            delta_tests,
+            timeout=timeout
+        )
             
         # Load NAT type and delta info.
         # On a server should be open.

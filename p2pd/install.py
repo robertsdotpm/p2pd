@@ -6,7 +6,12 @@ from .utils import *
 
 # Path to where the script is running from.
 def get_script_parent():
-    filename = inspect.getframeinfo(inspect.currentframe()).filename
+    # .f_back moves up one frame to the function that called this one
+    caller_frame = inspect.currentframe().f_back 
+    
+    # Get the filename from the caller's frame info
+    filename = inspect.getframeinfo(caller_frame).filename
+    
     parent = pathlib.Path(filename).resolve().parent
     return os.path.realpath(parent)
 

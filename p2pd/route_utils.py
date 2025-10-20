@@ -103,7 +103,6 @@ consensus code is not needed.
 """
 ROUTE_CONSENSUS = [1, 1]
 
-
 def rp_from_fixed(fixed, interface, af): # pragma: no cover
     """
     [

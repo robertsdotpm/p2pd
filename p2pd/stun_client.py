@@ -160,7 +160,7 @@ class STUNClient():
 
         await reply.pipe.close()
         if hasattr(reply, "rtup"):
-            return reply.rtup[0]
+            return ip_norm(reply.rtup[0])
 
     # Return information on your local + remote port.
     # The pipe is left open to be used with punch code.

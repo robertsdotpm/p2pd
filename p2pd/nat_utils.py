@@ -61,7 +61,7 @@ DELTA_N = [
     INDEPENDENT_DELTA,
 
     # Remote x; y = remote x + delta only when local x + delta
-    DEPENDENT_DELTA
+    DEPENDENT_DELTA,
 ]
 
 # The NATs here have various properties that allow their
@@ -75,6 +75,9 @@ PREDICTABLE_NATS = [
     
     # Same as above but reply port needs to match original dest.
     RESTRICT_PORT_NAT,
+
+    # Open doesn't really apply so yes.
+    OPEN_INTERNET,
 ]
 
 # NAT types that require specific reply ports.
