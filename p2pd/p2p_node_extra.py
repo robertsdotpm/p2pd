@@ -187,8 +187,12 @@ class P2PNodeExtra():
         Load the signal pipes based on the limit.
         """
         success_no = 0
-        for index in shuffled:
-            ret = await self.load_signal_pipe(index)
+        for index in shuffled[:5]:
+            ret = await async_wrap_errors(
+                self.load_signal_pipe(index),
+                timeout=2
+            )
+
             if ret is not None:
                 success_no += 1
 
