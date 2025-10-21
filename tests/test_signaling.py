@@ -7,28 +7,22 @@ class TestSignaling(unittest.IsolatedAsyncioTestCase):
         peerid = to_s(rand_plain(10))
         nic = await Interface()
         for af in nic.supported():
-            for index in [-1, -2]:
-                serv_info = MQTT_SERVERS[index]
-                dest = (serv_info[af], serv_info["port"])
+            for server in MQTT_SERVERS:
+                
+
+                if server[af] is None:
+                    continue
+
+                dest = (server[af], server["port"])
                 found_msg = []
 
-                def closure(ret):
-                    async def f_proto(payload, client):
-                        if to_s(payload) == to_s(msg):
-                            found_msg.append(True)
+                client = await is_valid_mqtt(dest)
 
-                    return f_proto
-
-                f_proto = closure(found_msg)
-                client = await SignalMock(peerid, f_proto, dest).start()
-                print(client)
-                await client.send_msg(msg, peerid)
-                await asyncio.sleep(2)
-
-                if not len(found_msg):
+                if not client:
                     print(fstr("mqtt {0} {1} broken", (af, dest,)))
                 else:
                     print(fstr("mqtt {0} {1} works", (af, dest,)))
+                    break
 
                 await client.close()
 

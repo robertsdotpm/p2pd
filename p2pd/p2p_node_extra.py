@@ -133,19 +133,13 @@ class P2PNodeExtra():
             pipe_id,
         ])
 
-    async def load_signal_pipe(self, offset):
-        server = MQTT_SERVERS[offset]
-
+    async def load_signal_pipe(self, af, offset):
         # Lookup IP and port of MQTT server.
-        try:
-            dest_tup = (
-                server["host"],
-                server["port"],
-            )
-        except:
-            # Fallback to fixed IPs if host res fails.
-            ip = server[IP4] or server[IP6]
-            dest_tup = (ip, server["port"])
+        server = MQTT_SERVERS[offset]
+        dest_tup = (
+            server[af],
+            server["port"],
+        )
 
         """
         This function does a basic send/recv test with MQTT to help
@@ -195,14 +189,22 @@ class P2PNodeExtra():
             # Try current server offset against the clients supported AFs.
             # Skip if it doesn't support the AF.
             for af in supported_afs:
-                # Determine whether MQTT server supports this AF.
+                # Update host IP if it's set.
                 server = MQTT_SERVERS[index]
+                if server["host"] is not None:
+                    try:
+                        addr = await Address(server["host"], 123)
+                        server[af] = addr.select_ip(af).ip
+                    except KeyError:
+                        log_exception()
+
+                # Skip unsupported servers.
                 if server[af] is None:
                     continue
 
                 # Attempt to get a handle to the MQTT server.
                 ret = await async_wrap_errors(
-                    self.load_signal_pipe(index),
+                    self.load_signal_pipe(af, index),
                     timeout=2
                 )
 

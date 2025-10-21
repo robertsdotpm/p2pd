@@ -76,6 +76,9 @@ async def sock_res_domain(host, route=None):
 
 class DestTup():
     def __init__(self, af, ip, port, ipr):
+        if ipr is None:
+            raise KeyError("AF not found for address")
+        
         self.af = af
         self.ip = ip
         self.port = port
