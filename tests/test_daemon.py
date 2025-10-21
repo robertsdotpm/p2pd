@@ -5,7 +5,7 @@ asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
     async def test_daemon(self):
-        server_port = 33200
+        server_port = 34200
         loopbacks = {
             IP4: "127.0.0.1",
             IP6: "::1"

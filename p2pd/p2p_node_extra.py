@@ -20,6 +20,16 @@ class P2PNodeExtra():
         msg = fstr("{0}: <{1}> {2}", (t, node_id, m,))
         log(msg)
 
+    # Return supported AFs based on all NICs for the node.
+    def supported(self):
+        afs = set()
+        for nic in self.ifs:
+            for af in nic.supported():
+                afs.add(af)
+
+        # Make IP4 earliest in the list.
+        return sorted(tuple(afs))
+
     def load_signing_key(self):
         # Make install dir if needed.
         install_root = get_p2pd_install_root()
@@ -137,21 +147,14 @@ class P2PNodeExtra():
             ip = server[IP4] or server[IP6]
             dest_tup = (ip, server["port"])
 
-        signal_pipe = SignalMock(
-            peer_id=to_s(self.node_id),
-            f_proto=self.signal_protocol,
-            mqtt_server=dest_tup
-        )
-
-        try:
-            await signal_pipe.start()
-            self.signal_pipes[offset] = signal_pipe
-            return signal_pipe
-        except Exception:
-            if signal_pipe.is_connected:
-                await signal_pipe.close()
-
-            return None
+        """
+        This function does a basic send/recv test with MQTT to help
+        ensure the MQTT servers are valid.
+        """
+        client = await is_valid_mqtt(dest_tup)
+        if client:
+            self.signal_pipes[offset] = client
+            return client
         
     """
     There's a massive problem with the MQTT client
@@ -162,10 +165,9 @@ class P2PNodeExtra():
     bound to the wrong event loop.
 
     TODO: investigate this.
-
-
+    TODO: maybe load MQTT servers concurrently.
     """
-    async def load_signal_pipes(self, node_id):
+    async def load_signal_pipes(self, node_id, min_success=2, max_attempt_no=10):
         # Offsets for MQTT servers.
         offsets = [n for n in range(0, len(MQTT_SERVERS))]
         shuffled = []
@@ -186,18 +188,43 @@ class P2PNodeExtra():
         """
         Load the signal pipes based on the limit.
         """
-        success_no = 0
-        for index in shuffled[:5]:
-            ret = await async_wrap_errors(
-                self.load_signal_pipe(index),
-                timeout=2
-            )
+        success_no = {IP4: 0, IP6: 0}
+        supported_afs = self.supported()
+        attempt_no = 0
+        for index in shuffled:
+            # Try current server offset against the clients supported AFs.
+            # Skip if it doesn't support the AF.
+            for af in supported_afs:
+                # Determine whether MQTT server supports this AF.
+                server = MQTT_SERVERS[index]
+                if server[af] is None:
+                    continue
 
-            if ret is not None:
-                success_no += 1
+                # Attempt to get a handle to the MQTT server.
+                ret = await async_wrap_errors(
+                    self.load_signal_pipe(index),
+                    timeout=2
+                )
 
-            if success_no >= self.conf["sig_pipe_no"]:
-                return
+                # Valid signal pipe.
+                if ret is not None:
+                    success_no[af] += 1
+
+            # Find count of current successes.
+            success_target = len(supported_afs) * min_success
+            total_success = 0
+            for af in supported_afs:
+                total_success += success_no[af]
+
+            # Exit if min loaded for supported AFs.
+            if total_success >= success_target:
+                break
+
+            # There may be many MQTT -- don't try forever.
+            # Safeguard to help prevent hangs.
+            attempt_no += 1
+            if attempt_no > max_attempt_no:
+                break
     
     def find_signal_pipe(self, addr):
         our_offsets = list(self.signal_pipes)

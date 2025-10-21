@@ -157,16 +157,30 @@ class P2PNode(P2PNodeExtra, Daemon):
         t = time.time()
         if out: print("\tLoading STUN clients...")
         await self.load_stun_clients()
-        if out: print("\t\tLoaded (done)")
+        if out:
+            buf = ""
+            for if_index in range(0, len(self.ifs)):
+                nic = self.ifs[if_index]
+                buf += "\t\t" + nic.name + " "
+                for af in nic.supported():
+                    af_txt = "V4" if af is IP4 else "V6"
+                    buf += fstr("({0}={1})", (
+                        af_txt, 
+                        str(len(self.stun_clients[af][if_index])),
+                    ))
+                buf += "\n"
+            print(buf)
 
         # MQTT server offsets for signal protocol.
         if self.conf["sig_pipe_no"]:
             if out: print("\tLoading MQTT clients...")
             await self.load_signal_pipes(self.node_id)
             if out:
-                buf = "\t\tmqtt = "
+                buf = "\t\tmqtt = ("
                 for index in list(self.signal_pipes):
-                    buf += fstr("{0}; ", (index,))
+                    buf += fstr("{0},", (index,))
+                buf += ")"
+                print(buf)
 
         # Multiprocess support for TCP punching and NTP sync.
         t = time.time()
@@ -189,8 +203,15 @@ class P2PNode(P2PNodeExtra, Daemon):
         # Start the server for the node protocol.
         await self.listen_on_ifs()
 
+        # Skip port forwarding if all NICs aren't behind NATs.
+        all_open_internet = True
+        for nic in self.ifs:
+            if nic.nat["type"] != OPEN_INTERNET:
+                all_open_internet = False
+                break
+
         # Port forward all listen servers.
-        if self.conf["enable_upnp"]:
+        if self.conf["enable_upnp"] and not all_open_internet:
             if out: print("\tStarting UPnP task...")
 
             # Put slow forwarding task in the background.

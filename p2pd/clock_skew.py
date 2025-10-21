@@ -27,30 +27,31 @@ from .settings import *
 NTP_RETRY = 2
 NTP_TIMEOUT = 2
 
-async def get_ntp(interface, server=None, retry=NTP_RETRY):
-    server = server or random.choice(NTP_SERVERS)
-    try:
-        dest = (
-            server["host"],
-            int(server["port"]),
-        )
-    except:
-        ip = server[IP4] or server[IP6]
-        dest = (
-            ip,
-            int(server["port"]),
-        )
+async def get_ntp(af, interface, server=None, retry=NTP_RETRY):
+    # Get a random NTP server that supports this AF.
+    server = server
+    if server is None:
+        for _ in range(0, 20):
+            random_server = random.choice(NTP_SERVERS)
+            if random_server[af]:
+                server = random_server
+                break
 
+    # Sanity check to see server was set.
+    if server is None:
+        raise Exception("Can't find compatible NTP server.")
+
+    # The NTP client uses UDP so retry on failure.
+    dest = (server["host"], int(server["port"]),)
     try:
         for _ in range(retry):
-            client = NTPClient(interface)
+            client = NTPClient(af, interface)
             response = await client.request(
                 dest,
                 version=3
             )
             if response is None:
                 continue
-
 
             ntp = response.tx_time
             return ntp
@@ -83,6 +84,7 @@ class SysClock:
             local_ip = "localhost"
             ntp_ret = await async_wrap_errors(
                 get_ntp(
+                    self.interface.supported()[0],
                     self.interface,
                     (local_ip, 123)
                 ),
@@ -121,7 +123,11 @@ class SysClock:
     async def collect_data_points(self, server=None):
         async def get_clock_skew():
             ntp_ret = await async_wrap_errors(
-                get_ntp(self.interface, server=server),
+                get_ntp(
+                    self.interface.supported()[0],
+                    self.interface,
+                    server=server
+                ),
                 timeout=NTP_RETRY * NTP_TIMEOUT
             )
 
@@ -265,6 +271,11 @@ class SysClock:
 async def test_clock_skew(): # pragma: no cover
     from p2pd.interface import init_p2pd, Interface
     interface = await Interface()
+    ret = await get_ntp(IP4, interface)
+    print(ret)
+    return
+
+
     s = await SysClock(interface=interface)
     print(repr(s))
 

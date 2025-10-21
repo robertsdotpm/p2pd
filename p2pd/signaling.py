@@ -28,15 +28,13 @@ class SignalMock():
         self.pending_tasks = []
 
     def on_message(self, client, topic, payload, qos, properties):
-        self.pending_tasks.append(
-            create_task(
-                async_wrap_errors(
-                    self.f_proto(payload, self),
+        create_task(
+            async_wrap_errors(
+                self.f_proto(payload, self),
 
-                    # Set a timeout of 20 seconds to do tasks.
-                    # Make everything timeout and end if it meets this.
-                    #20
-                )
+                # Set a timeout of 20 seconds to do tasks.
+                # Make everything timeout and end if it meets this.
+                #20
             )
         )
 
@@ -101,6 +99,47 @@ class SignalMock():
     async def close(self):
         if self.client is not None:
             await self.client.disconnect()
+
+async def is_valid_mqtt(dest):
+    found_msg = asyncio.Queue()
+
+    # Executed on receipt of a new MQTT message.
+    def mqtt_proto_closure(ret):
+        async def mqtt_proto(payload, client):
+            found_msg.put_nowait(payload)
+
+        return mqtt_proto
+
+    # Setup MQTT client with basic proto.
+    mqtt_proto = mqtt_proto_closure(found_msg)
+    peer_id = to_s(rand_plain(10))
+    client = SignalMock(peer_id, mqtt_proto, dest)
+
+    # Try to start client.
+    client = await async_wrap_errors(
+        client.start(),
+        timeout=2
+    )
+   
+    # Cannot get client reference. Return failure.
+    if client is None:
+        return None
+
+    # Send message to self and try receive it.
+    for _ in range(0, 3):
+        await client.send_msg(peer_id, peer_id)
+
+        # Allow time to receive responds.
+        await asyncio.sleep(0.1)
+        if not found_msg.empty(): break
+
+    # Wait for a reply.
+    try:
+        await asyncio.wait_for(found_msg.get(), 1.0)
+        await client.close()
+        return client
+    except asyncio.TimeoutError:
+        return None
 
 if __name__ == "__main__": # pragma: no cover
     async def f_proto(msg):

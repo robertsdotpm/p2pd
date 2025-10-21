@@ -273,8 +273,9 @@ class NTPStats(NTPPacket):
 class NTPClient:
     """NTP client session."""
 
-    def __init__(self, interface):
+    def __init__(self, af, interface):
         """Constructor."""
+        self.af = af
         self.interface = interface
 
     async def request(self, dest, version=2, timeout=2):
@@ -290,15 +291,18 @@ class NTPClient:
         NTPStats object
         """
         # lookup server address
-        route = await self.interface.route().bind()
+        route = await self.interface.route(self.af).bind()
 
         # create the socket
         pipe = await pipe_open(UDP, dest, route)
         pipe.subscribe()
         try:
             # create the request packet - mode 3 is client
-            query_packet = NTPPacket(mode=3, version=version,
-                                tx_timestamp=system_to_ntp_time(time.time()))
+            query_packet = NTPPacket(
+                mode=3,
+                version=version,
+                tx_timestamp=system_to_ntp_time(time.time())
+            )
 
             # send the request
             buf = query_packet.to_data()

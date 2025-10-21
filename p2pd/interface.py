@@ -705,9 +705,9 @@ class Interface():
             raise Exception("Unknown stack")
 
         if self.stack == DUEL_STACK:
-            return [IP4, IP6]
+            return sorted([IP4, IP6])
         else:
-            return [self.stack]
+            return sorted([self.stack])
 
     def what_afs(self):
         assert(self.resolved)
