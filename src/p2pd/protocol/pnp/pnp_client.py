@@ -1,7 +1,7 @@
 # TODO: different key per request.
 
 from ecdsa import SECP256k1, SigningKey
-from ...lib.ecies import decrypt, encrypt
+from ...vendor.ecies import decrypt, encrypt
 from ...net.pipe.pipe_utils import *
 from .pnp_utils import *
 from ...net.address import *

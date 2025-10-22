@@ -7,7 +7,7 @@ index by host name even if its longer.
 from ..utility.utils import *
 from .p2p_defs import *
 from .p2p_utils import CON_ID_MSG
-from ..lib.ecies import encrypt, decrypt
+from ..vendor.ecies import encrypt, decrypt
 
 SIG_PROTO = {
     SIG_CON: [ConMsg, P2P_DIRECT, 5],

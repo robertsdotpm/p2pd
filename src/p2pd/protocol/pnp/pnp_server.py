@@ -17,7 +17,7 @@ This is a registration-less, permissioned, key-value store
 that uses IP limits to reduce spam.
 """
 
-from ...lib.ecies import encrypt, decrypt
+from ...vendor.ecies import encrypt, decrypt
 import os
 import aiomysql
 from ecdsa import VerifyingKey, SECP256k1, SigningKey

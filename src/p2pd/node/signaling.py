@@ -1,6 +1,6 @@
 import asyncio
 from ..utility.utils import *
-from ..lib.gmqtt import Client as MQTTClient
+from ..vendor.gmqtt import Client as MQTTClient
 from ..net.net import *
 from ..settings import *
 

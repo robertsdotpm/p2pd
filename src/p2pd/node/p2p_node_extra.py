@@ -9,7 +9,7 @@ from .signaling import *
 from ..protocol.stun.stun_client import get_stun_clients
 from ..nic.nat.nat_utils import USE_MAP_NO
 from ..install import *
-from ..lib.ecies import encrypt, decrypt
+from ..vendor.ecies import encrypt, decrypt
 import asyncio
 import pathlib
 from ecdsa import SigningKey, SECP256k1
