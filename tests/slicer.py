@@ -1,11 +1,5 @@
 import platform
-from p2pd.test_init import *
-from p2pd.utils import *
-from p2pd.net import VALID_AFS
-from p2pd.win_netifaces import *
-
-from toxiclient import *
-from toxiserver import *
+from p2pd import *
 
 class ToxicSlicer(ToxicBase):
     def set_params(self, avg_size, size_var, delay):

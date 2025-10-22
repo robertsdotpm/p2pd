@@ -6,6 +6,8 @@
 
 [Watch demo on Asciinema](https://asciinema.org/a/EhADOwnoPt5KBiQDbwR69bNHS)
 
+Update 2: P2P stuff is broken at the moment. I'm slowly fixing it and will build
+better tooling for testing in the future.
 Update: Great news everyone! I am over my burn out and feel inspired to hack again. Some things I want to do now:
 
 - Improve docs and make videos so people know more what the project is about. People are still confused I think.

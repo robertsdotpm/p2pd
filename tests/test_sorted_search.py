@@ -1,4 +1,4 @@
-from p2pd.utils import sorted_search
+from p2pd.utility.utils import sorted_search
 
 assert(
     sorted_search(

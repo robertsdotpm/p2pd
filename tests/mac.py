@@ -1,6 +1,6 @@
 import re
 from p2pd import *
-from p2pd.netiface_extra import get_mac_mixed
+from p2pd.nic.netiface_extra import get_mac_mixed
 
 
 async def test_mac():

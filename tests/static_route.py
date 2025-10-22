@@ -1,6 +1,6 @@
 import socket
-from p2pd.net import IP4, IP6
-from p2pd.route_utils import rp_from_fixed
+from p2pd.net.net import IP4, IP6
+from p2pd.nic.route.route_utils import rp_from_fixed
 
 # Only used for tests.
 P2PD_NET_V4_IP = "139.99.209.63"

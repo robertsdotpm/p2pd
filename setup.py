@@ -23,7 +23,7 @@ else:
     install_reqs += ["winregistry"]
 
 setup(
-    version='3.1.9',
+    version='3.1.10',
     name='p2pd',
     description='Asynchronous P2P networking library and service',
     keywords=('NAT traversal, TCP hole punching, simultaneous open, UPnP, STUN, TURN, SIP, DHCP, add IP to interface, NATPMP, P2P, Peer-to-peer networking library, python'),
@@ -33,9 +33,9 @@ setup(
     author='Matthew Roberts',
     author_email='matthew@roberts.pm',
     license='public domain',
-    package_dir={"": "."},
-    packages=find_packages(exclude=('tests', 'docs')),
-    package_data={'p2pd': ['scripts/kvs_schema.sqlite3']},
+    package_dir={"": "src"},
+    packages=find_packages(where="src", exclude=('tests', 'docs')),
+    package_data={'.': ['scripts/kvs_schema.sqlite3']},
     include_package_data=True,
     install_requires=install_reqs,
     classifiers=[
