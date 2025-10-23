@@ -5,6 +5,9 @@ class TestInterface(unittest.IsolatedAsyncioTestCase):
         global p2pd_fds
         i = await Interface()
         print(i)
+        """
+        why are so many sockets created for one address?
+        """
         
         loop = get_running_loop()
 

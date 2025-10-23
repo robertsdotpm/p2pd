@@ -278,6 +278,7 @@ class Interface():
                 self,
                 servs=servs
             )
+            assert(len(stun_clients) <= max_agree)
 
 
             # Is this default iface for this AF?

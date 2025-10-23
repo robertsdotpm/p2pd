@@ -213,6 +213,8 @@ async def get_stun_clients(af, max_agree, interface, proto=UDP, servs=None, conf
             )
         
         stun_clients.append(get_stun_client(serv_info))
+        if len(stun_clients) >= max_agree:
+            break
 
     return await asyncio.gather(*stun_clients)
 
