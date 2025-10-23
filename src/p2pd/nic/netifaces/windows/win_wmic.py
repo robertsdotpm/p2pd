@@ -2,9 +2,9 @@ import re
 import asyncio
 import winreg
 
-from ..net.net import *
-from ..utility.cmd_tools import *
-from ..net.ip_range import IPRange
+from ....net.net import *
+from ....utility.cmd_tools import *
+from ....net.ip_range import IPRange
 
 def parse_wmic_list(entry):
     if not len(entry):

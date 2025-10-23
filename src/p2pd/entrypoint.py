@@ -13,6 +13,28 @@ else:
 _cached_netifaces = None
 _cache_lock = asyncio.Lock()
 
+"""
+I've honestly never had success with using "async locks",
+I've found it better to design the software in a way that it
+avoids locks but we'll see if this works.
+
+This is a critical function. It sets up the event loop properly
+and dynamically loads netifaces based on the OS. I implement
+a class-interface compatible version of netifaces for Windows
+because the netifaces main class requires a crap load of binary
+dependencies and I want my stuff to install easier.
+
+My Windows netifaces stuff doesn't use the Win32 API directly
+(too much effort) but it implements several scripting approaches
+with regex and fallbacks if one doesn't work. To support all
+Windows versions. It is slow but accesses some very complex
+information and ends up being cached.
+
+I have seen some interesting win32 api code in Python that does
+similar stuff on Github. May be something to add in the future.
+Otherwise -- the nix and BSD versions happily accept the regular
+netifaces module from pypi which doesn't need deps to work.
+"""
 async def init_p2pd():
     global ENABLE_UDP
     global ENABLE_STUN

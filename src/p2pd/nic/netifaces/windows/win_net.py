@@ -1,9 +1,9 @@
 # pragma: no cover
 import re
 import winreg
-from ..utility.utils import *
-from ..utility.cmd_tools import *
-from ..net.net import *
+from ....utility.utils import *
+from ....utility.cmd_tools import *
+from ....net.net import *
 
 
 async def nt_ipv6_routes(no): # pragma: no cover

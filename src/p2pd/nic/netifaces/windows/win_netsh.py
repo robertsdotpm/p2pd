@@ -2,9 +2,9 @@ import re
 import asyncio
 import winreg
 
-from ..net.net import *
-from ..utility.cmd_tools import *
-from ..net.ip_range import IPRange
+from ....net.net import *
+from ....utility.cmd_tools import *
+from ....net.ip_range import IPRange
 
 class NetshParse():
     # netsh interface ipv4 show interfaces

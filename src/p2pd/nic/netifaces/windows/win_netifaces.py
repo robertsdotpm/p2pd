@@ -62,8 +62,8 @@ Notes:
 
 import re
 import platform
-from ..net.ip_range import *
-from ..utility.cmd_tools import *
+from ....net.ip_range import *
+from ....utility.cmd_tools import *
 from .win_netsh import if_infos_from_netsh
 from .win_wmic import if_infos_from_wmic
 
