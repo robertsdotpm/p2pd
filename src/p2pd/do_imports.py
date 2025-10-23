@@ -17,6 +17,7 @@ if __name__ != '__main__':
     from .nic.route.route_utils import get_routes_with_res
     from .net.pipe.pipe_utils import *
     from .nic.interface import Interface, init_p2pd
+    from .nic.select_interface import *
     from .protocol.ntp.clock_skew import SysClock
     from .protocol.stun.stun_client import STUNClient, get_stun_clients
     from .traversal.turn.turn_client import TURNClient

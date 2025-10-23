@@ -8,7 +8,7 @@ from ..utility.utils import *
 from ..net.address import Address
 from ..net.net import *
 from ..nic.interface import get_default_iface, get_mac_address
-from ..nic.interface import select_if_by_dest
+from ..nic.select_interface import select_if_by_dest
 from ..traversal.turn.turn_client import TURNClient
 from .signaling import SignalMock
 

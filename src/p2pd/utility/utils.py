@@ -649,47 +649,6 @@ async def gather_or_cancel(tasks, timeout):
     finally:
         return []
 
-class SelectorEventPolicy(asyncio.DefaultEventLoopPolicy):
-    @staticmethod
-    def exception_handler(self, context):
-        log("exception handler")
-        log(context)
-
-    @staticmethod
-    def loop_setup(loop):
-        loop.set_debug(False)
-        loop.set_exception_handler(SelectorEventPolicy.exception_handler)
-        loop.default_exception_handler = SelectorEventPolicy.exception_handler
-
-    def new_event_loop(self):
-        selector = selectors.SelectSelector()
-        loop = asyncio.SelectorEventLoop(selector)
-        SelectorEventPolicy.loop_setup(loop)
-        return loop
-    
-def p2pd_setup_event_loop():
-    # If default isn't spawn then change it.
-    # But only if it hasn't already been set.
-    if multiprocessing.get_start_method() != "spawn":
-        start_method = multiprocessing.get_start_method(allow_none=True)
-
-        # First time setting this otherwise it will throw an error.
-        if start_method is None:
-            multiprocessing.set_start_method("spawn")
-
-    """
-    if platform.system() == "Windows":
-            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-            return
-    """
-
-    # Set the event loop policy to the selector if its not.
-    policy = asyncio.get_event_loop_policy()
-    if not isinstance(policy, SelectorEventPolicy):
-        asyncio.set_event_loop_policy(SelectorEventPolicy())
-
-    #sys.excepthook = my_except_hook
-
 def selector_event_loop():
     selector = selectors.SelectSelector()
     return asyncio.SelectorEventLoop(selector)
