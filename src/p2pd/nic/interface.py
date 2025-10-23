@@ -14,10 +14,7 @@ from .route.route_table import *
 from ..protocol.stun.stun_client import *
 from .nat.nat_test import fast_nat_test
 from .interface_utils import *
-if sys.platform == "win32":
-    from .win_netifaces import *
-else:
-    import netifaces as netifaces
+from ..entrypoint import *
 
 # Used for specifying the interface for sending out packets on
 # in TCP streams and UDP streams.
@@ -250,8 +247,7 @@ class Interface():
         
 
         # Load internal interface details.
-        if Interface.get_netifaces() is None:
-            self.netifaces = await init_p2pd()
+        self.netifaces = await init_p2pd()
 
         # Process interface name in right format.
         try:
@@ -543,6 +539,39 @@ def dict_to_if_list(dict_list):
 
     return if_list
 
+# Given a list of Interface objs.
+# Convert to dict and return a list.
+def if_list_to_dict(if_list):
+    dict_list = []
+    for interface in if_list:
+        d = interface.to_dict()
+        dict_list.append(d)
+
+    return dict_list
+
+async def load_interfaces(if_names):
+    """
+When an interface is loaded, it is placed into a clearing queue.
+The event loop cycles through this queue, switching between tasks as they
+become eligible to run. Because completion time depends on how many other
+interfaces are also pending, timeouts are set relative to the total number of
+active interfaces rather than per task in isolation. This ensures that delays from
+other tasks are accounted for and no single timeout is miscalculated by
+assuming immediate execution.
+    """
+    nics = []
+    if_len = len(if_names)
+    for if_name in if_names:
+        try:
+            nic = await Interface(if_name, timeout=if_len * 4)
+            await nic.load_nat(timeout=if_len * 4)
+            nics.append(nic)
+        except:
+            log_exception()
+
+    return nics
+            
+            
 if __name__ == "__main__": # pragma: no cover
     async def test_interface():
         #out = await cmd("route print")

@@ -17,7 +17,7 @@ if int(vmin) < 8:
     exit()
 
 from . import __version__ as p2pdv
-from .utility.utils import SelectorEventPolicy, p2pd_setup_event_loop
+from .entrypoint import SelectorEventPolicy, p2pd_setup_event_loop
 
 
 p2pd_setup_event_loop()

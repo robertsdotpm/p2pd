@@ -9,7 +9,7 @@ the -m switch to run a module directly. Python modules are lolz.
 if not '-m' in sys.argv:
     from .do_imports import *
 
-from .utility.utils import p2pd_setup_event_loop
+from .entrypoint import p2pd_setup_event_loop
 
 p2pd_setup_event_loop()
 

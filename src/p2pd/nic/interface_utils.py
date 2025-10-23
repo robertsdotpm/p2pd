@@ -126,35 +126,3 @@ def get_ifs_by_af_intersect(if_list):
 
     return [largest, af_used]
 
-async def load_interfaces(if_names):
-    """
-When an interface is loaded, it is placed into a clearing queue.
-The event loop cycles through this queue, switching between tasks as they
-become eligible to run. Because completion time depends on how many other
-interfaces are also pending, timeouts are set relative to the total number of
-active interfaces rather than per task in isolation. This ensures that delays from
-other tasks are accounted for and no single timeout is miscalculated by
-assuming immediate execution.
-    """
-    nics = []
-    if_len = len(if_names)
-    for if_name in if_names:
-        try:
-            nic = await Interface(if_name, timeout=if_len * 4)
-            await nic.load_nat(timeout=if_len * 4)
-            nics.append(nic)
-        except:
-            log_exception()
-
-    return nics
-
-# Given a list of Interface objs.
-# Convert to dict and return a list.
-def if_list_to_dict(if_list):
-    dict_list = []
-    for interface in if_list:
-        d = interface.to_dict()
-        dict_list.append(d)
-
-    return dict_list
-            

@@ -1,8 +1,105 @@
 import multiprocessing
 import asyncio
 import socket
+import sys
+from .settings import *
 from .utility.utils import *
 from .nic.interface_utils import *
+if sys.platform == "win32":
+    from .nic.netifaces.windows.win_netifaces import *
+else:
+    import netifaces as netifaces
+
+_cached_netifaces = None
+_cache_lock = asyncio.Lock()
+
+async def init_p2pd():
+    global ENABLE_UDP
+    global ENABLE_STUN
+    global _cached_netifaces
+    if _cached_netifaces is not None:
+        return _cached_netifaces
+    
+    async with _cache_lock:
+        # Double check inside lock
+        if _cached_netifaces is not None:
+            return _cached_netifaces
+
+        # Setup event loop.
+        loop = asyncio.get_event_loop()
+        loop.set_debug(False)
+        loop.set_exception_handler(SelectorEventPolicy.exception_handler)
+        
+        def fatal_error(self, exc, message='Fatal error on transport'):
+            er = {
+                'message': message,
+                'exception': exc,
+                'transport': self,
+                'protocol': self._protocol,
+            }
+            log(er)
+
+            # Should be called from exception handler only.
+            #self.call_exception_handler(er)
+            self._force_close(exc)
+
+        asyncio.selector_events._SelectorTransport._fatal_error = fatal_error
+
+        # Attempt to get monkey patched netifaces.
+        if sys.platform == "win32":
+            """
+            loop = get_running_loop()
+
+            # This happens if the asyncio REPL is used.
+            # Nested event loops are a work around.
+            if loop is not None:
+                import nest_asyncio
+                nest_asyncio.apply()
+            """
+            netifaces = await Netifaces().start()
+        else:
+            netifaces = sys.modules["netifaces"]
+
+        # Are UDP sockets blocked?
+        # Firewalls like iptables on freehosts can do this.
+        sock = None
+        try:
+            # Figure out what address family default interface supports.
+            if_name = get_default_iface(netifaces)
+            af = get_interface_af(netifaces, if_name)
+            if af == AF_ANY: # Duel stack. Just use v4.
+                af = IP4
+
+            # Set destination based on address family.
+            if af == IP4:
+                dest = ('8.8.8.8', 60000)
+            else:
+                dest = ('2001:4860:4860::8888', 60000)
+
+            # Build new UDP socket.
+            sock = socket.socket(family=af, type=socket.SOCK_DGRAM)
+
+            # Attempt to send small msg to dest.
+            sock.sendto(b'testing UDP. disregard this sorry.', 0, dest)
+        except Exception:
+            """
+            Maybe in the future I write code as a fail-safe but for
+            now I don't have time. It's better to show a clear reason
+            why the library won't work then to silently fail.
+            """
+            raise Exception("Error this library needs UDP support to work.")
+        
+
+            ENABLE_UDP = False
+            ENABLE_STUN = False
+            log("UDP sockets blocked! Disabling STUN.")
+            log_exception()
+        finally:
+            if sock is not None:
+                sock.close()
+
+        _cached_netifaces = netifaces
+        return netifaces
 
 class SelectorEventPolicy(asyncio.DefaultEventLoopPolicy):
     @staticmethod
@@ -45,85 +142,9 @@ def p2pd_setup_event_loop():
 
     #sys.excepthook = my_except_hook
 
-async def init_p2pd():
-    global ENABLE_UDP
-    global ENABLE_STUN
+async def entrypoint_test():
+    out = await init_p2pd()
+    print(out)
 
-    # Setup event loop.
-    loop = asyncio.get_event_loop()
-    loop.set_debug(False)
-    loop.set_exception_handler(SelectorEventPolicy.exception_handler)
-    
-    def fatal_error(self, exc, message='Fatal error on transport'):
-        er = {
-            'message': message,
-            'exception': exc,
-            'transport': self,
-            'protocol': self._protocol,
-        }
-        log(er)
-
-        # Should be called from exception handler only.
-        #self.call_exception_handler(er)
-        self._force_close(exc)
-
-    asyncio.selector_events._SelectorTransport._fatal_error = fatal_error
-
-    # Attempt to get monkey patched netifaces.
-    netifaces = Interface.get_netifaces()
-    if netifaces is None:
-        if sys.platform == "win32":
-            """
-            loop = get_running_loop()
-
-            # This happens if the asyncio REPL is used.
-            # Nested event loops are a work around.
-            if loop is not None:
-                import nest_asyncio
-                nest_asyncio.apply()
-            """
-            netifaces = await Netifaces().start()
-        else:
-            netifaces = sys.modules["netifaces"]
-
-        Interface.get_netifaces = lambda: netifaces
-
-    # Are UDP sockets blocked?
-    # Firewalls like iptables on freehosts can do this.
-    sock = None
-    try:
-        # Figure out what address family default interface supports.
-        if_name = get_default_iface(netifaces)
-        af = get_interface_af(netifaces, if_name)
-        if af == AF_ANY: # Duel stack. Just use v4.
-            af = IP4
-
-        # Set destination based on address family.
-        if af == IP4:
-            dest = ('8.8.8.8', 60000)
-        else:
-            dest = ('2001:4860:4860::8888', 60000)
-
-        # Build new UDP socket.
-        sock = socket.socket(family=af, type=socket.SOCK_DGRAM)
-
-        # Attempt to send small msg to dest.
-        sock.sendto(b'testing UDP. disregard this sorry.', 0, dest)
-    except Exception:
-        """
-        Maybe in the future I write code as a fail-safe but for
-        now I don't have time. It's better to show a clear reason
-        why the library won't work then to silently fail.
-        """
-        raise Exception("Error this library needs UDP support to work.")
-    
-
-        ENABLE_UDP = False
-        ENABLE_STUN = False
-        log("UDP sockets blocked! Disabling STUN.")
-        log_exception()
-    finally:
-        if sock is not None:
-            sock.close()
-
-    return netifaces
+if __name__ == "__main__": # pragma: no cover
+    asyncio.run(entrypoint_test())
