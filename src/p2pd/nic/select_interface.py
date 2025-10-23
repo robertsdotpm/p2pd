@@ -151,7 +151,6 @@ async def filter_trash_interfaces(netifaces=None):
     return clean_ifs
 
 async def list_interfaces(netifaces=None):
-    netifaces = netifaces or Interface.get_netifaces()
     if netifaces is None:
         netifaces = await init_p2pd()
 

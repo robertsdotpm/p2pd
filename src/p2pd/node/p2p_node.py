@@ -6,6 +6,7 @@ make servers appear broken when they're not.
 import asyncio
 import hashlib
 from ..nic.interface import load_interfaces
+from ..nic.select_interface import list_interfaces
 from ..net.daemon import *
 from .p2p_addr import *
 from .p2p_utils import *

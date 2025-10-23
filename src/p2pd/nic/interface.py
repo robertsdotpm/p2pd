@@ -563,8 +563,8 @@ assuming immediate execution.
     if_len = len(if_names)
     for if_name in if_names:
         try:
-            nic = await Interface(if_name, timeout=if_len * 4)
-            await nic.load_nat(timeout=if_len * 4)
+            nic = await Interface(if_name)
+            await nic.load_nat()
             nics.append(nic)
         except:
             log_exception()
