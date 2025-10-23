@@ -245,7 +245,6 @@ class Interface():
         stack = self.stack
         log(fstr("Starting resolve with stack type = {0}", (stack,)))
         
-
         # Load internal interface details.
         self.netifaces = await init_p2pd()
 
