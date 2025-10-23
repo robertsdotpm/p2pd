@@ -107,6 +107,7 @@ class PipeEvents(BaseACKProto):
 
         # Event fired when stream set.
         self.stream_ready = asyncio.Event()
+        self.on_close = asyncio.Event()
 
         # Placeholders.
         self.transport = None
@@ -269,6 +270,8 @@ class PipeEvents(BaseACKProto):
         # Execute any cleanup handlers.
         self.run_handlers(self.end_cbs, self.client_tup)
 
+        self.on_close.set()
+
     def route_msg(self, data, client_tup):
         # No data to route.
         if not data:
@@ -369,7 +372,16 @@ class PipeEvents(BaseACKProto):
         except:
             log_exception()
 
+    
     async def close(self, do_sleep=True):
+        if self.proto == UDP:
+            if self.transport is not None:
+                self.transport.close()
+
+        await self.on_close.wait()
+
+        return
+
         # Already closed.
         if not self.is_running:
             return

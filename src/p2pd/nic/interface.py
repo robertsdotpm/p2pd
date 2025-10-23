@@ -279,6 +279,7 @@ class Interface():
                 servs=servs
             )
 
+
             # Is this default iface for this AF?
             try:
                 if self.is_default(af):

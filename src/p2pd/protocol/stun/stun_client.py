@@ -158,7 +158,8 @@ class STUNClient():
             pipe
         )
 
-        await reply.pipe.close()
+        reply.pipe.transport.close()
+        await pipe.on_close.wait()
         if hasattr(reply, "rtup"):
             return ip_norm(reply.rtup[0])
 

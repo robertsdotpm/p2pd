@@ -30,6 +30,8 @@ from ..ip_range import IPRange
 from ..address import *
 from ..asyncio_patches import *
 
+p2pd_fds = set()
+
 """
 StreamReaderProtocol provides a way to "translate" between
 Protocol and StreamReader. Mostly we're interested in having
@@ -276,10 +278,14 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
                 conf=conf
             )
 
+            print(sock)
+
             # Check if sock succeeded.
             if sock is None:
                 log("Could not allocate socket.")
                 return None
+            else:
+                p2pd_fds.add(sock)
 
             # Connect socket if TCP.
             if proto == TCP and dest is not None:
