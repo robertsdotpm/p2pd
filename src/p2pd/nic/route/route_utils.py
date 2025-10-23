@@ -233,8 +233,6 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
     link_locals = []
     priv_iprs = []
     nic_iprs = await get_nic_iprs(af, interface, netifaces)
-
-
     for nic_ipr in nic_iprs:
         assert(int(nic_ipr[0]))
         if ip_norm(nic_ipr[0])[:2] in ["fe", "fd"]:
@@ -276,10 +274,16 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
         )
 
     # Append task to get route using priv nic.
+    """
+    Optimization:
+    If there was only one private NIC IPR and enable default already ran.
+    It's already done the necessary work to resolve that first route.
+    So only run the code bellow if there's more than 1 or enable default
+    has been disabled.
+    """
     priv_src = ""
-    if len(priv_iprs):
+    if len(priv_iprs) > 1 or (len(priv_iprs) and not enable_default):
         priv_src = ip_norm(str(priv_iprs[0]))
-        
         tasks.append(
             async_wrap_errors(
                 get_wan_ip_cfab(

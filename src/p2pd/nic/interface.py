@@ -241,7 +241,7 @@ class Interface():
         o = self.from_dict(state)
         self.__dict__ = o.__dict__
 
-    async def do_start(self, netifaces=None, min_agree=2, max_agree=6, timeout=2):
+    async def do_start(self, netifaces, min_agree, max_agree, timeout):
         stack = self.stack
         log(fstr("Starting resolve with stack type = {0}", (stack,)))
         
@@ -279,7 +279,7 @@ class Interface():
                 servs=servs
             )
             assert(len(stun_clients) <= max_agree)
-
+            print(len(stun_clients))
 
             # Is this default iface for this AF?
             try:
@@ -342,7 +342,7 @@ class Interface():
     
         return self
 
-    async def start(self, netifaces=None, min_agree=2, max_agree=6, timeout=2):
+    async def start(self, netifaces=None, min_agree=2, max_agree=5, timeout=2):
         return await self.do_start(
             netifaces=netifaces,
             min_agree=min_agree,
