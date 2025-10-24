@@ -88,6 +88,7 @@ import asyncio
 from ...nic.nat.nat_predict import *
 from .tcp_punch_utils import *
 from ...protocol.ntp.clock_skew import *
+from ...net.event_loop import *
 
 class TCPPuncher():
     def __init__(self, af, src_info, dest_info, stuns, sys_clock, nic, same_machine=False):
@@ -296,7 +297,8 @@ def proc_do_punching(args):
         fixes the issue. However, this may mean breaking some of
         my command execution code on Windows -- test this.
         """
-        asyncio.set_event_loop_policy(SelectorEventPolicy())
+        loop = CustomEventLoop()
+        asyncio.set_event_loop(loop)
 
         # Build a puncher from a dictionary.
         reverse_tup = args[0]

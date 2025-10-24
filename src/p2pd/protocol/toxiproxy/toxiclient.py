@@ -312,7 +312,6 @@ class ToxiClient():
         self.tunnels.append(tunnel)
         return tunnel
 
-asyncio.set_event_loop_policy(SelectorEventPolicy())
 async def test_setup(netifaces=None, client=None):
     # Suppress socket unclosed warnings.
     if not hasattr(test_setup, "netifaces"):

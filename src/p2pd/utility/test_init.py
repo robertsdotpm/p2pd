@@ -14,6 +14,7 @@ from .cmd_tools import *
 from ..net.net import *
 from ..net.address import *
 from ..nic.interface import *
+from ..net.event_loop import *
 
 # Loads interface info on Windows.
 # Make it available for all tests.
@@ -33,8 +34,7 @@ if hasattr(unittest, "IsolatedAsyncioTestCase"):
     class PatchedAsyncTest(unittest.IsolatedAsyncioTestCase):
         def _setupAsyncioLoop(self):
             assert self._asyncioTestLoop is None
-            loop = asyncio.new_event_loop()
-
+            loop = CustomEventLoop()
             asyncio.set_event_loop(loop)
             loop.set_debug(False)
             self._asyncioTestLoop = loop

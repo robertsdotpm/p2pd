@@ -40,7 +40,6 @@ async def get_turn_client(af, interface, turn_offset):
     await client.relay_tup_future
     return client
 
-asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestTurn(unittest.IsolatedAsyncioTestCase):
     async def test_turn_duel_ifs(self):
         # Offset of turn server to use.

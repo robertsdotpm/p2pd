@@ -323,8 +323,6 @@ async def p2p_check_strats(params, strats):
     # Give time to close.
     await asyncio.sleep(2)
 
-asyncio.set_event_loop_policy(SelectorEventPolicy())
-
 async def test_p2p_multi_node_ifs():
     if_names = await list_interfaces()
     ifs = await load_interfaces(if_names)

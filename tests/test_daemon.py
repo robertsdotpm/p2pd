@@ -1,10 +1,10 @@
 from p2pd import *
 
-
-asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestDaemon(unittest.IsolatedAsyncioTestCase):
-
     async def test_daemon(self):
+        loop = asyncio.get_event_loop()
+        print(loop)
+
         protos = (TCP,)
         server_port = 34200
         loopbacks = {

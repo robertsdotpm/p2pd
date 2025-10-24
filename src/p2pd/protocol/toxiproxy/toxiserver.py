@@ -616,8 +616,6 @@ class ToxiMainServer(RESTD):
 
         await super().close()
 
-asyncio.set_event_loop_policy(SelectorEventPolicy())
-
 """
 class TestToxiServer(unittest.IsolatedAsyncioTestCase):
 

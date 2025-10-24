@@ -7,8 +7,6 @@ from ..nic.select_interface import *
 from ..utility.var_names import *
 from ..protocol.http.http_server_lib import *
 
-asyncio.set_event_loop_policy(SelectorEventPolicy())
-
 REST_API_PORT = 12333
 
 def con_info(self, con_name, con):

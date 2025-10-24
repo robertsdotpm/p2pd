@@ -5,6 +5,7 @@ import sys
 from .settings import *
 from .utility.utils import *
 from .nic.interface_utils import *
+from .net.event_loop import *
 if sys.platform == "win32":
     from .nic.netifaces.windows.win_netifaces import *
 else:
@@ -158,9 +159,17 @@ def p2pd_setup_event_loop():
     """
 
     # Set the event loop policy to the selector if its not.
+    """
     policy = asyncio.get_event_loop_policy()
     if not isinstance(policy, SelectorEventPolicy):
         asyncio.set_event_loop_policy(SelectorEventPolicy())
+    """
+    #loop = CustomEventLoop()
+    #asyncio.set_event_loop(loop)
+
+    policy = asyncio.get_event_loop_policy()
+    if not isinstance(policy, CustomEventLoopPolicy):
+        asyncio.set_event_loop_policy(CustomEventLoopPolicy())
 
     #sys.excepthook = my_except_hook
 
