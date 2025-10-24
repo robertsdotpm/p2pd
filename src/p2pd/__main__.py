@@ -17,10 +17,9 @@ if int(vmin) < 8:
     exit()
 
 from . import __version__ as p2pdv
-from .entrypoint import SelectorEventPolicy, p2pd_setup_event_loop
+from .net.event_loop import *
+from .entrypoint import SelectorEventPolicy
 
-
-p2pd_setup_event_loop()
 
 class AsyncIOInteractiveConsole(code.InteractiveConsole):
 
@@ -108,9 +107,7 @@ class REPLThread(threading.Thread):
             loop.call_soon_threadsafe(loop.stop)
 
 if __name__ == '__main__':
-    loop = CustomEventLoop()
-    asyncio.set_event_loop(loop)
-
+    loop = asyncio.get_event_loop()
     repl_locals = {'asyncio': asyncio}
     for key in {'__name__', '__package__',
                 '__loader__', '__spec__',

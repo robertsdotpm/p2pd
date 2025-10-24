@@ -12,13 +12,12 @@ if __name__ != '__main__':
     from .net.bind import *
     from .net.address import Address
     from .net.ip_range import IPRange, IPR
+    from .entrypoint import p2pd_setup_netifaces
     from .traversal.upnp.upnp import port_forward
     from .nic.route.route_defs import Route, RoutePool
     from .nic.route.route_utils import get_routes_with_res
     from .net.pipe.pipe_utils import *
-    from .entrypoint import init_p2pd
     from .nic.interface import Interface, p2pd_setup_event_loop, SelectorEventPolicy
-    
     from .nic.select_interface import *
     from .protocol.ntp.clock_skew import SysClock
     from .protocol.stun.stun_client import STUNClient, get_stun_clients

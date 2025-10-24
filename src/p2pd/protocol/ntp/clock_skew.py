@@ -273,7 +273,7 @@ class SysClock:
         self.__dict__ = o.__dict__
 
 async def test_clock_skew(): # pragma: no cover
-    from p2pd.interface import init_p2pd, Interface
+    from p2pd import p2pd_setup_netifaces, Interface
     interface = await Interface()
     ret = await get_ntp(IP4, interface)
     print(ret)

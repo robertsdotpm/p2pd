@@ -152,7 +152,7 @@ async def filter_trash_interfaces(netifaces=None):
 
 async def list_interfaces(netifaces=None):
     if netifaces is None:
-        netifaces = await init_p2pd()
+        netifaces = await p2pd_setup_netifaces()
 
     # Get list of good interfaces with ::/0 or 0.0.0.0 routes.
     ifs = await filter_trash_interfaces(netifaces)

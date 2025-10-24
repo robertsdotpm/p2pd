@@ -246,7 +246,7 @@ class Interface():
         log(fstr("Starting resolve with stack type = {0}", (stack,)))
         
         # Load internal interface details.
-        self.netifaces = await init_p2pd()
+        self.netifaces = await p2pd_setup_netifaces()
 
         # Process interface name in right format.
         try:

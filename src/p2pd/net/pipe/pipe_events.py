@@ -373,77 +373,28 @@ class PipeEvents(BaseACKProto):
         except:
             log_exception()
 
-    async def close(self, do_sleep=True):
-        if self.sock:
-            loop = asyncio.get_event_loop()
-            on_close = loop.await_fd_close(self.sock)
-            if self.transport is not None:
-                self.transport.close()
-
-            print(on_close)
-            await on_close
-    
-    async def _close(self, do_sleep=True):
-        # Wait for all current tasks to end.
-        #self.tasks = rm_done_tasks(self.tasks)
-        # Disabling everything until all parts work.
-        """
-        self.tasks = []
-        if len(self.tasks) or 0:
-            # Wait for tasks to finish.
-            await gather_or_cancel(self.tasks, 4)
-            self.tasks = []
-        why was it initialised cleared?
-        """
-
+    async def close(self):
         """
         If this is a transport for a TCP server its important to close
         it first before closing tcp_clients. Otherwise, new clients may
         be accepted while TCP clients are added to the server and
         the close code may end up missing them.
         """
-        print("closing", self.sock)
-        if self.transport is not None:
-            self.transport.close()
+        if self.sock:
+            loop = asyncio.get_event_loop()
+            on_close = loop.await_fd_close(self.sock)
+            if self.transport is not None:
+                self.transport.close()
+
+            await on_close
 
         """
-        if hasattr(self, "_stream_writer"):
-            print("has attr wait closed")
-            if self._stream_writer is not None:
-                await self._stream_writer.wait_closed()
+        If it's a TCP server close TCP client cons.
         """
-
-        # Close spawned TCP clients for a TCP server.
-        print(self.tcp_clients)
         for client in self.tcp_clients:
             # Close client transports.
             if client.close != self.close:
                 await client.close()
-
-        while 1:
-            try:
-                self.sock.getsockname()
-            except OSError:
-                print(self.sock)
-                break
-
-            
-            await asyncio.sleep(0.01)
-
-        #await self.on_close.wait()
-
-        # Wait for sending tasks in ACK UDP.
-        """
-        if self.stream is not None:
-            # Set ACKs for all sent messages.
-            for seq_no in self.stream.seq.keys():
-                self.stream.seq[seq_no].set()
-
-            # Wait for all send loops to end.
-            if len(self.stream.ack_send_tasks):
-                await gather_or_cancel(self.stream.ack_send_tasks, 4)
-                self.stream.ack_send_tasks = []
-        """
 
         # No longer running.
         self.transport = None
@@ -454,8 +405,6 @@ class PipeEvents(BaseACKProto):
         self.tcp_clients = []
         if self.proc_lock is not None:
             self.proc_lock.release()
-
-        return
 
     # Return a matching message, async, non-blocking.
     async def recv(self, sub=SUB_ALL, timeout=2, full=False):

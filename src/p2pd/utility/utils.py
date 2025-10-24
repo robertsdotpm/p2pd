@@ -127,27 +127,6 @@ if not hasattr(unittest, "IsolatedAsyncioTestCase"):
     except:
         pass
 
-def proactorfy(self=None):
-    """
-    The func is called once to set the main event loop
-    to use. At this point there is an existing event loop
-    not doing anything. This event loop should be used first
-    rather than creating a new one. With aiounittest this
-    prevents having unclosed event loops at the end of
-    running test suites.
-    """
-    try:
-        loop = asyncio.get_event_loop()
-    except:
-        loop = asyncio.ProactorEventLoop()
-
-    asyncio.set_event_loop(loop)
-    if self is not None:
-        self.my_loop = loop
-        return self.my_loop
-
-    return loop
-
 DB_READ_LOCK = 0
 DB_WRITE_LOCK = 1
 STATUS_RETRY = 1
@@ -456,6 +435,8 @@ async def async_wrap_errors(coro, timeout=None):
         # Bound wait time.
         if isinstance(timeout, int):
             return (await asyncio.wait_for(coro, timeout))
+    except RuntimeError: # Reusing already awaited.
+        pass
     except Exception as e:
         # Log all errors.
         log("async wrap errors called")

@@ -36,7 +36,7 @@ similar stuff on Github. May be something to add in the future.
 Otherwise -- the nix and BSD versions happily accept the regular
 netifaces module from pypi which doesn't need deps to work.
 """
-async def init_p2pd():
+async def p2pd_setup_netifaces():
     global ENABLE_UDP
     global ENABLE_STUN
     global _cached_netifaces
@@ -141,6 +141,17 @@ class SelectorEventPolicy(asyncio.DefaultEventLoopPolicy):
         loop = asyncio.SelectorEventLoop(selector)
         SelectorEventPolicy.loop_setup(loop)
         return loop
+    
+def init_process_pool():
+    # Make selector default event loop.
+    # On Windows this changes it from proactor to selector.
+    asyncio.set_event_loop_policy(CustomEventLoopPolicy())
+
+    # Create new event loop in the process.
+    loop = asyncio.get_event_loop()
+
+    # Handle exceptions on close.
+    loop.set_exception_handler(handle_exceptions)
 
 def p2pd_setup_event_loop():
     # If default isn't spawn then change it.
@@ -158,23 +169,16 @@ def p2pd_setup_event_loop():
             return
     """
 
-    # Set the event loop policy to the selector if its not.
-    """
-    policy = asyncio.get_event_loop_policy()
-    if not isinstance(policy, SelectorEventPolicy):
-        asyncio.set_event_loop_policy(SelectorEventPolicy())
-    """
-    #loop = CustomEventLoop()
-    #asyncio.set_event_loop(loop)
-
     policy = asyncio.get_event_loop_policy()
     if not isinstance(policy, CustomEventLoopPolicy):
         asyncio.set_event_loop_policy(CustomEventLoopPolicy())
 
     #sys.excepthook = my_except_hook
 
+p2pd_setup_event_loop()
+
 async def entrypoint_test():
-    out = await init_p2pd()
+    out = await p2pd_setup_netifaces()
     print(out)
 
 if __name__ == "__main__": # pragma: no cover

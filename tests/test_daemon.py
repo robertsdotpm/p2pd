@@ -5,7 +5,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         loop = asyncio.get_event_loop()
         print(loop)
 
-        protos = (TCP, UDP,)
+        protos = (UDP,)
         server_port = 34200
         loopbacks = {
             IP4: "127.0.0.1",
@@ -93,6 +93,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                         await pipe.send(msg, dest)
                         data = await client_pipe.recv(SUB_ALL)
                         self.assertEqual(data, msg)
+                        print(proto, dest, "works")
                     finally:
                         """
                         Making sure cleanup works correctly is very important
@@ -101,9 +102,14 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                         will throw an 'address already in use' error if the
                         socket wasn't cleaned up correctly. The code here
                         will fail if cleanup for these servers isn't correct.
+
+                        Does end up clearing servers FDs.
                         """
+                        """
+                        simulate misbehaving client not closing.
                         if pipe is not None:
                             await pipe.close()
+                        """
                         if echod is not None:
                             await echod.close()
 

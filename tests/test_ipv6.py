@@ -15,7 +15,7 @@ class TestIPv6(unittest.IsolatedAsyncioTestCase):
         print(x)
         """
 
-        netifaces = await init_p2pd()
+        netifaces = await p2pd_setup_netifaces()
         i_name = netifaces.interfaces()[0]
         addr_info = netifaces.ifaddresses(i_name)
  

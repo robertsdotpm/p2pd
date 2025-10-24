@@ -18,17 +18,6 @@ CON_ID_MSG = b"P2P_CON_ID_EQ"
 
 f_path_txt = lambda x: "local" if x == NIC_BIND else "external"
 
-def init_process_pool():
-    # Make selector default event loop.
-    # On Windows this changes it from proactor to selector.
-    asyncio.set_event_loop_policy(SelectorEventPolicy())
-
-    # Create new event loop in the process.
-    loop = asyncio.get_event_loop()
-
-    # Handle exceptions on close.
-    loop.set_exception_handler(handle_exceptions)
-
 async def get_pp_executors(workers=None):
     workers = workers or min(32, os.cpu_count() + 4)
     try:

@@ -316,7 +316,7 @@ async def test_setup(netifaces=None, client=None):
     # Suppress socket unclosed warnings.
     if not hasattr(test_setup, "netifaces"):
         if netifaces is None:
-            test_setup.netifaces = await init_p2pd()
+            test_setup.netifaces = await p2pd_setup_netifaces()
         else:
             test_setup.netifaces = netifaces
         #warnings.filterwarnings('ignore', message="unclosed", category=ResourceWarning)

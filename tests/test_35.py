@@ -6,7 +6,7 @@ import re
 async def main():
     print("hello")
     return
-    netifaces = await init_p2pd()
+    netifaces = await p2pd_setup_netifaces()
     print(netifaces)
     print(netifaces.gateways())
     print(netifaces.interfaces())

@@ -406,7 +406,7 @@ async def start_p2pd_server(port=REST_API_PORT, ifs=[], enable_upnp=False):
     }, NODE_CONF)
 
     # Load netifaces.
-    netifaces = await init_p2pd()
+    netifaces = await p2pd_setup_netifaces()
 
     # Load interfaces.
     if not len(ifs):

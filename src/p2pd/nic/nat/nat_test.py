@@ -236,7 +236,7 @@ async def fast_nat_test(pipe, test_no=NAT_TEST_NO, timeout=NAT_TEST_TIMEOUT):
         return q_list[-1] 
 
 async def nat_test_main():
-    from .interface import Interface, init_p2pd
+    from .interface import Interface, p2pd_setup_netifaces
 
     loop = asyncio.get_event_loop()
 
@@ -276,7 +276,7 @@ async def nat_test_main():
     return
     # Load internal interface details.
     t1 = timestamp(1)
-    netifaces = await init_p2pd()
+    netifaces = await p2pd_setup_netifaces()
     t2 = timestamp(1)
     duration = t2 - t1
     print(fstr("init_p2pd() = {0}", (duration,)))

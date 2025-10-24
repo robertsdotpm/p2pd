@@ -3,7 +3,7 @@ This module is a drop-in replacement for netifaces on Windows.
 Usage is simply:
     from p2pd import *
     async def main():
-        netifaces = await init_p2pd() 
+        netifaces = await p2pd_setup_netifaces() 
 
 The pypi netifaces module has several problems on Windows OS':
 
