@@ -397,11 +397,12 @@ class PipeEvents(BaseACKProto):
         if self.transport is not None:
             self.transport.close()
 
-        
+        """
         if hasattr(self, "_stream_writer"):
             print("has attr wait closed")
             if self._stream_writer is not None:
                 await self._stream_writer.wait_closed()
+        """
 
         # Close spawned TCP clients for a TCP server.
         print(self.tcp_clients)
@@ -410,20 +411,17 @@ class PipeEvents(BaseACKProto):
             if client.close != self.close:
                 await client.close()
 
-        await asyncio.sleep(0)
-        print(self.proto)
-        if self.proto == UDP:
-            while 1:
-                try:
-                    self.sock.getsockname()
-                except OSError:
-                    print(self.sock)
-                    break
+        while 1:
+            try:
+                self.sock.getsockname()
+            except OSError:
+                print(self.sock)
+                break
 
-                
-                await asyncio.sleep(0.01)
+            
+            await asyncio.sleep(0.01)
 
-        await self.on_close.wait()
+        #await self.on_close.wait()
 
         # Wait for sending tasks in ACK UDP.
         """
