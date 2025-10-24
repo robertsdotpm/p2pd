@@ -157,6 +157,9 @@ class PipeEvents(BaseACKProto):
         self.tcp_clients.append(client)
         self.client_futures[client.p_client_entry].set_result(client)
 
+    """
+    TODO: This is fucking cryptic. WTF?
+    """
     async def make_awaitable(self):
         if self.endpoint_type == TYPE_TCP_SERVER:
             bound = self.p_client_insert + 1
@@ -374,29 +377,37 @@ class PipeEvents(BaseACKProto):
 
     
     async def close(self, do_sleep=True):
-        if self.proto == UDP:
-            if self.transport is not None:
-                self.transport.close()
+        # Wait for all current tasks to end.
+        #self.tasks = rm_done_tasks(self.tasks)
+        # Disabling everything until all parts work.
+        """
+        self.tasks = []
+        if len(self.tasks) or 0:
+            # Wait for tasks to finish.
+            await gather_or_cancel(self.tasks, 4)
+            self.tasks = []
+        why was it initialised cleared?
+        """
+
+        """
+        If this is a transport for a TCP server its important to close
+        it first before closing tcp_clients. Otherwise, new clients may
+        be accepted while TCP clients are added to the server and
+        the close code may end up missing them.
+        """
+        if self.transport is not None:
+            self.transport.close()
+
+        # Close spawned TCP clients for a TCP server.
+        for client in self.tcp_clients:
+            # Close client transports.
+            if client.close != self.close:
+                await client.close()
 
         await self.on_close.wait()
 
-        return
-
-        # Already closed.
-        if not self.is_running:
-            return
-
-        # Skip sleep for TCP clients.
-        if do_sleep:
-            await asyncio.sleep(0)
-
-        """
-        # Cancel serve forever.
-        if self.tcp_server_task is not None:
-            self.transport.shutdown()
-        """
-
         # Wait for sending tasks in ACK UDP.
+        """
         if self.stream is not None:
             # Set ACKs for all sent messages.
             for seq_no in self.stream.seq.keys():
@@ -406,39 +417,8 @@ class PipeEvents(BaseACKProto):
             if len(self.stream.ack_send_tasks):
                 await gather_or_cancel(self.stream.ack_send_tasks, 4)
                 self.stream.ack_send_tasks = []
-
-        # Wait for all current tasks to end.
-        #self.tasks = rm_done_tasks(self.tasks)
-        self.tasks = []
-        if len(self.tasks):
-            # Wait for tasks to finish.
-            await gather_or_cancel(self.tasks, 4)
-            self.tasks = []
-
-        # Close spawned TCP clients for a TCP server.
-        for client in self.tcp_clients:
-            # Client is already closed.
-            if not client.is_running:
-                continue
-
-            # Close client transports.
-            if client.close != self.close:
-                await client.close(do_sleep=False)
-
-        # Close the main server socket.
-        # This does cleanup for any TCP servers.
-        if self.transport is not None:
-            self.transport.close()
-
-        """
-        if self.tcp_server_task is not None:
-            self.tcp_server_task.cancel()
         """
 
-        # Close any sockets.
-        # if self.sock is not None:
-        #    self.sock.close()
-        
         # No longer running.
         self.transport = None
         self.socket = None
@@ -448,6 +428,8 @@ class PipeEvents(BaseACKProto):
         self.tcp_clients = []
         if self.proc_lock is not None:
             self.proc_lock.release()
+
+        return
 
     # Return a matching message, async, non-blocking.
     async def recv(self, sub=SUB_ALL, timeout=2, full=False):

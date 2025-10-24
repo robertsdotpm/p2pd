@@ -153,6 +153,7 @@ async def netiface_addr_to_ipr(af, nic_id, info):
                 log(">get routes invalid subnet for {}".format(str(nic_ipr)))
             finally:
                 s.close()
+                print("this s = ", s)
                 break
 
         # Don't add this address to any route.

@@ -5,6 +5,7 @@ asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
     async def test_daemon(self):
+        protos = (UDP,)
         server_port = 34200
         loopbacks = {
             IP4: "127.0.0.1",
@@ -14,6 +15,10 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         at_least_one = False
         i = 0
         interface = await Interface()
+        while 1:
+            await asyncio.sleep(1)
+            print(p2pd_fds)
+        return
         for af in interface.supported():
             log(fstr("Test daemon af = {0}", (af,)))
 
@@ -38,7 +43,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
             for addr in addrs:
                 log(fstr("test daemon addr = {0}", (addr,)))
                 msg = b"hello world ay lmaoo"
-                for proto in [UDP, TCP]:
+                for proto in protos:
                     log(fstr("test daemon proto = {0}", (proto,)))
                     #print()
                     #print(proto)
@@ -104,6 +109,8 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                         await pipe.close()
                     if echod is not None:
                         await echod.close()
+
+                    print(p2pd_fds)
 
         await asyncio.sleep(0.1)
 

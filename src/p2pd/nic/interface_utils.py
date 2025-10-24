@@ -26,7 +26,9 @@ def get_default_nic_ip(af):
     try:
         with socket.socket(af, socket.SOCK_DGRAM) as s:
             s.connect((BLACK_HOLE_IPS[af], 80))
-            return s.getsockname()[0]
+            name = s.getsockname()[0]
+            s.close()
+            return name
     except:
         log_exception()
         return ""

@@ -151,20 +151,23 @@ class STUNClient():
     # Return only your remote IP.
     async def get_wan_ip(self, pipe=None):
         pipe = await self._get_dest_pipe(pipe)
-        reply = await get_stun_reply(
-            self.mode,
-            self.dest,
-            self.dest,
-            pipe
-        )
-
-        reply.pipe.transport.close()
-        await pipe.on_close.wait()
-        if hasattr(reply, "rtup"):
-            return ip_norm(reply.rtup[0])
+        try:
+            reply = await get_stun_reply(
+                self.mode,
+                self.dest,
+                self.dest,
+                pipe
+            )
+        finally:
+            if pipe is not None:
+                await pipe.close()
+    
+            if hasattr(reply, "rtup"):
+                return ip_norm(reply.rtup[0])
 
     # Return information on your local + remote port.
     # The pipe is left open to be used with punch code.
+    # NOTE: Pipe doesn't get closed from this. Intentional?
     async def get_mapping(self, pipe=None):
         pipe = await self._get_dest_pipe(pipe)
         reply = await get_stun_reply(

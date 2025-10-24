@@ -39,7 +39,7 @@ a protocol class for TCP that can handle messages as they're
 ready as opposed to having to poll ourself. Encapsulates
 a client connection to a TCP server in a BaseProto object.
 """
-class TCPEvents(asyncio.StreamReaderProtocol):
+class TCPClientProtocol(asyncio.StreamReaderProtocol):
     def __init__(self, stream_reader, pipe_events, loop, conf=NET_CONF):
         """
         Patch for Python 3.13. Would be SOOOO fun if the Python
@@ -57,7 +57,14 @@ class TCPEvents(asyncio.StreamReaderProtocol):
         # Setup stream reader / writers.
         super().__init__(stream_reader, set_streams, loop=loop)
 
-        # This is the server that spawns these client connections.
+        """
+        PipeEvents is created once before creating the main server with
+        create_tcp_server -- but importantly: its not actually used
+        as an event-driven class for protocol class events directly.
+        It instead acts as a container and API to work with the existing
+        code base and this class here passes events on to that class
+        for TCP-based client messages.
+        """
         self.pipe_events = pipe_events
         self.loop = loop
 
@@ -88,6 +95,7 @@ class TCPEvents(asyncio.StreamReaderProtocol):
         # Wrap this connection in a BaseProto object.
         self.transport = transport
         self.sock = transport.get_extra_info('socket')
+        p2pd_fds.add(self.sock)
         self.remote_tup = self.sock.getpeername()
         self.client_events = PipeEvents(
             sock=self.sock,
@@ -97,7 +105,13 @@ class TCPEvents(asyncio.StreamReaderProtocol):
         )
 
         # Log connection details.
-        log(fstr("New TCP client l={0}, r={1}", (self.sock.getsockname(), self.remote_tup,)))
+        log(
+            fstr(
+                "New TCP client l={0}, r={1}", (
+                self.sock.getsockname(), 
+                self.remote_tup,
+            ))
+        )
 
         # Setup stream object.
         self.client_events.set_endpoint_type(TYPE_TCP_CLIENT)
@@ -136,21 +150,30 @@ class TCPEvents(asyncio.StreamReaderProtocol):
         client_tup = self.remote_tup
         self.client_events.run_handlers(self.client_events.end_cbs, client_tup)
 
+        # Set on close event.
+        self.client_events.on_close.set()
+
         # Close its client socket and transport.
+        """
+        Will lead to issues iterating on closing TCP clients?
         try:
             if self.client_events in self.pipe_events.tcp_clients:
                 self.pipe_events.tcp_clients.remove(self.client_events)
         except Exception:
             log_exception()
+        """
 
+        """
+        Transport should be closed if this is called?
         try:
             self.transport.close()
             self.transport = None
         except Exception:
             log_exception()
+        """
 
         # Remove this as an object to close and manage in the server.
-        super().connection_lost(exc)
+        #super().connection_lost(exc)
 
     def error_received(self, exp):
         pass
@@ -168,12 +191,12 @@ class TCPEvents(asyncio.StreamReaderProtocol):
         self.client_events.handle_data(data, self.remote_tup)
 
 # Returns a hacked TCP server object
-async def handle_tcp_events(sock, pipe_events, *, loop=None, conf=NET_CONF, **kwds):
+async def create_tcp_server(sock, pipe_events, *, loop=None, conf=NET_CONF, **kwds):
     # Main vars.
     loop = loop or asyncio.get_event_loop()
     def factory():
         reader = asyncio.StreamReader(limit=conf["reader_limit"], loop=loop)
-        return TCPEvents(
+        return TCPClientProtocol(
             reader,
             pipe_events,
             loop,
@@ -352,7 +375,7 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
             # Listen server.
             if dest is None:
                 # Start router for TCP messages.
-                server = await handle_tcp_events(
+                server = await create_tcp_server(
                     sock=sock,
                     pipe_events=pipe_events,
                     loop=loop,
