@@ -119,6 +119,7 @@ class TCPClientProtocol(asyncio.StreamReaderProtocol):
         self.client_events.end_cbs = self.pipe_events.end_cbs
         self.client_events.up_cbs = self.pipe_events.up_cbs
         self.client_events.connection_made(transport)
+        self.client_events._stream_writer = self._stream_writer
 
         # Record destination.
         self.client_events.stream.set_dest_tup(self.remote_tup)

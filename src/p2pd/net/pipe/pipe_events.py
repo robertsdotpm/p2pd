@@ -40,8 +40,6 @@ tweaks it is flexible enough to do whatever you want.
 """
 class PipeEvents(BaseACKProto):
     def __init__(self, sock, route=None, loop=None, conf=NET_CONF):
-        super().__init__(conf)
-
         # Config.
         self.conf = conf
         self.loop = loop
@@ -395,14 +393,35 @@ class PipeEvents(BaseACKProto):
         be accepted while TCP clients are added to the server and
         the close code may end up missing them.
         """
+        print("closing", self.sock)
         if self.transport is not None:
             self.transport.close()
 
+        
+        if hasattr(self, "_stream_writer"):
+            print("has attr wait closed")
+            if self._stream_writer is not None:
+                await self._stream_writer.wait_closed()
+
         # Close spawned TCP clients for a TCP server.
+        print(self.tcp_clients)
         for client in self.tcp_clients:
             # Close client transports.
             if client.close != self.close:
                 await client.close()
+
+        await asyncio.sleep(0)
+        print(self.proto)
+        if self.proto == UDP:
+            while 1:
+                try:
+                    self.sock.getsockname()
+                except OSError:
+                    print(self.sock)
+                    break
+
+                
+                await asyncio.sleep(0.01)
 
         await self.on_close.wait()
 

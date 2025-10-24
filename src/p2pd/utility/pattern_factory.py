@@ -7,7 +7,7 @@ Consensus first-in:
     - return when m * 2
     - or timeout: return most frequent r
 """
-async def concurrent_first_agree_or_best(min_agree, tasks, timeout):
+async def concurrent_first_agree_or_best(min_agree, tasks, timeout, wait_all=False):
     results = {} # val[n]
     try:
         # Return as soon as agree on result.
@@ -30,4 +30,7 @@ async def concurrent_first_agree_or_best(min_agree, tasks, timeout):
                 continue
 
         return best
-    
+    finally:
+        if wait_all:
+            tasks = [async_wrap_errors(task, timeout=timeout) for task in tasks]
+            await asyncio.gather(*tasks)

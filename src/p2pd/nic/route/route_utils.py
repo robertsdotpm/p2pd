@@ -178,7 +178,8 @@ async def get_wan_ip_cfab(src_ip, min_agree, stun_clients, timeout):
         wan_ip = await concurrent_first_agree_or_best(
             min_agree,
             tasks,
-            timeout
+            timeout,
+            wait_all=True
         )
 
         if wan_ip is None:

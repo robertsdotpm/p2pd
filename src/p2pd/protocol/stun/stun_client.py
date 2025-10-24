@@ -158,12 +158,12 @@ class STUNClient():
                 self.dest,
                 pipe
             )
+
+            if hasattr(reply, "rtup"):
+                return ip_norm(reply.rtup[0])
         finally:
             if pipe is not None:
                 await pipe.close()
-    
-            if hasattr(reply, "rtup"):
-                return ip_norm(reply.rtup[0])
 
     # Return information on your local + remote port.
     # The pipe is left open to be used with punch code.

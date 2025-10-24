@@ -5,7 +5,7 @@ asyncio.set_event_loop_policy(SelectorEventPolicy())
 class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
     async def test_daemon(self):
-        protos = (UDP,)
+        protos = (TCP,)
         server_port = 34200
         loopbacks = {
             IP4: "127.0.0.1",
@@ -15,10 +15,6 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         at_least_one = False
         i = 0
         interface = await Interface()
-        while 1:
-            await asyncio.sleep(1)
-            print(p2pd_fds)
-        return
         for af in interface.supported():
             log(fstr("Test daemon af = {0}", (af,)))
 
@@ -74,44 +70,44 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                         dest,
                         test_route,
                     )
-                    self.assertTrue(pipe is not None)
+                    try:
+                        self.assertTrue(pipe is not None)
 
-                    # Indicate to save all messages to a queue.
-                    pipe.subscribe(SUB_ALL)
+                        # Indicate to save all messages to a queue.
+                        pipe.subscribe(SUB_ALL)
 
-                    # Send message to server.
-                    #print(dest.tup)
-                    send_ret = await pipe.send(msg, dest)
+                        # Send message to server.
+                        #print(dest.tup)
+                        send_ret = await pipe.send(msg, dest)
 
-                    # Receive data back.
-                    data = await pipe.recv(SUB_ALL)
-                    self.assertEqual(data, msg)
+                        # Receive data back.
+                        data = await pipe.recv(SUB_ALL)
+                        self.assertEqual(data, msg)
 
-                    # Test accept() await.
-                    # Send message from pipe to server's client pipe.
-                    # Then manually call it's receive and check for receipt.
-                    client_pipe = await pipe
-                    self.assertTrue(client_pipe is not None)
-                    client_pipe.subscribe(SUB_ALL)
-                    await pipe.send(msg, dest)
-                    data = await client_pipe.recv(SUB_ALL)
-                    self.assertEqual(data, msg)
+                        # Test accept() await.
+                        # Send message from pipe to server's client pipe.
+                        # Then manually call it's receive and check for receipt.
+                        client_pipe = await pipe
+                        self.assertTrue(client_pipe is not None)
+                        client_pipe.subscribe(SUB_ALL)
+                        await pipe.send(msg, dest)
+                        data = await client_pipe.recv(SUB_ALL)
+                        self.assertEqual(data, msg)
+                    finally:
+                        """
+                        Making sure cleanup works correctly is very important
+                        because if they restart a server program it will
+                        most probably try listen to the same address and that
+                        will throw an 'address already in use' error if the
+                        socket wasn't cleaned up correctly. The code here
+                        will fail if cleanup for these servers isn't correct.
+                        """
+                        if pipe is not None:
+                            await pipe.close()
+                        if echod is not None:
+                            await echod.close()
 
-                    """
-                    Making sure cleanup works correctly is very important
-                    because if they restart a server program it will
-                    most probably try listen to the same address and that
-                    will throw an 'address already in use' error if the
-                    socket wasn't cleaned up correctly. The code here
-                    will fail if cleanup for these servers isn't correct.
-                    """
-                    if pipe is not None:
-                        await pipe.close()
-                    if echod is not None:
-                        await echod.close()
-
-                    print(p2pd_fds)
-
+        print(p2pd_fds)
         await asyncio.sleep(0.1)
 
 if __name__ == '__main__':
