@@ -5,7 +5,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         loop = asyncio.get_event_loop()
         print(loop)
 
-        protos = (TCP,)
+        protos = (TCP, UDP)
         server_port = 34200
         loopbacks = {
             IP4: "127.0.0.1",

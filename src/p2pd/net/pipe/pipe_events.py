@@ -373,8 +373,17 @@ class PipeEvents(BaseACKProto):
         except:
             log_exception()
 
-    
     async def close(self, do_sleep=True):
+        if self.sock:
+            loop = asyncio.get_event_loop()
+            on_close = loop.await_fd_close(self.sock)
+            if self.transport is not None:
+                self.transport.close()
+
+            print(on_close)
+            await on_close
+    
+    async def _close(self, do_sleep=True):
         # Wait for all current tasks to end.
         #self.tasks = rm_done_tasks(self.tasks)
         # Disabling everything until all parts work.

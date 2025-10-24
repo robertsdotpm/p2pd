@@ -27,6 +27,13 @@ class CustomEventLoop(asyncio.SelectorEventLoop):
                 self.call_soon(future.set_result, True)
                 print(f"✅ FD={fd} removal detected. Signaling Future.") # Debug line
 
+    """
+    Needed for TCP cleanup.
+    """
+    def _remove_reader(self, fd):
+        self._signal_fd_removal(fd)
+        super()._remove_reader(fd)
+
     def remove_reader(self, fd: int) -> None:
         """Intercepts removal of read events."""
         self._signal_fd_removal(fd)
@@ -36,6 +43,13 @@ class CustomEventLoop(asyncio.SelectorEventLoop):
         """Intercepts removal of write events."""
         self._signal_fd_removal(fd)
         super().remove_writer(fd)
+
+    """
+    Needed for UDP cleanup.
+    """
+    def _remove_writer(self, fd):
+        self._signal_fd_removal(fd)
+        super()._remove_writer(fd)
         
     def remove_handler(self, fd: int) -> None:
         """

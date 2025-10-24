@@ -346,6 +346,7 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
 
         # Start processing messages for UDP.
         if proto in [UDP, RUDP]:
+            print("loop for create dg endpoint", loop)
             transport, _ = await create_datagram_endpoint(
                 loop,
                 lambda: pipe_events,
