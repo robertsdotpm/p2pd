@@ -1,54 +1,45 @@
+"""
+In Python3 with asyncio, the "correct" way to close a protocol transport
+is to call close on the transport. You can also await an event set in
+connection_lost. You would think that would be enough to indicate that
+the underlying socket was closed (but it's not.)
+
+At some nebulous point later: the event loop still has to close the socket
+and delete it from being monitored. The advice to make sure this happens
+is to await asyncio.sleep(0) to ensure the event loop runs to process
+the transport.close() properly. But ah... wait, no, that also doesn't
+work. The issue is you have no control on what happens when an
+event loop runs / what it prioritized / which is a race condition.
+That's the whole thing with coroutines and concurrency -- ordering
+is unpredictable. So the whole await sleep ... pattern is non-sense.
+
+This is also the reason why almost all Python network code in the wild
+is wrong and littered with resource bugs about unclosed sockets.
+So how to properly solve the issue? Just my view, but I think the right
+way is to make the event loop set an event when a socket is closed. Then
+you can get the awaitable and await when the event loop closes it. 
+
+Some caveats in implementing this though: a first attempt might try to
+overload internal reader / writer close functions. But the thing with
+internal APIs is they can change between Python versions. For 3.13 APIs
+like _remove_reader didn't exist in Python 3.5 (and this project is going
+for heavy backwards compatibility.) So the approach I take is this: go
+one level deeper -- and create a custom Selector. Then it's possible to
+--only-- use public APIs to signal socket close behavior: unregister
+and modify (available since Python 3.4.)
+
+BTW: this is for asyncio.SelectorEventLoop only. There are other event loops,
+this project only uses Selector though as its the one that works with
+complex code like TCP hole punching.
+"""
+
 import asyncio
-import socket # For type hinting
+import socket
 import selectors
 from ..utility.utils import *
 
 # Map: FD -> Future object
 _CLOSE_FUTURES: dict[int, asyncio.Future] = {}
-
-
-class _CustomEventLoop(asyncio.SelectorEventLoop):
-    def await_fd_close(self, sock: socket.socket) -> asyncio.Future:
-        """
-        Creates or returns a Future that resolves when the socket's File Descriptor (FD) 
-        is removed from the event loop's monitoring set.
-        """
-        fd = sock.fileno()
-        if fd not in _CLOSE_FUTURES:
-            # Create a new Future and store it
-            _CLOSE_FUTURES[fd] = self.create_future()
-        return _CLOSE_FUTURES[fd]
-    
-    def _signal_fd_removal(self, fd: int) -> None:
-        """Helper to check and signal any pending close Future for a given FD."""
-        if fd in _CLOSE_FUTURES:
-            future = _CLOSE_FUTURES.pop(fd)
-            if not future.done():
-                # Use call_soon to execute the signaling safely in the event loop thread
-                self.call_soon(future.set_result, True)
-                print(f"✅ FD={fd} removal detected. Signaling Future.") # Debug line
-
-    """
-    Needed for TCP cleanup.
-    """
-    def _remove_reader(self, fd):
-        self._signal_fd_removal(fd)
-        super()._remove_reader(fd)
-
-    """
-    Needed for UDP cleanup.
-    """
-    def _remove_writer(self, fd):
-        self._signal_fd_removal(fd)
-        super()._remove_writer(fd)
-        
-    def remove_handler(self, fd: int) -> None:
-        """
-        Intercepts removal of generic handlers. This covers FDs not specifically 
-        added as a reader or writer, but still being monitored (like listener sockets).
-        """
-        self._signal_fd_removal(fd)
-        super().remove_handler(fd)
 
 class ProxySelector:
     """A wrapper around the actual selector object to intercept unregister calls."""
@@ -56,7 +47,6 @@ class ProxySelector:
     def __init__(self, selector_instance, loop):
         self._selector = selector_instance
         self._loop = loop
-        # Copy public methods needed by the loop
         self.select = selector_instance.select
         self.close = selector_instance.close
         self.register = selector_instance.register
@@ -70,9 +60,6 @@ class ProxySelector:
         if fd not in _CLOSE_FUTURES:
             return
 
-        # If events is 0 (unregister) OR data is None (usually only the loop's internal cleanup)
-        # OR if we detect the last reader/writer being removed (as in your example logic)
-        
         # In the context of a fully-removed item:
         if events == 0 and data is None:
             future = _CLOSE_FUTURES.pop(fd)
@@ -86,14 +73,12 @@ class ProxySelector:
         return self._selector.unregister(fd)
     
     def modify(self, fd, events, data=None):
-        """Intercepts modification, checking if the FD is effectively unregistered."""
-        # Your custom check logic should go here:
+        """Intercepts modification, checking if FD is effectively unregistered."""
         if events == 0:
-            # If the FD is modified to watch for 0 events, it's equivalent to unregister.
+            # FD modified to watch for 0 events, it's equivalent to unregister.
             self._maybe_signal_removal(fd, 0, None)
         elif events != 0:
-            # Check if an existing FD is being modified to watch for 0 events (e.g., in a complex cleanup)
-            # NOTE: This is tricky, the SelectorEventLoop internal logic mostly handles this.
+            # NOTE: This is tricky, the SelectorEventLoop mostly handles this.
             # We focus on the unregister/events=0 case for reliability.
             pass
 

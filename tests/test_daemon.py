@@ -105,11 +105,11 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
                         Does end up clearing servers FDs.
                         """
-                        """
-                        simulate misbehaving client not closing.
+                        
+                        #simulate misbehaving client not closing.
                         if pipe is not None:
                             await pipe.close()
-                        """
+                        
                         if echod is not None:
                             await echod.close()
 
