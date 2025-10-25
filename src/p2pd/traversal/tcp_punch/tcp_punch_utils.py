@@ -6,18 +6,7 @@ from ...nic.interface import *
 from ...nic.nat.nat_predict import *
 from ...protocol.ntp.clock_skew import *
 from ...net.keep_alive import set_keep_alive
-
-PUNCH_ALIVE = b"234o2jdjf\n"
-PUNCH_END = b"qwekl2k343ok\n"
-INITIATED_PREDICTIONS = 1
-RECEIVED_PREDICTIONS = 2
-UPDATED_PREDICTIONS = 3
-INITIATOR = 1
-RECIPIENT = 2
-
-# Number of seconds in the future from an NTP time
-# for hole punching to occur.
-NTP_MEET_STEP = 6
+from .tcp_punch_defs import *
 
 # Fine tune various network settings.
 PUNCH_CONF = dict_child({

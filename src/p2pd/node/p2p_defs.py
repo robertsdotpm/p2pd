@@ -3,8 +3,7 @@ from ecdsa import VerifyingKey
 from ..utility.utils import *
 from ..net.net import *
 from ..net.ip_range import IPRange
-from ..traversal.tcp_punch.tcp_punch_client import TCP_PUNCH_REMOTE, TCP_PUNCH_LAN
-from ..traversal.tcp_punch.tcp_punch_client import TCP_PUNCH_SELF
+from ..traversal.tcp_punch.tcp_punch_defs import *
 from .p2p_addr import *
 
 SIG_CON = 1

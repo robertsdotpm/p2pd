@@ -90,11 +90,6 @@ BLOCKING_NATS = [
     BLOCKED_NAT
 ]
 
-# Punch modes.
-TCP_PUNCH_LAN = 1
-TCP_PUNCH_REMOTE = 2
-TCP_PUNCH_SELF = 3
-
 # Convenience funcs.
 # delta, nat_type
 f_is_open = lambda n, d: n in [OPEN_INTERNET, SYMMETRIC_UDP_FIREWALL]

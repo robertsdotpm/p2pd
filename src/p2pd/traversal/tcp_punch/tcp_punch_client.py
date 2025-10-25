@@ -87,6 +87,7 @@ would itself require another message. So maybe not worth the cost.
 import asyncio
 from ...nic.nat.nat_predict import *
 from .tcp_punch_utils import *
+from .tcp_punch_defs import *
 from ...protocol.ntp.clock_skew import *
 from ...net.event_loop import *
 

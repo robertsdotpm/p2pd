@@ -6,6 +6,7 @@ from .nat.nat_utils import *
 from .route.route_table import *
 from ..protocol.stun.stun_client import *
 from .route.route_defs import *
+from ..utility.var_names import TXT
 
 def get_interface_af(netifaces, name):
     af_list = []
@@ -315,7 +316,6 @@ def nic_from_dict(d, Interface):
     return i
 
 def nic_to_dict(nic):
-    from ..utility.var_names import TXT
     return {
         "netiface_index": nic.netiface_index,
         "name": nic.name,
