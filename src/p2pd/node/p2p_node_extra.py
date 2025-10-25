@@ -329,7 +329,10 @@ class P2PNodeExtra():
             # Or load new server offset.
             if offset not in self.signal_pipes:
                 sig_pipe = await async_wrap_errors(
-                    self.load_signal_pipe(offset)
+                    self.load_signal_pipe(
+                        msg.routing.af,
+                        offset
+                    )
                 )
 
             # Failed.

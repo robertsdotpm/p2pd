@@ -21,7 +21,7 @@ NODE_CONF = dict_child({
 
 # Main class for the P2P node server.
 class P2PNode(P2PNodeExtra, Daemon):
-    def __init__(self, ifs=[], port=None, conf=NODE_CONF):
+    def __init__(self, ifs=[], port=3000, conf=NODE_CONF):
         super().__init__()
         self.__name__ = "P2PNode"
         
@@ -308,6 +308,7 @@ class P2PNode(P2PNodeExtra, Daemon):
                 )
 
                 # Use the src addr directly.
+                print("Got updated addr.", reply.meta.src_buf)
                 addr_bytes = reply.meta.src_buf
             except asyncio.TimeoutError:
                 pass

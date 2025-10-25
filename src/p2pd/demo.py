@@ -1,3 +1,10 @@
+"""
+code a function for is_node_reachable_over_mqtt for debugging
+
+I did delete the thing that saves send msg tasks in the mqtt client
+idk if thats relevant.
+"""
+
 import asyncio
 import sys
 from .do_imports import *
@@ -68,6 +75,7 @@ async def main():
 
     node = P2PNode(ifs=ifs)
     port = node.listen_port if len(sys.argv) < 2 else int(sys.argv[1])
+    print(port)
     node.listen_port = port
     print("Starting node on %d..." % (port,))
 
@@ -262,6 +270,21 @@ async def main():
             for n in nodes:
                 await n.close()
             return
+
+        """
+        if choice == "4":
+            if addr is None:
+                prefix = ""
+                if len(last_addr):
+                    prefix = fstr(" (enter for {0})", (last_addr,))
+
+                addr = input(fstr("Enter nodes nickname or address{0}: ", (prefix,)))
+                if addr == "":
+                    addr = last_addr
+                else:
+                    last_addr = addr
+        """
+            
 
 
 

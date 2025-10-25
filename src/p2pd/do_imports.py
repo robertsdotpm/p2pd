@@ -37,8 +37,8 @@ if __name__ != '__main__':
     from .node.p2p_utils import get_pp_executors
     from .node.signaling import SignalMock, is_valid_mqtt
     from .install import *
-    from .protocol.toxiproxy.toxiclient import ToxiToxic, ToxiTunnel, ToxiClient
-    from .protocol.toxiproxy.toxiserver import ToxiMainServer
+    from .utility.toxiproxy.toxiclient import ToxiToxic, ToxiTunnel, ToxiClient
+    from .utility.toxiproxy.toxiserver import ToxiMainServer
 
     # Will fail if no aiomysql.
     # But PNP server is not needed to use P2PD.
