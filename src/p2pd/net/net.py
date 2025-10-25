@@ -35,6 +35,9 @@ AF_ANY = 1337
 # Error value.
 AF_NONE = 80085
 
+# Enum taken from netifaces.
+AF_LINK = 17
+
 # Avoid annoying socket... to access vars.
 AF_INET = socket.AF_INET
 AF_INET6 = socket.AF_INET6

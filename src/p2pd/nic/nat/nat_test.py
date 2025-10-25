@@ -234,6 +234,62 @@ async def fast_nat_test(pipe, test_no=NAT_TEST_NO, timeout=NAT_TEST_TIMEOUT):
     else:
         # Symmetric NAT or RESTRICT_PORT_NAT.
         return q_list[-1] 
+    
+async def nic_load_nat(nic, nat_tests=5, delta_tests=12, servs=None, timeout=4):
+    # IPv6 only has no NAT!
+    if IP4 not in nic.supported():
+        af = IP6
+        nat = nat_info(SYMMETRIC_NAT, RANDOM_DELTA)
+        return nic.set_nat(nat)
+    else:
+        af = IP4
+
+    # Copy random STUN servers to use.
+    test_no = max(nat_tests, delta_tests)
+    stun_clients = await get_stun_clients(
+        af,
+        test_no,
+        nic,
+        servs=servs
+    )
+
+    # Pipe is used for NAT tests using multiplexing.
+    # Same socket, different dests, TXID ordered.
+    route = await nic.route(af).bind()
+    pipe = await pipe_open(UDP, route=route)
+
+    # Run delta test.
+    nat_type, delta = await asyncio.gather(*[
+        # Fastest fit wins.
+        async_wrap_errors(
+            fast_nat_test(
+                pipe,
+                test_no=nat_tests,
+            ),
+            timeout=timeout
+        ),
+
+        # Concurrent -- 12 different hosts
+        # Threshold of 5 for consensus.
+        async_wrap_errors(
+            delta_test(
+                stun_clients,
+                test_no=delta_tests,
+                threshold=int(delta_tests / 2) - 1
+            ),
+            timeout=timeout
+        )
+    ])
+
+    # Cleanup NAT test pipe.
+    if pipe is not None:
+        await pipe.close()
+
+    # Sanity check nat / delta details.
+    if None in [nat_type, delta]:
+        raise ErrorCantLoadNATInfo("Unable to load nat.")
+    
+    return nat_type, delta
 
 async def nat_test_main():
     from .interface import Interface, p2pd_setup_netifaces

@@ -1,4 +1,4 @@
-from ..node.p2p_pipe import *
+from ..node.p2p_defs import *
 from ..nic.nat.nat_utils import *
 
 TXT = {

@@ -4,8 +4,8 @@ import socket
 import sys
 from .settings import *
 from .utility.utils import *
-from .nic.interface_utils import *
 from .net.event_loop import *
+from .nic.interface_utils import *
 if sys.platform == "win32":
     from .nic.netifaces.windows.win_netifaces import *
 else:

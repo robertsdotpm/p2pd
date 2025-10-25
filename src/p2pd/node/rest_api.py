@@ -416,7 +416,7 @@ async def start_p2pd_server(port=REST_API_PORT, ifs=[], enable_upnp=False):
             raise Exception("p2pd rest could not find if names")
         
         # Load those interfaces with NAT details.
-        ifs =  await load_interfaces(if_names)
+        ifs =  await load_interfaces(if_names, Interface)
         if not len(ifs):
             raise Exception("p2pd rest no ifs loaded.")
 

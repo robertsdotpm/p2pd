@@ -105,7 +105,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         if not len(self.ifs):
             try:
                 if_names = await list_interfaces()
-                self.ifs = await load_interfaces(if_names)
+                self.ifs = await load_interfaces(if_names, Interface)
             except:
                 log_exception()
                 self.ifs = []

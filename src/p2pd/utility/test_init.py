@@ -14,6 +14,7 @@ from .cmd_tools import *
 from ..net.net import *
 from ..net.address import *
 from ..nic.interface import *
+from ..nic.select_interface import *
 from ..net.event_loop import *
 
 # Loads interface info on Windows.
@@ -121,7 +122,7 @@ class FakeSTUNClient():
 async def duel_if_setup(netifaces):
     # Load interface list
     if_names = await list_interfaces(netifaces)
-    ifs = await load_interfaces(if_names)
+    ifs = await load_interfaces(if_names, Interface)
 
     for af in VALID_AFS:
         found = []

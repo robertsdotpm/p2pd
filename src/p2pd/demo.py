@@ -50,7 +50,7 @@ async def main():
     print()
     print("Loading networking interfaces...")
     if_names = await list_interfaces()
-    ifs = await load_interfaces(if_names)
+    ifs = await load_interfaces(if_names, Interface)
 
     buf = ""
     for nic in ifs:
