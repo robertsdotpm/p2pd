@@ -8,9 +8,9 @@ import hashlib
 from ..nic.interface import load_interfaces
 from ..nic.select_interface import list_interfaces
 from ..net.daemon import *
-from .p2p_addr import *
-from .p2p_utils import *
-from .p2p_node_extra import *
+from .node_addr import *
+from .node_utils import *
+from .node_extra import *
 from .nickname import *
 
 NODE_CONF = dict_child({
@@ -99,6 +99,87 @@ class P2PNode(P2PNodeExtra, Daemon):
                 out.routing.dest["node_id"]
             )
 
+    async def dev(self):
+        if not len(self.ifs):
+            nic = await Interface()
+            self.ifs = [nic]
+
+        # Set machine id.
+        t = time.time()
+        self.machine_id = await self.load_machine_id(
+            "p2pd",
+            self.ifs[0].netifaces
+        )
+
+        # Managed to load machine IDs?
+        if self.machine_id in (None, ""):
+            raise Exception("Could not load machine id.")
+        
+        """
+        The listen port is set deterministically to avoid conflicts
+        with port forwarding with multiple nodes in the LAN.
+        """
+        if self.listen_port is None:
+            self.listen_port = field_wrap(
+                dhash(self.machine_id),
+                [10000, 60000]
+            )
+
+        # Cryptography for authenticated messages.
+        self.sk = self.load_signing_key()
+        self.vk = self.sk.verifying_key
+        self.node_id = hashlib.sha256(
+            self.vk.to_string("compressed")
+        ).hexdigest()[:25]
+
+        # Table of authenticated users.
+        self.auth = {
+            self.node_id: {
+                "sk": self.sk,
+                "vk": self.vk.to_string("compressed"),
+            }
+        }
+
+        mqtt_servers = [{
+            "host": None,
+            IP4: "127.0.0.1",
+            IP6: "::1",
+            "port": 1883,
+        }]
+
+        await self.load_signal_pipes(
+            self.node_id,
+            servers=mqtt_servers,
+            min_success=1,
+        )
+
+        print(self.signal_pipes)
+
+        sys_clock = SysClock(interface=self.ifs[0], clock_skew=Dec("0.1"))
+
+        # Start the server for the node protocol.
+        await self.listen_on_ifs()
+
+        # Build P2P address bytes.
+        assert(self.node_id is not None)
+        self.addr_bytes = make_peer_addr(
+            self.node_id,
+            self.machine_id,
+            self.ifs,
+            list(self.signal_pipes),
+            port=self.listen_port,
+        )
+
+        # Log address.
+        msg = fstr("Starting node = '{0}'", (self.addr_bytes,))
+
+        # Save a dict version of the address fields.
+        try:
+            self.p2p_addr = parse_peer_addr(self.addr_bytes)
+        except:
+            log_exception()
+            raise Exception("Can't parse nodes p2p addr.")
+
     async def start(self, sys_clock=None, out=False):
         # Load ifs.
         t = time.time()
@@ -181,6 +262,12 @@ class P2PNode(P2PNodeExtra, Daemon):
                     buf += fstr("{0},", (index,))
                 buf += ")"
                 print(buf)
+
+        if sys_clock is None:
+            sys_clock = SysClock(
+                interface=self.ifs[0]
+            )
+            await sys_clock.start()
 
         # Multiprocess support for TCP punching and NTP sync.
         t = time.time()

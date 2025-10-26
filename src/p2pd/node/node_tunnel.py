@@ -1,12 +1,12 @@
 import asyncio
 from ..net.address import Address
 from ..net.pipe.pipe_utils import pipe_open, PipeEvents
-from .p2p_addr import *
+from .node_addr import *
 from ..traversal.tcp_punch.tcp_punch_client import *
-from .p2p_utils import for_addr_infos, get_turn_client
-from .p2p_utils import get_first_working_turn_client
-from .p2p_utils import CON_ID_MSG, f_path_txt
-from .p2p_protocol import *
+from .node_utils import for_addr_infos, get_turn_client
+from .node_utils import get_first_working_turn_client
+from .node_utils import CON_ID_MSG, f_path_txt
+from .node_protocol import *
 from ..traversal.tcp_punch.tcp_punch_client import *
 from ..traversal.turn.turn_client import TURNClient
 

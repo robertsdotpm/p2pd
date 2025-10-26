@@ -5,8 +5,8 @@ index by host name even if its longer.
 """
 
 from ..utility.utils import *
-from .p2p_defs import *
-from .p2p_utils import CON_ID_MSG
+from .node_defs import *
+from .node_utils import CON_ID_MSG
 from ..vendor.ecies import encrypt, decrypt
 
 SIG_PROTO = {

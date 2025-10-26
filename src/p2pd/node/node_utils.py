@@ -10,7 +10,7 @@ from ..net.net import *
 from ..nic.interface import get_default_iface, get_mac_address
 from ..nic.select_interface import select_if_by_dest
 from ..traversal.turn.turn_client import TURNClient
-from .signaling import SignalMock
+from ..traversal.signaling import SignalMock
 
 TRY_OVERLAP_EXTS = 1
 TRY_NOT_TO_OVERLAP_EXTS = 2

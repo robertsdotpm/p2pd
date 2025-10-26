@@ -10,6 +10,13 @@ import sys
 from .do_imports import *
 
 IS_DEBUG = 2
+DISABLE_PORT_FORWARDING = True
+
+node_conf = dict_child({
+    "reuse_addr": False,
+    "enable_upnp": False,
+    "sig_pipe_no": SIGNAL_PIPE_NO,
+}, NET_CONF)
 
 def patch_log_p2p(m, node_id=""):
     out = fstr("p2p: <{0}> ", (node_id,)) + to_s(m)
@@ -73,7 +80,7 @@ async def main():
         buf += "\n"
     print(buf[:-1])
 
-    node = P2PNode(ifs=ifs)
+    node = P2PNode(ifs=ifs, conf=node_conf)
     port = node.listen_port if len(sys.argv) < 2 else int(sys.argv[1])
     print(port)
     node.listen_port = port
@@ -133,7 +140,7 @@ async def main():
         addr = None
         if choice == "2":
             alice = nodes[-1]
-            bob = P2PNode(port=alice.listen_port + 1, ifs=ifs)
+            bob = P2PNode(port=alice.listen_port + 1, ifs=ifs, conf=node_conf)
             bob.add_msg_cb(add_echo_support)
             bob.stun_clients = alice.stun_clients
             await asyncio.create_task(

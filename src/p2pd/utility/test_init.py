@@ -21,6 +21,7 @@ from ..net.event_loop import *
 # Make it available for all tests.
 from ..net.pipe.pipe_utils import *
 from ..protocol.stun.stun_client import *
+from ..install import *
 
 
 P2PD_NET_ADDR_BYTES = b'0,3-[0,149.56.128.148,149.56.128.148,10001,1,1,0]-[0,2607:5300:0201:3100:0000:0000:0000:8d2f,fe80:0000:0000:0000:f816:3eff:feae:b2d9,10001,1,1,0]-p2pd_test_node'
@@ -142,3 +143,13 @@ class FakeNetifaces():
 
     def ifaddresses(self, if_name):
         return self.addr_info
+    
+def get_cached_if():
+    install_path = get_p2pd_install_root()
+    nic_path = os.path.join(install_path, "if_info")
+    if not os.path.exists(nic_path):
+        return None
+    
+    with open(nic_path, "rb") as f:
+        buf = f.read()
+        return eval(buf)

@@ -435,8 +435,6 @@ async def async_wrap_errors(coro, timeout=None):
         # Bound wait time.
         if isinstance(timeout, int):
             return (await asyncio.wait_for(coro, timeout))
-    except RuntimeError: # Reusing already awaited.
-        pass
     except Exception as e:
         # Log all errors.
         log("async wrap errors called")

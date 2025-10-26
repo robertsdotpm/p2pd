@@ -88,7 +88,7 @@ import asyncio
 from ...nic.nat.nat_predict import *
 from .tcp_punch_utils import *
 from .tcp_punch_defs import *
-from ...protocol.ntp.clock_skew import *
+from ...utility.clock_skew import *
 from ...net.event_loop import *
 
 class TCPPuncher():

@@ -7,30 +7,6 @@ import hashlib
 #     python -W ignore::ResourceWarning your_script.py
 NIC_NAME = ""
 
-"""
-While I update the list of servers, loading WAN addresses is going to be broken.
-So I'll manually set this for both speed and reliability.
-"""
-if_info = {'id': 'eno1',
- 'is_default': {2: True, 10: True},
- 'mac': '00-1e-67-fa-5d-42',
- 'name': 'eno1',
- 'nat': {'delta': {'type': 1, 'value': 0},
-         'delta_info': 'not applicable',
-         'nat_info': 'open internet',
-         'type': 1},
- 'netiface_index': 1,
- 'nic_no': 0,
- 'rp': {2: [{'af': 2,
-             'ext_ips': [{'af': 2, 'cidr': 32, 'ip': '158.69.27.176'}],
-             'link_local_ips': [],
-             'nic_ips': [{'af': 2, 'cidr': 32, 'ip': '158.69.27.176'}]}],
-        10: [{'af': 10,
-             'ext_ips': [{'af': 10, 'cidr': 128, 'ip': '2607:5300:60:80b0::1'}],
-             'link_local_ips': [],
-             'nic_ips': [{'af': 10, 'cidr': 128, 'ip': '2607:5300:60:80b0::1'}]}]
-        }
-}
 
 class TestStatus(unittest.IsolatedAsyncioTestCase):
     async def test_address(self):
@@ -62,36 +38,33 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
     async def test_mqtt_client(self):
         msg = "test msg"
         peerid = to_s(rand_plain(10))
-        nic = await Interface(NIC_NAME)
-        for af in nic.supported():
-            for index in [-1, -2]:
-                serv_info = MQTT_SERVERS[index]
-                dest = (serv_info[af], serv_info["port"])
-                found_msg = []
+        #nic = await Interface()
+        #print(nic.supported())
+        servs = [{
+            IP4: "127.0.0.1",
+            IP6: "127.0.0.1",
+            "port": 1883
+        }]
 
-                def closure(ret):
-                    async def f_proto(payload, client):
-                        if to_s(payload) == to_s(msg):
-                            found_msg.append(True)
-
-                    return f_proto
-
-                f_proto = closure(found_msg)
-
-                client = SignalMock(peerid, f_proto, dest)
-                try:
-                    client = await client.start()
-                    await client.send_msg(msg, peerid)
-                    await asyncio.sleep(2)
-                except: # ignore timeouts if servers are down.
-                    log_exception()
-
-                if not len(found_msg):
-                    print(fstr("mqtt {0} {1} broken", (af, dest,)))
+        for af in (IP4,):
+            count = 0
+            for serv_info in servs:
+                if not serv_info[af]:
+                    continue
                 else:
-                    print(fstr("mqtt {0} {1} works", (af, dest,)))
+                    count += 1
 
-                await client.close()
+                if count > 2:
+                    break
+
+                dest = (serv_info[af], serv_info["port"])
+                print(dest)
+                client = await is_valid_mqtt(dest)
+                if client:
+                    print("valid ", dest)
+                    await client.close()
+                else:
+                    print("invalid ", dest)
 
     async def test_turn_client_multi(self):
         return
@@ -361,6 +334,21 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         }, NET_CONF)
 
         n = await P2PNode(conf=conf)
+        print(n.ifs)
+        print(n.addr_bytes)
+        print(n.listen_port)
+        await n.close()
+
+    async def test_node_simple(self):
+        conf = dict_child({
+            "reuse_addr": False,
+            "enable_upnp": False,
+            "sig_pipe_no": 3,
+        }, NET_CONF)
+
+        nic = get_cached_if()
+        n = P2PNode(ifs=[nic], conf=conf)
+        await n.dev()
         print(n.ifs)
         print(n.addr_bytes)
         print(n.listen_port)

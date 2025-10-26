@@ -29,7 +29,8 @@ class SignalMock():
         self.pending_tasks = []
 
     def on_message(self, client, topic, payload, qos, properties):
-        create_task(
+        print("got signal msg:", payload, self.f_proto)
+        task = create_task(
             async_wrap_errors(
                 self.f_proto(payload, self),
 
@@ -38,6 +39,7 @@ class SignalMock():
                 #20
             )
         )
+        self.pending_tasks.append(task)
 
     def on_connect(self, client, flags, rc, properties):
         self.is_connected = True

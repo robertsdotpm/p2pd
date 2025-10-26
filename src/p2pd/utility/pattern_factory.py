@@ -8,29 +8,18 @@ Consensus first-in:
     - or timeout: return most frequent r
 """
 async def concurrent_first_agree_or_best(min_agree, tasks, timeout, wait_all=False):
-    results = {} # val[n]
+    results = {}
+    pending = set(tasks)
     try:
-        # Return as soon as agree on result.
         for task in asyncio.as_completed(tasks, timeout=timeout):
             result = await task
-            results.setdefault(result, 0)
-            results[result] += 1
+            pending.discard(task)
+            results[result] = results.get(result, 0) + 1
             if results[result] >= min_agree:
                 return result
     except asyncio.TimeoutError:
-        # Return result with most agreement.
-        best = None
-        for value in results:
-            if best is None:
-                best = value
-                continue
-
-            if results[value] > results[best]:
-                best = value
-                continue
-
+        best = max(results, key=results.get, default=None)
         return best
     finally:
-        if wait_all:
-            tasks = [async_wrap_errors(task, timeout=timeout) for task in tasks]
-            await asyncio.gather(*tasks)
+        if wait_all and pending:
+            await asyncio.gather(*pending, return_exceptions=True)

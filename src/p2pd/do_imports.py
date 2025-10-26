@@ -19,7 +19,7 @@ if __name__ != '__main__':
     from .net.pipe.pipe_utils import *
     from .nic.interface import Interface, p2pd_setup_event_loop, SelectorEventPolicy
     from .nic.select_interface import *
-    from .protocol.ntp.clock_skew import SysClock
+    from .utility.clock_skew import SysClock
     from .protocol.stun.stun_client import STUNClient, get_stun_clients
     from .traversal.turn.turn_client import TURNClient
     from .traversal.tcp_punch.tcp_punch_client import TCPPuncher
@@ -30,12 +30,12 @@ if __name__ != '__main__':
     from .protocol.http.http_server_lib import rest_service, send_json, send_binary, RESTD, api_route_closure
     from .protocol.http.http_server_lib import ParseHTTPRequest
     from .node.rest_api import P2PDServer, start_p2pd_server, P2PD_PORT
-    from .node.p2p_addr import *
-    from .node.p2p_pipe import *
-    from .node.p2p_node_extra import P2PNodeExtra
-    from .node.p2p_node import P2PNode, NODE_CONF, NODE_PORT
-    from .node.p2p_utils import get_pp_executors
-    from .node.signaling import SignalMock, is_valid_mqtt
+    from .node.node_addr import *
+    from .node.node_tunnel import *
+    from .node.node_extra import P2PNodeExtra
+    from .node.node import P2PNode, NODE_CONF, NODE_PORT
+    from .node.node_utils import get_pp_executors
+    from .traversal.signaling import SignalMock, is_valid_mqtt
     from .install import *
     from .utility.toxiproxy.toxiclient import ToxiToxic, ToxiTunnel, ToxiClient
     from .utility.toxiproxy.toxiserver import ToxiMainServer

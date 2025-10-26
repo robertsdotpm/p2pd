@@ -4,7 +4,7 @@ from ..utility.utils import *
 from ..net.net import *
 from ..net.ip_range import IPRange
 from ..traversal.tcp_punch.tcp_punch_defs import *
-from .p2p_addr import *
+from .node_addr import *
 
 SIG_CON = 1
 SIG_TCP_PUNCH = 2

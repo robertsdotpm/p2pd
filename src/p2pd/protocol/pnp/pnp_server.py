@@ -25,7 +25,7 @@ from .pnp_utils import *
 from ...net.net import *
 from ...net.ip_range import IPRange
 from ...net.daemon import *
-from ..ntp.clock_skew import SysClock
+from ...utility.clock_skew import SysClock
 
 async def v6_range_usage(cur, v6_glob_main, v6_glob_extra, v6_lan_id, _):
     # Count number of subnets used.

@@ -3,9 +3,9 @@ from ..settings import *
 from ..utility.utils import *
 from ..utility.machine_id import hashed_machine_id
 from ..traversal.tcp_punch.tcp_punch_client import PUNCH_CONF
-from .p2p_utils import *
-from .p2p_pipe import *
-from .signaling import *
+from .node_utils import *
+from .node_tunnel import *
+from ..traversal.signaling import *
 from ..protocol.stun.stun_client import get_stun_clients
 from ..nic.nat.nat_utils import USE_MAP_NO
 from ..install import *
@@ -133,9 +133,9 @@ class P2PNodeExtra():
             pipe_id,
         ])
 
-    async def load_signal_pipe(self, af, offset):
+    async def load_signal_pipe(self, af, offset, servers):
         # Lookup IP and port of MQTT server.
-        server = MQTT_SERVERS[offset]
+        server = servers[offset]
         dest_tup = (
             server[af],
             server["port"],
@@ -161,9 +161,10 @@ class P2PNodeExtra():
     TODO: investigate this.
     TODO: maybe load MQTT servers concurrently.
     """
-    async def load_signal_pipes(self, node_id, min_success=2, max_attempt_no=10):
+    async def load_signal_pipes(self, node_id, servers=None, min_success=2, max_attempt_no=10):
         # Offsets for MQTT servers.
-        offsets = [n for n in range(0, len(MQTT_SERVERS))]
+        servers = servers or MQTT_SERVERS
+        offsets = [n for n in range(0, len(servers))]
         shuffled = []
 
         """
@@ -190,7 +191,7 @@ class P2PNodeExtra():
             # Skip if it doesn't support the AF.
             for af in supported_afs:
                 # Update host IP if it's set.
-                server = MQTT_SERVERS[index]
+                server = servers[index]
                 if server["host"] is not None:
                     try:
                         addr = await Address(server["host"], 123)
@@ -204,7 +205,7 @@ class P2PNodeExtra():
 
                 # Attempt to get a handle to the MQTT server.
                 ret = await async_wrap_errors(
-                    self.load_signal_pipe(af, index),
+                    self.load_signal_pipe(af, index, servers),
                     timeout=2
                 )
 
@@ -331,7 +332,8 @@ class P2PNodeExtra():
                 sig_pipe = await async_wrap_errors(
                     self.load_signal_pipe(
                         msg.routing.af,
-                        offset
+                        offset,
+                        MQTT_SERVERS
                     )
                 )
 

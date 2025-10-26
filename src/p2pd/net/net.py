@@ -572,4 +572,4 @@ def is_socket_closed(sock):
     except Exception as e:
         log("unexpected exception when checking if a socket is closed")
         return False
-    return False
+    return False    
