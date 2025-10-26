@@ -89,9 +89,12 @@ class P2PNode(P2PNodeExtra, Daemon):
     
     # Used by the MQTT clients.
     async def signal_protocol(self, msg, signal_pipe):
+        print("Signal_protocol msg:", msg)
         out = await async_wrap_errors(
             self.sig_proto_handlers.proto(msg)
         )
+
+        print(out)
 
         if isinstance(out, SigMsg):
             await signal_pipe.send_msg(
@@ -221,7 +224,11 @@ class P2PNode(P2PNodeExtra, Daemon):
 
         # Cryptography for authenticated messages.
         self.sk = self.load_signing_key()
+        print("sk:", self.sk)
+
         self.vk = self.sk.verifying_key
+        print("vk:", self.vk)
+
         self.node_id = hashlib.sha256(
             self.vk.to_string("compressed")
         ).hexdigest()[:25]
@@ -277,7 +284,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         if out: print(fstr("\t\tClock skew = {0}", (clock_skew,)))
             
         # Accept TCP punch requests.
-        self.start_punch_worker()
+        #self.start_punch_worker()
 
         # Start worker that forwards sig proto messages.
         self.start_sig_msg_dispatcher()
@@ -323,6 +330,8 @@ class P2PNode(P2PNodeExtra, Daemon):
         if not out:
             Log.log_p2p(msg, self.node_id[:8])
 
+
+
         # Save a dict version of the address fields.
         try:
             self.p2p_addr = parse_peer_addr(self.addr_bytes)
@@ -337,6 +346,11 @@ class P2PNode(P2PNodeExtra, Daemon):
             self.sys_clock,
         )
 
+        nick = await self.nickname(self.node_id)
+        print(nick)
+        pkt = await self.nick_client.fetch(nick)
+        print("nick pkt vkc = ", pkt.vkc)
+
         return self
     
     def __await__(self):
@@ -349,13 +363,18 @@ class P2PNode(P2PNodeExtra, Daemon):
             Log.log_p2p(msg, self.node_id[:8])
             name = addr_bytes
             pkt = await self.nick_client.fetch(addr_bytes)
+            print("nick pkt vkc = ", pkt.vkc)
+            assert(pkt.vkc)
             addr_bytes = pkt.value
+            assert(pkt.vkc)
+            print("got addr bytes:", addr_bytes)
 
             msg = fstr("Resolved '{0}' = '{1}'", (name, addr_bytes,))
             Log.log_p2p(msg, self.node_id[:8])
 
             # Parse address bytes to a dict.
             addr = parse_peer_addr(addr_bytes)
+            print(addr)
 
             # Authorize this node for replies.
             assert(isinstance(pkt.vkc, bytes))
@@ -384,9 +403,11 @@ class P2PNode(P2PNodeExtra, Daemon):
             msg.cipher.vk = to_h(self.vk.to_string("compressed"))
 
             # Their key as loaded from PNS.
+            assert(pkt.vkc)
             self.sig_msg_queue.put_nowait([msg, pkt.vkc, 0])
 
             # Wait for an updated address.
+            reply = None
             try:
                 # Get a return addr reply.
                 reply = await asyncio.wait_for(
@@ -398,6 +419,7 @@ class P2PNode(P2PNodeExtra, Daemon):
                 print("Got updated addr.", reply.meta.src_buf)
                 addr_bytes = reply.meta.src_buf
             except asyncio.TimeoutError:
+                print("addr requ timed out")
                 pass
 
         msg = fstr("Connecting to '{0}'", (addr_bytes,))
@@ -406,7 +428,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         for af in conf["addr_families"]:
             af_conf = copy.deepcopy(conf)
             af_conf["addr_families"] = [af]
-            pipe = await pp.connect(strategies, reply=None, conf=af_conf)
+            pipe = await pp.connect(strategies, reply=reply, conf=af_conf)
             if pipe is not None:
                 return pipe
             

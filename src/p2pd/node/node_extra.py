@@ -140,15 +140,25 @@ class P2PNodeExtra():
             server[af],
             server["port"],
         )
+        print(dest_tup)
 
         """
         This function does a basic send/recv test with MQTT to help
         ensure the MQTT servers are valid.
         """
-        client = await is_valid_mqtt(dest_tup)
-        if client:
+        print("load mqtt with self.node id:", self.node_id)
+        client = await SignalMock(
+            to_s(self.node_id),
+            self.signal_protocol,
+            dest_tup
+        ).start()
+
+        if client is not None:
             self.signal_pipes[offset] = client
-            return client
+
+        print("mqtt client", client)
+
+        return client
         
     """
     There's a massive problem with the MQTT client
@@ -361,12 +371,22 @@ class P2PNodeExtra():
         # Need fallback plan here.
 
     async def sig_msg_dispatcher(self):
+        print("in sig msg dispatcher")
         try:
             x = await self.sig_msg_queue.get()
+            print("got sig msg q item", x)
             if x is None:
                 return
             else:
                 msg, vk, m = x
+                if None in (msg, vk, m,):
+                    raise Exception(
+                        "Invalid sig msg params = " + 
+                        str(msg) + 
+                        str(vk) + 
+                        str(m)
+                    )
+                print(msg, vk, m)
             
             await async_wrap_errors(
                 self.await_peer_con(
@@ -380,6 +400,8 @@ class P2PNodeExtra():
                 self.sig_msg_dispatcher()
             )
         except RuntimeError:
+            print("run time error in sig msg dispatcher")
+            what_exception()
             log_exception()
             return
         

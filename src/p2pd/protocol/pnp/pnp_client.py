@@ -58,7 +58,9 @@ class PNPClient():
         try:
             buf = await proto_recv(pipe)
             buf = decrypt(self.reply_sk, buf)
+            print("decrypted pnp resp:", buf)
             pkt = PNPPacket.unpack(buf)
+            print(pkt)
             
             if not pkt.updated:
                 pkt.value = None

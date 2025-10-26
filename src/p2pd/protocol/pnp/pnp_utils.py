@@ -138,7 +138,9 @@ class PNPPacket():
 
         # Extract sig field.
         vkc = buf[p:p + 33]; p += 33;
+        print(vkc)
         sig = buf[p:]
+        print(sig)
 
         return PNPPacket(name, val, vkc, sig, updated, behavior, pkid, reply_pk)
 
