@@ -378,10 +378,14 @@ class P2PNode(P2PNodeExtra, Daemon):
 
             # Authorize this node for replies.
             assert(isinstance(pkt.vkc, bytes))
+
+            
             self.auth[addr["node_id"]] = {
                 "vk": pkt.vkc,
                 "sk": None,
             }
+
+            print("auth table:", self.auth)
 
             # Reply must match this ID with this sender key.
             pipe_id = to_s(rand_plain(10))
@@ -428,7 +432,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         for af in conf["addr_families"]:
             af_conf = copy.deepcopy(conf)
             af_conf["addr_families"] = [af]
-            pipe = await pp.connect(strategies, reply=reply, conf=af_conf)
+            pipe = await pp.connect(strategies, reply=None, conf=af_conf)
             if pipe is not None:
                 return pipe
             

@@ -121,7 +121,7 @@ async def is_valid_mqtt(dest):
         client.start(),
         timeout=2
     )
-   
+
     # Cannot get client reference. Return failure.
     if client is None:
         return None

@@ -161,7 +161,10 @@ class P2PPipe():
             },
         })
 
-        self.route_msg(msg, m=1)
+        #self.route_msg(msg, m=0)
+        dest_node_id = self.dest["node_id"]
+        dest_pkc = self.node.auth[dest_node_id]["vk"]
+        self.node.sig_msg_queue.put_nowait([msg, dest_pkc , 1])
         return await self.node.pipes[pipe_id]
 
     async def tcp_hole_punch(self, af, pipe_id, src_info, dest_info, nic, addr_type, reply=None):
