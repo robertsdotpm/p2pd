@@ -7,6 +7,7 @@ index by host name even if its longer.
 from ...utility.utils import *
 from ...vendor.ecies import encrypt, decrypt
 from .signaling_msgs import *
+from ..tunnel import Tunnel
 
 SIG_PROTO = {
     SIG_CON: [ConMsg, P2P_DIRECT, 5],
@@ -44,9 +45,7 @@ class SigProtoHandlers():
         _, strategy, timeout = info
 
         # Connect to chosen address.
-        pp = self.node.p2p_pipe(
-            msg.meta.src_buf
-        )
+        tunnel = Tunnel(msg.meta.src_buf, self.node)
 
         # Get address.
         if isinstance(msg, GetAddr):
@@ -64,12 +63,13 @@ class SigProtoHandlers():
             # Our key for an encrypted reply.
             reply.cipher.vk = to_h(self.node.vk.to_string("compressed"))
 
-            pp.route_msg(reply, reply=msg)
+            # TODO: still using dubious route message func.
+            tunnel.route_msg(reply, reply=msg)
             return
 
         # Connect to chosen address.
         task = create_task(
-            pp.connect(
+            tunnel.connect(
                 strategies=[strategy],
                 reply=msg,
                 conf=conf,

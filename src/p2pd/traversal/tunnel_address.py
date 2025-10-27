@@ -26,7 +26,7 @@ async def get_updated_addr_bytes(node, dest_addr):
         Log.log_p2p(msg, node.node_id[:8])
 
         # Parse address bytes to a dict.
-        addr = parse_peer_addr(dest_addr)
+        addr = parse_peer_addr(addr_bytes)
         print(addr)
 
         # Authorize this node for replies.
@@ -75,7 +75,7 @@ async def get_updated_addr_bytes(node, dest_addr):
             addr_bytes = reply.meta.src_buf
         except asyncio.TimeoutError:
             print("addr requ timed out")
-            pass
+            return addr_bytes
 
     else:
         raise Exception("dest addr not a pnp name")

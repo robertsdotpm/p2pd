@@ -16,6 +16,9 @@ from ..traversal.tunnel_address import *
 from ..traversal.signaling.signaling_protocol import *
 from ..traversal.signaling.signaling_utils import *
 from ..traversal.signaling.signaling_sender import *
+from ..utility.clock_skew import SysClock
+from ..traversal.plugins.tcp_punch.tcp_punch_utils import start_punch_worker
+from ..traversal.plugins.tcp_punch.tcp_punch_utils import setup_punch_coordination
 
 async def node_start(node, sys_clock=None, out=False):
     # Load ifs.
@@ -166,7 +169,7 @@ async def node_start(node, sys_clock=None, out=False):
 
     # Save a dict version of the address fields.
     try:
-        self.p2p_addr = parse_peer_addr(node.addr_bytes)
+        node.p2p_addr = parse_peer_addr(node.addr_bytes)
     except:
         log_exception()
         raise Exception("Can't parse nodes p2p addr.")

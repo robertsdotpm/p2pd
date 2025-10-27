@@ -80,7 +80,8 @@ async def tcp_hole_punch(tunnel, af, pipe_id, src_info, dest_info, nic, addr_typ
     updated mappings for the dest peer (if any.)
     """
     task = create_task(
-        tunnel.node.schedule_punching_with_delay(
+        schedule_punching_with_delay(
+            tunnel.node,
             pipe_id,
             n=2 if puncher.side == INITIATOR else 0
         )

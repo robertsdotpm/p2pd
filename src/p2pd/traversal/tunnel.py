@@ -61,7 +61,7 @@ class Tunnel():
 
             # Large timeout, end refreshers, disable LAN cons.
             # <20 timeout can cause timeouts for relay setup.
-            P2P_RELAY: [udp_turn_relay, 20, self.turn_cleanup, 1, 2, "relay"],
+            P2P_RELAY: [udp_turn_relay, 20, turn_cleanup, 1, 2, "relay"],
         }
 
     def route_msg(self, msg, reply=None, m=0):

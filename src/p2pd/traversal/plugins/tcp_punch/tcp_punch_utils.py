@@ -540,6 +540,6 @@ async def punch_queue_worker(node):
     
 def start_punch_worker(node):
     node.punch_worker_task = create_task(
-        node.punch_queue_worker()
+        punch_queue_worker(node)
     )
 

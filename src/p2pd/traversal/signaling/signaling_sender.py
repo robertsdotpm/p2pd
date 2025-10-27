@@ -120,5 +120,5 @@ def start_sig_msg_queue_worker(node):
     # Route messages to destination.
     if node.sig_msg_queue_worker_task is None:
         node.sig_msg_queue_worker_task = create_task(
-            node.sig_msg_queue_worker(node)
+            sig_msg_queue_worker(node)
         )
