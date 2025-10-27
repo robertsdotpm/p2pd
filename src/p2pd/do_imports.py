@@ -31,11 +31,11 @@ if __name__ != '__main__':
     from .protocol.http.http_server_lib import ParseHTTPRequest
     from .node.rest_api import P2PDServer, start_p2pd_server, P2PD_PORT
     from .node.node_addr import *
-    from .node.node_tunnel import *
+    from .traversal.tunnel import *
     from .node.node_extra import P2PNodeExtra
     from .node.node import P2PNode, NODE_CONF, NODE_PORT
     from .node.node_utils import get_pp_executors
-    from .traversal.signaling import SignalMock, is_valid_mqtt
+    from .traversal.signaling.signaling_client import SignalMock, is_valid_mqtt
     from .install import *
     from .utility.toxiproxy.toxiclient import ToxiToxic, ToxiTunnel, ToxiClient
     from .utility.toxiproxy.toxiserver import ToxiMainServer

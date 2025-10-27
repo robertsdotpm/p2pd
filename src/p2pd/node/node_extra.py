@@ -4,8 +4,8 @@ from ..utility.utils import *
 from ..utility.machine_id import hashed_machine_id
 from ..traversal.tcp_punch.tcp_punch_client import PUNCH_CONF
 from .node_utils import *
-from .node_tunnel import *
-from ..traversal.signaling import *
+from ..traversal.tunnel import *
+from ..traversal.signaling.signaling_client import *
 from ..protocol.stun.stun_client import get_stun_clients
 from ..nic.nat.nat_utils import USE_MAP_NO
 from ..install import *

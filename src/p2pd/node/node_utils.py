@@ -10,11 +10,7 @@ from ..net.net import *
 from ..nic.interface import get_default_iface, get_mac_address
 from ..nic.select_interface import select_if_by_dest
 from ..traversal.turn.turn_client import TURNClient
-from ..traversal.signaling import SignalMock
-
-TRY_OVERLAP_EXTS = 1
-TRY_NOT_TO_OVERLAP_EXTS = 2
-CON_ID_MSG = b"P2P_CON_ID_EQ"
+from ..traversal.signaling.signaling_client import SignalMock
 
 f_path_txt = lambda x: "local" if x == NIC_BIND else "external"
 
@@ -278,6 +274,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             """
             result = await async_wrap_errors(
                 func(
+                    pp,
                     af,
                     pipe_id,
                     src_info,
