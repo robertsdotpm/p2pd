@@ -10,10 +10,9 @@ from ..install import *
 from ..net.address import Address
 from ..net.net import *
 from ..nic.interface import get_default_iface, get_mac_address
-from ..traversal.signaling.signaling_client import SignalMock
-from ..traversal.signaling.signaling_protocol import signal_protocol
 from ..protocol.stun.stun_client import get_n_stun_clients
-from ..utility.clock_skew import SysClock
+from ..nic.nat.nat_utils import USE_MAP_NO
+from ..traversal.plugins.tcp_punch.tcp_punch_client import PUNCH_CONF
 
 def load_signing_key(listen_port):
     # Make install dir if needed.
@@ -55,6 +54,52 @@ async def fallback_machine_id(netifaces, app_id="p2pd"):
     mac = await get_mac_address(if_name, netifaces)
     buf = fstr("{0} {1} {2} {3}", (app_id, host, if_name, mac,))
     return to_s(hashlib.sha256(to_b(buf)).hexdigest())
+
+async def close_idle_pipes(node):
+    """
+    As the number of free processes in the process pool
+    decreases and the pool approaches full the need to
+    check for idle connections to free up processes becomes
+    more urgent. The math bellow allocates an interval to use
+    for the idle count down based on urgency (remaining
+    processes) in reference to a min and max idle interval.)
+    """
+    floor_check = 300
+    ceil_check = 7200
+    alloc_pcent = node.active_punchers / node.max_punchers
+    num_space = ceil_check - floor_check
+    rel_placement = num_space * alloc_pcent
+    abs_placement = ceil_check - rel_placement
+    cur_time = time.time()
+    while 1:
+        # Check the list of oldest monitored pipes to least.
+        close_list = []
+        for pipe in node.last_recv_queue:
+            # Get last recv time.
+            last_recv = node.last_recv_table[pipe.sock]
+            elapsed = cur_time - last_recv
+
+            # No time passed.
+            if elapsed <= 0:
+                break
+            
+            # Sorted by time so >= this aren't expired.
+            if elapsed < abs_placement:
+                break
+
+            # Record pipe to close.
+            if elapsed >= abs_placement:
+                close_list.append(pipe)
+
+        # Don't change the prev list we're iterating.
+        # Close these idle connections.
+        for pipe in close_list:
+            node.last_recv_queue.remove(pipe)
+            del node.last_recv_table[pipe.sock]
+            await pipe.close()
+
+        # Don't tie up event loop
+        await asyncio.sleep(5)
 
 async def load_stun_clients(node):
     # Already loaded.

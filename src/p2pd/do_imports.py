@@ -13,7 +13,7 @@ if __name__ != '__main__':
     from .net.address import Address
     from .net.ip_range import IPRange, IPR
     from .entrypoint import p2pd_setup_netifaces
-    from .traversal.upnp.upnp import port_forward
+    from .protocol.upnp.upnp import port_forward
     from .nic.route.route_defs import Route, RoutePool
     from .nic.route.route_utils import get_routes_with_res
     from .net.pipe.pipe_utils import *
@@ -21,8 +21,8 @@ if __name__ != '__main__':
     from .nic.select_interface import *
     from .utility.clock_skew import SysClock
     from .protocol.stun.stun_client import STUNClient, get_stun_clients
-    from .traversal.turn.turn_client import TURNClient
-    from .traversal.tcp_punch.tcp_punch_client import TCPPuncher
+    from .protocol.turn.turn_client import TURNClient
+    from .traversal.plugins.tcp_punch.tcp_punch_client import TCPPuncher
     from .net.daemon import Daemon
     from .protocol.echo.echo_server import *
     from .protocol.http.http_client_lib import ParseHTTPResponse, WebCurl
@@ -32,7 +32,6 @@ if __name__ != '__main__':
     from .node.rest_api import P2PDServer, start_p2pd_server, P2PD_PORT
     from .node.node_addr import *
     from .traversal.tunnel import *
-    from .node.node_extra import P2PNodeExtra
     from .node.node import P2PNode, NODE_CONF, NODE_PORT
     from .node.node_utils import get_pp_executors
     from .traversal.signaling.signaling_client import SignalMock, is_valid_mqtt

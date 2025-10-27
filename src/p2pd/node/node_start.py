@@ -11,11 +11,10 @@ from ..nic.select_interface import list_interfaces
 from ..net.daemon import *
 from .node_addr import *
 from .node_utils import *
-from .node_extra import *
 from .nickname import *
 from ..traversal.tunnel_address import *
 from ..traversal.signaling.signaling_protocol import *
-from ..traverswal.signaling.signaling_utils import *
+from ..traversal.signaling.signaling_utils import *
 from ..traversal.signaling.signaling_sender import *
 
 async def node_start(node, sys_clock=None, out=False):
@@ -62,10 +61,10 @@ async def node_start(node, sys_clock=None, out=False):
     print("sk:", node.sk)
 
     node.vk = node.sk.verifying_key
-    print("vk:", self.vk)
+    print("vk:", node.vk)
 
     node.node_id = hashlib.sha256(
-        self.vk.to_string("compressed")
+        node.vk.to_string("compressed")
     ).hexdigest()[:25]
 
     # Table of authenticated users.
@@ -82,32 +81,32 @@ async def node_start(node, sys_clock=None, out=False):
     await load_stun_clients(node)
     if out:
         buf = ""
-        for if_index in range(0, len(self.ifs)):
-            nic = self.ifs[if_index]
+        for if_index in range(0, len(node.ifs)):
+            nic = node.ifs[if_index]
             buf += "\t\t" + nic.name + " "
             for af in nic.supported():
                 af_txt = "V4" if af is IP4 else "V6"
                 buf += fstr("({0}={1})", (
                     af_txt, 
-                    str(len(self.stun_clients[af][if_index])),
+                    str(len(node.stun_clients[af][if_index])),
                 ))
             buf += "\n"
         print(buf)
 
     # MQTT server offsets for signal protocol.
-    if self.conf["sig_pipe_no"]:
+    if node.conf["sig_pipe_no"]:
         if out: print("\tLoading MQTT clients...")
-        await load_signal_pipes(node, self.node_id)
+        await load_signal_pipes(node, node.node_id)
         if out:
             buf = "\t\tmqtt = ("
-            for index in list(self.signal_pipes):
+            for index in list(node.signal_pipes):
                 buf += fstr("{0},", (index,))
             buf += ")"
             print(buf)
 
     if sys_clock is None:
         sys_clock = SysClock(
-            interface=self.ifs[0]
+            interface=node.ifs[0]
         )
         await sys_clock.start()
 
@@ -115,7 +114,7 @@ async def node_start(node, sys_clock=None, out=False):
     t = time.time()
     if out: print("\tLoading NTP clock skew...")
     await setup_punch_coordination(node, sys_clock)
-    clock_skew = str(self.sys_clock.clock_skew)
+    clock_skew = str(node.sys_clock.clock_skew)
     if out: print(fstr("\t\tClock skew = {0}", (clock_skew,)))
         
     # Accept TCP punch requests.
@@ -125,63 +124,63 @@ async def node_start(node, sys_clock=None, out=False):
     start_sig_msg_queue_worker(node)
 
     # Simple loop to close idle tasks.
-    self.idle_pipe_closer = create_task(
-        self.close_idle_pipes()
+    node.idle_pipe_closer = create_task(
+        close_idle_pipes(node)
     )
 
     # Start the server for the node protocol.
-    await self.listen_on_ifs()
+    await node.listen_on_ifs()
 
     # Skip port forwarding if all NICs aren't behind NATs.
     all_open_internet = True
-    for nic in self.ifs:
+    for nic in node.ifs:
         if nic.nat["type"] != OPEN_INTERNET:
             all_open_internet = False
             break
 
     # Port forward all listen servers.
-    if self.conf["enable_upnp"] and not all_open_internet:
+    if node.conf["enable_upnp"] and not all_open_internet:
         if out: print("\tStarting UPnP task...")
 
         # Put slow forwarding task in the background.
         forward = asyncio.create_task(
-            self.forward(self.listen_port)
+            node.forward(node.listen_port)
         )
-        self.tasks.append(forward)
+        node.tasks.append(forward)
         await asyncio.sleep(2)
 
     # Build P2P address bytes.
-    assert(self.node_id is not None)
-    self.addr_bytes = make_peer_addr(
-        self.node_id,
-        self.machine_id,
-        self.ifs,
-        list(self.signal_pipes),
-        port=self.listen_port,
+    assert(node.node_id is not None)
+    node.addr_bytes = make_peer_addr(
+        node.node_id,
+        node.machine_id,
+        node.ifs,
+        list(node.signal_pipes),
+        port=node.listen_port,
     )
 
     # Log address.
-    msg = fstr("Starting node = '{0}'", (self.addr_bytes,))
+    msg = fstr("Starting node = '{0}'", (node.addr_bytes,))
     if not out:
-        Log.log_p2p(msg, self.node_id[:8])
+        Log.log_p2p(msg, node.node_id[:8])
 
     # Save a dict version of the address fields.
     try:
-        self.p2p_addr = parse_peer_addr(self.addr_bytes)
+        self.p2p_addr = parse_peer_addr(node.addr_bytes)
     except:
         log_exception()
         raise Exception("Can't parse nodes p2p addr.")
 
     # Used for setting nicknames for the node.
-    self.nick_client = await Nickname(
-        self.sk,
-        self.ifs,
-        self.sys_clock,
+    node.nick_client = await Nickname(
+        node.sk,
+        node.ifs,
+        node.sys_clock,
     )
 
-    nick = await self.nickname(self.node_id)
+    nick = await node.nickname(node.node_id)
     print(nick)
-    pkt = await self.nick_client.fetch(nick)
+    pkt = await node.nick_client.fetch(nick)
     print("nick pkt vkc = ", pkt.vkc)
 
-    return self
+    return node

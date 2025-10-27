@@ -91,7 +91,7 @@ import copy
 from functools import cmp_to_key
 from ...net.ip_range import *
 from ...nic.netiface_extra import *
-from ...traversal.upnp.upnp import *
+from ...protocol.upnp.upnp import *
 from ...net.address import *
 from .route_defs import *
 from ...utility.pattern_factory import *

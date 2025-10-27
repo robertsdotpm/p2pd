@@ -7,9 +7,10 @@ import asyncio
 from ..net.daemon import *
 from .node_addr import *
 from .node_utils import *
-from .node_extra import *
 from .nickname import *
 from .node_start import *
+from .node_stop import *
+from ..utility.machine_id import *
 from ..traversal.tunnel_address import *
 from ..traversal.tunnel import *
 from ..traversal.signaling.signaling_protocol import *
@@ -21,7 +22,7 @@ NODE_CONF = dict_child({
 }, NET_CONF)
 
 # Main class for the P2P node server.
-class P2PNode(P2PNodeExtra, Daemon):
+class P2PNode(Daemon):
     def __init__(self, ifs=[], port=3000, conf=NODE_CONF):
         super().__init__()
         self.__name__ = "P2PNode"
@@ -92,6 +93,9 @@ class P2PNode(P2PNodeExtra, Daemon):
         await node_start(self, sys_clock=sys_clock, out=out)
         return self
     
+    async def close(self):
+        await node_stop(self)
+    
     def __await__(self):
         return self.start().__await__()
     
@@ -115,4 +119,76 @@ class P2PNode(P2PNodeExtra, Daemon):
         msg = fstr("Setting nickname '{0}' = '{1}'", (name, value,))
         #Log.log_p2p(msg, self.node_id[:8])
         return name
+
+    def log(self, t, m):
+        node_id = self.node_id[:8]
+        msg = fstr("{0}: <{1}> {2}", (t, node_id, m,))
+        log(msg)
+
+    # Return supported AFs based on all NICs for the node.
+    def supported(self):
+        afs = set()
+        for nic in self.ifs:
+            for af in nic.supported():
+                afs.add(af)
+
+        # Make IP4 earliest in the list.
+        return sorted(tuple(afs))
+
+    async def listen_on_ifs(self):
+        # Multi-iface connection facilitation.
+        for nic in self.ifs:
+            # Listen on first route for AFs.
+            outs = await self.listen_local(
+                TCP,
+                self.listen_port,
+                nic
+            )
+
+            # Add global address listener.
+            if IP6 in nic.supported():
+                route = await nic.route(IP6).bind(
+                    port=self.listen_port
+                )
+
+                out = await self.add_listener(TCP, route)
+                outs.append(out)
+
+    def pipe_future(self, pipe_id):
+        if pipe_id not in self.pipes:
+            self.pipes[pipe_id] = asyncio.Future()
+
+        return pipe_id
+
+    def pipe_ready(self, pipe_id, pipe):
+        if pipe_id not in self.pipes:
+            log(fstr("pipe ready for non existing pipe {0}!", (pipe_id,)))
+            return
+        
+        if not self.pipes[pipe_id].done():
+            self.pipes[pipe_id].set_result(pipe)
+        
+        return pipe
+
+    async def load_machine_id(self, app_id, netifaces):
+        # Set machine id.
+        try:
+            return hashed_machine_id(app_id)
+        except:
+            return await fallback_machine_id(
+                netifaces,
+                app_id
+            )
+
+    # Accomplishes port forwarding and pin hole rules.
+    async def forward(self, port):
+        async def forward_server(server):
+            ret = await server.route.forward(port=port)
+            msg = fstr("<upnp> Forwarded {0}:{1}", (server.route.ext(), port,))
+            msg += fstr(" on {0}", (server.route.interface.name,))
+            if ret:
+                Log.log_p2p(msg, self.node_id[:8])
+
+        # Loop over all listen pipes for this node.
+        await self.for_server_in_self(forward_server)
 

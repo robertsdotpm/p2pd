@@ -4,7 +4,7 @@ import pprint
 from functools import total_ordering
 from ...net.ip_range import *
 from ...nic.netiface_extra import *
-from ...traversal.upnp.upnp import *
+from ...protocol.upnp.upnp import *
 from ...net.address import *
 
 # Allows referencing a list of routes as if all WAN IPs
