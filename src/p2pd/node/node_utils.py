@@ -48,24 +48,6 @@ def load_signing_key(listen_port):
     sk_buf = h_to_b(sk_hex)
     sk = SigningKey.from_string(sk_buf, curve=SECP256k1)
     return sk
-
-async def new_peer_signal_pipe(offset, p2p_dest, node):
-    # Build a channel to relay signal messages to peer.
-    mqtt_server = MQTT_SERVERS[offset]
-    signal_pipe = SignalMock(
-        peer_id=to_s(node.node_id),
-        f_proto=node.signal_protocol,
-        mqtt_server=mqtt_server
-    )
-
-    # If it fails unset the client.
-    try:
-        # If it's successful exit server offset attempts.
-        await signal_pipe.start()
-        return signal_pipe
-    except asyncio.TimeoutError:
-        # Cleanup and make sure it's unset.
-        await signal_pipe.close()
     
 async def fallback_machine_id(netifaces, app_id="p2pd"):
     host = socket.gethostname()

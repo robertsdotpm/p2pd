@@ -1,4 +1,28 @@
+from ...settings import *
 from ...net.net import *
+from ...net.address import Address
+from .signaling_protocol import signal_protocol
+from .signaling_client import SignalMock
+
+def find_signal_pipe(node, addr):
+    our_offsets = list(node.signal_pipes)
+    for offset in addr["signal"]:
+        if offset in our_offsets:
+            return node.signal_pipes[offset]
+
+    return None
+
+# Make already loaded sig pipes first to try.
+def prioritize_sig_pipe_overlap(node, offsets):
+    overlap = []
+    non_overlap = []
+    for offset in offsets:
+        if offset in node.signal_pipes:
+            overlap.append(offset)
+        else:
+            non_overlap.append(offset)
+
+    return overlap + non_overlap
 
 async def load_signal_pipe(node, af, offset, servers):
     # Lookup IP and port of MQTT server.
@@ -44,7 +68,7 @@ bound to the wrong event loop.
 TODO: investigate this.
 TODO: maybe load MQTT servers concurrently.
 """
-async def load_signal_pipes(self, node_id, servers=None, min_success=2, max_attempt_no=10):
+async def load_signal_pipes(node, node_id, servers=None, min_success=2, max_attempt_no=10):
     # Offsets for MQTT servers.
     servers = servers or MQTT_SERVERS
     offsets = [n for n in range(0, len(servers))]
@@ -67,7 +91,7 @@ async def load_signal_pipes(self, node_id, servers=None, min_success=2, max_atte
     Load the signal pipes based on the limit.
     """
     success_no = {IP4: 0, IP6: 0}
-    supported_afs = self.supported()
+    supported_afs = node.supported()
     attempt_no = 0
     for index in shuffled:
         # Try current server offset against the clients supported AFs.
@@ -88,7 +112,7 @@ async def load_signal_pipes(self, node_id, servers=None, min_success=2, max_atte
 
             # Attempt to get a handle to the MQTT server.
             ret = await async_wrap_errors(
-                self.load_signal_pipe(af, index, servers),
+                load_signal_pipe(node, af, index, servers),
                 timeout=2
             )
 
@@ -111,11 +135,3 @@ async def load_signal_pipes(self, node_id, servers=None, min_success=2, max_atte
         attempt_no += 1
         if attempt_no > max_attempt_no:
             break
-
-def find_signal_pipe(self, addr):
-    our_offsets = list(self.signal_pipes)
-    for offset in addr["signal"]:
-        if offset in our_offsets:
-            return self.signal_pipes[offset]
-
-    return None

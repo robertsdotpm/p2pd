@@ -15,6 +15,8 @@ from .node_extra import *
 from .nickname import *
 from ..traversal.tunnel_address import *
 from ..traversal.signaling.signaling_protocol import *
+from ..traverswal.signaling.signaling_utils import *
+from ..traversal.signaling.signaling_sender import *
 
 async def node_start(node, sys_clock=None, out=False):
     # Load ifs.
@@ -95,7 +97,7 @@ async def node_start(node, sys_clock=None, out=False):
     # MQTT server offsets for signal protocol.
     if self.conf["sig_pipe_no"]:
         if out: print("\tLoading MQTT clients...")
-        await self.load_signal_pipes(self.node_id)
+        await load_signal_pipes(node, self.node_id)
         if out:
             buf = "\t\tmqtt = ("
             for index in list(self.signal_pipes):
@@ -120,7 +122,7 @@ async def node_start(node, sys_clock=None, out=False):
     start_punch_worker(node)
 
     # Start worker that forwards sig proto messages.
-    self.start_sig_msg_dispatcher()
+    start_sig_msg_queue_worker(node)
 
     # Simple loop to close idle tasks.
     self.idle_pipe_closer = create_task(

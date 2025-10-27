@@ -49,7 +49,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         # Signal protocol class instance.
         self.sig_proto_handlers = SigProtoHandlers(self)
         self.sig_msg_queue = asyncio.Queue()
-        self.sig_msg_dispatcher_task = None
+        self.sig_msg_queue_worker_task = None
 
         # Fixed reference for long-running tasks.
         self.tasks = []

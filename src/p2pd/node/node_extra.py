@@ -9,9 +9,6 @@ from ..traversal.signaling.signaling_client import *
 from ..protocol.stun.stun_client import *
 from ..nic.nat.nat_utils import USE_MAP_NO
 from ..install import *
-from ..vendor.ecies import encrypt, decrypt
-from ..utility.clock_skew import SysClock
-from ..traversal.signaling.signaling_protocol import signal_protocol
 import asyncio
 import pathlib
 from ecdsa import SigningKey, SECP256k1
@@ -66,136 +63,6 @@ class P2PNodeExtra():
             self.pipes[pipe_id].set_result(pipe)
         
         return pipe
-    
-    # Make already loaded sig pipes first to try.
-    def prioritize_sig_pipe_overlap(self, offsets):
-        overlap = []
-        non_overlap = []
-        for offset in offsets:
-            if offset in self.signal_pipes:
-                overlap.append(offset)
-            else:
-                non_overlap.append(offset)
-
-        return overlap + non_overlap
-
-    async def await_peer_con(self, msg, vk=None, m=0, relay_no=2):
-        # Encrypt the message if the public key is known.
-        buf = b"\0" + msg.pack()
-        dest_node_id = msg.routing.dest["node_id"]
-
-        # Loaded from PNP root server.
-        if dest_node_id in self.auth:
-            vk = self.auth[dest_node_id]["vk"]
-
-        # Else loaded from a MSN.
-        if vk is not None:
-            assert(isinstance(vk, bytes))
-            buf = b"\1" + encrypt(
-                vk,
-                msg.pack(),
-            )
-
-        # UTF-8 messes up binary data in MQTT.
-        buf = to_h(buf)
-
-        # Try not to load a new signal pipe if
-        # one already exists for the dest.
-        dest = msg.routing.dest
-        offsets = dest["signal"]
-        offsets = self.prioritize_sig_pipe_overlap(offsets)
-
-        # Try signal pipes in order.
-        # If connect fails try another.
-        count = 0
-        for i in range(0, len(offsets)):
-            """
-            The start location within the offset list
-            depends on the technique no in the p2p_pipe
-            so that a different start server can be used
-            per method to skip failing on the same
-            server every time. Adds more resilience.
-            """
-            offset = offsets[(i + (m - 1)) % len(offsets)]
-
-            # Use existing sig pipe.
-            if offset in self.signal_pipes:
-                sig_pipe = self.signal_pipes[offset]
-
-            # Or load new server offset.
-            if offset not in self.signal_pipes:
-                sig_pipe = await async_wrap_errors(
-                    self.load_signal_pipe(
-                        msg.routing.af,
-                        offset,
-                        MQTT_SERVERS
-                    )
-                )
-
-            # Failed.
-            if sig_pipe is None:
-                continue
-
-            # Send message.
-            sent = await async_wrap_errors(
-                sig_pipe.send_msg(
-                    buf,
-                    to_s(dest["node_id"])
-                )
-            )
-
-            # Otherwise try next signal pipe.
-            if sent:
-                count += 1
-
-            # Relay limit reached.
-            if count >= relay_no:
-                return
-            
-        # TODO: no paths to host.
-        # Need fallback plan here.
-
-    async def sig_msg_dispatcher(self):
-        print("in sig msg dispatcher")
-        try:
-            x = await self.sig_msg_queue.get()
-            print("got sig msg q item", x)
-            if x is None:
-                return
-            else:
-                msg, vk, m = x
-                if None in (msg, vk, m,):
-                    log(
-                        "Invalid sig msg params = " + 
-                        str(msg) + 
-                        str(vk) + 
-                        str(m)
-                    )
-                print(msg, vk, m)
-            
-            await async_wrap_errors(
-                self.await_peer_con(
-                    msg,
-                    vk,
-                    m,
-                )
-            )
-
-            self.sig_msg_dispatcher_task = create_task(
-                self.sig_msg_dispatcher()
-            )
-        except RuntimeError:
-            print("run time error in sig msg dispatcher")
-            what_exception()
-            log_exception()
-            return
-        
-    def start_sig_msg_dispatcher(self):
-        # Route messages to destination.
-        if self.sig_msg_dispatcher_task is None:
-            self.sig_msg_dispatcher_task = create_task(
-                self.sig_msg_dispatcher()
-            )
 
     async def close_idle_pipes(self):
         """
@@ -264,9 +131,6 @@ class P2PNodeExtra():
 
         # Loop over all listen pipes for this node.
         await self.for_server_in_self(forward_server)
-
-    def p2p_pipe(self, dest_bytes):
-        return Tunnel(dest_bytes, self)
 
     # Shutdown the node server and do cleanup.
     async def close(self):
