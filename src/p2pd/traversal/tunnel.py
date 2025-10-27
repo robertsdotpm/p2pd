@@ -10,6 +10,8 @@ from .plugins.direct_connect.main import direct_connect
 from .plugins.tcp_punch.main import tcp_hole_punch, tcp_punch_cleanup
 from .plugins.turn.main import udp_turn_relay, turn_cleanup
 from .plugins.reverse_connect.main import reverse_connect
+from ..node.nickname import *
+from .tunnel_address import *
 
 async def log_pipe(addr_type, func_txt, pipe):
     path_txt = f_path_txt(addr_type)
@@ -105,6 +107,26 @@ class Tunnel():
             Log.log_p2p(msg, self.node.node_id[:8])
             pipe.subscribe(SUB_ALL)
             return pipe
+        
+# Connect to a remote P2P node using a number of techniques.
+async def connect_tunnel(node, pnp_addr, strategies=P2P_STRATEGIES, conf=P2P_PIPE_CONF):
+    # Get most recent address bytes if given a nickname.
+    if pnp_name_has_tld(pnp_addr):
+        addr_bytes = await get_updated_addr_bytes(node, pnp_addr)
+    else:
+        addr_bytes = pnp_addr
+
+    msg = fstr("Connecting to '{0}'", (addr_bytes,))
+    Log.log_p2p(msg, node.node_id[:8])
+    tunnel = Tunnel(addr_bytes, node)
+    for af in conf["addr_families"]:
+        af_conf = copy.deepcopy(conf)
+        af_conf["addr_families"] = [af]
+        pipe = await tunnel.connect(strategies, reply=None, conf=af_conf)
+        if pipe is not None:
+            return pipe
+        
+    return pipe
 
 if __name__ == "__main__": # pragma: no cover
     async def test_p2p_con():

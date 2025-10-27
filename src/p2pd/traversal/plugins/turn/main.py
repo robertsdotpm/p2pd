@@ -3,7 +3,7 @@ from ....net.pipe.pipe_utils import PipeEvents
 from ....settings import *
 from ....utility.utils import *
 from ....traversal.signaling.signaling_msgs import TURNMsg
-from ....node.node_utils import get_first_working_turn_client
+from .turn_utils import get_first_working_turn_client
 
 async def udp_turn_relay(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
     if addr_type == NIC_BIND:

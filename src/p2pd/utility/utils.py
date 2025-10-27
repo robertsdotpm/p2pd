@@ -21,6 +21,7 @@ import hashlib
 import unittest
 import ecdsa
 import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
 from ecdsa.curves import NIST192p
 from decimal import Decimal as Dec
 from .fstr import fstr
@@ -775,6 +776,29 @@ async def safe_gather(*args):
 async def sleep_random(min_ms=100, max_ms=2000):
     delay = random.randrange(min_ms, max_ms + 1) / 1000.0
     await asyncio.sleep(delay)
+
+async def get_pp_executors(workers=None):
+    workers = workers or min(32, os.cpu_count() + 4)
+    try:
+        pp_executor = ProcessPoolExecutor(max_workers=workers)
+    except Exception:
+        """
+        Not all platform have a working implementation of sem_open / semaphores.
+        Android is one such platform. It does support multiprocessing but
+        this semaphore feature is missing and will throw an error here.
+        In this case -- log the error and revert to using a single event loop.
+        """
+        log_exception()
+    
+    return workers, pp_executor
+    loop = asyncio.get_event_loop()
+    tasks = []
+    for i in range(0, workers):
+        tasks.append(loop.run_in_executor(
+            pp_executor, init_process_pool
+        ))
+    await asyncio.gather(*tasks)
+    return pp_executor
 
 
 if __name__ == "__main__": # pragma: no cover
