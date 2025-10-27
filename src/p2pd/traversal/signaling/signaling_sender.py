@@ -108,7 +108,7 @@ async def sig_msg_queue_worker(node):
         )
 
         node.sig_msg_queue_worker_task = create_task(
-            node.sig_msg_queue_worker(node)
+            sig_msg_queue_worker(node)
         )
     except RuntimeError:
         print("run time error in sig msg dispatcher")
