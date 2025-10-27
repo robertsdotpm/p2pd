@@ -28,7 +28,7 @@ TCP
 nc -4 -l 127.0.0.1 10001 -k
 nc -6 -l ::1 10001 -k
 """
-class P2PPipe():
+class Tunnel():
     def __init__(self, dest_bytes, node):
         # Record main references.
         self.node = node
@@ -70,7 +70,7 @@ class P2PPipe():
 
         msg.cipher.vk = to_h(self.node.vk.to_string("compressed"))
         self.node.sig_msg_queue.put_nowait([msg, vk, m])
-
+    
     async def connect(self, strategies=P2P_STRATEGIES, reply=None, conf=P2P_PIPE_CONF):
         # Try strategies to achieve a connection.
         pipe = None
@@ -112,7 +112,7 @@ if __name__ == "__main__": # pragma: no cover
         if1 = await Interface("enp3s0").start()
         if_list = [if1]
         pipe_id = rand_plain(10)
-        p2p_pipe = P2PPipe(if_list, 0)
+        p2p_pipe = Tunnel(if_list, 0)
         await p2p_pipe.direct_connect(p2p_dest, pipe_id, proto=TCP)
 
 

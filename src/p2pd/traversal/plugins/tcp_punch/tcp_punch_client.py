@@ -85,11 +85,11 @@ would itself require another message. So maybe not worth the cost.
 """
 
 import asyncio
-from ...nic.nat.nat_predict import *
+from ....nic.nat.nat_predict import *
 from .tcp_punch_utils import *
 from .tcp_punch_defs import *
-from ...utility.clock_skew import *
-from ...net.event_loop import *
+from ....utility.clock_skew import *
+from ....net.event_loop import *
 
 class TCPPuncher():
     def __init__(self, af, src_info, dest_info, stuns, sys_clock, nic, same_machine=False):

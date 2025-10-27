@@ -1,11 +1,11 @@
 import warnings
 import sys
-from ...net.ip_range import *
-from ...nic.nat.nat_utils import *
-from ...nic.interface import *
-from ...nic.nat.nat_predict import *
-from ...utility.clock_skew import *
-from ...net.keep_alive import set_keep_alive
+from ....net.ip_range import *
+from ....nic.nat.nat_utils import *
+from ....nic.interface import *
+from ....nic.nat.nat_predict import *
+from ....utility.clock_skew import *
+from ....net.keep_alive import set_keep_alive
 from .tcp_punch_defs import *
 
 # Fine tune various network settings.

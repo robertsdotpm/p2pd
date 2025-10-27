@@ -17,6 +17,20 @@ SIG_PROTO = {
     #SIG_ADDR: [AddrMsg, 0, 5],
 }
 
+# Used by the MQTT clients.
+async def signal_protocol(self, msg, signal_pipe):
+    print("Signal_protocol msg:", msg)
+    out = await async_wrap_errors(
+        self.sig_proto_handlers.proto(msg)
+    )
+
+    print(out)
+
+    if isinstance(out, SigMsg):
+        await signal_pipe.send_msg(
+            out,
+            out.routing.dest["node_id"]
+        )
 
 class SigProtoHandlers():
     def __init__(self, node, conf=P2P_PIPE_CONF):

@@ -2,14 +2,16 @@
 from ..settings import *
 from ..utility.utils import *
 from ..utility.machine_id import hashed_machine_id
-from ..traversal.tcp_punch.tcp_punch_client import PUNCH_CONF
+from ..traversal.plugins.tcp_punch.tcp_punch_client import PUNCH_CONF
 from .node_utils import *
 from ..traversal.tunnel import *
 from ..traversal.signaling.signaling_client import *
-from ..protocol.stun.stun_client import get_stun_clients
+from ..protocol.stun.stun_client import *
 from ..nic.nat.nat_utils import USE_MAP_NO
 from ..install import *
 from ..vendor.ecies import encrypt, decrypt
+from ..utility.clock_skew import SysClock
+from ..traversal.signaling.signaling_protocol import signal_protocol
 import asyncio
 import pathlib
 from ecdsa import SigningKey, SECP256k1
@@ -142,6 +144,12 @@ class P2PNodeExtra():
         )
         print(dest_tup)
 
+        def sig_proto_closure():
+            def closure(msg, signal_pipe):
+                return signal_protocol(self, msg, signal_pipe)
+        
+            return closure
+
         """
         This function does a basic send/recv test with MQTT to help
         ensure the MQTT servers are valid.
@@ -149,7 +157,7 @@ class P2PNodeExtra():
         print("load mqtt with self.node id:", self.node_id)
         client = await SignalMock(
             to_s(self.node_id),
-            self.signal_protocol,
+            sig_proto_closure(),
             dest_tup
         ).start()
 
@@ -481,7 +489,7 @@ class P2PNodeExtra():
         await self.for_server_in_self(forward_server)
 
     def p2p_pipe(self, dest_bytes):
-        return P2PPipe(dest_bytes, self)
+        return Tunnel(dest_bytes, self)
 
     # Shutdown the node server and do cleanup.
     async def close(self):

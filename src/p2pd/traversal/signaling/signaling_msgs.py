@@ -3,7 +3,7 @@ from ecdsa import VerifyingKey
 from ...utility.utils import *
 from ...net.net import *
 from ...net.ip_range import IPRange
-from ..tcp_punch.tcp_punch_defs import *
+from ..plugins.tcp_punch.tcp_punch_defs import *
 from ...node.node_addr import *
 
 SIG_CON = 1

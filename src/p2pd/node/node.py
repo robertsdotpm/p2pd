@@ -12,6 +12,8 @@ from .node_addr import *
 from .node_utils import *
 from .node_extra import *
 from .nickname import *
+from ..traversal.tunnel_address import *
+from ..traversal.signaling.signaling_protocol import *
 
 NODE_CONF = dict_child({
     "reuse_addr": False,
@@ -86,102 +88,6 @@ class P2PNode(P2PNodeExtra, Daemon):
             await node_protocol(self, msg, client_tup, pipe)
             for msg_cb in self.msg_cbs:
                 run_handler(pipe, msg_cb, client_tup, msg)
-    
-    # Used by the MQTT clients.
-    async def signal_protocol(self, msg, signal_pipe):
-        print("Signal_protocol msg:", msg)
-        out = await async_wrap_errors(
-            self.sig_proto_handlers.proto(msg)
-        )
-
-        print(out)
-
-        if isinstance(out, SigMsg):
-            await signal_pipe.send_msg(
-                out,
-                out.routing.dest["node_id"]
-            )
-
-    async def dev(self):
-        if not len(self.ifs):
-            nic = await Interface()
-            self.ifs = [nic]
-
-        # Set machine id.
-        t = time.time()
-        self.machine_id = await self.load_machine_id(
-            "p2pd",
-            self.ifs[0].netifaces
-        )
-
-        # Managed to load machine IDs?
-        if self.machine_id in (None, ""):
-            raise Exception("Could not load machine id.")
-        
-        """
-        The listen port is set deterministically to avoid conflicts
-        with port forwarding with multiple nodes in the LAN.
-        """
-        if self.listen_port is None:
-            self.listen_port = field_wrap(
-                dhash(self.machine_id),
-                [10000, 60000]
-            )
-
-        # Cryptography for authenticated messages.
-        self.sk = self.load_signing_key()
-        self.vk = self.sk.verifying_key
-        self.node_id = hashlib.sha256(
-            self.vk.to_string("compressed")
-        ).hexdigest()[:25]
-
-        # Table of authenticated users.
-        self.auth = {
-            self.node_id: {
-                "sk": self.sk,
-                "vk": self.vk.to_string("compressed"),
-            }
-        }
-
-        mqtt_servers = [{
-            "host": None,
-            IP4: "127.0.0.1",
-            IP6: "::1",
-            "port": 1883,
-        }]
-
-        await self.load_signal_pipes(
-            self.node_id,
-            servers=mqtt_servers,
-            min_success=1,
-        )
-
-        print(self.signal_pipes)
-
-        sys_clock = SysClock(interface=self.ifs[0], clock_skew=Dec("0.1"))
-
-        # Start the server for the node protocol.
-        await self.listen_on_ifs()
-
-        # Build P2P address bytes.
-        assert(self.node_id is not None)
-        self.addr_bytes = make_peer_addr(
-            self.node_id,
-            self.machine_id,
-            self.ifs,
-            list(self.signal_pipes),
-            port=self.listen_port,
-        )
-
-        # Log address.
-        msg = fstr("Starting node = '{0}'", (self.addr_bytes,))
-
-        # Save a dict version of the address fields.
-        try:
-            self.p2p_addr = parse_peer_addr(self.addr_bytes)
-        except:
-            log_exception()
-            raise Exception("Can't parse nodes p2p addr.")
 
     async def start(self, sys_clock=None, out=False):
         # Load ifs.
@@ -357,74 +263,12 @@ class P2PNode(P2PNodeExtra, Daemon):
         return self.start().__await__()
     
     # Connect to a remote P2P node using a number of techniques.
-    async def connect(self, addr_bytes, strategies=P2P_STRATEGIES, conf=P2P_PIPE_CONF):
-        if pnp_name_has_tld(addr_bytes):
-            msg = fstr("Translating '{0}'", (addr_bytes,))
-            Log.log_p2p(msg, self.node_id[:8])
-            name = addr_bytes
-            pkt = await self.nick_client.fetch(addr_bytes)
-            print("nick pkt vkc = ", pkt.vkc)
-            assert(pkt.vkc)
-            addr_bytes = pkt.value
-            assert(pkt.vkc)
-            print("got addr bytes:", addr_bytes)
-
-            msg = fstr("Resolved '{0}' = '{1}'", (name, addr_bytes,))
-            Log.log_p2p(msg, self.node_id[:8])
-
-            # Parse address bytes to a dict.
-            addr = parse_peer_addr(addr_bytes)
-            print(addr)
-
-            # Authorize this node for replies.
-            assert(isinstance(pkt.vkc, bytes))
-
-            
-            self.auth[addr["node_id"]] = {
-                "vk": pkt.vkc,
-                "sk": None,
-            }
-
-            print("auth table:", self.auth)
-
-            # Reply must match this ID with this sender key.
-            pipe_id = to_s(rand_plain(10))
-            self.addr_futures[pipe_id] = asyncio.Future()
-
-            # Request most recent address from peer using MQTT.
-            msg = GetAddr({
-                "meta": {
-                    "ttl": int(self.sys_clock.time()) + 5,
-                    "pipe_id": pipe_id,
-                    "src_buf": self.addr_bytes,
-                },
-                "routing": {
-                    "dest_buf": addr_bytes,
-                },
-            })
-
-            # Our key for an encrypted reply.
-            msg.cipher.vk = to_h(self.vk.to_string("compressed"))
-
-            # Their key as loaded from PNS.
-            assert(pkt.vkc)
-            self.sig_msg_queue.put_nowait([msg, pkt.vkc, 0])
-
-            # Wait for an updated address.
-            reply = None
-            try:
-                # Get a return addr reply.
-                reply = await asyncio.wait_for(
-                    self.addr_futures[pipe_id],
-                    5
-                )
-
-                # Use the src addr directly.
-                print("Got updated addr.", reply.meta.src_buf)
-                addr_bytes = reply.meta.src_buf
-            except asyncio.TimeoutError:
-                print("addr requ timed out")
-                pass
+    async def connect(self, pnp_addr, strategies=P2P_STRATEGIES, conf=P2P_PIPE_CONF):
+        # Get most recent address bytes if given a nickname.
+        if pnp_name_has_tld(pnp_addr):
+            addr_bytes = await get_updated_addr_bytes(self, pnp_addr)
+        else:
+            addr_bytes = pnp_addr
 
         msg = fstr("Connecting to '{0}'", (addr_bytes,))
         Log.log_p2p(msg, self.node_id[:8])
