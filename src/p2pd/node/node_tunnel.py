@@ -272,7 +272,20 @@ class P2PPipe():
             },
         })
 
-        self.route_msg(msg, reply=reply, m=2)
+        #self.route_msg(msg, reply=reply, m=2)
+        #dest_node_id = self.dest["node_id"]
+        #dest_pkc = self.node.auth[dest_node_id]["vk"]
+        """
+        if reply is None:
+            dest_node_id = self.dest["node_id"]
+            dest_pkc = self.node.auth[dest_node_id]["vk"]
+        else:
+            #dest_pkc = h_to_b(reply.cipher.vk)
+
+            print(reply.cipher.vk)
+        """
+
+        self.node.sig_msg_queue.put_nowait([msg, None , 2])
 
         # Prevent protocol loop.
         pipe = await self.node.pipes[pipe_id]
@@ -352,6 +365,10 @@ class P2PPipe():
                 "serv_id": client.serv_offset,
             },
         })
+
+        #dest_node_id = self.dest["node_id"]
+        #dest_pkc = self.node.auth[dest_node_id]["vk"]
+        #self.node.sig_msg_queue.put_nowait([msg, dest_pkc , 1])
 
         try:
             self.route_msg(msg, reply=reply, m=3)

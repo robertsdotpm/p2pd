@@ -23,6 +23,7 @@ from decimal import Decimal as Dec
 from ..net.address import *
 from ..protocol.ntp.ntp_client import NTPClient
 from ..settings import *
+from ..nic.interface import *
 
 NTP_RETRY = 2
 NTP_TIMEOUT = 2
@@ -258,7 +259,6 @@ class SysClock:
 
     @staticmethod
     def from_dict(d):
-        from p2pd.interface import Interface
         i = Interface.from_dict(d["if"])
         x = SysClock(interface=i, clock_skew=d["clock_skew"])
         return x

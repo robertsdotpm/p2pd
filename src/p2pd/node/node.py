@@ -284,7 +284,7 @@ class P2PNode(P2PNodeExtra, Daemon):
         if out: print(fstr("\t\tClock skew = {0}", (clock_skew,)))
             
         # Accept TCP punch requests.
-        #self.start_punch_worker()
+        self.start_punch_worker()
 
         # Start worker that forwards sig proto messages.
         self.start_sig_msg_dispatcher()

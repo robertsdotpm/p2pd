@@ -380,7 +380,7 @@ class P2PNodeExtra():
             else:
                 msg, vk, m = x
                 if None in (msg, vk, m,):
-                    raise Exception(
+                    log(
                         "Invalid sig msg params = " + 
                         str(msg) + 
                         str(vk) + 

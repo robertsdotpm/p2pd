@@ -2,6 +2,7 @@ from ...utility.utils import *
 from .nat_utils import *
 from ..interface import *
 from ...protocol.stun.stun_client import *
+from ...traversal.tcp_punch.tcp_punch_defs import *
 
 MAX_PREDICT_NO = 100
 
