@@ -101,7 +101,7 @@ async def close_idle_pipes(node):
         # Don't tie up event loop
         await asyncio.sleep(5)
 
-async def load_stun_clients(node):
+async def load_stun_clients(node, limit=USE_MAP_NO):
     # Already loaded.
     if hasattr(node, "stun_clients"):
         return
@@ -112,7 +112,7 @@ async def load_stun_clients(node):
         for af in interface.supported():
             node.stun_clients[af][if_index] = await get_n_stun_clients(
                 af=af,
-                n=USE_MAP_NO,
+                n=limit,
                 interface=interface,
                 proto=TCP,
                 conf=PUNCH_CONF,

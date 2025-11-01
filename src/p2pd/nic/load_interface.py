@@ -36,14 +36,15 @@ async def load_interface(nic, netifaces, min_agree, max_agree, timeout):
         nic.rp[af] = RoutePool()
 
         # Used to resolve nic addresses.
-        servs = STUN_MAP_SERVERS[UDP][af]
-        random.shuffle(servs[:max(20, max_agree)])
+        servs = STUN_MAP_SERVERS[UDP][af][:max(20, max_agree)]
+        random.shuffle(servs)
         stun_clients = await get_stun_clients(
             af,
             max_agree,
             nic,
             servs=servs
         )
+
         assert(len(stun_clients) <= max_agree)
 
         # Is this default iface for this AF?

@@ -281,6 +281,8 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
     It's already done the necessary work to resolve that first route.
     So only run the code bellow if there's more than 1 or enable default
     has been disabled.
+
+    > 1 or (len(priv_iprs) and not enable_default)
     """
     priv_src = ""
     if len(priv_iprs) > 1 or (len(priv_iprs) and not enable_default):

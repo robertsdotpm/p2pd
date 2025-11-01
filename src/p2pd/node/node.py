@@ -89,8 +89,8 @@ class P2PNode(Daemon):
             for msg_cb in self.msg_cbs:
                 run_handler(pipe, msg_cb, client_tup, msg)
 
-    async def start(self, sys_clock=None, out=False):
-        await node_start(self, sys_clock=sys_clock, out=out)
+    async def start(self, sys_clock=None, out=False, cout=print):
+        await node_start(self, sys_clock=sys_clock, out=out, cout=cout)
         return self
     
     async def close(self):

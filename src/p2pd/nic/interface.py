@@ -40,7 +40,7 @@ class Interface():
         self.stack = stack
         assert(self.stack in VALID_STACKS)
 
-    async def start(self, netifaces=None, min_agree=2, max_agree=5, timeout=2):
+    async def start(self, netifaces=None, min_agree=2, max_agree=5, timeout=4):
         # Declared in load_interface.py.
         return await load_interface(
             nic=self,

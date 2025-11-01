@@ -14,9 +14,13 @@ IS_DEBUG = 2
 DISABLE_PORT_FORWARDING = True
 
 node_conf = dict_child({
+    "init_clock_skew": True,
     "reuse_addr": False,
     "enable_upnp": False,
     "sig_pipe_no": SIGNAL_PIPE_NO,
+    "enable_punching": True,
+    "enable_nickname": True,
+    "enable_stun_clients": True,
 }, NET_CONF)
 
 
@@ -27,11 +31,14 @@ parser.add_argument("--cmd", type=str, required=False, help="Command to run")
 args = parser.parse_args()
 
 
-def cout(m=""):
+def cout(*fargs):
     if args.cmd:
         return
     else:
-        print(m)
+        if not len(fargs):
+            print()
+        else:
+            print(*fargs)
 
 def patch_log_p2p(m, node_id=""):
     out = fstr("p2p: <{0}> ", (node_id,)) + to_s(m)
@@ -72,14 +79,49 @@ method_txt = {
     "t": P2P_RELAY,
 }
 
+async def load_nickname_static(listen_port=None):
+    """
+    The listen port is set deterministically to avoid conflicts
+    with port forwarding with multiple nodes in the LAN.
+    if node.listen_port is None:
+        node.listen_port = field_wrap(
+            dhash(node.machine_id),
+            [10000, 60000]
+        )
+    """
+
+    sk = load_signing_key(listen_port)
+    vk = sk.verifying_key
+    node_id = hashlib.sha256(
+        vk.to_string("compressed")
+    ).hexdigest()[:25]
+    return node_id + ".p2p"
+
 async def main():
     cout("Universal reachability demo")
     cout("Coded by matthew@roberts.pm")
     cout("-----------------------------")
     cout()
     cout("Loading networking interfaces...")
+
     if_names = await list_interfaces()
-    ifs = await load_interfaces(if_names, Interface)
+    if args.cmd == "get_nickname":
+        print("fast load active")
+        # Speed up interface loading for nickname only.
+        ifs = await load_interfaces(
+            if_names,
+            Interface,
+            1,
+            2,
+            skip_nat=True,
+            timeout=8
+        )
+    else:
+        ifs = await load_interfaces(
+            if_names,
+            Interface,
+            timeout=4
+        )
 
     """
     If the NICs flag has been set then filter the interface list
@@ -113,6 +155,13 @@ async def main():
         buf += "\n"
     cout(buf[:-1])
 
+    if args.cmd == "get_nickname":
+        node_conf["sig_pipe_no"] = 0
+        node_conf["enable_upnp"] = False
+        node_conf["init_clock_skew"] = False
+        node_conf["enable_punching"] = False
+        node_conf["enable_nickname"] = False
+
     node = P2PNode(ifs=ifs, conf=node_conf)
     if args.port:
         node.listen_port = args.port
@@ -120,12 +169,14 @@ async def main():
     cout("Starting node on %d..." % (node.listen_port,))
     nodes = []
     node.add_msg_cb(add_echo_support)
-    await node.start(out=True)
+    await node.start(out=True, cout=cout)
     nodes.append(node)
     cout()
     cout(fstr("Node started = {0}", (to_s(node.addr_bytes),)))
     cout(fstr("Node port = {0}", (node.listen_port,)))
-    
+
+
+    nick = None
     try:
         nick = await node.nickname(node.node_id)
         cout(fstr("Node nickname = {0}", (nick,)))
@@ -134,6 +185,13 @@ async def main():
         log_exception()
         cout("node id default nickname didnt load")
         cout("might have been taken over or all servers down.")
+
+    if args.cmd:
+        if args.cmd == "get_nickname":
+            print(nick)
+            await node.close()
+            return
+
 
     cout(\
 """(0) Connect to a node using its nickname or address.

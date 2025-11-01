@@ -20,10 +20,10 @@ from ..utility.clock_skew import SysClock
 from ..traversal.plugins.tcp_punch.tcp_punch_utils import start_punch_worker
 from ..traversal.plugins.tcp_punch.tcp_punch_utils import setup_punch_coordination
 
-async def node_start(node, sys_clock=None, out=False):
+async def node_start(node, sys_clock=None, out=False, cout=print):
     # Load ifs.
-    t = time.time()
     if not len(node.ifs):
+        print("\tLoading networking interfaces again...")
         try:
             if_names = await list_interfaces()
             node.ifs = await load_interfaces(if_names, Interface)
@@ -39,7 +39,6 @@ async def node_start(node, sys_clock=None, out=False):
         raise Exception("p2p node could not load ifs.")
 
     # Set machine id.
-    t = time.time()
     node.machine_id = await node.load_machine_id(
         "p2pd",
         node.ifs[0].netifaces
@@ -61,10 +60,10 @@ async def node_start(node, sys_clock=None, out=False):
 
     # Cryptography for authenticated messages.
     node.sk = load_signing_key(node.listen_port)
-    print("sk:", node.sk)
+    cout("sk:", node.sk)
 
     node.vk = node.sk.verifying_key
-    print("vk:", node.vk)
+    cout("vk:", node.vk)
 
     node.node_id = hashlib.sha256(
         node.vk.to_string("compressed")
@@ -79,52 +78,61 @@ async def node_start(node, sys_clock=None, out=False):
     }
 
     # Used by TCP punch clients.
-    t = time.time()
-    if out: print("\tLoading STUN clients...")
-    await load_stun_clients(node)
-    if out:
-        buf = ""
-        for if_index in range(0, len(node.ifs)):
-            nic = node.ifs[if_index]
-            buf += "\t\t" + nic.name + " "
-            for af in nic.supported():
-                af_txt = "V4" if af is IP4 else "V6"
-                buf += fstr("({0}={1})", (
-                    af_txt, 
-                    str(len(node.stun_clients[af][if_index])),
-                ))
-            buf += "\n"
-        print(buf)
+    if node.conf.get("enable_punching", True):
+        if out: cout("\tLoading STUN clients...")
+        await load_stun_clients(node)
+        if out:
+            buf = ""
+            for if_index in range(0, len(node.ifs)):
+                nic = node.ifs[if_index]
+                buf += "\t\t" + nic.name + " "
+                for af in nic.supported():
+                    af_txt = "V4" if af is IP4 else "V6"
+                    buf += fstr("({0}={1})", (
+                        af_txt, 
+                        str(len(node.stun_clients[af][if_index])),
+                    ))
+                buf += "\n"
+            cout(buf)
 
     # MQTT server offsets for signal protocol.
     if node.conf["sig_pipe_no"]:
-        if out: print("\tLoading MQTT clients...")
+        if out: cout("\tLoading MQTT clients...")
         await load_signal_pipes(node, node.node_id)
         if out:
             buf = "\t\tmqtt = ("
             for index in list(node.signal_pipes):
                 buf += fstr("{0},", (index,))
             buf += ")"
-            print(buf)
+            cout(buf)
 
     if sys_clock is None:
-        sys_clock = SysClock(
-            interface=node.ifs[0]
-        )
-        await sys_clock.start()
+        if node.conf.get("init_clock_skew", True):
+            sys_clock = SysClock(
+                interface=node.ifs[0]
+            )
+            await sys_clock.start()
+        else:
+            sys_clock = SysClock(node.ifs[0], clock_skew=Dec(0.1))
+            node.sys_clock = sys_clock
 
     # Multiprocess support for TCP punching and NTP sync.
     t = time.time()
-    if out: print("\tLoading NTP clock skew...")
-    await setup_punch_coordination(node, sys_clock)
-    clock_skew = str(node.sys_clock.clock_skew)
-    if out: print(fstr("\t\tClock skew = {0}", (clock_skew,)))
+    if out: cout("\tLoading NTP clock skew...")
+    if node.conf.get("enable_punching", True):
+        await setup_punch_coordination(node, sys_clock)
+
+    if node.conf.get("init_clock_skew", True):
+        clock_skew = str(node.sys_clock.clock_skew)
+        if out: cout(fstr("\t\tClock skew = {0}", (clock_skew,)))
         
     # Accept TCP punch requests.
-    start_punch_worker(node)
+    if node.conf.get("enable_punching", True):
+        start_punch_worker(node)
 
     # Start worker that forwards sig proto messages.
-    start_sig_msg_queue_worker(node)
+    if node.conf["sig_pipe_no"]:
+        start_sig_msg_queue_worker(node)
 
     # Simple loop to close idle tasks.
     node.idle_pipe_closer = create_task(
@@ -143,7 +151,7 @@ async def node_start(node, sys_clock=None, out=False):
 
     # Port forward all listen servers.
     if node.conf["enable_upnp"] and not all_open_internet:
-        if out: print("\tStarting UPnP task...")
+        if out: cout("\tStarting UPnP task...")
 
         # Put slow forwarding task in the background.
         forward = asyncio.create_task(
@@ -181,9 +189,10 @@ async def node_start(node, sys_clock=None, out=False):
         node.sys_clock,
     )
 
-    nick = await node.nickname(node.node_id)
-    print(nick)
-    pkt = await node.nick_client.fetch(nick)
-    print("nick pkt vkc = ", pkt.vkc)
+    if node.conf.get("enable_nickname", True):
+        nick = await node.nickname(node.node_id)
+        cout(nick)
+        pkt = await node.nick_client.fetch(nick)
+        cout("nick pkt vkc = ", pkt.vkc)
 
     return node

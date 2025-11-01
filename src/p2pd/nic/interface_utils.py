@@ -358,7 +358,7 @@ def if_list_to_dict(if_list):
 
     return dict_list
 
-async def load_interfaces(if_names, Interface):
+async def load_interfaces(if_names, Interface, min_agree=2, max_agree=5, skip_nat=False, timeout=4):
     """
 When an interface is loaded, it is placed into a clearing queue.
 The event loop cycles through this queue, switching between tasks as they
@@ -369,11 +369,17 @@ other tasks are accounted for and no single timeout is miscalculated by
 assuming immediate execution.
     """
     nics = []
-    if_len = len(if_names)
     for if_name in if_names:
         try:
-            nic = await Interface(if_name)
-            await nic.load_nat()
+            nic = Interface(if_name)
+            await nic.start(
+                min_agree=min_agree,
+                max_agree=max_agree,
+                timeout=timeout,
+            )
+
+            if not skip_nat:
+                await nic.load_nat(timeout=timeout)
             nics.append(nic)
         except:
             log_exception()
