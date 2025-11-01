@@ -27,9 +27,19 @@ node_conf = dict_child({
 parser = argparse.ArgumentParser(description="A simple greeting script")
 parser.add_argument("--nics", type=str, required=False, help="Limit to specific nics, comma separated")
 parser.add_argument("--port", type=int, required=False, help="Start node on specific port")
+parser.add_argument("--pnp_server", type=str, required=False, help="Specify using a specific PNP server")
 parser.add_argument("--cmd", type=str, required=False, help="Command to run")
 args = parser.parse_args()
 
+if args.pnp_server:
+    pnp_tup = args.pnp_server.split(",")
+    pnp_tup[1] = int(pnp_tup[1])
+    print(pnp_tup)
+    PNP_SERVERS[IP4][0]["host"] = pnp_tup[0]
+    PNP_SERVERS[IP4][0]["ip"] = pnp_tup[0]
+    PNP_SERVERS[IP4][0]["port"] = pnp_tup[1]
+    PNP_SERVERS[IP6][0]["host"] = "localhost"
+    PNP_SERVERS[IP6][0]["ip"] = "::1"
 
 def cout(*fargs):
     if args.cmd:
@@ -160,7 +170,7 @@ async def main():
         node_conf["enable_upnp"] = False
         node_conf["init_clock_skew"] = False
         node_conf["enable_punching"] = False
-        node_conf["enable_nickname"] = False
+        #node_conf["enable_nickname"] = False
 
     node = P2PNode(ifs=ifs, conf=node_conf)
     if args.port:

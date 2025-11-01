@@ -100,6 +100,7 @@ class Nickname():
 
                 # Uses direct IPs to avoid domain names.
                 serv_info = PNP_SERVERS[af][index]
+                print(serv_info)
                 dest = (
                     serv_info["ip"],
                     serv_info["port"],
