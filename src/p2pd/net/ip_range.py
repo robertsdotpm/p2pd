@@ -55,6 +55,8 @@ class IPRange():
                 self.netmask = None
             else:
                 self.netmask = netmask
+                if netmask == 128 or netmask == 32:
+                    log("Netmask looks like a CIDR.")
 
         # Is this IP4 or IP6 -- check for ambiguity.
         self.af = None
@@ -111,10 +113,20 @@ class IPRange():
 
         # IP is network portion + host portion.
         self.i_ip = int(self.ipa_ip)
+    
+        # This portion blanks out the host segment to zero
+        # so that calculations to the number with offsets are correct.
         if host_bit_len:
             # If a range is specified and host bits are set.
             # Get rid of them.
             self.i_host = get_bits(self.i_ip, l=host_bit_len)
+
+            """
+            Returns the max number that the host portion can be.
+            and the i_ip ends up as the network portion only
+            with no host bits set.
+            """
+
             self.i_ip -= self.i_host
             self.host_no = 1
         else:
@@ -138,6 +150,7 @@ class IPRange():
         if not self.i_ip:
             self.is_public = True
             self.is_private = False
+
         if self.ip in BLACK_HOLE_IPS.values():
             self.is_public = True
             self.is_private = False
@@ -343,7 +356,7 @@ def IPR(ip, af):
 def ensure_ip_is_public(ip):
     ip = ip_norm(ip)
     af = IP4 if "." in ip else IP6
-    ipr = IPRange(ip, af_to_cidr(af))
+    ipr = IPRange(ip, cidr=af_to_cidr(af))
     if ipr.is_private:
         raise Exception("IP must be public.")
 
@@ -352,6 +365,11 @@ def ensure_ip_is_public(ip):
 if __name__ == "__main__": # pragma: no cover
     # Blank host = range.
     x = IPRange("192.168.1.0", "255.255.255.0")
+
+    #print(str(x[0]))
+    #print(str(x[-1]))
+    #exit()
+
     assert(str(x[0]) == "192.168.1.1")
     assert(str(x[1]) == "192.168.1.2")
     assert(str(x[-1]) == "192.168.1.255")

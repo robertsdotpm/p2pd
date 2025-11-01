@@ -2,6 +2,11 @@ from p2pd import *
 
 
 class TestIPRange(unittest.IsolatedAsyncioTestCase):
+    async def test_private_for_single_host_v6(self):
+        ipr = IPRange("::1", cidr=128)
+        self.assertTrue(ipr.is_private)
+
+
     async def test_ip_range_iter(self):
         ipr = IPRange("192.168.0.0", cidr=16)
 

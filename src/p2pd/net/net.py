@@ -480,6 +480,11 @@ def ip_norm(ip):
 
     return ip
 
+def mac_norm(mac):
+    parts = re.split("[:.-]", mac)
+    parts = [ part.zfill(2).lower() for part in parts ]
+    return "".join(parts)
+
 async def proto_recv(pipe):
     n = 1 if pipe.sock.type == TCP else 5
     for _ in range(0, n):

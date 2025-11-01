@@ -7,6 +7,7 @@ idk if thats relevant.
 
 import asyncio
 import sys
+import argparse
 from .do_imports import *
 
 IS_DEBUG = 2
@@ -18,17 +19,31 @@ node_conf = dict_child({
     "sig_pipe_no": SIGNAL_PIPE_NO,
 }, NET_CONF)
 
+
+parser = argparse.ArgumentParser(description="A simple greeting script")
+parser.add_argument("--nics", type=str, required=False, help="Limit to specific nics, comma separated")
+parser.add_argument("--port", type=int, required=False, help="Start node on specific port")
+parser.add_argument("--cmd", type=str, required=False, help="Command to run")
+args = parser.parse_args()
+
+
+def cout(m=""):
+    if args.cmd:
+        return
+    else:
+        print(m)
+
 def patch_log_p2p(m, node_id=""):
     out = fstr("p2p: <{0}> ", (node_id,)) + to_s(m)
-    print(out)
+    cout(out)
 
 Log.log_p2p = patch_log_p2p
 
 async def add_echo_support(msg, client_tup, pipe):
     if b"ECHO" == msg[:4]:
-        print()
-        print("\tGot echo proto msg: " + to_s(msg) + fstr(" from {0}", (client_tup,)))
-        print()
+        cout()
+        cout("\tGot echo proto msg: " + to_s(msg) + fstr(" from {0}", (client_tup,)))
+        cout()
         await pipe.send(msg[4:], client_tup)
 
 nat_txt = {
@@ -58,13 +73,31 @@ method_txt = {
 }
 
 async def main():
-    print("Universal reachability demo")
-    print("Coded by matthew@roberts.pm")
-    print("-----------------------------")
-    print()
-    print("Loading networking interfaces...")
+    cout("Universal reachability demo")
+    cout("Coded by matthew@roberts.pm")
+    cout("-----------------------------")
+    cout()
+    cout("Loading networking interfaces...")
     if_names = await list_interfaces()
     ifs = await load_interfaces(if_names, Interface)
+
+    """
+    If the NICs flag has been set then filter the interface list
+    to match only the MAC addresses indicated.
+    """
+    if args.nics:
+        if "," in args.nics:
+            mac_list = args.nics.split(",")
+        else:
+            mac_list = [args.nics]
+
+        mac_list = [mac_norm(mac) for mac in mac_list]
+        new_ifs = []
+        for nic in ifs:
+            if nic.mac in mac_list:
+                new_ifs.append(nic)
+
+        ifs = new_ifs
 
     buf = ""
     for nic in ifs:
@@ -78,32 +111,31 @@ async def main():
         buf += fstr("{0} delta = ", (delta_txt[nic.nat['delta']['type']],))
         buf += fstr("{0}", (nic.nat['delta']['value'],))
         buf += "\n"
-    print(buf[:-1])
+    cout(buf[:-1])
 
     node = P2PNode(ifs=ifs, conf=node_conf)
-    port = node.listen_port if len(sys.argv) < 2 else int(sys.argv[1])
-    print(port)
-    node.listen_port = port
-    print("Starting node on %d..." % (port,))
+    if args.port:
+        node.listen_port = args.port
 
+    cout("Starting node on %d..." % (node.listen_port,))
     nodes = []
     node.add_msg_cb(add_echo_support)
     await node.start(out=True)
     nodes.append(node)
-    print()
-    print(fstr("Node started = {0}", (to_s(node.addr_bytes),)))
-    print(fstr("Node port = {0}", (node.listen_port,)))
+    cout()
+    cout(fstr("Node started = {0}", (to_s(node.addr_bytes),)))
+    cout(fstr("Node port = {0}", (node.listen_port,)))
     
     try:
         nick = await node.nickname(node.node_id)
-        print(fstr("Node nickname = {0}", (nick,)))
-        print()
+        cout(fstr("Node nickname = {0}", (nick,)))
+        cout()
     except:
         log_exception()
-        print("node id default nickname didnt load")
-        print("might have been taken over or all servers down.")
+        cout("node id default nickname didnt load")
+        cout("might have been taken over or all servers down.")
 
-    print(\
+    cout(\
 """(0) Connect to a node using its nickname or address.
 (1) Start accepting connections (this stops the input loop)
 (2) Start additional node for testing (needed for self punch.)
@@ -129,9 +161,9 @@ async def main():
             choice = input("Enter nickname: ")
             try:
                 ret = await node.nickname(choice)
-                print(fstr("Nickname registered = {0}", (str(ret),)))
+                cout(fstr("Nickname registered = {0}", (str(ret),)))
             except:
-                print("Nickname taken.")
+                cout("Nickname taken.")
 
             continue
 
@@ -146,13 +178,13 @@ async def main():
             await asyncio.create_task(
                 bob.start(sys_clock=alice.sys_clock, out=True)
             )
-            print()
-            print(fstr("New node addr = {0}", (to_s(bob.addr_bytes),)))
+            cout()
+            cout(fstr("New node addr = {0}", (to_s(bob.addr_bytes),)))
             ret = await bob.nickname(bob.node_id)
-            print(fstr("New node port = {0}", (bob.listen_port,)))
-            print(fstr("New node nickname = {0}", (ret,)))
+            cout(fstr("New node port = {0}", (bob.listen_port,)))
+            cout(fstr("New node nickname = {0}", (ret,)))
             nodes.append(bob)
-            print()
+            cout()
             continue
 
         if choice == "0":
@@ -168,9 +200,9 @@ async def main():
                     last_addr = addr
             
 
-            print()
-            print("Connection methods (in order):")
-            print("TCP: (d)irect, (r)everse, (p)unch; UDP: (t)urn")
+            cout()
+            cout("Connection methods (in order):")
+            cout("TCP: (d)irect, (r)everse, (p)unch; UDP: (t)urn")
             strats = []
             while 1:
                 methods = input("Enter for default (drp): ")
@@ -189,11 +221,11 @@ async def main():
                 else:
                     break
 
-            print(strats)
+            cout(strats)
 
-            print()
-            print("Enabled connection pathways (in order):")
-            print("WAN: (e)xternal, LAN: (l)ocal ")
+            cout()
+            cout("Enabled connection pathways (in order):")
+            cout("WAN: (e)xternal, LAN: (l)ocal ")
             addr_types = []
             while 1:
                 pathway = input("Enter for default (el): ")
@@ -215,9 +247,9 @@ async def main():
                 else:
                     break
 
-            print()
-            print("Address family priority (in order):")
-            print("(4) IPv4, (6) IPv6")
+            cout()
+            cout("Address family priority (in order):")
+            cout("(4) IPv4, (6) IPv6")
             af_priority = []
             while 1:
                 afs = input("Enter for default (46): ")
@@ -238,8 +270,8 @@ async def main():
                 else:
                     break
 
-            print()
-            print("Connection in progress... Please wait...")
+            cout()
+            cout("Connection in progress... Please wait...")
             pipe_conf = {
                 "addr_types": addr_types,
                 "addr_families": af_priority,
@@ -248,14 +280,14 @@ async def main():
 
             pipe = await node.connect(addr, strategies=strats, conf=pipe_conf)
             if pipe is None:
-                print("Connection failed.")
+                cout("Connection failed.")
                 continue
             else:
-                print("Connection open.")
-                print(pipe.sock)
-                print()
-                print("Basic echo protocol.")
-                print("Enter menu to return to menu or exit to quit.")
+                cout("Connection open.")
+                cout(pipe.sock)
+                cout()
+                cout("Basic echo protocol.")
+                cout("Enter menu to return to menu or exit to quit.")
                 while 1:
                     choice = to_b(input("Echo: "))
                     if choice in (b"quit", b"exit"):
@@ -268,12 +300,12 @@ async def main():
 
                     await pipe.send(b"ECHO " + choice + b"\n")
                     buf = await pipe.recv(timeout=3)
-                    print(b"recv = ", buf)
+                    cout(b"recv = ", buf)
 
         if choice == "4":
-            print("Stopping nodes...")
-            print("May take a while... work in progress")
-            print("(I usually just spam cnt + c)")
+            cout("Stopping nodes...")
+            cout("May take a while... work in progress")
+            cout("(I usually just spam cnt + c)")
             for n in nodes:
                 await n.close()
             return

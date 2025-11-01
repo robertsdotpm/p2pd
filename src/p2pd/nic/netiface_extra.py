@@ -91,12 +91,13 @@ def is_af_routable(af, netifaces):
 async def get_mac_address(name, netifaces):
     if not hasattr(netifaces.ifaddresses(name), "AF_LINK"):
         try:
-            return await get_mac_mixed(name)
+            mac = await get_mac_mixed(name)
         except:
             log_exception()
             return None
 
-    return netifaces.ifaddresses(name)[netifaces.AF_LINK][0]["addr"]
+    mac = netifaces.ifaddresses(name)[netifaces.AF_LINK][0]["addr"]
+    return mac_norm(mac)
     
 # Note: Discards subnet for single addresses.
 async def netiface_addr_to_ipr(af, nic_id, info):

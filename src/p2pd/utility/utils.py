@@ -160,7 +160,6 @@ in_range = lambda x, r: x >= r[0] and x <= r[1]
 b_and = lambda abytes, bbytes: bytes(map(lambda a,b: a & b, abytes, bbytes))
 b_or = lambda abytes, bbytes: bytes(map(lambda a,b: a | b, abytes, bbytes))
 len_range = lambda r: r[1] - r[0]
-get_bits = lambda n, l, p=0: ( ((1 << l) - 1)  &  (n >> p ) )
 is_no = lambda x: to_s(x).isnumeric()
 is_b = lambda x: isinstance(x, bytes)
 rm_whitespace = lambda x: re.sub(r"\s+", "", x, flags=re.UNICODE)
@@ -176,6 +175,16 @@ b_sha3_256 = lambda x: hashlib.sha3_256(to_b(x)).digest()
 bind_str = lambda r: fstr("{0}:{1}", (r.bind_tup()[0], r.bind_tup()[1],))
 dhash = lambda x: b_to_i(hashlib.sha256(to_b(fstr("{0}", (x,)))).digest())
 list_x_to_dict = lambda x: [v.dict() for v in x]
+get_bits = lambda n, l, p=0: ( ((1 << l) - 1)  &  (n >> p ) )
+
+"""
+def get_bits(n, b, p):
+    assert(b >= p)
+    # Mask to b bits
+    n = n & ((1 << b) - 1
+    # Drop the *most significant* p bits
+    return n & ((1 << (b - p)) - 1)
+"""
 
 def list_clone_rand(the_list, n):
     the_clone = the_list[:]
