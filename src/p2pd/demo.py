@@ -3,6 +3,8 @@ code a function for is_node_reachable_over_mqtt for debugging
 
 I did delete the thing that saves send msg tasks in the mqtt client
 idk if thats relevant.
+
+python3 -m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd 0dl4 --dest_addr 5b5ed965936a5f28c2795724a.p2p --echo "hello world"
 """
 
 import asyncio
@@ -33,15 +35,39 @@ parser.add_argument("--echo", type=str, required=False, help="Text to send down 
 parser.add_argument("--cmd", type=str, required=False, help="Command to run")
 args = parser.parse_args()
 
+"""
+parser.add_argument("--stun_server", type=str, required=False, help="Specify using a specific STUN server")
+parser.add_argument("--mqtt_server", type=str, required=False, help="Specify using a specific STUN server")
+parser.add_argument("--ntp_server", type=str, required=False, help="Specify using a specific STUN server")
+"""
+
+def patch_server_dict(arg_list, serv_dict):
+    # offset, af, ip, port
+    if ";" in arg_list:
+        serv_infos = arg_list.split(";")
+    else:
+        serv_infos = [arg_list]
+
+
+    for serv_info in serv_infos:
+        parts = serv_info.split(",")
+        offset, af, ip, port = parts
+        offset = int(offset)
+        af = int(af)
+        port = int(port)
+        if af == 4:
+            af = IP4
+        else:
+            af = IP6
+
+
+        serv_dict[af][offset]["host"] = ip
+        serv_dict[af][offset]["ip"] = ip
+        serv_dict[af][offset]["port"] = port
+
 if args.pnp_server:
-    pnp_tup = args.pnp_server.split(",")
-    pnp_tup[1] = int(pnp_tup[1])
-    print(pnp_tup)
-    PNP_SERVERS[IP4][0]["host"] = pnp_tup[0]
-    PNP_SERVERS[IP4][0]["ip"] = pnp_tup[0]
-    PNP_SERVERS[IP4][0]["port"] = pnp_tup[1]
-    PNP_SERVERS[IP6][0]["host"] = "localhost"
-    PNP_SERVERS[IP6][0]["ip"] = "::1"
+    patch_server_dict(args.pnp_server, PNP_SERVERS)
+
 
 def cout(*fargs):
     if args.cmd:
@@ -217,6 +243,11 @@ async def main():
     dest_addr = None
     if args.dest_addr:
         dest_addr = args.dest_addr
+
+    # Allow piping an address to this program.
+    if sys.stdin:
+        lines = list(sys.stdin)
+        dest_addr = lines[0].rstrip("\n")
 
     # Data to echo.
     echo_data = None
