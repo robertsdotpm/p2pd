@@ -28,6 +28,8 @@ parser = argparse.ArgumentParser(description="A simple greeting script")
 parser.add_argument("--nics", type=str, required=False, help="Limit to specific nics, comma separated")
 parser.add_argument("--port", type=int, required=False, help="Start node on specific port")
 parser.add_argument("--pnp_server", type=str, required=False, help="Specify using a specific PNP server")
+parser.add_argument("--dest_addr", type=str, required=False, help="Destination to connect to")
+parser.add_argument("--echo", type=str, required=False, help="Text to send down the connection")
 parser.add_argument("--cmd", type=str, required=False, help="Command to run")
 args = parser.parse_args()
 
@@ -201,7 +203,25 @@ async def main():
             print(nick)
             await node.close()
             return
+        
+    # Options for making a connection.
+    # Set connection menu mode.
+    menu_option = None
+    menu_option = con_method = pathway = addr_type = None
+    if args.cmd:
+        menu_option = args.cmd[0]
+        if menu_option == "0":
+            menu_option, con_method, pathway, addr_type = args.cmd
 
+    # Connect to this destination.
+    dest_addr = None
+    if args.dest_addr:
+        dest_addr = args.dest_addr
+
+    # Data to echo.
+    echo_data = None
+    if args.echo:
+        echo_data = to_b(args.echo)
 
     cout(\
 """(0) Connect to a node using its nickname or address.
@@ -214,18 +234,18 @@ async def main():
     last_addr = ""
     choice = None
     while 1:
-        choice = input("Select menu option: ")
-        if choice not in ("0", "1", "2", "3", "exit", "quit"):
+        menu_option = menu_option or input("Select menu option: ")
+        if menu_option not in ("0", "1", "2", "3", "exit", "quit"):
             continue
 
-        if choice in ("exit", "quit"):
-            choice = "4"
+        if menu_option in ("exit", "quit"):
+            menu_option = "4"
 
-        if choice == "1":
+        if menu_option == "1":
             while 1:
                 await asyncio.sleep(1)
 
-        if choice == "3":
+        if menu_option == "3":
             choice = input("Enter nickname: ")
             try:
                 ret = await node.nickname(choice)
@@ -237,8 +257,7 @@ async def main():
 
         # TODO: copy mqtt from alice too.
         # maybe dont bother port forwarding either
-        addr = None
-        if choice == "2":
+        if menu_option == "2":
             alice = nodes[-1]
             bob = P2PNode(port=alice.listen_port + 1, ifs=ifs, conf=node_conf)
             bob.add_msg_cb(add_echo_support)
@@ -255,17 +274,17 @@ async def main():
             cout()
             continue
 
-        if choice == "0":
-            if addr is None:
+        if menu_option == "0":
+            if dest_addr is None:
                 prefix = ""
                 if len(last_addr):
                     prefix = fstr(" (enter for {0})", (last_addr,))
 
-                addr = input(fstr("Enter nodes nickname or address{0}: ", (prefix,)))
-                if addr == "":
-                    addr = last_addr
+                dest_addr = input(fstr("Enter nodes nickname or address{0}: ", (prefix,)))
+                if dest_addr == "":
+                    dest_addr = last_addr
                 else:
-                    last_addr = addr
+                    last_addr = dest_addr
             
 
             cout()
@@ -273,13 +292,13 @@ async def main():
             cout("TCP: (d)irect, (r)everse, (p)unch; UDP: (t)urn")
             strats = []
             while 1:
-                methods = input("Enter for default (drp): ")
-                if not len(methods):
+                con_method = con_method or input("Enter for default (drp): ")
+                if not len(con_method):
                     strats = P2P_STRATEGIES
                     break
 
                 strats = []
-                for c in methods:
+                for c in con_method:
                     c = c.lower()
                     if c in method_txt:
                         strats.append(method_txt[c])
@@ -296,7 +315,7 @@ async def main():
             cout("WAN: (e)xternal, LAN: (l)ocal ")
             addr_types = []
             while 1:
-                pathway = input("Enter for default (el): ")
+                pathway = pathway or input("Enter for default (el): ")
                 if not len(pathway):
                     addr_types = [EXT_BIND, NIC_BIND]
                     break
@@ -309,7 +328,6 @@ async def main():
                     if c == 'l':
                         addr_types.append(NIC_BIND)
 
-
                 if not len(addr_types):
                     continue
                 else:
@@ -320,13 +338,13 @@ async def main():
             cout("(4) IPv4, (6) IPv6")
             af_priority = []
             while 1:
-                afs = input("Enter for default (46): ")
-                if not len(afs):
+                addr_type = addr_type or input("Enter for default (46): ")
+                if not len(addr_type):
                     af_priority = [IP4, IP6]
                     break
 
                 af_priority = []
-                for c in afs:
+                for c in addr_type:
                     c  = c.lower()
                     if c == '4':
                         af_priority.append(IP4)
@@ -346,7 +364,7 @@ async def main():
                 "return_msg": False,
             }
 
-            pipe = await node.connect(addr, strategies=strats, conf=pipe_conf)
+            pipe = await node.connect(dest_addr, strategies=strats, conf=pipe_conf)
             if pipe is None:
                 cout("Connection failed.")
                 continue
@@ -357,20 +375,24 @@ async def main():
                 cout("Basic echo protocol.")
                 cout("Enter menu to return to menu or exit to quit.")
                 while 1:
-                    choice = to_b(input("Echo: "))
-                    if choice in (b"quit", b"exit"):
-                        choice = "4"
+                    echo_data = echo_data or to_b(input("Echo: "))
+                    if echo_data in (b"quit", b"exit"):
+                        echo_data = "4"
                         break
-                    if choice in (b"menu"):
-                        choice = ""
+                    if echo_data in (b"menu"):
+                        echo_data = ""
                         await pipe.close()
                         break
 
-                    await pipe.send(b"ECHO " + choice + b"\n")
+                    await pipe.send(b"ECHO " + echo_data + b"\n")
                     buf = await pipe.recv(timeout=3)
                     cout(b"recv = ", buf)
+                    if args.echo:
+                        print(buf)
+                        menu_option = "4"
+                        break
 
-        if choice == "4":
+        if menu_option == "4":
             cout("Stopping nodes...")
             cout("May take a while... work in progress")
             cout("(I usually just spam cnt + c)")
