@@ -144,7 +144,6 @@ async def main():
 
     if_names = await list_interfaces()
     if args.cmd == "get_nickname":
-        print("fast load active")
         # Speed up interface loading for nickname only.
         ifs = await load_interfaces(
             if_names,
