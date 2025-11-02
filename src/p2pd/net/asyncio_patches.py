@@ -285,8 +285,8 @@ class EchoServerProtocol:
 
     def datagram_received(self, data, addr):
         message = data.decode()
-        print('Received %r from %s' % (message, addr))
-        print('Send %r to %s' % (message, addr))
+        #print('Received %r from %s' % (message, addr))
+        #print('Send %r to %s' % (message, addr))
         self.transport.sendto(data, addr)
     
 async def workspace():

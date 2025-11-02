@@ -100,7 +100,7 @@ class Nickname():
 
                 # Uses direct IPs to avoid domain names.
                 serv_info = PNP_SERVERS[af][index]
-                print(serv_info)
+                #print(serv_info)
                 dest = (
                     serv_info["ip"],
                     serv_info["port"],
@@ -124,7 +124,7 @@ class Nickname():
                     else:
                         await pipe.close()
                 except:
-                    what_exception()
+                    log_exception()
                     continue
 
                 # Good client so save.

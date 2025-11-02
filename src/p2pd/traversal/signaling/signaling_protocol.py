@@ -20,12 +20,12 @@ SIG_PROTO = {
 
 # Used by the MQTT clients.
 async def signal_protocol(self, msg, signal_pipe):
-    print("Signal_protocol msg:", msg)
+    #print("Signal_protocol msg:", msg)
     out = await async_wrap_errors(
         self.sig_proto_handlers.proto(msg)
     )
 
-    print(out)
+    #print(out)
 
     if isinstance(out, SigMsg):
         await signal_pipe.send_msg(

@@ -23,7 +23,7 @@ from ..traversal.plugins.tcp_punch.tcp_punch_utils import setup_punch_coordinati
 async def node_start(node, sys_clock=None, out=False, cout=print):
     # Load ifs.
     if not len(node.ifs):
-        print("\tLoading networking interfaces again...")
+        #print("\tLoading networking interfaces again...")
         try:
             if_names = await list_interfaces()
             node.ifs = await load_interfaces(if_names, Interface)

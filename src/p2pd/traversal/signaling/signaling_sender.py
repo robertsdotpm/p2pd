@@ -81,10 +81,10 @@ async def send_sig_msg(node, msg, vk=None, m=0, relay_no=2):
     # Need fallback plan here.
 
 async def sig_msg_queue_worker(node):
-    print("in sig msg dispatcher")
+    #print("in sig msg dispatcher")
     try:
         x = await node.sig_msg_queue.get()
-        print("got sig msg q item", x)
+        #print("got sig msg q item", x)
         if x is None:
             return
         else:
@@ -96,7 +96,7 @@ async def sig_msg_queue_worker(node):
                     str(vk) + 
                     str(m)
                 )
-            print(msg, vk, m)
+            #print(msg, vk, m)
         
         await async_wrap_errors(
             send_sig_msg(
@@ -111,8 +111,8 @@ async def sig_msg_queue_worker(node):
             sig_msg_queue_worker(node)
         )
     except RuntimeError:
-        print("run time error in sig msg dispatcher")
-        what_exception()
+        #print("run time error in sig msg dispatcher")
+        #what_exception()
         log_exception()
         return
     

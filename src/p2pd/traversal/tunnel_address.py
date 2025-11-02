@@ -16,18 +16,18 @@ async def get_updated_addr_bytes(node, dest_addr):
         Log.log_p2p(msg, node.node_id[:8])
         name = dest_addr
         pkt = await node.nick_client.fetch(dest_addr)
-        print("nick pkt vkc = ", pkt.vkc)
+        #print("nick pkt vkc = ", pkt.vkc)
         assert(pkt.vkc)
         addr_bytes = pkt.value
         assert(pkt.vkc)
-        print("got addr bytes:", dest_addr)
+        #print("got addr bytes:", dest_addr)
 
         msg = fstr("Resolved '{0}' = '{1}'", (name, dest_addr,))
         Log.log_p2p(msg, node.node_id[:8])
 
         # Parse address bytes to a dict.
         addr = parse_peer_addr(addr_bytes)
-        print(addr)
+        #print(addr)
 
         # Authorize this node for replies.
         assert(isinstance(pkt.vkc, bytes))
@@ -36,7 +36,7 @@ async def get_updated_addr_bytes(node, dest_addr):
             "sk": None,
         }
 
-        print("auth table:", node.auth)
+        #print("auth table:", node.auth)
 
         # Reply must match this ID with this sender key.
         pipe_id = to_s(rand_plain(10))
@@ -71,10 +71,10 @@ async def get_updated_addr_bytes(node, dest_addr):
             )
 
             # Use the src addr directly.
-            print("Got updated addr.", reply.meta.src_buf)
+            #print("Got updated addr.", reply.meta.src_buf)
             addr_bytes = reply.meta.src_buf
         except asyncio.TimeoutError:
-            print("addr requ timed out")
+            #print("addr requ timed out")
             return addr_bytes
 
     else:
