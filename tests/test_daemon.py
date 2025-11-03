@@ -5,7 +5,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         loop = asyncio.get_event_loop()
         print(loop)
 
-        protos = (TCP,)
+        protos = (TCP, UDP)
         server_port = 34200
         loopbacks = {
             IP4: "127.0.0.1",
@@ -132,8 +132,11 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0.1)
 
         """
-        one socket should be unclosed simulating their client computer
-        keeping it open
+        one socket can potentially be unclosed simulating their client computer
+        keeping it open if it wasn't shutdown cleanly esp for UDP this
+        is expected since its designed to be connectionless.
+        breaking a con at one end can close the other with TCP but unless
+        a manual proto is done for udp the socket still exists
         """
 
 if __name__ == '__main__':

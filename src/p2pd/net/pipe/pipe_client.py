@@ -4,17 +4,7 @@ from ...protocol.ack_udp import *
 from ..net_utils import *
 from ..ip_range import *
 from .pipe_defs import *
-
-def tup_to_sub(dest_tup):
-    dest_tup = client_tup_norm(dest_tup)
-    return (
-        b"", # Any message.
-        dest_tup
-    )
-
-def norm_client_tup(client_tup):
-    ip = ip_norm(client_tup[0])
-    return (ip, client_tup[1])
+from .pipe_utils import *
 
 """
 The code in this class supports a pull / fetch style use-case.

@@ -5,7 +5,7 @@ from .netifaces.netiface_extra import *
 from .nat.nat_utils import *
 from .route.route_table import *
 from ..protocol.stun.stun_client import *
-from .route.route_defs import *
+from .route.route_pool import *
 from ..utility.var_names import TXT
 
 def get_interface_af(netifaces, name):

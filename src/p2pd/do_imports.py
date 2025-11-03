@@ -14,7 +14,8 @@ if __name__ != '__main__':
     from .net.ip_range import IPRange, IPR
     from .entrypoint import p2pd_setup_netifaces
     from .protocol.upnp.upnp import port_forward
-    from .nic.route.route_defs import Route, RoutePool
+    from .nic.route.route import Route
+    from .nic.route.route_pool import RoutePool
     from .nic.route.route_load import get_routes_with_res
     from .net.pipe.pipe_open import *
     from .nic.interface import Interface, p2pd_setup_event_loop, SelectorEventPolicy

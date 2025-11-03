@@ -5,10 +5,11 @@ from ...net.ip_range import *
 from ..netifaces.netiface_extra import *
 from ...protocol.upnp.upnp import *
 from ...net.address import *
-from .route_defs import *
 from ...utility.pattern_factory import *
 from ...settings import *
 from ...net.bind.bind import *
+from .route import Route
+from .route_pool import RoutePool
 
 """
 As there's only one STUN server in the preview release the
