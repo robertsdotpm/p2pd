@@ -1,7 +1,7 @@
 from functools import lru_cache
 from ..net.net import *
 from ..net.ip_range import *
-from .netiface_extra import *
+from .netifaces.netiface_extra import *
 from .nat.nat_utils import *
 from .route.route_table import *
 from ..protocol.stun.stun_client import *
@@ -98,15 +98,6 @@ def clean_if_list(ifs):
             clean_ifs.append(if_name)
 
     return clean_ifs
-
-# Resolve the external addresses for an interface.
-# Tries with public STUN servers first.
-# Otherwise uses official p2pd servers.
-async def route_res_with_fallback(af, is_default, nic, main_res):
-    # Try the main 'decentralized' approach first.
-    out = await async_wrap_errors(main_res)
-    if out is not None:
-        return out
     
 def log_interface_rp(interface):
     for af in VALID_AFS:
@@ -132,64 +123,6 @@ def get_ifs_by_af_intersect(if_list):
             af_used = af
 
     return [largest, af_used]
-
-def load_if_info_fallback(nic):
-    # Just guess name.
-    # Getting this wrong will only break IPv6 link-local binds.
-    nic.id = nic.name = nic.name or "eth0"
-    nic.netiface_index = 0
-    nic.type = INTERFACE_ETHERNET
-
-    # Get IP of default route.
-    ips = {
-        # Google IPs. Nothing special.
-        IP4: "142.250.70.206",
-        IP6: "2404:6800:4015:803::200e",
-    }
-
-    # Build a table of default interface IPs based on con success.
-    # Supported stack changes based on success.
-    if_addrs = {}
-    for af in VALID_AFS:
-        try:
-            s = socket.create_connection((ips[af], 80))
-            if_addrs[s.family] = s.getsockname()[0][:]
-            s.close()
-        except:
-            continue
-
-    # Same API as netifaces.
-    class NetifaceShim():
-        def __init__(self, if_addrs):
-            self.if_addrs = if_addrs
-
-        def interfaces(self):
-            return [self.name]
-
-        def ifaddresses(self, name):
-            ret = {
-                # MAC address (blanket)
-                # 17 = netifaces.AF_LINK enum.
-                AF_LINK: [
-                    {
-                        'addr': '',
-                        'broadcast': 'ff:ff:ff:ff:ff:ff'
-                    }
-                ],
-            }
-
-            for af in self.if_addrs:
-                ret[af] = [
-                    {
-                        "addr": self.if_addrs[af],
-                        "netmask": "0"
-                    }
-                ]
-
-            return ret
-        
-    nic.netifaces = NetifaceShim(if_addrs)
-    nic.is_default = nic.is_default_patch
 
 def is_nic_default(nic, af, gws=None):
     def try_netiface_check(af, gws):
@@ -227,60 +160,6 @@ def is_nic_default(nic, af, gws=None):
     except:
         log_exception()
         return False
-    
-# Load mac, nic_no, and process name.
-def load_if_info(nic):
-    # Assume its an AF.
-    if isinstance(nic.name, int):
-        if nic.name not in [IP4, IP6, AF_ANY]:
-            raise InterfaceInvalidAF
-
-        nic.name = get_default_iface(nic.netifaces, afs=[nic.name])
-
-    # No name specified.
-    # Get name of default interface.
-    log(fstr("Load if info = {0}", (nic.name,)))
-    if nic.name is None or nic.name == "":
-        # Windows -- default interface name is a GUID.
-        # This is ugly AF.
-        iface_name = get_default_iface(nic.netifaces)
-        iface_af = get_interface_af(nic.netifaces, iface_name)
-        if iface_name is None:
-            raise InterfaceNotFound
-        else:
-            nic.name = iface_name
-
-        # Allow blank interface names to be used for testing.
-        log(fstr("> default interface loaded = {0}", (iface_name,)))
-
-        # May not be accurate.
-        # Start() is the best way to set this.
-        if nic.stack == DUEL_STACK:
-            nic.stack = iface_af
-            log(fstr("if load changing stack to {0}", (nic.stack,)))
-
-    # Windows NIC descriptions are used for the name
-    # if the interfaces are detected as all hex.
-    # It's more user friendly.
-    nic.name = to_s(nic.name)
-
-    # Check ID exists.
-    if nic.netifaces is not None:
-        if_names = nic.netifaces.interfaces()
-        if nic.name not in if_names:
-            log(fstr("interface name {0} not in {1}", (nic.name, if_names,)))
-            raise InterfaceNotFound
-        nic.type = get_interface_type(nic.name)
-        nic.nic_no = 0
-        if hasattr(nic.netifaces, 'nic_no'):
-            nic.nic_no = nic.netifaces.nic_no(nic.name)
-            nic.id = nic.nic_no
-        else:
-            nic.id = nic.name
-
-        nic.netiface_index = if_names.index(nic.name)
-
-    return nic
 
 def nic_from_dict(d, Interface):
     i = Interface(d["name"])

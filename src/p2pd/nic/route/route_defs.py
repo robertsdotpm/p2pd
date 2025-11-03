@@ -3,7 +3,7 @@ import ipaddress
 import pprint
 from functools import total_ordering
 from ...net.ip_range import *
-from ...nic.netiface_extra import *
+from ..netifaces.netiface_extra import *
 from ...protocol.upnp.upnp import *
 from ...net.address import *
 

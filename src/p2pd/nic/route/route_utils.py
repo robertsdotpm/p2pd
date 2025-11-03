@@ -1,96 +1,8 @@
-"""
-This is my attempt to visualize the association between private, NIC
-addresses and public WAN addresses on a network interface. I have
-learned the following information about network addresses:
- 
-    * A NIC can have one or more addresses.
-    * A NIC can be assigned a block or range of addresses.
-    * A NIC doesn't have to use private addresses. It's common for
-    server hosts to assign the external addresses that belong
-    to the server in such a way that they are used by the NIC.
-    In such a case: the NICs addresses would be the same as
-    how it was viewed from the external Internet.
-    * A NIC can use public addresses that it doesn't own on
-    the Internet. This is very bad because it means that these
-    addresses will be unreachable on the Internet on that machine.
-    NICs should ideally use private addresses. Or stick to IPs
-    they actually can route to themselves on the Internet.
-    * A NIC defines a "default" gateway to route packets to
-    the Internet (which is given by network 0.0.0.0 in IPv4.)
-    " The NIC can actually specify multiple default gateways.
-    Each entry is a route in the route table. It will have a
-    'metric' indicates its 'speed.' The route with the
-    the lowest metric is chosen to route packets. TCP/IP may
-    adjust the metric of routes based on network conditions.
-    Thus, if there are multiple gateways for a NIC then its
-    possible for the external WAN address to change under
-    high network load. This is not really ideal.
- 
-The purpose of this module is to have easy access to the
-external addresses of the machine and any associated NIC
-addresses needed for Bind calls in order to use them. I
-use the following simple rules to make this possible:
- 
-    1. All private addresses for a NIC form a group. This
-    group points to the same external address for that NIC.
-    2. Any public addresses are tested using STUN. If STUN
-    sees the same result as the public address then the
-    address is considered public and forms its own route.
-    If STUN reports a different result then the address is
-    being improperly used for a private NIC address. It
-    thus gets added to the private group in step 1.
-    3. If there is a block of public addresses to check
-    only the first address is checked. If success then
-    I assume the whole block is valid. Ranges of
-    addresses are fully supported.
- 
-When it comes to complex routing tables that have
-strange setups with multiple default gateways for
-a NIC I am for now ignoring this possibility. I
-don't consider myself an expert on networking (its
-much more complex than it appears) but to directly
-leverage routes in a routing table seems to me that
-it would require having to work on the ethernet layer.
-Something much more painful than regular sockets.
-
-One last thing to note about routing tables: there is
-a flag portion that indicates whether a route is 'up.'
-If this means 'online' and 'reachable' it would be
-really useful to check this to determine if a stack
-supported IPv6 or IPv4 rather than trying to test it
-first using STUN and waiting for a long time out.
-
-Other:
-When it comes to IPs assigned to a NIC its possible
-to assign 'public' IPs to it directly. You often
-see this setup on servers. In this case you know
-that not only can you use the public addresses
-directly in bind() calls -- but you know that
-the server's corresponding external IP will be
-what was used in the bind() call. Very useful.
-
-The trouble is that network interfaces happily
-accept 'external IPs' or IPs outside of the
-typical 'private IP' range for use on a NIC or
-LAN network. Obviously this is a very bad idea
-but in the software it has the result of
-potentially assuming that an IP would end up
-resulting in a particular external IP being used.
-
-The situation is not desirable when building
-a picture of a network's basic routing makeup.
-I've thought about the problem and I don't see
-a way to solve it other than to measure how a
-route's external address is perceived from the
-outside world. Such a solution is not ideal but
-at least it only has to be done once.
-"""
-
 import asyncio
 import copy
 from functools import cmp_to_key
 from ...net.ip_range import *
-from ...nic.netiface_extra import *
+from ..netifaces.netiface_extra import *
 from ...protocol.upnp.upnp import *
 from ...net.address import *
 from .route_defs import *
@@ -153,53 +65,6 @@ async def get_nic_iprs(af, interface, netifaces):
     results = await asyncio.gather(*tasks)
     return [r for r in results if r is not None]
 
-async def get_wan_ip_cfab(src_ip, min_agree, stun_clients, timeout):
-    try:
-        tasks = []
-        interface = stun_clients[0].interface
-        af = stun_clients[0].af
-        for stun_client in stun_clients:
-            local_addr = await Bind(
-                stun_client.interface,
-                af=stun_client.af,
-                port=0,
-                ips=src_ip
-            ).res()
-
-            # Get external IP and compare to bind IP.
-            task = async_wrap_errors(
-                stun_client.get_wan_ip(
-                    # Will be upgraded to a pipe.
-                    pipe=local_addr
-                )
-            )
-            tasks.append(task)
-
-        wan_ip = await concurrent_first_agree_or_best(
-            min_agree,
-            tasks,
-            timeout,
-            wait_all=True
-        )
-
-        if wan_ip is None:
-            return None
-        
-        # Convert default details to a Route object.
-        cidr = af_to_cidr(af)
-        ext_ipr = IPRange(wan_ip, cidr=cidr)
-        nic_ipr = IPRange(src_ip, cidr=cidr)
-        if nic_ipr.is_private or src_ip != wan_ip:
-            nic_ipr.is_private = True
-            nic_ipr.is_public = False
-        else:
-            nic_ipr.is_private = False
-            nic_ipr.is_public = True
-
-
-        return (src_ip, Route(af, [nic_ipr], [ext_ipr], interface))
-    except:
-        log_exception()
 
 def sort_routes(routes):
     # Deterministically order routes list.
@@ -228,136 +93,7 @@ def exclude_routes_by_src(src_ips, results):
 
     return new_list
 
-async def get_routes_with_res(af, min_agree, enable_default, interface, stun_clients, netifaces, timeout):
-    # Get a list of tasks to resolve NIC addresses.
-    tasks = []
-    link_locals = []
-    priv_iprs = []
-    nic_iprs = await get_nic_iprs(af, interface, netifaces)
-    for nic_ipr in nic_iprs:
-        assert(int(nic_ipr[0]))
-        if ip_norm(nic_ipr[0])[:2] in ["fe", "fd"]:
-            link_locals.append(nic_ipr)
-            log(fstr("Addr is link local so skipping"))
-            continue
 
-        if nic_ipr.is_private:
-            priv_iprs.append(nic_ipr)
-            continue
-        else:
-            src_ip = ip_norm(str(nic_ipr[0]))
-            tasks.append(
-                async_wrap_errors(
-                    get_wan_ip_cfab(
-                        src_ip,
-                        min_agree,
-                        stun_clients,
-                        timeout
-                    )
-                )
-            )
-
-    # Append task for get default route.
-    cidr = af_to_cidr(af)
-    af_default_nic_ip = ""
-    if enable_default:
-        dest = "8.8.8.8" if af == IP4 else "2001:4860:4860::8888"
-        af_default_nic_ip = determine_if_path(af, dest)
-        tasks.append(
-            async_wrap_errors(
-                get_wan_ip_cfab(
-                    af_default_nic_ip,
-                    min_agree,
-                    stun_clients,
-                    timeout
-                )
-            )
-        )
-
-    # Append task to get route using priv nic.
-    """
-    Optimization:
-    If there was only one private NIC IPR and enable default already ran.
-    It's already done the necessary work to resolve that first route.
-    So only run the code bellow if there's more than 1 or enable default
-    has been disabled.
-
-    > 1 or (len(priv_iprs) and not enable_default)
-    """
-    priv_src = ""
-    if len(priv_iprs) > 1 or (len(priv_iprs) and not enable_default):
-        priv_src = ip_norm(str(priv_iprs[0]))
-        tasks.append(
-            async_wrap_errors(
-                get_wan_ip_cfab(
-                    priv_src,
-                    min_agree,
-                    stun_clients,
-                    timeout
-                )
-            )
-        )
-
-    # Resolve interface addresses CFAB.
-    results = await asyncio.gather(*tasks)
-    results = [r for r in results if r is not None]
-
-    # Only the default NIC will have
-    # a default route enabled for the af.
-    if enable_default:
-        default_route = get_route_by_src(
-            af_default_nic_ip,
-            results
-        )
-
-        """
-        If the main NIC IP for the default interface for AF
-        is not in the NIC IPs for this interface then
-        don't enable the use of the default route.
-        """
-        af_default_nic_ipr = IPRange(af_default_nic_ip, cidr=cidr)
-        if af_default_nic_ipr not in nic_iprs:
-            default_route = None
-            log(fstr("Route error {0} disabling default route.", (af,)))
-    else:
-        default_route = None
-
-    # Load route used for priv nics.
-    priv_route = get_route_by_src(priv_src, results)
-
-    # Exclude priv_route and default.
-    exclude = [priv_src, af_default_nic_ip]
-    routes = exclude_routes_by_src(exclude, results)
-
-    # Add a single route for all private IPs (if exists)
-    # Use default routes external address (if exists)
-    if len(priv_iprs):
-        priv_ext = None
-        if default_route is not None:
-            priv_ext = default_route.ext_ips
-        else:
-            if priv_route is not None:
-                priv_ext = priv_route.ext_ips
-
-        if priv_ext is not None:
-            priv_route = Route(af, priv_iprs, priv_ext, interface)
-            routes.append(priv_route)
-
-    # Only use default route if no other option.
-    if not len(routes):
-        if default_route is None:
-            routes = []
-        else:
-            routes = [default_route]
-    else:
-        # Deterministic order = consistent for servers.
-        routes = sort_routes(routes)
-
-    # Set link locals in route list.
-    [r.set_link_locals(link_locals) for r in routes]
-
-    # Return results back to caller.
-    return [af, routes, link_locals]
 
 # Combine all routes from interface into RoutePool.
 def interfaces_to_rp(interface_list):
@@ -436,6 +172,15 @@ async def bind_to_route(bind_obj):
     # Bind to port in route.
     await route.bind(port=bind_obj.bind_port)
     return route
+
+# Resolve the external addresses for an interface.
+# Tries with public STUN servers first.
+# Otherwise uses official p2pd servers.
+async def route_res_with_fallback(af, is_default, nic, main_res):
+    # Try the main 'decentralized' approach first.
+    out = await async_wrap_errors(main_res)
+    if out is not None:
+        return out
 
 if __name__ == "__main__": # pragma: no cover
     from .interface import Interface

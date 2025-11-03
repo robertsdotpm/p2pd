@@ -15,7 +15,7 @@ if __name__ != '__main__':
     from .entrypoint import p2pd_setup_netifaces
     from .protocol.upnp.upnp import port_forward
     from .nic.route.route_defs import Route, RoutePool
-    from .nic.route.route_utils import get_routes_with_res
+    from .nic.route.route_load import get_routes_with_res
     from .net.pipe.pipe_utils import *
     from .nic.interface import Interface, p2pd_setup_event_loop, SelectorEventPolicy
     from .nic.select_interface import *

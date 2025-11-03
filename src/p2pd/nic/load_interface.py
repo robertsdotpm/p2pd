@@ -2,10 +2,66 @@ from ..errors import *
 from ..settings import *
 from .route.route_defs import *
 from .route.route_utils import *
+from .route.route_load import *
+from .netifaces.netiface_fallback import *
 from .nat.nat_utils import *
 from .route.route_table import *
 from ..protocol.stun.stun_client import *
 from ..entrypoint import *
+
+# Load mac, nic_no, and process name.
+def load_if_info(nic):
+    # Assume its an AF.
+    if isinstance(nic.name, int):
+        if nic.name not in [IP4, IP6, AF_ANY]:
+            raise InterfaceInvalidAF
+
+        nic.name = get_default_iface(nic.netifaces, afs=[nic.name])
+
+    # No name specified.
+    # Get name of default interface.
+    log(fstr("Load if info = {0}", (nic.name,)))
+    if nic.name is None or nic.name == "":
+        # Windows -- default interface name is a GUID.
+        # This is ugly AF.
+        iface_name = get_default_iface(nic.netifaces)
+        iface_af = get_interface_af(nic.netifaces, iface_name)
+        if iface_name is None:
+            raise InterfaceNotFound
+        else:
+            nic.name = iface_name
+
+        # Allow blank interface names to be used for testing.
+        log(fstr("> default interface loaded = {0}", (iface_name,)))
+
+        # May not be accurate.
+        # Start() is the best way to set this.
+        if nic.stack == DUEL_STACK:
+            nic.stack = iface_af
+            log(fstr("if load changing stack to {0}", (nic.stack,)))
+
+    # Windows NIC descriptions are used for the name
+    # if the interfaces are detected as all hex.
+    # It's more user friendly.
+    nic.name = to_s(nic.name)
+
+    # Check ID exists.
+    if nic.netifaces is not None:
+        if_names = nic.netifaces.interfaces()
+        if nic.name not in if_names:
+            log(fstr("interface name {0} not in {1}", (nic.name, if_names,)))
+            raise InterfaceNotFound
+        nic.type = get_interface_type(nic.name)
+        nic.nic_no = 0
+        if hasattr(nic.netifaces, 'nic_no'):
+            nic.nic_no = nic.netifaces.nic_no(nic.name)
+            nic.id = nic.nic_no
+        else:
+            nic.id = nic.name
+
+        nic.netiface_index = if_names.index(nic.name)
+
+    return nic
 
 async def load_interface(nic, netifaces, min_agree, max_agree, timeout):
     stack = nic.stack
