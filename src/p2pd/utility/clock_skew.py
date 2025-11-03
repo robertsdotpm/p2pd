@@ -21,7 +21,7 @@ https://datatracker.ietf.org/doc/html/rfc5905#section-6
 import random
 from decimal import Decimal as Dec
 from ..net.address import *
-from ..protocol.ntp.ntp_client import NTPClient
+from ..vendor.ntp_client import NTPClient
 from ..settings import *
 from ..nic.interface import *
 

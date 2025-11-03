@@ -1,11 +1,3 @@
-"""
-
-
-
-
-
-"""
-
 from struct import pack
 import hmac
 import socket

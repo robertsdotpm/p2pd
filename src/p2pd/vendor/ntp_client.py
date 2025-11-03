@@ -32,8 +32,8 @@ import datetime
 import struct
 import time
 import asyncio
-from ...net.address import *
-from ...net.pipe.pipe_open import *
+from ..net.address import *
+from ..net.pipe.pipe_open import *
 
 class NTPException(Exception):
     """Exception raised by this module."""

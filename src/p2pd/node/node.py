@@ -10,7 +10,7 @@ from .node_utils import *
 from .nickname import *
 from .node_start import *
 from .node_stop import *
-from ..utility.machine_id import *
+from ..vendor.machine_id import *
 from ..traversal.tunnel_address import *
 from ..traversal.tunnel import *
 from ..traversal.signaling.signaling_protocol import *
