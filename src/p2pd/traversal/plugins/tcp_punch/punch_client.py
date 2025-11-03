@@ -86,8 +86,8 @@ would itself require another message. So maybe not worth the cost.
 
 import asyncio
 from ....nic.nat.nat_predict import *
-from .tcp_punch_utils import *
-from .tcp_punch_defs import *
+from .punch_utils import *
+from .punch_defs import *
 from ....utility.clock_skew import *
 from ....net.event_loop import *
 
@@ -179,81 +179,6 @@ class TCPPuncher():
             )
 
             return 1
-        
-    async def setup_punching_process(self):
-        # Listen server that process will connect back to.
-        # References are saved to avoid garbage collection.
-        route = await self.interface.route(self.af).bind()
-        self.listen_pipe = await pipe_open(
-            TCP,
-            dest=None,
-            route=route,
-            msg_cb=self.node.msg_cb,
-        )
-        
-        # Might not be necessary since the get addr infos does this.
-        """
-        interface = await select_if_by_dest(
-            self.af,
-            self.dest_info["ip"],
-            self.interface
-        )
-        """
-        interface = self.interface
-
-        # Passed on to a new process.
-        listen_tup = self.listen_pipe.sock.getsockname()[:2]
-        args = (
-            listen_tup,
-            self.to_dict(),
-            interface,
-            self.node.node_id[:8]
-        )
-
-        try:
-            # Schedule TCP punching in process pool executor.
-            loop = asyncio.get_event_loop()
-            puncher_future = loop.run_in_executor(
-                self.pp_executor,
-                proc_do_punching,
-                args
-            )
-            
-            # Check every 100 ms for 5 seconds.
-            while 1:
-                try:
-                    # Check if reverse connect server has a client yet.
-                    if len(self.listen_pipe.tcp_clients):
-                        # Reverse connect from punching process to
-                        # server in the main thread.
-                        self.pipe = self.listen_pipe.tcp_clients[0]
-
-                        # Patch close to send close message.
-                        pipe_close = self.pipe.close
-                        async def close_patch():
-                            await self.pipe.send(PUNCH_END)
-                            await pipe_close()
-                        self.pipe.close = close_patch
-
-                        # Indicate hole made to waiter.
-                        self.node.pipe_ready(self.pipe_id, self.pipe)
-                        return self.pipe
-                except:
-                    log_exception()
-                
-                # Check every 100 ms.
-                await asyncio.sleep(0.1)
-
-                # Puncher ended.
-                if puncher_future.done():
-                    self.active_punchers = max(
-                        0,
-                        self.active_punchers - 1
-                    )
-
-                    return
-        except:
-            log_exception()
 
     def set_punch_mode(self):
         self.punch_mode = get_punch_mode(
@@ -287,69 +212,4 @@ class TCPPuncher():
 
         if self.listen_pipe is not None:
             await self.listen_pipe.close()
-
-# Started in a new process.
-def proc_do_punching(args):
-    try:
-        """
-        On Windows it seems like using the default 'proactor event loop'
-        prevents the TCP hole punching code from working. It seems that
-        manually setting the event loop to use SelectorEventLoop
-        fixes the issue. However, this may mean breaking some of
-        my command execution code on Windows -- test this.
-        """
-        loop = CustomEventLoop()
-        asyncio.set_event_loop(loop)
-
-        # Build a puncher from a dictionary.
-        reverse_tup = args[0]
-        d = args[1]
-        interface = args[2]
-        node_id = args[3]
-        puncher = TCPPuncher.from_dict(d)
-
-        # Allow more recent Pythons to do punching.
-        if hasattr(asyncio, "run"):
-            f = async_wrap_errors(
-                do_punching_wrapper(
-                    puncher.af,
-                    puncher.dest_info["ip"],
-                    puncher.send_mappings,
-                    puncher.recv_mappings,
-                    puncher.sys_clock.time(),
-                    puncher.start_time,
-                    puncher.punch_mode,
-                    interface,
-                    reverse_tup,
-                    node_id
-                )
-            )
-
-            # Start a  new event loop and run the coroutine.
-            return asyncio.run(f)
-        else:
-            # Use older deprecated functions.
-            loop = asyncio.get_event_loop()
-            f = create_task(
-                async_wrap_errors(
-                    do_punching_wrapper(
-                        puncher.af,
-                        puncher.dest_info["ip"],
-                        puncher.send_mappings,
-                        puncher.recv_mappings,
-                        puncher.sys_clock.time(),
-                        puncher.start_time,
-                        puncher.punch_mode,
-                        interface,
-                        reverse_tup,
-                        node_id
-                    )
-                ),
-                loop=loop
-            )
-
-            # Workers better for older Python versions.
-            return loop.run_until_complete(f)
-    except:
-        log_exception()
 

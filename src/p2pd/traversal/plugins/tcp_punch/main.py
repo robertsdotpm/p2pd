@@ -3,7 +3,8 @@ from ....net.net_utils import *
 from ....net.pipe.pipe_open import PipeEvents
 from ....nic.nat.nat_predict import *
 from ...signaling.signaling_msgs import TCPPunchMsg
-from .tcp_punch_client import *
+from .punch_init import *
+from .punch_client import *
 
 async def tcp_hole_punch(tunnel, af, pipe_id, src_info, dest_info, nic, addr_type, reply=None):
     # Load TCP punch client for this pipe ID.

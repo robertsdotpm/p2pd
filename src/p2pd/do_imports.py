@@ -22,7 +22,7 @@ if __name__ != '__main__':
     from .utility.clock_skew import SysClock
     from .protocol.stun.stun_client import STUNClient, get_stun_clients
     from .protocol.turn.turn_client import TURNClient
-    from .traversal.plugins.tcp_punch.tcp_punch_client import TCPPuncher
+    from .traversal.plugins.tcp_punch.punch_client import TCPPuncher
     from .net.daemon import Daemon
     from .protocol.echo.echo_server import *
     from .protocol.http.http_client_lib import ParseHTTPResponse, WebCurl

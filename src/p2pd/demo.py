@@ -232,7 +232,7 @@ async def main():
     # Options for making a connection.
     # Set connection menu mode.
     menu_option = None
-    menu_option = con_method = pathway = addr_type = None
+    con_method = pathway = addr_type = None
     if args.cmd:
         menu_option = args.cmd[0]
         if menu_option == "0":
@@ -244,9 +244,12 @@ async def main():
         dest_addr = args.dest_addr
 
     # Allow piping an address to this program.
-    if sys.stdin:
-        lines = list(sys.stdin)
+    """
+    stdin_data = sys.stdin.read().strip()
+    if stdin_data:
+        lines = list(stdin_data)
         dest_addr = lines[0].rstrip("\n")
+    """
 
     # Data to echo.
     echo_data = None
@@ -265,7 +268,7 @@ async def main():
     choice = None
     while 1:
         menu_option = menu_option or input("Select menu option: ")
-        if menu_option not in ("0", "1", "2", "3", "exit", "quit"):
+        if menu_option not in ("0", "1", "2", "3", "4", "exit", "quit"):
             continue
 
         if menu_option in ("exit", "quit"):
