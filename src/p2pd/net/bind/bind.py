@@ -2,7 +2,6 @@ from ...utility.utils import *
 from ..net_utils import *
 from .bind_rules import *
 
-
 """
 Mostly this class will not be used directly by users.
 It's code is also shitty for res. Routes have superseeded this.
@@ -21,7 +20,7 @@ class Bind():
         # Will store a tuple that can be passed to bind.
         self._bind_tups = ()
         if not hasattr(self, "bind"):
-            self.bind = bind_closure(self)
+            self.bind = bind_closure(self, binder)
 
     def __await__(self):
         return self.bind().__await__()
@@ -62,46 +61,3 @@ class Bind():
     def supported(self):
         return [self.af]
     
-"""
-Provides an interface that allows for bind() to be called
-with its own parameters as a Route object method. Allows
-the IP and port used to be accessed inside it as properties.
-Otherwise defaults to using IP and port already set in class
-which would only be the case if this method were used from a
-Bind object and not a Route object. So a lot of hacks here.
-But that's the API I wanted.
-"""
-def bind_closure(self):
-    async def bind(port=None, ips=None):
-        if self.resolved:
-            return
-        
-        # Bind parameters.
-        port = port or self.bind_port
-        ips = ips or self.ips
-        if ips is None:
-            # Bind parent.
-            if hasattr(self, "interface") and self.interface is not None:
-                route = self.interface.route(self.af)
-                ips = route.nic()
-            else:
-                # Being inherited from route.
-                ips = self.nic()
-
-        # Number or name - platform specific.
-        if self.interface is not None:
-            nic_id = self.interface.id
-        else:
-            nic_id = None
-
-        # Get bind tuple for NIC bind.
-        self._bind_tups = await binder(
-            af=self.af, ip=ips, port=port, nic_id=nic_id
-        )
-
-        # Save state.
-        self.bind_port = port
-        self.resolved = True
-        return self
-        
-    return bind

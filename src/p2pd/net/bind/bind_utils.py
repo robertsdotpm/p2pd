@@ -44,3 +44,47 @@ async def get_high_port_socket(route, socket_factory, sock_type=TCP):
         return s, n
     
     raise Exception("Could not bind high range port.")
+
+"""
+Provides an interface that allows for bind() to be called
+with its own parameters as a Route object method. Allows
+the IP and port used to be accessed inside it as properties.
+Otherwise defaults to using IP and port already set in class
+which would only be the case if this method were used from a
+Bind object and not a Route object. So a lot of hacks here.
+But that's the API I wanted.
+"""
+def bind_closure(self, binder):
+    async def bind(port=None, ips=None):
+        if self.resolved:
+            return
+        
+        # Bind parameters.
+        port = port or self.bind_port
+        ips = ips or self.ips
+        if ips is None:
+            # Bind parent.
+            if hasattr(self, "interface") and self.interface is not None:
+                route = self.interface.route(self.af)
+                ips = route.nic()
+            else:
+                # Being inherited from route.
+                ips = self.nic()
+
+        # Number or name - platform specific.
+        if self.interface is not None:
+            nic_id = self.interface.id
+        else:
+            nic_id = None
+
+        # Get bind tuple for NIC bind.
+        self._bind_tups = await binder(
+            af=self.af, ip=ips, port=port, nic_id=nic_id
+        )
+
+        # Save state.
+        self.bind_port = port
+        self.resolved = True
+        return self
+        
+    return bind
