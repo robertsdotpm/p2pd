@@ -88,3 +88,48 @@ def bind_closure(self, binder):
         return self
         
     return bind
+
+# Convert compact bind rule list to named access.
+class BindRule():
+    def __init__(self, bind_rule):
+        self.platform = bind_rule[0]
+        self.af = bind_rule[1]
+        self.type = bind_rule[2]
+        self.hey = bind_rule[3]
+        self.norm = bind_rule[4]
+        self.change = bind_rule[5]
+
+# Return a BindRule if it matches the requirements.
+def match_bind_rule(ip, af, plat, bind_rule, rule_type):
+    bind_rule = BindRule(bind_rule)
+
+    # Skip rule types we're not processing.
+    if bind_rule.type != rule_type:
+        return
+
+    # Skip address types that don't apply to us.
+    if type(bind_rule.af) == list:
+        if af not in bind_rule.af:
+            return
+    else:
+        if af != bind_rule.af:
+            return
+
+    # Skip platform rules that don't match us.
+    if bind_rule.platform not in ["*", plat]:
+        return
+
+    # Check hey for matches.
+    if type(bind_rule.hey) == list:
+        if ip not in bind_rule.hey:
+            return
+    if type(bind_rule.hey) == int:
+        if bind_rule.hey == IP_PRIVATE:
+            try:
+                ipr = ip_f(ip)
+                if not ipr.is_private:
+                    return
+            except:
+                pass
+
+    return bind_rule
