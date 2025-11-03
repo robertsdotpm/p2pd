@@ -6,7 +6,7 @@ index by host name even if its longer.
 
 from ...utility.utils import *
 from ...vendor.ecies import encrypt, decrypt
-from .signaling_msgs import *
+from .signal_msgs import *
 from ..tunnel import Tunnel
 
 SIG_PROTO = {

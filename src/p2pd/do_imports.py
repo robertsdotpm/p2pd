@@ -35,7 +35,7 @@ if __name__ != '__main__':
     from .traversal.tunnel import *
     from .node.node import P2PNode, NODE_CONF, NODE_PORT
     from .node.node_utils import get_pp_executors, load_signing_key
-    from .traversal.signaling.signaling_client import SignalMock, is_valid_mqtt
+    from .traversal.signaling.signal_client import SignalMock, is_valid_mqtt
     from .install import *
     from .utility.toxiproxy.toxiclient import ToxiToxic, ToxiTunnel, ToxiClient
     from .utility.toxiproxy.toxiserver import ToxiMainServer

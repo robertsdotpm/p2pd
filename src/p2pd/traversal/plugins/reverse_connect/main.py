@@ -1,4 +1,4 @@
-from ....traversal.signaling.signaling_msgs import ConMsg
+from ...signaling.signal_msgs import ConMsg
 
 async def reverse_connect(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
     msg = ConMsg({

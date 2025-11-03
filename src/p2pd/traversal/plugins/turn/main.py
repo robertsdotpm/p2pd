@@ -2,7 +2,7 @@ from ....net.net_utils import *
 from ....net.pipe.pipe_open import PipeEvents
 from ....settings import *
 from ....utility.utils import *
-from ....traversal.signaling.signaling_msgs import TURNMsg
+from ...signaling.signal_msgs import TURNMsg
 from .turn_utils import get_first_working_turn_client
 
 async def udp_turn_relay(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):

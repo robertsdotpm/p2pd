@@ -1,8 +1,8 @@
 from ...settings import *
 from ...net.net_utils import *
 from ...net.address import Address
-from .signaling_protocol import signal_protocol
-from .signaling_client import SignalMock
+from .signal_protocol import signal_protocol
+from .signal_client import SignalMock
 
 def find_signal_pipe(node, addr):
     our_offsets = list(node.signal_pipes)

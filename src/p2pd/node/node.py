@@ -13,7 +13,7 @@ from .node_stop import *
 from ..vendor.machine_id import *
 from ..traversal.tunnel_address import *
 from ..traversal.tunnel import *
-from ..traversal.signaling.signaling_protocol import *
+from ..traversal.signaling.signal_protocol import *
 
 NODE_CONF = dict_child({
     "reuse_addr": False,

@@ -1,4 +1,4 @@
-from ..traversal.signaling.signaling_msgs import *
+from ..traversal.signaling.signal_msgs import *
 from ..nic.nat.nat_utils import *
 
 TXT = {

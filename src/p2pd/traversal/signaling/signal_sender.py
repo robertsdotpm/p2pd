@@ -1,7 +1,7 @@
 from ...utility.utils import *
 from ...settings import *
 from ...vendor.ecies import encrypt, decrypt
-from .signaling_utils import *
+from .signal_utils import *
 
 async def send_sig_msg(node, msg, vk=None, m=0, relay_no=2):
     # Encrypt the message if the public key is known.

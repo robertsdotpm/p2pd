@@ -13,9 +13,9 @@ from .node_addr import *
 from .node_utils import *
 from .nickname import *
 from ..traversal.tunnel_address import *
-from ..traversal.signaling.signaling_protocol import *
-from ..traversal.signaling.signaling_utils import *
-from ..traversal.signaling.signaling_sender import *
+from ..traversal.signaling.signal_protocol import *
+from ..traversal.signaling.signal_utils import *
+from ..traversal.signaling.signal_sender import *
 from ..utility.clock_skew import SysClock
 from ..traversal.plugins.tcp_punch.punch_init import setup_punch_coordination
 from ..traversal.plugins.tcp_punch.punch_init import start_punch_worker

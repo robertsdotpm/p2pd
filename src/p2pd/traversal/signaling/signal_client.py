@@ -3,11 +3,7 @@ from ...utility.utils import *
 from ...vendor.gmqtt import Client as MQTTClient
 from ...net.net_utils import *
 from ...settings import *
-
-MQTT_CONF = dict_child({
-    "con_timeout": 4,
-    "recv_timeout": 4
-}, NET_CONF)
+from .signal_defs import *
 
 async def f_proto_print(data):
     print(data)

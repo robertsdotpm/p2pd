@@ -5,7 +5,7 @@ index by host name even if its longer.
 """
 
 from ..utility.utils import *
-from ..traversal.signaling.signaling_msgs import *
+from ..traversal.signaling.signal_msgs import *
 from .node_defs import CON_ID_MSG
 from ..vendor.ecies import encrypt, decrypt
 

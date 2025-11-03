@@ -1,7 +1,7 @@
 from ..utility.utils import *
 from ..node.node_addr import *
 from ..node.nickname import *
-from .signaling.signaling_msgs import GetAddr
+from .signaling.signal_msgs import GetAddr
 
 """
 A nodes PNS address gets resolved to address bytes.
