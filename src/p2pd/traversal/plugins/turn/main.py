@@ -1,5 +1,5 @@
-from ....net.net import *
-from ....net.pipe.pipe_utils import PipeEvents
+from ....net.net_utils import *
+from ....net.pipe.pipe_open import PipeEvents
 from ....settings import *
 from ....utility.utils import *
 from ....traversal.signaling.signaling_msgs import TURNMsg

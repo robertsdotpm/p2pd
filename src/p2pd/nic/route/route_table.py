@@ -1,6 +1,6 @@
 import re
 import platform
-from ...net.net import *
+from ...net.net_utils import *
 
 async def windows_get_route_table(af):
     table = []

@@ -1,8 +1,8 @@
 import asyncio
 from ....utility.utils import *
-from ....net.net import *
+from ....net.net_utils import *
 from ....net.address import Address
-from ....net.pipe.pipe_utils import pipe_open
+from ....net.pipe.pipe_open import pipe_open
 from ....node.node_defs import *
 
 async def direct_connect(tunnel, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):

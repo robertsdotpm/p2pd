@@ -12,7 +12,7 @@ import socket
 import hashlib
 import socket
 from ...utility.utils import *
-from ...net.net import *
+from ...net.net_utils import *
 
 STUN_CHANGE_NONE = 1
 STUN_CHANGE_PORT = 2

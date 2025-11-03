@@ -17,7 +17,7 @@ this design might not be ideal.
 
 import asyncio
 from ...utility.utils import *
-from ..net import *
+from ..net_utils import *
 from ...protocol.ack_udp import *
 from .pipe_client import *
 

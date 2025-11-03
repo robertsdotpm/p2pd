@@ -57,9 +57,9 @@ https://community.ui.com/questions/Ports-required-for-upnp2/6692d89e-1dd6-4abd-a
 
 import socket
 from ...utility.utils import *
-from ...net.net import *
+from ...net.net_utils import *
 from ...net.address import *
-from ...net.pipe.pipe_utils import *
+from ...net.pipe.pipe_open import *
 from ...protocol.http.http_client_lib import *
 from .upnp_utils import *
 

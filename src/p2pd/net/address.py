@@ -1,5 +1,5 @@
 from ..utility.utils import *
-from .net import *
+from .net_utils import *
 from .bind import *
 from .ip_range import *
 

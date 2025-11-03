@@ -2,7 +2,7 @@
 
 from ecdsa import SECP256k1, SigningKey
 from ...vendor.ecies import decrypt, encrypt
-from ...net.pipe.pipe_utils import *
+from ...net.pipe.pipe_open import *
 from .pnp_utils import *
 from ...net.address import *
 

@@ -2,7 +2,7 @@ import copy
 from http.client import HTTPResponse
 import json
 from ...net import *
-from ...net.pipe.pipe_utils import *
+from ...net.pipe.pipe_open import *
 from ...net.address import *
 
 HTTP_HEADERS = [

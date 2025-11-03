@@ -32,7 +32,7 @@ if __name__ == "__main__": # pragma: no cover
             print(f"Connection closed from {addr}")
 
     async def echo_main():
-        from p2pd.net.net import IP4, TCP
+        from p2pd.src.p2pd.net.net_utils import IP4, TCP
         from p2pd.nic.interface import Interface
 
         loop = asyncio.get_running_loop()

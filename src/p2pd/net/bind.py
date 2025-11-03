@@ -1,5 +1,5 @@
 from ..utility.utils import *
-from .net import *
+from .net_utils import *
 
 def ip6_patch_bind_ip(bind_ip, nic_id):
     # Add interface descriptor if it's link local.

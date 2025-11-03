@@ -1,5 +1,5 @@
 from functools import lru_cache
-from ..net.net import *
+from ..net.net_utils import *
 from ..net.ip_range import *
 from .netifaces.netiface_extra import *
 from .nat.nat_utils import *

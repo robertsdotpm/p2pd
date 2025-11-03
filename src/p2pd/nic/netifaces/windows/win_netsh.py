@@ -2,7 +2,7 @@ import re
 import asyncio
 import winreg
 
-from ....net.net import *
+from ....net.net_utils import *
 from ....utility.cmd_tools import *
 from ....net.ip_range import IPRange
 

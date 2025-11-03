@@ -1,6 +1,6 @@
 import xmltodict
 from ...utility.utils import *
-from ...net.net import *
+from ...net.net_utils import *
 from ...protocol.http.http_client_lib import *
 
 UPNP_LEASE_TIME = 86399

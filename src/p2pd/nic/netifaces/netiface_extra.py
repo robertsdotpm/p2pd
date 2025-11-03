@@ -1,5 +1,5 @@
 import re
-from ...net.net import *
+from ...net.net_utils import *
 from ...net.ip_range import *
 from ...utility.cmd_tools import *
 from ...net.bind import *

@@ -8,7 +8,7 @@ if __name__ != '__main__':
     from .errors import *
     from .utility.utils import log, what_exception, log_exception, async_test
     from .utility.cmd_tools import *
-    from .net.net import *
+    from .net.net_utils import *
     from .net.bind import *
     from .net.address import Address
     from .net.ip_range import IPRange, IPR
@@ -16,7 +16,7 @@ if __name__ != '__main__':
     from .protocol.upnp.upnp import port_forward
     from .nic.route.route_defs import Route, RoutePool
     from .nic.route.route_load import get_routes_with_res
-    from .net.pipe.pipe_utils import *
+    from .net.pipe.pipe_open import *
     from .nic.interface import Interface, p2pd_setup_event_loop, SelectorEventPolicy
     from .nic.select_interface import *
     from .utility.clock_skew import SysClock

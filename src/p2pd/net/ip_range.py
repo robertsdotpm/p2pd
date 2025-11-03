@@ -6,7 +6,7 @@ todo: Need to write better checks here.
 import ipaddress
 import copy
 from functools import total_ordering
-from .net import *
+from .net_utils import *
 
 CIDR_WAN = 1000
 

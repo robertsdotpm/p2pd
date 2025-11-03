@@ -22,7 +22,7 @@ import os
 import aiomysql
 from ecdsa import VerifyingKey, SECP256k1, SigningKey
 from .pnp_utils import *
-from ...net.net import *
+from ...net.net_utils import *
 from ...net.ip_range import IPRange
 from ...net.daemon import *
 from ...utility.clock_skew import SysClock

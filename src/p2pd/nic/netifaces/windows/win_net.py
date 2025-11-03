@@ -3,7 +3,7 @@ import re
 import winreg
 from ....utility.utils import *
 from ....utility.cmd_tools import *
-from ....net.net import *
+from ....net.net_utils import *
 
 
 async def nt_ipv6_routes(no): # pragma: no cover

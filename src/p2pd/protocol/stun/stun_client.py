@@ -43,9 +43,9 @@ TODO: Refactor code. The code in this module offers many good features but the c
 
 from ...errors import *
 from ...utility.utils import *
-from ...net.net import *
+from ...net.net_utils import *
 from ...net.address import Address
-from ...net.pipe.pipe_utils import *
+from ...net.pipe.pipe_open import *
 from .stun_defs import *
 from .stun_utils import *
 from ...utility.pattern_factory import *

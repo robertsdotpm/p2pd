@@ -11,7 +11,7 @@ from ..errors import *
 from ..settings import *
 from .utils import *
 from .cmd_tools import *
-from ..net.net import *
+from ..net.net_utils import *
 from ..net.address import *
 from ..nic.interface import *
 from ..nic.select_interface import *
@@ -19,7 +19,7 @@ from ..net.event_loop import *
 
 # Loads interface info on Windows.
 # Make it available for all tests.
-from ..net.pipe.pipe_utils import *
+from ..net.pipe.pipe_open import *
 from ..protocol.stun.stun_client import *
 from ..install import *
 

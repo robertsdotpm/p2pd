@@ -1,4 +1,4 @@
-from ....net.net import *
+from ....net.net_utils import *
 from ....settings import *
 from ....utility.utils import *
 from ....protocol.turn.turn_client import TURNClient

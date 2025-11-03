@@ -1,4 +1,4 @@
-from ...net.net import *
+from ...net.net_utils import *
 
 def load_if_info_fallback(nic):
     # Just guess name.

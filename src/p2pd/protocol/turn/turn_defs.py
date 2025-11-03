@@ -2,7 +2,7 @@ import socket
 from struct import pack
 import hmac
 from hashlib import sha1
-from ...net.net import *
+from ...net.net_utils import *
 from ...settings import *
 
 # Config variables -------------------------------------

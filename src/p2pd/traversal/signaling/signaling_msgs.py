@@ -1,7 +1,7 @@
 import json
 from ecdsa import VerifyingKey
 from ...utility.utils import *
-from ...net.net import *
+from ...net.net_utils import *
 from ...net.ip_range import IPRange
 from ..plugins.tcp_punch.tcp_punch_defs import *
 from ...node.node_addr import *

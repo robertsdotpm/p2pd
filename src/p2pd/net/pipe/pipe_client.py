@@ -1,7 +1,7 @@
 import asyncio
 import re
 from ...protocol.ack_udp import *
-from ..net import *
+from ..net_utils import *
 from ..ip_range import *
 
 def tup_to_sub(dest_tup):

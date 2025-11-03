@@ -8,7 +8,7 @@ from ..settings import *
 from ..utility.utils import *
 from ..install import *
 from ..net.address import Address
-from ..net.net import *
+from ..net.net_utils import *
 from ..nic.interface import get_default_iface, get_mac_address
 from ..protocol.stun.stun_client import get_n_stun_clients
 from ..nic.nat.nat_utils import USE_MAP_NO

@@ -1,7 +1,7 @@
 from ..utility.utils import *
 from .address import *
 from ..nic.interface import *
-from .pipe.pipe_utils import *
+from .pipe.pipe_open import *
 from ..install import *
 
 DAEMON_CONF = dict_child({

@@ -31,7 +31,7 @@ from ...nic.interface import *
 from .turn_process import *
 from ...protocol.stun.stun_defs import *
 from .turn_defs import *
-from ...net.pipe.pipe_utils import *
+from ...net.pipe.pipe_open import *
 
 # Main class for handling TURN sessions with a server.
 class TURNClient(PipeEvents):
