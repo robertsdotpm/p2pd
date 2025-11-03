@@ -427,8 +427,6 @@ async def main():
 
         if menu_option == "4":
             cout("Stopping nodes...")
-            cout("May take a while... work in progress")
-            cout("(I usually just spam cnt + c)")
             for n in nodes:
                 await n.close()
             return

@@ -31,8 +31,7 @@ from ..address import *
 from ..asyncio_patches import *
 from .pipe_tcp_events import *
 from ..socket import *
-
-p2pd_fds = set()
+from .pipe_defs import *
 
 """
 In the spirit of unix a 'pipe' is an protocol and destination

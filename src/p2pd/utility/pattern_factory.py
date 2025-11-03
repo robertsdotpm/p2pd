@@ -8,7 +8,6 @@ Consensus first-in:
     - or timeout: return most frequent r
 """
 async def concurrent_first_agree_or_best(min_agree, tasks, timeout, wait_all=False):
-    wait_all = False
     results = {}
     #tasks = [async_wrap_errors(t, timeout=timeout - 1) for t in tasks]
     pending = set(tasks)

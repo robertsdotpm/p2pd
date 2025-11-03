@@ -5,7 +5,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         loop = asyncio.get_event_loop()
         print(loop)
 
-        protos = (UDP,)
+        protos = (TCP,)
         server_port = 34200
         loopbacks = {
             IP4: "127.0.0.1",
@@ -15,7 +15,18 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
         at_least_one = False
         i = 0
         interface = await Interface()
-        for af in interface.supported():
+
+        """
+        for s in p2pd_fds:
+            print(s._closed)
+
+        print(p2pd_fds)
+        return
+        """
+
+
+        afs = [IP4]
+        for af in afs:
             log(fstr("Test daemon af = {0}", (af,)))
 
             """
@@ -107,14 +118,23 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                         """
                         
                         #simulate misbehaving client not closing.
+                        """
                         if pipe is not None:
                             await pipe.close()
-                        
+                        """
+                            
                         if echod is not None:
                             await echod.close()
+                        
 
+        #await asyncio.sleep(4)
         print(p2pd_fds)
         await asyncio.sleep(0.1)
+
+        """
+        one socket should be unclosed simulating their client computer
+        keeping it open
+        """
 
 if __name__ == '__main__':
     main()

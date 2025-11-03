@@ -21,12 +21,42 @@ from ..net_utils import *
 from ...protocol.ack_udp import *
 from .pipe_client import *
 
-TYPE_UDP_CON = 1
-TYPE_UDP_SERVER = 2
-TYPE_TCP_CON = 3
-TYPE_TCP_SERVER = 4
-TYPE_TCP_CLIENT = 5
+async def close_all_clients(tcp_clients, loop=None, timeout=1.0):
+    """
+    Close all TCP clients concurrently, ensuring their sockets
+    are actually unregistered and closed at the OS level.
 
+    Parameters
+    ----------
+    tcp_clients : list
+        List of asyncio Transports or Protocols with a .close() method
+        and .get_extra_info('socket') to access the socket.
+    loop : asyncio.AbstractEventLoop, optional
+        Event loop with `await_fd_close`. Defaults to current loop.
+    timeout : float
+        Maximum seconds to wait per client.
+    """
+    if loop is None:
+        loop = asyncio.get_event_loop()
+
+    tasks = []
+
+    for client in tcp_clients:
+        if client.transport is not None:
+            client.transport.close()
+        sock = client.sock
+        if sock is None:
+            continue
+
+        # Await the OS-level socket closure with timeout
+        tasks.append(asyncio.wait_for(loop.await_fd_close(sock), timeout=timeout))
+
+    if tasks:
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Optional: log exceptions
+        for r in results:
+            if isinstance(r, Exception):
+                pass  # log or ignore
 """
 In Python's asyncio code you can use so-called 'protocol' classes
 to receive messages from an endpoint or server and then handle
@@ -190,6 +220,7 @@ class PipeEvents(BaseACKProto):
     def set_tcp_server(self, server):
         self.transport = server
         self.tcp_server = server
+        
 
     def set_tcp_server_task(self, task):
         self.tcp_server_task = task
@@ -386,15 +417,15 @@ class PipeEvents(BaseACKProto):
             if self.transport is not None:
                 self.transport.close()
 
+            if self.tcp_server:
+                self.tcp_server.close()
+
             await on_close
 
         """
         If it's a TCP server close TCP client cons.
         """
-        for client in self.tcp_clients:
-            # Close client transports.
-            if client.close != self.close:
-                await client.close()
+        await close_all_clients(self.tcp_clients, timeout=1.0)
 
         # No longer running.
         self.transport = None

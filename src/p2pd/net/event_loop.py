@@ -58,6 +58,7 @@ class ProxySelector:
         
         # Check if the FD's future exists
         if fd not in _CLOSE_FUTURES:
+            #_CLOSE_FUTURES[fd] = self._loop.create_future()
             return
 
         # In the context of a fully-removed item:
@@ -109,7 +110,7 @@ class CustomEventLoop(asyncio.SelectorEventLoop):
         fd = sock.fileno()
         if fd not in _CLOSE_FUTURES:
             _CLOSE_FUTURES[fd] = self.create_future()
-
+            
         return _CLOSE_FUTURES[fd]
 
 class CustomEventLoopPolicy(asyncio.DefaultEventLoopPolicy):

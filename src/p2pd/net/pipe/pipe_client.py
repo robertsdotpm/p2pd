@@ -3,6 +3,7 @@ import re
 from ...protocol.ack_udp import *
 from ..net_utils import *
 from ..ip_range import *
+from .pipe_defs import *
 
 def tup_to_sub(dest_tup):
     dest_tup = client_tup_norm(dest_tup)

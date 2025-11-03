@@ -5,6 +5,9 @@ from ..bind import *
 from .pipe_events import *
 from ..address import *
 from ..asyncio_patches import *
+from .pipe_defs import *
+
+
 
 """
 StreamReaderProtocol provides a way to "translate" between
@@ -70,6 +73,7 @@ class TCPClientProtocol(asyncio.StreamReaderProtocol):
         self.transport = transport
         self.sock = transport.get_extra_info('socket')
         p2pd_fds.add(self.sock)
+
         self.remote_tup = self.sock.getpeername()
         self.client_events = PipeEvents(
             sock=self.sock,
