@@ -6,6 +6,7 @@ from ...net.ip_range import *
 from ..netifaces.netiface_extra import *
 from ...protocol.upnp.upnp import *
 from ...net.address import *
+from ...net.bind.bind import *
 
 # Allows referencing a list of routes as if all WAN IPs
 # were at their own index regardless of if they're in ranges.

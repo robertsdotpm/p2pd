@@ -8,6 +8,7 @@ from ...net.address import *
 from .route_defs import *
 from ...utility.pattern_factory import *
 from ...settings import *
+from ...net.bind.bind import *
 
 """
 As there's only one STUN server in the preview release the

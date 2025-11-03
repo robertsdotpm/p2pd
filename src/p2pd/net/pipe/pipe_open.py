@@ -30,6 +30,7 @@ from ..ip_range import IPRange
 from ..address import *
 from ..asyncio_patches import *
 from .pipe_tcp_events import *
+from ..socket import *
 
 p2pd_fds = set()
 

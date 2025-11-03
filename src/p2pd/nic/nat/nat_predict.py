@@ -59,6 +59,7 @@ async def get_high_port_mapping(stun_client):
             # Reserve a sock for use.
             _, high_port = await get_high_port_socket(
                 nic.route(af),
+                socket_factory,
                 sock_type=TCP,
             )
 
