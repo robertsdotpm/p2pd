@@ -21,6 +21,7 @@ from ...utility.utils import *
 from .stun_defs import *
 from ...net.net_utils import *
 from ...net.ip_range import *
+from ...net.net_patterns import *
 
 def stun_proc_attrs(af, attr_code, attr_data, msg):
     # Set our remote IP and port.

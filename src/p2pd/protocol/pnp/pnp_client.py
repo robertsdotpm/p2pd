@@ -5,6 +5,7 @@ from ...vendor.ecies import decrypt, encrypt
 from ...net.pipe.pipe_open import *
 from .pnp_utils import *
 from ...net.address import *
+from ...net.net_patterns import *
 
 """
 Important: since this immediately returns if one

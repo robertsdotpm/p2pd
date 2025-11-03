@@ -2,6 +2,7 @@ import sys
 import socket
 import platform
 import ipaddress
+from io import BytesIO
 from ..errors import *
 from ..utility.cmd_tools import *
 
@@ -198,3 +199,19 @@ NET_CONF = {
     # Ref to an event loop.
     "loop": None
 }
+
+class FakeSocket():
+    def __init__(self, response_bytes):
+        self._file = BytesIO(response_bytes)
+
+    def makefile(self, *args, **kwargs):
+        return self._file
+    
+    def close(self):
+        return
+    
+    def _close_conn(self):
+        return
+    
+    def flush(self):
+        return

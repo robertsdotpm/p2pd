@@ -25,6 +25,7 @@ from .pnp_utils import *
 from ...net.net_utils import *
 from ...net.ip_range import IPRange
 from ...net.daemon import *
+from ...net.net_patterns import *
 from ...utility.clock_skew import SysClock
 
 async def v6_range_usage(cur, v6_glob_main, v6_glob_extra, v6_lan_id, _):
