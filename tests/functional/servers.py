@@ -19,7 +19,7 @@ SSH_SERVERS = [
         "os": "android pixel 9a",
         "ip": "10.0.1.123",
         "user": "x",
-        "home": [],
+        "home": ["/", "data", "data", "com.termux", "files", "home"],
         "port": 8022,
         "py": "3.12.12"
         #"cmd": "proot-distro login debian"
