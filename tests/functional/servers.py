@@ -1,3 +1,5 @@
+"echo $SHELL"
+
 SSH_SERVERS = [
     {
         "os": "debian",
