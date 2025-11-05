@@ -4,6 +4,7 @@ SSH_SERVERS = [
     {
         "os": "debian",
         "ip": "110.0.1.251",
+        "shell": "bash",
         "user": "x",
         "home": ["/", "home", "x"],
         "pyenv": ["3.5.10", "3.7.10", "3.9.10", "3.12.10"]
@@ -12,6 +13,7 @@ SSH_SERVERS = [
     {
         "os": "mac os x big sur",
         "ip": "10.0.1.158",
+        "shell": "bash", # installed bash but uses zsh but default.
         "user": "xx",
         "home": ["/", "Users", "xx"],
         "pyenv": ["3.5.10", "3.7.10", "3.9.10", "3.12.10"]
@@ -20,6 +22,7 @@ SSH_SERVERS = [
     {
         "os": "android pixel 9a",
         "ip": "10.0.1.123",
+        "shell": "bash",
         "user": "x",
         "home": ["/", "data", "data", "com.termux", "files", "home"],
         "port": 8022,
@@ -30,6 +33,7 @@ SSH_SERVERS = [
     {
         "os": "freebsd",
         "ip": "10.0.1.225",
+        "shell": "bash",
         "user": "root",
         "home": ["/", "root"],
         "pyenv": ["3.5.10", "3.7.10", "3.9.10", "3.12.10"]
@@ -38,6 +42,7 @@ SSH_SERVERS = [
     {
         "os": "fedora",
         "ip": "10.0.1.224",
+        "shell": "bash",
         "user": "x",
         "home": ["/", "home", "x"],
         "pyenv": ["3.5.3", "3.7.0", "3.9.0", "3.12.0"]
@@ -46,6 +51,7 @@ SSH_SERVERS = [
     {
         "os": "ghostbsd",
         "ip": "10.0.1.152",
+        "shell": "bash",
         "user": "x",
         "home": ["/", "home", "x"],
         "pyenv": ["3.5.10", "3.7.10", "3.9.10", "3.12.10"]
@@ -54,6 +60,7 @@ SSH_SERVERS = [
     {
         "os": "windows 11",
         "ip": "10.0.1.123",
+        "shell": "cmd.exe",
         "user": "matth",
         "home": ["C:\\", "Users", "matth"],
         "pyenv": ["3.5.0", "3.7.0", "3.9.0", "3.12.0"]
@@ -62,6 +69,7 @@ SSH_SERVERS = [
     {
         "os": "windows xp pro",
         "ip": "10.0.1.132",
+        "shell": "cmd.exe",
         "user": "matthew",
         "home": ["C:\\", "Documents and Settings", "matthew"],
         "py": "3.5.0"
@@ -70,6 +78,7 @@ SSH_SERVERS = [
     {
         "os": "windows 8.1 pro",
         "ip": "10.0.1.165",
+        "shell": "cmd.exe",
         "user": "x",
         "home": ["C:\\", "Users", "x"],
         "pyenv": ["3.5.0", "3.7.0", "3.9.0", "3.11.0b4"]
@@ -78,6 +87,7 @@ SSH_SERVERS = [
     {
         "os": "windows server 2022",
         "ip": "10.0.1.248",
+        "shell": "cmd.exe",
         "user": "administrator",
         "home": ["C:\\", "Users", "Administrator"],
         "pyenv": ["3.5.0", "3.7.0", "3.9.0", "3.12.0"]
@@ -86,6 +96,7 @@ SSH_SERVERS = [
     {
         "os": "windows vista",
         "ip": "10.0.1.167",
+        "shell": "cmd.exe",
         "user": "x",
         "home": ["C:\\", "Users", "x"],
         "py": "3.7.0"
@@ -94,6 +105,7 @@ SSH_SERVERS = [
     {
         "os": "windows 10",
         "ip": "10.0.1.199",
+        "shell": "cmd.exe",
         "user": "matth",
         "home": ["C:\\", "Users", "matth"],
         "pyenv": ["3.5.0", "3.7.0", "3.9.0", "3.11.0b4"]
@@ -102,6 +114,7 @@ SSH_SERVERS = [
     {
         "os": "windows 7",
         "ip": "10.0.1.231",
+        "shell": "cmd.exe",
         "user": "x",
         "home": ["C:\\", "Users", "x"],
         "pyenv": ["3.5.0", "3.7.0"]

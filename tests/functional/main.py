@@ -23,32 +23,20 @@ async def git_pull_latest(servers):
             cmd = f"""cd "{p2pd_dir}" && git pull"""
             await con.run(cmd, check=True)
 
-def pyenv_install_p2pd(py_ver, server):
-    p2pd_dir = get_p2pd_code_path(server)
-    pip_install = f'-m pip install "{p2pd_dir}"'
-    return pyenv_run(py_ver, server, pip_install)
+async def pyenv_install_latest(servers):
+    for server in servers:
+        print(f"{server['os']}> Installing latest P2PD.")
+        async with ssh_connect(server) as con:
+            py_ver = choose_first_py_ver(server)
+            cmd = pyenv_install_p2pd(py_ver, server)
+            await con.run(cmd, check=True)
 
 async def run_client():
     # Freebsd and fedora, chosen arbitrary to start testing with.
     servers = (SSH_SERVERS[3], SSH_SERVERS[4],)
-    #await git_pull_latest(servers)
-    cmd = pyenv_install_p2pd("3.5.10", servers[0])
-    print(cmd)
-    async with (ssh_connect(servers[0])) as con:
-        """
-        result = await con.run('echo $PATH', check=True)
-        print(result.stdout)
-
-        result = await con.run("echo hello")
-        print(result)
-        """
-        #print(await con.run("whoami", check=True))
-        print(await con.run('bash -lc "PYENV_VERSION=3.5.10 pyenv exec python -m pip install /root/p2pd_dev/p2pd"', check=True))
-
-        return
-        result = await con.run(cmd, check=True)
-        print(result)
-        
+    await git_pull_latest(servers)
+    await pyenv_install_latest(servers)
+    
 
 try:
     asyncio.get_event_loop().run_until_complete(run_client())
