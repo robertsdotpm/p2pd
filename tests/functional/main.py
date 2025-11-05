@@ -31,11 +31,22 @@ async def pyenv_install_latest(servers):
             cmd = pyenv_install_p2pd(py_ver, server)
             await con.run(cmd, check=True)
 
+async def tunnel_test(active, passive):
+    # Get PNP address of the passive node.
+    passive_con = await ssh_connect(passive)
+    cmd = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd get_nickname"
+    py_ver = choose_first_py_ver(passive)
+    cmd = pyenv_run(py_ver, passive, cmd)
+    print(cmd)
+    passive_addr = await passive_con.run(cmd, check=True)
+    print(passive_addr)
+
 async def run_client():
     # Freebsd and fedora, chosen arbitrary to start testing with.
     servers = (SSH_SERVERS[3], SSH_SERVERS[4],)
     await git_pull_latest(servers)
     await pyenv_install_latest(servers)
+    await tunnel_test(*servers)
     
 
 try:
