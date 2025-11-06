@@ -163,7 +163,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Build P2P address bytes.
     assert(node.node_id is not None)
-    node.addr_bytes = make_peer_addr(
+    node.addr_bytes = make_node_addr(
         node.node_id,
         node.machine_id,
         node.ifs,
@@ -178,7 +178,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Save a dict version of the address fields.
     try:
-        node.p2p_addr = parse_peer_addr(node.addr_bytes)
+        node.p2p_addr = parse_node_addr(node.addr_bytes)
     except:
         log_exception()
         raise Exception("Can't parse nodes p2p addr.")

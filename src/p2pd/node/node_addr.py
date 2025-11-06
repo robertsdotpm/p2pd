@@ -2,15 +2,12 @@ import struct
 from ..settings import *
 from ..nic.nat.nat_utils import *
 from ..net.ip_range import *
+from .node_defs import *
 
-
-# No more than n interfaces per address family in peer addr.
-PEER_ADDR_MAX_INTERFACES = 4
-
-# No more than n signal pipes to send signals to nodes.
-SIGNAL_PIPE_NO = 3
 
 """
+    Absolutely DERANGED. Or is it?
+
         can be up to N interfaces
 [ IP4 nics
     [
@@ -25,7 +22,7 @@ SIGNAL_PIPE_NO = 3
     ,... more interfaces for AF family
 ],[IP6 nics ...],node_id
 """
-def make_peer_addr(node_id, machine_id, interface_list, signal_offsets, port=NODE_PORT, ip=None, nat=None, if_index=None):
+def make_node_addr(node_id, machine_id, interface_list, signal_offsets, port=NODE_PORT, ip=None, nat=None, if_index=None):
     ensure_resolved(interface_list)
 
     # Make the program crash early on invalid addr inputs.
@@ -107,7 +104,7 @@ Doing this was necessary for the IRC DNS module as space in
 topics for records is quite scarce. There's room here for improvement
 if you wanted to make each bit count. But I haven't gone overboard here.
 """
-def pack_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=None, nat=None, if_index=None):
+def pack_node_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=None, nat=None, if_index=None):
     # Truncate node id to 8.
     node_id = node_id[:8]
 
@@ -194,7 +191,7 @@ def pack_peer_addr(node_id, interface_list, signal_offsets, port=NODE_PORT, ip=N
 
     return buf
 
-def validate_peer_addr(addr):
+def validate_node_addr(addr):
     # Check signal server offsets.
     for offset in addr["signal"]:
         if not in_range(offset, [0, len(MQTT_SERVERS) - 1]):
@@ -234,7 +231,7 @@ def validate_peer_addr(addr):
             
     return addr
 
-def unpack_peer_addr(addr):
+def unpack_node_addr(addr):
     # Unpack header portion.
     node_id = addr[:8]; p = 8;
     port, signal_no, if_no = struct.unpack("HBB", addr[p:p + 4]); p += 4;
@@ -297,9 +294,9 @@ def unpack_peer_addr(addr):
             # Save results.
             out[af].append(as_dict)
 
-    return validate_peer_addr(out)
+    return validate_node_addr(out)
 
-def parse_peer_addr(addr):
+def parse_node_addr(addr):
     # Already passed.
     if isinstance(addr, dict):
         return addr
@@ -386,14 +383,14 @@ def parse_peer_addr(addr):
             out[af][parts[1]] = as_dict
 
     # Sanity check address.
-    validate_peer_addr(out)
+    validate_node_addr(out)
 
     # Convert to tuple to prevent change.
     out["signal"] = tuple(out["signal"])
 
     return out
 
-def peer_addr_extract_exts(p2p_addr):
+def node_addr_extract_exts(p2p_addr):
     exts = []
     for af in VALID_AFS:
         for info in p2p_addr[af]:
@@ -402,9 +399,9 @@ def peer_addr_extract_exts(p2p_addr):
 
     return exts
 
-def is_p2p_addr_us(addr_bytes, if_list):
+def is_node_addr_us(addr_bytes, if_list):
     # Parse address bytes to address.
-    addr = parse_peer_addr(addr_bytes)
+    addr = parse_node_addr(addr_bytes)
 
     # Check all address families.
     for af in VALID_AFS:
@@ -436,10 +433,10 @@ if __name__ == "__main__": # pragma: no cover
         x = await Interface("enp3s0").start()
         if_list = [x]
         node_id = b"noasdfosdfo"
-        b_addr = make_peer_addr(node_id, if_list)
+        b_addr = make_node_addr(node_id, if_list)
         print(b_addr)
 
-        addr = parse_peer_addr(b_addr)
+        addr = parse_node_addr(b_addr)
         print(addr)
 
     async_test(test_p2p_addr)

@@ -1,5 +1,4 @@
 import asyncio
-from platform import node
 
 # Shutdown the node server and do cleanup.
 async def node_stop(node):

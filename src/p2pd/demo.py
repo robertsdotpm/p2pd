@@ -30,6 +30,8 @@ parser = argparse.ArgumentParser(description="A simple greeting script")
 parser.add_argument("--nics", type=str, required=False, help="Limit to specific nics, comma separated")
 parser.add_argument("--port", type=int, required=False, help="Start node on specific port")
 parser.add_argument("--pnp_server", type=str, required=False, help="Specify using a specific PNP server")
+parser.add_argument("--turn_server", type=str, required=False, help="Specify using a specific TURN server")
+parser.add_argument("--mqtt_server", type=str, required=False, help="Specify using a specific STUN server")
 parser.add_argument("--dest_addr", type=str, required=False, help="Destination to connect to")
 parser.add_argument("--echo", type=str, required=False, help="Text to send down the connection")
 parser.add_argument("--cmd", type=str, required=False, help="Command to run")
@@ -37,11 +39,22 @@ args = parser.parse_args()
 
 """
 parser.add_argument("--stun_server", type=str, required=False, help="Specify using a specific STUN server")
-parser.add_argument("--mqtt_server", type=str, required=False, help="Specify using a specific STUN server")
 parser.add_argument("--ntp_server", type=str, required=False, help="Specify using a specific STUN server")
 """
 
-def patch_server_dict(arg_list, serv_dict):
+def get_req_serv_parts(parts):
+    ip = parts[2]
+    offset = int(parts[0])
+    af = int(parts[1])
+    port = int(parts[3])
+    if af == 4:
+        af = IP4
+    else:
+        af = IP6
+
+    return offset, af, ip, port
+
+def patch_server_af_dict(arg_list, serv_dict):
     # offset, af, ip, port
     if ";" in arg_list:
         serv_infos = arg_list.split(";")
@@ -51,23 +64,54 @@ def patch_server_dict(arg_list, serv_dict):
 
     for serv_info in serv_infos:
         parts = serv_info.split(",")
-        offset, af, ip, port = parts
-        offset = int(offset)
-        af = int(af)
-        port = int(port)
-        if af == 4:
-            af = IP4
-        else:
-            af = IP6
-
-
+        offset, af, ip, port = get_req_serv_parts(parts)
         serv_dict[af][offset]["host"] = ip
         serv_dict[af][offset]["ip"] = ip
         serv_dict[af][offset]["port"] = port
+        if "afs" not in serv_dict:
+            serv_dict["afs"] = []
+
+def patch_server_list(arg_list, server_list):
+    # offset, af, ip, port, (optional) user, (optional) password
+    if ";" in arg_list:
+        serv_infos = arg_list.split(";")
+    else:
+        serv_infos = [arg_list]
+
+    for serv_info in serv_infos:
+        parts = serv_info.split(",")
+        offset, af, ip, port = get_req_serv_parts(parts)
+        username = password = None
+        if len(parts) >= 5:
+            username = parts[4]
+        if len(parts) >= 6:
+            password = parts[5]
+
+        if server_list[offset]["host"] != ip:
+            entry = {
+                "host": ip,
+                "port": port,
+                "user": username,
+                "pass": password,
+                IP4: None,
+                IP6: None,
+                "afs": []
+            }
+        else:
+            entry = server_list[offset]
+
+        entry[af] = ip
+        entry["afs"].append(af)
+        server_list[offset] = entry
 
 if args.pnp_server:
-    patch_server_dict(args.pnp_server, PNP_SERVERS)
+    patch_server_af_dict(args.pnp_server, PNP_SERVERS)
 
+if args.turn_server:
+    patch_server_list(args.turn_server, TURN_SERVERS)
+
+if args.mqtt_server:
+    patch_server_list(args.mqtt_server, MQTT_SERVERS)
 
 def cout(*fargs):
     if args.cmd:

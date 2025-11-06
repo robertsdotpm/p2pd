@@ -22,7 +22,7 @@ NODE_CONF = dict_child({
 }, NET_CONF)
 
 # Main class for the P2P node server.
-class P2PNode(Daemon):
+class Node(Daemon):
     def __init__(self, ifs=[], port=3000, conf=NODE_CONF):
         super().__init__()
         self.__name__ = "P2PNode"
