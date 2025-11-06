@@ -16,7 +16,7 @@ if __name__ != '__main__':
     from .protocol.upnp.upnp import port_forward
     from .nic.route.route import Route
     from .nic.route.route_pool import RoutePool
-    from .nic.route.route_load import get_routes_with_res
+    from .nic.route.route_load import discover_nic_wan_ips
     from .net.pipe.pipe_open import *
     from .nic.interface import Interface, p2pd_setup_event_loop, SelectorEventPolicy
     from .nic.select_interface import *
@@ -33,7 +33,7 @@ if __name__ != '__main__':
     from .node.rest_api import P2PDServer, start_p2pd_server, P2PD_PORT
     from .node.node_addr import *
     from .traversal.tunnel import *
-    from .node.node import P2PNode, NODE_CONF, NODE_PORT
+    from .node.node import Node, NODE_CONF, NODE_PORT
     from .node.node_utils import get_pp_executors, load_signing_key
     from .traversal.signaling.signal_client import SignalMock, is_valid_mqtt
     from .install import *
