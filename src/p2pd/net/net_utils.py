@@ -189,3 +189,17 @@ def determine_if_path(af, dest):
         s.close()
 
     return src_ip
+
+def avoid_time_wait(pipe):
+    try:
+        sock = pipe.sock
+        linger = struct.pack('ii', 1, 0)
+        sock.setsockopt(
+            socket.SOL_SOCKET,
+            socket.SO_LINGER,
+            linger
+        )
+    except:
+        # Not guaranteed on windows.
+        log_exception()
+

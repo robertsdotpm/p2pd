@@ -60,7 +60,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         )
 
     # Cryptography for authenticated messages.
-    node.sk = load_signing_key(node.listen_port)
+    node.sk = load_signing_key(node.listen_port, node.conf["install_path"])
     cout("sk:", node.sk)
 
     node.vk = node.sk.verifying_key

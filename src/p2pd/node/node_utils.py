@@ -14,10 +14,9 @@ from ..protocol.stun.stun_client import get_n_stun_clients
 from ..nic.nat.nat_utils import USE_MAP_NO
 from ..traversal.plugins.tcp_punch.punch_client import PUNCH_CONF
 
-def load_signing_key(listen_port):
+def load_signing_key(listen_port, install_path):
     # Make install dir if needed.
-    install_root = get_p2pd_install_root()
-    pathlib.Path(install_root).mkdir(
+    pathlib.Path(install_path).mkdir(
         parents=True,
         exist_ok=True
     )
@@ -25,7 +24,7 @@ def load_signing_key(listen_port):
     # Store cryptographic random bytes here for ECDSA ident.
     sk_path = os.path.realpath(
         os.path.join(
-            install_root,
+            install_path,
             fstr("SECRET_KEY_DONT_SHARE_{0}.hex", (listen_port,))
         )
     )

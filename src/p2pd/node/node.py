@@ -19,6 +19,7 @@ NODE_CONF = dict_child({
     "reuse_addr": False,
     "enable_upnp": True,
     "sig_pipe_no": SIGNAL_PIPE_NO,
+    "install_path": get_p2pd_install_root()
 }, NET_CONF)
 
 # Main class for the P2P node server.
@@ -26,6 +27,7 @@ class Node(Daemon):
     def __init__(self, ifs=[], port=3000, conf=NODE_CONF):
         super().__init__()
         self.__name__ = "P2PNode"
+        self.install_path = conf["install_path"]
         
         # Main variables for the class.
         self.conf = conf
@@ -190,5 +192,5 @@ class Node(Daemon):
                 Log.log_p2p(msg, self.node_id[:8])
 
         # Loop over all listen pipes for this node.
-        await self.for_server_in_self(forward_server)
+        await for_server_in_daemon(self, forward_server)
 

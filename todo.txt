@@ -6,3 +6,5 @@ http client library doesnt work well
 
     clean up long pipe open func -- split into funcs
 signaling messa
+
+make zombie proc stuff more robust

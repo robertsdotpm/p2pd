@@ -8,7 +8,6 @@ python3 -m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd 0dl4 --dest_addr 5b5
 """
 
 import asyncio
-import sys
 import argparse
 from .do_imports import *
 
@@ -23,6 +22,7 @@ node_conf = dict_child({
     "enable_punching": True,
     "enable_nickname": True,
     "enable_stun_clients": True,
+    "install_path": get_p2pd_install_root()
 }, NET_CONF)
 
 
@@ -35,6 +35,7 @@ parser.add_argument("--mqtt_server", type=str, required=False, help="Specify usi
 parser.add_argument("--dest_addr", type=str, required=False, help="Destination to connect to")
 parser.add_argument("--echo", type=str, required=False, help="Text to send down the connection")
 parser.add_argument("--cmd", type=str, required=False, help="Command to run")
+parser.add_argument("--install_path", type=str, required=False, help="Directory path to use to store some of P2PDs data files. Defaults to user home/p2pd")
 args = parser.parse_args()
 
 """
@@ -242,6 +243,9 @@ async def main():
         node_conf["init_clock_skew"] = False
         node_conf["enable_punching"] = False
         #node_conf["enable_nickname"] = False
+
+    if args.install_path:
+        node_conf["install_path"] = args.install_path
 
     node = P2PNode(ifs=ifs, conf=node_conf)
     if args.port:
