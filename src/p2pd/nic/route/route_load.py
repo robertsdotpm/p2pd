@@ -1,91 +1,3 @@
-"""
-This is my attempt to visualize the association between private, NIC
-addresses and public WAN addresses on a network interface. I have
-learned the following information about network addresses:
- 
-    * A NIC can have one or more addresses.
-    * A NIC can be assigned a block or range of addresses.
-    * A NIC doesn't have to use private addresses. It's common for
-    server hosts to assign the external addresses that belong
-    to the server in such a way that they are used by the NIC.
-    In such a case: the NICs addresses would be the same as
-    how it was viewed from the external Internet.
-    * A NIC can use public addresses that it doesn't own on
-    the Internet. This is very bad because it means that these
-    addresses will be unreachable on the Internet on that machine.
-    NICs should ideally use private addresses. Or stick to IPs
-    they actually can route to themselves on the Internet.
-    * A NIC defines a "default" gateway to route packets to
-    the Internet (which is given by network 0.0.0.0 in IPv4.)
-    " The NIC can actually specify multiple default gateways.
-    Each entry is a route in the route table. It will have a
-    'metric' indicates its 'speed.' The route with the
-    the lowest metric is chosen to route packets. TCP/IP may
-    adjust the metric of routes based on network conditions.
-    Thus, if there are multiple gateways for a NIC then its
-    possible for the external WAN address to change under
-    high network load. This is not really ideal.
- 
-The purpose of this module is to have easy access to the
-external addresses of the machine and any associated NIC
-addresses needed for Bind calls in order to use them. I
-use the following simple rules to make this possible:
- 
-    1. All private addresses for a NIC form a group. This
-    group points to the same external address for that NIC.
-    2. Any public addresses are tested using STUN. If STUN
-    sees the same result as the public address then the
-    address is considered public and forms its own route.
-    If STUN reports a different result then the address is
-    being improperly used for a private NIC address. It
-    thus gets added to the private group in step 1.
-    3. If there is a block of public addresses to check
-    only the first address is checked. If success then
-    I assume the whole block is valid. Ranges of
-    addresses are fully supported.
- 
-When it comes to complex routing tables that have
-strange setups with multiple default gateways for
-a NIC I am for now ignoring this possibility. I
-don't consider myself an expert on networking (its
-much more complex than it appears) but to directly
-leverage routes in a routing table seems to me that
-it would require having to work on the ethernet layer.
-Something much more painful than regular sockets.
-
-One last thing to note about routing tables: there is
-a flag portion that indicates whether a route is 'up.'
-If this means 'online' and 'reachable' it would be
-really useful to check this to determine if a stack
-supported IPv6 or IPv4 rather than trying to test it
-first using STUN and waiting for a long time out.
-
-Other:
-When it comes to IPs assigned to a NIC its possible
-to assign 'public' IPs to it directly. You often
-see this setup on servers. In this case you know
-that not only can you use the public addresses
-directly in bind() calls -- but you know that
-the server's corresponding external IP will be
-what was used in the bind() call. Very useful.
-
-The trouble is that network interfaces happily
-accept 'external IPs' or IPs outside of the
-typical 'private IP' range for use on a NIC or
-LAN network. Obviously this is a very bad idea
-but in the software it has the result of
-potentially assuming that an IP would end up
-resulting in a particular external IP being used.
-
-The situation is not desirable when building
-a picture of a network's basic routing makeup.
-I've thought about the problem and I don't see
-a way to solve it other than to measure how a
-route's external address is perceived from the
-outside world. Such a solution is not ideal but
-at least it only has to be done once.
-"""
-
 import asyncio
 from ...net.ip_range import *
 from ..netifaces.netiface_extra import *
@@ -97,8 +9,13 @@ from ...settings import *
 from .route_utils import *
 from ...net.bind.bind import *
 
-# Loads external IP associated with a nic IP.
-async def get_wan_ip_cfab(src_ip, min_agree, stun_clients, timeout):
+"""
+Loads external IP associated with a nic IP.
+Give a single address for a NIC (may appear public or private) --
+use STUN to lookup what WAN address ends up being reported after using
+that particular address for a bind() call.
+"""
+async def lookup_wan_ip_for_nic_ip(src_ip, min_agree, stun_clients, timeout):
     try:
         tasks = []
         interface = stun_clients[0].interface
@@ -146,9 +63,27 @@ async def get_wan_ip_cfab(src_ip, min_agree, stun_clients, timeout):
     except:
         log_exception()
 
-# Puts all local addresses into a route list
-# that points correctly to the right WAN IP(s).
-async def get_routes_with_res(af, min_agree, enable_default, interface, stun_clients, netifaces, timeout):
+"""
+Network interface cards have a list of addresses to bind on them. 
+They consist of one or more ranges of IPs. A range may have one IP in it.
+Depending on the gateway and route tables -- binding to any of those IPs
+ends up with a certain public address from another machines perspective on
+the Internet. To discover that perspective -- STUN is used.
+
+However, since public STUN servers are used a portion of them may be adversarial
+(or simply misconfigured to return bad results.) So this function allows for
+public addresses to be discovered assuming that a minimum number of STUN
+servers report the same result. It is optimized so that if there are ranges
+of IPs for a NIC (with a million IPs for example) -- it only checks the
+first address to learn an associated IP and then generalized the result.
+
+Servers often like to directly set public addresses for their NIC cards
+to indicate that they're directly connected to the Internet without NATs
+or any of that junk. In that case -- the software still checks if these are
+valid addresses because a machine is free to set whatever addresses they like
+for their interface but it doesn't mean that the addresses are valid.
+"""
+async def discover_nic_wan_ips(af, min_agree, enable_default, interface, stun_clients, netifaces, timeout):
     # Get a list of tasks to resolve NIC addresses.
     tasks = []
     link_locals = []
@@ -168,7 +103,7 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
             src_ip = ip_norm(str(nic_ipr[0]))
             tasks.append(
                 async_wrap_errors(
-                    get_wan_ip_cfab(
+                    lookup_wan_ip_for_nic_ip(
                         src_ip,
                         min_agree,
                         stun_clients,
@@ -185,7 +120,7 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
         af_default_nic_ip = determine_if_path(af, dest)
         tasks.append(
             async_wrap_errors(
-                get_wan_ip_cfab(
+                lookup_wan_ip_for_nic_ip(
                     af_default_nic_ip,
                     min_agree,
                     stun_clients,
@@ -209,7 +144,7 @@ async def get_routes_with_res(af, min_agree, enable_default, interface, stun_cli
         priv_src = ip_norm(str(priv_iprs[0]))
         tasks.append(
             async_wrap_errors(
-                get_wan_ip_cfab(
+                lookup_wan_ip_for_nic_ip(
                     priv_src,
                     min_agree,
                     stun_clients,

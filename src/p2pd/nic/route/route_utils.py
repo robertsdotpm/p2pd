@@ -67,7 +67,6 @@ async def get_nic_iprs(af, interface, netifaces):
     results = await asyncio.gather(*tasks)
     return [r for r in results if r is not None]
 
-
 def sort_routes(routes):
     # Deterministically order routes list.
     cmp = lambda r1, r2: int(r1.ext_ips[0]) - int(r2.ext_ips[0])
@@ -94,8 +93,6 @@ def exclude_routes_by_src(src_ips, results):
             new_list.append(route)
 
     return new_list
-
-
 
 # Combine all routes from interface into RoutePool.
 def interfaces_to_rp(interface_list):
@@ -174,15 +171,6 @@ async def bind_to_route(bind_obj):
     # Bind to port in route.
     await route.bind(port=bind_obj.bind_port)
     return route
-
-# Resolve the external addresses for an interface.
-# Tries with public STUN servers first.
-# Otherwise uses official p2pd servers.
-async def route_res_with_fallback(af, is_default, nic, main_res):
-    # Try the main 'decentralized' approach first.
-    out = await async_wrap_errors(main_res)
-    if out is not None:
-        return out
 
 if __name__ == "__main__": # pragma: no cover
     from .interface import Interface

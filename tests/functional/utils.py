@@ -1,4 +1,5 @@
 import asyncssh
+import shlex
 from posixpath import join as nix_join
 from ntpath import join as nt_join
 from defs import *
@@ -32,7 +33,7 @@ def ssh_connect(server):
         username=server["user"],
         client_keys=[ID_RSA_PATH],
         port=port,
-        options=opts,
+        #options=opts,
     )
 
 def server_has_py_ver(py_ver, server):
@@ -46,7 +47,7 @@ def server_has_py_ver(py_ver, server):
         
     return False
 
-def pyenv_run(py_ver, server, cmd):
+def pyenv_run_cmd(py_ver, server, cmd):
     # Ensure server supports requested Python version.
     if not server_has_py_ver(py_ver, server):
         raise PythonVersionNotSupported(py_ver, server)
@@ -62,19 +63,37 @@ def pyenv_run(py_ver, server, cmd):
     if "windows" in server["os"]:
         out = "set " + out
 
-    # Ensure PATHs are set and pyenv is initialized.
-    if server["shell"] == "bash":
-        out = f"bash -lc '{out}'"
-
-    return out
+    return out + "\n"
 
 def pyenv_install_p2pd(py_ver, server):
     p2pd_dir = get_p2pd_code_path(server)
     pip_install = f'-m pip install "{p2pd_dir}"'
-    return pyenv_run(py_ver, server, pip_install)
+    return pyenv_run_cmd(py_ver, server, pip_install)
 
 def choose_first_py_ver(server):
     if "pyenv" in server:
         return server["pyenv"][0]
     else:
         return server["py"]
+    
+def init_pyenv_vars(server):
+    buf  = 'export PYENV_ROOT="$HOME/.pyenv"; '
+    buf += 'export PATH="$PYENV_ROOT/bin:$PATH"; '
+    buf += 'eval "$(pyenv init -)"\n'
+    return buf
+
+async def init_shell_env(shell, server):
+    # Initialize pyenv once
+    init_cmd = init_pyenv_vars(server)
+    print(init_cmd)
+    shell.stdin.write(init_cmd)
+
+async def something(shell, py_ver, server):
+    # Run your Python command safely
+    install_cmd = pyenv_install_p2pd(py_ver, server)
+    shell.stdin.write(install_cmd)
+
+    # Collect stdout/stderr
+    stdout, stderr = await shell.communicate()
+    print(stdout)
+    print(stderr)

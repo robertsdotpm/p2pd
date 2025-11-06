@@ -116,24 +116,16 @@ async def load_interface(nic, netifaces, min_agree, max_agree, timeout):
         log(fstr("{0} {1} {2}", (nic.name, af, enable_default,)))
 
         # Use a threshold of pub servers for res.
-        main_res = get_routes_with_res(
-            af,
-            min_agree,
-            enable_default,
-            nic,
-            stun_clients,
-            netifaces,
-            timeout=timeout,
-        )
-
-        # If it fails use 'official' servers.
         tasks.append(
             async_wrap_errors(
-                route_res_with_fallback(
+                discover_nic_wan_ips(
                     af,
+                    min_agree,
                     enable_default,
                     nic,
-                    main_res
+                    stun_clients,
+                    netifaces,
+                    timeout=timeout,
                 )
             )
         )

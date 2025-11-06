@@ -1,3 +1,91 @@
+"""
+This is my attempt to visualize the association between private, NIC
+addresses and public WAN addresses on a network interface. I have
+learned the following information about network addresses:
+ 
+    * A NIC can have one or more addresses.
+    * A NIC can be assigned a block or range of addresses.
+    * A NIC doesn't have to use private addresses. It's common for
+    server hosts to assign the external addresses that belong
+    to the server in such a way that they are used by the NIC.
+    In such a case: the NICs addresses would be the same as
+    how it was viewed from the external Internet.
+    * A NIC can use public addresses that it doesn't own on
+    the Internet. This is very bad because it means that these
+    addresses will be unreachable on the Internet on that machine.
+    NICs should ideally use private addresses. Or stick to IPs
+    they actually can route to themselves on the Internet.
+    * A NIC defines a "default" gateway to route packets to
+    the Internet (which is given by network 0.0.0.0 in IPv4.)
+    " The NIC can actually specify multiple default gateways.
+    Each entry is a route in the route table. It will have a
+    'metric' indicates its 'speed.' The route with the
+    the lowest metric is chosen to route packets. TCP/IP may
+    adjust the metric of routes based on network conditions.
+    Thus, if there are multiple gateways for a NIC then its
+    possible for the external WAN address to change under
+    high network load. This is not really ideal.
+ 
+The purpose of this module is to have easy access to the
+external addresses of the machine and any associated NIC
+addresses needed for Bind calls in order to use them. I
+use the following simple rules to make this possible:
+ 
+    1. All private addresses for a NIC form a group. This
+    group points to the same external address for that NIC.
+    2. Any public addresses are tested using STUN. If STUN
+    sees the same result as the public address then the
+    address is considered public and forms its own route.
+    If STUN reports a different result then the address is
+    being improperly used for a private NIC address. It
+    thus gets added to the private group in step 1.
+    3. If there is a block of public addresses to check
+    only the first address is checked. If success then
+    I assume the whole block is valid. Ranges of
+    addresses are fully supported.
+ 
+When it comes to complex routing tables that have
+strange setups with multiple default gateways for
+a NIC I am for now ignoring this possibility. I
+don't consider myself an expert on networking (its
+much more complex than it appears) but to directly
+leverage routes in a routing table seems to me that
+it would require having to work on the ethernet layer.
+Something much more painful than regular sockets.
+
+One last thing to note about routing tables: there is
+a flag portion that indicates whether a route is 'up.'
+If this means 'online' and 'reachable' it would be
+really useful to check this to determine if a stack
+supported IPv6 or IPv4 rather than trying to test it
+first using STUN and waiting for a long time out.
+
+Other:
+When it comes to IPs assigned to a NIC its possible
+to assign 'public' IPs to it directly. You often
+see this setup on servers. In this case you know
+that not only can you use the public addresses
+directly in bind() calls -- but you know that
+the server's corresponding external IP will be
+what was used in the bind() call. Very useful.
+
+The trouble is that network interfaces happily
+accept 'external IPs' or IPs outside of the
+typical 'private IP' range for use on a NIC or
+LAN network. Obviously this is a very bad idea
+but in the software it has the result of
+potentially assuming that an IP would end up
+resulting in a particular external IP being used.
+
+The situation is not desirable when building
+a picture of a network's basic routing makeup.
+I've thought about the problem and I don't see
+a way to solve it other than to measure how a
+route's external address is perceived from the
+outside world. Such a solution is not ideal but
+at least it only has to be done once.
+"""
+
 import copy
 import ipaddress
 import pprint
