@@ -370,6 +370,9 @@ class PipeEvents(BaseACKProto):
             log_exception()
 
     async def close(self):
+        if not self.is_running:
+            raise AlreadyClosedError()
+
         """
         If this is a transport for a TCP server its important to close
         it first before closing tcp_clients. Otherwise, new clients may
@@ -381,6 +384,7 @@ class PipeEvents(BaseACKProto):
             on_close = loop.await_fd_close(self.sock)
             if self.transport is not None:
                 self.transport.close()
+                await asyncio.sleep(0)
 
             await on_close
 
@@ -389,6 +393,7 @@ class PipeEvents(BaseACKProto):
         """
         if self.tcp_clients:
             await close_all_clients(self.tcp_clients, timeout=1.0)
+            await asyncio.sleep(0)
 
         # No longer running.
         self.transport = None

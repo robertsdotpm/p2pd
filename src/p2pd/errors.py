@@ -21,3 +21,6 @@ class ErrorFeatureDeprecated(Exception):
 
 class ErrorCantLoadNATInfo(Exception):
     pass
+
+class AlreadyClosedError(Exception):
+    pass

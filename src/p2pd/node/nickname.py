@@ -116,16 +116,17 @@ class Nickname():
                 )
 
                 # Test connectivity.
+                pipe = None
                 try:
                     pipe = await client.get_dest_pipe()
                     if pipe is None:
                         self.clients[af][index] = None
                         continue
-                    else:
-                        await pipe.close()
                 except:
                     log_exception()
-                    continue
+                finally:
+                    if pipe is not None:
+                        await pipe.close()
 
                 # Good client so save.
                 self.clients[af][index] = client

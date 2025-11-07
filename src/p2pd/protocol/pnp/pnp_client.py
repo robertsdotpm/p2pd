@@ -52,6 +52,7 @@ class PNPClient():
             route = await route.bind(ips=self.dest[0])
         else:
             route = await route.bind()
+
         pipe = await pipe_open(self.proto, self.dest, route)
         return pipe
 

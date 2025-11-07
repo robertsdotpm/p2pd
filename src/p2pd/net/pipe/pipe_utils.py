@@ -16,11 +16,12 @@ async def close_all_clients(tcp_clients, loop=None, timeout=1.0):
     if loop is None:
         loop = asyncio.get_event_loop()
 
-    tasks = []
-
+    tasks = []    
     for client in tcp_clients:
         if client.transport is not None:
             client.transport.close()
+            client.transport = None
+            
         sock = client.sock
         if sock is None:
             continue

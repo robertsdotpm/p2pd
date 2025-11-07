@@ -187,7 +187,7 @@ NET_CONF = {
     "sock_only": False,
 
     # Enable closing sock on error.
-    "do_close": True,
+    "do_close": False,
 
     # Whether to set SO_LINGER. None = off.
     # Non-none = linger value.
