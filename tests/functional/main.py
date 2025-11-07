@@ -27,7 +27,10 @@ async def git_pull_latest(servers):
 
 async def pyenv_install_latest(servers):
     for server in servers:
-        print(f"{server['os']}> Installing latest P2PD.")
+        # For now just choose any Python version.
+        pyver = choose_first_py_ver(server)
+
+        print(f"{server['os']}> Installing latest P2PD ({pyver}).")
         chain_cmds = get_chain_cmds(server)
         async with ssh_connect(server) as con:
             # Start a persistent shell
@@ -36,26 +39,30 @@ async def pyenv_install_latest(servers):
                 init_cmd = init_pyenv_vars_cmd(server)
                 shell.stdin.write(init_cmd)
 
-                # For now just choose any Python version.
-                py_ver = choose_first_py_ver(server)
-
                 # Install this module through pyenv version.
-                pyenv_cmd = pyenv_install_p2pd(py_ver, server)
+                pyenv_cmd = pyenv_install_p2pd(pyver, server)
 
                 # Waits for the command to be done in the active shell session.
                 await ssh_await_cmd(pyenv_cmd, shell, chain_cmds)
 
-
 async def tunnel_test(active, passive):
-    # Get PNP address of the passive node.
+    chain_cmds = get_chain_cmds(active)
+
+    # Setup shell and env for passive server.
     passive_con = await ssh_connect(passive)
-    return
+    passive_shell = await passive_con.create_process(passive["shell"])
+    init_cmd = init_pyenv_vars_cmd(passive)
+    passive_shell.stdin.write(init_cmd)
 
-
-    cmd = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd get_nickname"
+    # Get PNP address of the passive node.
     py_ver = choose_first_py_ver(passive)
-        # Initialize pyenv once if needed
-    
+    cmd = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd get_nickname"
+    cmd = pyenv_run_cmd(py_ver, passive, cmd)
+    print(cmd)
+    results = await ssh_await_cmd(cmd, passive_shell, chain_cmds)
+    print(results)
+ 
+    return
     #cmd = pyenv_run(py_ver, passive, cmd)
     print(cmd)
     passive_addr = await passive_con.run(cmd, check=True)
@@ -66,7 +73,7 @@ async def run_client():
     servers = (SSH_SERVERS[3], SSH_SERVERS[4],)
     await git_pull_latest(servers)
     await pyenv_install_latest(servers)
-    #await tunnel_test(*servers)
+    await tunnel_test(*servers)
     
 
 try:
