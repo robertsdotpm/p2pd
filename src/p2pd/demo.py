@@ -247,7 +247,7 @@ async def main():
     if args.install_path:
         node_conf["install_path"] = args.install_path
 
-    node = P2PNode(ifs=ifs, conf=node_conf)
+    node = Node(ifs=ifs, conf=node_conf)
     if args.port:
         node.listen_port = args.port
 
@@ -340,7 +340,7 @@ async def main():
         # maybe dont bother port forwarding either
         if menu_option == "2":
             alice = nodes[-1]
-            bob = P2PNode(port=alice.listen_port + 1, ifs=ifs, conf=node_conf)
+            bob = Node(port=alice.listen_port + 1, ifs=ifs, conf=node_conf)
             bob.add_msg_cb(add_echo_support)
             bob.stun_clients = alice.stun_clients
             await asyncio.create_task(

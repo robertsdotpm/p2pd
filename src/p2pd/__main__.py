@@ -19,6 +19,7 @@ if int(vmin) < 8:
 from . import __version__ as p2pdv
 from .net.event_loop import *
 from .entrypoint import SelectorEventPolicy
+from .utility.fstr import fstr
 
 
 class AsyncIOInteractiveConsole(code.InteractiveConsole):
@@ -87,10 +88,10 @@ class REPLThread(threading.Thread):
             spawn_method = multiprocessing.get_start_method()
             vmaj, vmin, _ = platform.python_version_tuple()
             banner = (
-                f'P2PD {p2pdv} REPL on Python {vmaj}.{vmin} / {sys.platform}\n'
-                f'Loop = {loop_policy}, Process = {spawn_method}\n'
-                f'Use "await" directly instead of "asyncio.run()".\n'
-                f'{getattr(sys, "ps1", ">>> ")}from p2pd import *'
+                fstr('P2PD {0} REPL on Python {1}.{2} / {3}\n', (p2pdv, vmaj, vmin, sys.platform,)),
+                fstr('Loop = {0}, Process = {1}\n', (loop_policy, spawn_method,)),
+                'Use "await" directly instead of "asyncio.run()".\n' ,
+                fstr('{0}from p2pd import *', (getattr(sys, "ps1", ">>> "),)),
             )
 
             console.push("from p2pd.do_imports import *")

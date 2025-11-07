@@ -1,4 +1,5 @@
 from ...net.daemon import *
+from ...utility.fstr import fstr
 
 class EchoServer(Daemon):
     def __init__(self):
@@ -18,18 +19,18 @@ if __name__ == "__main__": # pragma: no cover
             print(transport)
             print(transport.get_extra_info("socket"))
             addr = transport.get_extra_info('peername')
-            print(f"Connection from {addr}")
+            print(fstr("Connection from {0}", (addr,)))
 
         def data_received(self, data):
             message = data.decode()
             addr = self.transport.get_extra_info('peername')
-            print(f"Received {message!r} from {addr}")
+            print(fstr("Received {0} from {1}", (message, addr,)))
             # Echo back
             self.transport.write(data)
 
         def connection_lost(self, exc):
             addr = self.transport.get_extra_info('peername')
-            print(f"Connection closed from {addr}")
+            print(fstr("Connection closed from {0}", (addr,)))
 
     async def echo_main():
         from p2pd.src.p2pd.net.net_utils import IP4, TCP

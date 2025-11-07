@@ -39,7 +39,7 @@ import selectors
 from ..utility.utils import *
 
 # Map: FD -> Future object
-_CLOSE_FUTURES: dict[int, asyncio.Future] = {}
+_CLOSE_FUTURES = {}
 
 class ProxySelector:
     """A wrapper around the actual selector object to intercept unregister calls."""

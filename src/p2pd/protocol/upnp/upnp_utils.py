@@ -1,5 +1,6 @@
-import xmltodict
+
 from ...utility.utils import *
+from ...vendor import xmltodict
 from ...net.net_utils import *
 from ...protocol.http.http_client_lib import *
 

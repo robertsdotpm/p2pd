@@ -11,7 +11,7 @@ here = path.abspath(path.dirname(__file__))
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
-install_reqs = ["ntplib", "xmltodict", "ecdsa"]
+install_reqs = ["ntplib", "ecdsa"]
 if (sys.version_info >= (3, 6)) or sys.platform != "win32":
     install_reqs += ["fasteners"]
 
@@ -35,7 +35,6 @@ setup(
     license='public domain',
     package_dir={"": "src"},
     packages=find_packages(where="src", exclude=('tests', 'docs')),
-    package_data={'.': ['scripts/kvs_schema.sqlite3']},
     include_package_data=True,
     install_requires=install_reqs,
     classifiers=[

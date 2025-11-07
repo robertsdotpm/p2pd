@@ -183,6 +183,8 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         log_exception()
         raise Exception("Can't parse nodes p2p addr.")
 
+    return node
+
     # Used for setting nicknames for the node.
     node.nick_client = await Nickname(
         node.sk,
