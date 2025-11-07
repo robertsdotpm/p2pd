@@ -28,24 +28,23 @@ async def git_pull_latest(servers):
 async def pyenv_install_latest(servers):
     for server in servers:
         print(f"{server['os']}> Installing latest P2PD.")
+        chain_cmds = get_chain_cmds(server)
         async with ssh_connect(server) as con:
             # Start a persistent shell
             async with con.create_process(server["shell"]) as shell:
-                print(shell)
-                await init_shell_env(shell, server)
+                # Set paths to pyenv tool.
+                init_cmd = init_pyenv_vars_cmd(server)
+                shell.stdin.write(init_cmd)
 
+                # For now just choose any Python version.
                 py_ver = choose_first_py_ver(server)
+
+                # Install this module through pyenv version.
                 pyenv_cmd = pyenv_install_p2pd(py_ver, server)
-                print(pyenv_cmd)
-                shell.stdin.write(pyenv_cmd)
 
-                # Collect stdout/stderr
-                while 1:
-                    stdout = await shell.stdout.readline()
-                    if not stdout:
-                        break
+                # Waits for the command to be done in the active shell session.
+                await ssh_await_cmd(pyenv_cmd, shell, chain_cmds)
 
-                    print(stdout)
 
 async def tunnel_test(active, passive):
     # Get PNP address of the passive node.

@@ -8,3 +8,8 @@ http client library doesnt work well
 signaling messa
 
 make zombie proc stuff more robust
+
+create tests for thousands of uses of key components of the software like STUN
+to uncover that the software cleans up properly. all successive tests should
+succeed. this is designed to uncover edge cases in long-running processes.
+equivalent to durability testing in regular product testing.

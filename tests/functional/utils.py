@@ -1,9 +1,19 @@
+import asyncio
 import asyncssh
 import shlex
 from posixpath import join as nix_join
 from ntpath import join as nt_join
 from defs import *
 from error import *
+
+def get_chain_cmds(server):
+    def chain_cmds(*args):
+        assert("\n" not in args)
+        out = " && ".join(args)
+        out += "\n"
+        return out
+    
+    return chain_cmds
 
 def get_path_join(server):
     """
@@ -47,6 +57,7 @@ def server_has_py_ver(py_ver, server):
         
     return False
 
+
 def pyenv_run_cmd(py_ver, server, cmd):
     # Ensure server supports requested Python version.
     if not server_has_py_ver(py_ver, server):
@@ -63,7 +74,7 @@ def pyenv_run_cmd(py_ver, server, cmd):
     if "windows" in server["os"]:
         out = "set " + out
 
-    return out + "\n"
+    return out
 
 def pyenv_install_p2pd(py_ver, server):
     p2pd_dir = get_p2pd_code_path(server)
@@ -76,24 +87,46 @@ def choose_first_py_ver(server):
     else:
         return server["py"]
     
-def init_pyenv_vars(server):
-    buf  = 'export PYENV_ROOT="$HOME/.pyenv"; '
-    buf += 'export PATH="$PYENV_ROOT/bin:$PATH"; '
-    buf += 'eval "$(pyenv init -)"\n'
+def init_pyenv_vars_cmd(server):
+    if "windows" in server["os"]:
+        buf  = "set PYENV_ROOT=%USERPROFILE%\\.pyenv"
+        buf += "set PATH=%PYENV_ROOT%\\bin;%PATH%"
+    else:
+        buf  = 'export PYENV_ROOT="$HOME/.pyenv"; '
+        buf += 'export PATH="$PYENV_ROOT/bin:$PATH"; '
+        buf += 'eval "$(pyenv init -)"\n'
+
     return buf
 
-async def init_shell_env(shell, server):
-    # Initialize pyenv once
-    init_cmd = init_pyenv_vars(server)
-    print(init_cmd)
-    shell.stdin.write(init_cmd)
+async def ssh_await_cmd(cmd, shell, chain_cms):
+    # Write command with marker to shell.
+    marker = "__CMD_DONE_MARKER__"
+    cmd = chain_cms(cmd, f"echo {marker}")
+    shell.stdin.write(cmd)
 
-async def something(shell, py_ver, server):
-    # Run your Python command safely
-    install_cmd = pyenv_install_p2pd(py_ver, server)
-    shell.stdin.write(install_cmd)
+    # Fetch results and check for marker.
+    lines = []
+    while 1:
+        """
+        If a command has no output or has hung prevent endless loop.
+        """
+        try:
+            line = await asyncio.wait_for(
+                shell.stdout.readline(),
+                timeout=2
+            )
+        except asyncio.TimeoutError:
+            break
 
-    # Collect stdout/stderr
-    stdout, stderr = await shell.communicate()
-    print(stdout)
-    print(stderr)
+        # Invalid line.
+        if not line:
+            break
+
+        # If the end of the cmd segment was found -- quit while.
+        if marker in line:
+            break
+
+        lines.append(line.strip())
+
+    # Return results as a single str.
+    return "\n".join(lines)
