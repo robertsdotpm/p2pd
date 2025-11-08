@@ -190,7 +190,7 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated, sys
     """
     if names_used:
         p_names_used = 1 if names_used >= name_limit else (names_used / name_limit)
-        penalty = (MIN_NAME_DURATION * p_names_used) + 1
+        penalty = int(MIN_NAME_DURATION * p_names_used) + 1
         penalty = max(penalty, MIN_DURATION_PENALTY)
     else:
         penalty = 0
