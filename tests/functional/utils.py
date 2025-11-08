@@ -70,7 +70,7 @@ def pyenv_run_cmd(py_ver, server, cmd):
         sep = " "
 
     # Full command looks like this with some edge-cases.
-    out = f"PYENV_VERSION={py_ver}{sep}pyenv exec python {cmd}"
+    out = f"PYENV_VERSION={py_ver}{sep}pyenv exec python {cmd}\n"
     if "windows" in server["os"]:
         out = "set " + out
 
