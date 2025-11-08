@@ -46,6 +46,8 @@ async def pyenv_install_latest(servers):
                 await ssh_await_cmd(pyenv_cmd, shell, chain_cmds)
 
 async def tunnel_test(active, passive):
+    # Use local machines PNP server so names have no limits.
+    p2pd_cmd = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd"
     chain_cmds = get_chain_cmds(active)
 
     # Setup shell and env for passive server.
@@ -56,17 +58,33 @@ async def tunnel_test(active, passive):
 
     # Get PNP address of the passive node.
     py_ver = choose_first_py_ver(passive)
-    cmd = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd get_nickname"
+    cmd = p2pd_cmd + " get_nickname"
     cmd = pyenv_run_cmd(py_ver, passive, cmd)
-    print(cmd)
-    results = await ssh_await_cmd(cmd, passive_shell, chain_cmds)
+    results = await ssh_await_cmd(cmd, passive_shell, chain_cmds, timeout=10)
+    passive_pnp = results.strip()
+
+    # Start passive node listening for cons.
+    cmd = p2pd_cmd + "1"
+    cmd = pyenv_run_cmd(py_ver, passive, cmd)
+    passive_shell.stdin.write(cmd)
+
+    # Setup shell and env for passive server.
+    active_con = await ssh_connect(active)
+    active_shell = await active_con.create_process(active["shell"])
+    init_cmd = init_pyenv_vars_cmd(active)
+    active_shell.stdin.write(init_cmd)
+
+    # Start active node -- connect to passive node (local con)
+    # Echo down the returned pipe and get the output.
+    # (0) connect (d)irect (l)an ipv(4)
+    cmd = f'{p2pd_cmd} 0dl4 --echo "hello world" --dest_addr {passive_pnp}'
+    cmd = pyenv_run_cmd(py_ver, passive, cmd)
+    results = await ssh_await_cmd(cmd, passive_shell, chain_cmds, timeout=10)
     print(results)
- 
-    return
-    #cmd = pyenv_run(py_ver, passive, cmd)
-    print(cmd)
-    passive_addr = await passive_con.run(cmd, check=True)
-    print(passive_addr)
+
+    # Close cons and active programs.
+    await passive_con.close()
+    await active_con.close()
 
 async def run_client():
     # Freebsd and fedora, chosen arbitrary to start testing with.

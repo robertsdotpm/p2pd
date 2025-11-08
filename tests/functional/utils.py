@@ -98,7 +98,7 @@ def init_pyenv_vars_cmd(server):
 
     return buf
 
-async def ssh_await_cmd(cmd, shell, chain_cms):
+async def ssh_await_cmd(cmd, shell, chain_cms, timeout=2):
     # Write command with marker to shell.
     marker = "__CMD_DONE_MARKER__"
     cmd = chain_cms(cmd, f"echo {marker}")
@@ -113,7 +113,7 @@ async def ssh_await_cmd(cmd, shell, chain_cms):
         try:
             line = await asyncio.wait_for(
                 shell.stdout.readline(),
-                timeout=2
+                timeout=timeout
             )
         except asyncio.TimeoutError:
             break
