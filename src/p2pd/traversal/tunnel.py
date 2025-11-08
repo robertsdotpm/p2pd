@@ -36,7 +36,7 @@ class Tunnel():
 
         # Parse address bytes to dicts.
         self.dest_bytes = dest_bytes
-        self.dest = parse_peer_addr(dest_bytes)
+        self.dest = parse_node_addr(dest_bytes)
         self.src  = self.node.p2p_addr
         self.src_bytes = self.node.addr_bytes
         

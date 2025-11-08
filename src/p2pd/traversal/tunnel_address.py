@@ -26,7 +26,7 @@ async def get_updated_addr_bytes(node, dest_addr):
         Log.log_p2p(msg, node.node_id[:8])
 
         # Parse address bytes to a dict.
-        addr = parse_peer_addr(addr_bytes)
+        addr = parse_node_addr(addr_bytes)
         #print(addr)
 
         # Authorize this node for replies.
