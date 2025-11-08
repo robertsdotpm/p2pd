@@ -78,7 +78,7 @@ def pyenv_run_cmd(py_ver, server, cmd):
 
 def pyenv_install_p2pd(py_ver, server):
     p2pd_dir = get_p2pd_code_path(server)
-    pip_install = f'-m pip install --force-reinstall "{p2pd_dir}"'
+    pip_install = f'-m pip install --force-reinstall -e "{p2pd_dir}"'
     return pyenv_run_cmd(py_ver, server, pip_install)
 
 def choose_first_py_ver(server):

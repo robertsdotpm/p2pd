@@ -11,7 +11,7 @@ class SigMsg():
     @staticmethod
     def load_addr(af, addr_buf, if_index):
         # Validate src address.
-        addr = parse_peer_addr(
+        addr = parse_node_addr(
             addr_buf
         )
 
