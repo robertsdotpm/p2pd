@@ -323,6 +323,7 @@ async def main():
             menu_option = "4"
 
         if menu_option == "1":
+            print("Listen on PNP: ", nick)
             while 1:
                 await asyncio.sleep(1)
 
