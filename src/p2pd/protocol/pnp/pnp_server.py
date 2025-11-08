@@ -183,9 +183,15 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated, sys
     await cur.execute(sql, (int(af), int(ip_id),))
     names_used = (await cur.fetchone())[0]
     name_limit = name_limit_by_af(af, serv)
+
+    """
+    The more resources a person uses for names, the less time they have to refresh
+    the name. The idea is to reward conservation of resources.
+    """
     if names_used:
-        penalty = ((names_used / name_limit) * MIN_NAME_DURATION) + 1
-        penalty = min(penalty, (MIN_NAME_DURATION - MIN_DURATION_PENALTY))
+        p_names_used = 1 if names_used >= name_limit else (names_used / name_limit)
+        penalty = (MIN_NAME_DURATION * p_names_used) + 1
+        penalty = max(penalty, MIN_DURATION_PENALTY)
     else:
         penalty = 0
 
@@ -196,7 +202,9 @@ async def record_name(cur, serv, af, ip_id, name, value, owner_pub, updated, sys
         
         # Apply penalty to updated.
         updated = int(updated)
-        updated -= max(penalty, 0)
+
+        # Unsigned ints kinda don't like negative numbers.
+        updated = max(updated - penalty, 0)
 
         sql  = """
         UPDATE names SET 
@@ -434,7 +442,7 @@ class PNPServer(Daemon):
                             db_con,
                             cur,
                             pkt.name,
-                            pkt.updated
+                            int(self.sys_clock.time())
                         )
                         buf = self.serv_resp(pkt)
                         await proto_send(pipe, buf)
@@ -465,7 +473,7 @@ class PNPServer(Daemon):
                     cur,
                     self,
                     pkt.behavior,
-                    pkt.updated,
+                    int(self.sys_clock.time()),
                     pkt.name,
                     pkt.value,
                     pkt.vkc,
