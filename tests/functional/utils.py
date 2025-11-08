@@ -70,7 +70,7 @@ def pyenv_run_cmd(py_ver, server, cmd):
         sep = " "
 
     # Full command looks like this with some edge-cases.
-    out = f"PYENV_VERSION={py_ver}{sep}pyenv exec python {cmd}\n"
+    out = f"PYENV_VERSION={py_ver}{sep}pyenv exec python -u {cmd}"
     if "windows" in server["os"]:
         out = "set " + out
 
@@ -101,8 +101,9 @@ def init_pyenv_vars_cmd(server):
 async def ssh_await_cmd(cmd, shell, chain_cms, timeout=2):
     # Write command with marker to shell.
     marker = "__CMD_DONE_MARKER__"
-    cmd = chain_cms(cmd, f"echo {marker}")
+    cmd = chain_cms(cmd, f"echo {marker}") + "\n"
     shell.stdin.write(cmd)
+    await shell.stdin.drain()
 
     # Fetch results and check for marker.
     lines = []
