@@ -241,7 +241,7 @@ async def echo_client(pipe, echo_data):
             return "menu"
         await pipe.send(b"ECHO " + send_buf + b"\n")
         buf = await pipe.recv(timeout=3)
-        cout(b"recv = ", buf)
+        cout(b"recv = ", buf, b"\n")
         if echo_data:
-            print(buf)
+            print(buf + b"\n")
             return "exit"

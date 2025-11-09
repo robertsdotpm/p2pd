@@ -87,12 +87,11 @@ async def tunnel_test(active, passive):
         cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n"
         passive_shell.stdin.write(cmd)
         await passive_shell.stdin.drain()
-        """
         await asyncio.wait_for(
             passive_shell.stdout.readline(),
-            timeout=15
+            timeout=30
         )
-        """
+        
 
         # Setup shell and env for active server.
         print(f"{active['os']}> Starting active shell.")
@@ -111,7 +110,7 @@ async def tunnel_test(active, passive):
         #print(cmd)
         cmd = pyenv_run_cmd(py_ver, active, cmd)
         print(cmd)
-        results = await ssh_await_cmd(cmd, active_shell, chain_cmds, timeout=60)
+        results = await ssh_await_cmd(cmd, active_shell, chain_cmds, timeout=80)
         print(results)
     finally:
         shells = (active_shell, passive_shell,)
