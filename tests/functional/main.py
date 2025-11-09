@@ -10,6 +10,9 @@ p2pd uses home for everything, allow install to the pyenv sub dir or its
 going to have conflicts so needs an install_dir cmd
 
 the bash -l pattern is stupid, launch a new, clean shell with -c
+
+direct and reverse working on nix 3.5
+    -- not liking that when pyenv has an error the command just returns nothing
 """
 
 async def git_pull_latest(servers):
@@ -46,64 +49,75 @@ async def pyenv_install_latest(servers):
                 await ssh_await_cmd(pyenv_cmd, shell, chain_cmds)
 
 async def tunnel_test(active, passive):
-    # Use local machines PNP server so names have no limits.
-    p2pd_cmd  = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 "
-    p2pd_cmd += "--disable_upnp 1 --cmd "
-    chain_cmds = get_chain_cmds(active)
-
-    # Setup shell and env for passive server.
-    print(f"{passive['os']}> Starting passive shell.")
-    passive_con = await ssh_connect(passive)
-    passive_shell = await passive_con.create_process("bash -l")
-    init_cmd = init_pyenv_vars_cmd(passive)
-    passive_shell.stdin.write(init_cmd)
-    await passive_shell.stdin.drain()
-
-    # Get PNP address of the passive node.
-    print(f"{passive['os']}> Getting passive node address.")
-    py_ver = choose_first_py_ver(passive)
-    cmd = p2pd_cmd + "get_nickname"
-    cmd = pyenv_run_cmd(py_ver, passive, cmd)
-    print(cmd)
-    results = await ssh_await_cmd(cmd, passive_shell, chain_cmds, timeout=10)
-    print(results)
-    passive_pnp = results.strip()
-    print("\t", passive_pnp)
-    if not passive_pnp:
-        raise Exception("Passive node addr could not be loaded.")
-
-    # Start passive node listening for cons.
-    print(f"{passive['os']}> Starting passive node.")
-    cmd = p2pd_cmd + "1"
-    cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n"
-    passive_shell.stdin.write(cmd)
-    await passive_shell.stdin.drain()
     """
-    await asyncio.wait_for(
-        passive_shell.stdout.readline(),
-        timeout=15
-    )
+    If running script in rapid succession against same node pairs
+    at least give them time to clean up...
     """
+    await asyncio.sleep(2)
+    passive_shell = active_shell = None
+    try:
 
-    # Setup shell and env for active server.
-    print(f"{active['os']}> Starting active shell.")
-    active_con = await ssh_connect(active)
-    active_shell = await active_con.create_process("bash -l")
-    init_cmd = init_pyenv_vars_cmd(active)
-    active_shell.stdin.write(init_cmd)
-    await active_shell.stdin.drain()
+        # Use local machines PNP server so names have no limits.
+        p2pd_cmd  = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 "
+        p2pd_cmd += "--disable_upnp 1 --cmd "
+        chain_cmds = get_chain_cmds(active)
 
-    # Start active node -- connect to passive node (local con)
-    # Echo down the returned pipe and get the output.
-    # (0) connect (d)irect (l)an ipv(4)
-    # NOTE: changed to (r) to test reverse con
-    print(f"{active['os']}> Try connect and echo to passive node.")
-    cmd = f'{p2pd_cmd}0rl4 --echo "hello world" --dest_addr {passive_pnp}'
-    #print(cmd)
-    cmd = pyenv_run_cmd(py_ver, active, cmd)
-    print(cmd)
-    results = await ssh_await_cmd(cmd, active_shell, chain_cmds, timeout=15)
-    print(results)
+        # Setup shell and env for passive server.
+        print(f"{passive['os']}> Starting passive shell.")
+        passive_con = await ssh_connect(passive)
+        passive_shell = await passive_con.create_process("bash -l")
+        init_cmd = init_pyenv_vars_cmd(passive)
+        passive_shell.stdin.write(init_cmd)
+        await passive_shell.stdin.drain()
+
+        # Get PNP address of the passive node.
+        print(f"{passive['os']}> Getting passive node address.")
+        py_ver = choose_first_py_ver(passive)
+        cmd = p2pd_cmd + "get_nickname"
+        cmd = pyenv_run_cmd(py_ver, passive, cmd)
+        print(cmd)
+        results = await ssh_await_cmd(cmd, passive_shell, chain_cmds, timeout=10)
+        print(results)
+        passive_pnp = results.strip()
+        print("\t", passive_pnp)
+
+        # Start passive node listening for cons.
+        print(f"{passive['os']}> Starting passive node.")
+        cmd = p2pd_cmd + "1"
+        cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n"
+        passive_shell.stdin.write(cmd)
+        await passive_shell.stdin.drain()
+        """
+        await asyncio.wait_for(
+            passive_shell.stdout.readline(),
+            timeout=15
+        )
+        """
+
+        # Setup shell and env for active server.
+        print(f"{active['os']}> Starting active shell.")
+        active_con = await ssh_connect(active)
+        active_shell = await active_con.create_process("bash -l")
+        init_cmd = init_pyenv_vars_cmd(active)
+        active_shell.stdin.write(init_cmd)
+        await active_shell.stdin.drain()
+
+        # Start active node -- connect to passive node (local con)
+        # Echo down the returned pipe and get the output.
+        # (0) connect (d)irect (l)an ipv(4)
+        # NOTE: changed to (r) to test reverse con
+        print(f"{active['os']}> Try connect and echo to passive node.")
+        cmd = f'{p2pd_cmd}0rl4 --echo "hello world" --dest_addr {passive_pnp}'
+        #print(cmd)
+        cmd = pyenv_run_cmd(py_ver, active, cmd)
+        print(cmd)
+        results = await ssh_await_cmd(cmd, active_shell, chain_cmds, timeout=15)
+        print(results)
+    finally:
+        shells = (active_shell, passive_shell,)
+        for shell in shells:
+            if shell is not None:
+                shell.close()
 
     # Close cons and active programs.
     passive_con.close()

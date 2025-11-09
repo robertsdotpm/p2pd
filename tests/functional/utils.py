@@ -99,35 +99,29 @@ def init_pyenv_vars_cmd(server):
     return buf
 
 async def ssh_await_cmd(cmd, shell, chain_cms, timeout=2):
-    # Write command with marker to shell.
     marker = "__CMD_DONE_MARKER__"
     cmd = chain_cms(cmd, f"echo {marker}") + "\n"
     shell.stdin.write(cmd)
     await shell.stdin.drain()
 
-    # Fetch results and check for marker.
     lines = []
-    while 1:
-        """
-        If a command has no output or has hung prevent endless loop.
-        """
-        try:
-            line = await asyncio.wait_for(
-                shell.stdout.readline(),
-                timeout=timeout
-            )
-        except asyncio.TimeoutError:
-            break
+    try:
+        while True:
+            try:
+                line = await asyncio.wait_for(shell.stdout.readline(), timeout=timeout)
+            except asyncio.TimeoutError:
+                lines.append(f"[timeout after {timeout}s]")
+                break
 
-        # Invalid line.
-        if not line:
-            break
+            if not line:
+                break
+            if marker in line:
+                break
+            lines.append(line.strip())
 
-        # If the end of the cmd segment was found -- quit while.
-        if marker in line:
-            break
+    except Exception as e:
+        output = "\n".join(lines).strip()
+        raise Exception(output + f"[error: {e}]")
 
-        lines.append(line.strip())
-
-    # Return results as a single str.
-    return "\n".join(lines)
+    output = "\n".join(lines).strip()
+    return output if output else "[no output]"
