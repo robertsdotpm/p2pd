@@ -1,3 +1,5 @@
+from ..do_imports import *
+
 IS_DEBUG = 2
 
 node_conf = dict_child({

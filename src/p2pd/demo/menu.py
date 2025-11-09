@@ -198,45 +198,33 @@ async def stop_nodes_option(nodes):
     for n in nodes:
         await n.close()
 
-async def show_menu_program():
+async def show_menu_program(nick, ifs, nodes, last_addr, echo_data, menu_option):
+    # Select menu program.
     menu_option = menu_option or input("Select menu option: ")
-    if menu_option not in ("0", "1", "2", "3", "4", "exit", "quit"):
-        continue
-
-    if menu_option in ("exit", "quit"):
-        menu_option = "4"
-
-    if menu_option == "1":
-        accept_option
-
-    if menu_option == "3":
-        nickname_option
-
-        continue
-
-    # TODO: copy mqtt from alice too.
-    # maybe dont bother port forwarding either
-    if menu_option == "2":
-        spawn_node_option
-        continue
-
+    menu_option = menu_option.lower().strip()
+    
+    # Connect to a remote host using PNP or full node address.
     if menu_option == "0":
-        connect_option
+        return (await connect_option(nodes[0], last_addr, echo_data))
 
-    if menu_option == "4":
-        exit_option
-        return
+    # Just run the event loop so cons can be accepted.
+    # Just an asyncio sleep loop.
+    if menu_option == "1":
+        return (await accept_option(nick))
+    
+    # Create a new node for testing.
+    # TODO: copy mqtt from alice too.
+    if menu_option == "2":
+        return (await node_spawn_option(ifs, nodes))
 
-    """
-    if choice == "4":
-        if addr is None:
-            prefix = ""
-            if len(last_addr):
-                prefix = fstr(" (enter for {0})", (last_addr,))
+    # Set a new nickname for the primary node.
+    if menu_option == "3":
+        return (await nickname_option(nodes[0]))
 
-            addr = input(fstr("Enter nodes nickname or address{0}: ", (prefix,)))
-            if addr == "":
-                addr = last_addr
-            else:
-                last_addr = addr
-    """
+    # Close all nodes and exit the program.
+    if menu_option in ("4", "exit", "quit"):
+        return (await stop_nodes_option(nodes))
+    
+    # Try again.
+    return "continue"
+

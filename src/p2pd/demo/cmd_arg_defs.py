@@ -1,7 +1,6 @@
 import argparse
 from ..do_imports import *
 from .defs import *
-from .utils import *
 
 """
 parser.add_argument("--stun_server", type=str, required=False, help="Specify using a specific STUN server")
@@ -20,25 +19,3 @@ parser.add_argument("--cmd", type=str, required=False, help="Command to run")
 parser.add_argument("--install_path", type=str, required=False, help="Directory path to use to store some of P2PDs data files. Defaults to user home/p2pd")
 parser.add_argument("--disable_upnp", type=str, required=False, help="Disable port forwarding and IPv6 pin hole rules on an associated router?")
 args = parser.parse_args()
-
-if args.disable_upnp:
-    node_conf["enable_upnp"] = False
-
-if args.pnp_server:
-    patch_server_af_dict(args.pnp_server, PNP_SERVERS)
-
-if args.turn_server:
-    patch_server_list(args.turn_server, TURN_SERVERS)
-
-if args.mqtt_server:
-    patch_server_list(args.mqtt_server, MQTT_SERVERS)
-
-if args.cmd == "get_nickname":
-    node_conf["sig_pipe_no"] = 0
-    node_conf["enable_upnp"] = False
-    node_conf["init_clock_skew"] = False
-    node_conf["enable_punching"] = False
-    #node_conf["enable_nickname"] = False
-
-if args.install_path:
-    node_conf["install_path"] = args.install_path

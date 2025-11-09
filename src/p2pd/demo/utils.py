@@ -1,4 +1,5 @@
 from ..do_imports import *
+from .cmd_arg_defs import *
 
 def cout(*fargs):
     if args.cmd:

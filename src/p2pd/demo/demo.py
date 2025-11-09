@@ -7,10 +7,11 @@ idk if thats relevant.
 python3 -m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd 0dl4 --dest_addr 5b5ed965936a5f28c2795724a.p2p --echo "hello world"
 """
 
-import asyncio
 from ..do_imports import *
 from .defs import *
-from .cmd_args import *
+from .cmd_arg_defs import *
+from .utils import *
+from .cmd_arg_proc import *
 
 Log.log_p2p = patch_log_p2p
 
