@@ -6,9 +6,9 @@ def cout(*fargs):
         return
     else:
         if not len(fargs):
-            print()
+            print(flush=True)
         else:
-            print(*fargs)
+            print(*fargs, flush=True)
 
 async def add_echo_support(msg, client_tup, pipe):
     if b"ECHO" == msg[:4]:
@@ -243,5 +243,5 @@ async def echo_client(pipe, echo_data):
         buf = await pipe.recv(timeout=3)
         cout(b"recv = ", buf, b"\n")
         if echo_data:
-            print(buf + b"\n")
+            print(buf + b"\n", flush=True)
             return "exit"
