@@ -85,7 +85,7 @@ async def run_node_loop(node, ifs, nick):
     # Data to echo.
     echo_data = None
     if args.echo:
-        echo_data = to_b(args.echo)
+        echo_data = to_b(args.echo) + b"\n"
 
     # To simulate a "pointer" we exploit the fact that objects in Python are
     # passed by reference as use last_addr["addr"] as the pointer.
