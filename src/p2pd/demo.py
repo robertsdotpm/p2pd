@@ -12,12 +12,11 @@ import argparse
 from .do_imports import *
 
 IS_DEBUG = 2
-DISABLE_PORT_FORWARDING = True
 
 node_conf = dict_child({
     "init_clock_skew": True,
     "reuse_addr": False,
-    "enable_upnp": False,
+    "enable_upnp": True,
     "sig_pipe_no": SIGNAL_PIPE_NO,
     "enable_punching": True,
     "enable_nickname": True,
@@ -36,7 +35,11 @@ parser.add_argument("--dest_addr", type=str, required=False, help="Destination t
 parser.add_argument("--echo", type=str, required=False, help="Text to send down the connection")
 parser.add_argument("--cmd", type=str, required=False, help="Command to run")
 parser.add_argument("--install_path", type=str, required=False, help="Directory path to use to store some of P2PDs data files. Defaults to user home/p2pd")
+parser.add_argument("--disable_upnp", type=str, required=False, help="Disable port forwarding and IPv6 pin hole rules on an associated router?")
 args = parser.parse_args()
+
+if args.disable_upnp:
+    node_conf["enable_upnp"] = False
 
 """
 parser.add_argument("--stun_server", type=str, required=False, help="Specify using a specific STUN server")
@@ -161,24 +164,6 @@ method_txt = {
     "p": P2P_PUNCH,
     "t": P2P_RELAY,
 }
-
-async def load_nickname_static(listen_port=None):
-    """
-    The listen port is set deterministically to avoid conflicts
-    with port forwarding with multiple nodes in the LAN.
-    if node.listen_port is None:
-        node.listen_port = field_wrap(
-            dhash(node.machine_id),
-            [10000, 60000]
-        )
-    """
-
-    sk = load_signing_key(listen_port)
-    vk = sk.verifying_key
-    node_id = hashlib.sha256(
-        vk.to_string("compressed")
-    ).hexdigest()[:25]
-    return node_id + ".p2p"
 
 async def main():
     cout("Universal reachability demo")

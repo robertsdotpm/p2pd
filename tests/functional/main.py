@@ -47,7 +47,8 @@ async def pyenv_install_latest(servers):
 
 async def tunnel_test(active, passive):
     # Use local machines PNP server so names have no limits.
-    p2pd_cmd = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd "
+    p2pd_cmd  = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 "
+    p2pd_cmd += "--disable_upnp 1 --cmd "
     chain_cmds = get_chain_cmds(active)
 
     # Setup shell and env for passive server.
@@ -63,7 +64,9 @@ async def tunnel_test(active, passive):
     py_ver = choose_first_py_ver(passive)
     cmd = p2pd_cmd + "get_nickname"
     cmd = pyenv_run_cmd(py_ver, passive, cmd)
+    print(cmd)
     results = await ssh_await_cmd(cmd, passive_shell, chain_cmds, timeout=10)
+    print(results)
     passive_pnp = results.strip()
     print("\t", passive_pnp)
     if not passive_pnp:
@@ -93,8 +96,9 @@ async def tunnel_test(active, passive):
     # Start active node -- connect to passive node (local con)
     # Echo down the returned pipe and get the output.
     # (0) connect (d)irect (l)an ipv(4)
+    # NOTE: changed to (r) to test reverse con
     print(f"{active['os']}> Try connect and echo to passive node.")
-    cmd = f'{p2pd_cmd}0dl4 --echo "hello world" --dest_addr {passive_pnp}'
+    cmd = f'{p2pd_cmd}0rl4 --echo "hello world" --dest_addr {passive_pnp}'
     #print(cmd)
     cmd = pyenv_run_cmd(py_ver, active, cmd)
     print(cmd)
