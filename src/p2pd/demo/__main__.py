@@ -90,6 +90,10 @@ async def run_node_loop(node, ifs, nick):
     # To simulate a "pointer" we exploit the fact that objects in Python are
     # passed by reference as use last_addr["addr"] as the pointer.
     last_addr = {}
+    if args.dest_addr:
+        last_addr = args.dest_addr
+
+    # Show menu and choose option.
     con_opts = (last_addr, echo_data, cmd_opts,)
     while True:
         try:

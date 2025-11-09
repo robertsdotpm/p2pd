@@ -12,8 +12,13 @@ async def connect_option(node, con_opts):
     if cmd_opts:
         _, con_method, pathway, addr_type = cmd_opts
 
+    # Dest addr is already set from command line.
+    if type(last_addr) == str:
+        dest_addr = last_addr
+    else:
+        dest_addr = get_dest_addr(last_addr)
+
     # Get connect cmd segments manually if not set.
-    dest_addr = get_dest_addr(last_addr)
     strats = choose_connection_methods(con_method)
     addr_types = choose_pathways(pathway)
     af_priority = choose_address_families(addr_type)

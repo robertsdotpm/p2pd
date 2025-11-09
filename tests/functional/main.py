@@ -107,11 +107,11 @@ async def tunnel_test(active, passive):
         # (0) connect (d)irect (l)an ipv(4)
         # NOTE: changed to (r) to test reverse con
         print(f"{active['os']}> Try connect and echo to passive node.")
-        cmd = f'{p2pd_cmd}0rl4 --echo "hello world" --dest_addr {passive_pnp}'
+        cmd = f'{p2pd_cmd}0pl4 --echo "hello world" --dest_addr {passive_pnp}'
         #print(cmd)
         cmd = pyenv_run_cmd(py_ver, active, cmd)
         print(cmd)
-        results = await ssh_await_cmd(cmd, active_shell, chain_cmds, timeout=15)
+        results = await ssh_await_cmd(cmd, active_shell, chain_cmds, timeout=60)
         print(results)
     finally:
         shells = (active_shell, passive_shell,)
