@@ -12,6 +12,7 @@ from .defs import *
 from .cmd_arg_defs import *
 from .utils import *
 from .cmd_arg_proc import *
+from .menu import *
 
 Log.log_p2p = patch_log_p2p
 
@@ -129,13 +130,28 @@ async def main():
 (4) Exit program.
 """)
 
-    last_addr = ""
-    choice = None
+    # To simulate a "pointer" we exploit the fact that objects in Python are
+    # passed by reference as use last_addr["addr"] as the pointer.
+    last_addr = {}
     while 1:
+        try:
+            # Shows the main menu options.
+            outcome = await show_menu(
+                nick,
+                ifs,
+                nodes,
+                last_addr,
+                echo_data,
+                menu_option
+            )
 
-            
-
-
+            # Watch for attempts to exit loop.
+            outcome = outcome.lower().strip()
+            if outcome == "exit":
+                await stop_nodes_option(nodes)
+                return
+        except TunnelFailed:
+            cout("Tunnel connection failed!")
 
 if __name__ == "__main__":
     async_run(main())

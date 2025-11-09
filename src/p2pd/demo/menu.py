@@ -10,15 +10,15 @@ async def connect_option(node, last_addr=None, echo_data=None):
     same address for a dest if you're trying to test a remote machine.
     """
     extra_txt = ""
-    if len(last_addr):
-        extra_txt = fstr("(enter for {0})", (last_addr,))
+    if last_addr:
+        extra_txt = fstr("(enter for {0})", (last_addr["addr"],))
 
     # Enter to use the last address if it's set.
     dest_addr = input(fstr("Enter nodes nickname or address {0}: ", (extra_txt,)))
     if dest_addr == "":
-        dest_addr = last_addr
+        dest_addr = last_addr["addr"]
     else:
-        last_addr = dest_addr
+        last_addr["addr"] = dest_addr
 
     # Select a connection method segment.
     cout()
@@ -169,6 +169,8 @@ async def accept_option(nick):
     while 1:
         await asyncio.sleep(1)
 
+    return "menu"
+
 async def nickname_option(node):
     choice = input("Enter nickname: ")
     try:
@@ -176,6 +178,8 @@ async def nickname_option(node):
         cout(fstr("Nickname registered = {0}", (str(ret),)))
     except:
         cout("Nickname taken.")
+    
+    return "menu"
 
 async def node_spawn_option(ifs, nodes):
     alice = nodes[-1]
@@ -193,38 +197,43 @@ async def node_spawn_option(ifs, nodes):
     nodes.append(bob)
     cout()
 
+    return "menu"
+
 async def stop_nodes_option(nodes):
     cout("Stopping nodes...")
     for n in nodes:
         await n.close()
 
-async def show_menu_program(nick, ifs, nodes, last_addr, echo_data, menu_option):
+    return ""
+
+async def show_menu(nick, ifs, nodes, last_addr, echo_data, menu_option):
     # Select menu program.
     menu_option = menu_option or input("Select menu option: ")
     menu_option = menu_option.lower().strip()
     
     # Connect to a remote host using PNP or full node address.
-    if menu_option == "0":
+    if "connect:" and menu_option == "0":
         return (await connect_option(nodes[0], last_addr, echo_data))
 
     # Just run the event loop so cons can be accepted.
     # Just an asyncio sleep loop.
-    if menu_option == "1":
+    if "accept:" and menu_option == "1":
+        # NOTE: Blocking loop so won't return.
         return (await accept_option(nick))
     
     # Create a new node for testing.
-    # TODO: copy mqtt from alice too.
-    if menu_option == "2":
+    # TODO: copy MQTT servers from node 0 to spawned node too.
+    if "spawn:" and menu_option == "2":
         return (await node_spawn_option(ifs, nodes))
 
     # Set a new nickname for the primary node.
-    if menu_option == "3":
+    if "nickname:" and menu_option == "3":
         return (await nickname_option(nodes[0]))
 
     # Close all nodes and exit the program.
-    if menu_option in ("4", "exit", "quit"):
-        return (await stop_nodes_option(nodes))
+    if "exit:" and menu_option in ("4", "exit", "quit"):
+        return "exit"
     
     # Try again.
-    return "continue"
+    return "menu"
 
