@@ -67,8 +67,7 @@ async def tunnel_test(active, passive):
         passive_con = await ssh_connect(passive)
         passive_shell = await passive_con.create_process("bash -l")
         init_cmd = init_pyenv_vars_cmd(passive)
-        passive_shell.stdin.write(init_cmd)
-        await passive_shell.stdin.drain()
+        await shell_write(init_cmd, passive_shell)
 
         # Get PNP address of the passive node.
         print(f"{passive['os']}> Getting passive node address.")
@@ -85,8 +84,7 @@ async def tunnel_test(active, passive):
         print(f"{passive['os']}> Starting passive node.")
         cmd = p2pd_cmd + "1"
         cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n"
-        passive_shell.stdin.write(cmd)
-        await passive_shell.stdin.drain()
+        await shell_write(cmd, passive_shell)
         await asyncio.wait_for(
             passive_shell.stdout.readline(),
             timeout=30
@@ -98,8 +96,7 @@ async def tunnel_test(active, passive):
         active_con = await ssh_connect(active)
         active_shell = await active_con.create_process("bash -l")
         init_cmd = init_pyenv_vars_cmd(active)
-        active_shell.stdin.write(init_cmd)
-        await active_shell.stdin.drain()
+        await shell_write(init_cmd, active_shell)
 
         # Start active node -- connect to passive node (local con)
         # Echo down the returned pipe and get the output.
@@ -109,8 +106,9 @@ async def tunnel_test(active, passive):
         cmd = f'{p2pd_cmd}0pl4 --echo "hello world" --dest_addr {passive_pnp}'
         #print(cmd)
         cmd = pyenv_run_cmd(py_ver, active, cmd)
+        await shell_write(cmd + "\n", active_shell)
         print(cmd)
-        results = await ssh_await_cmd(cmd, active_shell, chain_cmds, timeout=80)
+        results = await active_shell.stdout.readline()
         print(results)
     finally:
         shells = (active_shell, passive_shell,)

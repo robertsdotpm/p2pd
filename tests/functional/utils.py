@@ -98,11 +98,20 @@ def init_pyenv_vars_cmd(server):
 
     return buf
 
+async def shell_write(cmd, shell):
+    if cmd[-1] != "\n":
+        raise UnterminatedShellCmd(cmd)
+    
+    if "\n" in cmd[:-1]:
+        raise MalformedShellCmd(cmd)
+
+    shell.stdin.write(cmd)
+    await shell.stdin.drain()
+
 async def ssh_await_cmd(cmd, shell, chain_cms, timeout=2):
     marker = "__CMD_DONE_MARKER__"
     cmd = chain_cms(cmd, f"echo {marker}") + "\n"
-    shell.stdin.write(cmd)
-    await shell.stdin.drain()
+    await shell_write(cmd, shell)
 
     lines = []
     try:
@@ -125,3 +134,4 @@ async def ssh_await_cmd(cmd, shell, chain_cms, timeout=2):
 
     output = "\n".join(lines).strip()
     return output if output else "[no output]"
+
