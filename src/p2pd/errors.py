@@ -24,3 +24,6 @@ class ErrorCantLoadNATInfo(Exception):
 
 class AlreadyClosedError(Exception):
     pass
+
+class TunnelFailed(Exception):
+    pass

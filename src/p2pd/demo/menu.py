@@ -3,7 +3,7 @@ from ..do_imports import *
 from .defs import *
 from .utils import *
 
-async def connect_option(last_addr=None):
+async def connect_option(node, last_addr=None, echo_data=None):
     """
     Dest addr may have already been set from previous invocations of the program.
     It's designed to be interactive so you don't have to keep pasting the
@@ -23,37 +23,52 @@ async def connect_option(last_addr=None):
     # Select a connection method segment.
     cout()
     cout("Connection methods (in order):")
-    cout("TCP: (d)irect, (r)everse, (p)unch; UDP: (t)urn or menu to ")
+    cout("TCP: (d)irect, (r)everse, (p)unch; UDP: (t)urn.")
+    cout("Type menu to return.")
     strats = []
     while 1:
+        # If pressing enter then use the default list of methods in order.
         con_method = con_method or input("Enter for default (drp): ")
         if not len(con_method):
             strats = P2P_STRATEGIES
             break
 
+        # Go back to the menu.
+        if con_method.lower().strip() == "menu":
+            return "menu"
+
+        # Save a list of only valid choices.
         strats = []
         for c in con_method:
             c = c.lower()
             if c in method_txt:
                 strats.append(method_txt[c])
 
+        # Try again if there are no valid choices.
         if not len(strats):
             continue
         else:
             break
 
-    cout(strats)
-
+    # Choose the routing pathway to try (this controls IP selection!)
+    # This is why having accurate interface info is so important.
     cout()
     cout("Enabled connection pathways (in order):")
     cout("WAN: (e)xternal, LAN: (l)ocal ")
+    cout("Type menu to return.")
     addr_types = []
     while 1:
+        # Enter means try external then local.
         pathway = pathway or input("Enter for default (el): ")
         if not len(pathway):
             addr_types = [EXT_BIND, NIC_BIND]
             break
 
+        # Go back to the menu.
+        if con_method.lower().strip() == "menu":
+            return "menu"
+
+        # Same pattern as before: get a list of valid choices to order.
         addr_types = []
         for c in pathway:
             c  = c.lower()
@@ -62,21 +77,32 @@ async def connect_option(last_addr=None):
             if c == 'l':
                 addr_types.append(NIC_BIND)
 
+        # If no valid choices then try again.
         if not len(addr_types):
             continue
         else:
             break
 
+    # Allows the code to specifically use one or more address families.
+    # Applicable / useful for duel-stack environments.
     cout()
     cout("Address family priority (in order):")
     cout("(4) IPv4, (6) IPv6")
+    cout("Type menu to return.")
     af_priority = []
     while 1:
+        # Bias to IPv4 first then try 6 if supported.
+        # Both machines need to support the same address family.
         addr_type = addr_type or input("Enter for default (46): ")
         if not len(addr_type):
             af_priority = [IP4, IP6]
             break
 
+        # Go back to the menu.
+        if con_method.lower().strip() == "menu":
+            return "menu"
+
+        # Filter by valid choice.
         af_priority = []
         for c in addr_type:
             c  = c.lower()
@@ -85,11 +111,14 @@ async def connect_option(last_addr=None):
             if c == '6':
                 af_priority.append(IP6)
 
+        # Skip if there are none.
         if not len(af_priority):
             continue
         else:
             break
 
+    # Data structure to control a tunnel to the remote host.
+    # This is when connection options and address families are manually chosen.
     cout()
     cout("Connection in progress... Please wait...")
     pipe_conf = {
@@ -98,33 +127,42 @@ async def connect_option(last_addr=None):
         "return_msg": False,
     }
 
+    # Attempt to make the tunnel connection to the remote host.
     pipe = await node.connect(dest_addr, strategies=strats, conf=pipe_conf)
-    if pipe is None:
-        cout("Connection failed.")
-        continue
-    else:
-        cout("Connection open.")
-        cout(pipe.sock)
-        cout()
-        cout("Basic echo protocol.")
-        cout("Enter menu to return to menu or exit to quit.")
-        while 1:
-            echo_data = echo_data or to_b(input("Echo: "))
-            if echo_data in (b"quit", b"exit"):
-                echo_data = "4"
-                break
-            if echo_data in (b"menu"):
-                echo_data = ""
-                await pipe.close()
-                break
+    try:
+        # Failed to create connection to remote machine.
+        if pipe is None:
+            raise TunnelFailed("Connection failed.")
+        else:
+            # Tunnel is open -- interactive echo client can be used.
+            cout("Connection open.")
+            cout(pipe.sock)
+            cout()
+            cout("Basic echo protocol.")
+            cout("Enter menu to return to menu or exit to quit.")
+            while 1:
+                # Allows a simple echo client over the tunnel for testing.
+                send_buf = echo_data or to_b(input("Echo: "))
+                if send_buf in (b"quit", b"exit"):
+                    return "exit"
 
-            await pipe.send(b"ECHO " + echo_data + b"\n")
-            buf = await pipe.recv(timeout=3)
-            cout(b"recv = ", buf)
-            if args.echo:
-                print(buf)
-                menu_option = "4"
-                break
+                # Go back to the main menu.
+                if send_buf in (b"menu"):
+                    send_buf = ""
+                    return "menu"
+
+                await pipe.send(b"ECHO " + send_buf + b"\n")
+                buf = await pipe.recv(timeout=3)
+                cout(b"recv = ", buf)
+                if echo_data:
+                    print(buf)
+                    return "exit"
+    finally:
+        if pipe:
+            await pipe.close()
+
+    # Return to menu for unexpected code paths.
+    return "menu"
 
 async def accept_option():
     print("Listen on PNP: \n", nick)
