@@ -82,3 +82,32 @@ def patch_server_list(arg_list, server_list):
         entry[af] = ip
         entry["afs"].append(af)
         server_list[offset] = entry
+
+def filter_nics_by_mac(mac_str, ifs):
+    if "," in mac_str:
+        mac_list = mac_str.split(",")
+    else:
+        mac_list = [mac_str]
+
+    mac_list = [mac_norm(mac) for mac in mac_list]
+    new_ifs = []
+    for nic in ifs:
+        if nic.mac in mac_list:
+            new_ifs.append(nic)
+
+    return new_ifs
+
+def display_ifs_loaded(ifs):
+    buf = ""
+    for nic in ifs:
+        buf += fstr("\t{0} ", (nic.name,))
+        for af in nic.supported():
+            if af == IP4:
+                buf += "(v4)"
+            if af == IP6:
+                buf += "(v6)"
+        buf += fstr("\n\t\t{0} nat; ", (nat_txt[nic.nat['type']],))
+        buf += fstr("{0} delta = ", (delta_txt[nic.nat['delta']['type']],))
+        buf += fstr("{0}", (nic.nat['delta']['value'],))
+        buf += "\n"
+    cout(buf[:-1])

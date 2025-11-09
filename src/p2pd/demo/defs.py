@@ -39,6 +39,11 @@ method_txt = {
     "t": P2P_RELAY,
 }
 
+PROGRAM_BANNER = """Universal reachability demo
+Coded by matthew@roberts.pm
+-----------------------------
+"""
+
 MENU_BANNER = """(0) Connect to a node using its nickname or address.
 (1) Start accepting connections (this stops the input loop)
 (2) Start additional node for testing (needed for self punch.)

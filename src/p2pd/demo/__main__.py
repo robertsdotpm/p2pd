@@ -17,71 +17,44 @@ from .menu import *
 Log.log_p2p = patch_log_p2p
 
 async def main():
-    cout("Universal reachability demo")
-    cout("Coded by matthew@roberts.pm")
-    cout("-----------------------------")
-    cout()
-    cout("Loading networking interfaces...")
+    # Display program banner.
+    cout(PROGRAM_BANNER)
 
+    # Load interfaces on machine.
+    cout("Loading networking interfaces...")
+    get_nickname = args.cmd == "get_nickname"
     if_names = await list_interfaces()
-    if args.cmd == "get_nickname":
-        # Speed up interface loading for nickname only.
-        ifs = await load_interfaces(
-            if_names,
-            Interface,
-            1,
-            2,
-            skip_nat=True,
-            timeout=8
-        )
-    else:
-        ifs = await load_interfaces(
-            if_names,
-            Interface,
-            timeout=4
-        )
+    ifs = await load_interfaces(
+        if_names,
+        Interface,
+        min_agree=1 if get_nickname else 2,
+        max_agree=2 if get_nickname else 5,
+        timeout=4
+    )
 
     """
     If the NICs flag has been set then filter the interface list
     to match only the MAC addresses indicated.
     """
     if args.nics:
-        if "," in args.nics:
-            mac_list = args.nics.split(",")
-        else:
-            mac_list = [args.nics]
+        ifs = filter_nics_by_mac(args.nics, ifs)
 
-        mac_list = [mac_norm(mac) for mac in mac_list]
-        new_ifs = []
-        for nic in ifs:
-            if nic.mac in mac_list:
-                new_ifs.append(nic)
+    # Show the ifs loaded.
+    display_ifs_loaded(ifs)
 
-        ifs = new_ifs
-
-    buf = ""
-    for nic in ifs:
-        buf += fstr("\t{0} ", (nic.name,))
-        for af in nic.supported():
-            if af == IP4:
-                buf += "(v4)"
-            if af == IP6:
-                buf += "(v6)"
-        buf += fstr("\n\t\t{0} nat; ", (nat_txt[nic.nat['type']],))
-        buf += fstr("{0} delta = ", (delta_txt[nic.nat['delta']['type']],))
-        buf += fstr("{0}", (nic.nat['delta']['value'],))
-        buf += "\n"
-    cout(buf[:-1])
-
+    # Main node class with chosen ifs and conf.
     node = Node(ifs=ifs, conf=node_conf)
     if args.port:
         node.listen_port = args.port
 
+    # Start the node and install echo protocol handler.
     cout("Starting node on %d..." % (node.listen_port,))
     nodes = []
     node.add_msg_cb(add_echo_support)
     await node.start(out=True, cout=cout)
     nodes.append(node)
+
+    # Show the nodes address and listen port.
     cout()
     cout(fstr("Node started = {0}", (to_s(node.addr_bytes),)))
     cout(fstr("Node port = {0}", (node.listen_port,)))

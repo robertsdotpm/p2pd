@@ -13,3 +13,23 @@ create tests for thousands of uses of key components of the software like STUN
 to uncover that the software cleans up properly. all successive tests should
 succeed. this is designed to uncover edge cases in long-running processes.
 equivalent to durability testing in regular product testing.
+
+trying write to close socket for MQTT?
+    [TRYING WRITE TO CLOSED SOCKET]
+
+punch double close found:
+  File "/home/x/projects/p2pd/src/p2pd/demo/__main__.py", line 113, in main
+    await stop_nodes_option(nodes)
+  File "/home/x/projects/p2pd/src/p2pd/demo/menu.py", line 211, in stop_nodes_option
+    await n.close()
+  File "/home/x/projects/p2pd/src/p2pd/node/node.py", line 99, in close
+    await node_stop(self)
+  File "/home/x/projects/p2pd/src/p2pd/node/node_stop.py", line 36, in node_stop
+    await pipe.close()
+  File "/home/x/projects/p2pd/src/p2pd/traversal/plugins/tcp_punch/punch_client.py", line 211, in close
+    await self.pipe.close()
+  File "/home/x/projects/p2pd/src/p2pd/traversal/plugins/tcp_punch/punch_process.py", line 162, in close_patch
+    await pipe_close()
+  File "/home/x/projects/p2pd/src/p2pd/net/pipe/pipe_events.py", line 374, in close
+    raise AlreadyClosedError()
+p2pd.errors.AlreadyClosedError

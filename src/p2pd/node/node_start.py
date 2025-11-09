@@ -93,7 +93,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
                         af_txt, 
                         str(len(node.stun_clients[af][if_index])),
                     ))
-                buf += "\n"
+                #buf += "\n"
             cout(buf)
 
     # MQTT server offsets for signal protocol.
