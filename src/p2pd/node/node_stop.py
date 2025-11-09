@@ -1,4 +1,5 @@
 import asyncio
+from ..errors import *
 
 # Shutdown the node server and do cleanup.
 async def node_stop(node):
@@ -22,6 +23,8 @@ async def node_stop(node):
         node.pipes,
     ]
 
+    # For all active pipes, attempt to close them.
+    # Skip if already closed if not resolved to a pipe.
     for pipe_list in pipe_lists:
         for pipe in pipe_list.values():
             if pipe is None:
@@ -32,8 +35,16 @@ async def node_stop(node):
                     pipe = pipe.result()
                 else:
                     continue
-                    
-            await pipe.close()
+            
+            """
+            Pipes can be closed manually by programs that clean up after themselves
+            or if a TCP pipe ends up having the other side hang up cleanly and
+            the connection ends. In this case, alreadyclosed isn't unexpected.
+            """
+            try:
+                await pipe.close()
+            except AlreadyClosedError:
+                continue
 
     # Try close the multiprocess manager.
     """
@@ -47,4 +58,3 @@ async def node_stop(node):
 
     # Stop node server.
     await super(node.__class__, node).close()
-    #await asyncio.sleep(.25)
