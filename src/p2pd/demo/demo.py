@@ -12,20 +12,7 @@ from ..do_imports import *
 from .defs import *
 from .cmd_args import *
 
-
-
-
-
-
-
 Log.log_p2p = patch_log_p2p
-
-async def add_echo_support(msg, client_tup, pipe):
-    if b"ECHO" == msg[:4]:
-        cout()
-        cout("\tGot echo proto msg: " + to_s(msg) + fstr(" from {0}", (client_tup,)))
-        cout()
-        await pipe.send(msg[4:], client_tup)
 
 async def main():
     cout("Universal reachability demo")

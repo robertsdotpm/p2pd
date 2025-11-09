@@ -1,3 +1,5 @@
+from ..do_imports import *
+
 def cout(*fargs):
     if args.cmd:
         return
@@ -6,6 +8,13 @@ def cout(*fargs):
             print()
         else:
             print(*fargs)
+
+async def add_echo_support(msg, client_tup, pipe):
+    if b"ECHO" == msg[:4]:
+        cout()
+        cout("\tGot echo proto msg: " + to_s(msg) + fstr(" from {0}", (client_tup,)))
+        cout()
+        await pipe.send(msg[4:], client_tup)
 
 def patch_log_p2p(m, node_id=""):
     out = fstr("p2p: <{0}> ", (node_id,)) + to_s(m)

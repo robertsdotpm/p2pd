@@ -164,12 +164,12 @@ async def connect_option(node, last_addr=None, echo_data=None):
     # Return to menu for unexpected code paths.
     return "menu"
 
-async def accept_option():
+async def accept_option(nick):
     print("Listen on PNP: \n", nick)
     while 1:
         await asyncio.sleep(1)
 
-async def nickname_option():
+async def nickname_option(node):
     choice = input("Enter nickname: ")
     try:
         ret = await node.nickname(choice)
@@ -177,7 +177,7 @@ async def nickname_option():
     except:
         cout("Nickname taken.")
 
-async def node_spawn_option():
+async def node_spawn_option(ifs, nodes):
     alice = nodes[-1]
     bob = Node(port=alice.listen_port + 1, ifs=ifs, conf=node_conf)
     bob.add_msg_cb(add_echo_support)
@@ -193,7 +193,7 @@ async def node_spawn_option():
     nodes.append(bob)
     cout()
 
-async def stop_nodes_option():
+async def stop_nodes_option(nodes):
     cout("Stopping nodes...")
     for n in nodes:
         await n.close()
