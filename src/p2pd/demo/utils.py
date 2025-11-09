@@ -110,4 +110,138 @@ def display_ifs_loaded(ifs):
         buf += fstr("{0} delta = ", (delta_txt[nic.nat['delta']['type']],))
         buf += fstr("{0}", (nic.nat['delta']['value'],))
         buf += "\n"
-    cout(buf[:-1])
+    cout(buf)
+
+def get_dest_addr(last_addr):
+    """
+    Dest addr may have already been set from previous invocations of the program.
+    It's designed to be interactive so you don't have to keep pasting the
+    same address for a dest if you're trying to test a remote machine.
+    """
+    extra_txt = ""
+    if last_addr:
+        extra_txt = fstr("(enter for {0})", (last_addr["addr"],))
+
+    dest_addr = input(fstr("Enter nodes nickname or address {0}: ", (extra_txt,)))
+    if dest_addr == "":
+        dest_addr = last_addr["addr"]
+    else:
+        last_addr["addr"] = dest_addr
+
+    return dest_addr
+
+def choose_connection_methods(con_method):
+    """
+    Select a connection method segment.
+    """
+    cout()
+    cout("Connection methods (in order):")
+    cout("TCP: (d)irect, (r)everse, (p)unch; UDP: (t)urn.")
+    cout("Type menu to return.")
+    strats = []
+    while True:
+        # If pressing enter then use the default list of methods in order.
+        con_method = con_method or input("Enter for default (drp): ")
+        if not len(con_method):
+            strats = P2P_STRATEGIES
+            break
+
+        # Go back to the menu.
+        if con_method.lower().strip() == "menu":
+            return "menu"
+
+        # Save a list of only valid choices.
+        strats = []
+        for c in con_method:
+            c = c.lower()
+            if c in method_txt:
+                strats.append(method_txt[c])
+
+        if strats:
+            break
+    return strats
+
+def choose_pathways(pathway):
+    """
+    Choose the routing pathway to try (this controls IP selection!)
+    This is why having accurate interface info is so important.
+    """
+    cout()
+    cout("Enabled connection pathways (in order):")
+    cout("WAN: (e)xternal, LAN: (l)ocal ")
+    cout("Type menu to return.")
+    addr_types = []
+    while True:
+        pathway = pathway or input("Enter for default (el): ")
+        if not len(pathway):
+            addr_types = [EXT_BIND, NIC_BIND]
+            break
+
+        if pathway.lower().strip() == "menu":
+            return "menu"
+
+        addr_types = []
+        for c in pathway:
+            c = c.lower()
+            if c == 'e':
+                addr_types.append(EXT_BIND)
+            if c == 'l':
+                addr_types.append(NIC_BIND)
+
+        if addr_types:
+            break
+    return addr_types
+
+def choose_address_families(addr_type):
+    """
+    Allows the code to specifically use one or more address families.
+    Applicable / useful for dual-stack environments.
+    """
+    cout()
+    cout("Address family priority (in order):")
+    cout("(4) IPv4, (6) IPv6")
+    cout("Type menu to return.")
+    af_priority = []
+    while True:
+        addr_type = addr_type or input("Enter for default (46): ")
+        if not len(addr_type):
+            af_priority = [IP4, IP6]
+            break
+
+        if addr_type.lower().strip() == "menu":
+            return "menu"
+
+        af_priority = []
+        for c in addr_type:
+            c = c.lower()
+            if c == '4':
+                af_priority.append(IP4)
+            if c == '6':
+                af_priority.append(IP6)
+
+        if af_priority:
+            break
+    return af_priority
+
+async def echo_client(pipe, echo_data):
+    """
+    Tunnel is open -- interactive echo client can be used.
+    """
+    cout("Connection open.")
+    cout(pipe.sock)
+    cout()
+    cout("Basic echo protocol.")
+    cout("Enter menu to return to menu or exit to quit.")
+    while True:
+        send_buf = echo_data or to_b(input("Echo: "))
+        if send_buf in (b"quit", b"exit"):
+            return "exit"
+        if send_buf in (b"menu"):
+            send_buf = b""
+            return "menu"
+        await pipe.send(b"ECHO " + send_buf + b"\n")
+        buf = await pipe.recv(timeout=3)
+        cout(b"recv = ", buf)
+        if echo_data:
+            print(buf)
+            return "exit"
