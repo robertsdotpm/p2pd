@@ -16,7 +16,8 @@ from .menu import *
 
 Log.log_p2p = patch_log_p2p
 
-async def main():
+async def setup_node():
+    """Load interfaces, start node, and return node info."""
     # Display program banner.
     cout(PROGRAM_BANNER)
 
@@ -49,10 +50,8 @@ async def main():
 
     # Start the node and install echo protocol handler.
     cout("Starting node on %d..." % (node.listen_port,))
-    nodes = []
     node.add_msg_cb(add_echo_support)
     await node.start(out=True, cout=cout)
-    nodes.append(node)
 
     # Show the nodes address and listen port.
     cout()
@@ -70,13 +69,12 @@ async def main():
         cout("node id default nickname didnt load")
         cout("might have been taken over or all servers down.")
 
-    # Output the node's address then finish.
-    if args.cmd:
-        if args.cmd == "get_nickname":
-            print(nick)
-            await node.close()
-            return
-        
+    return node, ifs, nick
+
+async def run_node_loop(node, ifs, nick):
+    """Run the main menu loop for node interaction."""
+    nodes = [node]
+
     # Options for making a connection.
     # Set connection menu mode.
     menu_option = cmd_opts = None
@@ -93,11 +91,11 @@ async def main():
     # passed by reference as use last_addr["addr"] as the pointer.
     last_addr = {}
     con_opts = (last_addr, echo_data, cmd_opts,)
-    while 1:
+    while True:
         try:
             # Show menu choices.
             cout(MENU_BANNER)
-            
+
             # Shows the main menu options.
             outcome = await run_menu_program(
                 nick,
@@ -112,10 +110,21 @@ async def main():
             if outcome == "exit":
                 await stop_nodes_option(nodes)
                 return
-            
+
         # Watch for connection errors.
         except TunnelFailed:
             cout("Tunnel connection failed!")
+
+async def main():
+    node, ifs, nick = await setup_node()
+
+    # Output the node's address then finish.
+    if args.cmd == "get_nickname":
+        print(nick)
+        await node.close()
+        return
+
+    await run_node_loop(node, ifs, nick)
 
 if __name__ == "__main__":
     async_run(main())
