@@ -3,7 +3,13 @@ from ..do_imports import *
 from .defs import *
 from .utils import *
 
-async def connect_option(node, last_addr=None, echo_data=None):
+async def connect_option(node, con_opts):
+    # Some variables set by command line flags or other parts.
+    last_addr, echo_data, cmd_opts = con_opts
+    con_method = pathway = addr_type = None
+    if cmd_opts:
+        _, con_method, pathway, addr_type = cmd_opts
+
     """
     Dest addr may have already been set from previous invocations of the program.
     It's designed to be interactive so you don't have to keep pasting the
@@ -206,14 +212,15 @@ async def stop_nodes_option(nodes):
 
     return ""
 
-async def show_menu(nick, ifs, nodes, last_addr, echo_data, menu_option):
+async def run_menu_program(nick, ifs, nodes, con_opts=None, menu_option=None):
     # Select menu program.
     menu_option = menu_option or input("Select menu option: ")
     menu_option = menu_option.lower().strip()
     
     # Connect to a remote host using PNP or full node address.
     if "connect:" and menu_option == "0":
-        return (await connect_option(nodes[0], last_addr, echo_data))
+        assert(con_opts)
+        return (await connect_option(nodes[0], con_opts))
 
     # Just run the event loop so cons can be accepted.
     # Just an asyncio sleep loop.

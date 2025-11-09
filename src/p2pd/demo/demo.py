@@ -86,7 +86,7 @@ async def main():
     cout(fstr("Node started = {0}", (to_s(node.addr_bytes),)))
     cout(fstr("Node port = {0}", (node.listen_port,)))
 
-
+    # Get PNP address of the node being started.
     nick = None
     try:
         nick = await node.nickname(node.node_id)
@@ -97,6 +97,7 @@ async def main():
         cout("node id default nickname didnt load")
         cout("might have been taken over or all servers down.")
 
+    # Output the node's address then finish.
     if args.cmd:
         if args.cmd == "get_nickname":
             print(nick)
@@ -105,43 +106,31 @@ async def main():
         
     # Options for making a connection.
     # Set connection menu mode.
-    menu_option = None
-    con_method = pathway = addr_type = None
+    menu_option = cmd_opts = None
     if args.cmd:
         menu_option = args.cmd[0]
-        if menu_option == "0":
-            menu_option, con_method, pathway, addr_type = args.cmd
-
-    # Connect to this destination.
-    dest_addr = None
-    if args.dest_addr:
-        dest_addr = args.dest_addr
+        cmd_opts = args.cmd
 
     # Data to echo.
     echo_data = None
     if args.echo:
         echo_data = to_b(args.echo)
 
-    cout(\
-"""(0) Connect to a node using its nickname or address.
-(1) Start accepting connections (this stops the input loop)
-(2) Start additional node for testing (needed for self punch.)
-(3) Register a unique nickname for your node.
-(4) Exit program.
-""")
-
     # To simulate a "pointer" we exploit the fact that objects in Python are
     # passed by reference as use last_addr["addr"] as the pointer.
     last_addr = {}
+    con_opts = (last_addr, echo_data, cmd_opts,)
     while 1:
         try:
+            # Show menu choices.
+            cout(MENU_BANNER)
+            
             # Shows the main menu options.
-            outcome = await show_menu(
+            outcome = await run_menu_program(
                 nick,
                 ifs,
                 nodes,
-                last_addr,
-                echo_data,
+                con_opts,
                 menu_option
             )
 
@@ -150,6 +139,8 @@ async def main():
             if outcome == "exit":
                 await stop_nodes_option(nodes)
                 return
+            
+        # Watch for connection errors.
         except TunnelFailed:
             cout("Tunnel connection failed!")
 
