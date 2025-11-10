@@ -48,6 +48,7 @@ class Node(Daemon):
         self.punch_worker_task = None
         self.active_punchers = 0
         self.max_punchers = 0
+        self.pp_executor = None
 
         # Signal protocol class instance.
         self.sig_proto_handlers = SigProtoHandlers(self)

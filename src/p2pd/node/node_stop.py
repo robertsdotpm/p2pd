@@ -53,8 +53,9 @@ async def node_stop(node):
     with socket error -1
 
     So you need to make sure to wrap coroutines for exceptions.
-    
     """
+    if node.pp_executor:
+        node.pp_executor.shutdown(wait=True)
 
     # Stop node server.
     await super(node.__class__, node).close()

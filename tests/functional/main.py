@@ -13,6 +13,9 @@ the bash -l pattern is stupid, launch a new, clean shell with -c
 
 direct and reverse working on nix 3.5
     -- not liking that when pyenv has an error the command just returns nothing
+
+i dont think forked processes (for the process pool in
+punching are being closed properly?)
 """
 
 async def git_pull_latest(servers):

@@ -88,15 +88,15 @@ class REPLThread(threading.Thread):
             spawn_method = multiprocessing.get_start_method()
             vmaj, vmin, _ = platform.python_version_tuple()
             banner = (
-                fstr('P2PD {0} REPL on Python {1}.{2} / {3}\n', (p2pdv, vmaj, vmin, sys.platform,)),
-                fstr('Loop = {0}, Process = {1}\n', (loop_policy, spawn_method,)),
-                'Use "await" directly instead of "asyncio.run()".\n' ,
+                fstr('P2PD {0} REPL on Python {1}.{2} / {3}', (p2pdv, vmaj, vmin, sys.platform,)),
+                fstr('Loop = {0}, Process = {1}', (loop_policy, spawn_method,)),
+                'Use "await" directly instead of "asyncio.run()".' ,
                 fstr('{0}from p2pd import *', (getattr(sys, "ps1", ">>> "),)),
             )
 
             console.push("from p2pd.do_imports import *")
             console.interact(
-                banner=banner,
+                banner="\n".join(banner),
                 exitmsg='exiting asyncio REPL...')
             
         finally:
