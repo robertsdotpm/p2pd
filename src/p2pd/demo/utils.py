@@ -1,3 +1,4 @@
+from aioconsole import ainput
 from ..do_imports import *
 from .cmd_arg_defs import *
 
@@ -112,7 +113,7 @@ def display_ifs_loaded(ifs):
         buf += "\n"
     cout(buf)
 
-def get_dest_addr(last_addr):
+async def get_dest_addr(last_addr):
     """
     Dest addr may have already been set from previous invocations of the program.
     It's designed to be interactive so you don't have to keep pasting the
@@ -122,7 +123,7 @@ def get_dest_addr(last_addr):
     if last_addr:
         extra_txt = fstr("(enter for {0})", (last_addr["addr"],))
 
-    dest_addr = input(fstr("Enter nodes nickname or address {0}: ", (extra_txt,)))
+    dest_addr = await ainput(fstr("Enter nodes nickname or address {0}: ", (extra_txt,)))
     if dest_addr == "":
         dest_addr = last_addr["addr"]
     else:
@@ -130,7 +131,7 @@ def get_dest_addr(last_addr):
 
     return dest_addr
 
-def choose_connection_methods(con_method):
+async def choose_connection_methods(con_method):
     """
     Select a connection method segment.
     """
@@ -141,7 +142,7 @@ def choose_connection_methods(con_method):
     strats = []
     while True:
         # If pressing enter then use the default list of methods in order.
-        con_method = con_method or input("Enter for default (drp): ")
+        con_method = con_method or (await ainput("Enter for default (drp): "))
         if not len(con_method):
             strats = P2P_STRATEGIES
             break
@@ -161,7 +162,7 @@ def choose_connection_methods(con_method):
             break
     return strats
 
-def choose_pathways(pathway):
+async def choose_pathways(pathway):
     """
     Choose the routing pathway to try (this controls IP selection!)
     This is why having accurate interface info is so important.
@@ -172,7 +173,7 @@ def choose_pathways(pathway):
     cout("Type menu to return.")
     addr_types = []
     while True:
-        pathway = pathway or input("Enter for default (el): ")
+        pathway = pathway or (await ainput("Enter for default (el): "))
         if not len(pathway):
             addr_types = [EXT_BIND, NIC_BIND]
             break
@@ -192,7 +193,7 @@ def choose_pathways(pathway):
             break
     return addr_types
 
-def choose_address_families(addr_type):
+async def choose_address_families(addr_type):
     """
     Allows the code to specifically use one or more address families.
     Applicable / useful for dual-stack environments.
@@ -203,7 +204,7 @@ def choose_address_families(addr_type):
     cout("Type menu to return.")
     af_priority = []
     while True:
-        addr_type = addr_type or input("Enter for default (46): ")
+        addr_type = addr_type or (await ainput("Enter for default (46): "))
         if not len(addr_type):
             af_priority = [IP4, IP6]
             break
@@ -233,7 +234,7 @@ async def echo_client(pipe, echo_data):
     cout("Basic echo protocol.")
     cout("Enter menu to return to menu or exit to quit.")
     while True:
-        send_buf = echo_data or to_b(input("Echo: "))
+        send_buf = echo_data or to_b(await ainput("Echo: "))
         if send_buf in (b"quit", b"exit"):
             return "exit"
         if send_buf in (b"menu"):

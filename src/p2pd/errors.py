@@ -27,3 +27,6 @@ class AlreadyClosedError(Exception):
 
 class TunnelFailed(Exception):
     pass
+
+class StartNodeNicknameFailed(Exception):
+    pass

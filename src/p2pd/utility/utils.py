@@ -592,7 +592,7 @@ def run_in_executor(f):
             loop = asyncio.get_event_loop()
             return loop.run_in_executor(None, helper)
 
-    return inner
+    return inner()
     
 def run_in_executor2(f):
     @functools.wraps(f)

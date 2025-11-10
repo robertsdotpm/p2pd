@@ -7,17 +7,19 @@ idk if thats relevant.
 python3 -m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd 0dl4 --dest_addr 5b5ed965936a5f28c2795724a.p2p --echo "hello world"
 """
 
+import asyncio
 from ..do_imports import *
 from .defs import *
 from .cmd_arg_defs import *
 from .utils import *
 from .cmd_arg_proc import *
 from .menu import *
+from .signals import *
 
 Log.log_p2p = patch_log_p2p
 
+"""Load interfaces, start node, and return node info."""
 async def setup_node():
-    """Load interfaces, start node, and return node info."""
     # Display program banner.
     cout(PROGRAM_BANNER)
 
@@ -64,17 +66,16 @@ async def setup_node():
         nick = await node.nickname(node.node_id)
         cout(fstr("Node nickname = {0}", (nick,)))
         cout()
-    except:
+    except (StartNodeNicknameFailed, FullNameFailure):
         log_exception()
         cout("node id default nickname didnt load")
         cout("might have been taken over or all servers down.")
 
-    return node, ifs, nick
-
-async def run_node_loop(node, ifs, nick):
-    """Run the main menu loop for node interaction."""
     nodes = [node]
+    return nodes, ifs, nick
 
+"""Run the main menu loop for node interaction."""
+async def run_node_loop(nodes, ifs, nick, stop_event):
     # Options for making a connection.
     # Set connection menu mode.
     menu_option = cmd_opts = None
@@ -95,7 +96,7 @@ async def run_node_loop(node, ifs, nick):
 
     # Show menu and choose option.
     con_opts = (last_addr, echo_data, cmd_opts,)
-    while True:
+    while nodes and not stop_event.is_set():
         try:
             # Show menu choices.
             cout(MENU_BANNER)
@@ -112,23 +113,63 @@ async def run_node_loop(node, ifs, nick):
             # Watch for attempts to exit loop.
             outcome = outcome.lower().strip()
             if outcome == "exit":
-                await stop_nodes_option(nodes)
+                stop_event.set()
                 return
 
         # Watch for connection errors.
         except TunnelFailed:
             cout("Tunnel connection failed!")
 
-async def main():
-    node, ifs, nick = await setup_node()
+        # Catch Ctrl+C
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            stop_event.set()
+            return
 
-    # Output the node's address then finish.
-    if args.cmd == "get_nickname":
-        print(nick)
-        await node.close()
-        return
+"""
+Run the main program which accepts input and shows menu options.
+Also waits for close events and handles cleanup.
+"""
+async def main(stop_event, loop):
+    nodes = []
+    nodes_loop = None
+    try:
+        # Setup node
+        nodes, ifs, nick = await setup_node()
 
-    await run_node_loop(node, ifs, nick)
+        if args.cmd == "get_nickname":
+            print(nick)
+            await nodes[0].close()
+            return
+
+        # Start main loop task
+        nodes_loop = loop.create_task(run_node_loop(nodes, ifs, nick, stop_event))
+
+        # Wait until stop_event is set
+        while not stop_event.is_set():
+            await asyncio.sleep(1)
+    finally:
+        # Cancel nodes_loop if still running
+        if nodes_loop and not nodes_loop.done():
+            nodes_loop.cancel()
+            try:
+                await nodes_loop
+            except asyncio.CancelledError:
+                pass
+
+        # Stop all nodes
+        if nodes:
+            await stop_nodes_option(nodes)
+            del nodes[:]
 
 if __name__ == "__main__":
-    async_run(main())
+    loop = asyncio.get_event_loop()
+    stop_event = asyncio.Event()
+    install_signal_handlers(stop_event)
+    try:
+        loop.run_until_complete(main(stop_event, loop))
+    except KeyboardInterrupt:
+        # fallback if signal didn’t trigger cleanly
+        stop_event.set()
+    finally:
+        loop.close()
+        print("Exited cleanly.")

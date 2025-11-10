@@ -1,4 +1,5 @@
 import asyncio
+from aioconsole import ainput
 from ..do_imports import *
 from .defs import *
 from .utils import *
@@ -16,12 +17,12 @@ async def connect_option(node, con_opts):
     if type(last_addr) == str:
         dest_addr = last_addr
     else:
-        dest_addr = get_dest_addr(last_addr)
+        dest_addr = await get_dest_addr(last_addr)
 
     # Get connect cmd segments manually if not set.
-    strats = choose_connection_methods(con_method)
-    addr_types = choose_pathways(pathway)
-    af_priority = choose_address_families(addr_type)
+    strats = await choose_connection_methods(con_method)
+    addr_types = await choose_pathways(pathway)
+    af_priority = await choose_address_families(addr_type)
     if "menu" in (strats, addr_types, strats,):
         return "menu"
 
@@ -55,7 +56,7 @@ async def accept_option(nick):
     return "menu"
 
 async def nickname_option(node):
-    choice = input("Enter nickname: ")
+    choice = await ainput("Enter nickname: ")
     try:
         ret = await node.nickname(choice)
         cout(fstr("Nickname registered = {0}", (str(ret),)))
@@ -83,6 +84,7 @@ async def node_spawn_option(ifs, nodes):
     return "menu"
 
 async def stop_nodes_option(nodes):
+    cout("")
     cout("Stopping nodes...")
     for n in nodes:
         await n.close()
@@ -91,7 +93,7 @@ async def stop_nodes_option(nodes):
 
 async def run_menu_program(nick, ifs, nodes, con_opts=None, menu_option=None):
     # Select menu program.
-    menu_option = menu_option or input("Select menu option: ")
+    menu_option = menu_option or (await ainput("Select menu option: "))
     menu_option = menu_option.lower().strip()
     
     # Connect to a remote host using PNP or full node address.

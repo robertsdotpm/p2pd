@@ -9,6 +9,7 @@ from ..settings import *
 from ..utility.utils import *
 from ..protocol.pnp.pnp_client import *
 from ..nic.interface import *
+from ..errors import *
 from ecdsa import SigningKey
 
 PNP_INDEX_TO_TLD = {
@@ -86,6 +87,7 @@ class Nickname():
 
     # A client for each PNP server is loaded by index.
     async def start(self):
+        success_no = 0
         for index in range(0, len(PNP_SERVERS[IP4])):
             """
             Prefer IPv4 -- the reason is v6 blocks are more likely
@@ -130,6 +132,10 @@ class Nickname():
 
                 # Good client so save.
                 self.clients[af][index] = client
+                success_no += 1
+        
+        if not success_no:
+            raise StartNodeNicknameFailed()
         
         self.started = True
         return self
