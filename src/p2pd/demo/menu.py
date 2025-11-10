@@ -1,5 +1,4 @@
 import asyncio
-from aioconsole import ainput
 from ..do_imports import *
 from .defs import *
 from .utils import *

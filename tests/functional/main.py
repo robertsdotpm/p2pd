@@ -66,6 +66,7 @@ async def tunnel_test(active, passive):
         print(f"{passive['os']}> Starting passive shell.")
         passive_con = await ssh_connect(passive)
         passive_shell = await passive_con.create_process("bash -l")
+        await shell_write("pkill -15 p2pd\n", passive_shell) # TODO: win
         init_cmd = init_pyenv_vars_cmd(passive)
         await shell_write(init_cmd, passive_shell)
 
@@ -75,7 +76,7 @@ async def tunnel_test(active, passive):
         cmd = p2pd_cmd + "get_nickname"
         cmd = pyenv_run_cmd(py_ver, passive, cmd)
         print(cmd)
-        results = await ssh_await_cmd(cmd, passive_shell, chain_cmds, timeout=10)
+        results = await ssh_await_cmd(cmd, passive_shell, chain_cmds, timeout=20)
         print(results)
         passive_pnp = results.strip()
         print("\t", passive_pnp)
@@ -83,18 +84,15 @@ async def tunnel_test(active, passive):
         # Start passive node listening for cons.
         print(f"{passive['os']}> Starting passive node.")
         cmd = p2pd_cmd + "1"
-        cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n"
+        cmd = pyenv_run_cmd(py_ver, passive, cmd) + "&\n" # TODO: background on win?
         await shell_write(cmd, passive_shell)
-        await asyncio.wait_for(
-            passive_shell.stdout.readline(),
-            timeout=30
-        )
-        
+        await asyncio.sleep(5)
 
         # Setup shell and env for active server.
         print(f"{active['os']}> Starting active shell.")
         active_con = await ssh_connect(active)
         active_shell = await active_con.create_process("bash -l")
+        await shell_write("pkill -15 p2pd\n", active_shell) # TODO: win?
         init_cmd = init_pyenv_vars_cmd(active)
         await shell_write(init_cmd, active_shell)
 
@@ -110,6 +108,12 @@ async def tunnel_test(active, passive):
         print(cmd)
         results = await active_shell.stdout.readline()
         print(results)
+
+        # Close long-running processes.
+        # TODO: task kill on win?
+        cmd = "pkill -15 p2pd\n"
+        await shell_write(cmd, active_shell)
+        await shell_write(cmd, passive_shell)
     finally:
         shells = (active_shell, passive_shell,)
         for shell in shells:

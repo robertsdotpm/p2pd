@@ -1,4 +1,3 @@
-from aioconsole import ainput
 from ..do_imports import *
 from .cmd_arg_defs import *
 

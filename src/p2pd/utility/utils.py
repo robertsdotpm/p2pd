@@ -813,6 +813,11 @@ async def get_pp_executors(workers=None):
     await asyncio.gather(*tasks)
     return pp_executor
 
+async def ainput(prompt: str = "") -> str:
+    """Async wrapper around built-in input()"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: input(prompt))
+
 
 if __name__ == "__main__": # pragma: no cover
     x = [1, 1]

@@ -10,7 +10,6 @@ def get_chain_cmds(server):
     def chain_cmds(*args):
         assert("\n" not in args)
         out = " && ".join(args)
-        out += "\n"
         return out
     
     return chain_cmds
@@ -78,6 +77,7 @@ def pyenv_run_cmd(py_ver, server, cmd):
 
 def pyenv_install_p2pd(py_ver, server):
     p2pd_dir = get_p2pd_code_path(server)
+    assert("\n" not in p2pd_dir)
     pip_install = f'-m pip install --force-reinstall -e "{p2pd_dir}"'
     return pyenv_run_cmd(py_ver, server, pip_install)
 
@@ -99,10 +99,11 @@ def init_pyenv_vars_cmd(server):
     return buf
 
 async def shell_write(cmd, shell):
-    if cmd[-1] != "\n":
+    if not cmd or cmd[-1] != "\n":
         raise UnterminatedShellCmd(cmd)
     
     if "\n" in cmd[:-1]:
+        print(cmd)
         raise MalformedShellCmd(cmd)
 
     shell.stdin.write(cmd)
