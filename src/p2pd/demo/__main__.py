@@ -128,6 +128,17 @@ Run the main program which accepts input and shows menu options.
 Also waits for close events and handles cleanup.
 """
 async def main():
+    # Additional optional module to improve UX for cnt + c.
+    # Otherwise input() is used which still needs enter for exit.
+    try:
+        import aioconsole
+    except:
+        if not args.cmd:
+            print("Note: No aioconsole installed.")
+            print("Install it for cnt + c to work better on input.")
+            print()
+
+    # Start the program loop.
     nodes = []
     nodes_loop = None
     try:
@@ -157,8 +168,13 @@ async def main():
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    #loop.add_signal_handler(signal.SIGTERM, cancel_all_tasks)
+    loop.add_signal_handler(signal.SIGTERM, cancel_all_tasks)
     try:
         loop.run_until_complete(main())
     except KeyboardInterrupt:
         print("keyboard interrupt")
+
+        # Needed when using older run_until_complete.
+        cancel_all_tasks()
+    finally:
+        loop.close()

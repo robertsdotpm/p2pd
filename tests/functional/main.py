@@ -13,10 +13,6 @@ the bash -l pattern is stupid, launch a new, clean shell with -c
 
 direct and reverse working on nix 3.5
     -- not liking that when pyenv has an error the command just returns nothing
-
-command to tell a node to exit if its in debug mode
-prepend a special executor before a command that stops if after a timeout,
-    then crashed processes will autoclose
 """
 
 async def git_pull_latest(servers):
@@ -63,7 +59,7 @@ async def tunnel_test(active, passive):
 
         # Use local machines PNP server so names have no limits.
         p2pd_cmd  = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 "
-        p2pd_cmd += "--disable_upnp 1 --cmd "
+        p2pd_cmd += "--disable_upnp 1 --run_time 120 --cmd "
         chain_cmds = get_chain_cmds(active)
 
         # Setup shell and env for passive server.
