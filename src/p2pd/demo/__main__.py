@@ -119,10 +119,6 @@ async def run_node_loop(nodes, ifs, nick):
         except TunnelFailed:
             cout("Tunnel connection failed!")
 
-        # Catch Ctrl+C
-        except asyncio.CancelledError:
-            return
-
 """
 Run the main program which accepts input and shows menu options.
 Also waits for close events and handles cleanup.
