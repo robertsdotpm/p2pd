@@ -151,6 +151,8 @@ async def main():
 
         # Start main loop task
         if args.run_time:
+            log("run time argument applies = " + str(args.run_time))
+
             # Total execution time includes setup time.
             elapsed = int(time.time()) - start_time
             run_time = args.run_time - elapsed

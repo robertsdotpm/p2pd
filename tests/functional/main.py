@@ -109,7 +109,7 @@ async def tunnel_test(active, passive):
         # (0) connect (d)irect (l)an ipv(4)
         # NOTE: changed to (r) to test reverse con
         print(f"{active['os']}> Try connect and echo to passive node.")
-        cmd = f'{p2pd_cmd}0dl4 --echo "CLEAN_SHUTDOWN" --dest_addr {passive_pnp}'
+        cmd = f'{p2pd_cmd}0dl4 --echo "CLEddAN_SHUTDOdWN" --dest_addr {passive_pnp}'
         #print(cmd)
         cmd = pyenv_run_cmd(py_ver, active, cmd)
         await shell_write(cmd + "\n", active_shell)
