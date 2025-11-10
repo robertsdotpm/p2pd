@@ -4,9 +4,16 @@ from .cmd_arg_defs import *
 
 def cancel_all_tasks():
     loop = asyncio.get_event_loop()
-    tasks = [t for t in asyncio.all_tasks(loop) if not t.done()]
+    try:
+        # Python 3.7+
+        tasks = [t for t in asyncio.all_tasks(loop) if not t.done()]
+    except AttributeError:
+        # Python 3.5–3.6 fallback
+        tasks = [t for t in asyncio.Task.all_tasks(loop) if not t.done()]
+
     for t in tasks:
         t.cancel()
+
     loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
 
 async def ainput(prompt):

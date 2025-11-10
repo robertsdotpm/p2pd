@@ -91,7 +91,7 @@ async def tunnel_test(active, passive):
         # Start passive node listening for cons.
         print(f"{passive['os']}> Starting passive node.")
         cmd = p2pd_cmd + "1"
-        cmd = pyenv_run_cmd(py_ver, passive, cmd) + "&\n" # TODO: background on win?
+        cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n" # TODO: background on win?
         await shell_write(cmd, passive_shell)
         await asyncio.sleep(5)
 
