@@ -84,13 +84,27 @@ class Node(Daemon):
         if pipe in self.last_recv_queue:
             self.last_recv_table[pipe.sock] = time.time()
 
+        # Run msg_cbs across messages.
         msgs = msg.split(b"\n")
+        coros = []
         for msg in msgs:
-            # Pass messages directly to clients own handlers.
-            # Don't interfere so they can write their own protocol.
-            await node_protocol(self, msg, client_tup, pipe)
+            # node_protocol returns a coroutine
+            coros.append(node_protocol(self, msg, client_tup, pipe))
+
+            # wrap msg_cbs as coroutines
             for msg_cb in self.msg_cbs:
-                run_handler(pipe, msg_cb, client_tup, msg)
+                coros.append(msg_cb(msg, client_tup, pipe))
+
+        # Run all coroutines concurrently, collect exceptions instead of propagating
+        results = await asyncio.gather(*coros, return_exceptions=True)
+
+        # Handle exceptions.
+        for r in results:
+            if isinstance(r, KeyboardInterrupt):
+                log("reraising key interrupt")
+                raise r
+            else:
+                log(r)
 
     async def start(self, sys_clock=None, out=False, cout=print):
         await node_start(self, sys_clock=sys_clock, out=out, cout=cout)
