@@ -165,10 +165,12 @@ async def main():
         else:
             nodes_loop = await run_node_loop(nodes, ifs, nick)
     except asyncio.TimeoutError:
-        print("Command run time met.")
+        log("Command run time met.")
     except asyncio.CancelledError:
-        print("Main task cancelled!")
+        log("Main task cancelled!")
     finally:
+        log("stop nodes clause reached.")
+
         # Stop all nodes
         if nodes:
             await stop_nodes_option(nodes)
