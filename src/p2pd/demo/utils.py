@@ -41,7 +41,7 @@ async def add_echo_support(msg, client_tup, pipe):
         await pipe.send(msg[4:], client_tup)
 
         if b"CLEAN_SHUTDOWN" in msg:
-            await (cancel_all_tasks())
+            raise KeyboardInterrupt()
 
 def patch_log_p2p(m, node_id=""):
     out = fstr("p2p: <{0}> ", (node_id,)) + to_s(m)
