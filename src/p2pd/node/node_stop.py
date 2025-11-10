@@ -31,7 +31,7 @@ async def node_stop(node):
         for pipe in pipe_list.values():
             if pipe is None:
                 continue
-            
+
             if isinstance(pipe, asyncio.Future):
                 if pipe.done():
                     pipe = pipe.result()
@@ -44,9 +44,10 @@ async def node_stop(node):
                 except AlreadyClosedError:
                     pass
                 except asyncio.TimeoutError:
-                    log(f"Timeout closing {p}")
+                    log("Timeout closing " + str(p))
                 except Exception as e:
-                    log(f"Error closing {p}: {e}")
+                    log_exception()
+                    log("Error closing " + str(p)
 
             tasks.append(_close(pipe))
 
