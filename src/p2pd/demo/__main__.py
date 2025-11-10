@@ -188,5 +188,5 @@ if __name__ == "__main__":
         loop.run_until_complete(cancel_all_tasks())
         print("ended")
     finally:
-        pass
-        #loop.close()
+        if loop.is_running():
+            loop.close()
