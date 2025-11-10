@@ -98,6 +98,8 @@ class PNPClient():
             pkt = PNPPacket(name, vkc=self.vkc)
             await self.send_pkt(pipe, pkt, sign=False)
             return await self.return_resp(pipe)
+        except asyncio.CancelledError:
+            raise
         except:
             log_exception()
 

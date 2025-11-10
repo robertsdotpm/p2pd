@@ -104,6 +104,8 @@ async def p2pd_setup_netifaces():
 
             # Attempt to send small msg to dest.
             sock.sendto(b'testing UDP. disregard this sorry.', 0, dest)
+        except asyncio.CancelledError:
+            raise
         except Exception:
             """
             Maybe in the future I write code as a fail-safe but for

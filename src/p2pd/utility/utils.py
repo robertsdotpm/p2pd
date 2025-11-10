@@ -445,6 +445,8 @@ async def async_wrap_errors(coro, timeout=None):
         # Bound wait time.
         if isinstance(timeout, int):
             return (await asyncio.wait_for(coro, timeout))
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         # Log all errors.
         log("async wrap errors called")
@@ -790,6 +792,8 @@ async def get_pp_executors(workers=None):
     workers = workers or min(32, os.cpu_count() + 4)
     try:
         pp_executor = ProcessPoolExecutor(max_workers=workers)
+    except asyncio.CancelledError:
+        raise
     except Exception:
         """
         Not all platform have a working implementation of sem_open / semaphores.

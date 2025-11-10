@@ -176,6 +176,8 @@ class Node(Daemon):
         # Set machine id.
         try:
             return hashed_machine_id(app_id)
+        except asyncio.CancelledError:
+            raise
         except:
             return await fallback_machine_id(
                 netifaces,

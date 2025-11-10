@@ -14,7 +14,6 @@ from .cmd_arg_defs import *
 from .utils import *
 from .cmd_arg_proc import *
 from .menu import *
-from .signals import *
 
 Log.log_p2p = patch_log_p2p
 
@@ -121,7 +120,7 @@ async def run_node_loop(nodes, ifs, nick, stop_event):
             cout("Tunnel connection failed!")
 
         # Catch Ctrl+C
-        except (KeyboardInterrupt, asyncio.CancelledError):
+        except asyncio.CancelledError:
             stop_event.set()
             return
 
@@ -135,10 +134,8 @@ async def main(stop_event, loop):
     try:
         # Setup node
         nodes, ifs, nick = await setup_node()
-
         if args.cmd == "get_nickname":
             print(nick)
-            await nodes[0].close()
             return
 
         # Start main loop task
@@ -147,15 +144,9 @@ async def main(stop_event, loop):
         # Wait until stop_event is set
         while not stop_event.is_set():
             await asyncio.sleep(1)
+    except asyncio.CancelledError:
+        print("Main task cancelled!")
     finally:
-        # Cancel nodes_loop if still running
-        if nodes_loop and not nodes_loop.done():
-            nodes_loop.cancel()
-            try:
-                await nodes_loop
-            except asyncio.CancelledError:
-                pass
-
         # Stop all nodes
         if nodes:
             await stop_nodes_option(nodes)
@@ -164,12 +155,8 @@ async def main(stop_event, loop):
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     stop_event = asyncio.Event()
-    install_signal_handlers(stop_event)
     try:
-        loop.run_until_complete(main(stop_event, loop))
+        asyncio.run(main(stop_event, loop))
     except KeyboardInterrupt:
-        # fallback if signal didn’t trigger cleanly
+        print("keyboard interrupt")
         stop_event.set()
-    finally:
-        loop.close()
-        print("Exited cleanly.")

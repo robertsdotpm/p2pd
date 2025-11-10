@@ -260,6 +260,8 @@ assuming immediate execution.
             if not skip_nat:
                 await nic.load_nat(timeout=timeout)
             nics.append(nic)
+        except asyncio.CancelledError:
+            raise
         except:
             log_exception()
 

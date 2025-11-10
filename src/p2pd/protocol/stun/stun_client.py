@@ -239,6 +239,8 @@ async def get_n_stun_clients(af, n, interface, proto=UDP, limit=5, conf=NET_CONF
                 out = await stun.get_mapping()
                 if out is not None:
                     return stun
+            except asyncio.CancelledError:
+                raise
             except:
                 log_exception()
                 continue
@@ -256,7 +258,7 @@ async def get_n_stun_clients(af, n, interface, proto=UDP, limit=5, conf=NET_CONF
     return strip_none(
         await asyncio.gather(
             *tasks,
-            return_exceptions=False,
+            return_exceptions=True,
         )
     )
 

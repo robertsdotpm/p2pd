@@ -188,6 +188,8 @@ class Nickname():
                     ret = await client.fetch(name)
                     if ret is not None:
                         return ret
+                except asyncio.CancelledError:
+                    raise
                 except:
                     log_exception()
 
