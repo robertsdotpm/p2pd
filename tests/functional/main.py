@@ -13,6 +13,10 @@ the bash -l pattern is stupid, launch a new, clean shell with -c
 
 direct and reverse working on nix 3.5
     -- not liking that when pyenv has an error the command just returns nothing
+
+command to tell a node to exit if its in debug mode
+prepend a special executor before a command that stops if after a timeout,
+    then crashed processes will autoclose
 """
 
 async def git_pull_latest(servers):
@@ -66,7 +70,7 @@ async def tunnel_test(active, passive):
         print(f"{passive['os']}> Starting passive shell.")
         passive_con = await ssh_connect(passive)
         passive_shell = await passive_con.create_process("bash -l")
-        await shell_write("pkill -15 p2pd\n", passive_shell) # TODO: win
+        #await shell_write("pkill -f p2pd\n", passive_shell) # TODO: win
         init_cmd = init_pyenv_vars_cmd(passive)
         await shell_write(init_cmd, passive_shell)
 
@@ -92,7 +96,7 @@ async def tunnel_test(active, passive):
         print(f"{active['os']}> Starting active shell.")
         active_con = await ssh_connect(active)
         active_shell = await active_con.create_process("bash -l")
-        await shell_write("pkill -15 p2pd\n", active_shell) # TODO: win?
+        #await shell_write("pkill -f p2pd\n", active_shell) # TODO: win?
         init_cmd = init_pyenv_vars_cmd(active)
         await shell_write(init_cmd, active_shell)
 
@@ -111,9 +115,9 @@ async def tunnel_test(active, passive):
 
         # Close long-running processes.
         # TODO: task kill on win?
-        cmd = "pkill -15 p2pd\n"
-        await shell_write(cmd, active_shell)
-        await shell_write(cmd, passive_shell)
+        #cmd = "pkill -15 p2pd\n"
+        #await shell_write(cmd, active_shell)
+        #await shell_write(cmd, passive_shell)
     finally:
         shells = (active_shell, passive_shell,)
         for shell in shells:
