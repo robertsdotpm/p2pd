@@ -132,7 +132,7 @@ async def main():
     # Otherwise input() is used which still needs enter for exit.
     try:
         import aioconsole
-    except:
+    except ModuleNotFoundError:
         if not args.cmd:
             print("Note: No aioconsole installed.")
             print("Install it for cnt + c to work better on input.")
@@ -143,6 +143,7 @@ async def main():
     nodes_loop = None
     try:
         # Setup node
+        start_time = int(time.time())
         nodes, ifs, nick = await setup_node()
         if args.cmd == "get_nickname":
             print(nick)
@@ -150,6 +151,13 @@ async def main():
 
         # Start main loop task
         if args.run_time:
+            # Total execution time includes setup time.
+            elapsed = int(time.time()) - start_time
+            run_time = args.run_time - elapsed
+            if run_time <= 0:
+                return
+
+            # Only execute program for this long.
             nodes_loop = await asyncio.wait_for(
                 run_node_loop(nodes, ifs, nick),
                 timeout=args.run_time
