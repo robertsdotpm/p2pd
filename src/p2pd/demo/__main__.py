@@ -74,7 +74,7 @@ async def setup_node():
     return nodes, ifs, nick
 
 """Run the main menu loop for node interaction."""
-async def run_node_loop(nodes, ifs, nick, stop_event):
+async def run_node_loop(nodes, ifs, nick):
     # Options for making a connection.
     # Set connection menu mode.
     menu_option = cmd_opts = None
@@ -95,7 +95,7 @@ async def run_node_loop(nodes, ifs, nick, stop_event):
 
     # Show menu and choose option.
     con_opts = (last_addr, echo_data, cmd_opts,)
-    while nodes and not stop_event.is_set():
+    while nodes:
         try:
             # Show menu choices.
             cout(MENU_BANNER)
@@ -112,7 +112,6 @@ async def run_node_loop(nodes, ifs, nick, stop_event):
             # Watch for attempts to exit loop.
             outcome = outcome.lower().strip()
             if outcome == "exit":
-                stop_event.set()
                 return
 
         # Watch for connection errors.
@@ -121,14 +120,13 @@ async def run_node_loop(nodes, ifs, nick, stop_event):
 
         # Catch Ctrl+C
         except asyncio.CancelledError:
-            stop_event.set()
             return
 
 """
 Run the main program which accepts input and shows menu options.
 Also waits for close events and handles cleanup.
 """
-async def main(stop_event, loop):
+async def main():
     nodes = []
     nodes_loop = None
     try:
@@ -139,11 +137,7 @@ async def main(stop_event, loop):
             return
 
         # Start main loop task
-        nodes_loop = loop.create_task(run_node_loop(nodes, ifs, nick, stop_event))
-
-        # Wait until stop_event is set
-        while not stop_event.is_set():
-            await asyncio.sleep(1)
+        await run_node_loop(nodes, ifs, nick)
     except asyncio.CancelledError:
         print("Main task cancelled!")
     finally:
@@ -154,9 +148,7 @@ async def main(stop_event, loop):
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    stop_event = asyncio.Event()
     try:
-        asyncio.run(main(stop_event, loop))
+        asyncio.run(main())
     except KeyboardInterrupt:
         print("keyboard interrupt")
-        stop_event.set()
