@@ -16,6 +16,9 @@ direct and reverse working on nix 3.5
 
 i dont think forked processes (for the process pool in
 punching are being closed properly?)
+
+pkill -9 -f 'p2pd'
+disabling pp_executors for now as a test
 """
 
 async def git_pull_latest(servers):
@@ -70,6 +73,7 @@ async def tunnel_test(active, passive):
         passive_con = await ssh_connect(passive)
         passive_shell = await passive_con.create_process("bash -l")
         #await shell_write("pkill -f p2pd\n", passive_shell) # TODO: win
+        await shell_write("export P2PD_DEBUG=1\n", passive_shell)
         init_cmd = init_pyenv_vars_cmd(passive)
         await shell_write(init_cmd, passive_shell)
 
@@ -95,6 +99,7 @@ async def tunnel_test(active, passive):
         print(f"{active['os']}> Starting active shell.")
         active_con = await ssh_connect(active)
         active_shell = await active_con.create_process("bash -l")
+        await shell_write("export P2PD_DEBUG=1\n", active_shell)
         #await shell_write("pkill -f p2pd\n", active_shell) # TODO: win?
         init_cmd = init_pyenv_vars_cmd(active)
         await shell_write(init_cmd, active_shell)
@@ -104,7 +109,7 @@ async def tunnel_test(active, passive):
         # (0) connect (d)irect (l)an ipv(4)
         # NOTE: changed to (r) to test reverse con
         print(f"{active['os']}> Try connect and echo to passive node.")
-        cmd = f'{p2pd_cmd}0pl4 --echo "CLEAN_SHUTDOWN" --dest_addr {passive_pnp}'
+        cmd = f'{p2pd_cmd}0dl4 --echo "CLEAN_SHUTDOWN" --dest_addr {passive_pnp}'
         #print(cmd)
         cmd = pyenv_run_cmd(py_ver, active, cmd)
         await shell_write(cmd + "\n", active_shell)
