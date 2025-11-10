@@ -96,8 +96,6 @@ class SignalMock():
     async def close(self):
         if self.client is not None:
             await self.client.disconnect()
-            self.is_connected = False
-            self.close = None
 
 async def is_valid_mqtt(dest):
     found_msg = asyncio.Queue()
