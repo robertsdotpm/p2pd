@@ -8,6 +8,7 @@ python3 -m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd 0dl4 --dest_addr 5b5
 """
 
 import asyncio
+import signal
 from ..do_imports import *
 from .defs import *
 from .cmd_arg_defs import *
@@ -137,7 +138,15 @@ async def main():
             return
 
         # Start main loop task
-        await run_node_loop(nodes, ifs, nick)
+        if args.run_time:
+            nodes_loop = await asyncio.wait_for(
+                run_node_loop(nodes, ifs, nick),
+                timeout=args.run_time
+            )
+        else:
+            nodes_loop = await run_node_loop(nodes, ifs, nick)
+    except asyncio.TimeoutError:
+        print("Command run time met.")
     except asyncio.CancelledError:
         print("Main task cancelled!")
     finally:
@@ -148,6 +157,7 @@ async def main():
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
+    #loop.add_signal_handler(signal.SIGTERM, cancel_all_tasks)
     try:
         loop.run_until_complete(main())
     except KeyboardInterrupt:

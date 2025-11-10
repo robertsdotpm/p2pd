@@ -18,4 +18,5 @@ parser.add_argument("--echo", type=str, required=False, help="Text to send down 
 parser.add_argument("--cmd", type=str, required=False, help="Command to run")
 parser.add_argument("--install_path", type=str, required=False, help="Directory path to use to store some of P2PDs data files. Defaults to user home/p2pd")
 parser.add_argument("--disable_upnp", type=str, required=False, help="Disable port forwarding and IPv6 pin hole rules on an associated router?")
+parser.add_argument("--run_time", type=int, required=False, help="Close automatically after this amount of seconds.")
 args = parser.parse_args()
