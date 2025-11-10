@@ -150,9 +150,6 @@ class PipeEvents(BaseACKProto):
         self.tcp_clients.append(client)
         self.client_futures[client.p_client_entry].set_result(client)
 
-    """
-    TODO: This is fucking cryptic. WTF?
-    """
     async def make_awaitable(self):
         if self.endpoint_type == TYPE_TCP_SERVER:
             bound = self.p_client_insert + 1
@@ -185,7 +182,6 @@ class PipeEvents(BaseACKProto):
     def set_tcp_server(self, server):
         self.transport = server
         self.tcp_server = server
-        
 
     def set_tcp_server_task(self, task):
         self.tcp_server_task = task
@@ -266,7 +262,6 @@ class PipeEvents(BaseACKProto):
         
         # Execute any cleanup handlers.
         self.run_handlers(self.end_cbs, self.client_tup)
-
         self.on_close.set()
 
     def route_msg(self, data, client_tup):
@@ -342,7 +337,7 @@ class PipeEvents(BaseACKProto):
 
     def error_received(self, exp):
         log(str(exp))
-        pass
+        raise exp
 
     # UDP packets.
     def datagram_received(self, data, client_tup):

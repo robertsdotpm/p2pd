@@ -155,7 +155,7 @@ class TCPClientProtocol(asyncio.StreamReaderProtocol):
         #super().connection_lost(exc)
 
     def error_received(self, exp):
-        pass
+        raise exp
 
     def data_received(self, data):
         log(fstr("Base proto recv tcp client = {0}", (data,)))
