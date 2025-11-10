@@ -176,13 +176,17 @@ async def main():
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    loop.add_signal_handler(signal.SIGTERM, cancel_all_tasks)
+    #loop.add_signal_handler(signal.SIGTERM, cancel_all_tasks)
     try:
         loop.run_until_complete(main())
     except KeyboardInterrupt:
         print("keyboard interrupt")
 
         # Needed when using older run_until_complete.
-        cancel_all_tasks()
+        #loop.run_until_complete(cancel_all_tasks())
+        #cancellation_future = asyncio.ensure_future(cancel_all_tasks(), loop=loop)
+        loop.run_until_complete(cancel_all_tasks())
+        print("ended")
     finally:
-        loop.close()
+        pass
+        #loop.close()

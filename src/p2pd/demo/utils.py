@@ -2,7 +2,6 @@ import asyncio
 from ..do_imports import *
 from .cmd_arg_defs import *
 
-@asyncio.coroutine
 def cancel_all_tasks():
     loop = asyncio.get_event_loop()
 
@@ -16,8 +15,7 @@ def cancel_all_tasks():
         t.cancel()
 
     if tasks:
-        # old-style yield from for Python 3.5
-        yield from asyncio.gather(*tasks, return_exceptions=True)
+        return asyncio.gather(*tasks, return_exceptions=True)
 
 async def ainput(prompt):
     try:
@@ -43,7 +41,7 @@ async def add_echo_support(msg, client_tup, pipe):
         await pipe.send(msg[4:], client_tup)
 
         if b"CLEAN_SHUTDOWN" in msg:
-            await cancel_all_tasks()
+            await (cancel_all_tasks())
 
 def patch_log_p2p(m, node_id=""):
     out = fstr("p2p: <{0}> ", (node_id,)) + to_s(m)
