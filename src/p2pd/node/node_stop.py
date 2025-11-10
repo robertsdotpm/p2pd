@@ -47,7 +47,7 @@ async def node_stop(node):
                     log("Timeout closing " + str(p))
                 except Exception as e:
                     log_exception()
-                    log("Error closing " + str(p)
+                    log("Error closing " + str(p))
 
             tasks.append(_close(pipe))
 
