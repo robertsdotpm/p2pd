@@ -160,7 +160,7 @@ async def main():
             # Only execute program for this long.
             nodes_loop = await asyncio.wait_for(
                 run_node_loop(nodes, ifs, nick),
-                timeout=args.run_time
+                timeout=run_time
             )
         else:
             nodes_loop = await run_node_loop(nodes, ifs, nick)
