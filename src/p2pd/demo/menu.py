@@ -86,7 +86,11 @@ async def stop_nodes_option(nodes):
     cout("")
     cout("Stopping nodes...")
     for n in nodes:
-        await n.close()
+        try:
+            await n.close()
+        except:
+            log("exception in stop nodes")
+            log_exception()
 
     return ""
 

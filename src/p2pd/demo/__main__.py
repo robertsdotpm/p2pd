@@ -174,6 +174,8 @@ async def main():
             await stop_nodes_option(nodes)
             del nodes[:]
 
+        log("end of stop nodes clause.")
+
 if __name__ == "__main__":
     #loop = asyncio.get_event_loop()
     #loop.add_signal_handler(signal.SIGTERM, cancel_all_tasks)

@@ -1,5 +1,6 @@
 import asyncio
 from ..errors import *
+from ..utility.utils import *
 
 # Shutdown the node server and do cleanup.
 async def node_stop(node):
@@ -55,7 +56,9 @@ async def node_stop(node):
     So you need to make sure to wrap coroutines for exceptions.
     """
     if node.pp_executor:
+        log("trying to shut down pp executor waiting.")
         node.pp_executor.shutdown(wait=True)
+        log("shutdown for pp executor done.")
 
     # Stop node server.
     await super(node.__class__, node).close()
