@@ -26,26 +26,32 @@ async def node_stop(node):
 
     # For all active pipes, attempt to close them.
     # Skip if already closed if not resolved to a pipe.
+    tasks = []
     for pipe_list in pipe_lists:
         for pipe in pipe_list.values():
             if pipe is None:
                 continue
-
+            
             if isinstance(pipe, asyncio.Future):
                 if pipe.done():
                     pipe = pipe.result()
                 else:
                     continue
-            
-            """
-            Pipes can be closed manually by programs that clean up after themselves
-            or if a TCP pipe ends up having the other side hang up cleanly and
-            the connection ends. In this case, alreadyclosed isn't unexpected.
-            """
-            try:
-                await pipe.close()
-            except AlreadyClosedError:
-                continue
+
+            async def _close(p):
+                try:
+                    await asyncio.wait_for(p.close(), timeout=2)
+                except AlreadyClosedError:
+                    pass
+                except asyncio.TimeoutError:
+                    log(f"Timeout closing {p}")
+                except Exception as e:
+                    log(f"Error closing {p}: {e}")
+
+            tasks.append(_close(pipe))
+
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     # Try close the multiprocess manager.
     """
