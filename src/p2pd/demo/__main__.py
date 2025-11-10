@@ -132,7 +132,7 @@ async def main():
     # Otherwise input() is used which still needs enter for exit.
     try:
         import aioconsole
-    except ModuleNotFoundError:
+    except ImportError:
         if not args.cmd:
             print("Note: No aioconsole installed.")
             print("Install it for cnt + c to work better on input.")

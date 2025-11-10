@@ -13,7 +13,7 @@ async def ainput(prompt):
     try:
         import aioconsole
         return await aioconsole.ainput(prompt)
-    except ModuleNotFoundError:
+    except ImportError:
         return input(prompt)
 
 def cout(*fargs):
