@@ -28,7 +28,7 @@ from .pipe_events import *
 from ..address import Address
 from ..ip_range import IPRange
 from ..address import *
-from ..asyncio_patches import *
+from ..asyncio.asyncio_patches import *
 from .pipe_tcp_events import *
 from ..socket import *
 from .pipe_defs import *

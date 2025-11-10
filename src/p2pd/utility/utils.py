@@ -681,8 +681,6 @@ def async_test(coro, loop=None):
     # Can have cleanup errors.
     runner(coro)
 
-async_run = async_test
-
 async def return_true(result=None):
     return True
             

@@ -3,7 +3,7 @@ from ....nic.nat.nat_predict import *
 from .punch_utils import *
 from .punch_defs import *
 from ....utility.clock_skew import *
-from ....net.event_loop import *
+from ....net.asyncio.event_loop import *
 from .start_punching import start_punching
 
 async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, node_id):

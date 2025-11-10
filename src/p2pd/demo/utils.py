@@ -41,6 +41,8 @@ async def add_echo_support(msg, client_tup, pipe):
         await pipe.send(msg[4:], client_tup)
 
         if b"CLEAN_SHUTDOWN" in msg:
+            raise KeyboardInterrupt()
+            return
             loop = asyncio.get_event_loop()
             asyncio.ensure_future(cancel_all_tasks(), loop=loop)
 

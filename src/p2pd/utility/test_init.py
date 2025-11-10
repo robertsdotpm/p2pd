@@ -15,7 +15,7 @@ from ..net.net_utils import *
 from ..net.address import *
 from ..nic.interface import *
 from ..nic.select_interface import *
-from ..net.event_loop import *
+from ..net.asyncio.event_loop import *
 
 # Loads interface info on Windows.
 # Make it available for all tests.

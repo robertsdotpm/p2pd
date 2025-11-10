@@ -4,7 +4,8 @@ import socket
 import sys
 from .settings import *
 from .utility.utils import *
-from .net.event_loop import *
+from .net.asyncio.event_loop import *
+from .net.asyncio.async_run import *
 from .nic.interface_utils import *
 if sys.platform == "win32":
     from .nic.netifaces.windows.win_netifaces import *
@@ -171,6 +172,7 @@ def p2pd_setup_event_loop():
             return
     """
 
+    patch_asyncio_backports(CustomEventLoop)
     policy = asyncio.get_event_loop_policy()
     if not isinstance(policy, CustomEventLoopPolicy):
         asyncio.set_event_loop_policy(CustomEventLoopPolicy())

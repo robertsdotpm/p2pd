@@ -4,7 +4,7 @@ from ..net_utils import *
 from ..bind import *
 from .pipe_events import *
 from ..address import *
-from ..asyncio_patches import *
+from ..asyncio.asyncio_patches import *
 from .pipe_defs import *
 
 

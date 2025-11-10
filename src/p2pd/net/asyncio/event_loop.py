@@ -36,7 +36,7 @@ complex code like TCP hole punching.
 import asyncio
 import socket
 import selectors
-from ..utility.utils import *
+from ...utility.utils import *
 
 # Map: FD -> Future object
 _CLOSE_FUTURES = {}

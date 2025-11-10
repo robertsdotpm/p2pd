@@ -12,6 +12,7 @@ if __name__ != '__main__':
     from .net.bind import *
     from .net.address import Address
     from .net.ip_range import IPRange, IPR
+    from .net.asyncio.async_run import *
     from .entrypoint import p2pd_setup_netifaces
     from .protocol.upnp.upnp import port_forward
     from .nic.route.route import Route

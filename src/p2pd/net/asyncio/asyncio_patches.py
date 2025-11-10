@@ -10,7 +10,7 @@ import stat
 import select
 from selectors import SelectSelector
 
-from ..utility.utils import *
+from ...utility.utils import *
 
 def patched_select(self, r, w, _, timeout=None):
     try:

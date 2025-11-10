@@ -175,18 +175,15 @@ async def main():
             del nodes[:]
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
+    #loop = asyncio.get_event_loop()
     #loop.add_signal_handler(signal.SIGTERM, cancel_all_tasks)
     try:
-        loop.run_until_complete(main())
+        async_run(main())
     except KeyboardInterrupt:
         print("keyboard interrupt")
+        log("keyboard interrupt clause reached.")
 
         # Needed when using older run_until_complete.
         #loop.run_until_complete(cancel_all_tasks())
         #cancellation_future = asyncio.ensure_future(cancel_all_tasks(), loop=loop)
-        loop.run_until_complete(cancel_all_tasks())
         print("ended")
-    finally:
-        if loop.is_running():
-            loop.close()
