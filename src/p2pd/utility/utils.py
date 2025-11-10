@@ -545,9 +545,7 @@ def run_handler(pipe, handler, client_tup, data=None):
     if inspect.iscoroutinefunction(handler):
         # Lets you process messages from an async func.
         task = create_task(
-            async_wrap_errors(
-                handler(data, client_tup, pipe)
-            )
+            handler(data, client_tup, pipe)
         )
 
         # Process result if anyone.
@@ -559,9 +557,7 @@ def run_handler(pipe, handler, client_tup, data=None):
         pipe.handler_tasks.append(task)
     else: 
         # It's a callback.
-        result = sync_wrap_errors(
-            handler, [data, client_tup, pipe]
-        )
+        result = handler(data, client_tup, pipe)
 
         # Process result if any.
         handler_done_builder(pipe, handler)(result)

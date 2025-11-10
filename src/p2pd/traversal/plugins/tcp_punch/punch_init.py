@@ -48,6 +48,8 @@ async def punch_queue_worker(node, puncher_cls):
         node.punch_worker_task = create_task(
             punch_queue_worker(node, puncher_cls)
         )
+    except asyncio.CancelledError:
+        return
     except RuntimeError:
         log_exception()
         return
