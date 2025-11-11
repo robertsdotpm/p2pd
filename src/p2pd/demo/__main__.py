@@ -175,6 +175,8 @@ async def main():
                 await stop_nodes_option(nodes)
             except asyncio.CancelledError:
                 # ignore cancellation during cleanup
+                pass
+            
             del nodes[:]
 
         log("end of stop nodes clause.")
