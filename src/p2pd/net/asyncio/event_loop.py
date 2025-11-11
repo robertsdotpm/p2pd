@@ -36,6 +36,7 @@ complex code like TCP hole punching.
 import asyncio
 import socket
 import selectors
+import traceback
 from ...utility.utils import *
 
 # Map: FD -> Future object
@@ -119,32 +120,33 @@ class CustomEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
         """
         Custom asyncio exception handler.
         Logs exception type, message, and the line number where it occurred.
+        Compatible with Python 3.5+.
         """
         log("Exception handler in custom event loop")
         exc = context.get("exception")
         if exc is None:
             # No exception object, log the message
             msg = context.get("message", "Unknown exception")
-            log(f"No exception object, context message: {msg}")
+            log("No exception object, context message: " + str(msg))
             return
 
         # Log the exception type and message
-        log(f"Exception type: {type(exc).__name__}")
-        log(f"Exception message: {exc}")
+        log("Exception type: " + str(type(exc).__name__))
+        log("Exception message: " + str(exc))
 
         # Extract traceback and log the last frame (where exception occurred)
         tb = exc.__traceback__
         if tb is not None:
-            # Get the last frame in traceback
+            # Walk to the last frame
             while tb.tb_next:
                 tb = tb.tb_next
             frame = tb.tb_frame
             lineno = tb.tb_lineno
             filename = frame.f_code.co_filename
             funcname = frame.f_code.co_name
-            log(f"Occurred in {filename}, function {funcname}, line {lineno}")
+            log("Occurred in " + filename + ", function " + funcname + ", line " + str(lineno))
 
-        # Optional: log full traceback
+        # Log full traceback
         log("Full traceback:")
         log("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
 
