@@ -74,5 +74,7 @@ async def node_stop(node):
         node.pp_executor.shutdown(wait=True)
         log("shutdown for pp executor done.")
 
+    log("stop node () ending")
+
     # Stop node server.
     await super(node.__class__, node).close()

@@ -788,8 +788,6 @@ async def get_pp_executors(workers=None):
     #return 0, None
     try:
         pp_executor = ProcessPoolExecutor(max_workers=workers)
-    except asyncio.CancelledError:
-        raise
     except Exception:
         """
         Not all platform have a working implementation of sem_open / semaphores.
@@ -797,6 +795,7 @@ async def get_pp_executors(workers=None):
         this semaphore feature is missing and will throw an error here.
         In this case -- log the error and revert to using a single event loop.
         """
+        log("Unable to set processpoolexecutor in pp_executors " + str(workers))
         log_exception()
     
     return workers, pp_executor
