@@ -335,9 +335,8 @@ class PipeEvents(BaseACKProto):
         # Route message to stream.
         self.route_msg(data, client_tup)
 
-    def error_received(self, exp):
-        log_exception()
-        raise exp
+    def error_received(self, e):
+        proto_error_received(e)
 
     # UDP packets.
     def datagram_received(self, data, client_tup):

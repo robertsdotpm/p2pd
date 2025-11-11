@@ -176,13 +176,15 @@ async def main():
             except asyncio.CancelledError:
                 # ignore cancellation during cleanup
                 pass
-            
+
             del nodes[:]
 
         log("end of stop nodes clause.")
 
 if __name__ == "__main__":
     #loop = asyncio.get_event_loop()
+
+    # explore the sigterm handling last.
     #loop.add_signal_handler(signal.SIGTERM, cancel_all_tasks)
     try:
         async_run(main())

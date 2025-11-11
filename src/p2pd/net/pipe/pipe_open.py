@@ -139,14 +139,20 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
 
                 # Connect the socket task.
                 con_task = asyncio.create_task(
-                    loop.sock_connect(
-                        sock, 
-                        dest.tup
-                    )
+                    safe_sock_connect(loop, sock, dest)
                 )
                 
                 # Wait for connection, async style.
-                await asyncio.wait_for(con_task, conf["con_timeout"])
+                try:
+                    is_con = await asyncio.wait_for(con_task, conf["con_timeout"])
+                    if not is_con:
+                        sock.close()
+                        sock = None
+                        return
+                except asyncio.TimeoutError:
+                    sock.close()
+                    sock = None
+                    raise asyncio.TimeoutError("TCP con timeout for pipe open.")
                     
         # Make sure bind port is set (and not zero.)
         route.bind_port = sock.getsockname()[1]
@@ -274,9 +280,11 @@ async def pipe_open(proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=
                 log(fstr("closing socket. {0}", (sock.getsockname(),)))
                 sock.close()
             
+            """
             if pipe_events is not None:
                 log("closing bas proto")
                 await pipe_events.close()
+            """
 
 async def pipe_utils_workspace():
     from .interface import Interface

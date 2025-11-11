@@ -45,3 +45,22 @@ p2pd.errors.AlreadyClosedError
 
 if you try close a received pipe accepted from a TCP server that was already closed by the other side then does close timeout or error?
 log if -1 is passed as an fd to the close_await func
+
+[utils.py:54] {'transport': <_SelectorSocketTransport fd=10 read=polling write=<idle, bufsize=0>>, 'message': 'Fatal read error on socket transport', 'exception': ConnectionResetError(104, 'Connection reset by peer'), 'protocol': <p2pd.net.pipe.pipe_events.PipeEvents object at 0x7f5fb05b4c10>}
+
+
+    ^ maybe worth catching that
+
+  File "/root/.pyenv/versions/3.5.10/lib/python3.5/asyncio/selector_events.py", line 456, in _sock_connect
+    sock.connect(address)
+ConnectionRefusedError: [Errno 61] Connection refused
+    another one
+
+pipe_open is really badly designed now because the old pattern made it clean up the
+sock it made if there was an error and return none. now it seems to disable
+the cleanup? how was this meant to work?
+
+maybe i should refactor it into a class like:
+    Pipe() -- the details to resolve it with pipe open
+    .open() just the start code --> throws exception on error, original handles saved
+    so that close works

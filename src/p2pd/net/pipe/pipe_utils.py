@@ -1,6 +1,13 @@
 import asyncio
 from ..net_utils import *
 
+def proto_error_received(e):
+    log_exception()
+    if e == ConnectionResetError:
+        return
+    
+    raise e
+
 def tup_to_sub(dest_tup):
     dest_tup = client_tup_norm(dest_tup)
     return (
