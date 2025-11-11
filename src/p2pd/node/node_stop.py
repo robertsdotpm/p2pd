@@ -1,6 +1,24 @@
 import asyncio
-from ..errors import *
+from ..errors import AlreadyClosedError
 from ..utility.utils import *
+
+async def close_helper(p):
+    try:
+        await p.close()
+    except AlreadyClosedError:
+        pass
+    except Exception as e:
+        log_exception()
+        log("Error closing " + str(p))
+
+async def close_with_timeout(p):
+    try:
+        await asyncio.wait_for(
+            close_helper(p), 
+            timeout=2
+        )
+    except asyncio.TimeoutError:
+        log("Timeout closing " + str(p) + " endpoint t = " + str(p.endpoint_type))
 
 # Shutdown the node server and do cleanup.
 async def node_stop(node):
@@ -38,18 +56,7 @@ async def node_stop(node):
                 else:
                     continue
 
-            async def _close(p):
-                try:
-                    await asyncio.wait_for(p.close(), timeout=2)
-                except AlreadyClosedError:
-                    pass
-                except asyncio.TimeoutError:
-                    log("Timeout closing " + str(p) + " endpoint t = " + str(p.endpoint_type))
-                except Exception as e:
-                    log_exception()
-                    log("Error closing " + str(p))
-
-            tasks.append(_close(pipe))
+            tasks.append(close_with_timeout(pipe))
 
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
