@@ -116,8 +116,37 @@ class CustomEventLoop(asyncio.SelectorEventLoop):
 class CustomEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
     @staticmethod
     def exception_handler(self, context):
-        log("exception handler in custom event loop")
-        log_exception()
+        """
+        Custom asyncio exception handler.
+        Logs exception type, message, and the line number where it occurred.
+        """
+        log("Exception handler in custom event loop")
+        exc = context.get("exception")
+        if exc is None:
+            # No exception object, log the message
+            msg = context.get("message", "Unknown exception")
+            log(f"No exception object, context message: {msg}")
+            return
+
+        # Log the exception type and message
+        log(f"Exception type: {type(exc).__name__}")
+        log(f"Exception message: {exc}")
+
+        # Extract traceback and log the last frame (where exception occurred)
+        tb = exc.__traceback__
+        if tb is not None:
+            # Get the last frame in traceback
+            while tb.tb_next:
+                tb = tb.tb_next
+            frame = tb.tb_frame
+            lineno = tb.tb_lineno
+            filename = frame.f_code.co_filename
+            funcname = frame.f_code.co_name
+            log(f"Occurred in {filename}, function {funcname}, line {lineno}")
+
+        # Optional: log full traceback
+        log("Full traceback:")
+        log("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
 
     @staticmethod
     def loop_setup(loop):
