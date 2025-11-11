@@ -290,7 +290,7 @@ async def pipe_utils_workspace():
     from .interface import Interface
 
     i = await Interface()
-    dest = ("google.com", 80)
+    dest = Address("google.com", 80)
     r = await i.route(IP4)
     p = await pipe_open(TCP, dest, r)
     print(p.sock)

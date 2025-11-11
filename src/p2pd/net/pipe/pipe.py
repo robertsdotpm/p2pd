@@ -28,6 +28,7 @@ from ..address import Address
 from ..ip_range import IPRange
 from ..address import *
 from ..asyncio.asyncio_patches import *
+from ..asyncio.async_run import *
 from .pipe_tcp_events import *
 from ..socket import *
 from .pipe_defs import *
@@ -44,7 +45,7 @@ class PipeError(Exception):
     pass
 
 class Pipe:
-    def __init__(self, proto, sock=None, route=None, dest=None, conf=None):
+    def __init__(self, proto, route=None, dest=None, sock=None, conf=NET_CONF):
         self.proto = proto
         self.sock = sock
         self.route = route
@@ -53,23 +54,31 @@ class Pipe:
         self.conf = conf or {}
         self.owns_socket = False
 
-    @classmethod
-    async def open(cls, proto, dest=None, route=None, sock=None, msg_cb=None, up_cb=None, conf=None):
-        """
-        Opens a pipe, fully async. Supports TCP/UDP/RUDP clients and servers.
-        Automatically resolves route and destination, creates socket, and sets up PipeEvents.
-        """
-        pipe = cls(proto, sock=sock, route=route, dest=dest, conf=conf)
+    async def open(self, msg_cb=None, up_cb=None):
         try:
-            await pipe.resolve_route_and_dest()
-            await pipe.create_or_use_socket()
-            await pipe.tcp_client_connect_if_needed()
-            await pipe.setup_pipe_events(msg_cb, up_cb)
-            return pipe
+            await self.resolve_route_and_dest()
+            await self.create_or_use_socket()
+            await self.tcp_client_connect_if_needed()
+            await self.setup_pipe_events(msg_cb, up_cb)
         except Exception:
-            # Ensures socket and resources are closed on error
-            await pipe.close()
+            await self.cleanup_on_error()
             raise
+
+        return self
+    
+    # Pretend to be a pipe_client.
+    def __getattr__(self, name):
+        """
+        Redirect attribute access to self.pipe_events if it exists.
+        Called only if the attribute doesn't exist on self.
+        """
+        if self.pipe_events is not None:
+            try:
+                return getattr(self.pipe_events, name)
+            except AttributeError:
+                pass
+
+        raise AttributeError("'Pipe' object has no attribute " + str(name))
 
     # -----------------------------
     # Async context manager support
@@ -93,6 +102,7 @@ class Pipe:
     async def get_loop(self):
         if self.conf.get("loop") is not None:
             return self.conf["loop"]()
+        
         return asyncio.get_event_loop()
 
     async def resolve_route_and_dest(self):
@@ -108,15 +118,20 @@ class Pipe:
         """
         if route is not None and getattr(route, "__name__", None) == "Interface":
             nic = route
-            # For legacy code that passes Interface, get its first route
-            route = nic.route()  # may need await if route() is async
 
+            # For legacy code that passes Interface.
+            route = nic.route()
+
+        # If no route is set -- load a default interface.
+        # This is slow and is used as a fallback.
         if route is None:
             from ...nic.interface import Interface
-            iface = await Interface()
-            route = await iface.route(af)
+            nic = await Interface()
+            route = await nic.route(af)
 
+        # Routes all need to be bound.
         if not getattr(route, "resolved", False):
+            log("Resolve route received unboundd     route.")
             await route.bind()
 
         return route
@@ -129,24 +144,28 @@ class Pipe:
         if dest is None:
             return None
 
+        # For IPv6: dest tuples still need an interface to work correctly.
         if isinstance(dest, (list, tuple)):
             ip, port = dest
 
             # Supports int for IP, converts using CIDR
             if isinstance(ip, int):
-                cidr = getattr(route, "af", None)
-                cidr = "WAN" if cidr is None else af_to_cidr(route.af)
+                af = getattr(route, "af", None)
+                cidr = CIDR_WAN if af is None else af_to_cidr(af)
                 ip = IPRange(ip, cidr=cidr)
 
             # Normalize IPRange
             if isinstance(ip, IPRange):
                 ip = ipr_norm(ip)
 
-            dest = Address(ip, port, conf=conf)
+            # Standard address class for resolving addresses.
+            dest = Address(ip, port, route.nic, conf=conf)
 
+        # Ensure address instances are resolved to IPs.
         if isinstance(dest, Address):
             if not getattr(dest, "resolved", False):
                 await dest.res(route)
+
             # Select compatible IP for route AF
             dest = dest.select_ip(route.af)
 
@@ -165,11 +184,17 @@ class Pipe:
                 sock_type=UDP if self.proto == RUDP else self.proto,
                 conf=self.conf
             )
+
+            # Failed to get a socket.
             if self.sock is None:
                 raise PipeError("Socket allocation failed")
-            p2pd_fds.add(self.sock)
-            # Preserve bind_port for legacy code
+            
+            # Routes can specify binding on port 0.
+            # Resolve the port that the route ended up on.
             self.route.bind_port = self.sock.getsockname()[1]
+            
+            # Record socket ownership state.
+            p2pd_fds.add(self.sock)
             self.owns_socket = True
 
     async def connect_socket(self, loop, sock, dest, timeout):
@@ -177,11 +202,12 @@ class Pipe:
         Async TCP client connect helper.
         Raises PipeError on failure or timeout.
         """
-        task = asyncio.ensure_future(safe_sock_connect(loop, sock, dest))
+        task = safe_sock_connect(loop, sock, dest.tup)
         try:
             is_connected = await asyncio.wait_for(task, timeout)
             if not is_connected:
                 raise PipeError("Socket connection failed")
+            
             return True
         except asyncio.TimeoutError:
             task.cancel()
@@ -193,9 +219,9 @@ class Pipe:
         Sets non-blocking mode.
         """
         if self.proto == TCP and self.dest is not None:
+            loop = await self.get_loop()
             self.sock.settimeout(0)
             self.sock.setblocking(0)
-            loop = await self.get_loop()
             await self.connect_socket(
                 loop,
                 self.sock,
@@ -211,19 +237,43 @@ class Pipe:
         if self.conf.get("sock_only"):
             return
 
+        """
+        PipeEvents implements the same methods as asyncios Protocol classes
+        but it also allows for send/recv and a few other methods.
+        So code can be written in different styles.
+        """
         loop = await self.get_loop()
-        self.pipe_events = PipeEvents(sock=self.sock, route=self.route, loop=loop, conf=self.conf)
-        self.pipe_events.proto = self.proto
+        self.pipe_events = PipeEvents(
+            sock=self.sock, 
+            route=self.route, 
+            loop=loop, 
+            conf=self.conf
+        )
 
+        # Manually set some attributes in pipe events not in constructor.
+        self.pipe_events.proto = self.proto
         if msg_cb:
             self.pipe_events.add_msg_cb(msg_cb)
 
         # UDP / RUDP setup
         if self.proto in (UDP, RUDP):
-            transport, _ = await create_datagram_endpoint(loop, lambda: self.pipe_events, sock=self.sock)
+            transport, _ = await create_datagram_endpoint(
+                loop, 
+                lambda: self.pipe_events, 
+                sock=self.sock
+            )
+
+            # TODO: timeout, none?
+
+            # Wait for datagram transport to be ready.
             await self.pipe_events.stream_ready.wait()
+
+            # Record type of transport in pipe events.
             self.pipe_events.stream.set_handle(transport, client_tup=None)
-            self.pipe_events.set_endpoint_type(TYPE_UDP_CON if self.dest else TYPE_UDP_SERVER)
+            if self.dest is not None:
+                self.pipe_events.set_endpoint_type(TYPE_UDP_CON)
+            else:
+                self.pipe_events.set_endpoint_type(TYPE_UDP_SERVER)
 
         # RUDP ack handlers
         if self.proto == RUDP:
@@ -234,23 +284,42 @@ class Pipe:
 
         # TCP setup
         if self.proto == TCP:
+            # Add new connection handler.
             if up_cb:
                 self.pipe_events.add_up_cb(up_cb)
 
             if self.dest is None:
-                # TCP server
-                server = await create_tcp_server(sock=self.sock, pipe_events=self.pipe_events, loop=loop, conf=self.conf)
+                # Start router for TCP messages.
+                server = await create_tcp_server(
+                    sock=self.sock,
+                    pipe_events=self.pipe_events,
+                    loop=loop,
+                    conf=self.conf
+                )
+
+                # Check transport started successfully.
                 if server is None:
                     raise PipeError("Failed to create TCP server")
+                
+                # Save transport returned from create server.
                 self.pipe_events.set_tcp_server(server)
+
+                # Saving the task is apparently needed
+                # or the garbage collector could close it.
                 if hasattr(server, "serve_forever"):
-                    # Keep server task alive to prevent garbage collection
-                    task = asyncio.ensure_future(async_wrap_errors(server.serve_forever()))
-                    self.pipe_events.set_tcp_server_task(task)
+                    self.pipe_events.set_tcp_server_task(
+                        asyncio.ensure_future(
+                            async_wrap_errors(server.serve_forever())
+                        )
+                    )
+
+                # Store type of endpoint in pipe events.
                 self.pipe_events.set_endpoint_type(TYPE_TCP_SERVER)
             else:
                 # TCP client
                 if self.conf.get("use_ssl"):
+                    #ssl_context.set_ciphers('DEFAULT@SECLEVEL=1')
+                    #ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
                     ctx = ssl.create_default_context()
                     ctx.check_hostname = False
                     ctx.verify_mode = ssl.CERT_NONE
@@ -259,9 +328,23 @@ class Pipe:
                     ctx = None
                     server_hostname = None
 
-                await loop.create_connection(lambda: self.pipe_events, sock=self.sock, ssl=ctx, server_hostname=server_hostname)
+                # Create TCP SSL connection.
+                await loop.create_connection(
+                    lambda: self.pipe_events, 
+                    sock=self.sock, 
+                    ssl=ctx, 
+                    server_hostname=server_hostname
+                )
+
+                # Wait for the con and set handles.
+                # TODO: timeout none?
                 await self.pipe_events.stream_ready.wait()
-                self.pipe_events.stream.set_handle(self.pipe_events.transport, self.dest.tup)
+                self.pipe_events.stream.set_handle(
+                    self.pipe_events.transport, 
+                    self.dest.tup
+                )
+
+                # Indicate endpoint is for a TCP con.
                 self.pipe_events.set_endpoint_type(TYPE_TCP_CON)
 
         # Set dest and subscribe if no msg_cb
@@ -271,7 +354,7 @@ class Pipe:
             if not msg_cb:
                 self.pipe_events.subscribe(SUB_ALL)
 
-    async def close(self):
+    async def cleanup_on_error(self):
         """
         Closes socket if owned. Removes it from p2pd_fds.
         """
@@ -280,5 +363,27 @@ class Pipe:
                 self.sock.close()
             except Exception:
                 log_exception()
+
+            # Tracking all socks for debugging for now.
             if self.sock in p2pd_fds:
                 p2pd_fds.discard(self.sock)
+
+if __name__ == "__main__":
+    async def workspace():
+        from ...nic.interface import Interface
+        nic = await Interface()
+        print(nic)
+
+        route = nic.route(IP4)
+        dest = await Address("example.com", 80, nic)
+        pipe = Pipe(TCP, route, dest)
+        try:
+            await pipe.open()
+            await pipe.send(b"HTTP 1.1\r\nGET /\r\n\r\n")
+            resp = await pipe.recv()
+            print(resp)
+        finally:
+            await pipe.close()
+        
+
+    async_run(workspace())
