@@ -183,10 +183,13 @@ async def create_tcp_server(sock, pipe_events, *, loop=None, conf=NET_CONF, **kw
         )
 
     # Call the regular create server func with custom protocol factory.
-    server = await loop.create_server(
-        factory,
-        sock=sock,
-        **kwds
+    server = await asyncio.wait_for(
+        loop.create_server(
+            factory,
+            sock=sock,
+            **kwds
+        ),
+        timeout=5
     )
 
     return server

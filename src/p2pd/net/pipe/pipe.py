@@ -61,7 +61,7 @@ class Pipe:
             await self.tcp_client_connect_if_needed()
             await self.setup_pipe_events(msg_cb, up_cb)
         except Exception:
-            await self.cleanup_on_error()
+            self.cleanup_on_error()
             raise
 
         return self
@@ -197,22 +197,6 @@ class Pipe:
             p2pd_fds.add(self.sock)
             self.owns_socket = True
 
-    async def connect_socket(self, loop, sock, dest, timeout):
-        """
-        Async TCP client connect helper.
-        Raises PipeError on failure or timeout.
-        """
-        task = safe_sock_connect(loop, sock, dest.tup)
-        try:
-            is_connected = await asyncio.wait_for(task, timeout)
-            if not is_connected:
-                raise PipeError("Socket connection failed")
-            
-            return True
-        except asyncio.TimeoutError:
-            task.cancel()
-            raise PipeError("TCP connection timeout")
-
     async def tcp_client_connect_if_needed(self):
         """
         Connects TCP socket to remote dest if this is a TCP client.
@@ -222,11 +206,13 @@ class Pipe:
             loop = await self.get_loop()
             self.sock.settimeout(0)
             self.sock.setblocking(0)
-            await self.connect_socket(
-                loop,
-                self.sock,
-                self.dest,
-                self.conf.get("con_timeout", 10)
+            await asyncio.wait_for(
+                safe_sock_connect(
+                    loop,
+                    self.sock,
+                    self.dest.tup
+                ),
+                timeout=self.conf.get("con_timeout", 10)
             )
 
     async def setup_pipe_events(self, msg_cb=None, up_cb=None):
@@ -257,16 +243,22 @@ class Pipe:
 
         # UDP / RUDP setup
         if self.proto in (UDP, RUDP):
+            # Create a new protocol-based datagram transport.
             transport, _ = await create_datagram_endpoint(
                 loop, 
                 lambda: self.pipe_events, 
                 sock=self.sock
             )
 
-            # TODO: timeout, none?
+            # Likely never triggered as excceptions are raised instead.
+            if transport is None:
+                raise PipeError("Failed to create datagram endpoint")
 
             # Wait for datagram transport to be ready.
-            await self.pipe_events.stream_ready.wait()
+            await asyncio.wait_for(
+                self.pipe_events.stream_ready.wait(), 
+                timeout=2
+            )
 
             # Record type of transport in pipe events.
             self.pipe_events.stream.set_handle(transport, client_tup=None)
@@ -324,11 +316,13 @@ class Pipe:
                     ctx.check_hostname = False
                     ctx.verify_mode = ssl.CERT_NONE
                     server_hostname = ""
+                    wrap_overhead = 5
                 else:
                     ctx = None
                     server_hostname = None
+                    wrap_overhead = 2
 
-                # Create TCP SSL connection.
+                # Wrap an already connected TCP socket.
                 await loop.create_connection(
                     lambda: self.pipe_events, 
                     sock=self.sock, 
@@ -336,9 +330,13 @@ class Pipe:
                     server_hostname=server_hostname
                 )
 
-                # Wait for the con and set handles.
-                # TODO: timeout none?
-                await self.pipe_events.stream_ready.wait()
+                # Wait for the con to connect.
+                await asyncio.wait_for(
+                    self.pipe_events.stream_ready.wait(), 
+                    timeout=wrap_overhead
+                )
+
+                # Set the con handles.
                 self.pipe_events.stream.set_handle(
                     self.pipe_events.transport, 
                     self.dest.tup
@@ -354,9 +352,10 @@ class Pipe:
             if not msg_cb:
                 self.pipe_events.subscribe(SUB_ALL)
 
-    async def cleanup_on_error(self):
+    def cleanup_on_error(self):
         """
         Closes socket if owned. Removes it from p2pd_fds.
+        Resets self.sock and self.owns_socket to prevent reuse.
         """
         if self.owns_socket and self.sock:
             try:
@@ -364,9 +363,12 @@ class Pipe:
             except Exception:
                 log_exception()
 
-            # Tracking all socks for debugging for now.
             if self.sock in p2pd_fds:
                 p2pd_fds.discard(self.sock)
+
+        # Clear state
+        self.sock = None
+        self.owns_socket = False
 
 if __name__ == "__main__":
     async def workspace():
