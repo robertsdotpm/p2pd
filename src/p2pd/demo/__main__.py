@@ -171,7 +171,10 @@ async def main():
 
         # Stop all nodes
         if nodes:
-            await stop_nodes_option(nodes)
+            try:
+                await stop_nodes_option(nodes)
+            except asyncio.CancelledError:
+                # ignore cancellation during cleanup
             del nodes[:]
 
         log("end of stop nodes clause.")
