@@ -107,6 +107,8 @@ async def close_idle_pipes(node):
                 await asyncio.wait_for(pipe.close(), timeout=2)
             except asyncio.TimeoutError:
                 log("close idle pipe close timeout")
+            except AlreadyClosedError:
+                pass
             except Exception:
                 log_exception()
                 log("unknown exception for close pipe in close_idle_pipes.")

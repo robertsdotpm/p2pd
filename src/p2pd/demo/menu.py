@@ -42,7 +42,10 @@ async def connect_option(node, con_opts):
         return await echo_client(pipe, echo_data)
     finally:
         if pipe:
-            await pipe.close()
+            try:
+                await pipe.close()
+            except AlreadyClosedError:
+                pass
 
     # Return to menu for unexpected code paths.
     return "menu"

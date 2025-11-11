@@ -2,21 +2,6 @@ import asyncio
 from ..do_imports import *
 from .cmd_arg_defs import *
 
-def cancel_all_tasks():
-    loop = asyncio.get_event_loop()
-
-    # Pre-3.7 compatibility
-    if hasattr(asyncio, "all_tasks"):
-        tasks = [t for t in asyncio.all_tasks(loop) if not t.done()]
-    else:
-        tasks = [t for t in asyncio.Task.all_tasks(loop) if not t.done()]
-
-    for t in tasks:
-        t.cancel()
-
-    if tasks:
-        return asyncio.gather(*tasks, return_exceptions=True)
-
 async def ainput(prompt):
     try:
         import aioconsole
@@ -43,9 +28,6 @@ async def add_echo_support(msg, client_tup, pipe):
         if b"CLEAN_SHUTDOWN" in msg:
             log("reached clean shutdown in add echo")
             raise KeyboardInterrupt()
-            return
-            loop = asyncio.get_event_loop()
-            asyncio.ensure_future(cancel_all_tasks(), loop=loop)
 
 def patch_log_p2p(m, node_id=""):
     out = fstr("p2p: <{0}> ", (node_id,)) + to_s(m)

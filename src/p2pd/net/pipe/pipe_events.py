@@ -365,6 +365,7 @@ class PipeEvents(BaseACKProto):
             log_exception()
 
     async def close(self):
+        log("close called on " + str(self))
         if not self.is_running:
             raise AlreadyClosedError()
 

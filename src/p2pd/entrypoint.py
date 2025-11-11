@@ -52,7 +52,7 @@ async def p2pd_setup_netifaces():
         # Setup event loop.
         loop = asyncio.get_event_loop()
         loop.set_debug(False)
-        loop.set_exception_handler(SelectorEventPolicy.exception_handler)
+        loop.set_exception_handler(CustomEventLoopPolicy.exception_handler)
         
         def fatal_error(self, exc, message='Fatal error on transport'):
             er = {
@@ -126,24 +126,6 @@ async def p2pd_setup_netifaces():
 
         _cached_netifaces = netifaces
         return netifaces
-
-class SelectorEventPolicy(asyncio.DefaultEventLoopPolicy):
-    @staticmethod
-    def exception_handler(self, context):
-        log("exception handler")
-        log(context)
-
-    @staticmethod
-    def loop_setup(loop):
-        loop.set_debug(False)
-        loop.set_exception_handler(SelectorEventPolicy.exception_handler)
-        loop.default_exception_handler = SelectorEventPolicy.exception_handler
-
-    def new_event_loop(self):
-        selector = selectors.SelectSelector()
-        loop = asyncio.SelectorEventLoop(selector)
-        SelectorEventPolicy.loop_setup(loop)
-        return loop
     
 def init_process_pool():
     # Make selector default event loop.

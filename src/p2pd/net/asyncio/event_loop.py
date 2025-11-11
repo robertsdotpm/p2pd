@@ -116,8 +116,8 @@ class CustomEventLoop(asyncio.SelectorEventLoop):
 class CustomEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
     @staticmethod
     def exception_handler(self, context):
-        log("exception handler")
-        log(context)
+        log("exception handler in custom event loop")
+        log_exception()
 
     @staticmethod
     def loop_setup(loop):
