@@ -45,21 +45,34 @@ class PipeError(Exception):
     pass
 
 class Pipe:
-    def __init__(self, proto, route=None, dest=None, sock=None, conf=NET_CONF):
+    def __init__(self, proto, dest=None, route=None, sock=None, conf=NET_CONF):
         self.proto = proto
         self.sock = sock
         self.route = route
         self.dest = dest
         self.pipe_events = None
         self.conf = conf or {}
-        self.owns_socket = False
+        self.owns_socket = sock is None
+        if sock is not None:
+            log("Warning: externally provided socket will not be closed by Pipe")
+
+        self._opened = False
+        self._closed = False
 
     async def open(self, msg_cb=None, up_cb=None):
+        """
+        Opens the pipe, resolves route/dest, creates socket and PipeEvents.
+        Safe to call multiple times.
+        """
+        if self._opened:
+            return self
+
         try:
             await self.resolve_route_and_dest()
             await self.create_or_use_socket()
             await self.tcp_client_connect_if_needed()
             await self.setup_pipe_events(msg_cb, up_cb)
+            self._opened = True
         except Exception:
             self.cleanup_on_error()
             raise
@@ -83,18 +96,38 @@ class Pipe:
     # -----------------------------
     # Async context manager support
     # -----------------------------
-    def __await__(self):
-        return self._enter().__await__()
-
-    async def _enter(self):
-        return self
-
     async def __aenter__(self):
+        # Simply return self; open() must be awaited before using async with
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
-        # Cleanup pipe automatically on exit
         await self.close()
+
+    # -----------------------------
+    # Wrapper to allow 'async with Pipe(...).session()'
+    # -----------------------------
+    def session(self, msg_cb=None, up_cb=None):
+        """
+        Returns an awaitable object that opens the pipe and supports async with.
+        """
+        pipe = self
+
+        class _PipeAwaitableContext:
+            def __init__(self):
+                self._pipe = pipe
+
+            def __await__(self):
+                return pipe.open(msg_cb, up_cb).__await__()
+
+            async def __aenter__(self):
+                # Ensure pipe is fully opened
+                await pipe.open(msg_cb, up_cb)
+                return pipe
+
+            async def __aexit__(self, exc_type, exc, tb):
+                await pipe.close()
+
+        return _PipeAwaitableContext()
 
     # -----------------------------
     # Public helper methods
@@ -102,7 +135,6 @@ class Pipe:
     async def get_loop(self):
         if self.conf.get("loop") is not None:
             return self.conf["loop"]()
-        
         return asyncio.get_event_loop()
 
     async def resolve_route_and_dest(self):
@@ -131,7 +163,7 @@ class Pipe:
 
         # Routes all need to be bound.
         if not getattr(route, "resolved", False):
-            log("Resolve route received unboundd     route.")
+            log("Resolve route received unbound route.")
             await route.bind()
 
         return route
@@ -224,7 +256,7 @@ class Pipe:
             return
 
         """
-        PipeEvents implements the same methods as asyncios Protocol classes
+        PipeEvents implements the same methods as asyncio Protocol classes
         but it also allows for send/recv and a few other methods.
         So code can be written in different styles.
         """
@@ -250,14 +282,14 @@ class Pipe:
                 sock=self.sock
             )
 
-            # Likely never triggered as excceptions are raised instead.
+            # Likely never triggered as exceptions are raised instead.
             if transport is None:
                 raise PipeError("Failed to create datagram endpoint")
 
             # Wait for datagram transport to be ready.
             await asyncio.wait_for(
                 self.pipe_events.stream_ready.wait(), 
-                timeout=2
+                timeout=self.conf.get("con_timeout", 2)
             )
 
             # Record type of transport in pipe events.
@@ -310,8 +342,6 @@ class Pipe:
             else:
                 # TCP client
                 if self.conf.get("use_ssl"):
-                    #ssl_context.set_ciphers('DEFAULT@SECLEVEL=1')
-                    #ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
                     ctx = ssl.create_default_context()
                     ctx.check_hostname = False
                     ctx.verify_mode = ssl.CERT_NONE
@@ -356,19 +386,24 @@ class Pipe:
         """
         Closes socket if owned. Removes it from p2pd_fds.
         Resets self.sock and self.owns_socket to prevent reuse.
+        Idempotent.
         """
+        if getattr(self, "_closed", False):
+            return
+
         if self.owns_socket and self.sock:
             try:
                 self.sock.close()
             except Exception:
                 log_exception()
-
             if self.sock in p2pd_fds:
                 p2pd_fds.discard(self.sock)
 
         # Clear state
         self.sock = None
         self.owns_socket = False
+        self._closed = True
+
 
 if __name__ == "__main__":
     async def workspace():
@@ -378,6 +413,8 @@ if __name__ == "__main__":
 
         route = nic.route(IP4)
         dest = await Address("example.com", 80, nic)
+
+        """
         pipe = Pipe(TCP, route, dest)
         try:
             await pipe.open()
@@ -386,6 +423,13 @@ if __name__ == "__main__":
             print(resp)
         finally:
             await pipe.close()
+        """
+
+        async with Pipe(TCP, dest, route).session() as pipe:
+            await pipe.open()
+            await pipe.send(b"HTTP 1.1\r\nGET /\r\n\r\n")
+            resp = await pipe.recv()
+            print(resp)
         
 
     async_run(workspace())

@@ -27,6 +27,7 @@ import time
 from ...settings import *
 from ...net.ip_range import *
 from ...protocol.stun.stun_client import *
+from ...net.pipe.pipe import *
 from .nat_utils import *
 
 # Constants for a NAT test.
@@ -256,7 +257,7 @@ async def nic_load_nat(nic, nat_tests=5, delta_tests=12, servs=None, timeout=4):
     # Pipe is used for NAT tests using multiplexing.
     # Same socket, different dests, TXID ordered.
     route = await nic.route(af).bind()
-    pipe = await pipe_open(UDP, route=route)
+    pipe = await Pipe(UDP, route=route).open()
 
     # Run delta test.
     nat_type, delta = await asyncio.gather(*[
@@ -282,8 +283,7 @@ async def nic_load_nat(nic, nat_tests=5, delta_tests=12, servs=None, timeout=4):
     ])
 
     # Cleanup NAT test pipe.
-    if pipe is not None:
-        await pipe.close()
+    await pipe.close()
 
     # Sanity check nat / delta details.
     if None in [nat_type, delta]:
@@ -306,7 +306,7 @@ async def nat_test_main():
     
     af = IP4
     route = await i.route(af).bind(0)
-    pipe = await pipe_open(UDP, route=route)
+    pipe = await Pipe(UDP, route=route).open()
     assert(pipe is not None)
     s = STUNClient(
         ("stun1.p2pd.net", 3478)
