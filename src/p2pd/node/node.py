@@ -65,6 +65,7 @@ class Node(Daemon):
         # Set on start.
         self.addr_bytes = None
         self.addr_futures = {}
+        self.stop_node = asyncio.Event()
 
     def add_msg_cb(self, msg_cb):
         self.msg_cbs.append(msg_cb)
@@ -111,6 +112,7 @@ class Node(Daemon):
         return self
     
     async def close(self):
+        self.stop_node.set()
         await node_stop(self)
     
     def __await__(self):

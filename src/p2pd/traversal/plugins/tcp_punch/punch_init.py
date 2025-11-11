@@ -28,6 +28,9 @@ async def schedule_punching_with_delay(node, pipe_id, n=2):
 
 async def punch_queue_worker(node, puncher_cls):
     try:
+        if node.stop_node.is_set():
+            return
+
         params = await node.punch_queue.get()
         if params is None:
             return

@@ -59,46 +59,60 @@ async def close_idle_pipes(node):
     As the number of free processes in the process pool
     decreases and the pool approaches full the need to
     check for idle connections to free up processes becomes
-    more urgent. The math bellow allocates an interval to use
+    more urgent. The math below allocates an interval to use
     for the idle count down based on urgency (remaining
-    processes) in reference to a min and max idle interval.)
+    processes) in reference to a min and max idle interval.
     """
+    if node.max_punchers <= 0:
+        return
+
     floor_check = 300
     ceil_check = 7200
-    alloc_pcent = node.active_punchers / node.max_punchers
-    num_space = ceil_check - floor_check
-    rel_placement = num_space * alloc_pcent
-    abs_placement = ceil_check - rel_placement
-    cur_time = time.time()
-    while 1:
-        # Check the list of oldest monitored pipes to least.
+    while not node.stop_node.is_set():
+        # Recalculate abs_placement dynamically
+        alloc_pcent = node.active_punchers / node.max_punchers
+        num_space = ceil_check - floor_check
+        abs_placement = ceil_check - (num_space * alloc_pcent)
+
         close_list = []
+        cur_time = time.time()
+        next_sleep = 5  # default max sleep
+
+        # Sort recv queue oldest → newest
+        node.last_recv_queue.sort(
+            key=lambda pipe: node.last_recv_table.get(pipe.sock, 0)
+        )
+
+        # Loop over the queue
         for pipe in node.last_recv_queue:
-            # Get last recv time.
-            last_recv = node.last_recv_table[pipe.sock]
-            elapsed = cur_time - last_recv
+            last_recv = node.last_recv_table.get(pipe.sock)
+            if last_recv is None:
+                continue
 
-            # No time passed.
-            if elapsed <= 0:
-                break
-            
-            # Sorted by time so >= this aren't expired.
-            if elapsed < abs_placement:
-                break
-
-            # Record pipe to close.
+            elapsed = max(0, cur_time - last_recv)
             if elapsed >= abs_placement:
                 close_list.append(pipe)
+            else:
+                # Compute time until this pipe reaches abs_placement
+                time_until_expire = abs_placement - elapsed
+                next_sleep = min(next_sleep, time_until_expire)
+                # Queue is sorted, so no need to check further
+                break
 
-        # Don't change the prev list we're iterating.
-        # Close these idle connections.
+        # Close idle pipes
         for pipe in close_list:
             node.last_recv_queue.remove(pipe)
-            del node.last_recv_table[pipe.sock]
-            await pipe.close()
+            node.last_recv_table.pop(pipe.sock, None)
+            try:
+                await asyncio.wait_for(pipe.close(), timeout=2)
+            except asyncio.TimeoutError:
+                log("close idle pipe close timeout")
+            except Exception:
+                log_exception()
+                log("unknown exception for close pipe in close_idle_pipes.")
 
-        # Don't tie up event loop
-        await asyncio.sleep(5)
+        # Sleep until the next pipe is due, capped at 5 seconds
+        await asyncio.sleep(min(next_sleep, 5))
 
 async def load_stun_clients(node, limit=USE_MAP_NO):
     # Already loaded.
