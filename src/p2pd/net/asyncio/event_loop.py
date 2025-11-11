@@ -109,6 +109,12 @@ class CustomEventLoop(asyncio.SelectorEventLoop):
     # Add your public API method back (using the global map from the proxy)
     def await_fd_close(self, sock: socket) -> asyncio.Future:
         fd = sock.fileno()
+        if fd == -1:
+            log("-1 passed to await_fd_close()!")
+            f = self.create_future()
+            f.set_result(True)
+            return f
+
         if fd not in _CLOSE_FUTURES:
             _CLOSE_FUTURES[fd] = self.create_future()
             
