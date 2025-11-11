@@ -44,7 +44,7 @@ async def node_stop(node):
                 except AlreadyClosedError:
                     pass
                 except asyncio.TimeoutError:
-                    log("Timeout closing " + str(p))
+                    log("Timeout closing " + str(p) + " endpoint t = " + str(p.endpoint_type))
                 except Exception as e:
                     log_exception()
                     log("Error closing " + str(p))

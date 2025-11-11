@@ -33,3 +33,15 @@ punch double close found:
   File "/home/x/projects/p2pd/src/p2pd/net/pipe/pipe_events.py", line 374, in close
     raise AlreadyClosedError()
 p2pd.errors.AlreadyClosedError
+
+
+[utils.py:54] Signal pipe disconnected.
+[utils.py:54] Timeout closing <p2pd.net.pipe.pipe_events.PipeEvents object at 0x7fe09c26a950>
+[utils.py:54] end of stop nodes clause.
+[utils.py:54] exception handler
+[utils.py:54] {'task': <Task finished coro=<close_idle_pipes() done, defined at /home/x/p2pd_dev/p2pd/src/p2pd/node/node_utils.py:57> exception=ZeroDivisionError('division by zero',)>, 'exception': ZeroDivisionError('division by zero',), 'message': 'unhandled exception during asyncio.run() shutdown'}
+[utils.py:54] main task done.
+
+
+if you try close a received pipe accepted from a TCP server that was already closed by the other side then does close timeout or error?
+log if -1 is passed as an fd to the close_await func
