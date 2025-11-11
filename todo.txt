@@ -64,3 +64,5 @@ maybe i should refactor it into a class like:
     Pipe() -- the details to resolve it with pipe open
     .open() just the start code --> throws exception on error, original handles saved
     so that close works
+
+    changed return PipeEvents(None) to return None in some funcs

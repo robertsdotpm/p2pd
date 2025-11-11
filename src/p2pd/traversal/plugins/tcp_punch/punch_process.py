@@ -110,12 +110,13 @@ async def setup_punching_process(client, puncher_class):
     # Listen server that process will connect back to.
     # References are saved to avoid garbage collection.
     route = await client.interface.route(client.af).bind()
-    client.listen_pipe = await pipe_open(
-        TCP,
-        dest=None,
-        route=route,
-        msg_cb=client.node.msg_cb,
-    )
+    listen_pipe = Pipe(TCP, None, route)
+    try:
+        await listen_pipe.open(msg_cb=client.node.msg_cb)
+        client.listen_pipe = listen_pipe
+    except:
+        log("could not start listen server in setup punching process.")
+        raise
     
     # Might not be necessary since the get addr infos does this.
     """

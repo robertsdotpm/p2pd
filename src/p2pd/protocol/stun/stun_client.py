@@ -45,7 +45,7 @@ from ...errors import *
 from ...utility.utils import *
 from ...net.net_utils import *
 from ...net.address import Address
-from ...net.pipe.pipe_open import *
+from ...net.pipe.pipe import *
 from .stun_defs import *
 from .stun_utils import *
 from ...utility.pattern_factory import *
@@ -66,7 +66,7 @@ class STUNClient():
     # Boilerplate to get a pipe to the STUN server.
     async def _get_dest_pipe(self, unknown):
         # Already open pipe.
-        if isinstance(unknown, PipeEvents):
+        if isinstance(unknown, Pipe):
             return unknown
 
         # Open a new con to STUN server.
@@ -84,12 +84,8 @@ class STUNClient():
 
         # Otherwise use details to make a new pipe.
         self.dest = await resolv_dest(self.af, self.dest, self.interface)
-        return await pipe_open(
-            self.proto,
-            self.dest,
-            route,
-            conf=self.conf
-        )
+        pipe = await Pipe(self.proto, self.dest, route, conf=self.conf).open()
+        return pipe
     
     # Returns a STUN reply based on how client was setup.
     async def get_stun_reply(self, pipe=None, attrs=[]):

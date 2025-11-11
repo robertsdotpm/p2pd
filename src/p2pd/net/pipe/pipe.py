@@ -191,7 +191,7 @@ class Pipe:
                 ip = ipr_norm(ip)
 
             # Standard address class for resolving addresses.
-            dest = Address(ip, port, route.nic, conf=conf)
+            dest = Address(ip, port, route.interface, conf=conf)
 
         # Ensure address instances are resolved to IPs.
         if isinstance(dest, Address):

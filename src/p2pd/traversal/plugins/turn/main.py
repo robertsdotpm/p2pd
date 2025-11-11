@@ -1,5 +1,5 @@
 from ....net.net_utils import *
-from ....net.pipe.pipe_open import PipeEvents
+from ....net.pipe.pipe import PipeEvents
 from ....settings import *
 from ....utility.utils import *
 from ...signaling.signal_msgs import TURNMsg
@@ -44,7 +44,7 @@ async def udp_turn_relay(self, af, pipe_id, src_info, dest_info, iface, addr_typ
 
         # Protocol end.
         if already_accepted:
-            return PipeEvents(None)
+            return None
         else:
             # Log white listing action.
             our_relay = await client.relay_tup_future

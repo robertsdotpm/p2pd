@@ -18,7 +18,7 @@ if __name__ != '__main__':
     from .nic.route.route import Route
     from .nic.route.route_pool import RoutePool
     from .nic.route.route_load import discover_nic_wan_ips
-    from .net.pipe.pipe_open import *
+    from .net.pipe.pipe import *
     from .nic.interface import Interface, p2pd_setup_event_loop
     from .nic.select_interface import *
     from .utility.clock_skew import SysClock

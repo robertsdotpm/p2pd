@@ -2,7 +2,7 @@ import asyncio
 from ....utility.utils import *
 from ....net.net_utils import *
 from ....net.address import Address
-from ....net.pipe.pipe_open import pipe_open
+from ....net.pipe.pipe import *
 from ....node.node_defs import *
 
 async def direct_connect(tunnel, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
@@ -27,19 +27,12 @@ async def direct_connect(tunnel, af, pipe_id, src_info, dest_info, iface, addr_t
             route = await iface.route(af).bind()
 
     # Connect to destination.
-    pipe = await pipe_open(
-        route=route,
-        proto=TCP,
-        dest=dest,
-        msg_cb=tunnel.node.msg_cb
-    )
-
-    if pipe is None:
+    pipe = Pipe(TCP, dest, route)
+    try:
+        await pipe.open(msg_cb=tunnel.node.msg_cb)
+    except:
         return
     
-    if pipe.sock is None:
-        return
-
     await pipe.send(CON_ID_MSG + to_b(fstr(" {0}\n", (pipe_id,))))
     tunnel.node.pipe_ready(pipe_id, pipe)
     return pipe

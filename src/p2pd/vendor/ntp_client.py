@@ -33,7 +33,7 @@ import struct
 import time
 import asyncio
 from ..net.address import *
-from ..net.pipe.pipe_open import *
+from ..net.pipe.pipe import *
 
 class NTPException(Exception):
     """Exception raised by this module."""
@@ -294,7 +294,7 @@ class NTPClient:
         route = await self.interface.route(self.af).bind()
 
         # create the socket
-        pipe = await pipe_open(UDP, dest, route)
+        pipe = await Pipe(UDP, dest, route).open()
         pipe.subscribe()
         try:
             # create the request packet - mode 3 is client

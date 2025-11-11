@@ -1,5 +1,5 @@
 import asyncio
-from ..net.pipe.pipe_open import PipeEvents
+from ..net.pipe.pipe import PipeEvents
 from ..node.node_addr import *
 from .plugins.tcp_punch.punch_client import *
 from ..protocol.turn.turn_client import TURNClient
@@ -98,7 +98,7 @@ class Tunnel():
             )
 
             # Check return value.
-            if not isinstance(pipe, PipeEvents):
+            if not isinstance(pipe, Pipe):
                 continue
 
             # Indicate success result (long.)

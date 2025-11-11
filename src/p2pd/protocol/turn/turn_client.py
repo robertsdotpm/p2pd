@@ -31,7 +31,7 @@ from ...nic.interface import *
 from .turn_process import *
 from ...protocol.stun.stun_defs import *
 from .turn_defs import *
-from ...net.pipe.pipe_open import *
+from ...net.pipe.pipe import *
 
 # Main class for handling TURN sessions with a server.
 class TURNClient(PipeEvents):
@@ -146,16 +146,13 @@ class TURNClient(PipeEvents):
         # Connect to TURN server over UDP.
         self.dest = await resolv_dest(self.af, self.dest, self.nic)
         self.route = await self.nic.route(self.af).bind()
-        self.turn_pipe = await pipe_open(
-            route=self.route,
-            proto=UDP,
-            dest=self.dest
-        )
-        log(fstr("> Turn socket = {0}", (self.turn_pipe.sock,)))
-
-        # If con was unncessessful raise exception.
-        if self.turn_pipe is None:
+        try:
+            self.turn_pipe = await Pipe(UDP, self.dest, self.route).open()
+        except:
             raise Exception("Unable to connect to TURN host. This may mean the server is no longer working. Normally TURN is not a public service.")
+        
+
+        log(fstr("> Turn socket = {0}", (self.turn_pipe.sock,)))
 
         # Subscribe to all messages.
         self.turn_pipe.subscribe(SUB_ALL)

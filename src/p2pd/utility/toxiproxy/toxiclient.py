@@ -218,11 +218,11 @@ class ToxiTunnel():
             raise Exception(fstr("addr res tunnel client {0}", (self.port,)))
         
         # Connect to the listen server for this tunnel.
-        pipe = await pipe_open(TCP, dest, route, conf=conf)
-        if pipe is None:
-            raise Exception("Cant get tunnel pipe.")
-        else:
+        try:
+            pipe = await Pipe(TCP, dest, route, conf=conf).open()
             return pipe, dest
+        except:
+            raise Exception("Cant get tunnel pipe.")
     
     async def get_curl(self):
         # Build new route.

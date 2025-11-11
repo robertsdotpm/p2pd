@@ -19,7 +19,7 @@ from ..net.asyncio.event_loop import *
 
 # Loads interface info on Windows.
 # Make it available for all tests.
-from ..net.pipe.pipe_open import *
+from ..net.pipe.pipe import *
 from ..protocol.stun.stun_client import *
 from ..install import *
 

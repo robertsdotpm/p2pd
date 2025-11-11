@@ -88,24 +88,14 @@ async def start_punching(af, dest_addr, send_mappings, recv_mappings, current_nt
         # Punched hole to the remote node.
         route = await interface.route(af).bind(sock.getsockname()[1])
         upstream_dest = sock.getpeername()[:2]
-        upstream_pipe = await pipe_open(
-            route=route,
-            proto=TCP,
-            dest=upstream_dest,
-            sock=sock,
-            msg_cb=punch_close_msg
-        )
+        upstream_pipe = Pipe(TCP, upstream_dest, route, sock=sock)
+        await upstream_pipe.open(msg_cb=punch_close_msg)
 
         # Reverse connect to a listen server in parent process.
         # This avoids sharing between processes which breaks easily.
         route = await interface.route(af).bind()
-        client_pipe = await pipe_open(
-            proto=TCP,
-            dest=reverse_tup,
-            route=route,
-            msg_cb=punch_close_msg
-        )
-
+        client_pipe = Pipe(TCP, reverse_tup, route)
+        await client_pipe.open(msg_cb=punch_close_msg)
         
         async def forward_to_client_pipe(msg, client_tup, pipe):
             await client_pipe.send(msg, client_pipe.sock.getpeername())

@@ -1,6 +1,6 @@
 from ....utility.utils import *
 from ....net.net_utils import *
-from ....net.pipe.pipe_open import PipeEvents
+from ....net.pipe.pipe import PipeEvents
 from ....nic.nat.nat_predict import *
 from ...signaling.signal_msgs import TCPPunchMsg
 from .punch_init import *
@@ -67,7 +67,7 @@ async def tcp_hole_punch(tunnel, af, pipe_id, src_info, dest_info, nic, addr_typ
     
     # Protocol done -- return nothing.
     if ret == 1:
-        return PipeEvents(None)
+        return None
 
     # Increase active punchers.
     tunnel.node.active_punchers = min(
