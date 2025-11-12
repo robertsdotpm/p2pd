@@ -79,6 +79,10 @@ class Pipe:
 
         return self
     
+    async def accept(self):
+        if self.pipe_events is not None:
+            return await self.pipe_events.make_awaitable()
+    
     # Pretend to be a pipe_client.
     def __getattr__(self, name):
         """

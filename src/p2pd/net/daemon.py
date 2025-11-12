@@ -48,6 +48,7 @@ async def is_serv_listening(proto, listen_route):
         listen_ip = "localhost"
 
     # Try make pipe to the server socket.
+    assert(dest is not None)
     dest = (listen_ip, listen_port)
     pipe = Pipe(proto, dest, route)
     try:
@@ -183,7 +184,7 @@ class Daemon():
         
         # Start a new server listening.
         pipe = Pipe(proto, dest=None, route=route, conf=self.conf)
-        await pipe.open(msg_cb=self.msb_cb, up_cb=self.up_cb)
+        await pipe.open(msg_cb=self.msg_cb, up_cb=self.up_cb)
         assert(pipe is not None)
 
         """

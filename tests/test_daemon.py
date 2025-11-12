@@ -76,11 +76,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
 
                     # Spawn a pipe to the echo server.
                     test_route = await interface.route(af).bind(ips=addr)
-                    pipe = await pipe_open(
-                        proto,
-                        dest,
-                        test_route,
-                    )
+                    pipe = await Pipe(proto, dest, test_route).open()
                     try:
                         self.assertTrue(pipe is not None)
 
@@ -98,7 +94,7 @@ class TestDaemon(unittest.IsolatedAsyncioTestCase):
                         # Test accept() await.
                         # Send message from pipe to server's client pipe.
                         # Then manually call it's receive and check for receipt.
-                        client_pipe = await pipe
+                        client_pipe = await pipe.accept()
                         self.assertTrue(client_pipe is not None)
                         client_pipe.subscribe(SUB_ALL)
                         await pipe.send(msg, dest)
