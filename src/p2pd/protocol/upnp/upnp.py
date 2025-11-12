@@ -70,7 +70,7 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
         route = await interface.route(af).bind()
         pipe = Pipe(TCP, dest, route)
         try:
-            await pipe.open()
+            await pipe.connect()
             return dest
         except:
             return None
@@ -214,7 +214,7 @@ async def discover_upnp_devices(af, nic):
     dest = (UPNP_IP[af], UPNP_PORT)
     pipe = Pipe(UDP, dest, route, sock=sock, conf=sock_conf)
     try:
-        await pipe.open()
+        await pipe.connect()
     except:
         log(fstr("discover upnp pipe none {0} {1}", (af, nic.name,)))
         return

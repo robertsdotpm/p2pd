@@ -120,7 +120,7 @@ class Nickname():
                 # Test connectivity.
                 pipe = await client.get_dest_pipe()
                 try:
-                    pipe = await pipe.open()
+                    pipe = await pipe.connect()
                     if pipe is None:
                         self.clients[af][index] = None
                         continue

@@ -495,7 +495,7 @@ class ToxiMainServer(RESTD):
             dest = (dest_ip, dest_port)
 
             # Connect to upstream.
-            upstream = await Pipe(proto, dest, up_route).open()
+            upstream = await Pipe(proto, dest, up_route).connect()
         except:
             return {
                 "error": fstr("upstream res failure {0}:{1}", (dest_ip, dest_port,))

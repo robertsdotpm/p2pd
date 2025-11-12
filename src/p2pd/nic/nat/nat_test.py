@@ -257,7 +257,7 @@ async def nic_load_nat(nic, nat_tests=5, delta_tests=12, servs=None, timeout=4):
     # Pipe is used for NAT tests using multiplexing.
     # Same socket, different dests, TXID ordered.
     route = await nic.route(af).bind()
-    pipe = await Pipe(UDP, route=route).open()
+    pipe = await Pipe(UDP, route=route).connect()
 
     # Run delta test.
     nat_type, delta = await asyncio.gather(*[
@@ -306,7 +306,7 @@ async def nat_test_main():
     
     af = IP4
     route = await i.route(af).bind(0)
-    pipe = await Pipe(UDP, route=route).open()
+    pipe = await Pipe(UDP, route=route).connect()
     assert(pipe is not None)
     s = STUNClient(
         ("stun1.p2pd.net", 3478)

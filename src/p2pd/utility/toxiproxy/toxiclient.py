@@ -219,7 +219,7 @@ class ToxiTunnel():
         
         # Connect to the listen server for this tunnel.
         try:
-            pipe = await Pipe(TCP, dest, route, conf=conf).open()
+            pipe = await Pipe(TCP, dest, route, conf=conf).connect()
             return pipe, dest
         except:
             raise Exception("Cant get tunnel pipe.")

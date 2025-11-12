@@ -59,7 +59,7 @@ class Pipe:
         self._opened = False
         self._closed = False
 
-    async def open(self, msg_cb=None, up_cb=None):
+    async def connect(self, msg_cb=None, up_cb=None):
         """
         Opens the pipe, resolves route/dest, creates socket and PipeEvents.
         Safe to call multiple times.
@@ -105,7 +105,7 @@ class Pipe:
     # Async context manager support
     # -----------------------------
     async def __aenter__(self):
-        # Simply return self; open() must be awaited before using async with
+        # Simply return self; connect() must be awaited before using async with
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
@@ -125,11 +125,11 @@ class Pipe:
                 self._pipe = pipe
 
             def __await__(self):
-                return pipe.open(msg_cb, up_cb).__await__()
+                return pipe.connect(msg_cb, up_cb).__await__()
 
             async def __aenter__(self):
                 # Ensure pipe is fully opened
-                await pipe.open(msg_cb, up_cb)
+                await pipe.connect(msg_cb, up_cb)
                 return pipe
 
             async def __aexit__(self, exc_type, exc, tb):
@@ -421,7 +421,7 @@ if __name__ == "__main__":
         """
         pipe = Pipe(TCP, route, dest)
         try:
-            await pipe.open()
+            await pipe.connect()
             await pipe.send(b"HTTP 1.1\r\nGET /\r\n\r\n")
             resp = await pipe.recv()
             print(resp)
@@ -430,7 +430,6 @@ if __name__ == "__main__":
         """
 
         async with Pipe(TCP, dest, route).session() as pipe:
-            await pipe.open()
             await pipe.send(b"HTTP 1.1\r\nGET /\r\n\r\n")
             resp = await pipe.recv()
             print(resp)

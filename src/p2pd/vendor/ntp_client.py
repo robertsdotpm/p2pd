@@ -297,7 +297,7 @@ class NTPClient:
         pipe = Pipe(UDP, dest, route)
         pipe.subscribe()
         try:
-            await pipe.open()
+            await pipe.connect()
 
             # create the request packet - mode 3 is client
             query_packet = NTPPacket(

@@ -112,7 +112,7 @@ async def setup_punching_process(client, puncher_class):
     route = await client.interface.route(client.af).bind()
     listen_pipe = Pipe(TCP, None, route)
     try:
-        await listen_pipe.open(msg_cb=client.node.msg_cb)
+        await listen_pipe.connect(msg_cb=client.node.msg_cb)
         client.listen_pipe = listen_pipe
     except:
         log("could not start listen server in setup punching process.")

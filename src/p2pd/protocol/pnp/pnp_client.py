@@ -92,7 +92,7 @@ class PNPClient():
     async def fetch(self, name):
         pipe = await self.get_dest_pipe()
         try:
-            await pipe.open()
+            await pipe.connect()
             pkt = PNPPacket(name, vkc=self.vkc)
             await self.send_pkt(pipe, pkt, sign=False)
             return await self.return_resp(pipe)
@@ -106,7 +106,7 @@ class PNPClient():
     async def push(self, name, value, behavior=BEHAVIOR_DO_BUMP):
         pipe = await self.get_dest_pipe()
         try:
-            await pipe.open()
+            await pipe.connect()
             t = await self.get_updated(name)
             pkt = PNPPacket(name, value, self.vkc, None, t, behavior)
             await self.send_pkt(pipe, pkt)
@@ -119,7 +119,7 @@ class PNPClient():
     async def delete(self, name):
         pipe = await self.get_dest_pipe()
         try:
-            await pipe.open()
+            await pipe.connect()
             t = await self.get_updated(name)
             pkt = PNPPacket(name, vkc=self.vkc, updated=t)
             await self.send_pkt(pipe, pkt)

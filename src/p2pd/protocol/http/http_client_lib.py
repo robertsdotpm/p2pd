@@ -148,7 +148,7 @@ async def do_web_req(addr, http_buf, do_close, route, conf=NET_CONF):
     # Open TCP connection to HTTP server.
     p = None
     try:
-        p = await Pipe(TCP, addr, route, conf=conf).open()
+        p = await Pipe(TCP, addr, route, conf=conf).connect()
     except Exception:
         log_exception()
         return None, None
