@@ -150,6 +150,16 @@ class PipeEvents(BaseACKProto):
         self.tcp_clients.append(client)
         self.client_futures[client.p_client_entry].set_result(client)
 
+    """
+    After much puzzling: this mysterious code appears to allow a returned
+    PipeEvent to function like an async version of accept() as if
+    the server is started normally for a TCP server using Python's protocol
+    classes then outside a client can be accepted() using await on the
+    instance method itself. Otherwise, it returns itself.
+
+    I'm not too sure if it works properly when clients are cleaned up
+    though. TODO: test this with the new close().
+    """
     async def make_awaitable(self):
         if self.endpoint_type == TYPE_TCP_SERVER:
             bound = self.p_client_insert + 1
