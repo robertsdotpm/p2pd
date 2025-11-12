@@ -48,7 +48,7 @@ async def is_serv_listening(proto, listen_route):
         listen_ip = "localhost"
 
     # Try make pipe to the server socket.
-    assert(dest is not None)
+    assert(listen_ip is not None)
     dest = (listen_ip, listen_port)
     pipe = Pipe(proto, dest, route)
     try:
