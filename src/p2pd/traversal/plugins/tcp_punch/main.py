@@ -67,7 +67,7 @@ async def tcp_hole_punch(tunnel, af, pipe_id, src_info, dest_info, nic, addr_typ
     
     # Protocol done -- return nothing.
     if ret == 1:
-        return None
+        return 1
 
     # Increase active punchers.
     tunnel.node.active_punchers = min(

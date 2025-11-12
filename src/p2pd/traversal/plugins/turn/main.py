@@ -44,7 +44,7 @@ async def udp_turn_relay(self, af, pipe_id, src_info, dest_info, iface, addr_typ
 
         # Protocol end.
         if already_accepted:
-            return None
+            return 1
         else:
             # Log white listing action.
             our_relay = await client.relay_tup_future
