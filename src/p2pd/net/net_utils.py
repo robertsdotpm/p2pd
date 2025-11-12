@@ -208,9 +208,9 @@ async def safe_sock_connect(loop, sock, dest):
         await loop.sock_connect(sock, dest)
         return True
     except ConnectionRefusedError:
-        log(f"Connection refused: {dest}")
+        log("Connection refused: " + str(dest))
         return False
     except OSError as e:
         # Handles e.g. ENETUNREACH, ETIMEDOUT, ECONNRESET
-        log(f"Socket connect error to {dest}: {e}")
+        log("Socket connect error to " + str(dest) + ":" + str(e))
         return False
