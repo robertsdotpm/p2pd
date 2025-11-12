@@ -118,21 +118,41 @@ class Nickname():
                 )
 
                 # Test connectivity.
-                pipe = await client.get_dest_pipe()
                 try:
-                    pipe = await pipe.connect()
+                    pipe = await client.get_dest_pipe()
+                    print(pipe)
                     if pipe is None:
-                        self.clients[af][index] = None
                         continue
-                except:
-                    log_exception()
-                finally:
-                    await pipe.close()
 
-                # Good client so save.
-                self.clients[af][index] = client
-                success_no += 1
-        
+                    try:
+                        await pipe.connect()
+                        print("pipe con success")
+                    except asyncio.CancelledError:
+                        raise  # propagate cancellation
+                    except Exception:
+                        # cleanup and skip this client
+                        if pipe is not None:
+                            try:
+                                await pipe.close()
+                            except Exception:
+                                pass
+                        continue
+
+                    # Good client, save it
+                    print(client)
+                    self.clients[af][index] = client
+                    success_no += 1
+
+                    # Close pipe now if client doesn't need it open
+                    try:
+                        await pipe.close()
+                    except Exception:
+                        pass
+
+                except Exception:
+                    # Ensure client slot stays None if anything else goes wrong
+                    self.clients[af][index] = None
+
         if not success_no:
             raise StartNodeNicknameFailed()
         
@@ -167,7 +187,7 @@ class Nickname():
             )
 
         # Attempt storage at all PNP servers.
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         offsets = strip_none(results)
         if not len(offsets):
             raise FullNameFailure("All name servers failed.")

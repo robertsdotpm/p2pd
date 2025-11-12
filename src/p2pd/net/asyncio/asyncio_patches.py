@@ -14,14 +14,17 @@ from ...utility.utils import *
 
 def patched_select(self, r, w, _, timeout=None):
     try:
-        r, w, x = select.select(r, w, w, timeout)
+        r_list, w_list, x_list = select.select(r, w, w, timeout)
     except OSError as e:
+        # Windows: socket already closed
         if hasattr(e, 'winerror') and e.winerror == 10038:
-            # descriptors may already be closed
+            return [], [], []
+        # Unix: Bad file descriptor (Python 3.5)
+        if hasattr(e, 'errno') and e.errno == 9:
             return [], [], []
         raise
     else:
-        return r, w + x, []
+        return r_list, w_list + x_list, []
 
 async def create_datagram_endpoint(loop, protocol_factory,
                                    local_addr=None, remote_addr=None, *,

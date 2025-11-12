@@ -319,8 +319,7 @@ class NTPClient:
         except Exception as e:
             log_exception()
         finally:
-            if pipe is not None:
-                await pipe.close()
+            await pipe.close()
 
         # construct corresponding statistics
         stats = NTPStats()

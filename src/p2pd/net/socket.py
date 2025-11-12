@@ -64,7 +64,7 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
 
             if not is_default and NOT_WINDOWS:
                 sock.setsockopt(socket.SOL_SOCKET, 25, to_b(route.interface.id))
-    except Exception:
+    except:
         log_exception()
         # Try continue -- an exception isn't always accurate.
         # E.g. Mac OS X doesn't support that sockopt but still works.
@@ -87,7 +87,7 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
     try:
         sock.bind(bind_tup)
         return sock
-    except Exception:
+    except:
         error = fstr("""
         Could not bind to interface
         af = {0}

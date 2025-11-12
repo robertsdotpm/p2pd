@@ -1,24 +1,3 @@
-"""
-- pipe_open allows multiple encoding forms to be used for the IP
-field. But bytes is a little unclear. Is it the raw bytes of
-an IP address or is it a human-readable IP in ASCII? I
-decided to default to the latter otherwise devs. But you
-can still pass in ints or IPRanges to use raw IPs. With
-ints just make sure there is a route alongside it because
-the address family is needed to disambiguate whether the
-int is a short IPv6 or an IPv4.
-
-- theres a bug on ancient operating systems (Windows Vista)
-where await sock_event with wait_for can crash the event loop.
-The fix has been merged in >= 3.7.5 which also works on Vista.
-I wasn't even able to get Python 3 to run on XP so for now it
-isn't supported. Trying to merge Python fixes for older OSes
-isn't a priority so these users should be told to upgrade
-Python versions if they get bugs with the event loop.
-
-https://bugs.python.org/issue34795
-"""
-
 import asyncio
 from ...utility.utils import *
 from ..net_utils import *
@@ -34,12 +13,11 @@ from ..socket import *
 from .pipe_defs import *
 
 # Patch _select if needed.
-# This fixes a bug on Windows Vista / older versions
-# where await sock_event with wait_for
-# can crash the event loop. See Python bug 34795.
 if sys.platform == 'win32':
     if SelectSelector._select != patched_select:
         SelectSelector._select = patched_select
+
+SelectSelector._select = patched_select
 
 class PipeError(Exception):
     pass
@@ -73,20 +51,17 @@ class Pipe:
             await self.tcp_client_connect_if_needed()
             await self.setup_pipe_events(msg_cb, up_cb)
             self._opened = True
-        except Exception:
+        except:
+            # defensive cleanup
             self.cleanup_on_error()
             raise
 
         return self
-    
+
     async def accept(self):
         if self.pipe_events is not None:
             return await self.pipe_events.make_awaitable()
-        
-    async def close(self):
-        if self.pipe_events is not None:
-            return await self.pipe_events.close()
-    
+
     # Pretend to be a pipe_client.
     def __getattr__(self, name):
         """
@@ -246,10 +221,22 @@ class Pipe:
             loop = await self.get_loop()
             self.sock.settimeout(0)
             self.sock.setblocking(0)
-            await asyncio.wait_for(
-                loop.sock_connect(self.sock, self.dest.tup),
-                timeout=self.conf.get("con_timeout", 10)
+
+            # ---------------------------
+            # Non-cancelling wait pattern
+            # ---------------------------
+            fut = asyncio.ensure_future(
+                safe_sock_connect(loop, self.sock, self.dest.tup)
             )
+            timeout = self.conf.get("con_timeout", 5)
+            try:
+                await asyncio.wait_for(fut, timeout)
+            except asyncio.TimeoutError:
+                # Don't cancel underlying connect
+                pass
+
+            if not fut.done() or not fut.result():
+                raise PipeError("Pipe error for safe sock connect.")
 
     async def setup_pipe_events(self, msg_cb=None, up_cb=None):
         """
@@ -290,11 +277,15 @@ class Pipe:
             if transport is None:
                 raise PipeError("Failed to create datagram endpoint")
 
-            # Wait for datagram transport to be ready.
-            await asyncio.wait_for(
-                self.pipe_events.stream_ready.wait(), 
-                timeout=self.conf.get("con_timeout", 2)
-            )
+            # ---------------------------
+            # Non-cancelling wait pattern
+            # ---------------------------
+            fut = asyncio.ensure_future(self.pipe_events.stream_ready.wait())
+            try:
+                await asyncio.wait_for(fut, timeout=self.conf.get("con_timeout", 2))
+            except asyncio.TimeoutError:
+                # Don't cancel underlying event; UDP may still be ready later
+                pass
 
             # Record type of transport in pipe events.
             self.pipe_events.stream.set_handle(transport, client_tup=None)
@@ -364,11 +355,14 @@ class Pipe:
                     server_hostname=server_hostname
                 )
 
-                # Wait for the con to connect.
-                await asyncio.wait_for(
-                    self.pipe_events.stream_ready.wait(), 
-                    timeout=wrap_overhead
-                )
+                # ---------------------------
+                # Non-cancelling wait pattern
+                # ---------------------------
+                fut = asyncio.ensure_future(self.pipe_events.stream_ready.wait())
+                try:
+                    await asyncio.wait_for(fut, timeout=wrap_overhead)
+                except asyncio.TimeoutError:
+                    pass
 
                 # Set the con handles.
                 self.pipe_events.stream.set_handle(
@@ -408,31 +402,3 @@ class Pipe:
         self.owns_socket = False
         self._closed = True
 
-
-if __name__ == "__main__":
-    async def workspace():
-        from ...nic.interface import Interface
-        nic = await Interface()
-        print(nic)
-
-        route = nic.route(IP4)
-        dest = await Address("example.com", 80, nic)
-
-        """
-        pipe = Pipe(TCP, route, dest)
-        try:
-            await pipe.connect()
-            await pipe.send(b"HTTP 1.1\r\nGET /\r\n\r\n")
-            resp = await pipe.recv()
-            print(resp)
-        finally:
-            await pipe.close()
-        """
-
-        async with Pipe(TCP, dest, route).session() as pipe:
-            await pipe.send(b"HTTP 1.1\r\nGET /\r\n\r\n")
-            resp = await pipe.recv()
-            print(resp)
-        
-
-    async_run(workspace())

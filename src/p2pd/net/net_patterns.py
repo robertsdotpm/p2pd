@@ -31,5 +31,5 @@ async def send_recv_loop(dest, pipe, buf, sub=SUB_ALL):
         except asyncio.TimeoutError:
             log_exception()
             continue
-        except Exception:
+        except:
             log_exception()

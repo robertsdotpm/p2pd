@@ -171,22 +171,30 @@ robust -- so that it works to hosts in the LAN and to
 services on interfaces on the same machine.
 """
 def determine_if_path(af, dest):
-    # Setup socket for connection.
+    """
+    Determine the local source IP that would be used to reach `dest`.
+    Safe: ignores connection errors, closes socket properly.
+    """
     src_ip = None
-    s = socket.socket(af, UDP)
-
-    # We don't care about connection success.
-    # But avoiding delays is important.
-    s.settimeout(0)
     try:
-        # Large port avoids perm errors.
-        # Doesn't matter if it exists or not.
-        s.connect((dest, 12345))
-
-        # Get the interface bind address.
-        src_ip = s.getsockname()[0]
-    finally:
-        s.close()
+        s = socket.socket(af, socket.SOCK_DGRAM)  # UDP socket
+        try:
+            s.settimeout(0.1)  # small timeout instead of 0
+            # Connect to dest on arbitrary high port; ignore failures
+            try:
+                s.connect((dest, 12345))
+                src_ip = s.getsockname()[0]
+            except (OSError, BlockingIOError):
+                # ignore any errors; src_ip stays None
+                pass
+        finally:
+            try:
+                s.close()
+            except Exception:
+                pass
+    except Exception:
+        # fallback if socket creation fails
+        src_ip = None
 
     return src_ip
 

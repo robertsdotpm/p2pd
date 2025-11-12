@@ -64,6 +64,7 @@ class Log():
         
         out = fstr("p2p: <{0}> {1}", (node_id, m,))
 
+
         with open('program.log', 'a') as fp:
             fp.write(out + '\n')
 

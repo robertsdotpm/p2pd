@@ -186,7 +186,12 @@ class Daemon():
         
         # Start a new server listening.
         pipe = Pipe(proto, dest=None, route=route, conf=self.conf)
-        await pipe.connect(msg_cb=self.msg_cb, up_cb=self.up_cb)
+        try:
+            await pipe.connect(msg_cb=self.msg_cb, up_cb=self.up_cb)
+        except:
+            log_exception()
+            raise Exception("Cannot start pipe listen server.")
+
         assert(pipe is not None)
 
         """

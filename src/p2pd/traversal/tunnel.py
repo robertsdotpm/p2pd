@@ -121,11 +121,11 @@ async def connect_tunnel(node, pnp_addr, strategies=P2P_STRATEGIES, conf=P2P_PIP
     for af in conf["addr_families"]:
         af_conf = copy.deepcopy(conf)
         af_conf["addr_families"] = [af]
-        pipe = await tunnel.connect(strategies, reply=None, conf=af_conf)
-        if pipe is not None:
+        try:
+            pipe = await tunnel.connect(strategies, reply=None, conf=af_conf)
             return pipe
-        
-    return pipe
+        except:
+            log_exception()
 
 if __name__ == "__main__": # pragma: no cover
     async def test_p2p_con():
