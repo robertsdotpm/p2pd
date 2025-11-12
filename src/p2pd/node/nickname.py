@@ -118,17 +118,16 @@ class Nickname():
                 )
 
                 # Test connectivity.
-                pipe = None
+                pipe = await client.get_dest_pipe()
                 try:
-                    pipe = await client.get_dest_pipe()
+                    pipe = await pipe.open()
                     if pipe is None:
                         self.clients[af][index] = None
                         continue
                 except:
                     log_exception()
                 finally:
-                    if pipe is not None:
-                        await pipe.close()
+                    await pipe.close()
 
                 # Good client so save.
                 self.clients[af][index] = client
@@ -270,28 +269,4 @@ async def workspace():
     print(out)
 
     await asyncio.sleep(2)
-
-
-
-
-"""
-push:
-    - try to store on all of them
-    - store success offsets
-    - convert success offsets to tld
-    - return name + tld on success
-
-fetch:
-    - name + tld
-    - convert to list of offsets
-    - use first in to get the fastest success result
-
-delete:
-    - name + tld
-    - convert to list of offsets
-    - concurrently delete them
-    - no follow up
-
-
-"""
 

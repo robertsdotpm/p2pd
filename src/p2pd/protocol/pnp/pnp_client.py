@@ -52,9 +52,8 @@ class PNPClient():
             route = await route.bind(ips=self.dest[0])
         else:
             route = await route.bind()
-
-        pipe = await Pipe(self.proto, self.dest, route).open()
-        return pipe
+        
+        return Pipe(self.proto, self.dest, route)
 
     async def return_resp(self, pipe):
         try:
@@ -70,8 +69,6 @@ class PNPClient():
         except:
             log_exception()
             return None
-        finally:
-            await pipe.close()
 
     async def send_pkt(self, pipe, pkt, sign=True):
         pkt.reply_pk = self.reply_pk
@@ -93,8 +90,9 @@ class PNPClient():
                 await asyncio.sleep(0.5)
 
     async def fetch(self, name):
+        pipe = await self.get_dest_pipe()
         try:
-            pipe = await self.get_dest_pipe()
+            await pipe.open()
             pkt = PNPPacket(name, vkc=self.vkc)
             await self.send_pkt(pipe, pkt, sign=False)
             return await self.return_resp(pipe)
@@ -102,23 +100,31 @@ class PNPClient():
             raise
         except:
             log_exception()
+        finally:
+            await pipe.close()
 
     async def push(self, name, value, behavior=BEHAVIOR_DO_BUMP):
+        pipe = await self.get_dest_pipe()
         try:
+            await pipe.open()
             t = await self.get_updated(name)
-            pipe = await self.get_dest_pipe()
             pkt = PNPPacket(name, value, self.vkc, None, t, behavior)
             await self.send_pkt(pipe, pkt)
             return await self.return_resp(pipe)
         except:
             log_exception()
+        finally:
+            await pipe.close()
 
     async def delete(self, name):
+        pipe = await self.get_dest_pipe()
         try:
+            await pipe.open()
             t = await self.get_updated(name)
-            pipe = await self.get_dest_pipe()
             pkt = PNPPacket(name, vkc=self.vkc, updated=t)
             await self.send_pkt(pipe, pkt)
             return await self.return_resp(pipe)
         except:
             log_exception()
+        finally:
+            await pipe.close()
