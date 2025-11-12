@@ -243,11 +243,7 @@ class Pipe:
             self.sock.settimeout(0)
             self.sock.setblocking(0)
             await asyncio.wait_for(
-                safe_sock_connect(
-                    loop,
-                    self.sock,
-                    self.dest.tup
-                ),
+                loop.sock_connect(self.sock, self.dest.tup),
                 timeout=self.conf.get("con_timeout", 10)
             )
 
