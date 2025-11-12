@@ -56,7 +56,7 @@ async def is_serv_listening(proto, listen_route):
         return True
     except:
         log("TCP connect failed: ")
-        what_exception()
+        log_exception()
         return False
     finally:
         await pipe.close()

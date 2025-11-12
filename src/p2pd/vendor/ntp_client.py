@@ -294,9 +294,11 @@ class NTPClient:
         route = await self.interface.route(self.af).bind()
 
         # create the socket
-        pipe = await Pipe(UDP, dest, route).open()
+        pipe = Pipe(UDP, dest, route)
         pipe.subscribe()
         try:
+            await pipe.open()
+
             # create the request packet - mode 3 is client
             query_packet = NTPPacket(
                 mode=3,
