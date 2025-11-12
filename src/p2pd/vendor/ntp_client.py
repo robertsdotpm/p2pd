@@ -295,7 +295,6 @@ class NTPClient:
 
         # create the socket
         pipe = Pipe(UDP, dest, route)
-        pipe.subscribe()
         try:
             await pipe.connect()
 
