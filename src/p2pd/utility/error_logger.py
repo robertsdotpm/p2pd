@@ -40,14 +40,13 @@ async def _log_worker():
             pass
         _log_queue.task_done()
 
-def start_logger(loop=None):
+async def start_logger(loop):
     """Start the background logging task."""
     global _log_task
     if not IS_DEBUG:
         return
+    
     if _log_task is None:
-        if loop is None:
-            loop = asyncio.get_event_loop()
         _log_task = loop.create_task(_log_worker())
 
 async def stop_logger():
@@ -59,12 +58,14 @@ async def stop_logger():
         _log_task = None
 
 def log(message):
+    #print(message)
     """Enqueue a message to be logged."""
+    global _log_queue
     if not IS_DEBUG:
         return
     try:
         _log_queue.put_nowait(message)
-    except Exception:
+    except Exception as e:
         pass
 
 def log_exception():

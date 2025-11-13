@@ -7,19 +7,20 @@ if __name__ != '__main__':
 
     from .errors import *
     from .utility.utils import log, what_exception, log_exception, async_test
+    from .utility.error_logger import *
     from .utility.cmd_tools import *
     from .net.net_utils import *
     from .net.bind import *
     from .net.address import Address
     from .net.ip_range import IPRange, IPR
     from .net.asyncio.async_run import *
-    from .entrypoint import p2pd_setup_netifaces
+    from .entrypoint import p2pd_setup_netifaces, p2pd_setup_event_loop
     from .protocol.upnp.upnp import port_forward
     from .nic.route.route import Route
     from .nic.route.route_pool import RoutePool
     from .nic.route.route_load import discover_nic_wan_ips
     from .net.pipe.pipe import *
-    from .nic.interface import Interface, p2pd_setup_event_loop
+    from .nic.interface import Interface
     from .nic.select_interface import *
     from .utility.clock_skew import SysClock
     from .protocol.stun.stun_client import STUNClient, get_stun_clients

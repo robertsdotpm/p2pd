@@ -142,7 +142,7 @@ def init_process_pool():
 
 def p2pd_setup_event_loop():
     # Start worker task to process log messages.
-    start_logger()
+    #start_logger()
     
 
     # -----------------------------

@@ -53,13 +53,12 @@ async def is_serv_listening(proto, listen_route):
     pipe = Pipe(proto, dest, route)
     try:
         await pipe.connect()
+        await pipe.close()
         return True
     except Exception:
         log("TCP connect failed: ")
         log_exception()
         return False
-    finally:
-        await pipe.close()
 
 """
 Used to detect if daemons have uncleanly exited in which case

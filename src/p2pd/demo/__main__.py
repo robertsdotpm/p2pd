@@ -16,7 +16,7 @@ from .utils import *
 from .cmd_arg_proc import *
 from .menu import *
 
-Log.log_p2p = patch_log_p2p
+
 
 """Load interfaces, start node, and return node info."""
 async def setup_node():
@@ -124,6 +124,9 @@ Run the main program which accepts input and shows menu options.
 Also waits for close events and handles cleanup.
 """
 async def main():
+    loop = asyncio.get_event_loop()
+    await start_logger(loop)
+
     # Additional optional module to improve UX for cnt + c.
     # Otherwise input() is used which still needs enter for exit.
     try:
@@ -182,8 +185,6 @@ async def main():
         log("end of stop nodes clause.")
 
 if __name__ == "__main__":
-    #loop = asyncio.get_event_loop()
-
     # explore the sigterm handling last.
     #loop.add_signal_handler(signal.SIGTERM, cancel_all_tasks)
     try:

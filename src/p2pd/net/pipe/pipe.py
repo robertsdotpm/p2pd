@@ -239,21 +239,18 @@ class Pipe:
             loop = await self.get_loop()
             self.sock.settimeout(0)
             self.sock.setblocking(0)
-
-            # ---------------------------
-            # Non-cancelling wait pattern
-            # ---------------------------
-            fut = asyncio.ensure_future(
-                safe_sock_connect(loop, self.sock, self.dest.tup)
-            )
             timeout = self.conf.get("con_timeout", 5)
+            success = False
             try:
-                await asyncio.wait_for(fut, timeout)
+                success = await asyncio.wait_for(
+                    safe_sock_connect(loop, self.sock, self.dest.tup), 
+                    timeout
+                )
             except asyncio.TimeoutError:
                 # Don't cancel underlying connect
                 pass
 
-            if not fut.done() or not fut.result():
+            if not success:
                 raise PipeError("Pipe error for safe sock connect.")
 
     async def setup_pipe_events(self, msg_cb=None, up_cb=None):
