@@ -1,96 +1,73 @@
-# error_logger.py
-import os
-import sys
-import logging
-import traceback
-import asyncio
+import os, sys, logging, traceback, threading, queue
 
 IS_DEBUG = "P2PD_DEBUG" in os.environ
 
-log_path = 'program.log'
+log_path = "program.log"
 for arg in sys.argv:
     if "--log_path=" in arg:
         log_path = arg.split("--log_path=")[1]
         break
 
 log_path = os.path.abspath(log_path)
-
-# Global queue for logging
-_log_queue = asyncio.Queue()
-_log_task = None
+_log_queue = queue.Queue()
+_log_thread = None
+_stop_sentinel = object()
 
 if IS_DEBUG:
-    # Explicit file handler with flush support
     handler = logging.FileHandler(log_path, mode='a', encoding='utf-8')
     formatter = logging.Formatter('[%(filename)s:%(lineno)d] %(message)s', '%Y-%m-%d %H:%M:%S')
     handler.setFormatter(formatter)
     logging.getLogger().addHandler(handler)
     logging.getLogger().setLevel(logging.DEBUG)
 
-async def _log_worker():
-    """Background coroutine that consumes the log queue."""
+def _log_worker():
+    """Background thread consuming the log queue."""
     while True:
-        message = await _log_queue.get()
-        if message is None:
-            break  # sentinel to stop the worker
+        message = _log_queue.get()
+        if message is _stop_sentinel:
+            break
         try:
             logging.info(str(message))
-            # Force flush for Python 3.5 buffering issues
             for h in logging.getLogger().handlers:
                 h.flush()
         except Exception:
-            # never raise in logging
             pass
-        _log_queue.task_done()
+        finally:
+            _log_queue.task_done()
 
-async def start_logger(loop=None):
-    """Start the background logging task."""
-    global _log_task
-    if not IS_DEBUG:
+def start_logger():
+    """Start the background thread."""
+    global _log_thread
+    if not IS_DEBUG or _log_thread is not None:
         return
-    if _log_task is None:
-        if loop is None:
-            loop = asyncio.get_event_loop()
-        _log_task = loop.create_task(_log_worker())
+    _log_thread = threading.Thread(target=_log_worker, daemon=True)
+    _log_thread.start()
 
-async def stop_logger():
-    """Stop the logging worker gracefully."""
-    global _log_task
-    if _log_task:
-        await _log_queue.put(None)
-        await _log_queue.join()  # ensure all messages processed
-        await _log_task
-        _log_task = None
+def stop_logger():
+    """Stop the background thread gracefully."""
+    global _log_thread
+    if not IS_DEBUG or _log_thread is None:
+        return
+    _log_queue.put(_stop_sentinel)
+    _log_thread.join()
+    _log_thread = None
 
 def log(message):
     """Enqueue a message to be logged."""
-    global _log_queue
     if not IS_DEBUG:
         return
-    try:
-        _log_queue.put_nowait(message)
-    except Exception:
-        pass
+    _log_queue.put(message)
 
 def log_exception():
-    """Enqueue the current exception traceback to be logged."""
+    """Log current exception."""
     exc_type, exc_value, exc_tb = sys.exc_info()
     try:
         if exc_tb:
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             lineno = exc_tb.tb_lineno
         else:
-            fname = "unknown"
-            lineno = 0
+            fname, lineno = "unknown", 0
         exc_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
         log("> {0}, line {1} = {2}".format(fname, lineno, exc_text))
     except Exception:
         pass
-
-class Log(object):
-    @staticmethod
-    def log_p2p(message, node_id=""):
-        if not IS_DEBUG:
-            return
-        out = "p2p: <{0}> {1}".format(node_id, message)
-        log(out)

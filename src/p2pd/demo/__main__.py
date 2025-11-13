@@ -125,7 +125,7 @@ Also waits for close events and handles cleanup.
 """
 async def main():
     loop = asyncio.get_event_loop()
-    await start_logger(loop)
+    start_logger()
 
     # Additional optional module to improve UX for cnt + c.
     # Otherwise input() is used which still needs enter for exit.
