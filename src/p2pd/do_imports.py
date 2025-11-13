@@ -45,7 +45,7 @@ if __name__ != '__main__':
     # But PNP server is not needed to use P2PD.
     try:
         from .protocol.pnp.pnp_server import *
-    except:
+    except Exception:
         pass
 
     from .protocol.pnp.pnp_client import *

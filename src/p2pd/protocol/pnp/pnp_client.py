@@ -66,7 +66,7 @@ class PNPClient():
             if not pkt.updated:
                 pkt.value = None
             return pkt
-        except:
+        except Exception:
             log_exception()
             return None
 
@@ -98,7 +98,7 @@ class PNPClient():
             return await self.return_resp(pipe)
         except asyncio.CancelledError:
             raise
-        except:
+        except Exception:
             log_exception()
         finally:
             await pipe.close()
@@ -111,7 +111,7 @@ class PNPClient():
             pkt = PNPPacket(name, value, self.vkc, None, t, behavior)
             await self.send_pkt(pipe, pkt)
             return await self.return_resp(pipe)
-        except:
+        except Exception:
             log_exception()
         finally:
             await pipe.close()
@@ -124,7 +124,7 @@ class PNPClient():
             pkt = PNPPacket(name, vkc=self.vkc, updated=t)
             await self.send_pkt(pipe, pkt)
             return await self.return_resp(pipe)
-        except:
+        except Exception:
             log_exception()
         finally:
             await pipe.close()

@@ -38,7 +38,7 @@ async def get_high_port_socket(route, socket_factory, sock_type=TCP):
                 sock_type=sock_type,
                 conf=conf
             )
-        except:
+        except Exception:
             continue
 
         return s, n
@@ -129,7 +129,7 @@ def match_bind_rule(ip, af, plat, bind_rule, rule_type):
                 ipr = ip_f(ip)
                 if not ipr.is_private:
                     return
-            except:
+            except Exception:
                 pass
 
     return bind_rule

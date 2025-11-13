@@ -484,7 +484,7 @@ class PNPServer(Daemon):
 
                 buf = self.serv_resp(pkt)
                 await proto_send(pipe, buf)
-        except:
+        except Exception:
             await db_con.rollback()
             log_exception()
         finally:

@@ -81,7 +81,7 @@ async def udp_turn_relay(self, af, pipe_id, src_info, dest_info, iface, addr_typ
     try:
         self.route_msg(msg, reply=reply, m=3)
         return await self.node.pipes[pipe_id]
-    except:
+    except Exception:
         log_exception()
 
 async def turn_cleanup(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):

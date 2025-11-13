@@ -4,6 +4,7 @@ import socket
 import sys
 from .settings import *
 from .utility.utils import *
+from .net.asyncio.asyncio_patches import *
 from .net.asyncio.event_loop import *
 from .net.asyncio.async_run import *
 from .nic.interface_utils import *
@@ -139,6 +140,16 @@ def init_process_pool():
     loop.set_exception_handler(handle_exceptions)
 
 def p2pd_setup_event_loop():
+    # -----------------------------
+    # Patch logic based on Python version
+    # -----------------------------
+    if sys.version_info >= (3, 7):
+        # Modern Python
+        SelectSelector._select = patched_select_modern
+    else:
+        # Older Python
+        SelectSelector._select = patched_select_old
+
     # If default isn't spawn then change it.
     # But only if it hasn't already been set.
     if multiprocessing.get_start_method() != "spawn":

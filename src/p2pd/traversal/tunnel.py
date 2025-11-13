@@ -124,7 +124,7 @@ async def connect_tunnel(node, pnp_addr, strategies=P2P_STRATEGIES, conf=P2P_PIP
         try:
             pipe = await tunnel.connect(strategies, reply=None, conf=af_conf)
             return pipe
-        except:
+        except Exception:
             log_exception()
 
 if __name__ == "__main__": # pragma: no cover

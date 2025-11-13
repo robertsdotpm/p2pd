@@ -258,7 +258,7 @@ class Client(MqttPackageHandler, SubscriptionsHandler):
         self._temporatily_stop_reconnect()
         try:
             await self._disconnect()
-        except:
+        except Exception:
             self._logger.info('[RECONNECT] ignored error while disconnecting, trying to reconnect anyway')
         if delay:
             await asyncio.sleep(self._config['reconnect_delay'])

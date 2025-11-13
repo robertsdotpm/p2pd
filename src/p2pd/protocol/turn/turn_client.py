@@ -148,7 +148,7 @@ class TURNClient(PipeEvents):
         self.route = await self.nic.route(self.af).bind()
         try:
             self.turn_pipe = await Pipe(UDP, self.dest, self.route).connect()
-        except:
+        except Exception:
             raise Exception("Unable to connect to TURN host. This may mean the server is no longer working. Normally TURN is not a public service.")
         
 

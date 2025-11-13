@@ -60,6 +60,6 @@ async def get_first_working_turn_client(af, offsets, nic, msg_cb):
 
             turn_client.serv_offset = offset
             return turn_client
-        except:
+        except Exception:
             log_exception()
             continue

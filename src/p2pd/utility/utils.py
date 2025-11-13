@@ -106,7 +106,7 @@ async def safe_run(f, args=[]):
     try:
         tasks = asyncio.Task.all_tasks()
         cur_task = asyncio.Task.current_task()
-    except:
+    except Exception:
         tasks = asyncio.all_tasks()
         cur_task = asyncio.current_task()
 
@@ -126,7 +126,7 @@ if not hasattr(unittest, "IsolatedAsyncioTestCase"):
 
         unittest.IsolatedAsyncioTestCase.get_event_loop = safe_run_patch
         #sys.excepthook = my_except_hook
-    except:
+    except Exception:
         pass
 
 DB_READ_LOCK = 0
@@ -434,7 +434,7 @@ def log_exception():
             exc_tb.tb_lineno,
             exc_out
         ))
-    except:
+    except Exception:
         pass
 
 async def async_wrap_errors(coro, timeout=None):
@@ -630,7 +630,7 @@ async def gather_or_cancel(tasks, timeout):
         await asyncio.sleep(0)
     except asyncio.CancelledError:
         return []
-    except:
+    except Exception:
         # Event loop closed prob.
         log_exception()
         return []
@@ -734,7 +734,7 @@ def recover_verify_key(msg_b, sig_b, vk_b=None, curve=NIST192p, hashfunc=hashlib
                 msg_b
             )
             return vk
-        except:
+        except Exception:
             # Fail
             continue
 

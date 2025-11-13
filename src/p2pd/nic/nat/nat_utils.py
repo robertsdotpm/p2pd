@@ -226,7 +226,7 @@ async def delta_test(stun_clients, test_no=8, threshold=5, concurrency=True):
                             dist_no[mapped_dist] = dist_no.get(mapped_dist, 0) + 1
                         else:
                             local_dist[mapped_dist] = local_dist.get(mapped_dist, 0) + 1
-            except:
+            except Exception:
                 log_exception()
 
     # Offset names for port test results.

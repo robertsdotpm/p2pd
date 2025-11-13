@@ -80,7 +80,7 @@ async def get_high_port_mapping(stun_client):
                 [ret[0], 0, ret[1]],
                 ret[2]
             )
-        except:
+        except Exception:
             log_exception()
             continue
 

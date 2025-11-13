@@ -214,14 +214,14 @@ class ToxiTunnel():
         # Resolve tunnel address,
         try:
             dest = (self.ip, self.port)
-        except:
+        except Exception:
             raise Exception(fstr("addr res tunnel client {0}", (self.port,)))
         
         # Connect to the listen server for this tunnel.
         try:
             pipe = await Pipe(TCP, dest, route, conf=conf).connect()
             return pipe, dest
-        except:
+        except Exception:
             raise Exception("Cant get tunnel pipe.")
     
     async def get_curl(self):
@@ -232,7 +232,7 @@ class ToxiTunnel():
         # Connect to the listen server for this tunnel.
         try:
             dest = (self.ip, self.port)
-        except:
+        except Exception:
             raise Exception("get curl for tunnel client addr res")
         
         return WebCurl(addr=dest, route=route, do_close=0)
@@ -263,7 +263,7 @@ class ToxiClient():
         self.curl = WebCurl(self.addr, self.route, hdrs=hdrs)
         try:
             await self.version()
-        except:
+        except Exception:
             raise Exception("Failed to connect to toxid.")
         
         return self

@@ -43,14 +43,14 @@ def __exec__(cmd):
         return subprocess.run(cmd, shell=True, capture_output=True, check=True, encoding='utf-8') \
                 .stdout \
                 .strip()
-    except:
+    except Exception:
         return None
 
 def __read__(path):
     try:
         with open(path) as f:
             return f.read().strip()
-    except:
+    except Exception:
         return None
 
 def __reg__(registry, key):
@@ -58,7 +58,7 @@ def __reg__(registry, key):
         from winregistry import WinRegistry
         with WinRegistry() as reg:
             return reg.read_entry(registry, key).value.strip()
-    except:
+    except Exception:
         return None
 
 def get_machine_id(winregistry=True):

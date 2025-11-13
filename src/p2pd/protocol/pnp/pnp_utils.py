@@ -64,7 +64,7 @@ class PNPPacket():
             # recover_verify_key(msg, self.sig, vk_b)
             vk.verify(self.sig, msg)
             return True
-        except:
+        except Exception:
             log_exception()
             return False
 

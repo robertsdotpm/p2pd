@@ -207,7 +207,7 @@ def avoid_time_wait(pipe):
             socket.SO_LINGER,
             linger
         )
-    except:
+    except Exception:
         # Not guaranteed on windows.
         log_exception()
 

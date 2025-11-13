@@ -56,7 +56,7 @@ async def punch_queue_worker(node, puncher_cls):
     except RuntimeError:
         log_exception()
         return
-    except:
+    except Exception:
         log_exception()
     
 def start_punch_worker(node, puncher_cls):

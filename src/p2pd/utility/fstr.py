@@ -52,7 +52,7 @@ class fstr2(object):
                 name = frame.f_code.co_name
                 names.append(name)
                 frames.append(frame)
-            except:
+            except Exception:
                 break
         return frames[-2]
 

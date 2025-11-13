@@ -80,7 +80,7 @@ async def nt_ipconfig(desc=None, ipv4=None, ipv6=None): # pragma: no cover
                             }
                             info[to_s(key)] = value
                             continue
-                except:
+                except Exception:
                     # Likely no gateway.
                     continue
 

@@ -71,7 +71,7 @@ async def binder(af, ip="", port=0, nic_id=None, loop=None, plat=platform.system
     loop = loop or asyncio.get_event_loop()
     try:
         addr_infos = await loop.getaddrinfo(ip, port)
-    except:
+    except Exception:
         addr_infos = []
 
     if not len(addr_infos):

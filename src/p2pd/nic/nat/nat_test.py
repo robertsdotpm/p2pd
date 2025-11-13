@@ -259,7 +259,7 @@ async def nic_load_nat(nic, nat_tests=5, delta_tests=12, servs=None, timeout=4):
     route = await nic.route(af).bind()
     try:
         pipe = await Pipe(UDP, route=route).connect()
-    except:
+    except Exception:
         log_exception()
         raise ErrorCantLoadNATInfo("Unable to load nat.")
 

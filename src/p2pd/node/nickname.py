@@ -173,7 +173,7 @@ class Nickname():
                     if ret is None: continue
                     if ret.value is not None:
                         return offset
-                except:
+                except Exception:
                     log_exception()
 
         # Schedule store tasks at all PNP servers.
@@ -209,7 +209,7 @@ class Nickname():
                         return ret
                 except asyncio.CancelledError:
                     raise
-                except:
+                except Exception:
                     log_exception()
 
         # Convert TLD to client offset list.
@@ -249,7 +249,7 @@ class Nickname():
                     ret = await client.delete(name)
                     if ret is not None:
                         return ret
-                except:
+                except Exception:
                     log_exception()
 
         tasks = []

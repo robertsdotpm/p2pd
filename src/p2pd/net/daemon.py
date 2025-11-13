@@ -54,7 +54,7 @@ async def is_serv_listening(proto, listen_route):
     try:
         await pipe.connect()
         return True
-    except:
+    except Exception:
         log("TCP connect failed: ")
         log_exception()
         return False
@@ -72,7 +72,7 @@ def get_serv_lock(af, proto, serv_port, serv_ip, install_path):
     # Make install dir if needed.
     try:
         pathlib.Path(install_path).mkdir(parents=True, exist_ok=True)
-    except:
+    except Exception:
         log_exception()
 
     # Main path files.
@@ -96,7 +96,7 @@ def get_serv_lock(af, proto, serv_port, serv_ip, install_path):
     try:
         import fasteners
         return fasteners.InterProcessLock(pidfile_path)
-    except:
+    except Exception:
         return None
 
 """
@@ -188,7 +188,7 @@ class Daemon():
         pipe = Pipe(proto, dest=None, route=route, conf=self.conf)
         try:
             await pipe.connect(msg_cb=self.msg_cb, up_cb=self.up_cb)
-        except:
+        except Exception:
             log_exception()
             raise Exception("Cannot start pipe listen server.")
 
@@ -358,7 +358,7 @@ async def daemon_rewrite_workspace():
 
         while 1:
             await asyncio.sleep(1)
-    except:
+    except Exception:
         await serv.close()
         log_exception()
 

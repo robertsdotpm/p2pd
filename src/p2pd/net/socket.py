@@ -33,7 +33,7 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-        except:
+        except Exception:
             pass
             # Doesn't work on Windows.
 
@@ -58,13 +58,13 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
             # TODO: probably cache this.
             try:
                 is_default = route.interface.is_default(route.af)
-            except:
+            except Exception:
                 log_exception()
                 is_default = True
 
             if not is_default and NOT_WINDOWS:
                 sock.setsockopt(socket.SOL_SOCKET, 25, to_b(route.interface.id))
-    except:
+    except Exception:
         log_exception()
         # Try continue -- an exception isn't always accurate.
         # E.g. Mac OS X doesn't support that sockopt but still works.
@@ -87,7 +87,7 @@ async def socket_factory(route, dest_addr=None, sock_type=TCP, conf=NET_CONF):
     try:
         sock.bind(bind_tup)
         return sock
-    except:
+    except Exception:
         error = fstr("""
         Could not bind to interface
         af = {0}

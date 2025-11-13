@@ -62,7 +62,7 @@ async def nickname_option(node):
     try:
         ret = await node.nickname(choice)
         cout(fstr("Nickname registered = {0}", (str(ret),)))
-    except:
+    except Exception:
         cout("Nickname taken.")
     
     return "menu"
@@ -91,7 +91,7 @@ async def stop_nodes_option(nodes):
     for n in nodes:
         try:
             await n.close()
-        except:
+        except Exception:
             log("exception in stop nodes")
             log_exception()
 

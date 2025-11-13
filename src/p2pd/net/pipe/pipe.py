@@ -1,3 +1,24 @@
+"""
+- pipe_open allows multiple encoding forms to be used for the IP
+field. But bytes is a little unclear. Is it the raw bytes of
+an IP address or is it a human-readable IP in ASCII? I
+decided to default to the latter otherwise devs. But you
+can still pass in ints or IPRanges to use raw IPs. With
+ints just make sure there is a route alongside it because
+the address family is needed to disambiguate whether the
+int is a short IPv6 or an IPv4.
+
+- theres a bug on ancient operating systems (Windows Vista)
+where await sock_event with wait_for can crash the event loop.
+The fix has been merged in >= 3.7.5 which also works on Vista.
+I wasn't even able to get Python 3 to run on XP so for now it
+isn't supported. Trying to merge Python fixes for older OSes
+isn't a priority so these users should be told to upgrade
+Python versions if they get bugs with the event loop.
+
+https://bugs.python.org/issue34795
+"""
+
 import asyncio
 from ...utility.utils import *
 from ..net_utils import *
@@ -11,13 +32,6 @@ from ..asyncio.async_run import *
 from .pipe_tcp_events import *
 from ..socket import *
 from .pipe_defs import *
-
-# Patch _select if needed.
-if sys.platform == 'win32':
-    if SelectSelector._select != patched_select:
-        SelectSelector._select = patched_select
-
-SelectSelector._select = patched_select
 
 class PipeError(Exception):
     pass
@@ -51,7 +65,7 @@ class Pipe:
             await self.tcp_client_connect_if_needed()
             await self.setup_pipe_events(msg_cb, up_cb)
             self._opened = True
-        except:
+        except Exception:
             # defensive cleanup
             self.cleanup_on_error()
             raise

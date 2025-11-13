@@ -103,7 +103,7 @@ def proc_do_punching(args):
 
             # Workers better for older Python versions.
             return loop.run_until_complete(f)
-    except:
+    except Exception:
         log_exception()
 
 async def setup_punching_process(client, puncher_class):
@@ -114,7 +114,7 @@ async def setup_punching_process(client, puncher_class):
     try:
         await listen_pipe.connect(msg_cb=client.node.msg_cb)
         client.listen_pipe = listen_pipe
-    except:
+    except Exception:
         log("could not start listen server in setup punching process.")
         raise
     
@@ -166,7 +166,7 @@ async def setup_punching_process(client, puncher_class):
                     # Indicate hole made to waiter.
                     client.node.pipe_ready(client.pipe_id, client.pipe)
                     return client.pipe
-            except:
+            except Exception:
                 log_exception()
             
             # Check every 100 ms.
@@ -180,5 +180,5 @@ async def setup_punching_process(client, puncher_class):
                 )
 
                 return
-    except:
+    except Exception:
         log_exception()
