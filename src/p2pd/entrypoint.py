@@ -12,6 +12,7 @@ if sys.platform == "win32":
     from .nic.netifaces.windows.win_netifaces import *
 else:
     import netifaces as netifaces
+from .utility.error_logger import *
 
 _cached_netifaces = None
 _cache_lock = asyncio.Lock()
@@ -140,6 +141,10 @@ def init_process_pool():
     loop.set_exception_handler(handle_exceptions)
 
 def p2pd_setup_event_loop():
+    # Start worker task to process log messages.
+    start_logger()
+    
+
     # -----------------------------
     # Patch logic based on Python version
     # -----------------------------
@@ -159,18 +164,10 @@ def p2pd_setup_event_loop():
         if start_method is None:
             multiprocessing.set_start_method("spawn")
 
-    """
-    if platform.system() == "Windows":
-            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-            return
-    """
-
     patch_asyncio_backports(CustomEventLoop)
     policy = asyncio.get_event_loop_policy()
     if not isinstance(policy, CustomEventLoopPolicy):
         asyncio.set_event_loop_policy(CustomEventLoopPolicy())
-
-    #sys.excepthook = my_except_hook
 
 p2pd_setup_event_loop()
 

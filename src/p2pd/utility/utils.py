@@ -25,48 +25,10 @@ from concurrent.futures import ProcessPoolExecutor
 from ecdsa.curves import NIST192p
 from decimal import Decimal as Dec
 from .fstr import fstr
+from .error_logger import *
 
 to_b = lambda x: x if type(x) == bytes else x.encode("ascii", errors='ignore')
 to_s = lambda x: x if type(x) == str else x.decode("utf-8", errors='ignore')
-
-if "P2PD_DEBUG" in os.environ: 
-    IS_DEBUG = 1
-
-    log_path = 'program.log'
-    for arg in sys.argv:
-        if "--log_path=" in arg:
-            log_path = arg.split("--log_path=")[1]
-            break
-
-    log_path = os.path.abspath(log_path)
-    logging.basicConfig(
-        filename=log_path,
-        level=logging.DEBUG,
-        format='[%(filename)s:%(lineno)d] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-
-    def log(m):
-        if "P2PD_DEBUG" not in os.environ:
-            return
-
-        #print(m)
-        logging.info(m)
-else:
-    IS_DEBUG = 0
-    log = lambda m: None
-
-class Log():
-    @staticmethod
-    def log_p2p(m, node_id=""):
-        if not IS_DEBUG:
-            return
-        
-        out = fstr("p2p: <{0}> {1}", (node_id, m,))
-
-
-        with open('program.log', 'a') as fp:
-            fp.write(out + '\n')
 
 # Yoloswaggins.
 if not hasattr(asyncio, 'create_task'):
@@ -423,19 +385,6 @@ def what_exception():
     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
     print(exc_type, fname, exc_tb.tb_lineno)
     print(traceback.format_exc())
-
-def log_exception():
-    exc_type, exc_obj, exc_tb = sys.exc_info()
-    try:
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        exc_out = traceback.format_exc()
-        log("> {}, line {} = {}".format(
-            fname,
-            exc_tb.tb_lineno,
-            exc_out
-        ))
-    except Exception:
-        pass
 
 async def async_wrap_errors(coro, timeout=None):
     try:
