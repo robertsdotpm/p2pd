@@ -128,33 +128,39 @@ class CustomEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
         Logs exception type, message, and the line number where it occurred.
         Compatible with Python 3.5+.
         """
-        print("Exception handler in custom event loop")
+        buf = []
+
+        buf.append("Exception handler in custom event loop")
         exc = context.get("exception")
         if exc is None:
             # No exception object, log the message
             msg = context.get("message", "Unknown exception")
-            print("No exception object, context message: " + str(msg))
+            buf.append("No exception object, context message: " + str(msg))
+            log("\n".join(buf))
             return
 
         # Log the exception type and message
-        print("Exception type: " + str(type(exc).__name__))
-        print("Exception message: " + str(exc))
+        buf.append("Exception type: " + str(type(exc).__name__))
+        buf.append("Exception message: " + str(exc))
 
         # Extract traceback and log the last frame (where exception occurred)
         tb = exc.__traceback__
         if tb is not None:
-            # Walk to the last frame
             while tb.tb_next:
                 tb = tb.tb_next
             frame = tb.tb_frame
             lineno = tb.tb_lineno
             filename = frame.f_code.co_filename
             funcname = frame.f_code.co_name
-            print("Occurred in " + filename + ", function " + funcname + ", line " + str(lineno))
+            buf.append("Occurred in " + filename + ", function " + funcname + ", line " + str(lineno))
 
         # Log full traceback
-        print("Full traceback:")
-        print("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+        buf.append("Full traceback:")
+        buf.append("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+
+        # Write all at once
+        log("\n".join(buf))
+
 
     @staticmethod
     def loop_setup(loop):

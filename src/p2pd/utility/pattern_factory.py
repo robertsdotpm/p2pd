@@ -6,6 +6,7 @@ Consensus first-in:
     - Concurrent exec of f() -> r
     - return when m * 2
     - or timeout: return most frequent r
+    TODO: fix
 """
 async def concurrent_first_agree_or_best(min_agree, tasks, timeout, wait_all=False):
     results = {}
@@ -13,8 +14,8 @@ async def concurrent_first_agree_or_best(min_agree, tasks, timeout, wait_all=Fal
     pending = set(tasks)
     try:
         for task in asyncio.as_completed(tasks, timeout=timeout):
-            result = await task
             pending.discard(task)
+            result = await task
             results[result] = results.get(result, 0) + 1
             if results[result] >= min_agree:
                 return result
@@ -23,4 +24,9 @@ async def concurrent_first_agree_or_best(min_agree, tasks, timeout, wait_all=Fal
         return best
     finally:
         if wait_all and pending:
+            tasks = pending.copy()
+            for task in tasks:
+                if task.done():
+                    pending.discard(task)
+                    
             await asyncio.gather(*pending, return_exceptions=True)
