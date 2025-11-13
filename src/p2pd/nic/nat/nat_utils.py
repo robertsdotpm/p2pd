@@ -250,6 +250,8 @@ async def delta_test(stun_clients, test_no=8, threshold=5, concurrency=True):
             if result is not None:
                 results.append(result)
 
+    #print(results)
+
     """
     Check for:
         equal delta: src_port == mapped_port

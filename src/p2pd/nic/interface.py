@@ -23,6 +23,8 @@ class Interface():
         self.netiface_index = None
         self.id = self.mac = self.nic_no = None
         self.nat = nat or nat_info()
+        self.nat_type = None
+        self.delta = None
         self.name = name
         self.rp = {IP4: RoutePool(), IP6: RoutePool()}
         self.v4_lan_ips = []
@@ -50,18 +52,39 @@ class Interface():
             timeout=timeout,
         )
     
-    async def load_nat(self, nat_tests=5, delta_tests=12, timeout=4):
+    async def load_delta(self, delta_tests=12, timeout=4):
+        af = IP4 if IP4 in self.supported() else IP6        
+        stun_clients = await get_stun_clients(
+            af,
+            delta_tests,
+            self,
+        )
+        self.delta = await async_wrap_errors(
+            delta_test(
+                stun_clients,
+                test_no=delta_tests,
+                threshold=int(delta_tests / 2) - 1
+            ),
+            timeout=timeout
+        )
+
+        if self.delta and self.nat:
+            nat = nat_info(self.nat_type, self.delta)
+            self.set_nat(nat)
+        
+        return self.delta
+    
+    async def load_nat(self, nat_tests=5, timeout=4):
         # Try main decentralized NAT test approach.
-        nat_type, delta = await nic_load_nat(
+        self.nat_type = await nic_load_nat(
             self,
             nat_tests,
-            delta_tests,
             timeout=timeout
         )
             
         # Load NAT type and delta info.
         # On a server should be open.
-        nat = nat_info(nat_type, delta)
+        nat = nat_info(self.nat_type, self.delta)
         return self.set_nat(nat)
     
     def set_nat(self, nat):

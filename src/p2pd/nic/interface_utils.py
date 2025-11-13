@@ -258,7 +258,12 @@ assuming immediate execution.
             )
 
             if not skip_nat:
-                await nic.load_nat(timeout=timeout)
+                try:
+                    await nic.load_nat(timeout=timeout)
+                except ErrorCantLoadNATInfo:
+                    log(fstr("Failed to load NAT for nic {0}", (nic.name)))
+
+                await nic.load_delta()
             nics.append(nic)
         except asyncio.CancelledError:
             raise

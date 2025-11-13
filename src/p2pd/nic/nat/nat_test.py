@@ -236,20 +236,18 @@ async def fast_nat_test(pipe, test_no=NAT_TEST_NO, timeout=NAT_TEST_TIMEOUT):
         # Symmetric NAT or RESTRICT_PORT_NAT.
         return q_list[-1] 
     
-async def nic_load_nat(nic, nat_tests=5, delta_tests=12, servs=None, timeout=4):
+async def nic_load_nat(nic, nat_tests=5, servs=None, timeout=4):
     # IPv6 only has no NAT!
     if IP4 not in nic.supported():
         af = IP6
-        nat = nat_info(SYMMETRIC_NAT, RANDOM_DELTA)
-        return nic.set_nat(nat)
+        return SYMMETRIC_NAT
     else:
         af = IP4
 
     # Copy random STUN servers to use.
-    test_no = max(nat_tests, delta_tests)
     stun_clients = await get_stun_clients(
         af,
-        test_no,
+        nat_tests,
         nic,
         servs=servs
     )
@@ -264,36 +262,23 @@ async def nic_load_nat(nic, nat_tests=5, delta_tests=12, servs=None, timeout=4):
         raise ErrorCantLoadNATInfo("Unable to load nat.")
 
     # Run delta test.
-    nat_type, delta = await asyncio.gather(*[
-        # Fastest fit wins.
-        async_wrap_errors(
-            fast_nat_test(
-                pipe,
-                test_no=nat_tests,
-            ),
-            timeout=timeout
+    nat_type = await async_wrap_errors(
+        fast_nat_test(
+            pipe,
+            test_no=nat_tests,
         ),
-
-        # Concurrent -- 12 different hosts
-        # Threshold of 5 for consensus.
-        async_wrap_errors(
-            delta_test(
-                stun_clients,
-                test_no=delta_tests,
-                threshold=int(delta_tests / 2) - 1
-            ),
-            timeout=timeout
-        )
-    ])
+        timeout=timeout
+    )
 
     # Cleanup NAT test pipe.
     await pipe.close()
 
     # Sanity check nat / delta details.
-    if None in [nat_type, delta]:
+    if nat_type == None:
+        log(fstr("fast nat test failed for {0}", (nic.name,)))
         raise ErrorCantLoadNATInfo("Unable to load nat.")
     
-    return nat_type, delta
+    return nat_type
 
 async def nat_test_main():
     from .interface import Interface, p2pd_setup_netifaces

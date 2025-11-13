@@ -66,3 +66,5 @@ maybe i should refactor it into a class like:
     so that close works
 
     changed return PipeEvents(None) to return None in some funcs
+
+  DELTA tests are disabled for now 

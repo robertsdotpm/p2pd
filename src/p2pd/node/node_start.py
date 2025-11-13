@@ -197,11 +197,9 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     print("end nickname")
 
-    """
     if node.conf.get("enable_nickname", True):
         nick = await node.nickname(node.node_id)
         pkt = await node.nick_client.fetch(nick)
         cout("nick pkt vkc = ", pkt.vkc)
-    """
 
     return node

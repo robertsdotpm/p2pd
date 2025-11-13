@@ -33,14 +33,15 @@ async def lookup_wan_ip_for_nic_ip(src_ip, min_agree, stun_clients, timeout):
                 stun_client.get_wan_ip(
                     # Will be upgraded to a pipe.
                     pipe=local_addr
-                )
+                ),
+                timeout=timeout
             )
             tasks.append(task)
 
         wan_ip = await concurrent_first_agree_or_best(
             min_agree,
             tasks,
-            timeout,
+            timeout + 1,
             wait_all=True
         )
 

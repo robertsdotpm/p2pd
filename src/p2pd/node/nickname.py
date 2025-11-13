@@ -124,19 +124,7 @@ class Nickname():
                     if pipe is None:
                         continue
 
-                    try:
-                        await pipe.connect()
-                        print("pipe con success")
-                    except asyncio.CancelledError:
-                        raise  # propagate cancellation
-                    except Exception:
-                        # cleanup and skip this client
-                        if pipe is not None:
-                            try:
-                                await pipe.close()
-                            except Exception:
-                                pass
-                        continue
+                    await pipe.connect()
 
                     # Good client, save it
                     print(client)
@@ -144,10 +132,7 @@ class Nickname():
                     success_no += 1
 
                     # Close pipe now if client doesn't need it open
-                    try:
-                        await pipe.close()
-                    except Exception:
-                        pass
+                    await pipe.close()
 
                 except Exception:
                     # Ensure client slot stays None if anything else goes wrong
