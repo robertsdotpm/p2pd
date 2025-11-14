@@ -45,13 +45,12 @@ from ...errors import *
 from ...utility.utils import *
 from ...net.net_utils import *
 from ...net.address import Address
-from ...net.pipe.pipe import *
+from ...net.pipe.pipe_open import *
 from .stun_defs import *
 from .stun_utils import *
 from ...utility.pattern_factory import *
 from ...settings import *
 from ...nic.route.route import Route
-from ...net.bind.bind import *
 
 
 class STUNClient():
@@ -66,7 +65,7 @@ class STUNClient():
     # Boilerplate to get a pipe to the STUN server.
     async def _get_dest_pipe(self, unknown):
         # Already open pipe.
-        if isinstance(unknown, Pipe):
+        if isinstance(unknown, PipeEvents):
             return unknown
 
         # Open a new con to STUN server.
@@ -84,12 +83,12 @@ class STUNClient():
 
         # Otherwise use details to make a new pipe.
         self.dest = await resolv_dest(self.af, self.dest, self.interface)
-        try:
-            pipe = Pipe(self.proto, self.dest, route, conf=self.conf)
-            return await pipe.connect()
-        except Exception:
-            log_exception()
-            return None
+        return await pipe_open(
+            self.proto,
+            self.dest,
+            route,
+            conf=self.conf
+        )
     
     # Returns a STUN reply based on how client was setup.
     async def get_stun_reply(self, pipe=None, attrs=[]):
@@ -152,23 +151,19 @@ class STUNClient():
     # Return only your remote IP.
     async def get_wan_ip(self, pipe=None):
         pipe = await self._get_dest_pipe(pipe)
-        try:
-            reply = await get_stun_reply(
-                self.mode,
-                self.dest,
-                self.dest,
-                pipe
-            )
+        reply = await get_stun_reply(
+            self.mode,
+            self.dest,
+            self.dest,
+            pipe
+        )
 
-            if hasattr(reply, "rtup"):
-                return ip_norm(reply.rtup[0])
-        finally:
-            if pipe is not None:
-                await pipe.close()
+        await reply.pipe.close()
+        if hasattr(reply, "rtup"):
+            return ip_norm(reply.rtup[0])
 
     # Return information on your local + remote port.
     # The pipe is left open to be used with punch code.
-    # NOTE: Pipe doesn't get closed from this. Intentional?
     async def get_mapping(self, pipe=None):
         pipe = await self._get_dest_pipe(pipe)
         reply = await get_stun_reply(
@@ -217,8 +212,6 @@ async def get_stun_clients(af, max_agree, interface, proto=UDP, servs=None, conf
             )
         
         stun_clients.append(get_stun_client(serv_info))
-        if len(stun_clients) >= max_agree:
-            break
 
     return await asyncio.gather(*stun_clients)
 
@@ -239,9 +232,7 @@ async def get_n_stun_clients(af, n, interface, proto=UDP, limit=5, conf=NET_CONF
                 out = await stun.get_mapping()
                 if out is not None:
                     return stun
-            except asyncio.CancelledError:
-                raise
-            except Exception:
+            except:
                 log_exception()
                 continue
             
@@ -258,7 +249,7 @@ async def get_n_stun_clients(af, n, interface, proto=UDP, limit=5, conf=NET_CONF
     return strip_none(
         await asyncio.gather(
             *tasks,
-            return_exceptions=True,
+            return_exceptions=False,
         )
     )
 
@@ -338,6 +329,5 @@ async def test_con_stun_client():
 if __name__ == "__main__":
     pass
     #async_test(change_server_bind_experiment)
-
 
 
