@@ -114,4 +114,4 @@ def log_exception():
     exc_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
     
     # Enqueue the formatted string
-    log(f"EXCEPTION: {exc_text.strip()}")
+    log("EXCEPTION: " + exc_text.strip())

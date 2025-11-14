@@ -23,12 +23,11 @@ async def concurrent_first_agree_or_best(min_agree, tasks, timeout, wait_all=Fal
 
     try:
         if wait_all:
-            print(wait_all)
             ret = await asyncio.wait_for(
                 asyncio.gather(*pending, return_exceptions=True),
                 timeout=timeout
             )
-            print(ret)
+            
             for result in ret:
                 winner = process_result(result)
                 if winner is not None:
