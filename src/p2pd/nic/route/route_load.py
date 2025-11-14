@@ -42,7 +42,9 @@ async def lookup_wan_ip_for_nic_ip(src_ip, min_agree, stun_clients, timeout):
             min_agree,
             tasks,
             timeout + 1,
-            wait_all=True
+
+            # Return as soon as min_agree is met.
+            wait_all=False
         )
 
         if wan_ip is None:
