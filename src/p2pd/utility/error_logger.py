@@ -5,6 +5,7 @@ import traceback
 import threading
 import queue
 import atexit
+from .fstr import *
 
 # --- Configuration & Initialization ---
 IS_DEBUG = "P2PD_DEBUG" in os.environ
@@ -115,3 +116,7 @@ def log_exception():
     
     # Enqueue the formatted string
     log("EXCEPTION: " + exc_text.strip())
+
+def log_p2p(msg, node_id):
+    buf = fstr("p2p <{0}>: {1}", (node_id, msg,))
+    log(buf)

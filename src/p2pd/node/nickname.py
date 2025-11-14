@@ -102,7 +102,6 @@ class Nickname():
 
                 # Uses direct IPs to avoid domain names.
                 serv_info = PNP_SERVERS[af][index]
-                #print(serv_info)
                 dest = (
                     serv_info["ip"],
                     serv_info["port"],
@@ -120,14 +119,12 @@ class Nickname():
                 # Test connectivity.
                 try:
                     pipe = await client.get_dest_pipe()
-                    print(pipe)
                     if pipe is None:
                         continue
 
                     await pipe.connect()
 
                     # Good client, save it
-                    print(client)
                     self.clients[af][index] = client
                     success_no += 1
 
