@@ -297,7 +297,7 @@ class Pipe:
             # ---------------------------
             fut = asyncio.ensure_future(self.pipe_events.stream_ready.wait())
             try:
-                await asyncio.wait_for(fut, timeout=self.conf.get("con_timeout", 2))
+                await asyncio.wait_for(fut, timeout=2)
             except asyncio.TimeoutError:
                 # Don't cancel underlying event; UDP may still be ready later
                 pass

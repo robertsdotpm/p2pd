@@ -124,8 +124,18 @@ Run the main program which accepts input and shows menu options.
 Also waits for close events and handles cleanup.
 """
 async def main():
-    loop = asyncio.get_event_loop()
-    start_logger()
+    # Catch process exit signals (not supported on win32.)
+    if sys.platform != "win32":
+        # Caught properly by async_run and wrapped catch.
+        def raise_keyboard_interrupt():
+            raise KeyboardInterrupt()
+
+        # Install SIGTERM handler.
+        loop = asyncio.get_event_loop()
+        try:
+            loop.add_signal_handler(signal.SIGTERM, raise_keyboard_interrupt)
+        except NotImplementedError:
+            log("This platform doesn't support sigterm handling.")
 
     # Additional optional module to improve UX for cnt + c.
     # Otherwise input() is used which still needs enter for exit.
@@ -187,6 +197,9 @@ async def main():
 if __name__ == "__main__":
     # explore the sigterm handling last.
     #loop.add_signal_handler(signal.SIGTERM, cancel_all_tasks)
+    # Seperate thread for processing a queue of log messages.
+    # Avoids dead locks with Python's simple logger.
+    start_logger()
     try:
         async_run(main())
         log("main task done.")
