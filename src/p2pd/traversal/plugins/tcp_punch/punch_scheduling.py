@@ -92,6 +92,7 @@ in the Internet as packets travel across routers.
 Optimized and tested for remote connections.
 """
 async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings, interface):
+    log("In schedule delay punching")
     try:
         # Config.
         secs = 10
