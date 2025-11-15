@@ -13,6 +13,7 @@ if sys.platform == "win32":
 else:
     import netifaces as netifaces
 
+shutdown_event = multiprocessing.Event()
 _cached_netifaces = None
 _cache_lock = asyncio.Lock()
 
@@ -127,7 +128,6 @@ async def p2pd_setup_netifaces():
 
         _cached_netifaces = netifaces
         return netifaces
-
 
 def init_process_pool():
     # Make selector default event loop.

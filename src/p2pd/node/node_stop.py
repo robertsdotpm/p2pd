@@ -22,6 +22,12 @@ async def close_with_timeout(p):
 
 # Shutdown the node server and do cleanup.
 async def node_stop(node):
+    global shutdown_event
+
+    # Set the shutdown event if it's not set.
+    if not shutdown_event.is_set():
+        shutdown_event.set()
+
     # Make the worker thread for punching end.
     node.punch_queue.put_nowait(None)
     if node.punch_worker_task is not None:

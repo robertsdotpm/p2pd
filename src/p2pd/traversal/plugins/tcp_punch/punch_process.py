@@ -8,6 +8,7 @@ from .start_punching import start_punching
 from ....net.pipe.pipe import *
 
 async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, node_id):
+    global shutdown_event
     has_success = asyncio.Event()
     task = create_task(
         async_wrap_errors(
@@ -38,7 +39,7 @@ async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, curre
         30
     )
 
-    while 1:
+    while not shutdown_event.is_set():
         await asyncio.sleep(1)
 
 
