@@ -6,7 +6,7 @@ def async_shield(awaitable, *, loop=None):
     Return an awaitable that protects the given awaitable from
     cancellation of the outer task.
     """
-    loop = loop or asyncio.get_running_loop()
+    loop = loop or asyncio.get_event_loop()
     fut = asyncio.ensure_future(awaitable, loop=loop)
 
     async def _shield():
