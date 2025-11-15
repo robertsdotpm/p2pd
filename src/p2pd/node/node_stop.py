@@ -1,6 +1,8 @@
 import asyncio
 from ..errors import AlreadyClosedError
 from ..utility.utils import *
+from .node_defs import *
+
 
 async def close_helper(p):
     try:

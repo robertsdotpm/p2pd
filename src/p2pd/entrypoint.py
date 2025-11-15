@@ -13,7 +13,6 @@ if sys.platform == "win32":
 else:
     import netifaces as netifaces
 
-shutdown_event = multiprocessing.Event()
 _cached_netifaces = None
 _cache_lock = asyncio.Lock()
 

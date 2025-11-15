@@ -6,6 +6,7 @@ from ....utility.clock_skew import *
 from ....net.asyncio.event_loop import *
 from .start_punching import start_punching
 from ....net.pipe.pipe import *
+from ....node.node_defs import *
 
 async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, node_id):
     global shutdown_event
@@ -41,53 +42,6 @@ async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, curre
 
     while not shutdown_event.is_set():
         await asyncio.sleep(1)
-
-
-def proc_do_punching(args):
-    try:
-        puncher_class, reverse_tup, d, interface, node_id = args
-        puncher = puncher_class.from_dict(d)
-
-        """
-        On Windows it seems like using the default 'proactor event loop'
-        prevents the TCP hole punching code from working. It seems that
-        manually setting the event loop to use SelectorEventLoop
-        fixes the issue. However, this may mean breaking some of
-        my command execution code on Windows -- test this.
-        """
-        loop = CustomEventLoop()
-        asyncio.set_event_loop(loop)
-
-        coro = async_wrap_errors(
-            do_punching_wrapper(
-                puncher.af,
-                puncher.dest_info["ip"],
-                puncher.send_mappings,
-                puncher.recv_mappings,
-                puncher.sys_clock.time(),
-                puncher.start_time,
-                puncher.punch_mode,
-                interface,
-                reverse_tup,
-                node_id,
-            )
-        )
-
-        result = loop.run_until_complete(coro)
-        return result
-
-    except Exception:
-        log_exception()
-
-    finally:
-        try:
-            loop.stop()
-        except:
-            pass
-        try:
-            loop.close()
-        except:
-            pass
 
 # Started in a new process.
 def proc_do_punching(args):

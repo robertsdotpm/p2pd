@@ -1,3 +1,5 @@
+import multiprocessing
+
 TRY_OVERLAP_EXTS = 1
 TRY_NOT_TO_OVERLAP_EXTS = 2
 CON_ID_MSG = b"P2P_CON_ID_EQ"
@@ -7,3 +9,5 @@ NODE_ADDR_MAX_INTERFACES = 4
 
 # No more than n signal pipes to send signals to nodes.
 SIGNAL_PIPE_NO = 3
+
+shutdown_event = multiprocessing.Event()
