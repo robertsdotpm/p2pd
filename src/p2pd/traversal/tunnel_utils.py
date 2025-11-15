@@ -205,6 +205,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             """
             if cleanup is not None:
                 await cleanup(
+                    pp,
                     af,
                     pipe_id,
                     src_info,
