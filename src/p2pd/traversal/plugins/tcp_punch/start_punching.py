@@ -99,17 +99,7 @@ async def start_punching(af, dest_addr, send_mappings, recv_mappings, current_nt
         client_pipe = await Pipe(TCP, reverse_tup, route).connect(
             punch_close_msg
         )
-        
-        """
-        client_pipe = await pipe_open(
-            proto=TCP,
-            dest=reverse_tup,
-            route=route,
-            msg_cb=punch_close_msg
-        )
-        """
 
-        
         async def forward_to_client_pipe(msg, client_tup, pipe):
             await client_pipe.send(msg, client_pipe.sock.getpeername())
 
