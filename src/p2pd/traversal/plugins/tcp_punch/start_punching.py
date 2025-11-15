@@ -121,7 +121,10 @@ async def start_punching(af, dest_addr, send_mappings, recv_mappings, current_nt
                 break
                 
         # Ensure cleanup for pipes.
-        await client_pipe.close()
-        await upstream_pipe.close()
+        for pipe in (client_pipe, upstream_pipe,):
+            try:
+                await pipe.close()
+            except AlreadyClosedError:
+                pass
     except Exception:
         log_exception()

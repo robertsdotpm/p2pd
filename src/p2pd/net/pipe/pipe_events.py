@@ -150,6 +150,10 @@ class PipeEvents(BaseACKProto):
         self.tcp_clients.append(client)
         self.client_futures[client.p_client_entry].set_result(client)
 
+    """
+    This code allows the pipe to act like an async accept()
+    for a TCP server.
+    """
     async def make_awaitable(self):
         if self.endpoint_type == TYPE_TCP_SERVER:
             bound = self.p_client_insert + 1
@@ -336,8 +340,7 @@ class PipeEvents(BaseACKProto):
         self.route_msg(data, client_tup)
 
     def error_received(self, exp):
-        log_exception()
-        raise exp
+        proto_error_received(exp)
 
     # UDP packets.
     def datagram_received(self, data, client_tup):

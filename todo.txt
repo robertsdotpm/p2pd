@@ -33,3 +33,68 @@ punch double close found:
   File "/home/x/projects/p2pd/src/p2pd/net/pipe/pipe_events.py", line 374, in close
     raise AlreadyClosedError()
 p2pd.errors.AlreadyClosedError
+
+
+
+[error_logger.py:53] p2p <03cbb749>: <punch> Upstream ('10.0.1.224', 33487) = ('10.0.1.225', 33487) on 'ens192'
+[error_logger.py:53] Warning: externally provided socket will not be closed by Pipe
+[error_logger.py:53] New TCP client l=('10.0.1.224', 36555), r=('10.0.1.224', 41149)
+[error_logger.py:53] p2p <03cbb749>: <punch> Established local ('10.0.1.224', 36555) -> ('10.0.1.224', 41149) on 'ens192'
+[error_logger.py:53] Base proto recv tcp client = b'ECHO CLEAN_SHUTDOWN\n\n'
+[error_logger.py:53] > node proto = b'ECHO CLEAN_SHUTDOWN', ('10.0.1.224', 41149)
+[error_logger.py:53] reached clean shutdown in add echo
+[error_logger.py:53] Main task cancelled!
+[error_logger.py:53] stop nodes clause reached.
+[protocol.py:86] [CONN CLOSE NORMALLY]
+[handler.py:211] [CMD 0xe0] b''
+[error_logger.py:53] Signal pipe disconnected.
+[protocol.py:86] [CONN CLOSE NORMALLY]
+[handler.py:211] [CMD 0xe0] b''
+[error_logger.py:53] Signal pipe disconnected.
+[protocol.py:86] [CONN CLOSE NORMALLY]
+[handler.py:211] [CMD 0xe0] b''
+[error_logger.py:53] Signal pipe disconnected.
+[protocol.py:86] [CONN CLOSE NORMALLY]
+[handler.py:211] [CMD 0xe0] b''
+[error_logger.py:53] Signal pipe disconnected.
+[error_logger.py:53] -1 passed to await_fd_close()!
+[error_logger.py:53]  send error {('10.0.1.224', 41149): <StreamWriter transport=<_SelectorSocketTransport closed fd=36> reader=<StreamReader eof transport=<_SelectorSocketTransport closed fd=36>>>}
+[error_logger.py:53] EXCEPTION: Traceback (most recent call last):
+  File "/home/x/p2pd_dev/p2pd/src/p2pd/net/asyncio/async_run.py", line 89, in async_run
+    return loop.run_until_complete(main)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/x/.pyenv/versions/3.12.0/lib/python3.12/asyncio/base_events.py", line 651, in run_until_complete
+    self.run_forever()
+  File "/home/x/.pyenv/versions/3.12.0/lib/python3.12/asyncio/base_events.py", line 618, in run_forever
+    self._run_once()
+  File "/home/x/.pyenv/versions/3.12.0/lib/python3.12/asyncio/base_events.py", line 1951, in _run_once
+    handle._run()
+  File "/home/x/.pyenv/versions/3.12.0/lib/python3.12/asyncio/events.py", line 84, in _run
+    self._context.run(self._callback, *self._args)
+  File "/home/x/p2pd_dev/p2pd/src/p2pd/demo/utils.py", line 30, in add_echo_support
+    raise KeyboardInterrupt()
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/x/p2pd_dev/p2pd/src/p2pd/net/pipe/pipe_client.py", line 216, in send
+    await handle.drain()
+  File "/home/x/.pyenv/versions/3.12.0/lib/python3.12/asyncio/streams.py", line 377, in drain
+    await self._protocol._drain_helper()
+  File "/home/x/.pyenv/versions/3.12.0/lib/python3.12/asyncio/streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost
+[error_logger.py:53] -1 passed to await_fd_close()!
+[error_logger.py:53] stop node () ending
+[error_logger.py:53] -1 passed to await_fd_close()!
+[error_logger.py:53] end of stop nodes clause.
+[error_logger.py:53] -1 passed to await_fd_close()!
+[error_logger.py:53] EXCEPTION: Traceback (most recent call last):
+  File "/home/x/p2pd_dev/p2pd/src/p2pd/traversal/plugins/tcp_punch/start_punching.py", line 124, in start_punching
+    await client_pipe.close()
+  File "/home/x/p2pd_dev/p2pd/src/p2pd/net/pipe/pipe.py", line 80, in close
+    await self.pipe_events.close()
+  File "/home/x/p2pd_dev/p2pd/src/p2pd/net/pipe/pipe_events.py", line 369, in close
+    raise AlreadyClosedError()
+p2pd.errors.AlreadyClosedError

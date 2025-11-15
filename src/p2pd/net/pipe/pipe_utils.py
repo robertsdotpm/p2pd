@@ -1,5 +1,25 @@
 import asyncio
+import errno
 from ..net_utils import *
+
+def proto_error_received(e):
+    try:
+        # Some log util that doesn't crash if logging fails
+        log_exception()
+    except Exception:
+        pass
+
+    # Ignore common harmless socket errors
+    if isinstance(e, (ConnectionResetError, BrokenPipeError, OSError)):
+        # Check specific errno values
+        check = (errno.EBADF, errno.ENOTCONN, errno.EPIPE, errno.ECONNRESET)
+        if isinstance(e, OSError):
+            if e.errno in check:
+                return
+        return
+
+    # For everything else, re-raise
+    raise e
 
 def tup_to_sub(dest_tup):
     dest_tup = client_tup_norm(dest_tup)
