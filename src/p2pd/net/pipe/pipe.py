@@ -149,7 +149,7 @@ class Pipe:
         Covers the case where a network Interface is passed instead of a route.
         In that case, just use the first available route at first supported AF.
         """
-        if route is not None and getattr(route, "__name__", None) == "Interface":
+        if route is not None and route.__name__ == "Interface":
             nic = route
 
             # For legacy code that passes Interface.
@@ -163,7 +163,7 @@ class Pipe:
             route = await nic.route(af)
 
         # Routes all need to be bound.
-        if not getattr(route, "resolved", False):
+        if not route.resolved:
             log("Resolve route received unbound route.")
             await route.bind()
 
@@ -183,7 +183,7 @@ class Pipe:
 
             # Supports int for IP, converts using CIDR
             if isinstance(ip, int):
-                af = getattr(route, "af", None)
+                af = route.af
                 cidr = CIDR_WAN if af is None else af_to_cidr(af)
                 ip = IPRange(ip, cidr=cidr)
 
@@ -192,11 +192,11 @@ class Pipe:
                 ip = ipr_norm(ip)
 
             # Standard address class for resolving addresses.
-            dest = Address(ip, port, route.interface, conf=conf)
+            dest = Address(ip, port, conf=conf)
 
         # Ensure address instances are resolved to IPs.
         if isinstance(dest, Address):
-            if not getattr(dest, "resolved", False):
+            if not dest.resolved:
                 await dest.res(route)
 
             # Select compatible IP for route AF

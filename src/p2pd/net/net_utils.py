@@ -203,3 +203,15 @@ def avoid_time_wait(pipe):
         # Not guaranteed on windows.
         log_exception()
 
+# Not used presently but may be useful in future.
+async def safe_sock_connect(loop, sock, dest):
+    try:
+        await loop.sock_connect(sock, dest)
+        return True
+    except ConnectionRefusedError:
+        log("Connection refused: " + str(dest))
+        return False
+    except OSError as e:
+        # Handles e.g. ENETUNREACH, ETIMEDOUT, ECONNRESET
+        log("Socket connect error to " + str(dest) + ":" + str(e))
+        return False
