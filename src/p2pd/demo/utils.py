@@ -157,13 +157,14 @@ async def choose_connection_methods(con_method):
     while True:
         # If pressing enter then use the default list of methods in order.
         con_method = con_method or (await ainput("Enter for default (drp): "))
-        if not len(con_method):
-            strats = P2P_STRATEGIES
-            break
 
         # Go back to the menu.
         if con_method.lower().strip() == "menu":
             return "menu"
+
+        if not len(con_method):
+            strats = P2P_STRATEGIES
+            break
 
         # Save a list of only valid choices.
         strats = []
@@ -188,12 +189,12 @@ async def choose_pathways(pathway):
     addr_types = []
     while True:
         pathway = pathway or (await ainput("Enter for default (el): "))
+        if pathway.lower().strip() == "menu":
+            return "menu"
+
         if not len(pathway):
             addr_types = [EXT_BIND, NIC_BIND]
             break
-
-        if pathway.lower().strip() == "menu":
-            return "menu"
 
         addr_types = []
         for c in pathway:
@@ -219,12 +220,12 @@ async def choose_address_families(addr_type):
     af_priority = []
     while True:
         addr_type = addr_type or (await ainput("Enter for default (46): "))
+        if addr_type.lower().strip() == "menu":
+            return "menu"
+
         if not len(addr_type):
             af_priority = [IP4, IP6]
             break
-
-        if addr_type.lower().strip() == "menu":
-            return "menu"
 
         af_priority = []
         for c in addr_type:
@@ -254,6 +255,7 @@ async def echo_client(pipe, echo_data):
         if send_buf in (b"menu"):
             send_buf = b""
             return "menu"
+        
         await pipe.send(b"ECHO " + send_buf + b"\n")
         buf = await pipe.recv(timeout=3)
 
