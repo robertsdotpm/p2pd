@@ -3,6 +3,7 @@
 from ecdsa import SECP256k1, SigningKey
 from ...vendor.ecies import decrypt, encrypt
 from ...net.pipe.pipe_open import *
+from ...net.pipe.pipe import *
 from .pnp_utils import *
 from ...net.address import *
 from ...net.net_patterns import *
@@ -53,8 +54,16 @@ class PNPClient():
         else:
             route = await route.bind()
 
-        pipe = await pipe_open(self.proto, self.dest, route)
-        return pipe
+        try:
+            pipe = await Pipe(self.proto, self.dest, route).connect()
+            return pipe
+        except:
+            log_exception()
+            return None
+        
+        
+        #pipe = await pipe_open(self.proto, self.dest, route)
+        #return pipe
 
     async def return_resp(self, pipe):
         try:
