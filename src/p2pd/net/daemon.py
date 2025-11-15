@@ -56,15 +56,6 @@ async def is_serv_listening(proto, listen_route):
         return True
     except:
         return False
-    
-    """
-    pipe = await pipe_open(proto, dest, route)
-    if pipe is not None:
-        await pipe.close()
-        return True
-    
-    return False
-    """
 
 """
 Used to detect if daemons have uncleanly exited in which case
@@ -197,15 +188,6 @@ class Daemon():
         except:
             raise
 
-        """
-        pipe = await pipe_open(
-            proto,
-            route=route,
-            msg_cb=self.msg_cb,
-            up_cb=self.up_cb,
-            conf=self.conf
-        )
-        """
         assert(pipe is not None)
 
         """

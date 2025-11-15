@@ -256,7 +256,13 @@ async def nic_load_nat(nic, nat_tests=5, delta_tests=12, servs=None, timeout=4):
     # Pipe is used for NAT tests using multiplexing.
     # Same socket, different dests, TXID ordered.
     route = await nic.route(af).bind()
-    pipe = await pipe_open(UDP, route=route)
+    try:
+        pipe = Pipe(UDP, None, route)
+        await pipe.connect()
+    except:
+        raise ErrorCantLoadNATInfo("Unable to start pipe for load nat.")
+    
+    #pipe = await pipe_open(UDP, route=route)
 
     # Run delta test.
     nat_type, delta = await asyncio.gather(*[
