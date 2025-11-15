@@ -71,7 +71,9 @@ async def node_stop(node):
     """
     if node.pp_executor:
         log("trying to shut down pp executor waiting.")
-        node.pp_executor.shutdown(wait=True)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, node.pp_executor.shutdown, True)
+        #node.pp_executor.shutdown(wait=True)
         log("shutdown for pp executor done.")
 
     log("stop node () ending")
