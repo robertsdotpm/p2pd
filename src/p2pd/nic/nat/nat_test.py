@@ -259,7 +259,7 @@ async def nic_load_nat(nic, nat_tests=5, delta_tests=12, servs=None, timeout=4):
     try:
         pipe = Pipe(UDP, None, route)
         await pipe.connect()
-    except:
+    except Exception:
         raise ErrorCantLoadNATInfo("Unable to start pipe for load nat.")
     
     # Run delta test.

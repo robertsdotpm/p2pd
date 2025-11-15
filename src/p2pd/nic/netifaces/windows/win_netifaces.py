@@ -241,7 +241,7 @@ async def get_default_gw_by_if_index(af, if_index):
     try:
         ip_f(out)
         return out
-    except:
+    except Exception:
         log(out)
         return None
 
@@ -291,7 +291,7 @@ async def get_default_iface_by_af(af):
     cmd_buf = cmd_buf.format(dest_ip)
     try:
         out = await cmd(cmd_buf, timeout=CMD_TIMEOUT)
-    except:
+    except Exception:
         return None
 
     try:
@@ -508,7 +508,7 @@ class Netifaces():
                     continue
                     
                 break
-            except:
+            except Exception:
                 log_exception()
 
         self.by_guid_index = {}

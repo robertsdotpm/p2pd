@@ -30,7 +30,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
             node.ifs = await load_interfaces(if_names, Interface)
         except asyncio.CancelledError:
             raise
-        except:
+        except Exception:
             log_exception()
             node.ifs = []
 
@@ -183,7 +183,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         node.p2p_addr = parse_node_addr(node.addr_bytes)
     except asyncio.CancelledError:
         raise
-    except:
+    except Exception:
         log_exception()
         raise Exception("Can't parse nodes p2p addr.")
 

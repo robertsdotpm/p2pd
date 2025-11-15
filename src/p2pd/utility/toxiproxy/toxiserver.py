@@ -436,7 +436,7 @@ class ToxiMainServer(RESTD):
             bind_port = int(bind_port)
             if not bind_port:
                 bind_port = None
-        except:
+        except Exception:
             log_exception()
             return {
                 "error": "did not find listen details for create tunnel."
@@ -456,7 +456,7 @@ class ToxiMainServer(RESTD):
                 pipe.sock.type,
                 route
             )
-        except:
+        except Exception:
             log_exception()
             return {
                 "error": fstr("cant bind to {0}:{1}", (bind_ip, bind_port,))
@@ -496,7 +496,7 @@ class ToxiMainServer(RESTD):
 
             # Connect to upstream.
             upstream = await Pipe(proto, dest, up_route).connect()
-        except:
+        except Exception:
             return {
                 "error": fstr("upstream res failure {0}:{1}", (dest_ip, dest_port,))
             }

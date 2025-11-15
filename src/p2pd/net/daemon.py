@@ -53,7 +53,7 @@ async def is_serv_listening(proto, listen_route):
         pipe = await Pipe(proto, dest, route).connect()
         await pipe.close()
         return True
-    except:
+    except Exception:
         return False
 
 """
@@ -67,7 +67,7 @@ def get_serv_lock(af, proto, serv_port, serv_ip, install_path):
     # Make install dir if needed.
     try:
         pathlib.Path(install_path).mkdir(parents=True, exist_ok=True)
-    except:
+    except Exception:
         log_exception()
 
     # Main path files.
@@ -91,7 +91,7 @@ def get_serv_lock(af, proto, serv_port, serv_ip, install_path):
     try:
         import fasteners
         return fasteners.InterProcessLock(pidfile_path)
-    except:
+    except Exception:
         return None
 
 """
@@ -184,7 +184,7 @@ class Daemon():
             pipe = await Pipe(proto, None, route, conf=self.conf).connect(
                 self.msg_cb, self.up_cb
             )
-        except:
+        except Exception:
             raise
 
         assert(pipe is not None)
@@ -353,7 +353,7 @@ async def daemon_rewrite_workspace():
 
         while 1:
             await asyncio.sleep(1)
-    except:
+    except Exception:
         await serv.close()
         log_exception()
 

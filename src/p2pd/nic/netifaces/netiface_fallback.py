@@ -22,7 +22,7 @@ def load_if_info_fallback(nic):
             s = socket.create_connection((ips[af], 80))
             if_addrs[s.family] = s.getsockname()[0][:]
             s.close()
-        except:
+        except Exception:
             continue
 
     # Same API as netifaces.

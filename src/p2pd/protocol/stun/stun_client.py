@@ -236,7 +236,7 @@ async def get_n_stun_clients(af, n, interface, proto=UDP, limit=5, conf=NET_CONF
                     return stun
             except asyncio.CancelledError:
                 raise
-            except:
+            except Exception:
                 log_exception()
                 continue
             

@@ -6,7 +6,7 @@ async def proto_recv(pipe):
     for _ in range(0, n):
         try:
             return await pipe.recv()
-        except:
+        except Exception:
             continue
 
 async def proto_send(pipe, buf):
@@ -15,7 +15,7 @@ async def proto_send(pipe, buf):
         try:
             await pipe.send(buf)
             await asyncio.sleep(0.1)
-        except:
+        except Exception:
             continue
 
 async def send_recv_loop(dest, pipe, buf, sub=SUB_ALL):

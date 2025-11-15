@@ -60,7 +60,7 @@ async def lookup_wan_ip_for_nic_ip(src_ip, min_agree, stun_clients, timeout):
 
 
         return (src_ip, Route(af, [nic_ipr], [ext_ipr], interface))
-    except:
+    except Exception:
         log_exception()
 
 """

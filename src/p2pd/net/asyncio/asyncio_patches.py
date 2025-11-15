@@ -178,7 +178,7 @@ async def create_datagram_endpoint(loop, protocol_factory,
                 if sock is not None:
                     sock.close()
                 exceptions.append(exc)
-            except:
+            except Exception:
                 if sock is not None:
                     sock.close()
                 raise
@@ -201,7 +201,7 @@ async def create_datagram_endpoint(loop, protocol_factory,
         log(err_str)
     try:
         await waiter
-    except:
+    except Exception:
         transport.close()
         raise
 

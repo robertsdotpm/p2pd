@@ -148,7 +148,7 @@ class TURNClient(PipeEvents):
         try:
             self.turn_pipe = await Pipe(UDP, self.dest, self.route).connect()
             log(fstr("> Turn socket = {0}", (self.turn_pipe.sock,)))
-        except:
+        except Exception:
             log_exception()
             self.turn_pipe = None
 

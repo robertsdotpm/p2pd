@@ -123,5 +123,5 @@ async def start_punching(af, dest_addr, send_mappings, recv_mappings, current_nt
         # Ensure cleanup for pipes.
         await client_pipe.close()
         await upstream_pipe.close()
-    except:
+    except Exception:
         log_exception()

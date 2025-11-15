@@ -56,7 +56,7 @@ class PNPClient():
         try:
             pipe = await Pipe(self.proto, self.dest, route).connect()
             return pipe
-        except:
+        except Exception:
             log_exception()
             return None
 
@@ -71,7 +71,7 @@ class PNPClient():
             if not pkt.updated:
                 pkt.value = None
             return pkt
-        except:
+        except Exception:
             log_exception()
             return None
         finally:
@@ -104,7 +104,7 @@ class PNPClient():
             return await self.return_resp(pipe)
         except asyncio.CancelledError:
             raise
-        except:
+        except Exception:
             log_exception()
 
     async def push(self, name, value, behavior=BEHAVIOR_DO_BUMP):
@@ -114,7 +114,7 @@ class PNPClient():
             pkt = PNPPacket(name, value, self.vkc, None, t, behavior)
             await self.send_pkt(pipe, pkt)
             return await self.return_resp(pipe)
-        except:
+        except Exception:
             log_exception()
 
     async def delete(self, name):
@@ -124,5 +124,5 @@ class PNPClient():
             pkt = PNPPacket(name, vkc=self.vkc, updated=t)
             await self.send_pkt(pipe, pkt)
             return await self.return_resp(pipe)
-        except:
+        except Exception:
             log_exception()

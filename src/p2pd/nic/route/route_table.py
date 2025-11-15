@@ -152,7 +152,7 @@ async def linux_is_internet_if(if_name):
 
                 try:
                     ip_s = ip_norm(entry["dest"])
-                except:
+                except Exception:
                     continue
 
                 ip_obj = ip_f(ip_s)

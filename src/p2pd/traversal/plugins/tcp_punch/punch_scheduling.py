@@ -80,7 +80,7 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
         """
         mapping.sock = sock
         return mapping
-    except:
+    except Exception:
         #log_exception()
         return None
 
@@ -147,6 +147,6 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
         outs = await asyncio.gather(*tasks)
         outs = strip_none(outs)
         return outs
-    except:
+    except Exception:
         #what_exception()
         log_exception()

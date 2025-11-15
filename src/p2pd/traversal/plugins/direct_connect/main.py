@@ -29,7 +29,7 @@ async def direct_connect(tunnel, af, pipe_id, src_info, dest_info, iface, addr_t
     # Connect to destination.
     try:
         pipe = await Pipe(TCP, dest, route).connect(tunnel.node.msg_cb)
-    except:
+    except Exception:
         log_exception()
         pipe = None
 

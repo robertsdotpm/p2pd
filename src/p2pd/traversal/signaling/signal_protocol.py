@@ -88,7 +88,7 @@ class SigProtoHandlers():
                     buf[1:]
                 )
                 self.node.log("net", fstr("Recv decrypted {0}", (buf,)))
-            except:
+            except Exception:
                 self.node.log("net", fstr("Failed to decrypt {0}", (h,)))
                 log_exception()
         else:
@@ -151,7 +151,7 @@ class SigProtoHandlers():
 
             # Take action based on message.
             return await self.handle_msg(msg_info, msg, conf)
-        except:
+        except Exception:
             self.node.log("net", fstr("unknown handling {0}", (buf,)))
             log_exception()
     

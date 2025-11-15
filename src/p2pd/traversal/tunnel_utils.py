@@ -217,7 +217,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             # Delete unused futures on failure.
             if pipe_id in pp.node.pipes:
                 del pp.node.pipes[pipe_id]
-        except:
+        except Exception:
             log_exception()
 
     # Use an AF supported by both.

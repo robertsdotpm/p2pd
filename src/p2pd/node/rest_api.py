@@ -25,7 +25,7 @@ def con_info(self, con_name, con):
     # A route might end up malformed.
     try:
         con_route = con.route.to_dict()
-    except:
+    except Exception:
         log_exception()
         con_route = "couldn't load"
 
@@ -108,7 +108,7 @@ class P2PDServer(RESTD):
                 "ifs": if_list_to_dict(self.interfaces),
                 "error": 0
             }
-        except:
+        except Exception:
             log_exception()
             return {
                 "error": 4,

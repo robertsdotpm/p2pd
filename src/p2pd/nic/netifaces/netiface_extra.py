@@ -50,7 +50,7 @@ async def get_mac_mixed(if_name):
                 continue
 
             return out
-        except:
+        except Exception:
             log_exception()
     
     if os_name not in ["Darwin", "Windows"]:
@@ -59,7 +59,7 @@ async def get_mac_mixed(if_name):
             with pyroute2.NDB() as ndb:
                 with ndb.interfaces[if_name] as interface:
                     return interface["address"]
-        except:
+        except Exception:
             log_exception()
             return None
 
@@ -94,7 +94,7 @@ async def get_mac_address(name, netifaces):
             mac = await get_mac_mixed(name)
         except asyncio.CancelledError:
             raise
-        except:
+        except Exception:
             log_exception()
             return None
 

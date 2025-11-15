@@ -75,7 +75,7 @@ async def load_interface(nic, netifaces, min_agree, max_agree, timeout):
         load_if_info(nic)
     except InterfaceNotFound:
         raise InterfaceNotFound
-    except:
+    except Exception:
         log_exception()
         load_if_info_fallback(nic)
 
@@ -109,7 +109,7 @@ async def load_interface(nic, netifaces, min_agree, max_agree, timeout):
                 enable_default = True
             else:
                 enable_default = False
-        except:
+        except Exception:
             # If it's poorly supported allow default NIC behavior.
             log_exception()
             enable_default = True

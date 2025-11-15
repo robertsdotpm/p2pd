@@ -72,7 +72,7 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
             pipe = await Pipe(TCP, dest, route).connect()
             await pipe.close()
             return dest
-        except:
+        except Exception:
             return None
 
     # Try to load forwarding services at path and use them.
@@ -212,7 +212,7 @@ async def discover_upnp_devices(af, nic):
     dest = (UPNP_IP[af], UPNP_PORT)
     try:
         pipe = await Pipe(UDP, dest, route, sock=sock, conf=sock_conf).connect()
-    except:
+    except Exception:
         log_exception()
         pipe = None
 
@@ -237,7 +237,7 @@ async def discover_upnp_devices(af, nic):
 
         try:
             reply = ParseHTTPResponse(out)
-        except:
+        except Exception:
             log_exception()
             continue
 
@@ -284,7 +284,7 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
             proto,
             service_infos,
         )
-    except:
+    except Exception:
         log_exception()
         forward_success = False
 
