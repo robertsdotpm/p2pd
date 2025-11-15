@@ -46,4 +46,9 @@ MENU_BANNER = """(0) Connect to a node using its nickname or address.
 (1) Start accepting connections (this stops the input loop)
 (2) Register a unique nickname for your node.
 (3) Exit program.
+
+If you want to run another node instance for testing run this
+same program in another terminal but run it on a different port eg:
+
+python3 -m p2pd.demo --node_port 3001
 """

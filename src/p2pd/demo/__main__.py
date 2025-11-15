@@ -147,7 +147,6 @@ async def main():
 
     # Start the program loop.
     nodes = []
-    nodes_loop = None
     try:
         # Setup node
         start_time = int(time.time())
@@ -167,12 +166,12 @@ async def main():
                 return
 
             # Only execute program for this long.
-            nodes_loop = await asyncio.wait_for(
+            await asyncio.wait_for(
                 run_node_loop(nodes, ifs, nick),
                 timeout=run_time
             )
         else:
-            nodes_loop = await run_node_loop(nodes, ifs, nick)
+            await run_node_loop(nodes, ifs, nick)
     except asyncio.TimeoutError:
         log("Command run time met.")
     except asyncio.CancelledError:

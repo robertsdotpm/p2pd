@@ -63,13 +63,13 @@ class Pipe:
         try:
             await self.resolve_route_and_dest()
             await self.create_or_use_socket()
+            assert(self.route.bind_port)
             if do_connect:
                 await self.tcp_client_connect_if_needed()
-                
+
             await self.setup_pipe_events(msg_cb, up_cb)
             self._opened = True
         except Exception:
-            # defensive cleanup
             self.cleanup_on_error()
             raise
 
@@ -139,6 +139,7 @@ class Pipe:
     async def get_loop(self):
         if self.conf.get("loop") is not None:
             return self.conf["loop"]()
+        
         return asyncio.get_event_loop()
 
     async def resolve_route_and_dest(self):
@@ -242,8 +243,8 @@ class Pipe:
             loop = await self.get_loop()
             self.sock.settimeout(0)
             self.sock.setblocking(0)
-            timeout = self.conf.get("con_timeout", 5)
-            success = False
+
+            assert(not is_sock_connected(self.sock))
             con_task = asyncio.create_task(
                 loop.sock_connect(
                     self.sock, 
@@ -253,20 +254,6 @@ class Pipe:
 
             # Wait for connection, async style.
             await asyncio.wait_for(con_task, self.conf["con_timeout"])
-
-            """
-            try:
-                success = await asyncio.wait_for(
-                    safe_sock_connect(loop, self.sock, self.dest.tup), 
-                    timeout
-                )
-            except asyncio.TimeoutError:
-                # Don't cancel underlying connect
-                pass
-
-            if not success:
-                raise PipeError("Pipe error for safe sock connect.")
-            """
 
     async def setup_pipe_events(self, msg_cb=None, up_cb=None):
         """

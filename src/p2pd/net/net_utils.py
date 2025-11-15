@@ -215,3 +215,12 @@ async def safe_sock_connect(loop, sock, dest):
         # Handles e.g. ENETUNREACH, ETIMEDOUT, ECONNRESET
         log("Socket connect error to " + str(dest) + ":" + str(e))
         return False
+    
+def is_sock_connected(sock):
+    try:
+        # If this succeeds, the socket has a peer (is connected)
+        sock.getpeername()
+    except OSError:
+        return False
+    
+    return True
