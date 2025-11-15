@@ -79,7 +79,6 @@ class Pipe:
     async def accept(self):
         if self.pipe_events is not None:
             return await self.pipe_events.make_awaitable()
-            
 
     # Pretend to be a pipe_client.
     def __getattr__(self, name):
@@ -140,16 +139,17 @@ class Pipe:
         return asyncio.get_event_loop()
 
     async def resolve_route_and_dest(self):
-        self.route = await self.resolve_route(self.route)
+        af_hint = getattr(self.route, "af", None)
+        self.route = await self.resolve_route(self.route, af_hint)
         self.dest = await self.resolve_dest(self.dest, self.route, self.conf)
 
-    async def resolve_route(self, route):
+    async def resolve_route(self, route, af):
         """
         Resolves the route to bind the socket.
         Covers the case where a network Interface is passed instead of a route.
         In that case, just use the first available route at first supported AF.
         """
-        if route is not None and route.__name__ == "Interface":
+        if route is not None and getattr(route, "__name__", None) == "Interface":
             nic = route
 
             # For legacy code that passes Interface.
@@ -157,7 +157,6 @@ class Pipe:
 
         # If no route is set -- load a default interface.
         # This is slow and is used as a fallback.
-        af = route.af if route is not None else None
         if route is None:
             from ...nic.interface import Interface
             nic = await Interface()
@@ -193,7 +192,7 @@ class Pipe:
                 ip = ipr_norm(ip)
 
             # Standard address class for resolving addresses.
-            dest = Address(ip, port, conf=conf)
+            dest = Address(ip, port, route.interface, conf=conf)
 
         # Ensure address instances are resolved to IPs.
         if isinstance(dest, Address):
@@ -417,15 +416,3 @@ class Pipe:
         self.sock = None
         self.owns_socket = False
         self._closed = True
-
-async def pipe_workspace():
-    from ...nic.interface import Interface
-    nic = await Interface()
-    route = await nic.route()
-    async with Pipe(TCP, ("example.com", 80), route).session() as pipe:
-        await pipe.send(b"HTTP 1.0\r\nGET /\r\n\r\n")
-        out = await pipe.recv()
-        print(out)
-
-if __name__ == "__main__":
-    async_run(pipe_workspace())
