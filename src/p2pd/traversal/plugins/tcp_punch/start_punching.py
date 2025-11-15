@@ -93,25 +93,21 @@ async def start_punching(af, dest_addr, send_mappings, recv_mappings, current_nt
             punch_close_msg
         )
 
-        """
-        upstream_pipe = await pipe_open(
-            route=route,
-            proto=TCP,
-            dest=upstream_dest,
-            sock=sock,
-            msg_cb=punch_close_msg
-        )
-        """
-
         # Reverse connect to a listen server in parent process.
         # This avoids sharing between processes which breaks easily.
         route = await interface.route(af).bind()
+        client_pipe = await Pipe(TCP, reverse_tup, route).connect(
+            punch_close_msg
+        )
+        
+        """
         client_pipe = await pipe_open(
             proto=TCP,
             dest=reverse_tup,
             route=route,
             msg_cb=punch_close_msg
         )
+        """
 
         
         async def forward_to_client_pipe(msg, client_tup, pipe):
