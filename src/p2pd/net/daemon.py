@@ -16,6 +16,7 @@ from .address import *
 from .net_utils import *
 from ..nic.interface import *
 from .pipe.pipe_open import *
+from .pipe.pipe import *
 from ..install import *
 
 DAEMON_CONF = dict_child({
@@ -49,12 +50,21 @@ async def is_serv_listening(proto, listen_route):
 
     # Try make pipe to the server socket.
     dest = (listen_ip, listen_port)
+    try:
+        pipe = await Pipe(proto, dest, route).connect()
+        await pipe.close()
+        return True
+    except:
+        return False
+    
+    """
     pipe = await pipe_open(proto, dest, route)
     if pipe is not None:
         await pipe.close()
         return True
     
     return False
+    """
 
 """
 Used to detect if daemons have uncleanly exited in which case
@@ -180,6 +190,14 @@ class Daemon():
                 raise Exception(error)
         
         # Start a new server listening.
+        try:
+            pipe = await Pipe(proto, None, route, conf=self.conf).connect(
+                self.msg_cb, self.up_cb
+            )
+        except:
+            raise
+
+        """
         pipe = await pipe_open(
             proto,
             route=route,
@@ -187,6 +205,7 @@ class Daemon():
             up_cb=self.up_cb,
             conf=self.conf
         )
+        """
         assert(pipe is not None)
 
         """

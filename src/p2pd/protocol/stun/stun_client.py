@@ -87,15 +87,6 @@ class STUNClient():
         self.dest = await resolv_dest(self.af, self.dest, self.interface)
         return await Pipe(self.proto, self.dest, route, conf=self.conf).connect()
     
-        """
-        return await pipe_open(
-            self.proto,
-            self.dest,
-            route,
-            conf=self.conf
-        )
-        """
-    
     # Returns a STUN reply based on how client was setup.
     async def get_stun_reply(self, pipe=None, attrs=[]):
         pipe = await self._get_dest_pipe(pipe)
