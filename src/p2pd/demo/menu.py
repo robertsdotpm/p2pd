@@ -64,24 +64,6 @@ async def nickname_option(node):
     
     return "menu"
 
-async def node_spawn_option(ifs, nodes):
-    alice = nodes[-1]
-    bob = Node(port=alice.listen_port + 1, ifs=ifs, conf=node_conf)
-    bob.add_msg_cb(add_echo_support)
-    bob.stun_clients = alice.stun_clients
-    await asyncio.create_task(
-        bob.start(sys_clock=alice.sys_clock, out=True)
-    )
-    cout()
-    cout(fstr("New node addr = {0}", (to_s(bob.addr_bytes),)))
-    ret = await bob.nickname(bob.node_id)
-    cout(fstr("New node port = {0}", (bob.listen_port,)))
-    cout(fstr("New node nickname = {0}", (ret,)))
-    nodes.append(bob)
-    cout()
-
-    return "menu"
-
 async def stop_nodes_option(nodes):
     cout("")
     cout("Stopping nodes...")
@@ -109,18 +91,13 @@ async def run_menu_program(nick, ifs, nodes, con_opts=None, menu_option=None):
     if "accept:" and menu_option == "1":
         # NOTE: Blocking loop so won't return.
         return (await accept_option(nick))
-    
-    # Create a new node for testing.
-    # TODO: copy MQTT servers from node 0 to spawned node too.
-    if "spawn:" and menu_option == "2":
-        return (await node_spawn_option(ifs, nodes))
 
     # Set a new nickname for the primary node.
-    if "nickname:" and menu_option == "3":
+    if "nickname:" and menu_option == "2":
         return (await nickname_option(nodes[0]))
 
     # Close all nodes and exit the program.
-    if "exit:" and menu_option in ("4", "exit", "quit"):
+    if "exit:" and menu_option in ("3", "exit", "quit"):
         return "exit"
     
     # Try again.
