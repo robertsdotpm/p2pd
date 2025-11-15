@@ -3,6 +3,7 @@ from ....utility.utils import *
 from ....net.net_utils import *
 from ....net.address import Address
 from ....net.pipe.pipe_open import pipe_open
+from ....net.pipe.pipe import *
 from ....node.node_defs import *
 
 async def direct_connect(tunnel, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
@@ -27,12 +28,11 @@ async def direct_connect(tunnel, af, pipe_id, src_info, dest_info, iface, addr_t
             route = await iface.route(af).bind()
 
     # Connect to destination.
-    pipe = await pipe_open(
-        route=route,
-        proto=TCP,
-        dest=dest,
-        msg_cb=tunnel.node.msg_cb
-    )
+    try:
+        pipe = await Pipe(TCP, dest, route).connect(tunnel.node.msg_cb)
+    except:
+        log_exception()
+        pipe = None
 
     if pipe is None:
         return

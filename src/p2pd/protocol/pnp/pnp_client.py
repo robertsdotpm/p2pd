@@ -60,10 +60,6 @@ class PNPClient():
         except:
             log_exception()
             return None
-        
-        
-        #pipe = await pipe_open(self.proto, self.dest, route)
-        #return pipe
 
     async def return_resp(self, pipe):
         try:

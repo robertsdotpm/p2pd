@@ -3,6 +3,7 @@ from http.client import HTTPResponse
 import json
 from ...net import *
 from ...net.pipe.pipe_open import *
+from ...net.pipe.pipe import *
 from ...net.address import *
 
 HTTP_HEADERS = [
@@ -148,14 +149,10 @@ async def do_web_req(addr, http_buf, do_close, route, conf=NET_CONF):
     # Open TCP connection to HTTP server.
     p = None
     try:
-        p = await pipe_open(
-            route=route,
-            proto=TCP,
-            dest=addr,
-            conf=conf
-        )
+        p = await Pipe(TCP, addr, route, conf=conf).connect()
     except Exception:
         log_exception()
+        p = None
 
     # Error return empty.
     if p is None:

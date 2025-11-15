@@ -146,12 +146,12 @@ class TURNClient(PipeEvents):
         # Connect to TURN server over UDP.
         self.dest = await resolv_dest(self.af, self.dest, self.nic)
         self.route = await self.nic.route(self.af).bind()
-        self.turn_pipe = await pipe_open(
-            route=self.route,
-            proto=UDP,
-            dest=self.dest
-        )
-        log(fstr("> Turn socket = {0}", (self.turn_pipe.sock,)))
+        try:
+            self.turn_pipe = await Pipe(UDP, self.dest, self.route).connect()
+            log(fstr("> Turn socket = {0}", (self.turn_pipe.sock,)))
+        except:
+            log_exception()
+            self.turn_pipe = None
 
         # If con was unncessessful raise exception.
         if self.turn_pipe is None:
