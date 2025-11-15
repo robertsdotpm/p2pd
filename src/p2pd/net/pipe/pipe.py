@@ -222,13 +222,13 @@ class Pipe:
             if self.sock is None:
                 raise PipeError("Socket allocation failed")
             
-            # Routes can specify binding on port 0.
-            # Resolve the port that the route ended up on.
-            self.route.bind_port = self.sock.getsockname()[1]
-            
             # Record socket ownership state.
             p2pd_fds.add(self.sock)
             self.owns_socket = True
+
+        # Routes can specify binding on port 0.
+        # Resolve the port that the route ended up on.
+        self.route.bind_port = self.sock.getsockname()[1]
 
     async def tcp_client_connect_if_needed(self):
         """
