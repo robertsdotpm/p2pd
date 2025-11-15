@@ -13,7 +13,7 @@ async def get_updated_addr_bytes(node, dest_addr):
     addr_bytes = None
     if pnp_name_has_tld(dest_addr):
         msg = fstr("Translating '{0}'", (dest_addr,))
-        Log.log_p2p(msg, node.node_id[:8])
+        log_p2p(msg, node.node_id[:8])
         name = dest_addr
         pkt = await node.nick_client.fetch(dest_addr)
         #print("nick pkt vkc = ", pkt.vkc)
@@ -23,7 +23,7 @@ async def get_updated_addr_bytes(node, dest_addr):
         #print("got addr bytes:", dest_addr)
 
         msg = fstr("Resolved '{0}' = '{1}'", (name, dest_addr,))
-        Log.log_p2p(msg, node.node_id[:8])
+        log_p2p(msg, node.node_id[:8])
 
         # Parse address bytes to a dict.
         addr = parse_node_addr(addr_bytes)

@@ -84,7 +84,7 @@ async def start_punching(af, dest_addr, send_mappings, recv_mappings, current_nt
         remote_tup = sock.getpeername()[:2]
         msg = fstr("<punch> Upstream {0} = {1}", (local_tup, remote_tup,))
         msg += fstr(" on '{0}'", (interface.name,))
-        Log.log_p2p(msg, node_id)
+        log_p2p(msg, node_id)
 
         # Punched hole to the remote node.
         route = await interface.route(af).bind(sock.getsockname()[1])

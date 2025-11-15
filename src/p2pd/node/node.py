@@ -136,7 +136,7 @@ class Node(Daemon):
         )
 
         msg = fstr("Setting nickname '{0}' = '{1}'", (name, value,))
-        #Log.log_p2p(msg, self.node_id[:8])
+        #log_p2p(msg, self.node_id[:8])
         return name
 
     def log(self, t, m):
@@ -208,7 +208,7 @@ class Node(Daemon):
             msg = fstr("<upnp> Forwarded {0}:{1}", (server.route.ext(), port,))
             msg += fstr(" on {0}", (server.route.interface.name,))
             if ret:
-                Log.log_p2p(msg, self.node_id[:8])
+                log_p2p(msg, self.node_id[:8])
 
         # Loop over all listen pipes for this node.
         await for_server_in_daemon(self, forward_server)

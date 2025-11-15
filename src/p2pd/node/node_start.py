@@ -176,7 +176,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     # Log address.
     msg = fstr("Starting node = '{0}'", (node.addr_bytes,))
     if not out:
-        Log.log_p2p(msg, node.node_id[:8])
+        log_p2p(msg, node.node_id[:8])
 
     # Save a dict version of the address fields.
     try:

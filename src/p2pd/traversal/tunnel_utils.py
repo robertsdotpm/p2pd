@@ -170,7 +170,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             src_ip = src_info["nic"] if addr_type == NIC_BIND else src_info["ext"]
             msg = fstr("<{0}> Trying {1} {2} -> ", (strat, path_txt, src_ip,))
             msg += fstr("{0} on '{1}'", (dest_info['ip'], interface.name,))
-            Log.log_p2p(msg, pp.node.node_id[:8])
+            log_p2p(msg, pp.node.node_id[:8])
 
             """
             With all the correct interfaces and IPs

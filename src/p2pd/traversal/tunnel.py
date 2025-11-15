@@ -103,7 +103,7 @@ class Tunnel():
 
             # Indicate success result (long.)
             msg = await log_pipe(addr_type, func_txt, pipe)
-            Log.log_p2p(msg, self.node.node_id[:8])
+            log_p2p(msg, self.node.node_id[:8])
             pipe.subscribe(SUB_ALL)
             return pipe
         
@@ -116,7 +116,7 @@ async def connect_tunnel(node, pnp_addr, strategies=P2P_STRATEGIES, conf=P2P_PIP
         addr_bytes = pnp_addr
 
     msg = fstr("Connecting to '{0}'", (addr_bytes,))
-    Log.log_p2p(msg, node.node_id[:8])
+    log_p2p(msg, node.node_id[:8])
     tunnel = Tunnel(addr_bytes, node)
     for af in conf["addr_families"]:
         af_conf = copy.deepcopy(conf)
