@@ -197,7 +197,7 @@ if __name__ == "__main__":
     #loop.add_signal_handler(signal.SIGTERM, cancel_all_tasks)
     # Seperate thread for processing a queue of log messages.
     # Avoids dead locks with Python's simple logger.
-    #start_logger()
+    start_logger()
     try:
         async_run(main())
         log("main task done.")
