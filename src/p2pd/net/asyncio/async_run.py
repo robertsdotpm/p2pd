@@ -78,7 +78,7 @@ def _cancel_all_tasks(loop):
                 'task': task,
             })
 
-def async_run(main, *, debug=False):
+def async_run(main, *, debug=False, shield=False):
     """Execute the coroutine and return the result.
 
     This function runs the passed coroutine, taking care of
@@ -105,7 +105,10 @@ def async_run(main, *, debug=False):
     try:
         events.set_event_loop(loop)
         loop.set_debug(debug)
-        return loop.run_until_complete(main)
+        if shield:
+            return loop.run_until_complete(async_shield(main, loop=loop))
+        else:
+            return loop.run_until_complete(main)
     finally:
         try:
             _cancel_all_tasks(loop)
