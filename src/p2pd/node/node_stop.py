@@ -26,9 +26,14 @@ async def close_with_timeout(p):
 async def node_stop(node):
     global shutdown_event
 
+    log("node stop 1")
+
+
     # Set the shutdown event if it's not set.
     if not shutdown_event.is_set():
         shutdown_event.set()
+
+    log("node stop 2")
 
     # Make the worker thread for punching end.
     node.punch_queue.put_nowait(None)
@@ -36,11 +41,15 @@ async def node_stop(node):
         node.punch_worker_task.cancel()
         node.punch_worker_task = None
 
+    log("node stop 3")
+
     # Stop sig message dispatcher.
     node.sig_msg_queue.put_nowait(None)
     if node.sig_msg_queue_worker_task is not None:
         node.sig_msg_queue_worker_task.cancel()
         node.sig_msg_queue_worker_task = None
+
+    log("node stop 4")
 
     # Close other pipes.
     pipe_lists = [
@@ -49,6 +58,8 @@ async def node_stop(node):
         node.turn_clients,
         node.pipes,
     ]
+
+    log("node stop 5")
 
     # For all active pipes, attempt to close them.
     # Skip if already closed if not resolved to a pipe.
@@ -66,8 +77,12 @@ async def node_stop(node):
 
             tasks.append(close_with_timeout(pipe))
 
+    log("node stop 6")
+
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
+
+    log("node stop 7")
 
     # Try close the multiprocess manager.
     """

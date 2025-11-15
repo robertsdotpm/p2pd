@@ -129,11 +129,13 @@ async def main():
             raise KeyboardInterrupt()
 
         # Install SIGTERM handler.
+        """
         loop = asyncio.get_event_loop()
         try:
             loop.add_signal_handler(signal.SIGTERM, raise_keyboard_interrupt)
         except NotImplementedError:
             log("This platform doesn't support sigterm handling.")
+        """
 
     # Additional optional module to improve UX for cnt + c.
     # Otherwise input() is used which still needs enter for exit.
@@ -176,6 +178,8 @@ async def main():
         log("Command run time met.")
     except asyncio.CancelledError:
         log("Main task cancelled!")
+    except KeyboardInterrupt:
+        log("Caught key interrupt in main")
     finally:
         log("stop nodes clause reached.")
 
@@ -199,6 +203,12 @@ if __name__ == "__main__":
     # Seperate thread for processing a queue of log messages.
     # Avoids dead locks with Python's simple logger.
     start_logger()
+    async_run(main())
+    log("main task done.")
+
+    """
+
+
     try:
         async_run(main())
         log("main task done.")
@@ -210,3 +220,4 @@ if __name__ == "__main__":
         #loop.run_until_complete(cancel_all_tasks())
         #cancellation_future = asyncio.ensure_future(cancel_all_tasks(), loop=loop)
         print("ended")
+    """
