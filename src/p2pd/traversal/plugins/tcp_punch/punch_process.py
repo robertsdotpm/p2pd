@@ -5,6 +5,7 @@ from .punch_defs import *
 from ....utility.clock_skew import *
 from ....net.asyncio.event_loop import *
 from .start_punching import start_punching
+from ....net.pipe.pipe import *
 
 async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, node_id):
     has_success = asyncio.Event()
@@ -110,12 +111,7 @@ async def setup_punching_process(client, puncher_class):
     # Listen server that process will connect back to.
     # References are saved to avoid garbage collection.
     route = await client.interface.route(client.af).bind()
-    client.listen_pipe = await pipe_open(
-        TCP,
-        dest=None,
-        route=route,
-        msg_cb=client.node.msg_cb,
-    )
+    client.listen_pipe = await Pipe(TCP, None, route).connect(client.node.msg_cb)
     
     # Might not be necessary since the get addr infos does this.
     """
