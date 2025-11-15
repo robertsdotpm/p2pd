@@ -34,6 +34,7 @@ import time
 import asyncio
 from ..net.address import *
 from ..net.pipe.pipe_open import *
+from ..net.pipe.pipe import *
 
 class NTPException(Exception):
     """Exception raised by this module."""
@@ -294,9 +295,9 @@ class NTPClient:
         route = await self.interface.route(self.af).bind()
 
         # create the socket
-        pipe = await pipe_open(UDP, dest, route)
-        pipe.subscribe()
         try:
+            pipe = await Pipe(UDP, dest, route).connect()
+
             # create the request packet - mode 3 is client
             query_packet = NTPPacket(
                 mode=3,
@@ -313,13 +314,11 @@ class NTPClient:
 
             # build the destination timestamp
             dest_timestamp = system_to_ntp_time(time.time())
+            await pipe.close()
         except asyncio.TimeoutError:
             raise NTPException("No response received from host")
         except Exception as e:
             log_exception()
-        finally:
-            if pipe is not None:
-                await pipe.close()
 
         # construct corresponding statistics
         stats = NTPStats()
