@@ -241,6 +241,17 @@ class Pipe:
             self.sock.setblocking(0)
             timeout = self.conf.get("con_timeout", 5)
             success = False
+            con_task = asyncio.create_task(
+                loop.sock_connect(
+                    self.sock, 
+                    self.dest.tup
+                )
+            )
+
+            # Wait for connection, async style.
+            await asyncio.wait_for(con_task, self.conf["con_timeout"])
+
+            """
             try:
                 success = await asyncio.wait_for(
                     safe_sock_connect(loop, self.sock, self.dest.tup), 
@@ -252,6 +263,7 @@ class Pipe:
 
             if not success:
                 raise PipeError("Pipe error for safe sock connect.")
+            """
 
     async def setup_pipe_events(self, msg_cb=None, up_cb=None):
         """
