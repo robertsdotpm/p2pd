@@ -183,9 +183,11 @@ async def main():
 
         # Stop all nodes
         log(str(nodes))
+        loop = asyncio.get_event_loop()
         if nodes:
             await async_shield(
-                stop_nodes_option(nodes)
+                stop_nodes_option(nodes),
+                loop=loop
             )
 
         log("end of stop nodes clause.")

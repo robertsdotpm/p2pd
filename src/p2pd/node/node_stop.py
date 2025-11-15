@@ -65,6 +65,7 @@ async def node_stop(node):
     # For all active pipes, attempt to close them.
     # Skip if already closed if not resolved to a pipe.
     tasks = []
+    loop = asyncio.get_event_loop()
     for pipe_list in pipe_lists:
         for pipe in pipe_list.values():
             if pipe is None:
@@ -75,7 +76,7 @@ async def node_stop(node):
 
         try:
             if pipe.done():
-                pipe = await async_shield(pipe)
+                pipe = await async_shield(pipe, loop=loop)
                 tasks.append(close_with_timeout(pipe))
         except Exception as e:
             # handle other exceptions from the Future
