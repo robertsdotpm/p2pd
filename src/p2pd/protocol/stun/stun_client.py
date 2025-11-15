@@ -45,7 +45,6 @@ from ...errors import *
 from ...utility.utils import *
 from ...net.net_utils import *
 from ...net.address import Address
-from ...net.pipe.pipe_open import *
 from ...net.pipe.pipe import *
 from .stun_defs import *
 from .stun_utils import *

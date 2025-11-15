@@ -2,7 +2,6 @@ import copy
 from http.client import HTTPResponse
 import json
 from ...net import *
-from ...net.pipe.pipe_open import *
 from ...net.pipe.pipe import *
 from ...net.address import *
 

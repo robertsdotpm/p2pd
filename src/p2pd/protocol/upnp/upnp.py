@@ -59,7 +59,7 @@ import socket
 from ...utility.utils import *
 from ...net.net_utils import *
 from ...net.address import *
-from ...net.pipe.pipe_open import *
+from ...net.pipe.pipe import *
 from ...protocol.http.http_client_lib import *
 from .upnp_utils import *
 
@@ -68,10 +68,12 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
     async def try_connect(port, host):
         dest = (host, port)
         route = await interface.route(af).bind()
-        pipe = await pipe_open(TCP, dest, route)
-        if pipe is not None:
+        try:
+            pipe = await Pipe(TCP, dest, route).connect()
             await pipe.close()
             return dest
+        except:
+            return None
 
     # Try to load forwarding services at path and use them.
     async def try_service_path(path, dest):
@@ -208,7 +210,12 @@ async def discover_upnp_devices(af, nic):
 
     # Create async pipe wrapper for multicast socket.
     dest = (UPNP_IP[af], UPNP_PORT)
-    pipe = await pipe_open(UDP, dest, route, sock, conf=sock_conf)
+    try:
+        pipe = await Pipe(UDP, dest, route, sock=sock, conf=sock_conf).connect()
+    except:
+        log_exception()
+        pipe = None
+
     if pipe is None:
         log(fstr("discover upnp pipe none {0} {1}", (af, nic.name,)))
         return

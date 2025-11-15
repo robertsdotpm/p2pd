@@ -262,8 +262,6 @@ async def nic_load_nat(nic, nat_tests=5, delta_tests=12, servs=None, timeout=4):
     except:
         raise ErrorCantLoadNATInfo("Unable to start pipe for load nat.")
     
-    #pipe = await pipe_open(UDP, route=route)
-
     # Run delta test.
     nat_type, delta = await asyncio.gather(*[
         # Fastest fit wins.

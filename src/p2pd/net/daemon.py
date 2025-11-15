@@ -15,7 +15,6 @@ from ..utility.utils import *
 from .address import *
 from .net_utils import *
 from ..nic.interface import *
-from .pipe.pipe_open import *
 from .pipe.pipe import *
 from ..install import *
 

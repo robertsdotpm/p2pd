@@ -1,5 +1,5 @@
 import asyncio
-from ..net.pipe.pipe_open import PipeEvents
+from ..net.pipe.pipe_events import PipeEvents
 from ..node.node_addr import *
 from .plugins.tcp_punch.punch_client import *
 from ..protocol.turn.turn_client import TURNClient

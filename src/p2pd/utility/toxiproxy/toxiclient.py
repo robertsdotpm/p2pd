@@ -1,6 +1,7 @@
 import asyncio
 import re
 from ...utility.test_init import *
+from ...net.pipe.pipe import *
 
 # https://github.com/Shopify/toxiproxy/tree/main#toxics
 class ToxiToxic():
@@ -218,11 +219,8 @@ class ToxiTunnel():
             raise Exception(fstr("addr res tunnel client {0}", (self.port,)))
         
         # Connect to the listen server for this tunnel.
-        pipe = await pipe_open(TCP, dest, route, conf=conf)
-        if pipe is None:
-            raise Exception("Cant get tunnel pipe.")
-        else:
-            return pipe, dest
+        pipe = await Pipe(TCP, dest, route, conf=conf).connect()
+        return pipe, dest
     
     async def get_curl(self):
         # Build new route.

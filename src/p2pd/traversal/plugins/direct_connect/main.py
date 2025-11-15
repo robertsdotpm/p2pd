@@ -2,7 +2,6 @@ import asyncio
 from ....utility.utils import *
 from ....net.net_utils import *
 from ....net.address import Address
-from ....net.pipe.pipe_open import pipe_open
 from ....net.pipe.pipe import *
 from ....node.node_defs import *
 

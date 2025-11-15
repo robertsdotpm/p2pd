@@ -33,7 +33,6 @@ import struct
 import time
 import asyncio
 from ..net.address import *
-from ..net.pipe.pipe_open import *
 from ..net.pipe.pipe import *
 
 class NTPException(Exception):
