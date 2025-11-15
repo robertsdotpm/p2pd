@@ -8,20 +8,60 @@ import socket
 import os
 import stat
 import select
+import errno
 from selectors import SelectSelector
 
 from ...utility.utils import *
 
-def patched_select(self, r, w, _, timeout=None):
+# -----------------------------
+# Patched select for modern Python
+# -----------------------------
+def patched_select_modern(self, r, w, x, timeout=None):
+    """
+    Patched SelectSelector._select for modern Python (>=3.7).
+    
+    Handles:
+    - Windows: closed socket (winerror 10038)
+    - Unix: bad file descriptor (errno 9)
+    - Interrupted system calls (errno.EINTR)
+    """
     try:
-        r, w, x = select.select(r, w, w, timeout)
+        return select.select(r, w, x, timeout)
     except OSError as e:
-        if hasattr(e, 'winerror') and e.winerror == 10038:
-            # descriptors may already be closed
+        if getattr(e, 'winerror', None) == 10038:
             return [], [], []
+        
+        if getattr(e, 'errno', None) == 9:
+            return [], [], []
+        
+        if getattr(e, 'errno', None) == errno.EINTR:
+            return [], [], []
+        
+        raise
+
+# -----------------------------
+# Patched select for old Python
+# -----------------------------
+def patched_select_old(self, r, w, _, timeout=None):
+    """
+    Patched SelectSelector._select for older Python versions (<=3.5).
+    
+    Handles:
+    - Windows: closed socket (winerror 10038)
+    - Unix: bad file descriptor (errno 9)
+    """
+    try:
+        r_list, w_list, x_list = select.select(r, w, w, timeout)
+    except OSError as e:
+        if getattr(e, 'winerror', None) == 10038:
+            return [], [], []
+        
+        if getattr(e, 'errno', None) == 9:
+            return [], [], []
+        
         raise
     else:
-        return r, w + x, []
+        return r_list, w_list + x_list, []
 
 async def create_datagram_endpoint(loop, protocol_factory,
                                    local_addr=None, remote_addr=None, *,

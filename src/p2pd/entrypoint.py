@@ -6,6 +6,7 @@ from .settings import *
 from .utility.utils import *
 from .net.asyncio.event_loop import *
 from .net.asyncio.async_run import *
+from .net.asyncio.asyncio_patches import *
 from .nic.interface_utils import *
 if sys.platform == "win32":
     from .nic.netifaces.windows.win_netifaces import *
@@ -127,24 +128,7 @@ async def p2pd_setup_netifaces():
         _cached_netifaces = netifaces
         return netifaces
 
-class SelectorEventPolicy(asyncio.DefaultEventLoopPolicy):
-    @staticmethod
-    def exception_handler(self, context):
-        log("exception handler")
-        log(context)
 
-    @staticmethod
-    def loop_setup(loop):
-        loop.set_debug(False)
-        loop.set_exception_handler(SelectorEventPolicy.exception_handler)
-        loop.default_exception_handler = SelectorEventPolicy.exception_handler
-
-    def new_event_loop(self):
-        selector = selectors.SelectSelector()
-        loop = asyncio.SelectorEventLoop(selector)
-        SelectorEventPolicy.loop_setup(loop)
-        return loop
-    
 def init_process_pool():
     # Make selector default event loop.
     # On Windows this changes it from proactor to selector.
@@ -157,6 +141,16 @@ def init_process_pool():
     loop.set_exception_handler(handle_exceptions)
 
 def p2pd_setup_event_loop():
+    # -----------------------------
+    # Patch logic based on Python version
+    # -----------------------------
+    if sys.version_info >= (3, 7):
+        # Modern Python
+        SelectSelector._select = patched_select_modern
+    else:
+        # Older Python
+        SelectSelector._select = patched_select_old
+
     # If default isn't spawn then change it.
     # But only if it hasn't already been set.
     if multiprocessing.get_start_method() != "spawn":
@@ -166,11 +160,6 @@ def p2pd_setup_event_loop():
         if start_method is None:
             multiprocessing.set_start_method("spawn")
 
-    """
-    if platform.system() == "Windows":
-            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-            return
-    """
 
     patch_asyncio_backports(CustomEventLoop)
     policy = asyncio.get_event_loop_policy()
