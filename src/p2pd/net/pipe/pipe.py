@@ -30,7 +30,7 @@ from ..address import *
 from ..asyncio.asyncio_patches import *
 from ..asyncio.async_run import *
 from .pipe_tcp_events import *
-from ..bind.socket import *
+from ..socket import *
 from .pipe_defs import *
 
 class PipeError(Exception):
