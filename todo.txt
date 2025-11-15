@@ -98,3 +98,31 @@ ConnectionResetError: Connection lost
   File "/home/x/p2pd_dev/p2pd/src/p2pd/net/pipe/pipe_events.py", line 369, in close
     raise AlreadyClosedError()
 p2pd.errors.AlreadyClosedError
+
+
+    return await fut
+           ^^^^^^^^^
+  File "/root/p2pd_dev/p2pd/src/p2pd/traversal/plugins/tcp_punch/main.py", line 131, in tcp_hole_punch
+    pipe = await tunnel.node.pipes[pipe_id]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/p2pd_dev/p2pd/src/p2pd/utility/utils.py", line 397, in async_wrap_errors
+    return (await asyncio.wait_for(coro, timeout))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.pyenv/versions/3.12.0/lib/python3.12/asyncio/tasks.py", line 509, in wait_for
+    async with timeouts.timeout(timeout):
+  File "/root/.pyenv/versions/3.12.0/lib/python3.12/asyncio/timeouts.py", line 111, in __aexit__
+    raise TimeoutError from exc_val
+TimeoutError
+[error_logger.py:53] EXCEPTION: Traceback (most recent call last):
+  File "/root/p2pd_dev/p2pd/src/p2pd/traversal/tunnel_utils.py", line 207, in try_addr_infos
+    await cleanup(
+  File "/root/p2pd_dev/p2pd/src/p2pd/traversal/plugins/tcp_punch/main.py", line 143, in tcp_punch_cleanup
+    tunnel.node.active_punchers - 1
+
+
+add the punch cleanup patches too 
