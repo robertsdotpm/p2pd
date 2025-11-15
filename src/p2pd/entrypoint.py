@@ -53,7 +53,7 @@ async def p2pd_setup_netifaces():
         # Setup event loop.
         loop = asyncio.get_event_loop()
         loop.set_debug(False)
-        loop.set_exception_handler(SelectorEventPolicy.exception_handler)
+        loop.set_exception_handler(CustomEventLoopPolicy.exception_handler)
         
         def fatal_error(self, exc, message='Fatal error on transport'):
             er = {
