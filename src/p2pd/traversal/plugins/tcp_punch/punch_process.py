@@ -44,6 +44,9 @@ async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, curre
 # Started in a new process.
 def proc_do_punching(args):
     try:
+        puncher_class, reverse_tup, d, interface, node_id = args
+        puncher = puncher_class.from_dict(d)
+
         """
         On Windows it seems like using the default 'proactor event loop'
         prevents the TCP hole punching code from working. It seems that
@@ -54,58 +57,36 @@ def proc_do_punching(args):
         loop = CustomEventLoop()
         asyncio.set_event_loop(loop)
 
-        # Build a puncher from a dictionary.
-        puncher_class = args[0]
-        reverse_tup = args[1]
-        d = args[2]
-        interface = args[3]
-        node_id = args[4]
-        puncher = puncher_class.from_dict(d)
-
-        # Allow more recent Pythons to do punching.
-        if hasattr(asyncio, "run"):
-            f = async_wrap_errors(
-                do_punching_wrapper(
-                    puncher.af,
-                    puncher.dest_info["ip"],
-                    puncher.send_mappings,
-                    puncher.recv_mappings,
-                    puncher.sys_clock.time(),
-                    puncher.start_time,
-                    puncher.punch_mode,
-                    interface,
-                    reverse_tup,
-                    node_id
-                )
+        coro = async_wrap_errors(
+            do_punching_wrapper(
+                puncher.af,
+                puncher.dest_info["ip"],
+                puncher.send_mappings,
+                puncher.recv_mappings,
+                puncher.sys_clock.time(),
+                puncher.start_time,
+                puncher.punch_mode,
+                interface,
+                reverse_tup,
+                node_id,
             )
+        )
 
-            # Start a  new event loop and run the coroutine.
-            return asyncio.run(f)
-        else:
-            # Use older deprecated functions.
-            loop = asyncio.get_event_loop()
-            f = create_task(
-                async_wrap_errors(
-                    do_punching_wrapper(
-                        puncher.af,
-                        puncher.dest_info["ip"],
-                        puncher.send_mappings,
-                        puncher.recv_mappings,
-                        puncher.sys_clock.time(),
-                        puncher.start_time,
-                        puncher.punch_mode,
-                        interface,
-                        reverse_tup,
-                        node_id
-                    )
-                ),
-                loop=loop
-            )
+        result = loop.run_until_complete(coro)
+        return result
 
-            # Workers better for older Python versions.
-            return loop.run_until_complete(f)
     except Exception:
         log_exception()
+
+    finally:
+        try:
+            loop.stop()
+        except:
+            pass
+        try:
+            loop.close()
+        except:
+            pass
 
 async def setup_punching_process(client, puncher_class):
     # Listen server that process will connect back to.
