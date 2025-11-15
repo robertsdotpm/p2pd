@@ -101,6 +101,10 @@ class Tunnel():
             if not isinstance(pipe, PipeEvents):
                 continue
 
+            # Skip blank PipeEvents.
+            if pipe.sock == None:
+                continue
+
             # Indicate success result (long.)
             msg = await log_pipe(addr_type, func_txt, pipe)
             log_p2p(msg, self.node.node_id[:8])
