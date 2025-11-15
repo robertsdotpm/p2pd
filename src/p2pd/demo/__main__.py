@@ -16,8 +16,6 @@ from .utils import *
 from .cmd_arg_proc import *
 from .menu import *
 
-Log.log_p2p = patch_log_p2p
-
 """Load interfaces, start node, and return node info."""
 async def setup_node():
     # Display program banner.
@@ -88,7 +86,7 @@ async def run_node_loop(nodes, ifs, nick):
     if args.echo:
         echo_data = to_b(args.echo) + b"\n"
 
-    # To simulate a "pointer" we exploit the fact that objects in Python are
+    # To simulate a "pointer" we exploit objects in Python are
     # passed by reference as use last_addr["addr"] as the pointer.
     last_addr = {}
     if args.dest_addr:
@@ -124,6 +122,19 @@ Run the main program which accepts input and shows menu options.
 Also waits for close events and handles cleanup.
 """
 async def main():
+    # Catch process exit signals (not supported on win32.)
+    if sys.platform != "win32":
+        # Caught properly by async_run and wrapped catch.
+        def raise_keyboard_interrupt():
+            raise KeyboardInterrupt()
+
+        # Install SIGTERM handler.
+        loop = asyncio.get_event_loop()
+        try:
+            loop.add_signal_handler(signal.SIGTERM, raise_keyboard_interrupt)
+        except NotImplementedError:
+            log("This platform doesn't support sigterm handling.")
+
     # Additional optional module to improve UX for cnt + c.
     # Otherwise input() is used which still needs enter for exit.
     try:
@@ -171,14 +182,22 @@ async def main():
 
         # Stop all nodes
         if nodes:
-            await stop_nodes_option(nodes)
+            try:
+                await stop_nodes_option(nodes)
+            except asyncio.CancelledError:
+                # ignore cancellation during cleanup
+                pass
+
             del nodes[:]
 
         log("end of stop nodes clause.")
 
 if __name__ == "__main__":
-    #loop = asyncio.get_event_loop()
+    # explore the sigterm handling last.
     #loop.add_signal_handler(signal.SIGTERM, cancel_all_tasks)
+    # Seperate thread for processing a queue of log messages.
+    # Avoids dead locks with Python's simple logger.
+    #start_logger()
     try:
         async_run(main())
         log("main task done.")
