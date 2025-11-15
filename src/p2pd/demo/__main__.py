@@ -178,22 +178,23 @@ async def main():
         log("Command run time met.")
     except asyncio.CancelledError:
         log("Main task cancelled!")
-    except KeyboardInterrupt:
-        log("Caught key interrupt in main")
     finally:
         log("stop nodes clause reached.")
 
         # Stop all nodes
         log(str(nodes))
         if nodes:
-            try:
-                await stop_nodes_option(nodes)
-            except asyncio.CancelledError:
-                # ignore cancellation during cleanup
-                log("Cancelled error on stop_nodes_option.")
-                pass
-
-            del nodes[:]
+            if hasattr(asyncio, "shield"):
+                await asyncio.shield(
+                    stop_nodes_option(nodes)
+                )
+            else:
+                try:
+                    await stop_nodes_option(nodes)
+                except asyncio.CancelledError:
+                    # ignore cancellation during cleanup
+                    log("Cancelled error on stop_nodes_option.")
+                    pass
 
         log("end of stop nodes clause.")
 
@@ -203,10 +204,6 @@ if __name__ == "__main__":
     # Seperate thread for processing a queue of log messages.
     # Avoids dead locks with Python's simple logger.
     start_logger()
-    async_run(main())
-    log("main task done.")
-
-    """
 
 
     try:
@@ -220,4 +217,3 @@ if __name__ == "__main__":
         #loop.run_until_complete(cancel_all_tasks())
         #cancellation_future = asyncio.ensure_future(cancel_all_tasks(), loop=loop)
         print("ended")
-    """
