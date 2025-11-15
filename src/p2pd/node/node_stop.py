@@ -2,6 +2,7 @@ import asyncio
 from ..errors import AlreadyClosedError
 from ..utility.utils import *
 from .node_defs import *
+from ..net.asyncio.async_run import *
 
 
 async def close_helper(p):
@@ -69,13 +70,17 @@ async def node_stop(node):
             if pipe is None:
                 continue
 
-            if isinstance(pipe, asyncio.Future):
-                if pipe.done():
-                    pipe = pipe.result()
-                else:
-                    continue
+        if not pipe.done():
+            continue
 
-            tasks.append(close_with_timeout(pipe))
+        try:
+            if pipe.done():
+                pipe = await async_shield(pipe)
+                tasks.append(close_with_timeout(pipe))
+        except Exception as e:
+            # handle other exceptions from the Future
+            log_exception(e)
+            continue
 
     log("node stop 6")
 

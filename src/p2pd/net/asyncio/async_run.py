@@ -1,6 +1,25 @@
 import asyncio
 from asyncio import events, coroutines, tasks
 
+def async_shield(awaitable, *, loop=None):
+    """
+    Return an awaitable that protects the given awaitable from
+    cancellation of the outer task.
+    """
+    loop = loop or asyncio.get_running_loop()
+    fut = asyncio.ensure_future(awaitable, loop=loop)
+
+    async def _shield():
+        try:
+            return await fut
+        except asyncio.CancelledError:
+            # Ignore cancellation of the outer task
+            # The inner future continues running
+            # Wait for it to finish
+            return await fut
+
+    return _shield()
+
 def patch_asyncio_backports(loop_cls=None):
     from concurrent.futures import ThreadPoolExecutor
 

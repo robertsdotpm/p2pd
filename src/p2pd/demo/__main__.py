@@ -184,17 +184,9 @@ async def main():
         # Stop all nodes
         log(str(nodes))
         if nodes:
-            if hasattr(asyncio, "shield"):
-                await asyncio.shield(
-                    stop_nodes_option(nodes)
-                )
-            else:
-                try:
-                    await stop_nodes_option(nodes)
-                except asyncio.CancelledError:
-                    # ignore cancellation during cleanup
-                    log("Cancelled error on stop_nodes_option.")
-                    pass
+            await async_shield(
+                stop_nodes_option(nodes)
+            )
 
         log("end of stop nodes clause.")
 
@@ -206,7 +198,7 @@ if __name__ == "__main__":
     start_logger()
 
     try:
-        async_run(main())
+        async_run(async_shield(main()))
         log("main task done.")
 
     except KeyboardInterrupt:
