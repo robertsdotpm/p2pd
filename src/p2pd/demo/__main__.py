@@ -178,6 +178,8 @@ async def main():
         log("Command run time met.")
     except asyncio.CancelledError:
         log("Main task cancelled!")
+    except KeyboardInterrupt:
+        log("Caught keyboard interrupt in main() task")
     finally:
         log("stop nodes clause reached.")
 
@@ -206,9 +208,10 @@ if __name__ == "__main__":
     start_logger()
 
 
-    try:
-        async_run(main())
-        log("main task done.")
+    async_run(main())
+    log("main task done.")
+    
+    """
     except KeyboardInterrupt:
         print("keyboard interrupt")
         log("keyboard interrupt clause reached.")
@@ -217,3 +220,4 @@ if __name__ == "__main__":
         #loop.run_until_complete(cancel_all_tasks())
         #cancellation_future = asyncio.ensure_future(cancel_all_tasks(), loop=loop)
         print("ended")
+    """

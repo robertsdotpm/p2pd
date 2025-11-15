@@ -256,6 +256,11 @@ async def echo_client(pipe, echo_data):
             return "menu"
         await pipe.send(b"ECHO " + send_buf + b"\n")
         buf = await pipe.recv(timeout=3)
+
+        # Connection closed.
+        if buf is None:
+            return "exit"
+
         cout(b"recv = ", buf, b"\n")
         if echo_data:
             print(buf + b"\n", flush=True)
