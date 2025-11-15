@@ -128,10 +128,10 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     if node.conf.get("init_clock_skew", True):
         clock_skew = str(node.sys_clock.clock_skew)
         if out: cout(fstr("\t\tClock skew = {0}", (clock_skew,)))
-        if clock_skew > 2 and out:
+        if node.sys_clock.clock_skew > 2 and out:
             cout("Warning: high clock skew detected.")
             cout("If your system clock is invalid hole punching can fail.")
-            log("Warning: very high clock skew " + str(clock_skew))
+            log("Warning: very high clock skew " + clock_skew)
         
     # Accept TCP punch requests.
     if node.conf.get("enable_punching", True):
