@@ -2,21 +2,6 @@ import asyncio
 from ..do_imports import *
 from .cmd_arg_defs import *
 
-def cancel_all_tasks():
-    loop = asyncio.get_event_loop()
-
-    # Pre-3.7 compatibility
-    if hasattr(asyncio, "all_tasks"):
-        tasks = [t for t in asyncio.all_tasks(loop) if not t.done()]
-    else:
-        tasks = [t for t in asyncio.Task.all_tasks(loop) if not t.done()]
-
-    for t in tasks:
-        t.cancel()
-
-    if tasks:
-        return asyncio.gather(*tasks, return_exceptions=True)
-
 async def ainput(prompt):
     try:
         import aioconsole
