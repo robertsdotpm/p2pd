@@ -143,7 +143,7 @@ class Pipe:
         self.route = await self.resolve_route(self.route)
         self.dest = await self.resolve_dest(self.dest, self.route, self.conf)
 
-    async def resolve_route(self, route, af):
+    async def resolve_route(self, route):
         """
         Resolves the route to bind the socket.
         Covers the case where a network Interface is passed instead of a route.
