@@ -59,10 +59,13 @@ class Pipe:
         if self._opened:
             return self
 
+        do_connect = self.sock == None
         try:
             await self.resolve_route_and_dest()
             await self.create_or_use_socket()
-            await self.tcp_client_connect_if_needed()
+            if do_connect:
+                await self.tcp_client_connect_if_needed()
+                
             await self.setup_pipe_events(msg_cb, up_cb)
             self._opened = True
         except Exception:
