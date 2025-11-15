@@ -117,7 +117,7 @@ def win_arg_escape(arg, allow_vars=0):
     return arg
 
 def get_powershell_path():
-    ps_dir = "%WINDIR%\System32\WindowsPowerShell"
+    ps_dir = "%WINDIR%\\System32\\WindowsPowerShell"
     ps_dir = os.path.expandvars(ps_dir)
     dir_list = os.listdir(ps_dir)
 
