@@ -732,10 +732,19 @@ async def sleep_random(min_ms=100, max_ms=2000):
     delay = random.randrange(min_ms, max_ms + 1) / 1000.0
     await asyncio.sleep(delay)
 
+"""
+If None is used as the executor then the "default" executor is used
+which happens to be threads in Python. Python doesn't have real threads though,
+so what ends up happening is the punching code with threads is much less
+reliable than processed-based. But as a fallback, it does work, and some
+platforms need it because they can't create processes. So it's better than
+nothing. There may be a way to improve thread-based punching but for now
+its not optimized.
+"""
 async def get_pp_executors(workers=None):
     workers = workers or min(32, os.cpu_count() + 4)
     pp_executor = None
-    return 0, None # It was set disabled.
+    #return 0, None # It was set disabled.
     try:
         pp_executor = ProcessPoolExecutor(max_workers=workers)
     except asyncio.CancelledError:
