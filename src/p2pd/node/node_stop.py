@@ -89,7 +89,10 @@ async def node_stop(node):
     log("node stop 6")
 
     if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await async_shield(
+            asyncio.gather(*tasks, return_exceptions=True),
+            loop=loop
+        )
 
     log("node stop 7")
 
@@ -103,8 +106,11 @@ async def node_stop(node):
     """
     if node.pp_executor:
         log("trying to shut down pp executor waiting.")
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, node.pp_executor.shutdown, True)
+        await async_shield(
+            loop.run_in_executor(None, node.pp_executor.shutdown, True),
+            loop=loop
+        )
+        
         #node.pp_executor.shutdown(wait=True)
         log("shutdown for pp executor done.")
 
