@@ -101,7 +101,7 @@ async def node_stop(node):
         log("trying to shut down pp executor waiting.")
         try:
             await asyncio.wait_for(
-                loop.run_in_executor(None, node.pp_executor.shutdown, True)
+                loop.run_in_executor(None, node.pp_executor.shutdown, True),
                 timeout=5
             )
         except asyncio.TimeoutError:

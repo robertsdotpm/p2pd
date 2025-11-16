@@ -19,7 +19,6 @@ _cache_lock = asyncio.Lock()
 
 process_pool_init = concurrent.futures.ProcessPoolExecutor.__init__
 process_pool_executors = []
-
 def process_pool_init_patch(self, *args, **kwargs):
     if process_pool_executors:
         log("warning: multiple ProcessPoolExecutes created!")
@@ -83,15 +82,6 @@ async def p2pd_setup_netifaces():
 
         # Attempt to get monkey patched netifaces.
         if sys.platform == "win32":
-            """
-            loop = get_running_loop()
-
-            # This happens if the asyncio REPL is used.
-            # Nested event loops are a work around.
-            if loop is not None:
-                import nest_asyncio
-                nest_asyncio.apply()
-            """
             netifaces = await Netifaces().start()
         else:
             netifaces = sys.modules["netifaces"]
@@ -176,13 +166,13 @@ def p2pd_setup_event_loop():
         if start_method is None:
             multiprocessing.set_start_method("spawn")
 
-
+    """
+    Make event loop creation use the custom event loop.
+    """
     patch_asyncio_backports(CustomEventLoop)
     policy = asyncio.get_event_loop_policy()
     if not isinstance(policy, CustomEventLoopPolicy):
         asyncio.set_event_loop_policy(CustomEventLoopPolicy())
-
-    #sys.excepthook = my_except_hook
 
 p2pd_setup_event_loop()
 
