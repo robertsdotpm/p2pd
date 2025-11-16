@@ -11,7 +11,7 @@ from ....net.asyncio.async_run import *
 
 async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, node_id):
     has_success = asyncio.Event()
-    task = create_task(
+    task = asyncio.create_task(
         async_wrap_errors(
             start_punching(
                 af,

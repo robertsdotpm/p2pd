@@ -40,7 +40,7 @@ async def punch_queue_worker(node, puncher_cls):
             pipe_id = params[0]
             if pipe_id in node.tcp_punch_clients:
                 puncher = node.tcp_punch_clients[pipe_id]
-                task = create_task(
+                task = asyncio.create_task(
                     async_wrap_errors(
                         setup_punching_process(puncher, puncher_cls)
                     )
@@ -49,7 +49,7 @@ async def punch_queue_worker(node, puncher_cls):
                 # Avoid garbage collection for this task.
                 node.tasks.append(task)
 
-        node.punch_worker_task = create_task(
+        node.punch_worker_task = asyncio.create_task(
             punch_queue_worker(node, puncher_cls)
         )
     except asyncio.CancelledError:
@@ -61,6 +61,6 @@ async def punch_queue_worker(node, puncher_cls):
         log_exception()
     
 def start_punch_worker(node, puncher_cls):
-    node.punch_worker_task = create_task(
+    node.punch_worker_task = asyncio.create_task(
         punch_queue_worker(node, puncher_cls)
     )

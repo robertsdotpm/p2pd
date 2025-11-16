@@ -80,7 +80,7 @@ async def tcp_hole_punch(tunnel, af, pipe_id, src_info, dest_info, nic, addr_typ
     ensure there's enough time to receive any
     updated mappings for the dest peer (if any.)
     """
-    task = create_task(
+    task = asyncio.create_task(
         schedule_punching_with_delay(
             tunnel.node,
             pipe_id,

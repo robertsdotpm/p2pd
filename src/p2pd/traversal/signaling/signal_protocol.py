@@ -68,7 +68,7 @@ class SigProtoHandlers():
             return
 
         # Connect to chosen address.
-        task = create_task(
+        task = asyncio.create_task(
             tunnel.connect(
                 strategies=[strategy],
                 reply=msg,

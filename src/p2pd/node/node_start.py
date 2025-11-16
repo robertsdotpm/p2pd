@@ -142,7 +142,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         start_sig_msg_queue_worker(node)
 
     # Simple loop to close idle tasks.
-    node.idle_pipe_closer = create_task(
+    node.idle_pipe_closer = asyncio.create_task(
         close_idle_pipes(node)
     )
 

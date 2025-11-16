@@ -107,7 +107,7 @@ async def sig_msg_queue_worker(node):
             )
         )
 
-        node.sig_msg_queue_worker_task = create_task(
+        node.sig_msg_queue_worker_task = asyncio.create_task(
             sig_msg_queue_worker(node)
         )
     except RuntimeError:
@@ -119,6 +119,6 @@ async def sig_msg_queue_worker(node):
 def start_sig_msg_queue_worker(node):
     # Route messages to destination.
     if node.sig_msg_queue_worker_task is None:
-        node.sig_msg_queue_worker_task = create_task(
+        node.sig_msg_queue_worker_task = asyncio.create_task(
             sig_msg_queue_worker(node)
         )

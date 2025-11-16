@@ -30,11 +30,6 @@ from .error_logger import *
 to_b = lambda x: x if type(x) == bytes else x.encode("ascii", errors='ignore')
 to_s = lambda x: x if type(x) == str else x.decode("utf-8", errors='ignore')
 
-# Yoloswaggins.
-if not hasattr(asyncio, 'create_task'):
-    log("No create_task, using ensure future instead.")
-    asyncio.create_task = asyncio.ensure_future
-
 vmaj, vmin, _ = platform.python_version_tuple()
 vmaj = int(vmaj); vmin = int(vmin)
 if vmaj < 3:
@@ -52,10 +47,6 @@ if vmaj < 3:
     raise Exception("Python 2 not supported.")
 if vmin <= 4:
     raise Exception("Project needs >= 3.5")
-
-def create_task(x, loop=None):
-    loop = loop or asyncio.get_event_loop()
-    return loop.create_task(x)
 
 def my_except_hook(exctype, value, traceback):
     log("Global except handler called.")
@@ -494,7 +485,7 @@ def run_handler(pipe, handler, client_tup, data=None):
     # It's async.
     if inspect.iscoroutinefunction(handler):
         # Lets you process messages from an async func.
-        task = create_task(
+        task = asyncio.create_task(
             handler(data, client_tup, pipe)
         )
 
