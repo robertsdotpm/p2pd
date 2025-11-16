@@ -196,6 +196,7 @@ if __name__ == "__main__":
     start_logger()
     try:
         async_run(main(), shield=True)
+        stop_logger()
         log("main task done.")
     except KeyboardInterrupt:
         print("keyboard interrupt")
