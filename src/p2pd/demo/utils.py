@@ -27,10 +27,8 @@ async def add_echo_support(msg, client_tup, pipe):
 
         if b"CLEAN_SHUTDOWN" in msg:
             log("reached clean shutdown in add echo")
-            raise KeyboardInterrupt()
-            return
-            loop = asyncio.get_event_loop()
-            asyncio.ensure_future(cancel_all_tasks(), loop=loop)
+            if not shutdown_event.is_set():
+                shutdown_event.set()
 
 def patch_log_p2p(m, node_id=""):
     out = fstr("p2p: <{0}> ", (node_id,)) + to_s(m)
@@ -54,7 +52,6 @@ def patch_server_af_dict(arg_list, serv_dict):
         serv_infos = arg_list.split(";")
     else:
         serv_infos = [arg_list]
-
 
     for serv_info in serv_infos:
         parts = serv_info.split(",")
@@ -248,7 +245,7 @@ async def echo_client(pipe, echo_data):
     cout()
     cout("Basic echo protocol.")
     cout("Enter menu to return to menu or exit to quit.")
-    while True:
+    while not shutdown_event.is_set():
         send_buf = echo_data or to_b(await ainput("Echo: "))
         if send_buf in (b"quit", b"exit"):
             return "exit"

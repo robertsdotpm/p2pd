@@ -4,7 +4,6 @@ from ..utility.utils import *
 from .node_defs import *
 from ..net.asyncio.async_run import *
 
-
 async def close_helper(p):
     try:
         await p.close()
@@ -79,7 +78,7 @@ async def node_stop(node):
 
         try:
             if pipe.done():
-                pipe = await async_shield(pipe, loop=loop)
+                pipe = pipe.result()
                 tasks.append(close_with_timeout(pipe))
         except Exception as e:
             # handle other exceptions from the Future
@@ -89,10 +88,7 @@ async def node_stop(node):
     log("node stop 6")
 
     if tasks:
-        await async_shield(
-            asyncio.gather(*tasks, return_exceptions=True),
-            loop=loop
-        )
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     log("node stop 7")
 
@@ -106,11 +102,8 @@ async def node_stop(node):
     """
     if node.pp_executor:
         log("trying to shut down pp executor waiting.")
-        await async_shield(
-            loop.run_in_executor(None, node.pp_executor.shutdown, True),
-            loop=loop
-        )
-        
+
+        await loop.run_in_executor(None, node.pp_executor.shutdown, True)
         #node.pp_executor.shutdown(wait=True)
         log("shutdown for pp executor done.")
 

@@ -94,7 +94,7 @@ async def run_node_loop(nodes, ifs, nick):
 
     # Show menu and choose option.
     con_opts = (last_addr, echo_data, cmd_opts,)
-    while nodes:
+    while not shutdown_event.is_set():
         try:
             # Show menu choices.
             cout(MENU_BANNER)
@@ -183,12 +183,8 @@ async def main():
 
         # Stop all nodes
         log(str(nodes))
-        loop = asyncio.get_event_loop()
         if nodes:
-            await async_shield(
-                stop_nodes_option(nodes),
-                loop=loop
-            )
+            await stop_nodes_option(nodes)
 
         log("end of stop nodes clause.")
 
