@@ -13,6 +13,7 @@ from ..nic.interface import get_default_iface, get_mac_address
 from ..protocol.stun.stun_client import get_n_stun_clients
 from ..nic.nat.nat_utils import USE_MAP_NO
 from ..traversal.plugins.tcp_punch.punch_client import PUNCH_CONF
+from .node_defs import *
 
 def load_signing_key(listen_port, install_path):
     # Make install dir if needed.
@@ -68,7 +69,7 @@ async def close_idle_pipes(node):
 
     floor_check = 300
     ceil_check = 7200
-    while not node.stop_node.is_set():
+    while not shutdown_event.is_set():
         # Recalculate abs_placement dynamically
         alloc_pcent = node.active_punchers / node.max_punchers
         num_space = ceil_check - floor_check

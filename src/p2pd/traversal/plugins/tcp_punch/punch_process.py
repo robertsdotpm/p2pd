@@ -10,7 +10,6 @@ from ....node.node_defs import *
 from ....net.asyncio.async_run import *
 
 async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, node_id):
-    global shutdown_event
     has_success = asyncio.Event()
     task = create_task(
         async_wrap_errors(
@@ -64,7 +63,6 @@ def proc_do_punching(args):
         interface = args[3]
         node_id = args[4]
         puncher = puncher_class.from_dict(d)
-
         return async_run(
             async_wrap_errors(
                 do_punching_wrapper(
@@ -81,49 +79,6 @@ def proc_do_punching(args):
                 )
             )
         )
-
-        # Allow more recent Pythons to do punching.
-        if hasattr(asyncio, "run"):
-            f = async_wrap_errors(
-                do_punching_wrapper(
-                    puncher.af,
-                    puncher.dest_info["ip"],
-                    puncher.send_mappings,
-                    puncher.recv_mappings,
-                    puncher.sys_clock.time(),
-                    puncher.start_time,
-                    puncher.punch_mode,
-                    interface,
-                    reverse_tup,
-                    node_id
-                )
-            )
-
-            # Start a  new event loop and run the coroutine.
-            return asyncio.run(f)
-        else:
-            # Use older deprecated functions.
-            loop = asyncio.get_event_loop()
-            f = create_task(
-                async_wrap_errors(
-                    do_punching_wrapper(
-                        puncher.af,
-                        puncher.dest_info["ip"],
-                        puncher.send_mappings,
-                        puncher.recv_mappings,
-                        puncher.sys_clock.time(),
-                        puncher.start_time,
-                        puncher.punch_mode,
-                        interface,
-                        reverse_tup,
-                        node_id
-                    )
-                ),
-                loop=loop
-            )
-
-            # Workers better for older Python versions.
-            return loop.run_until_complete(f)
     except Exception:
         log_exception()
 

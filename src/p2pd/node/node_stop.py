@@ -24,10 +24,7 @@ async def close_with_timeout(p):
 
 # Shutdown the node server and do cleanup.
 async def node_stop(node):
-    global shutdown_event
-
     log("node stop 1")
-
 
     # Set the shutdown event if it's not set.
     if not shutdown_event.is_set():

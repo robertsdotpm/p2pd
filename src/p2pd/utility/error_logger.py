@@ -6,6 +6,7 @@ import threading
 import queue
 import atexit
 from .fstr import *
+from ..node.node_defs import *
 
 # --- Configuration & Initialization ---
 IS_DEBUG = "P2PD_DEBUG" in os.environ
@@ -42,7 +43,7 @@ def _log_worker():
     """Background thread consuming the log queue."""
     # We rely on the existing handlers attached to the root logger
     logger = logging.getLogger()
-    while True:
+    while not shutdown_event.is_set():
         # Blocks until a message is available
         message = _log_queue.get() 
         if message is _stop_sentinel:

@@ -21,6 +21,8 @@ pkill -9 -f 'p2pd'
 disabling pp_executors for now as a test
 """
 
+PY_VER = "3.5.10"
+
 async def git_pull_latest(servers):
     for server in servers:
         print(f"{server['os']}> Git pull latest code.")
@@ -37,7 +39,7 @@ async def git_pull_latest(servers):
 async def pyenv_install_latest(servers):
     for server in servers:
         # For now just choose any Python version.
-        pyver = "3.5.10" or choose_first_py_ver(server)
+        pyver = PY_VER or choose_first_py_ver(server)
 
         print(f"{server['os']}> Installing latest P2PD ({pyver}).")
         chain_cmds = get_chain_cmds(server)
@@ -79,7 +81,7 @@ async def tunnel_test(active, passive):
 
         # Get PNP address of the passive node.
         print(f"{passive['os']}> Getting passive node address.")
-        py_ver = "3.5.10" or choose_first_py_ver(passive)
+        py_ver = PY_VER or choose_first_py_ver(passive)
         cmd = p2pd_cmd + "get_nickname"
         cmd = pyenv_run_cmd(py_ver, passive, cmd)
         print(cmd)
