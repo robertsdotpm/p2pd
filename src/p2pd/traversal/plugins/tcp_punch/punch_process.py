@@ -7,6 +7,7 @@ from ....net.asyncio.event_loop import *
 from .start_punching import start_punching
 from ....net.pipe.pipe import *
 from ....node.node_defs import *
+from ....net.asyncio.async_run import *
 
 async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, node_id):
     global shutdown_event
@@ -63,6 +64,23 @@ def proc_do_punching(args):
         interface = args[3]
         node_id = args[4]
         puncher = puncher_class.from_dict(d)
+
+        return async_run(
+            async_wrap_errors(
+                do_punching_wrapper(
+                    puncher.af,
+                    puncher.dest_info["ip"],
+                    puncher.send_mappings,
+                    puncher.recv_mappings,
+                    puncher.sys_clock.time(),
+                    puncher.start_time,
+                    puncher.punch_mode,
+                    interface,
+                    reverse_tup,
+                    node_id
+                )
+            )
+        )
 
         # Allow more recent Pythons to do punching.
         if hasattr(asyncio, "run"):
