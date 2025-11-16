@@ -17,6 +17,10 @@ else:
 _cached_netifaces = None
 _cache_lock = asyncio.Lock()
 
+"""
+Just tracking whether or not process pool executors are
+created multiple times as it makes cleanup harder.
+"""
 process_pool_init = concurrent.futures.ProcessPoolExecutor.__init__
 process_pool_executors = []
 def process_pool_init_patch(self, *args, **kwargs):
@@ -116,29 +120,12 @@ async def p2pd_setup_netifaces():
             why the library won't work then to silently fail.
             """
             raise Exception("Error this library needs UDP support to work.")
-        
-
-            ENABLE_UDP = False
-            ENABLE_STUN = False
-            log("UDP sockets blocked! Disabling STUN.")
-            log_exception()
         finally:
             if sock is not None:
                 sock.close()
 
         _cached_netifaces = netifaces
         return netifaces
-
-def init_process_pool():
-    # Make selector default event loop.
-    # On Windows this changes it from proactor to selector.
-    asyncio.set_event_loop_policy(CustomEventLoopPolicy())
-
-    # Create new event loop in the process.
-    loop = asyncio.get_event_loop()
-
-    # Handle exceptions on close.
-    loop.set_exception_handler(handle_exceptions)
 
 def p2pd_setup_event_loop():
     """
@@ -174,6 +161,13 @@ def p2pd_setup_event_loop():
     if not isinstance(policy, CustomEventLoopPolicy):
         asyncio.set_event_loop_policy(CustomEventLoopPolicy())
 
+"""
+NOTE: Very important starting point for making the whole program run
+consistently on different platforms and Python versions.
+It does use a "custom" event loop but its based on the selector event
+loop and has various patches backported for different Python versions
+with bug fixes for socket issues on different OSes.
+"""
 p2pd_setup_event_loop()
 
 async def entrypoint_test():

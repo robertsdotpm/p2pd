@@ -759,15 +759,6 @@ async def get_pp_executors(workers=None):
         log_exception()
     
     return workers, pp_executor
-    loop = asyncio.get_event_loop()
-    tasks = []
-    for i in range(0, workers):
-        tasks.append(loop.run_in_executor(
-            pp_executor, init_process_pool
-        ))
-    await asyncio.gather(*tasks)
-    return pp_executor
-
 
 if __name__ == "__main__": # pragma: no cover
     x = [1, 1]
