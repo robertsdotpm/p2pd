@@ -71,6 +71,9 @@ async def node_stop(node):
             if pipe is None:
                 continue
 
+        if not isinstance(pipe, asyncio.Future):
+            continue
+
         if not pipe.done():
             continue
 
