@@ -194,11 +194,9 @@ if __name__ == "__main__":
     # Seperate thread for processing a queue of log messages.
     # Avoids dead locks with Python's simple logger.
     start_logger()
-
     try:
         async_run(main(), shield=True)
         log("main task done.")
-
     except KeyboardInterrupt:
         print("keyboard interrupt")
         log("keyboard interrupt clause reached.")

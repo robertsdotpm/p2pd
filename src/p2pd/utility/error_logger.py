@@ -43,7 +43,7 @@ def _log_worker():
     """Background thread consuming the log queue."""
     # We rely on the existing handlers attached to the root logger
     logger = logging.getLogger()
-    while not shutdown_event.is_set():
+    while True:
         # Blocks until a message is available
         message = _log_queue.get() 
         if message is _stop_sentinel:
