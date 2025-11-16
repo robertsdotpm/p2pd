@@ -125,17 +125,16 @@ async def main():
     # Catch process exit signals (not supported on win32.)
     if sys.platform != "win32":
         # Caught properly by async_run and wrapped catch.
-        def raise_keyboard_interrupt():
-            raise KeyboardInterrupt()
+        def handle_sigterm():
+            if not shutdown_event.is_set():
+                shutdown_event.set()
 
         # Install SIGTERM handler.
-        """
         loop = asyncio.get_event_loop()
         try:
-            loop.add_signal_handler(signal.SIGTERM, raise_keyboard_interrupt)
+            loop.add_signal_handler(signal.SIGTERM, handle_sigterm)
         except NotImplementedError:
             log("This platform doesn't support sigterm handling.")
-        """
 
     # Additional optional module to improve UX for cnt + c.
     # Otherwise input() is used which still needs enter for exit.
