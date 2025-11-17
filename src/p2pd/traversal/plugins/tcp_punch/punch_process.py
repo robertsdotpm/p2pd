@@ -111,11 +111,17 @@ async def setup_punching_process(client, puncher_class):
     try:
         # Schedule TCP punching in process pool executor.
         loop = asyncio.get_event_loop()
-        puncher_future = loop.run_in_executor(
-            client.pp_executor,
-            proc_do_punching,
-            args
-        )
+        if not client.pp_executor:
+            puncher_future = loop.run_in_executor(
+                client.pp_executor,
+                proc_do_punching,
+                args
+            )
+        else:
+            puncher_futuer = await client.pp_executor.submit(
+                proc_do_punching, 
+                args
+            )
         
         # Check every 100 ms for 5 seconds.
         while 1:

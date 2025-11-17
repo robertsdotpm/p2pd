@@ -20,12 +20,11 @@ import copy
 import hashlib
 import unittest
 import ecdsa
-import multiprocessing
-from concurrent.futures import ProcessPoolExecutor
 from ecdsa.curves import NIST192p
 from decimal import Decimal as Dec
 from .fstr import fstr
 from .error_logger import *
+from .process_group import *
 
 to_b = lambda x: x if type(x) == bytes else x.encode("ascii", errors='ignore')
 to_s = lambda x: x if type(x) == str else x.decode("utf-8", errors='ignore')
@@ -747,7 +746,7 @@ async def get_pp_executors(workers=None):
     pp_executor = None
     #return 0, None # It was set disabled.
     try:
-        pp_executor = ProcessPoolExecutor(max_workers=workers)
+        pp_executor = ProcessPool(size=workers)
     except asyncio.CancelledError:
         raise
     except Exception:
