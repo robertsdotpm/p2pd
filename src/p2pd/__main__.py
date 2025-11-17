@@ -18,7 +18,7 @@ if int(vmin) < 8:
 
 from . import __version__ as p2pdv
 from .net.asyncio.event_loop import *
-from .entrypoint import SelectorEventPolicy
+from .entrypoint import *
 from .utility.fstr import fstr
 
 
