@@ -121,7 +121,7 @@ async def setup_punching_process(client, puncher_class):
             log("Trying new punching code for proc_do_punching.")
             puncher_future = client.pp_executor.submit(
                 proc_do_punching, 
-                *args
+                args
             )
         
         # Check every 100 ms for 5 seconds.
