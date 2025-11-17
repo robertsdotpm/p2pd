@@ -746,7 +746,7 @@ async def get_pp_executors(workers=None):
     pp_executor = None
     #return 0, None # It was set disabled.
     try:
-        pp_executor = ProcessPool(size=workers)
+        pp_executor = ProcessManager()
     except asyncio.CancelledError:
         raise
     except Exception:
