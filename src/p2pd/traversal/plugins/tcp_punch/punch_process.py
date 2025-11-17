@@ -118,13 +118,14 @@ async def setup_punching_process(client, puncher_class):
                 args
             )
         else:
+            log("Trying new punching code for proc_do_punching.")
             puncher_future = client.pp_executor.submit(
                 proc_do_punching, 
                 *args
             )
         
         # Check every 100 ms for 5 seconds.
-        while 1:
+        while not shutdown_event.is_set():
             try:
                 # Check if reverse connect server has a client yet.
                 if len(client.listen_pipe.tcp_clients):

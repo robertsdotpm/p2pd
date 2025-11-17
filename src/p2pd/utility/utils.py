@@ -756,6 +756,7 @@ async def get_pp_executors(workers=None):
         this semaphore feature is missing and will throw an error here.
         In this case -- log the error and revert to using a single event loop.
         """
+        log("Could not make process manager.")
         log_exception()
     
     return workers, pp_executor
