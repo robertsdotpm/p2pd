@@ -95,7 +95,7 @@ class ProcessManager:
         """Thread that waits for results and sets futures."""
         while not self.stopping:
             try:
-                job_id, ok, data = self.out_q.get(timeout=0.1)
+                job_id, ok, data = self.out_q.get()
             except Empty:
                 continue
 
@@ -123,12 +123,13 @@ class ProcessManager:
                 fut.set_result(data)
             else:
                 msg, tb = data
-                fut.set_exception(RuntimeError("Worker exception: " + msg + "\n" + tb))
+                fut.set_exception(
+                    RuntimeError("Worker exception: " + msg + "\n" + tb)
+                )
 
     def shutdown(self):
         """Terminate all active processes and stop the listener."""
         self.stopping = True
-
         while not self.job_queue.empty():
             _, fut, p = self.job_queue.get()
             if p.is_alive():
