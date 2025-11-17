@@ -1,6 +1,7 @@
 from ..utility.utils import *
 from .net_utils import *
-from .bind import *
+from .bind.bind import *
+from ..net.bind.bind_utils import *
 from .ip_range import *
 
 DNS_NAMESERVERS = {

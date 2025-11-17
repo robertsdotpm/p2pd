@@ -223,7 +223,7 @@ async def do_netsh_cmds():
 
                 tasks.append(
                     to_task(
-                        helper(af, cmd_val, cmd_vector[0]
+                        helper(af, cmd_val, cmd_vector[0])
                     )
                 )
 
