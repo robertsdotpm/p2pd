@@ -22,6 +22,35 @@ import traceback
 from concurrent.futures import Future
 from queue import Queue, Empty
 
+def check_multiprocessing_available(timeout=1.0):
+    """Check if Process and Queue work on this platform."""
+    try:
+        out_q = mp.Queue()
+        
+        def worker(q):
+            q.put("ok")
+
+        p = mp.Process(target=worker, args=(out_q,))
+        p.start()
+        p.join(timeout=timeout)
+
+        if p.is_alive():
+            p.terminate()
+            raise RuntimeError("Process did not exit in time")
+
+        try:
+            result = out_q.get(timeout=timeout)
+        except Exception:
+            raise RuntimeError("Queue failed to return data")
+
+        if result != "ok":
+            raise RuntimeError("Queue returned unexpected data: {}".format(result))
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        raise RuntimeError("Multiprocessing not available: {} \n{}".format(e, tb))
+
+    return True
 
 def job_wrapper(func, args, kwargs, out_q, job_id):
     """Wrapper executed in a separate process."""
