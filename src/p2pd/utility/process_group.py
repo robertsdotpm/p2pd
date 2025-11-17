@@ -20,10 +20,10 @@ import threading
 import uuid
 import traceback
 from concurrent.futures import Future
-from queue import Empty
+from queue import Queue, Empty
 
 
-def job_runner(func, args, kwargs, out_q, job_id):
+def job_wrapper(func, args, kwargs, out_q, job_id):
     """Wrapper executed in a separate process."""
     try:
         result = func(*args, **kwargs)
@@ -34,14 +34,12 @@ def job_runner(func, args, kwargs, out_q, job_id):
 
 
 class ProcessManager:
-    """Manages one-process-per-job execution with futures."""
+    """Manages one-process-per-job execution with futures (lock-free)."""
 
     def __init__(self):
         self.out_q = mp.Queue()
-        self.futures = {}          # job_id -> Future
-        self.processes = {}        # job_id -> Process
+        self.job_queue = Queue()  # queue of (job_id, future, process)
         self.stopping = False
-        self.lock = threading.Lock()  # protect futures/processes dicts
         self.listener_thread = threading.Thread(target=self.listener, daemon=True)
         self.listener_thread.start()
 
@@ -50,19 +48,19 @@ class ProcessManager:
         if self.stopping:
             raise RuntimeError("ProcessManager stopping")
 
-        result_future = Future()
         job_id = uuid.uuid4().hex
+        fut = Future()
         p = mp.Process(
-            target=job_runner, 
+            target=job_wrapper, 
             args=(func, args, kwargs, self.out_q, job_id)
         )
+
         p.start()
 
-        with self.lock:
-            self.futures[job_id] = result_future
-            self.processes[job_id] = p
+        # Thread-safe queue; no explicit lock needed
+        self.job_queue.put((job_id, fut, p))
 
-        return result_future
+        return fut
 
     def listener(self):
         """Thread that waits for results and sets futures."""
@@ -72,17 +70,25 @@ class ProcessManager:
             except Empty:
                 continue
 
-            with self.lock:
-                fut = self.futures.pop(job_id, None)
-                p = self.processes.pop(job_id, None)
+            # Scan the queue to find the matching future/process
+            found_item = None
+            temp_queue = Queue()
+            while not self.job_queue.empty():
+                item = self.job_queue.get()
+                if item[0] == job_id:
+                    found_item = item
+                else:
+                    temp_queue.put(item)
 
-            if p and p.is_alive():
+            self.job_queue = temp_queue
+            if not found_item:
+                continue
+
+            _, fut, p = found_item
+            if p.is_alive():
                 p.join(timeout=1)
                 if p.is_alive():
                     p.terminate()
-
-            if fut is None:
-                continue
 
             if ok:
                 fut.set_result(data)
@@ -93,17 +99,13 @@ class ProcessManager:
     def shutdown(self):
         """Terminate all active processes and stop the listener."""
         self.stopping = True
-        with self.lock:
-            for p in self.processes.values():
-                if p.is_alive():
-                    p.terminate()
 
-            self.processes.clear()
-            for fut in self.futures.values():
-                if not fut.done():
-                    fut.set_exception(RuntimeError("ProcessManager shutting down"))
-
-            self.futures.clear()
+        while not self.job_queue.empty():
+            _, fut, p = self.job_queue.get()
+            if p.is_alive():
+                p.terminate()
+            if not fut.done():
+                fut.set_exception(RuntimeError("ProcessManager shutting down"))
 
 def multiply(a, b):
     return a * b
