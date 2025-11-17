@@ -111,6 +111,8 @@ async def setup_punching_process(client, puncher_class):
     try:
         # Schedule TCP punching in process pool executor.
         loop = asyncio.get_event_loop()
+
+        # Fallback to threads if multiprocessing not available.
         if not client.pp_executor:
             puncher_future = loop.run_in_executor(
                 client.pp_executor,
