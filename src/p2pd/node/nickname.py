@@ -161,9 +161,11 @@ class Nickname():
         tasks = []
         for offset in range(0, len(self.clients)):
             tasks.append(
-                async_wrap_errors(
-                    worker(offset),
-                    timeout,
+                to_task(
+                    async_wrap_errors(
+                        worker(offset),
+                        timeout,
+                    )
                 )
             )
 
@@ -236,9 +238,11 @@ class Nickname():
         tasks = []
         for offset in range(0, len(self.clients)):
             tasks.append(
-                async_wrap_errors(
-                    worker(offset),
-                    timeout
+                to_task(
+                    async_wrap_errors(
+                        worker(offset),
+                        timeout
+                    )
                 )
             )
 

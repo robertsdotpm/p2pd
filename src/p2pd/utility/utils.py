@@ -30,6 +30,7 @@ from .error_logger import *
 to_b = lambda x: x if type(x) == bytes else x.encode("ascii", errors='ignore')
 to_s = lambda x: x if type(x) == str else x.decode("utf-8", errors='ignore')
 
+
 vmaj, vmin, _ = platform.python_version_tuple()
 vmaj = int(vmaj); vmin = int(vmin)
 if vmaj < 3:
@@ -47,6 +48,14 @@ if vmaj < 3:
     raise Exception("Python 2 not supported.")
 if vmin <= 4:
     raise Exception("Project needs >= 3.5")
+
+"""
+Add support for create task on older python versions.
+"""
+if not hasattr(asyncio, 'create_task'):
+    log("No create_task, using ensure future instead.")
+    asyncio.create_task = asyncio.ensure_future
+
 
 def my_except_hook(exctype, value, traceback):
     log("Global except handler called.")
@@ -89,6 +98,7 @@ STATUS_SUCCESS = 2
 STATUS_FAILURE = 3
 MAX_PORT = 65535
 
+to_task = lambda x: asyncio.create_task(x)
 re.unescape = lambda x: re.sub(r'\\(.)', r'\1', x)
 to_hs = lambda x: to_s(binascii.hexlify(to_b(x)))
 to_h = lambda x: to_hs(x) if len(x) else "00"

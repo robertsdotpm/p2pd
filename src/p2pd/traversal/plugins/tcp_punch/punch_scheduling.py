@@ -117,27 +117,29 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
             await dest.res(interface.route(af))
             dest = dest.select_ip(af)
             for sleep_time in range(0, steps):
-                task = async_wrap_errors(
-                    delayed_punch(
-                        # Address family for the con.
-                        af,
+                task = to_task(
+                    async_wrap_errors(
+                        delayed_punch(
+                            # Address family for the con.
+                            af,
 
-                        # Wait until ms to do punching.
-                        # Punches are split up over time
-                        # to increase chances of success.
-                        sleep_time * ms_spacing,
+                            # Wait until ms to do punching.
+                            # Punches are split up over time
+                            # to increase chances of success.
+                            sleep_time * ms_spacing,
 
-                        # Local mapping.
-                        send_mappings[i],
+                            # Local mapping.
+                            send_mappings[i],
 
-                        # Destination addr to connect to.
-                        dest,
+                            # Destination addr to connect to.
+                            dest,
 
-                        # Event loop for this process.
-                        loop,
+                            # Event loop for this process.
+                            loop,
 
-                        # Punch from this interface.
-                        interface
+                            # Punch from this interface.
+                            interface
+                        )
                     )
                 )
                 tasks.append(task)

@@ -353,11 +353,13 @@ class ToxiTunnelServer(Daemon):
             tasks = []
             for client in self.clients:
                 tasks.append(
-                    toxic_router(
-                        msg,
-                        pipe,
-                        client,
-                        d_vals(self.downstream_toxics)
+                    to_task(
+                        toxic_router(
+                            msg,
+                            pipe,
+                            client,
+                            d_vals(self.downstream_toxics)
+                        )
                     )
                 )
 

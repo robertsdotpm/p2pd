@@ -41,7 +41,7 @@ async def async_res_domain(host, route=None):
     tasks = []
     for af in VALID_AFS:
         tasks.append(
-            async_res_domain_af(af, host)
+            to_task(async_res_domain_af(af, host))
         )
 
     # Concurrently get IP fields from domain.

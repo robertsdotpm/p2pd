@@ -117,15 +117,17 @@ async def load_interface(nic, netifaces, min_agree, max_agree, timeout):
 
         # Use a threshold of pub servers for res.
         tasks.append(
-            async_wrap_errors(
-                discover_nic_wan_ips(
-                    af,
-                    min_agree,
-                    enable_default,
-                    nic,
-                    stun_clients,
-                    netifaces,
-                    timeout=timeout,
+            to_task(
+                async_wrap_errors(
+                    discover_nic_wan_ips(
+                        af,
+                        min_agree,
+                        enable_default,
+                        nic,
+                        stun_clients,
+                        netifaces,
+                        timeout=timeout,
+                    )
                 )
             )
         )

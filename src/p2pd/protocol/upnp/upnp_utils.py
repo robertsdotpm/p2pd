@@ -173,11 +173,13 @@ async def get_upnp_forwarding_services_for_replies(af, src_tup, nic, replies):
         
         xml_dest = (hostname, url.port)
         route = await get_upnp_route(af, nic, hostname)
-        task = async_wrap_errors(
-            get_upnp_forwarding_services(
-                route,
-                xml_dest,
-                url.path
+        task = to_task(
+            async_wrap_errors(
+                get_upnp_forwarding_services(
+                    route,
+                    xml_dest,
+                    url.path
+                )
             )
         )
         tasks.append(task)

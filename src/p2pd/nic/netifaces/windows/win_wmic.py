@@ -159,7 +159,7 @@ async def do_wmic_cmds():
     tasks = []
     for vector in cmd_vectors:
         out_handler, cmd_meta, _ = vector
-        task = helper(cmd_meta[IP4], out_handler)
+        task = to_task(helper(cmd_meta[IP4], out_handler))
         tasks.append(task)
         
     # Run commands concurrently or not.

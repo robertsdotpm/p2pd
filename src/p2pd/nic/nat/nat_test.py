@@ -265,23 +265,27 @@ async def nic_load_nat(nic, nat_tests=5, delta_tests=12, servs=None, timeout=4):
     # Run delta test.
     nat_type, delta = await asyncio.gather(*[
         # Fastest fit wins.
-        async_wrap_errors(
-            fast_nat_test(
-                pipe,
-                test_no=nat_tests,
-            ),
-            timeout=timeout
+        to_task(
+            async_wrap_errors(
+                fast_nat_test(
+                    pipe,
+                    test_no=nat_tests,
+                ),
+                timeout=timeout
+            )
         ),
 
         # Concurrent -- 12 different hosts
         # Threshold of 5 for consensus.
-        async_wrap_errors(
-            delta_test(
-                stun_clients,
-                test_no=delta_tests,
-                threshold=int(delta_tests / 2) - 1
-            ),
-            timeout=timeout
+        to_task(
+            async_wrap_errors(
+                delta_test(
+                    stun_clients,
+                    test_no=delta_tests,
+                    threshold=int(delta_tests / 2) - 1
+                ),
+                timeout=timeout
+            )
         )
     ])
 

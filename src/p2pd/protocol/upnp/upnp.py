@@ -163,8 +163,10 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
         tasks = []
         for port in ports:
             tasks.append(
-                async_wrap_errors(
-                    try_connect(port, host)
+                to_task(
+                    async_wrap_errors(
+                        try_connect(port, host)
+                    )
                 )
             )
 
@@ -179,8 +181,10 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
             tasks = []
             for path in UPNP_PATHS[i * step:(i  * step) + step]:
                 tasks.append(
-                    async_wrap_errors(
-                        try_service_path(path, dest)
+                    to_task(
+                        async_wrap_errors(
+                            try_service_path(path, dest)
+                        )
                     )
                 )
 

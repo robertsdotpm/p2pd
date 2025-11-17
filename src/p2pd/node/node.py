@@ -89,11 +89,19 @@ class Node(Daemon):
         coros = []
         for msg in msgs:
             # node_protocol returns a coroutine
-            coros.append(node_protocol(self, msg, client_tup, pipe))
+            coros.append(
+                to_task(
+                    node_protocol(self, msg, client_tup, pipe)
+                )
+            )
 
             # wrap msg_cbs as coroutines
             for msg_cb in self.msg_cbs:
-                coros.append(msg_cb(msg, client_tup, pipe))
+                coros.append(
+                    to_task(
+                        msg_cb(msg, client_tup, pipe)
+                    )
+                )
 
         # Run all coroutines concurrently, collect exceptions instead of propagating
         results = await asyncio.gather(*coros, return_exceptions=True)

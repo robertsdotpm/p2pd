@@ -102,12 +102,14 @@ async def discover_nic_wan_ips(af, min_agree, enable_default, interface, stun_cl
         else:
             src_ip = ip_norm(str(nic_ipr[0]))
             tasks.append(
-                async_wrap_errors(
-                    lookup_wan_ip_for_nic_ip(
-                        src_ip,
-                        min_agree,
-                        stun_clients,
-                        timeout
+                to_task(
+                    async_wrap_errors(
+                        lookup_wan_ip_for_nic_ip(
+                            src_ip,
+                            min_agree,
+                            stun_clients,
+                            timeout
+                        )
                     )
                 )
             )
@@ -119,12 +121,14 @@ async def discover_nic_wan_ips(af, min_agree, enable_default, interface, stun_cl
         dest = "8.8.8.8" if af == IP4 else "2001:4860:4860::8888"
         af_default_nic_ip = determine_if_path(af, dest)
         tasks.append(
-            async_wrap_errors(
-                lookup_wan_ip_for_nic_ip(
-                    af_default_nic_ip,
-                    min_agree,
-                    stun_clients,
-                    timeout
+            to_task(
+                async_wrap_errors(
+                    lookup_wan_ip_for_nic_ip(
+                        af_default_nic_ip,
+                        min_agree,
+                        stun_clients,
+                        timeout
+                    )
                 )
             )
         )
@@ -143,12 +147,14 @@ async def discover_nic_wan_ips(af, min_agree, enable_default, interface, stun_cl
     if len(priv_iprs) > 1 or (len(priv_iprs) and not enable_default):
         priv_src = ip_norm(str(priv_iprs[0]))
         tasks.append(
-            async_wrap_errors(
-                lookup_wan_ip_for_nic_ip(
-                    priv_src,
-                    min_agree,
-                    stun_clients,
-                    timeout
+            to_task(
+                async_wrap_errors(
+                    lookup_wan_ip_for_nic_ip(
+                        priv_src,
+                        min_agree,
+                        stun_clients,
+                        timeout
+                    )
                 )
             )
         )

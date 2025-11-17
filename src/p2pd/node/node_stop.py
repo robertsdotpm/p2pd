@@ -76,7 +76,11 @@ async def node_stop(node):
         try:
             if pipe.done():
                 pipe = pipe.result()
-                tasks.append(close_with_timeout(pipe))
+                tasks.append(
+                    to_task(
+                        close_with_timeout(pipe)
+                    )
+                )
         except Exception as e:
             # handle other exceptions from the Future
             log_exception(e)

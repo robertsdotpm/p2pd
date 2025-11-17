@@ -146,7 +146,7 @@ async def preload_mappings(no, stuns):
     tasks = []
     for _ in range(0, no):
         stun = random.choice(stuns)
-        task = get_high_port_mapping(stun)
+        task = to_task(get_high_port_mapping(stun))
         tasks.append(task)
 
     mappings = await asyncio.gather(*tasks)

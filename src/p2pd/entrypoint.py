@@ -134,13 +134,6 @@ def p2pd_setup_event_loop():
     """
     concurrent.futures.ProcessPoolExecutor.__init__ = process_pool_init_patch
 
-    """
-    Add support for create task on older python versions.
-    """
-    if not hasattr(asyncio, 'create_task'):
-        log("No create_task, using ensure future instead.")
-        asyncio.create_task = asyncio.ensure_future
-
     # -----------------------------
     # Patch logic based on Python version
     # -----------------------------

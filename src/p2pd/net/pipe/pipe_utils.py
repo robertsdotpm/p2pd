@@ -47,10 +47,15 @@ async def close_all_clients(tcp_clients, loop=None, timeout=1.0):
             continue
 
         # Await the OS-level socket closure with timeout
-        tasks.append(asyncio.wait_for(loop.await_fd_close(sock), timeout=timeout))
+        tasks.append(
+            to_task(
+                asyncio.wait_for(loop.await_fd_close(sock), timeout=timeout)
+            )
+        )
 
     if tasks:
         results = await asyncio.gather(*tasks, return_exceptions=True)
+
         # Optional: log exceptions
         for r in results:
             if isinstance(r, Exception):

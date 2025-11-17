@@ -56,10 +56,12 @@ async def get_nic_iprs(af, interface, netifaces):
         bound_addresses = if_addresses[netifaces_af]
         for info in bound_addresses:
             # Only because it calls getaddrinfo is it async.
-            task = netiface_addr_to_ipr(
-                af,
-                interface.id,
-                info
+            task = to_task(
+                netiface_addr_to_ipr(
+                    af,
+                    interface.id,
+                    info
+                )
             )
 
             tasks.append(task)

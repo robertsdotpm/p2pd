@@ -144,7 +144,9 @@ class SysClock:
         tasks = []
         for _ in range(0, self.enough_data + 10):
             tasks.append(
-                get_clock_skew()
+                to_task(
+                    get_clock_skew()
+                )
             )
 
         results = await asyncio.gather(*tasks)

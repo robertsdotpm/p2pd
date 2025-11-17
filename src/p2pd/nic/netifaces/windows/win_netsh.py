@@ -221,7 +221,11 @@ async def do_netsh_cmds():
                 else:
                     cmd_val = fstr("netsh interface {0} show {1}", (af_val, show_val,))
 
-                tasks.append(helper(af, cmd_val, cmd_vector[0]))
+                tasks.append(
+                    to_task(
+                        helper(af, cmd_val, cmd_vector[0]
+                    )
+                )
 
     # Execute all netsh commands concurrently.
     results = await safe_gather(*tasks)

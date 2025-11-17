@@ -167,10 +167,12 @@ async def delta_test(stun_clients, test_no=8, threshold=5, concurrency=True):
 
             # Allow for tests to be done concurrently.
             tasks.append(
-                async_wrap_errors(
-                    asyncio.wait_for(
-                        result_wrapper(src_port),
-                        2
+                to_task(
+                    async_wrap_errors(
+                        asyncio.wait_for(
+                            result_wrapper(src_port),
+                            2
+                        )
                     )
                 )
             )

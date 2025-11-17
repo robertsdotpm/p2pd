@@ -211,7 +211,12 @@ async def get_stun_clients(af, max_agree, interface, proto=UDP, servs=None, conf
                 conf=conf,
             )
         
-        stun_clients.append(get_stun_client(serv_info))
+        stun_clients.append(
+            to_task(
+                get_stun_client(serv_info)
+            )
+        )
+
         if len(stun_clients) >= max_agree:
             break
 
@@ -244,8 +249,10 @@ async def get_n_stun_clients(af, n, interface, proto=UDP, limit=5, conf=NET_CONF
     tasks = []
     for _ in range(0, n):
         tasks.append(
-            async_wrap_errors(
-                worker()
+            to_task(
+                async_wrap_errors(
+                    worker()
+                )
             )
         )
 
