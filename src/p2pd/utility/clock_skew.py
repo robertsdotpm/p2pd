@@ -86,8 +86,14 @@ class SysClock:
             Plenty accurate for hole punching.
             """
             ntp_ret = None
+            server = {"host": "pool.ntp.org", "port": 123, IP4: None, IP6: None} 
+        
             for i in range(0, 20):
-                ntp_ret = await get_ntp(self.interface.supported()[0], self.interface)
+                ntp_ret = await get_ntp(
+                    self.interface.supported()[0],
+                    self.interface,
+                    server=server
+                )
                 if ntp_ret:
                     break
             
@@ -295,8 +301,9 @@ async def test_clock_skew(): # pragma: no cover
 
     return
     """
-
-    ret = await get_ntp(IP4, interface)
+    print(interface.supported()[0])
+    server = {"host": "pool.ntp.org", "port": 123, IP4: None, IP6: None}    
+    ret = await get_ntp(IP4, interface, server=server)
     print(ret)
     return
 
