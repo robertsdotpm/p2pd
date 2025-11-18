@@ -128,9 +128,6 @@ class PipeClient(ACKUDP):
 
         # Apply bool filters to message.
         msg_added = False
-        print(self.subs)
-
-
         for sub, q, handler in self.subs.values():
             log("add msg sub " + str(sub[:2]))
         

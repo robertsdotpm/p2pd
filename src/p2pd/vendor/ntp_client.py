@@ -294,7 +294,6 @@ class NTPClient:
         route = await self.interface.route(self.af).bind()
 
         # create the socket
-        print(dest)
         try:
             pipe = await Pipe(UDP, dest, route).connect()
             pipe.subscribe((None, None))
@@ -308,7 +307,6 @@ class NTPClient:
 
             # send the request
             buf = query_packet.to_data()
-            print(buf)
             await pipe.send(buf)
 
             # wait for the response - check the source address

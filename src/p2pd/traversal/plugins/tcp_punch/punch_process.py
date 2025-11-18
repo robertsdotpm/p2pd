@@ -112,20 +112,13 @@ async def setup_punching_process(client, puncher_class):
         # Schedule TCP punching in process pool executor.
         loop = get_running_loop()
 
-        # Fallback to threads if multiprocessing not available.
-        if not client.pp_executor:
-            puncher_future = loop.run_in_executor(
-                client.pp_executor,
-                proc_do_punching,
-                args
-            )
-        else:
-            log("Trying new punching code for proc_do_punching.")
-            puncher_future = client.pp_executor.submit(
-                proc_do_punching, 
-                args
-            )
-        
+        # If pp_executor is None it gracefully falls back to threads.
+        puncher_future = loop.run_in_executor(
+            client.pp_executor,
+            proc_do_punching,
+            args
+        )
+
         # Check every 100 ms for 5 seconds.
         while not shutdown_event.is_set():
             try:

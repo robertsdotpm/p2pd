@@ -24,7 +24,7 @@ from ecdsa.curves import NIST192p
 from decimal import Decimal as Dec
 from .fstr import fstr
 from .error_logger import *
-from .process_group import *
+from concurrent.futures import ProcessPoolExecutor
 from ..net.asyncio.asyncio_patches import *
 
 to_b = lambda x: x if type(x) == bytes else x.encode("ascii", errors='ignore')
@@ -742,9 +742,8 @@ async def get_pp_executors(workers=None):
     try:
         # Default to threads if all features aren't available.
         print("before check")
-        check_multiprocessing_available()
         print("after check multi proc available.")
-        pp_executor = ProcessManager()
+        pp_executor = ProcessPoolExecutor(max_workers=workers)
         log("Multiprocessing support available.")
     except asyncio.CancelledError:
         raise
