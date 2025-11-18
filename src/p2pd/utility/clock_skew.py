@@ -86,7 +86,15 @@ class SysClock:
             'NTP can usually maintain time to within tens of milliseconds over the public Internet, and can achieve better than one millisecond accuracy in local area networks under ideal conditions.'
             Plenty accurate for hole punching.
             """
-            ntp_ret = await get_ntp(self.interface.supported()[0], self.interface)
+            ntp_ret = None
+            for i in range(0, 20):
+                ntp_ret = await get_ntp(self.interface.supported()[0], self.interface)
+                if ntp_ret:
+                    break
+            
+            if not ntp_ret:
+                raise Exception("Failed to get clock skew.")
+
             self.clock_skew = Dec(timestamp(1)) - Dec(ntp_ret)
             return
 
