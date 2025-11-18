@@ -36,6 +36,7 @@ def check_multiprocessing_available(timeout=1.0):
         p.terminate()
         raise RuntimeError("Queue failed to return data")
 
+    out_q.close()
     p.join(timeout=timeout)
     if p.is_alive():
         p.terminate()
