@@ -102,7 +102,6 @@ class Shell():
         self.con = None
         self.process = None
         self.stdout = ""
-        self.chaincmds = chain_cmds
 
     async def init_env(self):
         init_cmd = init_pyenv_vars_cmd(self.node)
@@ -147,12 +146,12 @@ class Shell():
 
                 index = self.stdout.find('\n')
                 extracted = self.stdout[:index + 1]
-                self.stdout = index[index + 1:]
+                self.stdout = self.stdout[index + 1:]
                 return extracted
             
     async def await_cmd(self, cmd, timeout=2):
         marker = "__CMD_DONE_MARKER__"
-        cmd = self.chain_cms(cmd, f"echo {marker}") + "\n"
+        cmd = chain_cmds(cmd, f"echo {marker}") + "\n"
         await self.write(cmd)
 
         lines = []

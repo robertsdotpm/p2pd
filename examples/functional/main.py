@@ -64,11 +64,11 @@ async def tunnel_test(active, passive):
         p2pd_cmd += "--disable_upnp 1 --run_time 120 --cmd "
 
         # Setup shell and env for passive server.
-        print(f"{passive['os']}> Starting passive shell.")
+        print(f"{passive['os']} (p)> Starting passive shell.")
         passive_shell = await Shell(passive).start()
 
         # Get PNP address of the passive node.
-        print(f"{passive['os']}> Getting passive node address.")
+        print(f"{passive['os']} (p)> Getting passive node address.")
         py_ver = PY_VER or choose_first_py_ver(passive)
         cmd = p2pd_cmd + "get_nickname"
         cmd = pyenv_run_cmd(py_ver, passive, cmd)
@@ -79,14 +79,19 @@ async def tunnel_test(active, passive):
         print("\t", passive_pnp)
 
         # Start passive node listening for cons.
-        print(f"{passive['os']}> Starting passive node.")
+        print(f"{passive['os']} (p)> Starting passive node.")
         cmd = p2pd_cmd + "1"
         cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n" # TODO: background on win?
+        if "windows" in passive["os"]:
+            cmd = "start " + cmd
+
+        print(cmd)
+
         await passive_shell.write(cmd)
         await asyncio.sleep(5)
 
         # Setup shell and env for active server.
-        print(f"{active['os']}> Starting active shell.")
+        print(f"{active['os']} (a)> Starting active shell.")
 
         active_shell = await Shell(active).start()
 
@@ -94,7 +99,7 @@ async def tunnel_test(active, passive):
         # Echo down the returned pipe and get the output.
         # (0) connect (d)irect (l)an ipv(4)
         # NOTE: changed to (r) to test reverse con
-        print(f"{active['os']}> Try connect and echo to passive node.")
+        print(f"{active['os']} (a)> Try connect and echo to passive node.")
         cmd = f'{p2pd_cmd}0pl4 --echo "CLEAN_SHUTDOWN" --dest_addr {passive_pnp}'
         #print(cmd)
         cmd = pyenv_run_cmd(py_ver, active, cmd)
@@ -106,7 +111,7 @@ async def tunnel_test(active, passive):
         shells = (active_shell, passive_shell,)
         for shell in shells:
             if shell is not None:
-                shell.close()
+                await shell.close()
 
 async def windows_test(node):
     con = await ssh_connect(node)
@@ -116,11 +121,11 @@ async def windows_test(node):
 async def run_client():
     # Freebsd and fedora, chosen arbitrary to start testing with.
     servers = (SSH_SERVERS[0], SSH_SERVERS[1],)
-    #await git_pull_latest(servers)
-    #await pyenv_install_latest(servers)
+    await git_pull_latest(servers)
+    await pyenv_install_latest(servers)
 
-    await windows_test(servers[0])
-    #await tunnel_test(*servers)
+    #await windows_test(servers[0])
+    await tunnel_test(*servers)
     
 
 try:
