@@ -284,6 +284,10 @@ class Pipe:
         # UDP / RUDP setup
         if self.proto in (UDP, RUDP):
             # Create a new protocol-based datagram transport.
+            if self.dest:
+                if self.dest.tup[1] == 123:
+                    self.sock.connect(self.dest.tup)
+                    
             transport, _ = await create_datagram_endpoint(
                 loop, 
                 lambda: self.pipe_events, 
