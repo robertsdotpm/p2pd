@@ -1,6 +1,7 @@
 from ...utility.utils import *
 from ..net_utils import *
 from .bind_utils import *
+from ..asyncio.asyncio_patches import *
 
 """
 Returns the correct bind tuple given an af and listen IP.
@@ -68,7 +69,7 @@ async def binder(af, ip="", port=0, nic_id=None, loop=None, plat=platform.system
         break
 
     # Lookup correct bind tuples to use.
-    loop = loop or asyncio.get_event_loop()
+    loop = loop or get_running_loop()
     try:
         addr_infos = await loop.getaddrinfo(ip, port)
     except Exception:

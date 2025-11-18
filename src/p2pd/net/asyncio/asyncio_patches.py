@@ -13,6 +13,12 @@ from selectors import SelectSelector
 
 from ...utility.utils import *
 
+def get_running_loop():
+    if hasattr(asyncio, "get_running_loop"):
+        return asyncio.get_running_loop()
+    else:
+        return asyncio.get_event_loop()
+
 # -----------------------------
 # Patched select for modern Python
 # -----------------------------
@@ -232,7 +238,7 @@ def remove_writer(loop, fd):
     return loop._remove_writer(fd)
 
 def _sock_write_done(fd, fut, handle=None):
-    loop = asyncio.get_event_loop()
+    loop = get_running_loop()
     if handle is None or not handle.cancelled():
         remove_writer(loop, fd)
 
@@ -331,7 +337,7 @@ class EchoServerProtocol:
     
 async def workspace():
     print("w")
-    loop = asyncio.get_event_loop()
+    loop = get_running_loop()
     tran, pro = await create_datagram_endpoint(
         loop,
         EchoServerProtocol,

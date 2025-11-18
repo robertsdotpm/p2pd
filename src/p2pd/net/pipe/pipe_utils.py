@@ -34,7 +34,7 @@ def norm_client_tup(client_tup):
 
 async def close_all_clients(tcp_clients, loop=None, timeout=1.0):
     if loop is None:
-        loop = asyncio.get_event_loop()
+        loop = get_running_loop()
 
     tasks = []    
     for client in tcp_clients:

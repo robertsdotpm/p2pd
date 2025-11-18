@@ -109,7 +109,7 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
         assert(steps > 1)
         assert(steps)
         assert(len(send_mappings))
-        loop = asyncio.get_event_loop()
+        loop = get_running_loop()
         for i in range(0, 1):
             # Validate IP address.
             dest = Address(dest_addr, recv_mappings[i].remote)

@@ -98,7 +98,7 @@ class TURNClient(PipeEvents):
         self.tasks = []
 
         # Event loop reference.
-        loop = asyncio.get_event_loop()
+        loop = get_running_loop()
         if self.conf["loop"] is not None:
             loop = self.conf["loop"]()
 

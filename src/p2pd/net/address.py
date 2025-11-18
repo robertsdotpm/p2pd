@@ -55,7 +55,7 @@ async def async_res_domain(host, route=None):
 
 async def sock_res_domain(host, route=None):
     # Current event loop.
-    loop = asyncio.get_event_loop()
+    loop = get_running_loop()
 
     # Uses a process pool executor.
     # Caution needed here.

@@ -1,6 +1,6 @@
 import asyncio
 from asyncio import events, coroutines, tasks
-
+from .asyncio_patches import *
 
 
 def async_shield(awaitable, *, loop=None):
@@ -8,7 +8,7 @@ def async_shield(awaitable, *, loop=None):
     Return an awaitable that protects the given awaitable from
     cancellation of the outer task.
     """
-    loop = loop or asyncio.get_event_loop()
+    loop = loop or get_running_loop()
     fut = asyncio.ensure_future(awaitable, loop=loop)
 
     async def _shield():
@@ -27,7 +27,7 @@ def patch_asyncio_backports(loop_cls=None):
 
     # Default to whatever class is passed, or fall back to the base event loop
     if loop_cls is None:
-        loop_cls = asyncio.get_event_loop().__class__
+        loop_cls = get_running_loop().__class__
 
     if not hasattr(loop_cls, "shutdown_asyncgens"):
         async def _noop(self): pass
@@ -96,9 +96,15 @@ def async_run(main, *, debug=False, shield=False):
     It should be used as a main entry point for asyncio programs, and should
     ideally only be called once.
     """
-    if events._get_running_loop() is not None:
-        raise RuntimeError(
-            "asyncio.run() cannot be called from a running event loop")
+    
+    get_running_loop = getattr(asyncio.events, "_get_running_loop", None)
+    if get_running_loop:
+        loop = get_running_loop()
+    else:
+        loop = asyncio.get_event_loop()
+
+    if loop is not None:
+        raise RuntimeError("asyncio.run() cannot be called from a running event loop")
 
     if not coroutines.iscoroutine(main):
         raise ValueError("a coroutine was expected, got {!r}".format(main))

@@ -166,7 +166,7 @@ async def netiface_addr_to_ipr(af, nic_id, info):
     return nic_ipr
 
 async def get_nic_private_ips(interface, af, netifaces, loop=None):
-    loop = loop or asyncio.get_event_loop()
+    loop = loop or get_running_loop()
     nic_iprs = []
     if_name = interface.name
     if_addresses = netifaces.ifaddresses(if_name)

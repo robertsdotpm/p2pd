@@ -5,6 +5,7 @@ from ..net_utils import *
 from ..ip_range import *
 from .pipe_defs import *
 from .pipe_utils import *
+from ..asyncio.asyncio_patches import *
 
 """
 The code in this class supports a pull / fetch style use-case.
@@ -18,7 +19,7 @@ class PipeClient(ACKUDP):
         self.conf = conf
         self.dest = None
         self.dest_tup = None
-        self.loop = loop or asyncio.get_event_loop()
+        self.loop = loop or get_running_loop()
 
         # [Bool(msg)] = Queue.
         # Lets convert this to [b"msg pattern", b"host pattern"] = [Queue]

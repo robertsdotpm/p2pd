@@ -108,7 +108,7 @@ class REPLThread(threading.Thread):
             loop.call_soon_threadsafe(loop.stop)
 
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
+    loop = get_running_loop()
     repl_locals = {'asyncio': asyncio}
     for key in {'__name__', '__package__',
                 '__loader__', '__spec__',

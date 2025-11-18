@@ -140,7 +140,7 @@ class Pipe:
         if self.conf.get("loop") is not None:
             return self.conf["loop"]()
         
-        return asyncio.get_event_loop()
+        return get_running_loop()
 
     async def resolve_route_and_dest(self):
         af_hint = getattr(self.route, "af", None)

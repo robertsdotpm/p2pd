@@ -533,6 +533,6 @@ async def start_pnp_server(bind_port):
     return serv
 
 if __name__ == "__main__": 
-    loop = asyncio.get_event_loop()
+    loop = get_running_loop()
     task = loop.create_task(start_pnp_server(PNP_PORT))
     loop.run_forever()

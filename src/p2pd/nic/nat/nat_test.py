@@ -302,7 +302,7 @@ async def nic_load_nat(nic, nat_tests=5, delta_tests=12, servs=None, timeout=4):
 async def nat_test_main():
     from .interface import Interface, p2pd_setup_netifaces
 
-    loop = asyncio.get_event_loop()
+    loop = get_running_loop()
 
     # Use same pipe with multiplexing for reuse tests.
     #t1 = timestamp(1)

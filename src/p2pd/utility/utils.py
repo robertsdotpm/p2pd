@@ -25,6 +25,7 @@ from decimal import Decimal as Dec
 from .fstr import fstr
 from .error_logger import *
 from .process_group import *
+from ..net.asyncio.asyncio_patches import *
 
 to_b = lambda x: x if type(x) == bytes else x.encode("ascii", errors='ignore')
 to_s = lambda x: x if type(x) == str else x.decode("utf-8", errors='ignore')
@@ -80,7 +81,7 @@ if not hasattr(unittest, "IsolatedAsyncioTestCase"):
         unittest.IsolatedAsyncioTestCase = aiounittest.AsyncTestCase
 
         def safe_run_patch(self):
-            loop = asyncio.get_event_loop()
+            loop = get_running_loop()
             run_wrap = loop.run_until_complete
             loop.run_until_complete = lambda f: run_wrap(safe_run(f))
             loop.set_debug(False)
@@ -524,7 +525,7 @@ def run_handlers(pipe, handlers, client_tup, data=None):
 def run_in_executor(f):
     @functools.wraps(f)
     def inner(*args, **kwargs):
-        loop = asyncio.get_event_loop()
+        loop = get_running_loop()
 
         # Sync function
         if not inspect.iscoroutinefunction(f):
@@ -548,7 +549,7 @@ def run_in_executor(f):
 def run_in_executor2(f):
     @functools.wraps(f)
     def inner(*args, **kwargs):
-        loop = asyncio.get_event_loop()
+        loop = get_running_loop()
         if inspect.iscoroutinefunction(f):
             # Run coroutine function directly in the existing event loop
             return loop.create_task(f(*args, **kwargs))
@@ -599,7 +600,7 @@ def get_loop(loop=None):
         if sys.platform == "win32":
             loop = asyncio.ProactorEventLoop()
         else:
-            loop = asyncio.get_event_loop()
+            loop = get_running_loop()
     else:
         loop = loop()
 
@@ -608,16 +609,6 @@ def get_loop(loop=None):
 # Handle stray exceptions in the event loop.
 def handle_exceptions(loop, context):
     pass
-
-def get_running_loop():
-    try:
-        version = sys.version_info[1]
-        if version >= 7:
-            return asyncio.get_running_loop()
-        else:
-            return asyncio.get_event_loop()
-    except RuntimeError:
-        return None
 
 # Will be used in sample code to avoid boilerplate.
 def async_test(coro, loop=None):
@@ -628,7 +619,7 @@ def async_test(coro, loop=None):
     if hasattr(asyncio, "run"):
         runner = asyncio.run
     else:
-        loop = loop or asyncio.get_event_loop()
+        loop = loop or get_running_loop()
         runner = loop.run_until_complete
 
     # Can have cleanup errors.

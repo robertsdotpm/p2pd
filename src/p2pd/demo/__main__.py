@@ -130,7 +130,7 @@ async def main():
                 shutdown_event.set()
 
         # Install SIGTERM handler.
-        loop = asyncio.get_event_loop()
+        loop = get_running_loop()
         try:
             loop.add_signal_handler(signal.SIGTERM, handle_sigterm)
         except NotImplementedError:

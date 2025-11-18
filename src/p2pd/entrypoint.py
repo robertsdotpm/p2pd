@@ -53,7 +53,7 @@ async def p2pd_setup_netifaces():
             return _cached_netifaces
 
         # Setup event loop.
-        loop = asyncio.get_event_loop()
+        loop = get_running_loop()
         loop.set_debug(False)
         loop.set_exception_handler(CustomEventLoopPolicy.exception_handler)
         

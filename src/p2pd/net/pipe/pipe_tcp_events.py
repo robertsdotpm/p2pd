@@ -172,7 +172,7 @@ class TCPClientProtocol(asyncio.StreamReaderProtocol):
 # Returns a hacked TCP server object
 async def create_tcp_server(sock, pipe_events, *, loop=None, conf=NET_CONF, **kwds):
     # Main vars.
-    loop = loop or asyncio.get_event_loop()
+    loop = loop or get_running_loop()
     def factory():
         reader = asyncio.StreamReader(limit=conf["reader_limit"], loop=loop)
         return TCPClientProtocol(
