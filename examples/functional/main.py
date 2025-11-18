@@ -21,7 +21,7 @@ pkill -9 -f 'p2pd'
 disabling pp_executors for now as a test
 """
 
-PY_VER = "3.5.4"
+PY_VER = "3.7.9"
 
 async def git_pull_latest(servers):
     for server in servers:
