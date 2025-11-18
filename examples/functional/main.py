@@ -21,7 +21,7 @@ pkill -9 -f 'p2pd'
 disabling pp_executors for now as a test
 """
 
-PY_VER = "3.5.10"
+PY_VER = "3.5.4"
 
 async def git_pull_latest(servers):
     for server in servers:
@@ -136,7 +136,7 @@ async def tunnel_test(active, passive):
 
 async def run_client():
     # Freebsd and fedora, chosen arbitrary to start testing with.
-    servers = (SSH_SERVERS[3], SSH_SERVERS[4],)
+    servers = (SSH_SERVERS[0], SSH_SERVERS[1],)
     await git_pull_latest(servers)
     await pyenv_install_latest(servers)
     await tunnel_test(*servers)

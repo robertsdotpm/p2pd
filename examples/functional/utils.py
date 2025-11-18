@@ -89,8 +89,8 @@ def choose_first_py_ver(server):
     
 def init_pyenv_vars_cmd(server):
     if "windows" in server["os"]:
-        buf  = "set PYENV_ROOT=%USERPROFILE%\\.pyenv"
-        buf += "set PATH=%PYENV_ROOT%\\bin;%PATH%"
+        buf  = 'set PYENV_ROOT="%USERPROFILE%\\.pyenv" && '
+        buf += 'set PATH="%PYENV_ROOT%\\bin;%PATH%"\n'
     else:
         buf  = 'export PYENV_ROOT="$HOME/.pyenv"; '
         buf += 'export PATH="$PYENV_ROOT/bin:$PATH"; '
