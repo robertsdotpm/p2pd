@@ -30,24 +30,23 @@ NTP_TIMEOUT = 2
 
 async def get_ntp(af, interface, server=None, retry=NTP_RETRY):
     # Get a random NTP server that supports this AF.
-    server = server
     if server is None:
-        for _ in range(0, 20):
-            random_server = random.choice(NTP_SERVERS)
-            if af not in random_server:
+        servers = NTP_SERVERS[:]
+        random.shuffle(servers)
+        for s in servers:
+            if not s[af]:
                 continue
 
-            if random_server[af]:
-                server = random_server
-                break
+            server = s
+            break
 
     # Sanity check to see server was set.
     if server is None:
         raise Exception("Can't find compatible NTP server.")
 
     # Resolve af if its not set.
-    if not server[af]:
-        server[af] = await Address(server["host"], 123).select_ip(af).ip
+    if server[af] is None:
+        server[af] = (await Address(server["host"], 123, interface)).select_ip(af).ip
 
     # The NTP client uses UDP so retry on failure.
     dest = (server[af], int(server["port"]),)
@@ -287,8 +286,16 @@ class SysClock:
         self.__dict__ = o.__dict__
 
 async def test_clock_skew(): # pragma: no cover
-    from p2pd import p2pd_setup_netifaces, Interface
+    from p2pd.nic.interface import Interface
     interface = await Interface()
+
+    """
+    out = await Address("time.mit.edu", 123, interface)
+    print(out.select_ip(IP4).ip)
+
+    return
+    """
+
     ret = await get_ntp(IP4, interface)
     print(ret)
     return
@@ -310,7 +317,7 @@ async def test_clock_skew(): # pragma: no cover
 if __name__ == "__main__":
     #sys_clock = SysClock()
     #print(sys_clock.clock_skew)
-    async_test(test_clock_skew)
+    async_run(test_clock_skew())
 
 
     # print(get_ntp())
