@@ -103,6 +103,7 @@ class PipeClient(ACKUDP):
         
         # Norm compressed IPv6 addresses.
         client_tup = client_tup_norm(client_tup)
+        print(client_tup)
 
         # Add message to queue and raise an event.
         def do_add(q):
@@ -120,6 +121,7 @@ class PipeClient(ACKUDP):
         msg_added = False
         for sub, q, handler in self.subs.values():
             # Msg pattern, address pattern.
+            print(sub)
             b_msg_p, m_client_tup = sub[:2]
 
             # Check client_addr matches their host pattern.
