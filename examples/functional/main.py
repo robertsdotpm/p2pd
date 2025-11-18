@@ -68,16 +68,15 @@ async def tunnel_test(active, passive):
         # Use local machines PNP server so names have no limits.
         p2pd_cmd  = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 "
         p2pd_cmd += "--disable_upnp 1 --run_time 120 --cmd "
-        chain_cmds = get_chain_cmds(active)
 
         # Setup shell and env for passive server.
         print(f"{passive['os']}> Starting passive shell.")
-        passive_con = await ssh_connect(passive)
-        passive_shell = await passive_con.create_process("bash -l")
+        passive_shell = await Shell(passive).start()
+
         #await shell_write("pkill -f p2pd\n", passive_shell) # TODO: win
-        await shell_write("export P2PD_DEBUG=1\n", passive_shell)
+        await passive_shell.write("export P2PD_DEBUG=1\n")
         init_cmd = init_pyenv_vars_cmd(passive)
-        await shell_write(init_cmd, passive_shell)
+        await passive_shell.write(init_cmd)
 
         # Get PNP address of the passive node.
         print(f"{passive['os']}> Getting passive node address.")
@@ -85,7 +84,7 @@ async def tunnel_test(active, passive):
         cmd = p2pd_cmd + "get_nickname"
         cmd = pyenv_run_cmd(py_ver, passive, cmd)
         print(cmd)
-        results = await ssh_await_cmd(cmd, passive_shell, chain_cmds, timeout=20)
+        results = await passive_shell.await_cmd(cmd, timeout=20)
         print(results)
         passive_pnp = results.strip()
         print("\t", passive_pnp)
@@ -94,17 +93,17 @@ async def tunnel_test(active, passive):
         print(f"{passive['os']}> Starting passive node.")
         cmd = p2pd_cmd + "1"
         cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n" # TODO: background on win?
-        await shell_write(cmd, passive_shell)
+        await passive_shell.write(cmd)
         await asyncio.sleep(5)
 
         # Setup shell and env for active server.
         print(f"{active['os']}> Starting active shell.")
-        active_con = await ssh_connect(active)
-        active_shell = await active_con.create_process("bash -l")
-        await shell_write("export P2PD_DEBUG=1\n", active_shell)
+
+        active_shell = await Shell(active).start()
+        await active_shell.write("export P2PD_DEBUG=1\n")
         #await shell_write("pkill -f p2pd\n", active_shell) # TODO: win?
         init_cmd = init_pyenv_vars_cmd(active)
-        await shell_write(init_cmd, active_shell)
+        await active_shell.write(init_cmd)
 
         # Start active node -- connect to passive node (local con)
         # Echo down the returned pipe and get the output.
@@ -114,9 +113,9 @@ async def tunnel_test(active, passive):
         cmd = f'{p2pd_cmd}0pl4 --echo "CLEAN_SHUTDOWN" --dest_addr {passive_pnp}'
         #print(cmd)
         cmd = pyenv_run_cmd(py_ver, active, cmd)
-        await shell_write(cmd + "\n", active_shell)
+        await active_shell.write(cmd + "\n")
         print(cmd)
-        results = await active_shell.stdout.readline()
+        results = await active_shell.readline()
         print(results)
 
         # Close long-running processes.
@@ -130,16 +129,20 @@ async def tunnel_test(active, passive):
             if shell is not None:
                 shell.close()
 
-    # Close cons and active programs.
-    passive_con.close()
-    active_con.close()
+
+async def windows_test(node):
+    con = await ssh_connect(node)
+    result = await con.run('dir', check=True)
+    print(result.stdout, end='')
 
 async def run_client():
     # Freebsd and fedora, chosen arbitrary to start testing with.
     servers = (SSH_SERVERS[0], SSH_SERVERS[1],)
-    await git_pull_latest(servers)
-    await pyenv_install_latest(servers)
-    await tunnel_test(*servers)
+    #await git_pull_latest(servers)
+    #await pyenv_install_latest(servers)
+
+    await windows_test(servers[0])
+    #await tunnel_test(*servers)
     
 
 try:

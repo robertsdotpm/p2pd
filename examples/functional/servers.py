@@ -23,7 +23,7 @@ SSH_SERVERS = [
     {
         "os": "debian",
         "ip": "110.0.1.251",
-        "shell": "bash",
+        "shell": "bash -l",
         "user": "x",
         "home": ["/", "home", "x"],
         "pyenv": ["3.5.10", "3.7.10", "3.9.10", "3.12.10"]
@@ -32,7 +32,7 @@ SSH_SERVERS = [
     {
         "os": "mac os x big sur",
         "ip": "10.0.1.158",
-        "shell": "bash", # installed bash but uses zsh but default.
+        "shell": "bash -l", # installed bash but uses zsh but default.
         "user": "xx",
         "home": ["/", "Users", "xx"],
         "pyenv": ["3.5.10", "3.7.10", "3.9.10", "3.12.10"]
@@ -41,7 +41,7 @@ SSH_SERVERS = [
     {
         "os": "android pixel 9a",
         "ip": "10.0.1.123",
-        "shell": "bash",
+        "shell": "bash -l",
         "user": "x",
         "home": ["/", "data", "data", "com.termux", "files", "home"],
         "port": 8022,
@@ -52,7 +52,7 @@ SSH_SERVERS = [
     {
         "os": "freebsd",
         "ip": "10.0.1.225",
-        "shell": "bash",
+        "shell": "bash -l",
         "user": "root",
         "home": ["/", "root"],
         "pyenv": ["3.5.10", "3.7.10", "3.9.10", "3.12.0"]
@@ -61,7 +61,7 @@ SSH_SERVERS = [
     {
         "os": "fedora",
         "ip": "10.0.1.224",
-        "shell": "bash",
+        "shell": "bash -l",
         "user": "x",
         "home": ["/", "home", "x"],
         "pyenv": ["3.5.10", "3.7.10", "3.9.10", "3.12.0"]
@@ -70,7 +70,7 @@ SSH_SERVERS = [
     {
         "os": "ghostbsd",
         "ip": "10.0.1.152",
-        "shell": "bash",
+        "shell": "bash -l",
         "user": "x",
         "home": ["/", "home", "x"],
         "pyenv": ["3.5.10", "3.7.10", "3.9.10", "3.12.10"]

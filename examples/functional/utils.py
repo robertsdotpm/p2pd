@@ -6,6 +6,11 @@ from ntpath import join as nt_join
 from defs import *
 from error import *
 
+def chain_cmds(*args):
+    assert("\n" not in args)
+    out = " && ".join(args)
+    return out
+
 def get_chain_cmds(server):
     def chain_cmds(*args):
         assert("\n" not in args)
@@ -56,7 +61,6 @@ def server_has_py_ver(py_ver, server):
         
     return False
 
-
 def pyenv_run_cmd(py_ver, server, cmd):
     # Ensure server supports requested Python version.
     if not server_has_py_ver(py_ver, server):
@@ -98,41 +102,84 @@ def init_pyenv_vars_cmd(server):
 
     return buf
 
-async def shell_write(cmd, shell):
-    if not cmd or cmd[-1] != "\n":
-        raise UnterminatedShellCmd(cmd)
-    
-    if "\n" in cmd[:-1]:
-        print(cmd)
-        raise MalformedShellCmd(cmd)
+class Shell():
+    def __init__(self, node):
+        self.node = node
+        self.con = None
+        self.process = None
+        self.stdout = ""
+        self.chaincmds = chain_cmds
 
-    shell.stdin.write(cmd)
-    await shell.stdin.drain()
+    async def start(self):
+        self.con = await ssh_connect(self.node)
+        if not "windows" in self.node["os"]:
+            self.process = await self.con.create_process(
+                self.node["shell"]
+            )
 
-async def ssh_await_cmd(cmd, shell, chain_cms, timeout=2):
-    marker = "__CMD_DONE_MARKER__"
-    cmd = chain_cms(cmd, f"echo {marker}") + "\n"
-    await shell_write(cmd, shell)
+        return self
 
-    lines = []
-    try:
-        while True:
-            try:
-                line = await asyncio.wait_for(shell.stdout.readline(), timeout=timeout)
-            except asyncio.TimeoutError:
-                lines.append(f"[timeout after {timeout}s]")
-                break
+    async def write(self, cmd):
+        if not cmd or cmd[-1] != "\n":
+            raise UnterminatedShellCmd(cmd)
+        
+        if "\n" in cmd[:-1]:
+            raise MalformedShellCmd(cmd)
 
-            if not line:
-                break
-            if marker in line:
-                break
-            lines.append(line.strip())
+        if self.process:
+            self.process.stdin.write(cmd)
+            await self.process.stdin.drain()
+        else:
+            self.stdout += (await self.con.run(cmd, check=True)).stdout
 
-    except Exception as e:
+    async def readline(self, timeout=2):
+        if self.process:
+            return await asyncio.wait_for(
+                self.process.stdout.readline(),
+                timeout=timeout
+            )
+        else:
+            sleep_step = 0.1
+            for _ in range(0, int(timeout / sleep_step)):
+                if '\n' not in self.stdout:
+                    await asyncio.sleep(sleep_step)
+                    continue
+
+                index = self.stdout.find('\n')
+                extracted = self.stdout[:index + 1]
+                self.stdout = index[index + 1:]
+                return extracted
+            
+    async def await_cmd(self, cmd, timeout=2):
+        marker = "__CMD_DONE_MARKER__"
+        cmd = self.chain_cms(cmd, f"echo {marker}") + "\n"
+        await self.write(cmd)
+
+        lines = []
+        try:
+            while True:
+                try:
+                    line = await self.readline(timeout=timeout)
+                except asyncio.TimeoutError:
+                    lines.append(f"[timeout after {timeout}s]")
+                    break
+
+                if not line:
+                    break
+                if marker in line:
+                    break
+                lines.append(line.strip())
+
+        except Exception as e:
+            output = "\n".join(lines).strip()
+            raise Exception(output + f"[error: {e}]")
+
         output = "\n".join(lines).strip()
-        raise Exception(output + f"[error: {e}]")
+        return output if output else "[no output]"
+    
+    async def close(self):
+        if self.process:
+            self.process.close()
 
-    output = "\n".join(lines).strip()
-    return output if output else "[no output]"
-
+        if self.con:
+            self.con.close()
