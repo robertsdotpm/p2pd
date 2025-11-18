@@ -344,7 +344,7 @@ class PipeEvents(BaseACKProto):
 
     # UDP packets.
     def datagram_received(self, data, client_tup):
-        log(fstr("Base proto recv udp = {0} {1}", (client_tup, data,)))
+        #log(fstr("Base proto recv udp = {0} {1}", (client_tup, data,)))
         if self.transport is None:
             log(fstr("Skipping process data cause transport none 1."))
             return

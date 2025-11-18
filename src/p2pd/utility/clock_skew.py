@@ -34,6 +34,9 @@ async def get_ntp(af, interface, server=None, retry=NTP_RETRY):
     if server is None:
         for _ in range(0, 20):
             random_server = random.choice(NTP_SERVERS)
+            if af not in random_server:
+                continue
+
             if random_server[af]:
                 server = random_server
                 break
@@ -150,7 +153,8 @@ class SysClock:
                 )
             )
 
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        print(results)
         results = strip_none(results)
         self.data_points += results
 
