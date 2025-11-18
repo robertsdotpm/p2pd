@@ -82,17 +82,12 @@ async def tunnel_test(active, passive):
         print(f"{passive['os']} (p)> Starting passive node.")
         cmd = p2pd_cmd + "1"
         cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n" # TODO: background on win?
-        if "windows" in passive["os"]:
-            cmd = "start " + cmd
-
         print(cmd)
-
-        await passive_shell.write(cmd)
+        passive_proc = await passive_shell.write(cmd, long_running=True)
         await asyncio.sleep(5)
 
         # Setup shell and env for active server.
         print(f"{active['os']} (a)> Starting active shell.")
-
         active_shell = await Shell(active).start()
 
         # Start active node -- connect to passive node (local con)

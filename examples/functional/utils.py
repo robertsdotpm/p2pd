@@ -102,6 +102,7 @@ class Shell():
         self.con = None
         self.process = None
         self.stdout = ""
+        self.long_running = []
 
     async def init_env(self):
         init_cmd = init_pyenv_vars_cmd(self.node)
@@ -118,7 +119,7 @@ class Shell():
         await self.init_env()
         return self
 
-    async def write(self, cmd):
+    async def write(self, cmd, long_running=False):
         if not cmd or cmd[-1] != "\n":
             raise UnterminatedShellCmd(cmd)
         
@@ -129,12 +130,17 @@ class Shell():
             self.process.stdin.write(cmd)
             await self.process.stdin.drain()
         else:
-            self.stdout += (await self.con.run(cmd, check=True)).stdout
+            if long_running:
+                process = await self.con.create_process(cmd)
+                self.long_running.append(process)
+            else:
+                self.stdout += (await self.con.run(cmd, check=True)).stdout
 
-    async def readline(self, timeout=2):
-        if self.process:
+    async def readline(self, process=None, timeout=2):
+        process = process or self.process
+        if process:
             return await asyncio.wait_for(
-                self.process.stdout.readline(),
+                process.stdout.readline(),
                 timeout=timeout
             )
         else:
@@ -149,7 +155,7 @@ class Shell():
                 self.stdout = self.stdout[index + 1:]
                 return extracted
             
-    async def await_cmd(self, cmd, timeout=2):
+    async def await_cmd(self, cmd, process=None, timeout=2):
         marker = "__CMD_DONE_MARKER__"
         cmd = chain_cmds(cmd, f"echo {marker}") + "\n"
         await self.write(cmd)
@@ -158,7 +164,7 @@ class Shell():
         try:
             while True:
                 try:
-                    line = await self.readline(timeout=timeout)
+                    line = await self.readline(process=process, timeout=timeout)
                 except asyncio.TimeoutError:
                     lines.append(f"[timeout after {timeout}s]")
                     break
@@ -178,6 +184,9 @@ class Shell():
     async def close(self):
         if self.process:
             self.process.close()
+
+        for process in self.long_running:
+            process.close()
 
         if self.con:
             self.con.close()
