@@ -98,8 +98,8 @@ async def tunnel_test(active, passive):
         cmd = f'{p2pd_cmd}0pl4 --echo "CLEAN_SHUTDOWN" --dest_addr {passive_pnp}'
         #print(cmd)
         cmd = pyenv_run_cmd(py_ver, active, cmd)
-        await active_shell.write(cmd + "\n")
         print(cmd)
+        await active_shell.write(cmd + "\n")
         results = await active_shell.readline()
         print(results)
     finally:

@@ -98,7 +98,8 @@ class SysClock:
 
             if ntp_ret is not None:
                 log("> clockskew using local ntp daemon")
-                server = local_ip
+                self.clock_skew = Dec(timestamp(1)) - Dec(ntp_ret)
+                return self
 
             # Calculate clock skew.
             for i in range(0, 3):

@@ -7,7 +7,7 @@ SSH_SERVERS = [
         "shell": "cmd.exe",
         "user": "administrator",
         "home": ["C:\\", "Users", "Administrator"],
-        "pyenv": ["3.5.4", "3.7.9", "3.9.13", "3.12.0"]
+        "pyenv": ["3.5.4", "3.7.9", "3.9.13", "3.13.1"]
     },
 
 
