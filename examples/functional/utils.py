@@ -11,14 +11,6 @@ def chain_cmds(*args):
     out = " && ".join(args)
     return out
 
-def get_chain_cmds(server):
-    def chain_cmds(*args):
-        assert("\n" not in args)
-        out = " && ".join(args)
-        return out
-    
-    return chain_cmds
-
 def get_path_join(server):
     """
     Set the function used to join paths on different operating systems.
@@ -93,10 +85,12 @@ def choose_first_py_ver(server):
     
 def init_pyenv_vars_cmd(server):
     if "windows" in server["os"]:
-        buf  = 'set PYENV_ROOT="%USERPROFILE%\\.pyenv" && '
+        buf  = 'set P2PD_DEBUG=1 && '
+        buf += 'set PYENV_ROOT="%USERPROFILE%\\.pyenv" && '
         buf += 'set PATH="%PYENV_ROOT%\\bin;%PATH%"\n'
     else:
-        buf  = 'export PYENV_ROOT="$HOME/.pyenv"; '
+        buf  = 'export P2PD_DEBUG=1; '
+        buf += 'export PYENV_ROOT="$HOME/.pyenv"; '
         buf += 'export PATH="$PYENV_ROOT/bin:$PATH"; '
         buf += 'eval "$(pyenv init -)"\n'
 
@@ -110,6 +104,10 @@ class Shell():
         self.stdout = ""
         self.chaincmds = chain_cmds
 
+    async def init_env(self):
+        init_cmd = init_pyenv_vars_cmd(self.node)
+        await self.write(init_cmd)
+
     async def start(self):
         self.con = await ssh_connect(self.node)
         if not "windows" in self.node["os"]:
@@ -117,6 +115,8 @@ class Shell():
                 self.node["shell"]
             )
 
+        # Setup pyenv paths.
+        await self.init_env()
         return self
 
     async def write(self, cmd):
@@ -169,7 +169,6 @@ class Shell():
                 if marker in line:
                     break
                 lines.append(line.strip())
-
         except Exception as e:
             output = "\n".join(lines).strip()
             raise Exception(output + f"[error: {e}]")
