@@ -17,18 +17,6 @@ else:
 _cached_netifaces = None
 _cache_lock = asyncio.Lock()
 
-"""
-Just tracking whether or not process pool executors are
-created multiple times as it makes cleanup harder.
-"""
-process_pool_init = concurrent.futures.ProcessPoolExecutor.__init__
-process_pool_executors = []
-def process_pool_init_patch(self, *args, **kwargs):
-    if process_pool_executors:
-        log("warning: multiple ProcessPoolExecutes created!")
-
-    process_pool_executors.append(self)
-    process_pool_init(self, *args, **kwargs)
 
 """
 I've honestly never had success with using "async locks",
@@ -128,12 +116,6 @@ async def p2pd_setup_netifaces():
         return netifaces
 
 def p2pd_setup_event_loop():
-    """
-    Track the number of ProcessPoolExecutors made.
-    If multiple are made in the same object it can lead to issues.
-    """
-    concurrent.futures.ProcessPoolExecutor.__init__ = process_pool_init_patch
-
     # -----------------------------
     # Patch logic based on Python version
     # -----------------------------

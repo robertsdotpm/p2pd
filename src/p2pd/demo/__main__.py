@@ -188,10 +188,9 @@ async def main():
         log("end of stop nodes clause.")
 
 if __name__ == "__main__":
-    # explore the sigterm handling last.
-    #loop.add_signal_handler(signal.SIGTERM, cancel_all_tasks)
-    # Seperate thread for processing a queue of log messages.
-    # Avoids dead locks with Python's simple logger.
+    #import multiprocessing
+    #multiprocessing.freeze_support()
+
     start_logger()
     try:
         async_run(main(), shield=True)

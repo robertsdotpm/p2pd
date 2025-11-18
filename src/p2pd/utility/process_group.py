@@ -22,15 +22,14 @@ import traceback
 from concurrent.futures import Future
 from queue import Queue, Empty
 
+def check_worker(q):
+    q.put("ok")
+
 def check_multiprocessing_available(timeout=1.0):
     """Check if Process and Queue work on this platform."""
     try:
         out_q = mp.Queue()
-        
-        def worker(q):
-            q.put("ok")
-
-        p = mp.Process(target=worker, args=(out_q,))
+        p = mp.Process(target=check_worker, args=(out_q,))
         p.start()
         p.join(timeout=timeout)
 
