@@ -21,8 +21,12 @@ def cout(*fargs):
 async def add_echo_support(msg, client_tup, pipe):
     if b"ECHO" == msg[:4]:
         cout()
-        cout("\tGot echo proto msg: " + to_s(msg) + fstr(" from {0}", (client_tup,)))
+        print(
+            "\tGot echo proto msg: " + to_s(msg) + fstr(" from {0}", (client_tup,)),
+            flush=True
+        )
         cout()
+
         await pipe.send(msg[4:], client_tup)
 
         if b"CLEAN_SHUTDOWN" in msg:
