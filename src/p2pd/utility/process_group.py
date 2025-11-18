@@ -26,79 +26,80 @@ def check_worker(q):
     q.put("ok")
 
 def check_multiprocessing_available(timeout=1.0):
-    """Check if Process and Queue work on this platform."""
+    out_q = mp.Queue()
+    p = mp.Process(target=check_worker, args=(out_q,))
+    p.start()
+
     try:
-        out_q = mp.Queue()
-        p = mp.Process(target=check_worker, args=(out_q,))
-        p.start()
-        p.join(timeout=timeout)
+        result = out_q.get(timeout=timeout)  # <-- get before join
+    except Exception:
+        p.terminate()
+        raise RuntimeError("Queue failed to return data")
 
-        if p.is_alive():
-            p.terminate()
-            raise RuntimeError("Process did not exit in time")
+    p.join(timeout=timeout)
+    if p.is_alive():
+        p.terminate()
+        raise RuntimeError("Process did not exit in time")
 
-        try:
-            result = out_q.get(timeout=timeout)
-        except Exception:
-            raise RuntimeError("Queue failed to return data")
-
-        if result != "ok":
-            raise RuntimeError("Queue returned unexpected data: {}".format(result))
-
-    except Exception as e:
-        tb = traceback.format_exc()
-        raise RuntimeError("Multiprocessing not available: {} \n{}".format(e, tb))
+    if result != "ok":
+        raise RuntimeError("Queue returned unexpected data: {}".format(result))
 
     return True
 
-def job_wrapper(func, args, kwargs, out_q, job_id):
+import multiprocessing as mp
+import threading
+import uuid
+import traceback
+from queue import Queue, Empty
+from concurrent.futures import Future
+import time
+
+
+def job_wrapper(func, args, kwargs, completed_queue, job_id):
     """Wrapper executed in a separate process."""
     try:
         result = func(*args, **kwargs)
-        out_q.put((job_id, True, result))
+        completed_queue.put((job_id, True, result))
     except Exception as e:
         tb = traceback.format_exc()
-        out_q.put((job_id, False, (repr(e), tb)))
+        completed_queue.put((job_id, False, (repr(e), tb)))
 
 
 class ProcessManager:
-    """Manages one-process-per-job execution with futures (lock-free)."""
+    """Lock-free, one-process-per-job manager with futures."""
 
-    def __init__(self):
-        self.out_q = mp.Queue()
-        self.job_queue = Queue()  # queue of (job_id, future, process)
+    def __init__(self, queue_timeout=0.5):
+        self.job_queue = Queue()       # Holds (job_id, future, process)
+        self.completed_queue = mp.Queue()  # Holds (job_id, ok, data)
         self.stopping = False
+        self.queue_timeout = queue_timeout
         self.listener_thread = threading.Thread(target=self.listener, daemon=True)
         self.listener_thread.start()
 
     def submit(self, func, *args, **kwargs):
-        """Submit a job, returns a Future immediately."""
+        """Submit a job and immediately return a Future."""
         if self.stopping:
             raise RuntimeError("ProcessManager stopping")
 
         job_id = uuid.uuid4().hex
         fut = Future()
         p = mp.Process(
-            target=job_wrapper, 
-            args=(func, args, kwargs, self.out_q, job_id)
+            target=job_wrapper,
+            args=(func, args, kwargs, self.completed_queue, job_id)
         )
-
         p.start()
-
-        # Thread-safe queue; no explicit lock needed
         self.job_queue.put((job_id, fut, p))
-
         return fut
 
     def listener(self):
-        """Thread that waits for results and sets futures."""
-        while not self.stopping:
+        """Thread that waits for completed jobs and sets futures."""
+        while not self.stopping or not self.job_queue.empty():
             try:
-                job_id, ok, data = self.out_q.get()
+                job_id, ok, data = self.completed_queue.get(timeout=self.queue_timeout)
             except Empty:
-                continue
+                continue  # Check stopping flag
 
-            # Scan the queue to find the matching future/process
+            # Find the matching job in job_queue
             found_item = None
             temp_queue = Queue()
             while not self.job_queue.empty():
@@ -107,34 +108,38 @@ class ProcessManager:
                     found_item = item
                 else:
                     temp_queue.put(item)
-
             self.job_queue = temp_queue
+
             if not found_item:
-                continue
+                continue  # Shouldn't happen, but safe
 
             _, fut, p = found_item
+
+            # Ensure process has exited
             if p.is_alive():
                 p.join(timeout=1)
                 if p.is_alive():
                     p.terminate()
 
+            # Set result/exception
             if ok:
                 fut.set_result(data)
             else:
                 msg, tb = data
-                fut.set_exception(
-                    RuntimeError("Worker exception: " + msg + "\n" + tb)
-                )
+                fut.set_exception(RuntimeError(f"Worker exception: {msg}\n{tb}"))
 
     def shutdown(self):
         """Terminate all active processes and stop the listener."""
         self.stopping = True
+        # Terminate active processes
         while not self.job_queue.empty():
             _, fut, p = self.job_queue.get()
             if p.is_alive():
                 p.terminate()
             if not fut.done():
                 fut.set_exception(RuntimeError("ProcessManager shutting down"))
+        # Wait for listener to exit
+        self.listener_thread.join(timeout=2)
 
 def multiply(a, b):
     return a * b
