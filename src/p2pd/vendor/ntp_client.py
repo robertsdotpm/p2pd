@@ -294,6 +294,7 @@ class NTPClient:
         route = await self.interface.route(self.af).bind()
 
         # create the socket
+        print(dest)
         try:
             pipe = await Pipe(UDP, dest, route).connect()
 
@@ -306,6 +307,7 @@ class NTPClient:
 
             # send the request
             buf = query_packet.to_data()
+            print(buf)
             await pipe.send(buf)
 
             # wait for the response - check the source address
@@ -317,6 +319,7 @@ class NTPClient:
         except asyncio.TimeoutError:
             raise NTPException("No response received from host")
         except Exception as e:
+            what_exception()
             log_exception()
 
         # construct corresponding statistics
