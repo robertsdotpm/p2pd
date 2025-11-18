@@ -278,7 +278,7 @@ class NTPClient:
         self.af = af
         self.interface = interface
 
-    async def request(self, dest, version=2, timeout=2):
+    async def request(self, dest, version=2, timeout=5):
         """Query a NTP server.
 
         Parameters:
