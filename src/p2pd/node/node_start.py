@@ -119,11 +119,12 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
             await sys_clock.start()
         else:
             sys_clock = SysClock(node.ifs[0], clock_skew=Dec(0.1))
-            node.sys_clock = sys_clock
+        
+        node.sys_clock = sys_clock
     if sys_clock:
-        clock_skew = str(node.sys_clock.clock_skew)
+        clock_skew = str(sys_clock.clock_skew)
         if out: cout(fstr("\t\tClock skew = {0}", (clock_skew,)))
-        if node.sys_clock.clock_skew > 2 and out:
+        if sys_clock.clock_skew > 2 and out:
             cout("Warning: high clock skew detected.")
             cout("If your system clock is invalid hole punching can fail.")
             log("Warning: very high clock skew " + clock_skew)

@@ -7,9 +7,8 @@ from .punch_defs import *
 from .punch_process import *
 from ....node.node_defs import *
 
-async def setup_punch_coordination(node, sys_clock=None):
+async def setup_punch_coordination(node):
     node.max_punchers, node.pp_executor = await get_pp_executors()
-    node.sys_clock = sys_clock
 
 def add_punch_meeting(node, params):
     # Schedule the TCP punching.
