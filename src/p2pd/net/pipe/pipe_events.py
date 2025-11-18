@@ -271,6 +271,7 @@ class PipeEvents(BaseACKProto):
     def route_msg(self, data, client_tup):
         # No data to route.
         if not data:
+            log("route msg no data")
             return
 
         # Route messages to any pipes.
@@ -298,10 +299,12 @@ class PipeEvents(BaseACKProto):
     def handle_data(self, data, client_tup):
         # Convert data to bytes.
         if isinstance(data, bytearray):
+            log("is instance of byte array")
             data = bytes(data)
 
         # Norm IP.
         client_tup = norm_client_tup(client_tup)
+        log("handle data client tup = " + str(client_tup))
 
         # Ack UDP msg if enabled.
         if self.is_ack and self.is_ackable:
@@ -333,11 +336,17 @@ class PipeEvents(BaseACKProto):
 
         # Supports unique messages.
         if self.conf["enable_msg_ids"]:
+            log("handle data enable msg ids")
             if not self.is_unique_msg(self.stream, data, client_tup):
+                log("not unique dropping " + str(data) + str(client_tup))
                 return
 
         # Route message to stream.
-        self.route_msg(data, client_tup)
+        try:
+            self.route_msg(data, client_tup)
+        except:
+            log("route msg excp")
+            log_exception()
 
     def error_received(self, exp):
         proto_error_received(exp)
@@ -348,8 +357,13 @@ class PipeEvents(BaseACKProto):
         if self.transport is None:
             log(fstr("Skipping process data cause transport none 1."))
             return
+        try:
+            log("Passing to handle data")
+            self.handle_data(data, client_tup)
 
-        self.handle_data(data, client_tup)
+        except:
+            log("handle data exception")
+            log_exception()
 
     # Single TCP connection.
     def data_received(self, data):
