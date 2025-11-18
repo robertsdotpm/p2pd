@@ -9,6 +9,7 @@ import sys
 import subprocess
 import base64
 from ..utility.utils import *
+from ..net.asyncio.async_run import *
 
 """
 Windows doesn't always use UTF-8 for string encoding.
@@ -344,3 +345,11 @@ def win_uac():
 def ensure_root():
     if not is_root():
         raise Exception("root required for this code.")
+
+if __name__ == "__main__":
+    async def workspace():
+        out = await cmd("dir")
+        print(out)
+        print("workspacee")
+
+    async_run(workspace())

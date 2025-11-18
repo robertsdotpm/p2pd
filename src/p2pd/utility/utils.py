@@ -524,23 +524,26 @@ def run_handlers(pipe, handlers, client_tup, data=None):
 def run_in_executor(f):
     @functools.wraps(f)
     def inner(*args, **kwargs):
+        loop = asyncio.get_event_loop()
+
+        # Sync function
         if not inspect.iscoroutinefunction(f):
-            loop = asyncio.get_event_loop()
             return loop.run_in_executor(None, lambda: f(*args, **kwargs))
-        else:
-            def helper():
-                loop = asyncio.new_event_loop()
-                try:
-                    coro = f(*args, **kwargs)
-                    asyncio.set_event_loop(loop)
-                    return loop.run_until_complete(coro)
-                finally:
-                    loop.close()
 
-            loop = asyncio.get_event_loop()
-            return loop.run_in_executor(None, helper)
+        # Async function
+        def helper():
+            # Run the coroutine in a dedicated event loop inside the worker thread
+            new_loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(new_loop)
+                return new_loop.run_until_complete(f(*args, **kwargs))
+            finally:
+                new_loop.close()
 
-    return inner()
+        return loop.run_in_executor(None, helper)
+
+    # RETURN THE WRAPPER, NOT CALL IT
+    return inner
     
 def run_in_executor2(f):
     @functools.wraps(f)
