@@ -110,6 +110,7 @@ class PipeClient(ACKUDP):
 
         # Add message to queue and raise an event.
         def do_add(q):
+            log("add msg to q " + str(q))
             try:
                 # Check queue isn't full.
                 if q.full():
@@ -127,6 +128,9 @@ class PipeClient(ACKUDP):
 
         # Apply bool filters to message.
         msg_added = False
+        print(self.subs)
+
+
         for sub, q, handler in self.subs.values():
             log("add msg sub " + str(sub[:2]))
         
@@ -210,6 +214,8 @@ class PipeClient(ACKUDP):
                 # Return only the data portion.
                 return ret[1]
         except Exception as e:
+            log_exception()
+            log("exception in recv!")
             return None
 
     # Async send for TCP and UDP cons.
