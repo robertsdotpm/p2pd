@@ -109,8 +109,10 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
             buf += ")"
             cout(buf)
 
+    
     if sys_clock is None:
         if node.conf.get("init_clock_skew", True):
+            if out: cout("\tLoading NTP clock skew...")
             sys_clock = SysClock(
                 interface=node.ifs[0]
             )
@@ -118,20 +120,17 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         else:
             sys_clock = SysClock(node.ifs[0], clock_skew=Dec(0.1))
             node.sys_clock = sys_clock
-
-    # Multiprocess support for TCP punching and NTP sync.
-    t = time.time()
-    if out: cout("\tLoading NTP clock skew...")
-    if node.conf.get("enable_punching", True):
-        await setup_punch_coordination(node, sys_clock)
-
-    if node.conf.get("init_clock_skew", True):
+    if sys_clock:
         clock_skew = str(node.sys_clock.clock_skew)
         if out: cout(fstr("\t\tClock skew = {0}", (clock_skew,)))
         if node.sys_clock.clock_skew > 2 and out:
             cout("Warning: high clock skew detected.")
             cout("If your system clock is invalid hole punching can fail.")
             log("Warning: very high clock skew " + clock_skew)
+
+    # Multiprocess support for TCP punching and NTP sync.
+    if node.conf.get("enable_punching", True):
+        await setup_punch_coordination(node)
         
     # Accept TCP punch requests.
     if node.conf.get("enable_punching", True):

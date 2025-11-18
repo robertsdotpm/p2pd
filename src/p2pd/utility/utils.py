@@ -741,7 +741,9 @@ async def get_pp_executors(workers=None):
     #return 0, None # It was set disabled.
     try:
         # Default to threads if all features aren't available.
+        print("before check")
         check_multiprocessing_available()
+        print("after check multi proc available.")
         pp_executor = ProcessManager()
         log("Multiprocessing support available.")
     except asyncio.CancelledError:
