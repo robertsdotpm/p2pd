@@ -70,8 +70,8 @@ async def get_ntp(af, interface, server=None, retry=NTP_RETRY):
 class SysClock:
     def __init__(self, interface, clock_skew=Dec(0)):
         self.interface = interface
-        self.enough_data = 40
-        self.min_data = 10
+        self.enough_data = 40 # 40
+        self.min_data = 10 # 10
         self.max_sdev = 60
         self.clean_steps = 3
         self.data_points = []
@@ -86,6 +86,11 @@ class SysClock:
             'NTP can usually maintain time to within tens of milliseconds over the public Internet, and can achieve better than one millisecond accuracy in local area networks under ideal conditions.'
             Plenty accurate for hole punching.
             """
+            ntp_ret = await get_ntp(self.interface.supported()[0], self.interface)
+            self.clock_skew = Dec(timestamp(1)) - Dec(ntp_ret)
+            return
+
+
             # NTPD listens on all interfaces so
             # the LAN IP doesn't matter.
             server = None
@@ -105,16 +110,11 @@ class SysClock:
                 return self
 
             # Calculate clock skew.
-            for i in range(0, 3):
-                if self.clock_skew == Dec(0):
-                    await self.collect_data_points(server=server)
-                    if not len(self.data_points):
-                        continue
-
+            if self.clock_skew == Dec(0):
+                await self.collect_data_points(server=server)
+                if not len(self.data_points):
                     self.clock_skew = self.calculate_clock_skew()
-                else:
-                    break
-    
+
         return self
 
     def __await__(self):
@@ -154,7 +154,6 @@ class SysClock:
             )
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        print(results)
         results = strip_none(results)
         self.data_points += results
 
