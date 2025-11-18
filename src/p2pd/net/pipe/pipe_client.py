@@ -100,23 +100,18 @@ class PipeClient(ACKUDP):
         # No subscriptions.
     
         if not len(self.subs):
-            log("no subs")
             return
         
         # Norm compressed IPv6 addresses.
         client_tup = client_tup_norm(client_tup)
-        log("add msg client_tup " + str(client_tup))
-
 
         # Add message to queue and raise an event.
         def do_add(q):
-            log("add msg to q " + str(q))
             try:
                 # Check queue isn't full.
                 if q.full():
                     # TODO: Remove sock from event select.
                     # To give time for queue to be processed.
-                    log("q full!")
                     q.get_nowait()
 
                 # Put an item on the queue.
@@ -129,9 +124,6 @@ class PipeClient(ACKUDP):
         # Apply bool filters to message.
         msg_added = False
         for sub, q, handler in self.subs.values():
-            log("add msg sub " + str(sub[:2]))
-        
-
             # Msg pattern, address pattern.
             b_msg_p, m_client_tup = sub[:2]
 
@@ -156,7 +148,6 @@ class PipeClient(ACKUDP):
 
             # Execute message using handle instead of adding to queue.
             if handler is not None:
-                log("handler set for add_msg" + str(handler))
                 run_handler(
                     self.pipe_events,
                     handler,

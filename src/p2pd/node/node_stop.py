@@ -103,7 +103,7 @@ async def node_stop(node):
     """
     if node.pp_executor:
         log("trying to shut down pp executor waiting.")
-        node.pp_executor.shutdown(wait=True, cancel_futures=True)
+        node.pp_executor.shutdown(wait=True)
         #node.pp_executor.shutdown()
 
         #node.pp_executor.shutdown(wait=True)

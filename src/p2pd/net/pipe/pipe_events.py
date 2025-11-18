@@ -271,7 +271,6 @@ class PipeEvents(BaseACKProto):
     def route_msg(self, data, client_tup):
         # No data to route.
         if not data:
-            log("route msg no data")
             return
 
         # Route messages to any pipes.
@@ -299,12 +298,10 @@ class PipeEvents(BaseACKProto):
     def handle_data(self, data, client_tup):
         # Convert data to bytes.
         if isinstance(data, bytearray):
-            log("is instance of byte array")
             data = bytes(data)
 
         # Norm IP.
         client_tup = norm_client_tup(client_tup)
-        log("handle data client tup = " + str(client_tup))
 
         # Ack UDP msg if enabled.
         if self.is_ack and self.is_ackable:
@@ -342,44 +339,34 @@ class PipeEvents(BaseACKProto):
                 return
 
         # Route message to stream.
-        try:
-            self.route_msg(data, client_tup)
-        except:
-            log("route msg excp")
-            log_exception()
+        self.route_msg(data, client_tup)
 
     def error_received(self, exp):
         proto_error_received(exp)
 
     # UDP packets.
     def datagram_received(self, data, client_tup):
-        log(fstr("Base proto recv udp = {0} {1}", (client_tup, data,)))
+        #log(fstr("Base proto recv udp = {0} {1}", (client_tup, data,)))
         if self.transport is None:
             log(fstr("Skipping process data cause transport none 1."))
             return
-        try:
-            log("Passing to handle data")
-            self.handle_data(data, client_tup)
 
-        except:
-            log("handle data exception")
-            log_exception()
+        self.handle_data(data, client_tup)
 
     # Single TCP connection.
     def data_received(self, data):
-        try:
-            #log(f"Base proto recv tcp = {data}")
-            if self.transport is None:
-                log(fstr("Skipping process data cause transport none 2."))
-                return
 
-            client_tup = self.transport.get_extra_info('socket').getpeername()
-            self.handle_data(
-                data,
-                client_tup
-            )
-        except Exception:
-            log_exception()
+        #log(f"Base proto recv tcp = {data}")
+        if self.transport is None:
+            log(fstr("Skipping process data cause transport none 2."))
+            return
+
+        client_tup = self.transport.get_extra_info('socket').getpeername()
+        self.handle_data(
+            data,
+            client_tup
+        )
+
 
     async def close(self):
         if not self.is_running:
