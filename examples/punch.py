@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+this is straight fire, file under based
+"""
+
 import sys
 import time
 import socket
