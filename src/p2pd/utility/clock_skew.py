@@ -83,27 +83,11 @@ class SysClock:
             'NTP can usually maintain time to within tens of milliseconds over the public Internet, and can achieve better than one millisecond accuracy in local area networks under ideal conditions.'
             Plenty accurate for hole punching.
             """
-            # NTPD listens on all interfaces so
-            # the LAN IP doesn't matter.
-            server = None
-            local_ip = "localhost"
-            ntp_ret = await async_wrap_errors(
-                get_ntp(
-                    self.interface.supported()[0],
-                    self.interface,
-                    (local_ip, 123)
-                ),
-                timeout=NTP_RETRY * NTP_TIMEOUT
-            )
-
-            if ntp_ret is not None:
-                log("> clockskew using local ntp daemon")
-                server = local_ip
 
             # Calculate clock skew.
             for i in range(0, 3):
                 if self.clock_skew == Dec(0):
-                    await self.collect_data_points(server=server)
+                    await self.collect_data_points()
                     if not len(self.data_points):
                         continue
 
