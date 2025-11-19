@@ -55,6 +55,7 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
         # Sanity check for the sock option.
         if not reuse_set:
             log("Punch socket missing reuse addr opt.")
+            if sock: sock.close()
             return
 
         # Async connect that sends SYN.
@@ -116,7 +117,7 @@ async def schedule_delayed_punching(af, dest_addr, send_mappings, recv_mappings,
             interface.route(af)
             await dest.res(interface.route(af))
             dest = dest.select_ip(af)
-            for sleep_time in range(0, steps):
+            for sleep_time in range(0, min(steps, 100)):
                 task = async_wrap_errors(
                     delayed_punch(
                         # Address family for the con.
