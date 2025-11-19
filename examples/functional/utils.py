@@ -119,7 +119,7 @@ class Shell():
         await self.init_env()
         return self
 
-    async def write(self, cmd, long_running=False):
+    async def write(self, cmd, long_running=False, timeout=30):
         if not cmd or cmd[-1] != "\n":
             raise UnterminatedShellCmd(cmd)
         
@@ -134,7 +134,7 @@ class Shell():
                 process = await self.con.create_process(cmd)
                 self.long_running.append(process)
             else:
-                self.stdout += (await self.con.run(cmd, check=True)).stdout
+                self.stdout += (await self.con.run(cmd, check=True, timeout=timeout)).stdout
 
     async def readline(self, process=None, timeout=2):
         process = process or self.process

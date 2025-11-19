@@ -21,7 +21,7 @@ pkill -9 -f 'p2pd'
 disabling pp_executors for now as a test
 """
 
-PY_VER = "3.5.4"
+PY_VER = "3.7.9"
 
 async def git_pull_latest(servers):
     for server in servers:
@@ -84,6 +84,7 @@ async def tunnel_test(active, passive):
         cmd = p2pd_cmd + "1"
         cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n" # TODO: background on win?
         print(cmd)
+        cmd = "cmd.exe /k " + cmd
         passive_proc = await passive_shell.write(cmd, long_running=True)
         await asyncio.sleep(5)
 
@@ -101,9 +102,11 @@ async def tunnel_test(active, passive):
         cmd = pyenv_run_cmd(py_ver, active, cmd)
         #cmd = "start " + cmd
         print(cmd)
-        await active_shell.write(cmd + "\n")
+        cmd = "cmd.exe /k " + cmd
+        proc = await active_shell.write(cmd + "\n", timeout=120)
         print("try read return.")
-        results = await active_shell.readline(timeout=60)
+        print(active_shell.stdout)
+        #results = await active_shell.readline()
         #results = await passive_shell.readline()
         print(results)
     finally:

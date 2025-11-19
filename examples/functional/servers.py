@@ -4,7 +4,7 @@ SSH_SERVERS = [
     {
         "os": "windows server 2022",
         "ip": "10.0.1.248",
-        "shell": "cmd.exe",
+        "shell": "powershell.exe -NoLogo -NoProfile",
         "user": "administrator",
         "home": ["C:\\", "Users", "Administrator"],
         "pyenv": ["3.5.4", "3.7.9", "3.9.13", "3.13.1"]
@@ -14,7 +14,7 @@ SSH_SERVERS = [
     {
         "os": "windows 10",
         "ip": "10.0.1.199",
-        "shell": "cmd.exe",
+        "shell": "powershell.exe -NoLogo -NoProfile",
         "user": "matth",
         "home": ["C:\\", "Users", "matth"],
         "pyenv": ["3.5.4", "3.7.9", "3.9.13", "3.13.1"]
