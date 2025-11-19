@@ -20,7 +20,7 @@ RETRY_INTERVAL = 0.05
 FUTURE_OFFSET = 5
 # --------------------------
 
-def get_network_time(timeout=2.0):
+def get_network_time(timeout=4.0):
     """
     Get current Unix epoch from a web API.
     Falls back to local time if network fails.
@@ -30,6 +30,7 @@ def get_network_time(timeout=2.0):
         with urllib.request.urlopen(url, timeout=timeout) as resp:
             data = json.load(resp)
             return int(data.get("unixtime", time.time()))
+            
     except Exception:
         return int(time.time())
 
