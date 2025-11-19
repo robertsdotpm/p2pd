@@ -22,10 +22,6 @@ MAX_SLEEP = 10
 # --------------------------
 
 def get_network_time(timeout=4.0):
-    """
-    Fetch the current Unix epoch from a web API.
-    Raises an exception if network request fails.
-    """
     url = "http://worldtimeapi.org/api/ip"
     try:
         with urllib.request.urlopen(url, timeout=timeout) as resp:
@@ -168,8 +164,7 @@ def main():
                     try:
                         conn, addr = sock.accept()
                         conn.setblocking(False)
-                        print("Inbound connection from", addr, "on port", sock.getsockname()[1])
-                        completed_inbound.add(sock)
+                        completed_inbound.add((sock, addr))
                         conn.close()
                     except Exception:
                         pass
@@ -180,16 +175,23 @@ def main():
                     try:
                         err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
                         if err == 0:
-                            print("Outbound connect success on port", sock.getsockname()[1])
                             completed_outbound.add(sock)
                         else:
-                            # retry connect
                             try:
                                 sock.connect_ex((dest_ip, sock.getsockname()[1]))
                             except Exception:
                                 pass
                     except Exception:
                         pass
+
+    # Print results ordered by highest port first
+    print("\nOutbound connections (highest port first):")
+    for sock in sorted(completed_outbound, key=lambda s: s.getsockname()[1], reverse=True):
+        print("Outbound connect success on port", sock.getsockname()[1])
+
+    print("\nInbound connections (highest port first):")
+    for sock, addr in sorted(completed_inbound, key=lambda x: x[0].getsockname()[1], reverse=True):
+        print("Inbound connection from", addr, "on port", sock.getsockname()[1])
 
     # Cleanup
     for _, s in connectors:
