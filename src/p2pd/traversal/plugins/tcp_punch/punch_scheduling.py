@@ -82,7 +82,7 @@ async def delayed_punch(af, ms_delay, mapping, dest, loop, interface, conf=PUNCH
         mapping.sock = sock
         return mapping
     except Exception:
-        log_exception()
+        #log_exception()
         return None
 
 """
