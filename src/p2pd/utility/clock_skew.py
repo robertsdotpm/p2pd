@@ -30,23 +30,21 @@ NTP_TIMEOUT = 2
 
 async def get_ntp(af, interface, server=None, retry=NTP_RETRY):
     # Get a random NTP server that supports this AF.
+    server = server
     if server is None:
-        servers = NTP_SERVERS[:]
-        random.shuffle(servers)
-        for s in servers:
-            if not s[af]:
-                continue
-
-            server = s
-            break
+        for _ in range(0, 20):
+            random_server = random.choice(NTP_SERVERS)
+            if random_server[af]:
+                server = random_server
+                break
 
     # Sanity check to see server was set.
     if server is None:
         raise Exception("Can't find compatible NTP server.")
 
     # Resolve af if its not set.
-    if server[af] is None:
-        server[af] = (await Address(server["host"], 123, interface)).select_ip(af).ip
+    if not server[af]:
+        server[af] = await Address(server["host"], 123).select_ip(af).ip
 
     # The NTP client uses UDP so retry on failure.
     dest = (server[af], int(server["port"]),)
@@ -69,8 +67,8 @@ async def get_ntp(af, interface, server=None, retry=NTP_RETRY):
 class SysClock:
     def __init__(self, interface, clock_skew=Dec(0)):
         self.interface = interface
-        self.enough_data = 40 # 40
-        self.min_data = 10 # 10
+        self.enough_data = 40
+        self.min_data = 10
         self.max_sdev = 60
         self.clean_steps = 3
         self.data_points = []
@@ -85,25 +83,6 @@ class SysClock:
             'NTP can usually maintain time to within tens of milliseconds over the public Internet, and can achieve better than one millisecond accuracy in local area networks under ideal conditions.'
             Plenty accurate for hole punching.
             """
-            ntp_ret = None
-            server = {"host": "pool.ntp.org", "port": 123, IP4: None, IP6: None} 
-        
-            for i in range(0, 20):
-                ntp_ret = await get_ntp(
-                    self.interface.supported()[0],
-                    self.interface,
-                    server=server
-                )
-                if ntp_ret:
-                    break
-            
-            if not ntp_ret:
-                raise Exception("Failed to get clock skew.")
-
-            self.clock_skew = Dec(timestamp(1)) - Dec(ntp_ret)
-            return
-
-
             # NTPD listens on all interfaces so
             # the LAN IP doesn't matter.
             server = None
@@ -119,15 +98,19 @@ class SysClock:
 
             if ntp_ret is not None:
                 log("> clockskew using local ntp daemon")
-                self.clock_skew = Dec(timestamp(1)) - Dec(ntp_ret)
-                return self
+                server = local_ip
 
             # Calculate clock skew.
-            if self.clock_skew == Dec(0):
-                await self.collect_data_points(server=server)
-                if not len(self.data_points):
-                    self.clock_skew = self.calculate_clock_skew()
+            for i in range(0, 3):
+                if self.clock_skew == Dec(0):
+                    await self.collect_data_points(server=server)
+                    if not len(self.data_points):
+                        continue
 
+                    self.clock_skew = self.calculate_clock_skew()
+                else:
+                    break
+    
         return self
 
     def __await__(self):
@@ -161,12 +144,10 @@ class SysClock:
         tasks = []
         for _ in range(0, self.enough_data + 10):
             tasks.append(
-                to_task(
-                    get_clock_skew()
-                )
+                get_clock_skew()
             )
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks)
         results = strip_none(results)
         self.data_points += results
 
@@ -292,18 +273,9 @@ class SysClock:
         self.__dict__ = o.__dict__
 
 async def test_clock_skew(): # pragma: no cover
-    from p2pd.nic.interface import Interface
+    from p2pd import p2pd_setup_netifaces, Interface
     interface = await Interface()
-
-    """
-    out = await Address("time.mit.edu", 123, interface)
-    print(out.select_ip(IP4).ip)
-
-    return
-    """
-    print(interface.supported()[0])
-    server = {"host": "pool.ntp.org", "port": 123, IP4: None, IP6: None}    
-    ret = await get_ntp(IP4, interface, server=server)
+    ret = await get_ntp(IP4, interface)
     print(ret)
     return
 
@@ -324,7 +296,7 @@ async def test_clock_skew(): # pragma: no cover
 if __name__ == "__main__":
     #sys_clock = SysClock()
     #print(sys_clock.clock_skew)
-    async_run(test_clock_skew())
+    async_test(test_clock_skew)
 
 
     # print(get_ntp())
