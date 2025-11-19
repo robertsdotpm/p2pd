@@ -6,6 +6,7 @@ from ....utility.clock_skew import *
 from ....net.asyncio.event_loop import *
 from .start_punching import start_punching
 from ....net.pipe.pipe import *
+from ....node.node_defs import *
 
 async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, node_id):
     has_success = asyncio.Event()
@@ -38,7 +39,7 @@ async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, curre
         30
     )
 
-    while 1:
+    while not shut_down.is_set():
         await asyncio.sleep(1)
 
 # Started in a new process.
@@ -143,7 +144,7 @@ async def setup_punching_process(client, puncher_class):
         )
         
         # Check every 100 ms for 5 seconds.
-        while 1:
+        while not shut_down.is_set():
             try:
                 # Check if reverse connect server has a client yet.
                 if len(client.listen_pipe.tcp_clients):

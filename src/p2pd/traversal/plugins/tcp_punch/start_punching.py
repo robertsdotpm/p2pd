@@ -4,6 +4,7 @@ from .punch_defs import *
 from .punch_utils import *
 from .punch_scheduling import *
 from ....net.pipe.pipe import *
+from ....node.node_defs import *
 
 async def wait_for_punch_time(current_ntp, ntp_meet):
     # Sleep until the ntp timeframe.
@@ -113,7 +114,7 @@ async def start_punching(af, dest_addr, send_mappings, recv_mappings, current_nt
 
         # Prevent this process from exiting.
         has_success.set()
-        while 1:
+        while not shut_down.is_set():
             await asyncio.sleep(1)
 
             # Exit loop if chain breaks.

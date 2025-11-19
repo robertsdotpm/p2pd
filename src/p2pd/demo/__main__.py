@@ -94,7 +94,7 @@ async def run_node_loop(nodes, ifs, nick):
 
     # Show menu and choose option.
     con_opts = (last_addr, echo_data, cmd_opts,)
-    while nodes:
+    while not shut_down.is_set():
         try:
             # Show menu choices.
             cout(MENU_BANNER)
@@ -125,13 +125,14 @@ async def main():
     # Catch process exit signals (not supported on win32.)
     if sys.platform != "win32":
         # Caught properly by async_run and wrapped catch.
-        def raise_keyboard_interrupt():
-            raise KeyboardInterrupt()
+        def set_shut_down():
+            if not shut_down.is_set():
+                shut_down.set()
 
         # Install SIGTERM handler.
         loop = asyncio.get_event_loop()
         try:
-            loop.add_signal_handler(signal.SIGTERM, raise_keyboard_interrupt)
+            loop.add_signal_handler(signal.SIGTERM, set_shut_down)
         except NotImplementedError:
             log("This platform doesn't support sigterm handling.")
 
@@ -147,7 +148,6 @@ async def main():
 
     # Start the program loop.
     nodes = []
-    nodes_loop = None
     try:
         # Setup node
         start_time = int(time.time())
@@ -167,12 +167,12 @@ async def main():
                 return
 
             # Only execute program for this long.
-            nodes_loop = await asyncio.wait_for(
+            await asyncio.wait_for(
                 run_node_loop(nodes, ifs, nick),
                 timeout=run_time
             )
         else:
-            nodes_loop = await run_node_loop(nodes, ifs, nick)
+            await run_node_loop(nodes, ifs, nick)
     except asyncio.TimeoutError:
         log("Command run time met.")
     except asyncio.CancelledError:

@@ -25,12 +25,21 @@ async def add_echo_support(msg, client_tup, pipe):
         cout()
         await pipe.send(msg[4:], client_tup)
 
+        # Maybe give event loop chance to send before exit, IDK.
+
         if b"CLEAN_SHUTDOWN" in msg:
             log("reached clean shutdown in add echo")
-            raise KeyboardInterrupt()
+            # Try give event loop time to send.
+            # Since this will shut down -- got to be a better way to ensure send
+            # has finished before closing TODO
+            for _ in range(0, 5):
+                await asyncio.sleep(0.1)
+
+
+            if not shut_down.is_set():
+                shut_down.set()
+
             return
-            loop = asyncio.get_event_loop()
-            asyncio.ensure_future(cancel_all_tasks(), loop=loop)
 
 def patch_log_p2p(m, node_id=""):
     out = fstr("p2p: <{0}> ", (node_id,)) + to_s(m)
@@ -186,7 +195,7 @@ async def choose_pathways(pathway):
     cout("WAN: (e)xternal, LAN: (l)ocal ")
     cout("Type menu to return.")
     addr_types = []
-    while True:
+    while not shut_down.is_set():
         pathway = pathway or (await ainput("Enter for default (el): "))
         if not len(pathway):
             addr_types = [EXT_BIND, NIC_BIND]
@@ -217,7 +226,7 @@ async def choose_address_families(addr_type):
     cout("(4) IPv4, (6) IPv6")
     cout("Type menu to return.")
     af_priority = []
-    while True:
+    while not shut_down.is_set():
         addr_type = addr_type or (await ainput("Enter for default (46): "))
         if not len(addr_type):
             af_priority = [IP4, IP6]
@@ -247,7 +256,7 @@ async def echo_client(pipe, echo_data):
     cout()
     cout("Basic echo protocol.")
     cout("Enter menu to return to menu or exit to quit.")
-    while True:
+    while not shut_down.is_set():
         send_buf = echo_data or to_b(await ainput("Echo: "))
         if send_buf in (b"quit", b"exit"):
             return "exit"
@@ -255,7 +264,7 @@ async def echo_client(pipe, echo_data):
             send_buf = b""
             return "menu"
         await pipe.send(b"ECHO " + send_buf + b"\n")
-        buf = await pipe.recv(timeout=3)
+        buf = await pipe.recv(timeout=4)
         cout(b"recv = ", buf, b"\n")
         if echo_data:
             print(buf + b"\n", flush=True)

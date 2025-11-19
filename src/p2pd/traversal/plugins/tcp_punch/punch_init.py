@@ -3,6 +3,7 @@ from ....nic.nat.nat_utils import *
 from ....nic.interface import *
 from ....nic.nat.nat_predict import *
 from ....utility.clock_skew import *
+from ....node.node_defs import *
 from .punch_defs import *
 from .punch_process import *
 
@@ -28,7 +29,7 @@ async def schedule_punching_with_delay(node, pipe_id, n=2):
 
 async def punch_queue_worker(node, puncher_cls):
     try:
-        if node.stop_node.is_set():
+        if shut_down.is_set():
             return
 
         params = await node.punch_queue.get()
