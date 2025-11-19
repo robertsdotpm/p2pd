@@ -524,23 +524,26 @@ def run_handlers(pipe, handlers, client_tup, data=None):
 def run_in_executor(f):
     @functools.wraps(f)
     def inner(*args, **kwargs):
+        loop = get_running_loop()
+
+        # Sync function
         if not inspect.iscoroutinefunction(f):
-            loop = asyncio.get_event_loop()
             return loop.run_in_executor(None, lambda: f(*args, **kwargs))
-        else:
-            def helper():
-                loop = asyncio.new_event_loop()
-                try:
-                    coro = f(*args, **kwargs)
-                    asyncio.set_event_loop(loop)
-                    return loop.run_until_complete(coro)
-                finally:
-                    loop.close()
 
-            loop = asyncio.get_event_loop()
-            return loop.run_in_executor(None, helper)
+        # Async function
+        def helper():
+            # Run the coroutine in a dedicated event loop inside the worker thread
+            new_loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(new_loop)
+                return new_loop.run_until_complete(f(*args, **kwargs))
+            finally:
+                new_loop.close()
 
-    return inner()
+        return loop.run_in_executor(None, helper)
+
+    # RETURN THE WRAPPER, NOT CALL IT
+    return inner
     
 def run_in_executor2(f):
     @functools.wraps(f)
@@ -735,7 +738,7 @@ async def sleep_random(min_ms=100, max_ms=2000):
 async def get_pp_executors(workers=None):
     workers = workers or min(32, os.cpu_count() + 4)
     pp_executor = None
-    return 0, None
+    #return 0, None
     try:
         pp_executor = ProcessPoolExecutor(max_workers=workers)
     except asyncio.CancelledError:
