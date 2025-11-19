@@ -21,7 +21,7 @@ FUTURE_OFFSET = 5
 MAX_SLEEP = 10
 # --------------------------
 
-def get_network_time(timeout=4.0):
+def get_network_time(timeout=6.0):
     """
     Get current Unix epoch from a web API.
     Falls back to local time if network fails.
@@ -30,9 +30,9 @@ def get_network_time(timeout=4.0):
     try:
         with urllib.request.urlopen(url, timeout=timeout) as resp:
             data = json.load(resp)
-            return int(data.get("unixtime", time.time()))
+            return int(data["unixtime"])
     except Exception:
-        return int(time.time())
+        raise Exception("Could not get unixtime from worldtimeapi.")
 
 def quantized_bucket(now, window=WINDOW):
     # Round to nearest window instead of flooring
