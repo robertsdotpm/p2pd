@@ -9,11 +9,11 @@ import selectors
 
 WINDOW = 8
 FUTURE_OFFSET = 5
-MIN_RUN_WINDOW = 10      # minimum guaranteed time before rendezvous
+MIN_RUN_WINDOW = 10
 NUM_PORTS = 16
 BASE_PORT = 30000
 PORT_RANGE = 20000
-CONNECT_TIMEOUT = 2.0
+CONNECT_TIMEOUT = 3.0
 
 
 def quantized_bucket(now, window):
@@ -59,11 +59,9 @@ def sleep_until(t):
 def compute_rendezvous(now):
     bucket = quantized_bucket(now, WINDOW)
     rnd = (bucket + 1) * WINDOW
-
     if rnd - now < MIN_RUN_WINDOW:
         bucket += 1
         rnd = (bucket + 1) * WINDOW
-
     return bucket, rnd
 
 
@@ -92,14 +90,13 @@ def main():
     print("Rendezvous time:", rendezvous_time)
     print("Seconds until rendezvous:", rendezvous_time - now)
     print("Sleeping until rendezvous...")
-
     sleep_until(rendezvous_time)
-
     print("Punching at rendezvous time")
 
     sel = selectors.DefaultSelector()
-
     connectors = []
+
+    # For each bound listener port, create a connector using same local port
     for port, _listener in listeners:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setblocking(False)
@@ -108,27 +105,23 @@ def main():
         except OSError:
             s.close()
             continue
-
         try:
-            s.connect_ex((dest_ip, port))
+            s.connect_ex((dest_ip, port))  # non-blocking simultaneous open
         except Exception:
             s.close()
             continue
-
         connectors.append((port, s))
         sel.register(s, selectors.EVENT_WRITE)
 
+    # register listeners for incoming connections
     for port, lsock in listeners:
         sel.register(lsock, selectors.EVENT_READ)
 
     end = time.time() + CONNECT_TIMEOUT
-
     while time.time() < end:
         events = sel.select(timeout=0.1)
-
         for key, mask in events:
             sock = key.fileobj
-
             if mask & selectors.EVENT_READ:
                 try:
                     conn, addr = sock.accept()
@@ -137,7 +130,6 @@ def main():
                     conn.close()
                 except Exception:
                     pass
-
             if mask & selectors.EVENT_WRITE:
                 err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
                 if err == 0:
