@@ -10,7 +10,7 @@ import urllib.request
 import json
 
 # --------------------------
-WINDOW = 8
+WINDOW = 16
 MIN_RUN_WINDOW = 10
 NUM_PORTS = 16
 BASE_PORT = 30000
@@ -34,8 +34,9 @@ def get_network_time(timeout=4.0):
     except Exception:
         return int(time.time())
 
-def quantized_bucket(now, window):
-    return int((now + FUTURE_OFFSET) // window)
+def quantized_bucket(now, window=WINDOW):
+    # round to nearest window instead of floor
+    return int((now + FUTURE_OFFSET + window/2) // window)
 
 def deterministic_boundary(bucket):
     h = hashlib.sha256(str(bucket).encode()).digest()
