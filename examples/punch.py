@@ -42,14 +42,10 @@ network_time = get_network_time()
 network_timer = time.monotonic()
 
 def now_from_network():
-    """
-    Returns current network-aligned time using initial network_time + monotonic offset.
-    """
     elapsed = time.monotonic() - network_timer
     return network_time + int(elapsed)
 
 def quantized_bucket(now, window=WINDOW):
-    # Round to nearest window instead of flooring
     return int((now + FUTURE_OFFSET + window / 2) // window)
 
 def deterministic_boundary(bucket):
@@ -131,7 +127,7 @@ def main():
     sel = selectors.DefaultSelector()
     connectors = []
 
-    # Prepare outbound connectors
+    # Outbound sockets
     for port, _listener in listeners:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setblocking(False)
@@ -152,37 +148,50 @@ def main():
         connectors.append((port, s))
         sel.register(s, selectors.EVENT_WRITE)
 
-    # Register listeners for inbound connections
+    # Listener sockets
     for port, lsock in listeners:
         sel.register(lsock, selectors.EVENT_READ)
+
+    # Debouncing sets
+    completed_outbound = set()
+    completed_inbound = set()
 
     end = now_from_network() + CONNECT_TIMEOUT
     while now_from_network() < end:
         events = sel.select(timeout=RETRY_INTERVAL)
         for key, mask in events:
             sock = key.fileobj
-            if mask & selectors.EVENT_READ:
-                try:
-                    conn, addr = sock.accept()
-                    conn.setblocking(False)
-                    print("Inbound connection from", addr, "on port", sock.getsockname()[1])
-                    conn.close()
-                except Exception:
-                    pass
-            if mask & selectors.EVENT_WRITE:
-                try:
-                    err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-                    if err == 0:
-                        print("Outbound connect success on port", sock.getsockname()[1])
-                    else:
-                        try:
-                            sock.connect_ex((dest_ip, sock.getsockname()[1]))
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
 
-    # Close all sockets
+            # Inbound accept events
+            if mask & selectors.EVENT_READ:
+                if sock not in completed_inbound:
+                    try:
+                        conn, addr = sock.accept()
+                        conn.setblocking(False)
+                        print("Inbound connection from", addr, "on port", sock.getsockname()[1])
+                        completed_inbound.add(sock)
+                        conn.close()
+                    except Exception:
+                        pass
+
+            # Outbound connect events
+            if mask & selectors.EVENT_WRITE:
+                if sock not in completed_outbound:
+                    try:
+                        err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                        if err == 0:
+                            print("Outbound connect success on port", sock.getsockname()[1])
+                            completed_outbound.add(sock)
+                        else:
+                            # retry connect
+                            try:
+                                sock.connect_ex((dest_ip, sock.getsockname()[1]))
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+    # Cleanup
     for _, s in connectors:
         s.close()
     for _, s in listeners:
