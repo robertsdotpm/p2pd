@@ -49,6 +49,7 @@ async def pyenv_install_latest(servers):
 
         # Waits for the command to be done in the active shell session.
         await shell.await_cmd(pyenv_cmd)
+        await shell.close()
 
 async def tunnel_test(active, passive):
     """
@@ -101,7 +102,8 @@ async def tunnel_test(active, passive):
         #cmd = "start " + cmd
         print(cmd)
         await active_shell.write(cmd + "\n")
-        results = await active_shell.readline()
+        print("try read return.")
+        results = await active_shell.readline(timeout=30)
         #results = await passive_shell.readline()
         print(results)
     finally:
