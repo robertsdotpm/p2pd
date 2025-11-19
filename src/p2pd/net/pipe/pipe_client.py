@@ -5,7 +5,6 @@ from ..net_utils import *
 from ..ip_range import *
 from .pipe_defs import *
 from .pipe_utils import *
-from ..asyncio.asyncio_patches import *
 
 """
 The code in this class supports a pull / fetch style use-case.
@@ -19,7 +18,7 @@ class PipeClient(ACKUDP):
         self.conf = conf
         self.dest = None
         self.dest_tup = None
-        self.loop = loop or get_running_loop()
+        self.loop = loop or asyncio.get_event_loop()
 
         # [Bool(msg)] = Queue.
         # Lets convert this to [b"msg pattern", b"host pattern"] = [Queue]
@@ -98,7 +97,6 @@ class PipeClient(ACKUDP):
     """
     def add_msg(self, data, client_tup):
         # No subscriptions.
-    
         if not len(self.subs):
             return
         
@@ -107,19 +105,15 @@ class PipeClient(ACKUDP):
 
         # Add message to queue and raise an event.
         def do_add(q):
-            try:
-                # Check queue isn't full.
-                if q.full():
-                    # TODO: Remove sock from event select.
-                    # To give time for queue to be processed.
-                    q.get_nowait()
+            # Check queue isn't full.
+            if q.full():
+                # TODO: Remove sock from event select.
+                # To give time for queue to be processed.
+                q.get_nowait()
 
-                # Put an item on the queue.
-                assert(isinstance(client_tup, tuple))
-                q.put_nowait([client_tup, data])
-            except:
-                log("unknown error in do_add in add msg")
-                log_exception()
+            # Put an item on the queue.
+            assert(isinstance(client_tup, tuple))
+            q.put_nowait([client_tup, data])
 
         # Apply bool filters to message.
         msg_added = False
@@ -202,8 +196,6 @@ class PipeClient(ACKUDP):
                 # Return only the data portion.
                 return ret[1]
         except Exception as e:
-            log_exception()
-            log("exception in recv!")
             return None
 
     # Async send for TCP and UDP cons.

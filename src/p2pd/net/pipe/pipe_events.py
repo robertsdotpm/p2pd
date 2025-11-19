@@ -150,10 +150,6 @@ class PipeEvents(BaseACKProto):
         self.tcp_clients.append(client)
         self.client_futures[client.p_client_entry].set_result(client)
 
-    """
-    This code allows the pipe to act like an async accept()
-    for a TCP server.
-    """
     async def make_awaitable(self):
         if self.endpoint_type == TYPE_TCP_SERVER:
             bound = self.p_client_insert + 1
@@ -275,7 +271,7 @@ class PipeEvents(BaseACKProto):
 
         # Route messages to any pipes.
         for pipe in self.pipes:
-            task = asyncio.create_task(
+            task = create_task(
                 pipe.send(
                     data,
                     pipe.sock.getpeername()
@@ -333,20 +329,19 @@ class PipeEvents(BaseACKProto):
 
         # Supports unique messages.
         if self.conf["enable_msg_ids"]:
-            log("handle data enable msg ids")
             if not self.is_unique_msg(self.stream, data, client_tup):
-                log("not unique dropping " + str(data) + str(client_tup))
                 return
 
         # Route message to stream.
         self.route_msg(data, client_tup)
 
     def error_received(self, exp):
-        proto_error_received(exp)
+        log_exception()
+        raise exp
 
     # UDP packets.
     def datagram_received(self, data, client_tup):
-        #log(fstr("Base proto recv udp = {0} {1}", (client_tup, data,)))
+        log(fstr("Base proto recv udp = {0} {1}", (client_tup, data,)))
         if self.transport is None:
             log(fstr("Skipping process data cause transport none 1."))
             return
@@ -355,18 +350,19 @@ class PipeEvents(BaseACKProto):
 
     # Single TCP connection.
     def data_received(self, data):
+        try:
+            #log(f"Base proto recv tcp = {data}")
+            if self.transport is None:
+                log(fstr("Skipping process data cause transport none 2."))
+                return
 
-        #log(f"Base proto recv tcp = {data}")
-        if self.transport is None:
-            log(fstr("Skipping process data cause transport none 2."))
-            return
-
-        client_tup = self.transport.get_extra_info('socket').getpeername()
-        self.handle_data(
-            data,
-            client_tup
-        )
-
+            client_tup = self.transport.get_extra_info('socket').getpeername()
+            self.handle_data(
+                data,
+                client_tup
+            )
+        except Exception:
+            log_exception()
 
     async def close(self):
         if not self.is_running:
@@ -379,7 +375,7 @@ class PipeEvents(BaseACKProto):
         the close code may end up missing them.
         """
         if self.sock:
-            loop = get_running_loop()
+            loop = asyncio.get_event_loop()
             on_close = loop.await_fd_close(self.sock)
             if self.transport is not None:
                 self.transport.close()
@@ -424,4 +420,3 @@ class PipeEvents(BaseACKProto):
     async def echo(self, msg, dest_tup):
         buf = bytearray().join([b"ECHO ", msg, b"\n"])
         await self.send(buf, dest_tup)
-
