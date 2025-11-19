@@ -13,7 +13,8 @@ MIN_RUN_WINDOW = 10
 NUM_PORTS = 16
 BASE_PORT = 30000
 PORT_RANGE = 20000
-CONNECT_TIMEOUT = 3.0
+CONNECT_TIMEOUT = 5.0
+RETRY_INTERVAL = 0.05  # seconds between retries
 
 
 def quantized_bucket(now, window):
@@ -41,9 +42,15 @@ def bind_listeners(ports):
     for p in ports:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setblocking(False)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        except Exception:
+            pass  # Windows does not support
         try:
             s.bind(("0.0.0.0", p))
             s.listen(1)
+            reuse_set = s.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR)
             bound.append((p, s))
         except OSError:
             s.close()
@@ -67,7 +74,7 @@ def compute_rendezvous(now):
 
 def main():
     if len(sys.argv) != 2:
-        print("usage: punch_tcp.py <dest_host>")
+        print("usage: punch_tcp_retry.py <dest_host>")
         sys.exit(1)
 
     dest_host = sys.argv[1]
@@ -96,30 +103,34 @@ def main():
     sel = selectors.DefaultSelector()
     connectors = []
 
-    # For each bound listener port, create a connector using same local port
+    # Prepare connectors using the same local ports
     for port, _listener in listeners:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setblocking(False)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        except Exception:
+            pass
         try:
             s.bind(("0.0.0.0", port))
         except OSError:
             s.close()
             continue
         try:
-            s.connect_ex((dest_ip, port))  # non-blocking simultaneous open
+            s.connect_ex((dest_ip, port))
         except Exception:
-            s.close()
-            continue
+            pass
         connectors.append((port, s))
         sel.register(s, selectors.EVENT_WRITE)
 
-    # register listeners for incoming connections
+    # Register listeners for inbound connections
     for port, lsock in listeners:
         sel.register(lsock, selectors.EVENT_READ)
 
     end = time.time() + CONNECT_TIMEOUT
     while time.time() < end:
-        events = sel.select(timeout=0.1)
+        events = sel.select(timeout=RETRY_INTERVAL)
         for key, mask in events:
             sock = key.fileobj
             if mask & selectors.EVENT_READ:
@@ -131,10 +142,20 @@ def main():
                 except Exception:
                     pass
             if mask & selectors.EVENT_WRITE:
-                err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-                if err == 0:
-                    print("Outbound connect success on port", sock.getsockname()[1])
+                try:
+                    err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                    if err == 0:
+                        print("Outbound connect success on port", sock.getsockname()[1])
+                    else:
+                        # retry connect rapidly
+                        try:
+                            sock.connect_ex((dest_ip, sock.getsockname()[1]))
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
 
+    # Close all sockets at the end
     for _, s in connectors:
         s.close()
     for _, s in listeners:
