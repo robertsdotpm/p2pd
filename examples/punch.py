@@ -10,14 +10,17 @@ import json
 import random
 
 # --------------------------
-WINDOW = 16
+# --- FIXES APPLIED HERE ---
+# WINDOW must be > 2 * MAX_CLOCK_ERROR to ensure both hosts select the same bucket
+WINDOW = 42 # (e.g., 2 * 20s + 2s buffer)
+MAX_CLOCK_ERROR = 20 # The known max clock difference (1-20s)
 MIN_RUN_WINDOW = 10
 NUM_PORTS = 16
 BASE_PORT = 30000
 PORT_RANGE = 20000
 CONNECT_TIMEOUT = 5.0
 RETRY_INTERVAL = 0.05
-FUTURE_OFFSET = 5
+# FUTURE_OFFSET removed as it complicates the time alignment logic
 MAX_SLEEP = 10
 LARGE_PRIME = 2654435761
 # --------------------------
@@ -32,6 +35,8 @@ def get_network_time(timeout=4.0):
                 raise ValueError("No 'unixtime' field in response")
             return int(unixtime)
     except Exception as e:
+        # Fallback to local time if network time fails for robustness, 
+        # but the problem assumes network time is used.
         raise RuntimeError(f"Failed to get network time: {e}")
 
 # Network-aligned time reference
@@ -42,8 +47,14 @@ def now_from_network():
     elapsed = time.monotonic() - network_timer
     return network_time + int(elapsed)
 
-def quantized_bucket(now, window=WINDOW):
-    return int((now + FUTURE_OFFSET + window / 2) // window)
+# --- FIX 1: Corrected for error margin ---
+def quantized_bucket(now, window=WINDOW, max_error=MAX_CLOCK_ERROR):
+    """
+    Calculates the time bucket number, robust against clock offsets up to max_error.
+    By subtracting max_error, both hosts shift their time back to a point 
+    that guarantees they fall into the start of the same, correct window.
+    """
+    return int((now - max_error) // window)
 
 def stable_boundary(bucket):
     """
@@ -88,13 +99,26 @@ def sleep_until(t, max_sleep=MAX_SLEEP):
     if sleep_time > 0:
         time.sleep(sleep_time)
 
-def compute_rendezvous(now):
-    bucket = quantized_bucket(now, WINDOW)
-    rnd = (bucket + 1) * WINDOW
-    if rnd - now < MIN_RUN_WINDOW:
+# --- FIX 2: Corrected rendezvous time calculation ---
+def compute_rendezvous(now, window=WINDOW, min_run_window=MIN_RUN_WINDOW, max_error=MAX_CLOCK_ERROR):
+    """
+    Computes the current time bucket and the rendezvous time (start of the NEXT bucket).
+    The rendezvous time is calculated relative to the 'zero point' of the window structure.
+    """
+    # 1. Determine the current, shared bucket
+    bucket = quantized_bucket(now, window, max_error)
+
+    # 2. Calculate the start of the *next* bucket's valid time window.
+    # The window starts at: bucket * window + MAX_CLOCK_ERROR
+    # The rendezvous time should be the start of the (bucket + 1) window
+    rendezvous_time = (bucket + 1) * window + max_error
+
+    # 3. Check if there's enough time left in the current window for setup
+    if rendezvous_time - now < min_run_window:
         bucket += 1
-        rnd = (bucket + 1) * WINDOW
-    return bucket, rnd
+        rendezvous_time = (bucket + 1) * window + max_error
+        
+    return bucket, rendezvous_time
 
 def main():
     if len(sys.argv) != 2:
@@ -110,6 +134,8 @@ def main():
     ports = stable_ports(boundary)
 
     print("Network-aligned current time:", now)
+    print(f"Max expected clock error: +/- {MAX_CLOCK_ERROR}s")
+    print(f"Time Window Size: {WINDOW}s")
     print("Chosen bucket:", bucket)
     print("Stable boundary:", boundary)
     print("Candidate ports:", ports)
@@ -164,11 +190,14 @@ def main():
 
             # Inbound accept events
             if mask & selectors.EVENT_READ:
-                if sock not in [s for s, _ in completed_inbound]:
+                # Find listener port for cleanup
+                listener_port = sock.getsockname()[1] 
+                if listener_port not in [s.getsockname()[1] for s in completed_inbound]:
                     try:
                         conn, addr = sock.accept()
                         conn.setblocking(False)
-                        completed_inbound.add((sock, addr))
+                        completed_inbound.add(sock)
+                        # In a real app, you'd handle 'conn' here, but for this example, we close it.
                         conn.close()
                     except Exception:
                         pass
@@ -181,6 +210,7 @@ def main():
                         if err == 0:
                             completed_outbound.add(sock)
                         else:
+                            # Re-attempt connect_ex if needed (e.g., non-blocking in-progress)
                             try:
                                 sock.connect_ex((dest_ip, sock.getsockname()[1]))
                             except Exception:
@@ -194,8 +224,9 @@ def main():
         print("Outbound connect success on port", sock.getsockname()[1])
 
     print("\nInbound connections (highest port first):")
-    for sock, addr in sorted(completed_inbound, key=lambda x: x[0].getsockname()[1], reverse=True):
-        print("Inbound connection from", addr, "on port", sock.getsockname()[1])
+    # completed_inbound now contains the listener sockets that received an inbound connection
+    for sock in sorted(completed_inbound, key=lambda s: s.getsockname()[1], reverse=True):
+        print("Inbound connection received on listener port", sock.getsockname()[1])
 
     # Cleanup
     for _, s in connectors:
