@@ -1,34 +1,44 @@
 #!/usr/bin/env python3
 
-"""
-this is straight fire, file under based
-"""
-
 import sys
 import time
 import socket
 import hashlib
 import struct
 import selectors
+import urllib.request
+import json
 
+# --------------------------
 WINDOW = 8
-FUTURE_OFFSET = 5
 MIN_RUN_WINDOW = 10
 NUM_PORTS = 16
 BASE_PORT = 30000
 PORT_RANGE = 20000
 CONNECT_TIMEOUT = 5.0
-RETRY_INTERVAL = 0.05  # seconds between retries
+RETRY_INTERVAL = 0.05
+FUTURE_OFFSET = 5
+# --------------------------
 
+def get_network_time(timeout=2.0):
+    """
+    Get current Unix epoch from a web API.
+    Falls back to local time if network fails.
+    """
+    url = "http://worldtimeapi.org/api/ip"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            data = json.load(resp)
+            return int(data.get("unixtime", time.time()))
+    except Exception:
+        return int(time.time())
 
 def quantized_bucket(now, window):
     return int((now + FUTURE_OFFSET) // window)
 
-
 def deterministic_boundary(bucket):
     h = hashlib.sha256(str(bucket).encode()).digest()
     return struct.unpack(">I", h[:4])[0]
-
 
 def deterministic_ports(boundary):
     ports = []
@@ -40,7 +50,6 @@ def deterministic_ports(boundary):
         ports.append(port)
     return ports
 
-
 def bind_listeners(ports):
     bound = []
     for p in ports:
@@ -50,22 +59,19 @@ def bind_listeners(ports):
         try:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         except Exception:
-            pass  # Windows does not support
+            pass
         try:
             s.bind(("0.0.0.0", p))
             s.listen(1)
-            reuse_set = s.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR)
             bound.append((p, s))
         except OSError:
             s.close()
     return bound
 
-
 def sleep_until(t):
-    now = time.time()
+    now = get_network_time()
     if t > now:
         time.sleep(t - now)
-
 
 def compute_rendezvous(now):
     bucket = quantized_bucket(now, WINDOW)
@@ -75,21 +81,20 @@ def compute_rendezvous(now):
         rnd = (bucket + 1) * WINDOW
     return bucket, rnd
 
-
 def main():
     if len(sys.argv) != 2:
-        print("usage: punch_tcp_retry.py <dest_host>")
+        print("usage: punch_tcp_networktime.py <dest_host>")
         sys.exit(1)
 
     dest_host = sys.argv[1]
     dest_ip = socket.gethostbyname(dest_host)
 
-    now = time.time()
+    now = get_network_time()
     bucket, rendezvous_time = compute_rendezvous(now)
     boundary = deterministic_boundary(bucket)
     ports = deterministic_ports(boundary)
 
-    print("Current time:", now)
+    print("Network-based current time:", now)
     print("Chosen bucket:", bucket)
     print("Deterministic boundary:", boundary)
     print("Candidate ports:", ports)
@@ -107,7 +112,6 @@ def main():
     sel = selectors.DefaultSelector()
     connectors = []
 
-    # Prepare connectors using the same local ports
     for port, _listener in listeners:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setblocking(False)
@@ -128,12 +132,11 @@ def main():
         connectors.append((port, s))
         sel.register(s, selectors.EVENT_WRITE)
 
-    # Register listeners for inbound connections
     for port, lsock in listeners:
         sel.register(lsock, selectors.EVENT_READ)
 
-    end = time.time() + CONNECT_TIMEOUT
-    while time.time() < end:
+    end = get_network_time() + CONNECT_TIMEOUT
+    while get_network_time() < end:
         events = sel.select(timeout=RETRY_INTERVAL)
         for key, mask in events:
             sock = key.fileobj
@@ -151,7 +154,6 @@ def main():
                     if err == 0:
                         print("Outbound connect success on port", sock.getsockname()[1])
                     else:
-                        # retry connect rapidly
                         try:
                             sock.connect_ex((dest_ip, sock.getsockname()[1]))
                         except Exception:
@@ -159,12 +161,10 @@ def main():
                 except Exception:
                     pass
 
-    # Close all sockets at the end
     for _, s in connectors:
         s.close()
     for _, s in listeners:
         s.close()
-
 
 if __name__ == "__main__":
     main()
