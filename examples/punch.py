@@ -10,7 +10,7 @@ import urllib.request
 import json
 
 # --------------------------
-WINDOW = 16        # Increased for robustness
+WINDOW = 16
 MIN_RUN_WINDOW = 10
 NUM_PORTS = 16
 BASE_PORT = 30000
@@ -21,18 +21,32 @@ FUTURE_OFFSET = 5
 MAX_SLEEP = 10
 # --------------------------
 
-def get_network_time(timeout=6.0):
+def get_network_time(timeout=4.0):
     """
-    Get current Unix epoch from a web API.
-    Falls back to local time if network fails.
+    Fetch the current Unix epoch from a web API.
+    Raises an exception if network request fails.
     """
     url = "http://worldtimeapi.org/api/ip"
     try:
         with urllib.request.urlopen(url, timeout=timeout) as resp:
             data = json.load(resp)
-            return int(data["unixtime"])
-    except Exception:
-        raise Exception("Could not get unixtime from worldtimeapi.")
+            unixtime = data.get("unixtime")
+            if unixtime is None:
+                raise ValueError("No 'unixtime' field in response")
+            return int(unixtime)
+    except Exception as e:
+        raise RuntimeError(f"Failed to get network time: {e}")
+
+# Fetch network time once and store reference
+network_time = get_network_time()
+network_timer = time.monotonic()
+
+def now_from_network():
+    """
+    Returns current network-aligned time using initial network_time + monotonic offset.
+    """
+    elapsed = time.monotonic() - network_timer
+    return network_time + int(elapsed)
 
 def quantized_bucket(now, window=WINDOW):
     # Round to nearest window instead of flooring
@@ -71,7 +85,7 @@ def bind_listeners(ports):
     return bound
 
 def sleep_until(t, max_sleep=MAX_SLEEP):
-    now = get_network_time()
+    now = now_from_network()
     sleep_time = max(0, t - now)
     if sleep_time > max_sleep:
         sleep_time = max_sleep
@@ -94,12 +108,12 @@ def main():
     dest_host = sys.argv[1]
     dest_ip = socket.gethostbyname(dest_host)
 
-    now = get_network_time()
+    now = now_from_network()
     bucket, rendezvous_time = compute_rendezvous(now)
     boundary = deterministic_boundary(bucket)
     ports = deterministic_ports(boundary)
 
-    print("Network-based current time:", now)
+    print("Network-aligned current time:", now)
     print("Chosen bucket:", bucket)
     print("Deterministic boundary:", boundary)
     print("Candidate ports:", ports)
@@ -142,8 +156,8 @@ def main():
     for port, lsock in listeners:
         sel.register(lsock, selectors.EVENT_READ)
 
-    end = get_network_time() + CONNECT_TIMEOUT
-    while get_network_time() < end:
+    end = now_from_network() + CONNECT_TIMEOUT
+    while now_from_network() < end:
         events = sel.select(timeout=RETRY_INTERVAL)
         for key, mask in events:
             sock = key.fileobj
