@@ -234,7 +234,7 @@ def main():
 
     # Debouncing sets
     completed_outbound = set()
-    completed_inbound = set()
+    completed_inbound = set() # This set stores the successful listener sockets
 
     end = now_from_network() + CONNECT_TIMEOUT
     
@@ -253,8 +253,7 @@ def main():
                         conn, addr = sock.accept()
                         conn.setblocking(False)
                         completed_inbound.add(sock)
-                        print(f"--> INBOUND SUCCESS: Connected from {addr[0]} on port {sock.getsockname()[1]}")
-                        # In a real application, you would register 'conn' for I/O.
+                        # Suppress real-time print. Result will be in final summary.
                         conn.close()
                         sel.unregister(sock) # Stop listening on this port
                     except Exception:
@@ -267,20 +266,47 @@ def main():
                         err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
                         if err == 0:
                             completed_outbound.add(sock)
-                            print(f"<-- OUTBOUND SUCCESS: Connected to {dest_ip} on port {sock.getsockname()[1]}")
+                            # Suppress real-time print. Result will be in final summary.
                             sel.unregister(sock) # Stop checking for connection completion
                         else:
                             # Connection failed with error (e.g., ECONNREFUSED)
-                            # We can unregister it if we don't want to retry implicitly
-                            # For simplicity, we keep it registered until timeout
                             pass
                     except Exception:
                         pass # Ignore exceptions during getsockopt
 
-    # Final Summary (useful for testing)
-    print("\n--- Final Status ---")
-    print(f"Total Outbound Successes: {len(completed_outbound)}")
-    print(f"Total Inbound Successes: {len(completed_inbound)}")
+    # --- FINAL SORTED STATUS DISPLAY ---
+    
+    print("\n--- Connection Results (Highest Port First) ---")
+
+    # 1. Outbound Connection Successes
+    print(f"\nOUTBOUND SUCCESSES ({len(completed_outbound)} total):")
+    
+    # Sort by local port number (getsockname()[1]) in descending order
+    sorted_outbound = sorted(
+        completed_outbound, 
+        key=lambda s: s.getsockname()[1], 
+        reverse=True
+    )
+    for sock in sorted_outbound:
+        local_port = sock.getsockname()[1]
+        print(f"<-- Connected to {dest_ip} on port {local_port}")
+
+
+    # 2. Inbound Connection Successes
+    print(f"\nINBOUND SUCCESSES ({len(completed_inbound)} total):")
+    
+    # completed_inbound holds the listener sockets that accepted a connection.
+    # Sort by listener port number (getsockname()[1]) in descending order
+    sorted_inbound = sorted(
+        completed_inbound, 
+        key=lambda s: s.getsockname()[1], 
+        reverse=True
+    )
+    for sock in sorted_inbound:
+        listener_port = sock.getsockname()[1]
+        # Note: We don't have the client's IP here because we closed 'conn' immediately, 
+        # but the connection was successfully established on this port.
+        print(f"--> Accepted connection on listener port {listener_port}")
 
     # Cleanup
     for _, s in connectors:
