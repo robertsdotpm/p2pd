@@ -10,7 +10,7 @@ import urllib.request
 import json
 
 # --------------------------
-WINDOW = 16
+WINDOW = 16        # Increased for robustness
 MIN_RUN_WINDOW = 10
 NUM_PORTS = 16
 BASE_PORT = 30000
@@ -18,6 +18,7 @@ PORT_RANGE = 20000
 CONNECT_TIMEOUT = 5.0
 RETRY_INTERVAL = 0.05
 FUTURE_OFFSET = 5
+MAX_SLEEP = 10
 # --------------------------
 
 def get_network_time(timeout=4.0):
@@ -30,13 +31,12 @@ def get_network_time(timeout=4.0):
         with urllib.request.urlopen(url, timeout=timeout) as resp:
             data = json.load(resp)
             return int(data.get("unixtime", time.time()))
-            
     except Exception:
         return int(time.time())
 
 def quantized_bucket(now, window=WINDOW):
-    # round to nearest window instead of floor
-    return int((now + FUTURE_OFFSET + window/2) // window)
+    # Round to nearest window instead of flooring
+    return int((now + FUTURE_OFFSET + window / 2) // window)
 
 def deterministic_boundary(bucket):
     h = hashlib.sha256(str(bucket).encode()).digest()
@@ -70,10 +70,13 @@ def bind_listeners(ports):
             s.close()
     return bound
 
-def sleep_until(t):
+def sleep_until(t, max_sleep=MAX_SLEEP):
     now = get_network_time()
-    if t > now:
-        time.sleep(t - now)
+    sleep_time = max(0, t - now)
+    if sleep_time > max_sleep:
+        sleep_time = max_sleep
+    if sleep_time > 0:
+        time.sleep(sleep_time)
 
 def compute_rendezvous(now):
     bucket = quantized_bucket(now, WINDOW)
@@ -107,13 +110,14 @@ def main():
 
     print("Rendezvous time:", rendezvous_time)
     print("Seconds until rendezvous:", rendezvous_time - now)
-    print("Sleeping until rendezvous...")
+    print(f"Sleeping until rendezvous (max {MAX_SLEEP}s)...")
     sleep_until(rendezvous_time)
     print("Punching at rendezvous time")
 
     sel = selectors.DefaultSelector()
     connectors = []
 
+    # Prepare outbound connectors
     for port, _listener in listeners:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setblocking(False)
@@ -134,6 +138,7 @@ def main():
         connectors.append((port, s))
         sel.register(s, selectors.EVENT_WRITE)
 
+    # Register listeners for inbound connections
     for port, lsock in listeners:
         sel.register(lsock, selectors.EVENT_READ)
 
@@ -163,6 +168,7 @@ def main():
                 except Exception:
                     pass
 
+    # Close all sockets
     for _, s in connectors:
         s.close()
     for _, s in listeners:
