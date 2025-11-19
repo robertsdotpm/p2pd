@@ -103,7 +103,7 @@ async def tunnel_test(active, passive):
         print(cmd)
         await active_shell.write(cmd + "\n")
         print("try read return.")
-        results = await active_shell.readline(timeout=30)
+        results = await active_shell.readline(timeout=60)
         #results = await passive_shell.readline()
         print(results)
     finally:
