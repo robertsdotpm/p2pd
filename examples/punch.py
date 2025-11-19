@@ -3,11 +3,11 @@
 import sys
 import time
 import socket
-import hashlib
 import struct
 import selectors
 import urllib.request
 import json
+import random
 
 # --------------------------
 WINDOW = 16
@@ -19,6 +19,7 @@ CONNECT_TIMEOUT = 5.0
 RETRY_INTERVAL = 0.05
 FUTURE_OFFSET = 5
 MAX_SLEEP = 10
+LARGE_PRIME = 2654435761
 # --------------------------
 
 def get_network_time(timeout=4.0):
@@ -33,7 +34,7 @@ def get_network_time(timeout=4.0):
     except Exception as e:
         raise RuntimeError(f"Failed to get network time: {e}")
 
-# Fetch network time once and store reference
+# Network-aligned time reference
 network_time = get_network_time()
 network_timer = time.monotonic()
 
@@ -44,19 +45,22 @@ def now_from_network():
 def quantized_bucket(now, window=WINDOW):
     return int((now + FUTURE_OFFSET + window / 2) // window)
 
-def deterministic_boundary(bucket):
-    h = hashlib.sha256(str(bucket).encode()).digest()
-    return struct.unpack(">I", h[:4])[0]
+def stable_boundary(bucket):
+    """
+    Deterministic boundary stable against small clock offsets.
+    """
+    return (bucket * LARGE_PRIME) % 0xFFFFFFFF
 
-def deterministic_ports(boundary):
-    ports = []
-    h = hashlib.sha256(struct.pack(">I", boundary)).digest()
-    for i in range(NUM_PORTS):
-        start = (i * 2) % (len(h) - 1)
-        x = struct.unpack(">H", h[start:start+2])[0]
-        port = BASE_PORT + (x % PORT_RANGE)
-        ports.append(port)
-    return ports
+def stable_ports(boundary, num_ports=NUM_PORTS, base_port=BASE_PORT, port_range=PORT_RANGE):
+    """
+    Deterministic, smooth port selection using PRNG seeded by boundary.
+    """
+    rng = random.Random(boundary)
+    ports = set()
+    while len(ports) < num_ports:
+        port = base_port + rng.randint(0, port_range - 1)
+        ports.add(port)
+    return sorted(ports, reverse=True)
 
 def bind_listeners(ports):
     bound = []
@@ -102,12 +106,12 @@ def main():
 
     now = now_from_network()
     bucket, rendezvous_time = compute_rendezvous(now)
-    boundary = deterministic_boundary(bucket)
-    ports = deterministic_ports(boundary)
+    boundary = stable_boundary(bucket)
+    ports = stable_ports(boundary)
 
     print("Network-aligned current time:", now)
     print("Chosen bucket:", bucket)
-    print("Deterministic boundary:", boundary)
+    print("Stable boundary:", boundary)
     print("Candidate ports:", ports)
 
     listeners = bind_listeners(ports)
@@ -160,7 +164,7 @@ def main():
 
             # Inbound accept events
             if mask & selectors.EVENT_READ:
-                if sock not in completed_inbound:
+                if sock not in [s for s, _ in completed_inbound]:
                     try:
                         conn, addr = sock.accept()
                         conn.setblocking(False)
