@@ -44,6 +44,8 @@ import argparse
 import socket
 from .punch_defs import *
 from .port_allocators.boundary_alloc import *
+from .engines.tcp_selector_simple.engine import *
+from .punch_utils import *
 
 parser = argparse.ArgumentParser(description="Test main punching algorithm")
 parser.add_argument("--dest_ip", type=str, required=True, help="Dest IP to punch to")
@@ -67,14 +69,27 @@ class Punch():
         # Start punching in 10 seconds by defaul.
         self.punch_time = 10
 
+        # Default to inaccurate system clock.
+        self.timestamp = int(time.time())
+        self.start_time = time.monotonic()
+
     def set_src_ip(self, src_ip):
         self.src_ip = src_ip
 
     def set_af(self, af):
         self.af = af
 
+    def set_timestamp(self, timestamp):
+        self.timestamp = timestamp
+        self.start_time = time.monotonic()
+
+    def sleep_until(self):
+        elapsed = time.monotonic() - self.start_time
+        sleep_time = max(0, self.punch_time - elapsed)
+        time.sleep(sleep_time)
+
     def add_port_allocator(self, f_port_alloc, n=16):
-        port_allocs, punch_time = f_port_alloc(n=n)
+        port_allocs, punch_abs = f_port_alloc(self.timestamp, n=n)
         for port_alloc in port_allocs:
             is_unique = True
             for stored_port_alloc in self.port_allocs:
@@ -85,7 +100,17 @@ class Punch():
             if is_unique:
                 self.port_allocs.append(port_alloc)
 
-        self.punch_time = min(self.punch_time, punch_time)
+        punch_time_relative = punch_abs - self.timestamp
+        self.punch_time = min(self.punch_time, punch_time_relative)
+
+    def run_engine(self, f_engine):
+        f_engine(
+            af=self.af,
+            port_allocs=self.port_allocs,
+            src_ip=self.src_ip,
+            dest_ip=self.dest_ip,
+            f_sleep_until=self.sleep_until
+        )
 
 
 if __name__ == "__main__":
@@ -98,5 +123,19 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     punch = Punch(args.dest_ip)
+
+    # Network-aligned time reference
+    try:
+        timestamp = get_ntp_time()
+        punch.set_timestamp(timestamp)
+    except RuntimeError as e:
+        print(f"CRITICAL ERROR: {e}")
+        sys.exit(1)
+
     punch.add_port_allocator(boundary_port_alloc)
-    print(punch.port_allocs)
+    print(punch.punch_time)
+
+    punch.run_engine(tcp_selector_punch_engine)
+
+
+

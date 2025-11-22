@@ -16,7 +16,8 @@ def setup_engine(af, port_allocs, src_ip):
 
     # Reuse the same listen ports for outbound connects.
     # Hence the cryptic socket options.
-    pre_connect_infos = bind_tcp_sockets(af, listen_infos, src_ip)
+    port_allocs = [info[0] for info in listen_infos]
+    pre_connect_infos = bind_tcp_sockets(af, port_allocs, src_ip)
 
     # Register all existing sockets for events.
     sel = selectors.DefaultSelector()
@@ -36,8 +37,9 @@ def socket_event_monitor(sel):
     # This set stores the successful listener sockets
     inbound = set() 
 
-    end = now_from_network() + CONNECT_TIMEOUT
-    while now_from_network() < end:
+    start_time = time.monotonic()
+    end = start_time + CONNECT_TIMEOUT
+    while time.monotonic() < end:
         # Check for events on both listeners (read) and connectors (write)
         events = sel.select(timeout=RETRY_INTERVAL)
         for key, mask in events:
@@ -74,11 +76,12 @@ def socket_event_monitor(sel):
 
     return (inbound, outbound,)
 
-def selector_engine(af, port_allocs, src_ip, dest_ip, f_sleep_until):
+def tcp_selector_punch_engine(af, port_allocs, src_ip, dest_ip, f_sleep_until):
     # Create listen sockets, bound con socks, and register for selector events.
     listen_infos, pre_connect_infos, sel = setup_engine(af, port_allocs, src_ip)
 
     # Wait for synchronized punch time frame.
+    print("Waiting until punch time.")
     f_sleep_until()
 
     # Make outbound connections to the designated ports.

@@ -52,12 +52,12 @@ def listen_on_tcp_sockets(bound_infos):
 
 def connect_on_tcp_sockets(bound_infos, dest_ip):
     connect_infos = []
-    for bound_info in bound_infos:
+    for bound_info in bound_infos:  
         p, s = bound_info
         try:
             # Initiate non-blocking connect (the "punch")
             s.connect_ex((dest_ip, p.dest_port))
-            connect_infos.append(p, s)
+            connect_infos.append((p, s))
         except OSError as e:
             s.close()
             # print(f"Could not bind/connect outbound on port {port}: {e}")
@@ -65,9 +65,9 @@ def connect_on_tcp_sockets(bound_infos, dest_ip):
 
     return connect_infos
 
-def sleep_until(t, max_sleep=10):
-    now = now_from_network()
-    sleep_time = max(0, t - now)
+def sleep_until(punch_time, f_timer, max_sleep=10):
+    now = f_timer()
+    sleep_time = max(0, punch_time - now)
     
     # Cap sleep time to avoid large blocks if the host clock is far behind
     if sleep_time > max_sleep:

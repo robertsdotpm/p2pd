@@ -2,10 +2,13 @@ import time
 from ..lib.boundary_lib import *
 from ..punch_defs import *
 
-def boundary_port_alloc(n=NUM_PORTS, ntp=None):
-    now = ntp or int(time.time())
-    bucket, punch_time = compute_rendezvous(now)
+def boundary_port_alloc(timestamp, n=NUM_PORTS):
+    bucket, punch_time = compute_rendezvous(timestamp)
     boundary = stable_boundary(bucket)
+    print("bucket = ", bucket)
+    print("future punch time = ", punch_time)
+    print("boundary = ", boundary)
+
 
     # Same src and dest port for this allocation type.
     ret = []
