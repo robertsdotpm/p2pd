@@ -265,6 +265,11 @@ def main():
                     try:
                         err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
                         if err == 0:
+
+                            #   2. THE FIX: Verify with getpeername()
+                            #    If we aren't truly connected, this throws OSError.
+                            sock.getpeername()
+                            
                             completed_outbound.add(sock)
                             # Suppress real-time print. Result will be in final summary.
                             sel.unregister(sock) # Stop checking for connection completion

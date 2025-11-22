@@ -24,7 +24,6 @@ def setup_engine(af, port_allocs, src_ip):
     for listen_info in listen_infos:
         _, s = listen_info
         sel.register(s, selectors.EVENT_READ)
-
     return (listen_infos, pre_connect_infos, sel)
 
 def socket_event_monitor(sel):
@@ -62,6 +61,8 @@ def socket_event_monitor(sel):
                     try:
                         err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
                         if err == 0:
+                            # If we aren't truly connected, this throws OSError.
+                            sock.getpeername()
                             outbound.add(sock)
 
                             # Suppress real-time print. Result will be in final summary.
@@ -83,12 +84,9 @@ def tcp_selector_punch_engine(af, port_allocs, src_ip, dest_ip, f_sleep_until):
     f_sleep_until()
 
     # Make outbound connections to the designated ports.
-    connect_infos = connect_on_tcp_sockets(pre_connect_infos, dest_ip)
+    connect_infos = connect_on_tcp_sockets(sel, pre_connect_infos, dest_ip)
 
-    # Register connect sockets for writes.
-    for con_info in pre_connect_infos:
-        _, s = con_info
-        sel.register(s, selectors.EVENT_WRITE)
+
 
     # Return set of successful connections (if any.)
     inbound, outbound = socket_event_monitor(sel)

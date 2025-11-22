@@ -1,5 +1,6 @@
 import socket
 import time
+import selectors
 from ...punch_defs import *
 
 """
@@ -50,7 +51,7 @@ def listen_on_tcp_sockets(bound_infos):
 
     return listen_infos
 
-def connect_on_tcp_sockets(bound_infos, dest_ip):
+def connect_on_tcp_sockets(sel, bound_infos, dest_ip):
     connect_infos = []
     for bound_info in bound_infos:  
         p, s = bound_info
@@ -62,6 +63,8 @@ def connect_on_tcp_sockets(bound_infos, dest_ip):
             s.close()
             # print(f"Could not bind/connect outbound on port {port}: {e}")
             continue
+
+        sel.register(s, selectors.EVENT_WRITE)
 
     return connect_infos
 
