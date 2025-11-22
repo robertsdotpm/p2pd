@@ -128,13 +128,12 @@ if __name__ == "__main__":
     try:
         timestamp = get_ntp_time()
         punch.set_timestamp(timestamp)
+        print("Current ntp time = ", timestamp)
     except RuntimeError as e:
         print(f"CRITICAL ERROR: {e}")
         sys.exit(1)
 
     punch.add_port_allocator(boundary_port_alloc)
-    print(punch.punch_time)
-
     punch.run_engine(tcp_selector_punch_engine)
 
 
