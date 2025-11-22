@@ -23,34 +23,6 @@ def get_punch_mode(af, dest_ip, same_machine):
         else:
             return TCP_PUNCH_LAN
 
-def tcp_puncher_states(dest_mappings, state):
-    # bool of dest_mappings, start state, to state.
-    progressions = [
-        [False, None, INITIATED_PREDICTIONS],
-        [True, None, RECEIVED_PREDICTIONS],
-        [True, INITIATED_PREDICTIONS, UPDATED_PREDICTIONS]
-    ]
-
-    # What protocol 'side' corresponds to a state.
-    sides = {
-        INITIATED_PREDICTIONS: INITIATOR,
-        UPDATED_PREDICTIONS: INITIATOR,
-        RECEIVED_PREDICTIONS: RECIPIENT,
-    }
-
-    # Progress the state machine.
-    for progression in progressions:
-        from_recv, from_state, to_state = progression
-        if from_recv != bool(dest_mappings):
-            continue
-
-        if from_state != state:
-            continue
-
-        return (to_state, sides[to_state])
-    
-    raise Exception("Invalid puncher state progression.")
-
 def choose_same_punch_sock(our_wan, outs):
     chosen_sock = None
     try:
@@ -165,3 +137,76 @@ def puncher_from_dict(d, cls):
     puncher.send_mappings = send_mappings
     puncher.start_time = Dec(d["start_time"])
     return puncher
+
+async def wait_for_punch_time(current_ntp, ntp_meet):
+    # Sleep until the ntp timeframe.
+    assert(current_ntp)
+    if current_ntp < ntp_meet:
+        remaining_time = float(ntp_meet - current_ntp)
+        if remaining_time:
+            log(
+                "> punch waiting for meeting = %s" %
+                (str(remaining_time))
+            )
+
+            await asyncio.sleep(remaining_time)
+    else:
+        log("TCP punch behind current meeting time!")
+
+async def setup_punch_coordination(node, sys_clock=None):
+    if sys_clock is None:
+        sys_clock = await SysClock(node.ifs[0]).start()
+
+    node.max_punchers, node.pp_executor = await get_pp_executors()
+    node.sys_clock = sys_clock
+
+def add_punch_meeting(node, params):
+    # Schedule the TCP punching.
+    node.punch_queue.put_nowait(params)
+
+async def schedule_punching_with_delay(node, pipe_id, n=2):
+    await asyncio.sleep(n)
+
+    # Ready to do the punching process.
+    add_punch_meeting(
+        node,
+        [pipe_id]
+    )
+
+async def punch_queue_worker(node, puncher_cls):
+    try:
+        if shut_down.is_set():
+            return
+
+        params = await node.punch_queue.get()
+        if params is None:
+            return
+        
+        if len(params):
+            pipe_id = params[0]
+            if pipe_id in node.tcp_punch_clients:
+                puncher = node.tcp_punch_clients[pipe_id]
+                task = create_task(
+                    async_wrap_errors(
+                        setup_punching_process(puncher, puncher_cls)
+                    )
+                )
+
+                # Avoid garbage collection for this task.
+                node.tasks.append(task)
+
+        node.punch_worker_task = create_task(
+            punch_queue_worker(node, puncher_cls)
+        )
+    except asyncio.CancelledError:
+        return
+    except RuntimeError:
+        log_exception()
+        return
+    except Exception:
+        log_exception()
+    
+def start_punch_worker(node, puncher_cls):
+    node.punch_worker_task = create_task(
+        punch_queue_worker(node, puncher_cls)
+    )

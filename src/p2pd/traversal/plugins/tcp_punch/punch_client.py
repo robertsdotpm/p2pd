@@ -84,12 +84,39 @@ done. If some kind of reverse start logic is needed then it
 would itself require another message. So maybe not worth the cost.
 """
 
-import asyncio
 from ....nic.nat.nat_predict import *
 from .punch_utils import *
 from .punch_defs import *
 from ....utility.clock_skew import *
 from ....net.asyncio.event_loop import *
+
+def tcp_puncher_states(dest_mappings, state):
+    # bool of dest_mappings, start state, to state.
+    progressions = [
+        [False, None, INITIATED_PREDICTIONS],
+        [True, None, RECEIVED_PREDICTIONS],
+        [True, INITIATED_PREDICTIONS, UPDATED_PREDICTIONS]
+    ]
+
+    # What protocol 'side' corresponds to a state.
+    sides = {
+        INITIATED_PREDICTIONS: INITIATOR,
+        UPDATED_PREDICTIONS: INITIATOR,
+        RECEIVED_PREDICTIONS: RECIPIENT,
+    }
+
+    # Progress the state machine.
+    for progression in progressions:
+        from_recv, from_state, to_state = progression
+        if from_recv != bool(dest_mappings):
+            continue
+
+        if from_state != state:
+            continue
+
+        return (to_state, sides[to_state])
+    
+    raise Exception("Invalid puncher state progression.")
 
 class TCPPuncher():
     def __init__(self, af, src_info, dest_info, stuns, sys_clock, nic, same_machine=False):

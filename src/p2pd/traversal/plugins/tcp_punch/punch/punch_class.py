@@ -40,6 +40,8 @@ Design:
     - limitations:
         - FD limit on windows is 64
 """
+
+import sys
 import argparse
 import socket
 from .punch_defs import *
@@ -66,8 +68,9 @@ class Punch():
         # Listen bind / dest connect matrixes.
         self.port_allocs = [] # [ src bind, dest port ]
 
-        # Start punching in 10 seconds by defaul.
-        self.punch_time = 10
+        # The allocator has to decide on this.
+        # Relative time from start_time bellow.
+        self.punch_time = None
 
         # Default to inaccurate system clock.
         self.timestamp = int(time.time())

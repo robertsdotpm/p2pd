@@ -33,3 +33,8 @@ punch double close found:
   File "/home/x/projects/p2pd/src/p2pd/net/pipe/pipe_events.py", line 374, in close
     raise AlreadyClosedError()
 p2pd.errors.AlreadyClosedError
+
+
+Windows: Requires obscure socket options (IP_UNICAST_IF) or specific routing table metrics, and Microsoft's "Strong Host Model" implementation can be finicky.
+
+macOS: Uses IP_BOUND_IF.
