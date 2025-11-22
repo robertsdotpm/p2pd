@@ -73,14 +73,13 @@ class Punch():
     def set_af(self, af):
         self.af = af
 
-    def add_port_allocator(self, f_port_alloc):
-        port_allocs, punch_time = f_port_alloc()
+    def add_port_allocator(self, f_port_alloc, n=16):
+        port_allocs, punch_time = f_port_alloc(n=n)
         for port_alloc in port_allocs:
             is_unique = True
-            for stored_port_alloc in self.port_alloc:
+            for stored_port_alloc in self.port_allocs:
                 if tuple(port_alloc) == tuple(stored_port_alloc):
                     is_unique = False
-
                     break
 
             if is_unique:
@@ -99,4 +98,5 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     punch = Punch(args.dest_ip)
-
+    punch.add_port_allocator(boundary_port_alloc)
+    print(punch.port_allocs)

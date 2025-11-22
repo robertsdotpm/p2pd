@@ -2,7 +2,7 @@ import time
 from ..lib.boundary_lib import *
 from ..punch_defs import *
 
-def alloc_ports(n=NUM_PORTS, ntp=None):
+def boundary_port_alloc(n=NUM_PORTS, ntp=None):
     now = ntp or int(time.time())
     bucket, punch_time = compute_rendezvous(now)
     boundary = stable_boundary(bucket)
