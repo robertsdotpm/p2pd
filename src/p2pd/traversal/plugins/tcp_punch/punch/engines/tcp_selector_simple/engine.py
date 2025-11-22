@@ -1,6 +1,6 @@
 import selectors
 import socket
-import sys
+import os
 from .utils import *
 
 CONNECT_TIMEOUT = 5.0
@@ -11,8 +11,7 @@ def setup_engine(af, port_allocs, src_ip):
     pre_listen_infos = bind_tcp_sockets(af, port_allocs, src_ip)
     listen_infos = listen_on_tcp_sockets(pre_listen_infos)
     if not listen_infos:
-        print("CRITICAL: Failed to bind any ports. Exiting.")
-        sys.exit(1)
+        raise Exception("Engine failed to listen at all.")
 
     # Reuse the same listen ports for outbound connects.
     # Hence the cryptic socket options.
@@ -24,6 +23,7 @@ def setup_engine(af, port_allocs, src_ip):
     for listen_info in listen_infos:
         _, s = listen_info
         sel.register(s, selectors.EVENT_READ)
+
     return (listen_infos, pre_connect_infos, sel)
 
 def socket_event_monitor(sel):
@@ -33,6 +33,7 @@ def socket_event_monitor(sel):
     # This set stores the successful listener sockets
     inbound = set() 
 
+    # When to stop checking for events.
     start_time = time.monotonic()
     end = start_time + CONNECT_TIMEOUT
     while time.monotonic() < end:
@@ -46,12 +47,18 @@ def socket_event_monitor(sel):
                 # Check if this listener has already accepted a connection
                 if sock not in inbound:
                     try:
+                        # Accept a new client socket from the listener.
                         conn, addr = sock.accept()
                         conn.setblocking(False)
+
+                        # Record the socket.
                         inbound.add(sock)
-                        # Suppress real-time print. Result will be in final summary.
-                        conn.close()
-                        sel.unregister(sock) # Stop listening on this port
+
+                        # Close the initial server.
+                        sock.close()
+
+                        # Don't wait for any more read events.
+                        sel.unregister(sock)
                     except Exception:
                         pass # Ignore temporary errors
 
@@ -63,10 +70,12 @@ def socket_event_monitor(sel):
                         if err == 0:
                             # If we aren't truly connected, this throws OSError.
                             sock.getpeername()
+
+                            # Otherwise safe to record.
                             outbound.add(sock)
 
-                            # Suppress real-time print. Result will be in final summary.
-                            sel.unregister(sock) # Stop checking for connection completion
+                            # Stop checking for connection completion
+                            sel.unregister(sock) 
                         else:
                             # Connection failed with error (e.g., ECONNREFUSED)
                             pass
@@ -80,16 +89,13 @@ def tcp_selector_punch_engine(af, port_allocs, src_ip, dest_ip, f_sleep_until):
     listen_infos, pre_connect_infos, sel = setup_engine(af, port_allocs, src_ip)
 
     # Wait for synchronized punch time frame.
-    print("Waiting until punch time.")
     f_sleep_until()
 
     # Make outbound connections to the designated ports.
     connect_infos = connect_on_tcp_sockets(sel, pre_connect_infos, dest_ip)
 
-
-
     # Return set of successful connections (if any.)
     inbound, outbound = socket_event_monitor(sel)
-
-    for con_set in (inbound, outbound):
-        print(con_set)
+    if "P2PD_DEBUG" in os.environ:
+        for con_set in (inbound, outbound):
+            print(con_set)

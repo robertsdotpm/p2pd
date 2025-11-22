@@ -114,6 +114,7 @@ class Punch():
 
 
 if __name__ == "__main__":
+    # Get the dest IP.
     parser = argparse.ArgumentParser(description="Test main punching algorithm")
     parser.add_argument(
         "--dest_ip",
@@ -133,7 +134,10 @@ if __name__ == "__main__":
         print(f"CRITICAL ERROR: {e}")
         sys.exit(1)
 
+    # Default uses deterministic ports from NTP boundaries.
     punch.add_port_allocator(boundary_port_alloc)
+
+    # New punching engine uses non-blocking selector events.
     punch.run_engine(tcp_selector_punch_engine)
 
 
