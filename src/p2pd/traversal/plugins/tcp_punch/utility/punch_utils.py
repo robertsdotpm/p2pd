@@ -2,6 +2,12 @@
 import time
 import socket
 import struct
+from .....net.ip_range import *
+from .....nic.nat.nat_utils import *
+from .....nic.nat.nat_predict import *
+from .....nic.interface import *
+from .....utility.clock_skew import *
+from ..punch_defs import *
 
 # --- NTP Constants ---
 NTP_SERVER = "pool.ntp.org"
@@ -51,13 +57,6 @@ def get_ntp_time(server=NTP_SERVER, port=NTP_PORT, retries=MAX_NTP_RETRIES, time
             time.sleep(0.1)
 
     raise RuntimeError(f"Failed to get reliable network time from {server} after {retries} attempts.")
-
-from .....net.ip_range import *
-from .....nic.nat.nat_utils import *
-from .....nic.nat.nat_predict import *
-from .....nic.interface import *
-from .....utility.clock_skew import *
-from ..punch_defs import *
 
 """
 The function bellow is used to adjust sleep parameters

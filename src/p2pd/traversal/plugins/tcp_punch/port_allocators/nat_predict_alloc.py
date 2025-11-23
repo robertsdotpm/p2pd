@@ -58,7 +58,6 @@ class NATPredictAlloc():
         self.preloaded_mappings = []
         self.self_mappings = []
 
-
     def set_nat_info(self, src_nat=None, dest_nat=None):
         nat_default = nat_info(RESTRICT_PORT_NAT, delta_info(EQUAL_DELTA, 0))
         self.src_nat = src_nat or copy.deepcopy(nat_default)
@@ -100,7 +99,7 @@ class NATPredictAlloc():
                 )
 
             # Only things needed for protocol.
-            return nat_mapping_to_port_alloc(self.send_mappings)
+            return (nat_mapping_to_port_alloc(self.send_mappings), 0)
                 
         # Update the mapping to match needed reply ports.
         # Optional step but improves success chance.
@@ -110,15 +109,17 @@ class NATPredictAlloc():
 
             # Adjust our local bind ports if they need a specific
             # reply port to accept a connection.
-            return nat_mapping_to_port_alloc(
-                update_for_reply_ports(
-                    self.punch_mode,
-                    self.src_nat,
-                    self.dest_nat,
-                    self.preloaded_mappings,
-                    self.recv_mappings,
-                    self.send_mappings,
-                )
+            return (
+                nat_mapping_to_port_alloc(
+                    update_for_reply_ports(
+                        self.punch_mode,
+                        self.src_nat,
+                        self.dest_nat,
+                        self.preloaded_mappings,
+                        self.recv_mappings,
+                        self.send_mappings,
+                    )
+                ), 1
             )
 
     def set_punch_mode(self, dest_ip="192.168.0.100"):

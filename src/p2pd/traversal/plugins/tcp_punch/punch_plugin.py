@@ -48,20 +48,21 @@ from .punch_defs import *
 from .port_allocators.boundary_alloc import *
 from .engines.tcp_selector_simple.engine import *
 from .utility.punch_utils import *
+from ..generic.plugin import GenericPlugin
 
 # TODO: Could even use ARP to find the other node in a LAN
 # running the same tool so the dest IP doesn't have to be specified.
-class Punch():
-    def __init__(self, dest_ip):
+class PunchPlugin(GenericPlugin):
+    def __init__(self, dest_ip, src_ip=None):
         # Fallback to IP4
         self.af = socket.AF_INET
         if ":" in dest_ip:
             self.af = socket.AF_INET6
 
         # Fallback to default interface.
-        self.src_ip = "0.0.0.0" 
+        self.src_ip = src_ip or "0.0.0.0"
         self.dest_ip = dest_ip
-
+        
         # Listen bind / dest connect matrixes.
         self.port_allocs = [] # [ src bind, dest port ]
 

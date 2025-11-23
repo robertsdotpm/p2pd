@@ -1,10 +1,12 @@
-from .....utility.utils import *
-from .....net.net_utils import *
-from .....net.pipe.pipe_events import PipeEvents
-from .....nic.nat.nat_predict import *
-from ....signaling.signal_msgs import TCPPunchMsg
-from .punch_init import *
-from .punch_client import *
+from ....utility.utils import *
+from ....net.net_utils import *
+from ....net.pipe.pipe_events import PipeEvents
+from ....nic.nat.nat_predict import *
+from ...signaling.signal_msgs import TCPPunchMsg
+from .punch_defs import *
+from .utility.punch_utils import *
+from .punch_plugin import *
+from .port_allocators.nat_predict_alloc import *
 
 async def tcp_hole_punch(tunnel, af, pipe_id, src_info, dest_info, nic, addr_type, reply=None):
     # Load TCP punch client for this pipe ID.
@@ -29,15 +31,9 @@ async def tcp_hole_punch(tunnel, af, pipe_id, src_info, dest_info, nic, addr_typ
             return None
         
         # Create a new puncher for this pipe ID.
-        puncher = TCPPuncher(
-            af,
-            src_info,
-            dest_info,
-            stuns,
-            tunnel.node.sys_clock,
-            nic,
-            tunnel.same_machine,
-        )
+        puncher = PunchPlugin(dest_info["ip"], src_info["ip"])
+        puncher.set_routing(af, src_info, dest_info, nic, tunnel.same_machine)
+        puncher.set_timestamp((await tunnel.node.sys_clock.time()))
 
         # Save a reference to node.
         puncher.set_parent(pipe_id, tunnel.node)
@@ -49,24 +45,24 @@ async def tcp_hole_punch(tunnel, af, pipe_id, src_info, dest_info, nic, addr_typ
         # Save puncher reference.
         tunnel.node.tcp_punch_clients[pipe_id] = puncher
 
+        # Internal NAT prediction port allocator.
+        puncher.nat_predict_alloc = NATPredictAlloc(stuns)
+
     # Extract any received payload attributes.
     if reply is not None:
         recv_mappings = reply.payload.mappings
         recv_mappings = [NATMapping(m) for m in recv_mappings]
-        start_time = reply.payload.ntp
         assert(recv_mappings)
     else:
         recv_mappings = None
-        start_time = None
 
     # Update details needed for TCP punching.
-    ret = await puncher.proto(
-        recv_mappings,
-        start_time,
+    ret, is_end = await puncher.nat_predict_alloc.port_alloc(
+        recv_mappings
     )
     
     # Protocol done -- return nothing.
-    if ret == 1:
+    if is_end == 1:
         return PipeEvents(None)
 
     # Increase active punchers.
@@ -107,7 +103,8 @@ async def tcp_hole_punch(tunnel, af, pipe_id, src_info, dest_info, nic, addr_typ
         },
         "payload": {
             "punch_mode": puncher.punch_mode,
-            "ntp": ret[1],
+            #"ntp": ret[1],
+            "ntp": "0",
             "mappings": mappings,
         },
     })
