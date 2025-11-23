@@ -47,7 +47,7 @@ class NATPredictAlloc():
         self.src_nat = src_nat or copy.deepcopy(nat_default)
         self.dest_nat = dest_nat or copy.deepcopy(nat_default)
 
-    async def proto(self, recv_mappings=None):
+    async def port_alloc(self, recv_mappings=None):
         # Change protocol state transition.
         self.state, self.side = nat_predict_states(
             recv_mappings,
@@ -62,8 +62,8 @@ class NATPredictAlloc():
             self.send_mappings, self.preloaded_mappings = \
                 await nat_prediction(
                     self.punch_mode,
-                    self.src_info["nat"],
-                    self.dest_info["nat"],
+                    self.src_nat,
+                    self.dest_nat,
                     self.stun_clients,
                     recv_mappings=recv_mappings,
                 )
@@ -93,18 +93,16 @@ class NATPredictAlloc():
 
             # Adjust our local bind ports if they need a specific
             # reply port to accept a connection.
-            update_for_reply_ports(
+            return update_for_reply_ports(
                 self.punch_mode,
-                self.src_info["nat"],
-                self.dest_info["nat"],
+                self.src_nat,
+                self.dest_nat,
                 self.preloaded_mappings,
                 self.recv_mappings,
                 self.send_mappings,
             )
 
-            return 1
-
-    def set_punch_mode(self, dest_ip):
+    def set_punch_mode(self, dest_ip="192.168.0.100"):
         self.punch_mode = get_punch_mode(
             self.af,
             str(dest_ip),
@@ -121,18 +119,20 @@ async def workspace():
         conf=PUNCH_CONF
     )
 
-    port_alloc = NATPredictAlloc(stun_clients)
-    port_alloc.set_punch_mode("10.0.1.123")
-    port_alloc.set_nat_info()
+    # Generate port allocations based on NAT prediction algorithms.
+    nat_predict = NATPredictAlloc(stun_clients)
 
+    # Load test defaults.
+    nat_predict.set_punch_mode()
+    nat_predict.set_nat_info()
+    send_mappings = await nat_predict.port_alloc()
+    print(send_mappings)
 
-
-    send_mappings = await nat_prediction(
-        TCP_PUNCH_REMOTE,
-        stuns=stun_clients,
-    )
-
-    print(ret)
+    # Simulate receiving mappings by just using our own.
+    # Obviously this is meaningless and real would come from a client.
+    recv_mappings = send_mappings
+    updated_mappings = await nat_predict.port_alloc(recv_mappings)
+    print(updated_mappings) 
 
 if __name__ == "__main__":
     asyncio.run(workspace())
