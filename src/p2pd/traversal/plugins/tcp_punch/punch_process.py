@@ -1,46 +1,12 @@
 import asyncio
-from ....nic.nat.nat_predict import *
-from .punch_utils import *
+from .....nic.nat.nat_predict import *
+from .utility.punch_utils import *
 from .punch_defs import *
-from ....utility.clock_skew import *
-from ....net.asyncio.event_loop import *
+from .....utility.clock_skew import *
+from .....net.asyncio.event_loop import *
 from .start_punching import start_punching
-from ....net.pipe.pipe import *
-from ....node.node_defs import *
-
-async def do_punching_wrapper(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, node_id):
-    has_success = asyncio.Event()
-    task = create_task(
-        async_wrap_errors(
-            start_punching(
-                af,
-                dest_addr,
-                send_mappings,
-                recv_mappings,
-                current_ntp,
-                ntp_meet,
-                mode,
-                interface,
-                reverse_tup,
-                has_success,
-                node_id,
-            )
-        )
-    )
-
-    """
-    The punching func has 30 seconds to set this.
-    If it doesn't a timeout error is thrown to end the process.
-    So a hung punching process doesn't take up a process.
-    On the other hand -- if it succeeds and sets it block forever.
-    """
-    await asyncio.wait_for(
-        has_success.wait(),
-        30
-    )
-
-    while not shut_down.is_set():
-        await asyncio.sleep(1)
+from .....net.pipe.pipe import *
+from .....node.node_defs import *
 
 # Started in a new process.
 def proc_do_punching(args):

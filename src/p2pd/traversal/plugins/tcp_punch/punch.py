@@ -47,7 +47,7 @@ import socket
 from .punch_defs import *
 from .port_allocators.boundary_alloc import *
 from .engines.tcp_selector_simple.engine import *
-from .punch_utils import *
+from .utility.punch_utils import *
 
 # TODO: Could even use ARP to find the other node in a LAN
 # running the same tool so the dest IP doesn't have to be specified.

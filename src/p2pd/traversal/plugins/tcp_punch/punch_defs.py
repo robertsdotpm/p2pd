@@ -29,3 +29,14 @@ PUNCH_CONF = dict_child({
     # Applies to the pipe_open only (may not be needed.)
     "do_close": False,
 }, NET_CONF)
+
+
+class PortAlloc():
+    def __init__(self, src_port, dest_port):
+        self.src_port = src_port
+        self.dest_port = dest_port
+
+    def __iter__(self):
+        yield self.src_port
+        yield self.dest_port
+

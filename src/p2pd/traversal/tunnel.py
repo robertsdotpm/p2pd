@@ -6,7 +6,7 @@ from ..protocol.turn.turn_client import TURNClient
 from .tunnel_utils import *
 from ..node.node_protocol import *
 from .plugins.direct_connect.main import direct_connect
-from .plugins.tcp_punch.main import tcp_hole_punch, tcp_punch_cleanup
+from .plugins.tcp_punch.punch.proto import tcp_hole_punch, tcp_punch_cleanup
 from .plugins.turn.main import udp_turn_relay, turn_cleanup
 from .plugins.reverse_connect.main import reverse_connect
 from ..node.nickname import *

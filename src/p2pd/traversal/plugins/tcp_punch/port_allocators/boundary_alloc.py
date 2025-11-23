@@ -1,6 +1,6 @@
 import time
 import os
-from ..utils.boundary_lib import *
+from ..utility.boundary_lib import *
 from ..punch_defs import *
 
 def boundary_port_alloc(timestamp, n=NUM_PORTS):

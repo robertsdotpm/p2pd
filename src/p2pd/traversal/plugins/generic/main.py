@@ -4,7 +4,7 @@ from ....nic.nat.nat_predict import *
 from ....utility.clock_skew import *
 from ....net.asyncio.event_loop import *
 
-# stuns, sys_clock,
+# stuns, sys_clock
 class GenericPlugin():
     def __init__(self, af, src_info, dest_info, nic, same_machine=False):
         # Save input params.
@@ -19,7 +19,6 @@ class GenericPlugin():
         self.pipe = None
         self.listen_pipe = None
         self.ping_pong_task = None
-        self.active_punchers = 0
 
     def setup_multiproc(self, pp_executor):
         # Process pools are disabled.
