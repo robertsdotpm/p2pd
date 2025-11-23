@@ -5,6 +5,20 @@ from ...punch_utils import *
 from ...punch_defs import *
 from ......utility.clock_skew import *
 from ......net.asyncio.event_loop import *
+from ..punch_defs import *
+
+def nat_mapping_to_port_alloc(nat_mappings):
+    out = []
+    for m in nat_mappings:
+        out.append(
+            PortAlloc(
+                src_port=m.local,
+                dest_port=m.remote
+            )
+        )
+
+    return out
+
 
 def nat_predict_states(dest_mappings, state):
     # bool of dest_mappings, start state, to state.
@@ -83,7 +97,7 @@ class NATPredictAlloc():
                 )
 
             # Only things needed for protocol.
-            return self.send_mappings
+            return nat_mapping_to_port_alloc(self.send_mappings)
                 
         # Update the mapping to match needed reply ports.
         # Optional step but improves success chance.
@@ -93,13 +107,15 @@ class NATPredictAlloc():
 
             # Adjust our local bind ports if they need a specific
             # reply port to accept a connection.
-            return update_for_reply_ports(
-                self.punch_mode,
-                self.src_nat,
-                self.dest_nat,
-                self.preloaded_mappings,
-                self.recv_mappings,
-                self.send_mappings,
+            return nat_mapping_to_port_alloc(
+                update_for_reply_ports(
+                    self.punch_mode,
+                    self.src_nat,
+                    self.dest_nat,
+                    self.preloaded_mappings,
+                    self.recv_mappings,
+                    self.send_mappings,
+                )
             )
 
     def set_punch_mode(self, dest_ip="192.168.0.100"):
@@ -125,14 +141,14 @@ async def workspace():
     # Load test defaults.
     nat_predict.set_punch_mode()
     nat_predict.set_nat_info()
-    send_mappings = await nat_predict.port_alloc()
-    print(send_mappings)
+    send_alloc = await nat_predict.port_alloc()
+    print(send_alloc)
 
     # Simulate receiving mappings by just using our own.
     # Obviously this is meaningless and real would come from a client.
-    recv_mappings = send_mappings
-    updated_mappings = await nat_predict.port_alloc(recv_mappings)
-    print(updated_mappings) 
+    recv_mappings = nat_predict.send_mappings
+    updated_alloc = await nat_predict.port_alloc(recv_mappings)
+    print(updated_alloc) 
 
 if __name__ == "__main__":
     asyncio.run(workspace())
