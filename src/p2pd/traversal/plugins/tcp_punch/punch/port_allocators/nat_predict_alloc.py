@@ -19,7 +19,6 @@ def nat_mapping_to_port_alloc(nat_mappings):
 
     return out
 
-
 def nat_predict_states(dest_mappings, state):
     # bool of dest_mappings, start state, to state.
     progressions = [
@@ -55,6 +54,10 @@ class NATPredictAlloc():
         self.stun_clients = stun_clients
         self.side = self.state = None
         self.src_nat = self.dest_nat = None
+        self.recv_mappings = []
+        self.preloaded_mappings = []
+        self.self_mappings = []
+
 
     def set_nat_info(self, src_nat=None, dest_nat=None):
         nat_default = nat_info(RESTRICT_PORT_NAT, delta_info(EQUAL_DELTA, 0))
