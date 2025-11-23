@@ -49,9 +49,6 @@ from .port_allocators.boundary_alloc import *
 from .engines.tcp_selector_simple.engine import *
 from .punch_utils import *
 
-parser = argparse.ArgumentParser(description="Test main punching algorithm")
-parser.add_argument("--dest_ip", type=str, required=True, help="Dest IP to punch to")
-
 # TODO: Could even use ARP to find the other node in a LAN
 # running the same tool so the dest IP doesn't have to be specified.
 class Punch():
