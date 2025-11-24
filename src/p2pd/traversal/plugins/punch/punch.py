@@ -52,7 +52,7 @@ from ..generic.plugin import GenericPlugin
 
 # TODO: Could even use ARP to find the other node in a LAN
 # running the same tool so the dest IP doesn't have to be specified.
-class PunchPlugin(GenericPlugin):
+class Punch(GenericPlugin):
     def __init__(self, dest_ip, src_ip=None):
         # Fallback to IP4
         self.af = socket.AF_INET

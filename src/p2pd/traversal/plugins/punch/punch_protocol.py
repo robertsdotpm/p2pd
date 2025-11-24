@@ -10,11 +10,12 @@ addressing details. It should only focus on its own logic and returning a messag
 (if any), the routing layer can handle --filling in-- addresses.
 
 same_machine should be set in the routing layer (and come in the message too)
+
+do same treatment of punch_process -- simplify this code
 """
 
 from ....utility.utils import *
 from ....net.net_utils import *
-from ....net.pipe.pipe_events import PipeEvents
 from ....nic.nat.nat_predict import *
 from ...signaling.signal_msgs import PunchMsg, DoneMsg
 from .punch_defs import *
@@ -47,9 +48,22 @@ pipe = await tunnel.node.pipes[pipe_id]
 
     # Close pipe if ping times out.
     return pipe
+
+    old code:
+        add puncher pipe_id to queue
+        punch queue worker gets pipe_id
+        calls puncher.setup_punching_process()
+
+    why?
+        if the node is busy because the process pool is full then it will
+        likely miss the punchers waiting for empty slots and you can just
+        submit it to the pool that will schedule the job anyway? likewise,
+        for thread pool executor?
+
+    new code:
+        should just call the punching process start directly.
+
 """
-
-
 
 class PunchProtocol():
     def __init__(self, stun_clients, sys_clock=SysClock(None, Dec("0.1")), proc_pool=None):
