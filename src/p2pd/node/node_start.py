@@ -17,9 +17,9 @@ from ..traversal.signaling.signal_protocol import *
 from ..traversal.signaling.signal_utils import *
 from ..traversal.signaling.signal_sender import *
 from ..utility.clock_skew import SysClock
-from ..traversal.plugins.tcp_punch.punch_init import setup_punch_coordination
-from ..traversal.plugins.tcp_punch.punch_init import start_punch_worker
-from ..traversal.plugins.tcp_punch.punch_client import TCPPuncher
+from ..traversal.plugins.punch.punch_init import setup_punch_coordination
+from ..traversal.plugins.punch.punch_init import start_punch_worker
+from ..traversal.plugins.punch.punch_client import TCPPuncher
 
 async def node_start(node, sys_clock=None, out=False, cout=print):
     # Load ifs.

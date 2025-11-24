@@ -1,11 +1,10 @@
 import asyncio
 import copy
-from ......nic.nat.nat_predict import *
-from ...punch_utils import *
-from ...punch_defs import *
-from ......utility.clock_skew import *
-from ......net.asyncio.event_loop import *
+from .....nic.nat.nat_predict import *
+from ..utility.punch_utils import *
 from ..punch_defs import *
+from .....utility.clock_skew import *
+from .....net.asyncio.event_loop import *
 
 def nat_mapping_to_port_alloc(nat_mappings):
     out = []

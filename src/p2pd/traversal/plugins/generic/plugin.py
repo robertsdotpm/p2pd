@@ -17,6 +17,7 @@ class GenericPlugin():
         self.listen_pipe = None
         self.ping_pong_task = None
         self.stun_clients = None
+        self.same_machine = False
 
     def set_stun_clients(self, stun_clients):
         self.stun_clients = stun_clients
@@ -26,6 +27,7 @@ class GenericPlugin():
         self.src_info = src_info
         self.dest_info = dest_info
         self.nic = nic
+        self.same_machine = same_machine
 
     def setup_multiproc(self, pp_executor):
         # Process pools are disabled.

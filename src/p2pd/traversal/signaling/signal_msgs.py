@@ -3,7 +3,7 @@ from ecdsa import VerifyingKey
 from ...utility.utils import *
 from ...net.net_utils import *
 from ...net.ip_range import IPRange
-from ..plugins.tcp_punch.punch_defs import *
+from ..plugins.punch.punch_defs import *
 from ...node.node_addr import *
 from .signal_defs import *
 
