@@ -47,9 +47,9 @@ def nat_predict_states(dest_mappings, state):
     raise Exception("Invalid nat predict state progression.")
 
 class NATPredictAlloc():
-    def __init__(self, stun_clients, same_machine=False):
+    def __init__(self, stun_clients):
         self.af = stun_clients[0].af
-        self.same_machine = same_machine
+        self.same_machine = False
         self.stun_clients = stun_clients
         self.side = self.state = None
         self.src_nat = self.dest_nat = None
@@ -121,7 +121,7 @@ class NATPredictAlloc():
                 ), 1
             )
 
-    def set_punch_mode(self, dest_ip="192.168.0.100"):
+    def set_punch_mode(self, same_machine, dest_ip="192.168.0.100"):
         self.punch_mode = get_punch_mode(
             self.af,
             str(dest_ip),

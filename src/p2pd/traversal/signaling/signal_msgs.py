@@ -42,7 +42,7 @@ class SigMsg():
 
     # Information about the message sender.
     class Meta():
-        def __init__(self, ttl, pipe_id, af, src_buf, src_index=0, addr_types=[EXT_BIND, NIC_BIND]):
+        def __init__(self, ttl=0, pipe_id=b"", af=IP4, src_buf=b"", src_index=0, addr_types=[EXT_BIND, NIC_BIND]):
             # Load meta data about message.
             self.ttl = to_n(ttl)
             self.pipe_id = to_s(pipe_id)
@@ -51,7 +51,8 @@ class SigMsg():
             self.af = af
             self.same_machine = False
             self.addr_types = addr_types
-            self.load_src_addr()
+            if src_buf:
+                self.load_src_addr()
 
         def load_src_addr(self):
             # Parse src_buf to addr.
@@ -79,22 +80,23 @@ class SigMsg():
         @staticmethod
         def from_dict(d):
             return SigMsg.Meta(
-                d["ttl"],
-                d["pipe_id"],
+                d.get("ttl", 0),
+                d.get("pipe_id", b""),
                 d.get("af", IP4),
-                d["src_buf"],
+                d.get("src_buf", b""),
                 d.get("src_index", 0),
                 d.get("addr_types", [EXT_BIND, NIC_BIND]),
             )
 
     # The destination node for this msg.
     class Routing():
-        def __init__(self, af, dest_buf, dest_index=0):
+        def __init__(self, af=IP4, dest_buf=b"", dest_index=0):
             self.dest_buf = to_s(dest_buf)
             self.dest_index = to_n(dest_index)
             self.af = af
-            self.set_cur_dest(dest_buf)
-            self.cur_dest_buf = None # set later.
+            if dest_buf:
+                self.set_cur_dest(dest_buf)
+                self.cur_dest_buf = None # set later.
 
         def load_if_extra(self, node):
             if_index = self.dest_index
@@ -129,7 +131,7 @@ class SigMsg():
         def from_dict(d):
             return SigMsg.Routing(
                 d.get("af", IP4),
-                d["dest_buf"],
+                d.get("dest_buf", b""),
                 d.get("dest_index", 0),
             )
 
@@ -147,11 +149,11 @@ class SigMsg():
 
     def __init__(self, data, enum):
         self.meta = SigMsg.Meta.from_dict(
-            data["meta"]
+            data.get("meta", {})
         )
 
         self.routing = SigMsg.Routing.from_dict(
-            data["routing"]
+            data.get("routing", {})
         )
 
         self.payload = self.Payload.from_dict(

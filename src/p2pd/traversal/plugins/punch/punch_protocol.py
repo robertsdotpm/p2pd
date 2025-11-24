@@ -8,6 +8,8 @@ So something that introduces huge complexity: routing logic has been added
 to every function. The functions should not need to care about the destination
 addressing details. It should only focus on its own logic and returning a message
 (if any), the routing layer can handle --filling in-- addresses.
+
+same_machine should be set in the routing layer (and come in the message too)
 """
 
 from ....utility.utils import *
@@ -54,7 +56,7 @@ class PunchProtocol():
         self.stun_clients = stun_clients # af if index
         self.sys_clock = sys_clock
         self.proc_pool = proc_pool
-        self.punch_clients = []
+        self.punch_clients = {}
         self.active_punchers = 0
         self.node = None
         self.tasks = []
@@ -62,7 +64,7 @@ class PunchProtocol():
     def set_node(self, node=None):
         self.node = node
 
-    async def protocol(self, af=IP4, pipe_id=b"pipe", src_info=None, dest_info=None, nic=None, addr_type=NIC_BIND, reply=None):
+    async def protocol(self, af=IP4, pipe_id=b"pipe", src_info=None, dest_info=None, nic=None, addr_type=NIC_BIND, same_machine=False, reply=None):
         # Load TCP punch client for this pipe ID.
         if pipe_id in self.punch_clients:
             puncher = self.punch_clients[pipe_id]
@@ -101,6 +103,10 @@ class PunchProtocol():
 
             # Internal NAT prediction port allocator.
             puncher.nat_predict_alloc = NATPredictAlloc(stuns)
+            puncher.nat_predict_alloc.set_punch_mode(
+                same_machine,
+                dest_info["ip"]
+            )
 
         # Extract any received payload attributes.
         if reply is not None:
@@ -141,27 +147,28 @@ class PunchProtocol():
         """
 
         # Forward protocol details to peer.
-        mappings = [m.toJSON() for m in ret[0]]
+        mappings = [m.toJSON() for m in puncher.nat_predict_alloc.send_mappings]
+
+        """
+        "meta": {
+            #"ttl": int(self.sys_clock.time()) + 30,
+            #"pipe_id": pipe_id,
+            #"af": af,
+            #"src_buf": tunnel.src_bytes,
+            #"src_index": src_info["if_index"],
+            #"addr_types": [addr_type],
+        },
+        "routing": {
+            #"af": af,
+            #"dest_buf": tunnel.dest_bytes,
+            #"dest_index": dest_info["if_index"],
+        },
+        """
 
         # Protocol layer fills in meta and routing info.
         msg = TCPPunchMsg({
-            "meta": {
-                #"ttl": int(self.sys_clock.time()) + 30,
-                #"pipe_id": pipe_id,
-                #"af": af,
-                #"src_buf": tunnel.src_bytes,
-                #"src_index": src_info["if_index"],
-                #"addr_types": [addr_type],
-            },
-            "routing": {
-                #"af": af,
-                #"dest_buf": tunnel.dest_bytes,
-                #"dest_index": dest_info["if_index"],
-            },
             "payload": {
-                "punch_mode": puncher.punch_mode,
-                #"ntp": ret[1],
-                "ntp": "0",
+                "punch_mode": puncher.nat_predict_alloc.punch_mode,
                 "mappings": mappings,
             },
         })
@@ -174,14 +181,14 @@ async def tcp_punch_cleanup(tunnel, af, pipe_id, src_info, dest_info, nic, addr_
         tunnel.node.active_punchers - 1
     )
 
-
 async def build_punch_proto(af):
     nic = await Interface()
     stun_clients = await get_n_stun_clients(
         af=af,
         n=1,
         interface=nic,
-        proto=TCP
+        proto=TCP,
+        conf=PUNCH_CONF
     )
 
     stun_client_table = {
@@ -192,7 +199,11 @@ async def build_punch_proto(af):
 
     sys_clock = SysClock(nic, Dec("0.1"))
     _, proc_pool = await get_pp_executors()
-    punch_proto = PunchProtocol(stun_client_table, proc_pool=proc_pool)
+    punch_proto = PunchProtocol(
+        stun_client_table, 
+        proc_pool=proc_pool,
+    )
+
     punch_proto.nic = nic
     return punch_proto
 
@@ -200,16 +211,20 @@ async def workspace():
     af = IP4
     punch_proto = await build_punch_proto(af)
     src_info = dest_info = {
-        "if_index": 0
+        "if_index": 0,
+        "ip": "127.0.0.1"
     }
 
     send_msg = await punch_proto.protocol(
         src_info=src_info,
         dest_info=dest_info,
-        nic=punch_proto.nic
+        nic=punch_proto.nic,
+        same_machine=True,
     )
 
-    print(send_msg)
+
+
+    print(send_msg.to_dict())
 
 if __name__ == "__main__":
     async_run(workspace())
