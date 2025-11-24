@@ -203,7 +203,11 @@ class SigMsg():
         if sid == did:
             self.meta.same_machine = True
 
-class TCPPunchMsg(SigMsg):
+class DoneMsg(SigMsg):
+    def __init__(self, data=None, enum=SIG_DONE):
+        super().__init__({}, SIG_DONE)
+
+class PunchMsg(SigMsg):
     # The main contents of this message.
     class Payload():
         def __init__(self, punch_mode, ntp, mappings):
@@ -220,7 +224,7 @@ class TCPPunchMsg(SigMsg):
         
         @staticmethod
         def from_dict(d):
-            return TCPPunchMsg.Payload(
+            return PunchMsg.Payload(
                 d.get("punch_mode", TCP_PUNCH_REMOTE),
                 d.get("ntp", 0),
                 d["mappings"],

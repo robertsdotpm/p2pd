@@ -16,7 +16,7 @@ from ....utility.utils import *
 from ....net.net_utils import *
 from ....net.pipe.pipe_events import PipeEvents
 from ....nic.nat.nat_predict import *
-from ...signaling.signal_msgs import TCPPunchMsg
+from ...signaling.signal_msgs import PunchMsg, DoneMsg
 from .punch_defs import *
 from .utility.punch_utils import *
 from .punch import *
@@ -103,9 +103,11 @@ class PunchProtocol():
 
             # Internal NAT prediction port allocator.
             puncher.nat_predict_alloc = NATPredictAlloc(stuns)
+            puncher.nat_predict_alloc.set_nat_info(
+                src_info["nat"], dest_info["nat"]
+            )
             puncher.nat_predict_alloc.set_punch_mode(
-                same_machine,
-                dest_info["ip"]
+                same_machine, dest_info["ip"]
             )
 
         # Extract any received payload attributes.
@@ -123,7 +125,7 @@ class PunchProtocol():
         
         # Protocol done -- return nothing.
         if is_end == 1:
-            return PipeEvents(None)
+            return DoneMsg()
 
         # Increase active punchers.
         self.active_punchers += 1
@@ -166,7 +168,7 @@ class PunchProtocol():
         """
 
         # Protocol layer fills in meta and routing info.
-        msg = TCPPunchMsg({
+        msg = PunchMsg({
             "payload": {
                 "punch_mode": puncher.nat_predict_alloc.punch_mode,
                 "mappings": mappings,
@@ -212,7 +214,8 @@ async def workspace():
     punch_proto = await build_punch_proto(af)
     src_info = dest_info = {
         "if_index": 0,
-        "ip": "127.0.0.1"
+        "ip": "127.0.0.1",
+        "nat": nat_info(RESTRICT_PORT_NAT, delta_info(EQUAL_DELTA, 0))
     }
 
     send_msg = await punch_proto.protocol(
@@ -222,9 +225,21 @@ async def workspace():
         same_machine=True,
     )
 
-
+    """
+    Pretend out send msg is actually a reply
+    from another machine giving us their updated mappings.
+    It's our own mappings but this helps test code paths.
+    """
+    out = await punch_proto.protocol(
+        src_info=src_info,
+        dest_info=dest_info,
+        nic=punch_proto.nic,
+        same_machine=True,
+        reply=send_msg
+    )
 
     print(send_msg.to_dict())
+    print(out)
 
 if __name__ == "__main__":
     async_run(workspace())
