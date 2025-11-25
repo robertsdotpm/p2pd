@@ -265,46 +265,77 @@ def start_punch_worker(node, puncher_cls):
         punch_queue_worker(node, puncher_cls)
     )
 
-def wait_for_one_remaining(sockets, timeout=None, retry_interval=0.05):
+def wait_for_one_remaining(sockets, timeout=None):
     """
     Wait until only one socket remains open from a list of non-blocking TCP sockets.
-    Returns that last open socket.
+    Returns the last open socket.
     
     sockets: list of non-blocking TCP socket objects
     timeout: optional total timeout in seconds
     """
-    sel = selectors.DefaultSelector()
-    
-    # Register all sockets for readability
-    for s in sockets:
-        sel.register(s, selectors.EVENT_READ)
-    
-    start_time = time.monotonic()
+    # Handle edge case: if provided 0 or 1 socket initially
+    if len(sockets) <= 1:
+        return sockets[0] if sockets else None
+
     remaining = set(sockets)
-    while len(remaining) > 1:
-        if timeout and (time.monotonic() - start_time) > timeout:
-            raise TimeoutError("Timeout reached before only one socket remained")
-        
-        events = sel.select(timeout=retry_interval)
-        for key, mask in events:
-            s = key.fileobj
-            try:
-                data = s.recv(1)
-                if data == b"":
-                    # socket closed
-                    remaining.discard(s)
+    deadline = time.monotonic() + timeout if timeout else None
+
+    with selectors.DefaultSelector() as sel:
+        # Register all sockets to be notified when they have data/closure
+        for s in sockets:
+            sel.register(s, selectors.EVENT_READ)
+
+        while len(remaining) > 1:
+            # Calculate exact time left for the select call
+            wait_time = None
+            if deadline:
+                wait_time = deadline - time.monotonic()
+                if wait_time <= 0:
+                    raise TimeoutError("Timeout reached before only one socket remained")
+
+            # Block until a socket changes state or timeout expires
+            events = sel.select(timeout=wait_time)
+
+            # If select returns empty list implies timeout expired (if wait_time was set)
+            if not events and deadline:
+                raise TimeoutError("Timeout reached (select expired)")
+
+            for key, _ in events:
+                s = key.fileobj
+                try:
+                    # MSG_PEEK looks at the buffer without consuming data.
+                    # If we get b'', the connection is closed.
+                    data = s.recv(1, socket.MSG_PEEK)
+                    if data == b"":
+                        sel.unregister(s)
+                        remaining.discard(s)
+                        s.close()
+                    else:
+                        # OPTIONAL: The socket has data but isn't closed.
+                        # Depending on your logic, you might want to ignore this
+                        # or treat it as 'still alive'. 
+                        # NOTE: If data is sitting there, select() will return immediately
+                        # causing a busy loop. If you expect data flow, you must read it.
+                        pass 
+                
+                except (BlockingIOError, InterruptedError):
+                    # Resource temporarily unavailable (common in non-blocking)
+                    pass
+                except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+                    # Hard disconnects
                     sel.unregister(s)
+                    remaining.discard(s)
                     s.close()
-            except BlockingIOError:
-                # still open, nothing to read
-                pass
-            except Exception:
-                # treat other exceptions as closure
-                remaining.discard(s)
-                sel.unregister(s)
-                s.close()
-    
-    sel.close()
+                except Exception:
+                    # Catch-all for other socket errors
+                    sel.unregister(s)
+                    remaining.discard(s)
+                    s.close()
+
+    # If all sockets closed during the loop
+    if not remaining:
+        raise ConnectionError("All sockets closed unexpectedly.")
+
     return remaining.pop()
 
 # In a LAN = lan ip, or for WAN targets = wan IPs.
