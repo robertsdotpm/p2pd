@@ -252,10 +252,11 @@ def main():
                     try:
                         conn, addr = sock.accept()
                         conn.setblocking(False)
-                        completed_inbound.add(sock)
-                        # Suppress real-time print. Result will be in final summary.
-                        conn.close()
+                        completed_inbound.add(conn)
                         sel.unregister(sock) # Stop listening on this port
+
+                        # Close listen server sock.
+                        sock.close()
                     except Exception:
                         pass # Ignore temporary errors
 
@@ -269,9 +270,10 @@ def main():
                             #   2. THE FIX: Verify with getpeername()
                             #    If we aren't truly connected, this throws OSError.
                             sock.getpeername()
-                            
+
                             completed_outbound.add(sock)
                             # Suppress real-time print. Result will be in final summary.
+                            
                             sel.unregister(sock) # Stop checking for connection completion
                         else:
                             # Connection failed with error (e.g., ECONNREFUSED)

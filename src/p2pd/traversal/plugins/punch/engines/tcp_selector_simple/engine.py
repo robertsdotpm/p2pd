@@ -134,11 +134,11 @@ def socket_event_monitor(sel):
                 if sock not in inbound:
                     try:
                         # Accept a new client socket from the listener.
-                        conn, addr = sock.accept()
-                        conn.setblocking(False)
+                        client, addr = sock.accept()
+                        client.setblocking(False)
 
                         # Record the socket.
-                        inbound.add(sock)
+                        inbound.add(client)
 
                         # Close the initial server.
                         sock.close()
