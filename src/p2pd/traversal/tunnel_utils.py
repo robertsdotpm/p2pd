@@ -1,5 +1,7 @@
 from ..net.net_utils import *
 from ..utility.utils import *
+from .signaling.signal_msgs import *
+from .signaling.signal_sender import (
 
 f_path_txt = lambda x: "local" if x == NIC_BIND else "external"
 
@@ -108,7 +110,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
     a connection. Adapt the technique depending on whether
     addressing is suitably local or remote.
     """
-    async def try_addr_infos(strat, addr_type, src_info, dest_info):
+    async def try_addr_infos(af, strat, addr_type, src_info, dest_info):
         # Local addressing and/or remote.
         try:
             # Create a future for pending pipes.
@@ -192,6 +194,26 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                 timeout
             )
 
+            if isinstance(result, SigMsg):
+                msg = result
+                msg.meta = SigMsg.Meta.from_dict({
+                    "ttl": int(pp.node.sys_clock.time()) + 30,
+                    "pipe_id": pipe_id,
+                    "af": af,
+                    "src_buf": pp.src_bytes,
+                    "src_index": src_info["if_index"],
+                    "addr_types": [addr_type]
+                })
+
+                msg.routing = SigMsg.Routing.from_dict({
+                    "af": af,
+                    "dest_buf": pp.dest_bytes,
+                    "dest_index": dest_info["if_index"],
+                })
+
+                vk = to_h(pp.node.vk.to_string("compressed"))
+                pp.node.sig_msg_queue.put_nowait([msg, vk, 0])
+
             # Support testing failures for an addr type.
             if do_fail:
                 result = None
@@ -233,7 +255,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                 src_info = pp.src[af][reply.routing.dest_index]
                 dest_info = pp.dest[af][reply.meta.src_index]
                 ret = await async_wrap_errors(
-                    try_addr_infos(strat, addr_type, src_info, dest_info)
+                    try_addr_infos(af, strat, addr_type, src_info, dest_info)
                 )
 
                 return ret, addr_type
@@ -283,3 +305,5 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                     
     # Failure.
     return None, None
+
+# TODO: make this work with everything.

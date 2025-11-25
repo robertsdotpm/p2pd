@@ -8,23 +8,6 @@ from .punch import *
 from .port_allocators.nat_predict_alloc import *
 from .punch_process import *
 
-"""  
-        "meta": {
-            #"ttl": int(self.sys_clock.time()) + 30,
-            #"pipe_id": pipe_id,
-            #"af": af,
-            #"src_buf": tunnel.src_bytes,
-            #"src_index": src_info["if_index"],
-            #"addr_types": [addr_type],
-        },
-        "routing": {
-            #"af": af,
-            #"dest_buf": tunnel.dest_bytes,
-            #"dest_index": dest_info["if_index"],
-        },
-        
-"""
-
 class PunchProtocol():
     def __init__(self, stun_clients, sys_clock=SysClock(None, Dec("0.1")), proc_pool=None):
         self.stun_clients = stun_clients # af if index
@@ -122,7 +105,6 @@ class PunchProtocol():
         mappings = [m.toJSON() for m in puncher.nat_predict_alloc.send_mappings]
 
         # Protocol layer fills in meta and routing info.
-        # TODO: protocol layer now has to fill in meta and routing info.
         msg = PunchMsg({
             "payload": {
                 "punch_mode": puncher.nat_predict_alloc.punch_mode,
