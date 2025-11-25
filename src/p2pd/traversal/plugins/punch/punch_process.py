@@ -1,11 +1,3 @@
-"""
-The current design doesn't make sense.
-The code returns a socket from a process but creates a listen server because 
-to route to that process. its easier to pass the socket using send / recv handle
-
-
-"""
-
 import multiprocessing as mp
 import socket
 from multiprocessing.reduction import send_handle, recv_handle

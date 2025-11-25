@@ -1,19 +1,3 @@
-"""
-This function has too many references to Node which itself is a super manager object.
-I shouldn't have to initiate a full node to test this.
-Can the params take just what it needs. What would a pure, functional refactor
-look like to make testing as easy as possible?
-
-So something that introduces huge complexity: routing logic has been added
-to every function. The functions should not need to care about the destination
-addressing details. It should only focus on its own logic and returning a message
-(if any), the routing layer can handle --filling in-- addresses.
-
-same_machine should be set in the routing layer (and come in the message too)
-
-do same treatment of punch_process -- simplify this code
-"""
-
 from ....utility.utils import *
 from ....net.net_utils import *
 from ....nic.nat.nat_predict import *
@@ -24,47 +8,7 @@ from .punch import *
 from .port_allocators.nat_predict_alloc import *
 from .punch_process import *
 
-"""
-tunnel.src_bytes,
-src_info["if_index"],
-[addr_type],
-tunnel.dest_bytes,
-dest_info["if_index"],
-puncher.punch_mode,
-tunnel.node.sig_msg_queue.put_nowait([msg, None , 2])
-
-pipe = await tunnel.node.pipes[pipe_id]
-
-
-        # Watch this pipe for idleness.
-        tunnel.node.last_recv_table[pipe.sock] = time.time()
-        tunnel.node.last_recv_queue.append(pipe)
-
-    # Prevent protocol loop.
-    pipe = await tunnel.node.pipes[pipe_id]
-
-    # Watch this pipe for idleness.
-    tunnel.node.last_recv_table[pipe.sock] = time.time()
-    tunnel.node.last_recv_queue.append(pipe)
-
-    # Close pipe if ping times out.
-    return pipe
-
-    old code:
-        add puncher pipe_id to queue
-        punch queue worker gets pipe_id
-        calls puncher.setup_punching_process()
-
-    why?
-        if the node is busy because the process pool is full then it will
-        likely miss the punchers waiting for empty slots and you can just
-        submit it to the pool that will schedule the job anyway? likewise,
-        for thread pool executor?
-
-    new code:
-        should just call the punching process start directly.
-
-        
+"""  
         "meta": {
             #"ttl": int(self.sys_clock.time()) + 30,
             #"pipe_id": pipe_id,
@@ -178,6 +122,7 @@ class PunchProtocol():
         mappings = [m.toJSON() for m in puncher.nat_predict_alloc.send_mappings]
 
         # Protocol layer fills in meta and routing info.
+        # TODO: protocol layer now has to fill in meta and routing info.
         msg = PunchMsg({
             "payload": {
                 "punch_mode": puncher.nat_predict_alloc.punch_mode,
