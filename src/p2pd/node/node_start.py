@@ -17,9 +17,6 @@ from ..traversal.signaling.signal_protocol import *
 from ..traversal.signaling.signal_utils import *
 from ..traversal.signaling.signal_sender import *
 from ..utility.clock_skew import SysClock
-from ..traversal.plugins.punch.punch_init import setup_punch_coordination
-from ..traversal.plugins.punch.punch_init import start_punch_worker
-from ..traversal.plugins.punch.punch_client import TCPPuncher
 
 async def node_start(node, sys_clock=None, out=False, cout=print):
     # Load ifs.
@@ -83,6 +80,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     # Used by TCP punch clients.
     if node.conf.get("enable_punching", True):
         if out: cout("\tLoading STUN clients...")
+        # Returns TCP STUN clients using PUNCH_CONF.
         await load_stun_clients(node)
         if out:
             buf = ""
@@ -128,10 +126,6 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     if node.conf.get("init_clock_skew", True):
         clock_skew = str(node.sys_clock.clock_skew)
         if out: cout(fstr("\t\tClock skew = {0}", (clock_skew,)))
-        
-    # Accept TCP punch requests.
-    if node.conf.get("enable_punching", True):
-        start_punch_worker(node, TCPPuncher)
 
     # Start worker that forwards sig proto messages.
     if node.conf["sig_pipe_no"]:

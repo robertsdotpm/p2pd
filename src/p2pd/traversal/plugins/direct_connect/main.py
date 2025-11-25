@@ -5,7 +5,7 @@ from ....net.address import Address
 from ....net.pipe.pipe import *
 from ....node.node_defs import *
 
-async def direct_connect(tunnel, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
+async def direct_connect(tunnel, af, pipe_id, src_info, dest_info, iface, addr_type, rsame_machine, reply=None):
     # Connect to this address.
     dest = (
         str(dest_info["ip"]),

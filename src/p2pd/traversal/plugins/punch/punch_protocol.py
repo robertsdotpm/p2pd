@@ -95,7 +95,7 @@ class PunchProtocol():
         await asyncio.sleep(3)
         await start_punching_process(nic, puncher, self.proc_pool)
 
-    async def protocol(self, af=IP4, pipe_id=b"pipe", src_info=None, dest_info=None, nic=None, addr_type=NIC_BIND, same_machine=False, reply=None):
+    async def protocol(self, pp=None, af=IP4, pipe_id=b"pipe", src_info=None, dest_info=None, nic=None, addr_type=NIC_BIND, same_machine=False, reply=None):
         # Load TCP punch client for this pipe ID.
         if pipe_id in self.punch_clients:
             puncher = self.punch_clients[pipe_id]
@@ -117,9 +117,17 @@ class PunchProtocol():
             if not len(stuns):
                 return None
             
+            # Figure out addressing for sockets.
+            # Dest IP runs select dest IPR to contextually determine best IP.
+            route = await nic.bind(af)
+            dest_ip = dest_info["ip"]
+            if "fe80" == dest_ip:
+                src_ip = str(route.link_locals[0])
+            else:
+                src_ip = route.nic()
+
             # Create a new puncher for this pipe ID.
-            # TODO: this needs to specify the right bind ip for src_ip
-            puncher = Punch(dest_info["ip"], src_info["ip"], src_info["ip"])
+            puncher = Punch(dest_ip, src_ip, route.exe())
 
             # Set current unix time using NTP as a reference.
             timestamp = self.sys_clock.time()

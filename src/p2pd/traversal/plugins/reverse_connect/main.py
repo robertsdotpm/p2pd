@@ -1,6 +1,6 @@
 from ...signaling.signal_msgs import ConMsg
 
-async def reverse_connect(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
+async def reverse_connect(self, af, pipe_id, src_info, dest_info, iface, addr_type, same_machine, reply=None):
     msg = ConMsg({
         "meta": {
             "ttl": int(self.node.sys_clock.time()) + 10,

@@ -1,12 +1,11 @@
 import asyncio
 from ..net.pipe.pipe_events import PipeEvents
 from ..node.node_addr import *
-from .plugins.punch.punch_client import *
 from ..protocol.turn.turn_client import TURNClient
 from .tunnel_utils import *
 from ..node.node_protocol import *
 from .plugins.direct_connect.main import direct_connect
-from .plugins.punch.punch.proto import tcp_hole_punch, tcp_punch_cleanup
+from .plugins.punch.punch_protocol import PunchProtocol
 from .plugins.turn.main import udp_turn_relay, turn_cleanup
 from .plugins.reverse_connect.main import reverse_connect
 from ..node.nickname import *
@@ -46,6 +45,13 @@ class Tunnel():
         else:
             self.same_machine = False
 
+        # Encapsulate stun proto details.
+        self.punch_proto = PunchProtocol(
+            self.node.stun_clients,
+            self.node.sys_clock,
+            self.node.pp_executor
+        )
+
         # Mapping for funcs over addr infos.
         # Loop over the most likely strategies left.
         # func, timeout, cleanup, same_if, max_pairs
@@ -56,8 +62,8 @@ class Tunnel():
 
             # Large timeout for meetings with a state cleanup.
             # <20 timeout can cause timeouts for punching.
-            P2P_PUNCH: [tcp_hole_punch, 20,
-                        tcp_punch_cleanup, 0, 4, "punch"],
+            # todo: add cleanup back in
+            P2P_PUNCH: [self.punch_proto.protocol, 20, None, 0, 4, "punch"],
 
             # Large timeout, end refreshers, disable LAN cons.
             # <20 timeout can cause timeouts for relay setup.

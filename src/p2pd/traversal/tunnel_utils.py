@@ -186,6 +186,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                     dest_info,
                     interface,
                     addr_type,
+                    pp.same_machine,
                     reply,
                 ),
                 timeout

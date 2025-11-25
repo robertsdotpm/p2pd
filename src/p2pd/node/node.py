@@ -39,15 +39,10 @@ class Node(Daemon):
 
         # Main pipe connections.
         self.pipes = {} # by pipe_id
-        self.tcp_punch_clients = {} # by if_index
         self.turn_clients = {} # by pipe_id
         self.signal_pipes = {} # by MQTT_SERVERS index
 
         # Pending TCP punch queue.
-        self.punch_queue = asyncio.Queue()
-        self.punch_worker_task = None
-        self.active_punchers = 0
-        self.max_punchers = 0
         self.pp_executor = None
 
         # Signal protocol class instance.
