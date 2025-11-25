@@ -265,78 +265,41 @@ def start_punch_worker(node, puncher_cls):
         punch_queue_worker(node, puncher_cls)
     )
 
-def wait_for_one_remaining(sockets, timeout=None):
+def wait_for_one_remaining(sockets, timeout=5.0):
     """
-    Wait until only one socket remains open from a list of non-blocking TCP sockets.
-    Returns the last open socket.
-    
-    sockets: list of non-blocking TCP socket objects
-    timeout: optional total timeout in seconds
+    Waits up to 5 seconds for all but one socket to close.
+    Does NOT close the sockets locally.
     """
-    # Handle edge case: if provided 0 or 1 socket initially
-    if len(sockets) <= 1:
-        return sockets[0] if sockets else None
-
+    sel = selectors.DefaultSelector()
     remaining = set(sockets)
-    deadline = time.monotonic() + timeout if timeout else None
+    
+    for s in sockets:
+        sel.register(s, selectors.EVENT_READ)
 
-    with selectors.DefaultSelector() as sel:
-        # Register all sockets to be notified when they have data/closure
-        for s in sockets:
-            sel.register(s, selectors.EVENT_READ)
+    deadline = time.monotonic() + timeout
 
-        while len(remaining) > 1:
-            # Calculate exact time left for the select call
-            wait_time = None
-            if deadline:
-                wait_time = deadline - time.monotonic()
-                if wait_time <= 0:
-                    raise TimeoutError("Timeout reached before only one socket remained")
+    while len(remaining) > 1:
+        wait_time = deadline - time.monotonic()
+        if wait_time <= 0:
+            break # Hard stop at 5 seconds
 
-            # Block until a socket changes state or timeout expires
-            events = sel.select(timeout=wait_time)
-
-            # If select returns empty list implies timeout expired (if wait_time was set)
-            if not events and deadline:
-                raise TimeoutError("Timeout reached (select expired)")
-
-            for key, _ in events:
-                s = key.fileobj
-                try:
-                    # MSG_PEEK looks at the buffer without consuming data.
-                    # If we get b'', the connection is closed.
-                    data = s.recv(1, socket.MSG_PEEK)
-                    if data == b"":
-                        sel.unregister(s)
-                        remaining.discard(s)
-                        s.close()
-                    else:
-                        # OPTIONAL: The socket has data but isn't closed.
-                        # Depending on your logic, you might want to ignore this
-                        # or treat it as 'still alive'. 
-                        # NOTE: If data is sitting there, select() will return immediately
-                        # causing a busy loop. If you expect data flow, you must read it.
-                        pass 
-                
-                except (BlockingIOError, InterruptedError):
-                    # Resource temporarily unavailable (common in non-blocking)
-                    pass
-                except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
-                    # Hard disconnects
-                    sel.unregister(s)
+        events = sel.select(timeout=wait_time)
+        for key, _ in events:
+            s = key.fileobj
+            try:
+                # Peek to see if it's empty (closed) without consuming data
+                if s.recv(1, socket.MSG_PEEK) == b"":
                     remaining.discard(s)
-                    s.close()
-                except Exception:
-                    # Catch-all for other socket errors
                     sel.unregister(s)
-                    remaining.discard(s)
-                    s.close()
+            except Exception:
+                # Any error (connection reset, etc) counts as "gone"
+                remaining.discard(s)
+                sel.unregister(s)
 
-    # If all sockets closed during the loop
-    if not remaining:
-        raise ConnectionError("All sockets closed unexpectedly.")
-
-    return remaining.pop()
+    sel.close()
+    
+    # Return the winner, or None if everyone died/timed out
+    return list(remaining)[0] if remaining else None
 
 # In a LAN = lan ip, or for WAN targets = wan IPs.
 def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
