@@ -1,9 +1,15 @@
 """
 The current design doesn't make sense.
 The code returns a socket from a process but creates a listen server because 
-to route to that process
+to route to that process. its easier to pass the socket using send / recv handle
+
 
 """
+
+import multiprocessing as mp
+import socket
+from multiprocessing.reduction import send_handle, recv_handle
+import os
 
 import asyncio
 from ....nic.nat.nat_predict import *
@@ -13,105 +19,8 @@ from ....utility.clock_skew import *
 from ....net.asyncio.event_loop import *
 from ....net.pipe.pipe import *
 from ....node.node_defs import *
+from .engines.tcp_selector_simple.engine import *
 
-async def start_punching(af, dest_addr, send_mappings, recv_mappings, current_ntp, ntp_meet, mode, interface, reverse_tup, has_success, node_id):
-    try:
-        warnings.filterwarnings('ignore', message="unclosed", category=ResourceWarning)
-
-        # Set our WAN address from default route.
-        our_wan = interface.route(af).ext()
-
-        # Wait for NTP punching time.
-        if ntp_meet:
-            assert(current_ntp)
-            await wait_for_punch_time(current_ntp, ntp_meet)
-        else:
-            log_exception("ntp meet time is 0!")
-
-
-        """
-        If punching to our self or a machine on the LAN
-        then the ir remote port doesn't apply. Punch to
-        their local port instead.
-        """
-        if mode == TCP_PUNCH_LAN:
-            for mapping in recv_mappings:
-                mapping.remote = mapping.local
-
-        # Log warning messages.
-        punching_sanity_check(
-            mode=mode,
-            our_wan=our_wan,
-            dest_addr=dest_addr,
-            send_mappings=send_mappings,
-            recv_mappings=recv_mappings,
-        )
-
-        #print(interface)
-        #print("schedule delayed punching", 
-        #send_mappings, recv_mappings)
-
-        # Carry out TCP punching.
-        outs = await schedule_delayed_punching(
-            af=af,
-            dest_addr=dest_addr,
-            send_mappings=send_mappings,
-            recv_mappings=recv_mappings,
-            interface=interface,
-        )
-
-        # Make both sides choose the same socket.
-        sock = choose_same_punch_sock(our_wan, outs)
-        if sock is None:
-            log("> tcp punch chosen sock is none")
-            return None
-        
-        # Log punch upstream.
-        local_tup = sock.getsockname()[:2]
-        remote_tup = sock.getpeername()[:2]
-        msg = fstr("<punch> Upstream {0} = {1}", (local_tup, remote_tup,))
-        msg += fstr(" on '{0}'", (interface.name,))
-        log_p2p(msg, node_id)
-
-        # Punched hole to the remote node.
-        route = await interface.route(af).bind(sock.getsockname()[1])
-        upstream_dest = sock.getpeername()[:2]
-        upstream_pipe = await Pipe(TCP, upstream_dest, route, sock=sock).connect(
-            punch_close_msg
-        )
-
-        # Reverse connect to a listen server in parent process.
-        # This avoids sharing between processes which breaks easily.
-        route = await interface.route(af).bind()
-        client_pipe = await Pipe(TCP, reverse_tup, route).connect(
-            punch_close_msg
-        )
-
-        async def forward_to_client_pipe(msg, client_tup, pipe):
-            await client_pipe.send(msg, client_pipe.sock.getpeername())
-
-        async def forward_to_upstream_pipe(msg, client_tup, pipe):
-            await upstream_pipe.send(msg, upstream_pipe.sock.getpeername())
-
-        upstream_pipe.add_msg_cb(forward_to_client_pipe)
-        client_pipe.add_msg_cb(forward_to_upstream_pipe)
-        upstream_pipe.unsubscribe(SUB_ALL)
-        client_pipe.unsubscribe(SUB_ALL)
-
-        # Prevent this process from exiting.
-        has_success.set()
-        while not shut_down.is_set():
-            await asyncio.sleep(1)
-
-            # Exit loop if chain breaks.
-            if False in [client_pipe.is_running, upstream_pipe.is_running]:
-                break
-                
-        # Ensure cleanup for pipes.
-        await client_pipe.close()
-        await upstream_pipe.close()
-    except Exception:
-        log_exception()
 
 # Started in a new process.
 """
@@ -122,6 +31,22 @@ This is the intention and not a bug!
 This code disables that warning.
 """
 def punching_process_entry(args):
+    child_con = args[-1]
+    puncher = args[0]
+    socks = puncher.run_engine(tcp_selector_punch_engine)
+    
+
+
+
+
+
+    send_handle(child_con, s.fileno(), os.getppid())
+
+    # close worker copy
+    s.close()
+
+    print("proc entry")
+    return
     try:
         """
         On Windows it seems like using the default 'proactor event loop'
@@ -220,29 +145,36 @@ def punching_process_entry(args):
     except Exception:
         log_exception()
 
-async def spawn_punching_process(proc_pool):
+async def start_punching_process(args, f_target=punching_process_entry, proc_pool=None):
+    parent_con, child_con = mp.Pipe()
+    args += (child_con,)
+
+    # Schedule TCP punching in process pool executor.
+    loop = asyncio.get_event_loop()
+    future = loop.run_in_executor(
+        proc_pool,
+        f_target,
+        args
+    )
+
+    #await future
+    fd = recv_handle(parent_con)
+    s = socket.socket(fileno=fd)
+    print(s)
+
 
     print("hello world.")
     return
     # Passed on to a new process.
-    listen_tup = client.listen_pipe.sock.getsockname()[:2]
+
     args = (
         puncher_class,
-        listen_tup,
         client.to_dict(),
         interface,
         client.node.node_id[:8]
     )
 
     try:
-        # Schedule TCP punching in process pool executor.
-        loop = asyncio.get_event_loop()
-        puncher_future = loop.run_in_executor(
-            client.pp_executor,
-            proc_do_punching,
-            args
-        )
-        
         # Check every 100 ms for 5 seconds.
         while not shut_down.is_set():
             try:
@@ -283,9 +215,9 @@ async def spawn_punching_process(proc_pool):
 
 
 async def workspace():
-    proc_pool = await get_pp_executors()
-    await spawn_punching_process(proc_pool)
-
+    _, proc_pool = await get_pp_executors()
+    future = await spawn_punching_process(args=(), proc_pool=proc_pool)
+    print(future)
 
 if __name__ == "__main__":
     async_run(workspace())

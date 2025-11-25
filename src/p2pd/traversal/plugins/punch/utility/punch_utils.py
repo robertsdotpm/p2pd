@@ -17,7 +17,7 @@ NTP_PACKET_SIZE = 48
 MAX_NTP_RETRIES = 5
 NTP_TIMEOUT = 1.0
 
-def get_ntp_time(server=NTP_SERVER, port=NTP_PORT, retries=MAX_NTP_RETRIES, timeout=NTP_TIMEOUT):
+def timestamp_from_ntp(server=NTP_SERVER, port=NTP_PORT, retries=MAX_NTP_RETRIES, timeout=NTP_TIMEOUT):
     """
     Fetches the Unix timestamp from an NTP server using UDP sockets, 
     with built-in retry logic for reliability.

@@ -4,11 +4,10 @@ from ..utility.boundary_lib import *
 from ..punch_defs import *
 
 def boundary_port_alloc(timestamp, n=NUM_PORTS):
-    bucket, punch_time = compute_rendezvous(timestamp)
+    bucket, _ = compute_rendezvous(timestamp)
     boundary = stable_boundary(bucket)
     if "P2PD_DEBUG" in os.environ:
         print("bucket = ", bucket)
-        print("future punch time = ", punch_time)
         print("boundary = ", boundary)
 
     # Same src and dest port for this allocation type.
@@ -17,4 +16,4 @@ def boundary_port_alloc(timestamp, n=NUM_PORTS):
     for port in ports:
         ret.append(PortAlloc(port, port))
 
-    return (ret, punch_time,)
+    return ret

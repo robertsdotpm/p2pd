@@ -22,6 +22,7 @@ from .punch_defs import *
 from .utility.punch_utils import *
 from .punch import *
 from .port_allocators.nat_predict_alloc import *
+from .punch_process import *
 
 """
 tunnel.src_bytes,
@@ -65,6 +66,8 @@ pipe = await tunnel.node.pipes[pipe_id]
 
 """
 
+import multiprocessing
+
 class PunchProtocol():
     def __init__(self, stun_clients, sys_clock=SysClock(None, Dec("0.1")), proc_pool=None):
         self.stun_clients = stun_clients # af if index
@@ -101,16 +104,27 @@ class PunchProtocol():
                 return None
             
             # Create a new puncher for this pipe ID.
-            puncher = PunchPlugin(dest_info["ip"], src_info["ip"])
-            puncher.set_routing(af, src_info, dest_info, nic)
-            puncher.set_timestamp(self.sys_clock.time())
+            puncher = Punch(dest_info["ip"], src_info["ip"])
+            #puncher.set_routing(af, src_info, dest_info, nic)
+
+            # Set current unix time using NTP as a reference.
+            timestamp = self.sys_clock.time()
+            puncher.set_timestamp(timestamp)
+
+            # Set future punching time.
+            if reply:
+                punch_time = reply.payload.ntp
+            else:
+                punch_time = timestamp + 10
+            puncher.set_punch_time(punch_time)
+
 
             # Save a reference to node.
-            puncher.set_parent(pipe_id, self.node)
+            #puncher.set_parent(pipe_id, self.node)
 
             # Setup process manager and executor.
             # So that objects are shareable over processes.
-            puncher.setup_multiproc(self.proc_pool)
+            #puncher.setup_multiproc(self.proc_pool)
 
             # Save puncher reference.
             self.punch_clients[pipe_id] = puncher
@@ -122,6 +136,10 @@ class PunchProtocol():
             )
             puncher.nat_predict_alloc.set_punch_mode(
                 same_machine, dest_info["ip"]
+            )
+
+            start_punching_process(
+                (puncher,)
             )
 
         # Extract any received payload attributes.
@@ -149,6 +167,7 @@ class PunchProtocol():
         ensure there's enough time to receive any
         updated mappings for the dest peer (if any.)
         """
+        
 
         """
         TODO:

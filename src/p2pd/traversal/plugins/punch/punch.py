@@ -44,6 +44,7 @@ Design:
 import sys
 import argparse
 import socket
+import pickle
 from .punch_defs import *
 from .port_allocators.boundary_alloc import *
 from .engines.tcp_selector_simple.engine import *
@@ -68,7 +69,7 @@ class Punch(GenericPlugin):
 
         # The allocator has to decide on this.
         # Relative time from start_time bellow.
-        self.punch_time = None
+        self.punch_time = 0
 
         # Default to inaccurate system clock.
         self.timestamp = int(time.time())
@@ -77,17 +78,32 @@ class Punch(GenericPlugin):
     def set_src_ip(self, src_ip):
         self.src_ip = src_ip
 
-    def set_af(self, af):
-        self.af = af
-
+    # Timestamp is a unix timestamp.
     def set_timestamp(self, timestamp):
         self.timestamp = timestamp
         self.start_time = time.monotonic()
 
-    def sleep_until(self):
+    # Punch time is a future unix timestamp to start punching.
+    def set_punch_time(self, punch_time):
+        self.punch_time = punch_time
+
+    def sleep_until(self, max_sleep=MAX_SLEEP):
+        # Time elapsed in seconds since first starting.
         elapsed = time.monotonic() - self.start_time
-        sleep_time = max(0, self.punch_time - elapsed)
-        time.sleep(sleep_time)
+
+        # Calculate a current unix timestamp based on elapsed.
+        elapsed_abs = self.timestamp + int(elapsed)
+
+        # The sleep time is the remaining time to sleep for
+        sleep_time = max(0, self.punch_time - elapsed_abs)
+        
+        # Limit max sleep if current host is far behind.
+        if sleep_time > max_sleep:
+            sleep_time = max_sleep
+            
+        # No sleep needed if far behind.
+        if sleep_time > 0:
+            time.sleep(sleep_time)
 
     def add_port_allocator(self, f_port_alloc, n=16):
         port_allocs, punch_abs = f_port_alloc(self.timestamp, n=n)
@@ -113,7 +129,6 @@ class Punch(GenericPlugin):
             f_sleep_until=self.sleep_until
         )
 
-
 if __name__ == "__main__":
     # Get the dest IP.
     parser = argparse.ArgumentParser(description="Test main punching algorithm")
@@ -125,11 +140,15 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     punch = Punch(args.dest_ip)
-
-    # Network-aligned time reference
     try:
-        timestamp = get_ntp_time()
+        # Get unix timestamp from NTP.
+        timestamp = timestamp_from_ntp()
         punch.set_timestamp(timestamp)
+
+        # Calculate a future timestamp to use as the punch time.
+        _, punch_time = compute_rendezvous(timestamp)
+        punch.set_punch_time(punch_time)
+        print("future punch time = ", punch_time)
         print("Current ntp time = ", timestamp)
     except RuntimeError as e:
         print(f"CRITICAL ERROR: {e}")
@@ -137,6 +156,9 @@ if __name__ == "__main__":
 
     # Default uses deterministic ports from NTP boundaries.
     punch.add_port_allocator(boundary_port_alloc)
+    #out = pickle.dumps(punch)
+    #l = pickle.loads(out)
+    #print(l)
 
     # New punching engine uses non-blocking selector events.
     punch.run_engine(tcp_selector_punch_engine)
