@@ -16,4 +16,4 @@ def boundary_port_alloc(timestamp, n=NUM_PORTS):
     for port in ports:
         ret.append(PortAlloc(port, port))
 
-    return ret
+    return ret, 1

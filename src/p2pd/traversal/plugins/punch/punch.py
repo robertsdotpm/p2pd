@@ -106,7 +106,7 @@ class Punch(GenericPlugin):
             time.sleep(sleep_time)
 
     def add_port_allocator(self, f_port_alloc, n=16):
-        port_allocs, punch_abs = f_port_alloc(self.timestamp, n=n)
+        port_allocs, reserved = f_port_alloc(self.timestamp, n=n)
         for port_alloc in port_allocs:
             is_unique = True
             for stored_port_alloc in self.port_allocs:
@@ -116,9 +116,6 @@ class Punch(GenericPlugin):
 
             if is_unique:
                 self.port_allocs.append(port_alloc)
-
-        punch_time_relative = punch_abs - self.timestamp
-        self.punch_time = min(self.punch_time, punch_time_relative)
 
     def run_engine(self, f_engine):
         f_engine(
