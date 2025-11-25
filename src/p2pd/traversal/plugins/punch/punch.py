@@ -54,7 +54,7 @@ from ..generic.plugin import GenericPlugin
 # TODO: Could even use ARP to find the other node in a LAN
 # running the same tool so the dest IP doesn't have to be specified.
 class Punch(GenericPlugin):
-    def __init__(self, dest_ip, src_ip=None):
+    def __init__(self, dest_ip, src_ip=None, our_ip=None):
         # Fallback to IP4
         self.af = socket.AF_INET
         if ":" in dest_ip:
@@ -63,6 +63,7 @@ class Punch(GenericPlugin):
         # Fallback to default interface.
         self.src_ip = src_ip or "0.0.0.0"
         self.dest_ip = dest_ip
+        self.our_ip = our_ip
         
         # Listen bind / dest connect matrixes.
         self.port_allocs = [] # [ src bind, dest port ]
@@ -117,13 +118,15 @@ class Punch(GenericPlugin):
             if is_unique:
                 self.port_allocs.append(port_alloc)
 
+    # Return a socket (punched hole) on success.
     def run_engine(self, f_engine):
-        f_engine(
+        return f_engine(
             af=self.af,
             port_allocs=self.port_allocs,
             src_ip=self.src_ip,
             dest_ip=self.dest_ip,
-            f_sleep_until=self.sleep_until
+            f_sleep_until=self.sleep_until,
+            our_ip=self.our_ip
         )
 
 if __name__ == "__main__":
@@ -158,7 +161,7 @@ if __name__ == "__main__":
     #print(l)
 
     # New punching engine uses non-blocking selector events.
-    punch.run_engine(tcp_selector_punch_engine)
-
+    sock = punch.run_engine(tcp_selector_punch_engine)
+    print(sock)
 
 

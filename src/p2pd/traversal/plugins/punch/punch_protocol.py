@@ -104,7 +104,8 @@ class PunchProtocol():
                 return None
             
             # Create a new puncher for this pipe ID.
-            puncher = Punch(dest_info["ip"], src_info["ip"])
+            # TODO: this needs to specify the right bind ip for src_ip
+            puncher = Punch(dest_info["ip"], src_info["ip"], src_info["ip"])
             #puncher.set_routing(af, src_info, dest_info, nic)
 
             # Set current unix time using NTP as a reference.

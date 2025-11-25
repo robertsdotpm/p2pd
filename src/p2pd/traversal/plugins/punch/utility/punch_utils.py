@@ -2,6 +2,7 @@
 import time
 import socket
 import struct
+import selectors
 from .....net.ip_range import *
 from .....nic.nat.nat_utils import *
 from .....nic.nat.nat_predict import *
@@ -264,4 +265,67 @@ def start_punch_worker(node, puncher_cls):
         punch_queue_worker(node, puncher_cls)
     )
 
+def wait_for_one_remaining(sockets, timeout=None, retry_interval=0.05):
+    """
+    Wait until only one socket remains open from a list of non-blocking TCP sockets.
+    Returns that last open socket.
+    
+    sockets: list of non-blocking TCP socket objects
+    timeout: optional total timeout in seconds
+    """
+    sel = selectors.DefaultSelector()
+    
+    # Register all sockets for readability
+    for s in sockets:
+        sel.register(s, selectors.EVENT_READ)
+    
+    start_time = time.monotonic()
+    remaining = set(sockets)
+    while len(remaining) > 1:
+        if timeout and (time.monotonic() - start_time) > timeout:
+            raise TimeoutError("Timeout reached before only one socket remained")
+        
+        events = sel.select(timeout=retry_interval)
+        for key, mask in events:
+            s = key.fileobj
+            try:
+                data = s.recv(1)
+                if data == b"":
+                    # socket closed
+                    remaining.discard(s)
+                    sel.unregister(s)
+                    s.close()
+            except BlockingIOError:
+                # still open, nothing to read
+                pass
+            except Exception:
+                # treat other exceptions as closure
+                remaining.discard(s)
+                sel.unregister(s)
+                s.close()
+    
+    sel.close()
+    return remaining.pop()
 
+# In a LAN = lan ip, or for WAN targets = wan IPs.
+def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
+    if not sock_list:
+        return None
+
+    our_ip = our_ip or sock_list[0].getsockname()[0]
+
+    # Master side closes all others immediately
+    if hash(our_ip) > hash(their_ip):
+        winner = sock_list.pop()
+        for loser in sock_list:
+            try:
+                loser.shutdown(socket.SHUT_RDWR)
+            except Exception:
+                pass
+            
+            loser.close()
+    else:
+        # Non-master side waits for the first completed connection
+        winner = wait_for_one_remaining(sock_list)
+
+    return winner

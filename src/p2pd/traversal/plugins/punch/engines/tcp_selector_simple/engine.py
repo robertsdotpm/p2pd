@@ -88,6 +88,7 @@ import selectors
 import socket
 import os
 from .utils import *
+from ...utility.punch_utils import *
 
 CONNECT_TIMEOUT = 5.0
 RETRY_INTERVAL = 0.05
@@ -170,7 +171,7 @@ def socket_event_monitor(sel):
 
     return (inbound, outbound,)
 
-def tcp_selector_punch_engine(af, port_allocs, src_ip, dest_ip, f_sleep_until):
+def tcp_selector_punch_engine(af, port_allocs, src_ip, dest_ip, f_sleep_until, our_ip):
     # Create listen sockets, bound con socks, and register for selector events.
     listen_infos, pre_connect_infos, sel = setup_engine(af, port_allocs, src_ip)
 
@@ -183,7 +184,13 @@ def tcp_selector_punch_engine(af, port_allocs, src_ip, dest_ip, f_sleep_until):
     # Return set of successful connections (if any.)
     inbound, outbound = socket_event_monitor(sel)
 
+    # chosoe sock(our_wan, sock.getpeer..)
+    sock_list = list(inbound + outbound)
+    sock = choose_winning_tcp_sock(dest_ip, sock_list, our_ip)
+
     # TODO: choose winning socks
     if "P2PD_DEBUG" in os.environ:
         for con_set in (inbound, outbound):
             print(con_set)
+
+    return sock
