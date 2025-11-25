@@ -309,10 +309,12 @@ def wait_for_one_remaining(sockets, timeout=None, retry_interval=0.05):
 
 # In a LAN = lan ip, or for WAN targets = wan IPs.
 def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
+
     if not sock_list:
         return None
 
     our_ip = our_ip or sock_list[0].getsockname()[0]
+    print(our_ip)
 
     # Master side closes all others immediately
     if hash(our_ip) > hash(their_ip):
@@ -322,7 +324,7 @@ def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
                 loser.shutdown(socket.SHUT_RDWR)
             except Exception:
                 pass
-            
+
             loser.close()
     else:
         # Non-master side waits for the first completed connection
