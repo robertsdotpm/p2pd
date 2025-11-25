@@ -183,14 +183,11 @@ def tcp_selector_punch_engine(af, port_allocs, src_ip, dest_ip, f_sleep_until, o
 
     # Return set of successful connections (if any.)
     inbound, outbound = socket_event_monitor(sel)
-
-    # chosoe sock(our_wan, sock.getpeer..)
-    sock_list = list(inbound) + list(outbound)
-    sock = choose_winning_tcp_sock(dest_ip, sock_list, our_ip)
-
-    # TODO: choose winning socks
     if "P2PD_DEBUG" in os.environ:
         for con_set in (inbound, outbound):
             print(con_set)
 
+    # chosoe sock(our_wan, sock.getpeer..)
+    sock_list = list(inbound) + list(outbound)
+    sock = choose_winning_tcp_sock(dest_ip, sock_list, our_ip)
     return sock

@@ -64,9 +64,22 @@ pipe = await tunnel.node.pipes[pipe_id]
     new code:
         should just call the punching process start directly.
 
+        
+        "meta": {
+            #"ttl": int(self.sys_clock.time()) + 30,
+            #"pipe_id": pipe_id,
+            #"af": af,
+            #"src_buf": tunnel.src_bytes,
+            #"src_index": src_info["if_index"],
+            #"addr_types": [addr_type],
+        },
+        "routing": {
+            #"af": af,
+            #"dest_buf": tunnel.dest_bytes,
+            #"dest_index": dest_info["if_index"],
+        },
+        
 """
-
-import multiprocessing
 
 class PunchProtocol():
     def __init__(self, stun_clients, sys_clock=SysClock(None, Dec("0.1")), proc_pool=None):
@@ -74,12 +87,13 @@ class PunchProtocol():
         self.sys_clock = sys_clock
         self.proc_pool = proc_pool
         self.punch_clients = {}
+        self.punch_proc = {} # pipe_id: delayed start punching proc task
         self.active_punchers = 0
-        self.node = None
-        self.tasks = []
 
-    def set_node(self, node=None):
-        self.node = node
+    async def delayed_start_punching_proc(self, nic, puncher):
+        # Give time for updated mappings.
+        await asyncio.sleep(3)
+        await start_punching_process(nic, puncher, self.proc_pool)
 
     async def protocol(self, af=IP4, pipe_id=b"pipe", src_info=None, dest_info=None, nic=None, addr_type=NIC_BIND, same_machine=False, reply=None):
         # Load TCP punch client for this pipe ID.
@@ -106,26 +120,14 @@ class PunchProtocol():
             # Create a new puncher for this pipe ID.
             # TODO: this needs to specify the right bind ip for src_ip
             puncher = Punch(dest_info["ip"], src_info["ip"], src_info["ip"])
-            #puncher.set_routing(af, src_info, dest_info, nic)
 
             # Set current unix time using NTP as a reference.
             timestamp = self.sys_clock.time()
             puncher.set_timestamp(timestamp)
 
             # Set future punching time.
-            if reply:
-                punch_time = reply.payload.ntp
-            else:
-                punch_time = timestamp + 10
+            punch_time = reply.payload.ntp if reply else timestamp + 10
             puncher.set_punch_time(punch_time)
-
-
-            # Save a reference to node.
-            #puncher.set_parent(pipe_id, self.node)
-
-            # Setup process manager and executor.
-            # So that objects are shareable over processes.
-            #puncher.setup_multiproc(self.proc_pool)
 
             # Save puncher reference.
             self.punch_clients[pipe_id] = puncher
@@ -139,9 +141,12 @@ class PunchProtocol():
                 same_machine, dest_info["ip"]
             )
 
-            start_punching_process(
-                (puncher,)
-            )
+            # Schedule punching proc with a delay to allow for updated mappings.
+            # Done like this because a new message may or may not come.
+            if pipe_id not in self.punch_proc:
+                self.punch_proc[pipe_id] = asyncio.create_task(
+                    self.delayed_start_punching_proc(nic, puncher)
+                )
 
         # Extract any received payload attributes.
         if reply is not None:
@@ -152,9 +157,7 @@ class PunchProtocol():
             recv_mappings = None
 
         # Update details needed for TCP punching.
-        ret, is_end = await puncher.nat_predict_alloc.port_alloc(
-            recv_mappings
-        )
+        _, is_end = await puncher.nat_predict_alloc.port_alloc(recv_mappings)
         
         # Protocol done -- return nothing.
         if is_end == 1:
@@ -163,49 +166,15 @@ class PunchProtocol():
         # Increase active punchers.
         self.active_punchers += 1
 
-        """
-        Punching is delayed for a few seconds to
-        ensure there's enough time to receive any
-        updated mappings for the dest peer (if any.)
-        """
-        
-
-        """
-        TODO:
-        task = create_task(
-            schedule_punching_with_delay(
-                tunnel.node,
-                pipe_id,
-                n=2 if puncher.side == INITIATOR else 0
-            )
-        )
-        self.tasks.append(task)
-        """
-
         # Forward protocol details to peer.
         mappings = [m.toJSON() for m in puncher.nat_predict_alloc.send_mappings]
-
-        """
-        "meta": {
-            #"ttl": int(self.sys_clock.time()) + 30,
-            #"pipe_id": pipe_id,
-            #"af": af,
-            #"src_buf": tunnel.src_bytes,
-            #"src_index": src_info["if_index"],
-            #"addr_types": [addr_type],
-        },
-        "routing": {
-            #"af": af,
-            #"dest_buf": tunnel.dest_bytes,
-            #"dest_index": dest_info["if_index"],
-        },
-        """
 
         # Protocol layer fills in meta and routing info.
         msg = PunchMsg({
             "payload": {
                 "punch_mode": puncher.nat_predict_alloc.punch_mode,
                 "mappings": mappings,
+                "ntp": punch_time,
             },
         })
 
