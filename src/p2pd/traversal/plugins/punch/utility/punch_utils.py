@@ -318,6 +318,7 @@ def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
 
     # Master side closes all others immediately
     if hash(our_ip) > hash(their_ip):
+        print("We are master.")
         winner = sock_list.pop()
         for loser in sock_list:
             try:
