@@ -22,12 +22,6 @@ async def close_with_timeout(p):
 
 # Shutdown the node server and do cleanup.
 async def node_stop(node):
-    # Make the worker thread for punching end.
-    node.punch_queue.put_nowait(None)
-    if node.punch_worker_task is not None:
-        node.punch_worker_task.cancel()
-        node.punch_worker_task = None
-
     # Stop sig message dispatcher.
     node.sig_msg_queue.put_nowait(None)
     if node.sig_msg_queue_worker_task is not None:
@@ -37,7 +31,6 @@ async def node_stop(node):
     # Close other pipes.
     pipe_lists = [
         node.signal_pipes,
-        node.tcp_punch_clients,
         node.turn_clients,
         node.pipes,
     ]

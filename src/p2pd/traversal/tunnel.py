@@ -1,4 +1,5 @@
 import asyncio
+from collections import OrderedDict
 from ..net.pipe.pipe_events import PipeEvents
 from ..node.node_addr import *
 from ..protocol.turn.turn_client import TURNClient
@@ -89,6 +90,29 @@ class Tunnel():
             # Returns a pipe given comp addr info pairs.
             func, timeout, cleanup, has_set_bind, max_pairs, func_txt = \
                 self.func_table[strategy]
+            
+            """
+            has set bind? == same if?
+                select_dest_ipr(
+                    af,
+                    pp.same_machine,
+                    src_info,
+                    dest_info,
+                    [use_addr_type],
+
+                    # can you make this case
+                    # run for all
+                    # try it
+                    has_set_bind,
+                )
+
+                some methods need to bind on set src ports. 
+                If a method is meant to be used to connect to machines
+                on the same interface, then it will conflict with
+                binding on a set port.
+            """
+            
+
             pipe, addr_type = await async_wrap_errors(
                 for_addr_infos(
                     func_txt,
@@ -133,17 +157,3 @@ async def connect_tunnel(node, pnp_addr, strategies=P2P_STRATEGIES, conf=P2P_PIP
         
     return pipe
 
-if __name__ == "__main__": # pragma: no cover
-    async def test_p2p_con():
-        p2p_dest = None
-        if1 = await Interface("enp3s0").start()
-        if_list = [if1]
-        pipe_id = rand_plain(10)
-        p2p_pipe = Tunnel(if_list, 0)
-        await p2p_pipe.direct_connect(p2p_dest, pipe_id, proto=TCP)
-
-
-        while 1:
-            await asyncio.sleep(1)
-
-    async_test(test_p2p_con)

@@ -207,6 +207,10 @@ class DoneMsg(SigMsg):
     def __init__(self, data=None, enum=SIG_DONE):
         super().__init__({}, SIG_DONE)
 
+class RetryMsg(SigMsg):
+    def __init__(self, data=None, enum=SIG_RETRY):
+        super().__init__({}, SIG_RETRY)
+
 class PunchMsg(SigMsg):
     # The main contents of this message.
     class Payload():

@@ -38,3 +38,5 @@ p2pd.errors.AlreadyClosedError
 Windows: Requires obscure socket options (IP_UNICAST_IF) or specific routing table metrics, and Microsoft's "Strong Host Model" implementation can be finicky.
 
 macOS: Uses IP_BOUND_IF.
+
+when it comes to binding in the punch engine maybe do it before the reuse options are set so that ports already used error out. then set the sock options? or does it matter

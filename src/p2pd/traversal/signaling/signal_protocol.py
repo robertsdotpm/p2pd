@@ -11,7 +11,7 @@ from ..tunnel import Tunnel
 
 SIG_PROTO = {
     SIG_CON: [ConMsg, P2P_DIRECT, 5],
-    SIG_TCP_PUNCH: [TCPPunchMsg, P2P_PUNCH, 20],
+    SIG_TCP_PUNCH: [PunchMsg, P2P_PUNCH, 20],
     SIG_TURN: [TURNMsg, P2P_RELAY, 10],
     SIG_GET_ADDR: [GetAddr, 0, 5],
     SIG_RETURN_ADDR: [ReturnAddr, 0, 6],
