@@ -18,8 +18,8 @@ class Plugin():
     def __init__(self):
         pass
 
-    def set_routing(self, src_info, dest_info, nic):
-        self.af = src_info["af"]
+    def set_routing(self, af, src_info, dest_info, nic):
+        self.af = af
         self.src_info = src_info
         self.dest_info = dest_info
         self.nic = nic
@@ -69,12 +69,14 @@ def get_if_infos_order(af, route_type, src_map, dest_map):
     return pair_order
 
 class PluginManager():
-    def __init__(self):
+    def __init__(self, nic_map={}):
         self.plugins = OrderedDict()
+        self.nic_map = nic_map
 
     def install_plugin(self, name, conf):
         assert("class" in conf)
         conf = {
+            "class": conf["class"],
             "timeout": conf.get("timeout", 5),
             "cleanup": conf.get("cleanup", None),
             "same_if": conf.get("same_if", False),
@@ -93,6 +95,7 @@ class PluginManager():
         if not src_map[af] or not dest_map[af]:
             raise Exception("AF not supported between hosts.")
         
+        # Pairs of (src_info, dest_info) based on src / dest map.
         if_infos_order = get_if_infos_order(
             af,
             route_type,
@@ -100,8 +103,20 @@ class PluginManager():
             dest_map
         )
 
-        for plugin in self.plugins:
-            print(plugin)
+        # Try every traversial plugin to create a pipe.
+        for plugin_name in self.plugins:
+            # Meta data for this specific plugin.
+            plugin_loader = self.plugins[plugin_name]
+
+            # Loop over the pair of src_info / dest_infos
+            # then try them for each plugin.
+            for if_info_pair in if_infos_order:
+                plugin = plugin_loader["class"]()
+                src_info, dest_info = if_info_pair
+                nic = self.nic_map.get(src_info["if_index"], None)
+                plugin.set_routing(af, src_info, dest_info, nic)
+                print(plugin_loader)
+                print(plugin)
 
 
 async def setup_node_quick():
