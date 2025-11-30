@@ -17,7 +17,18 @@ for_addr_infos
 
 just start integration with the most basic plugin first then
 work through them
-    
+
+resume plugin run func 
+on sig msg recv:
+    if pipe_id in manager.plugins:
+        plugin = manager.plugins[pipe_id]
+        plugin.run(reply=reply)
+
+        # Try select if info based on their chosen offset.
+        if reply:
+            src_info = src_map[af][reply.routing.dest_index]
+            dest_info = dest_map[af][reply.meta.src_index]
+            if_infos_order = [[src_info, dest_info]]
 """
 
 from collections import OrderedDict
@@ -30,7 +41,7 @@ class TraversalPlugin():
     def __init__(self):
         pass
 
-    def set_routing(self, af, src_info, dest_info, nic, reply=None):
+    def set_routing(self, af, src_info, dest_info, nic):
         self.af = af
         self.src_info = src_info
         self.dest_info = dest_info
@@ -38,9 +49,11 @@ class TraversalPlugin():
 
         # Ensure our selected NIC is what the
         # remote peer wanted to use for the technique.
+        """
         if reply is not None:
             if reply.routing.dest_index != src_info["if_index"]:
                 raise Exception("Invalid NIC loaded for plugin.")
+        """
             
     def set_context(self, route_type, same_machine, set_bind, timeout):
         self.route_type = route_type
@@ -82,10 +95,11 @@ class TraversalPlugin():
         print("run parent.")
 
 class TraversalManager():
-    def __init__(self, nic_map={}):
-        self.plugins = OrderedDict()
+    def __init__(self, pipes={}, nic_map={}):
+        self.plugin_loaders = OrderedDict()
+        self.plugins = {} # by pipe id
+        self.pipes = pipes # by pipe id
         self.nic_map = nic_map
-        self.pipes = {} # by pipe_id
 
     def install_plugin(self, name, conf):
         assert("class" in conf)
@@ -97,7 +111,7 @@ class TraversalManager():
             "max_pairs": conf.get("max_pairs", 6),
         }
 
-        self.plugins[name] = conf
+        self.plugin_loaders[name] = conf
 
     """
     plugins directly return pipes, they can await for future results
@@ -113,6 +127,7 @@ class TraversalManager():
 
         if pipe_id not in self.pipes:
             self.pipes[pipe_id] = asyncio.Future()
+            self.plugins[pipe_id] = plugin
 
         plugin.set_pipe_id(pipe_id, self.pipes[pipe_id])
         ret = await async_wrap_errors(
@@ -125,10 +140,40 @@ class TraversalManager():
     async def close_plugin(self, plugin, reply=None):
         # Delete unused futures on failure.
         if hasattr(plugin, "pipe_id"):
+            del self.plugins[plugin.pipe_id]
             del self.pipes[plugin.pipe_id]
 
-    # TODO: if reply: conf["addr_families"] = [reply.meta.af]
-    async def connect(self, af, route_type, src_map, dest_map, reply=None):
+    async def plugin_router(self, af, route_type, src_info, dest_info, same_machine, plugin_name, reply=None):
+        # Meta data for this specific plugin.
+        plugin_loader = self.plugin_loaders[plugin_name]
+
+        # New instance of the plugin using init.
+        plugin = plugin_loader["class"]()
+        print(plugin_loader)
+        print(plugin)
+
+        # Load routing details in plugin.
+        nic = self.nic_map.get(src_info["if_index"], None)
+        plugin.set_routing(
+            af, 
+            src_info, 
+            dest_info,
+            nic
+        )
+
+        # Load extra info about pathway.
+        plugin.set_context(
+            route_type,
+            same_machine,
+            plugin_loader["set_bind"],
+            plugin_loader["timeout"]
+        )
+
+        # Run plugin function -- has timeout based on plugin meta.
+        pipe = await self.run_plugin(plugin, reply)
+        if pipe: return pipe
+
+    async def connect(self, src_map, dest_map, af=IP4, route_type=NIC_BIND):
         # Need AF supported by both.
         if not src_map[af] or not dest_map[af]:
             raise Exception("AF not supported between hosts.")
@@ -138,62 +183,32 @@ class TraversalManager():
             same_machine = True
         else:
             same_machine = False
-
-        # Try select if info based on their chosen offset.
-        if reply:
-            src_info = src_map[af][reply.routing.dest_index]
-            dest_info = dest_map[af][reply.meta.src_index]
-            if_infos_order = [[src_info, dest_info]]
         
         # Pairs of (src_info, dest_info) based on src / dest map.
-        if not reply:
-            if_infos_order = get_if_infos_order(
-                af,
-                route_type,
-                src_map,
-                dest_map
-            )
+        if_infos_order = get_if_infos_order(
+            af,
+            route_type,
+            src_map,
+            dest_map
+        )
 
-        # Try every traversial plugin to create a pipe.
-        for plugin_name in self.plugins:
-            # Meta data for this specific plugin.
-            plugin_loader = self.plugins[plugin_name]
-
-            # Loop over the pair of src_info / dest_infos
-            # then try them for each plugin.
-            for if_info_pair in if_infos_order:
-                # New instance of the plugin using init.
-                plugin = plugin_loader["class"]()
-
-                # Load routing details in plugin.
-                src_info, dest_info = if_info_pair
-                nic = self.nic_map.get(src_info["if_index"], None)
-                plugin.set_routing(
-                    af, 
-                    src_info, 
-                    dest_info,
-                    nic, 
-                    reply
-                )
-
-                # Load extra info about pathway.
-                plugin.set_context(
+        # Try every interface info pair for the plugins.
+        for plugin_name in self.plugin_loaders:
+            print(plugin_name)
+            for if_infos in if_infos_order:
+                src_info, dest_info = if_infos
+                pipe = await self.plugin_router(
+                    af,
                     route_type,
+                    src_info,
+                    dest_info,
                     same_machine,
-                    plugin_loader["set_bind"],
-                    plugin_loader["timeout"]
+                    plugin_name
                 )
 
-                # Run plugin function -- has timeout based on plugin meta.
-                pipe = await self.run_plugin(plugin, reply)
-                if pipe: return pipe
-
-                # Run plugin cleanup function.
-                #if not pipe:
-                #    await self.close_plugin(plugin, reply)
-
-                print(plugin_loader)
-                print(plugin)
+                # Run plugins for if info pairs.
+                if pipe:
+                    return pipe
 
 
 if __name__ == "__main__":
@@ -223,6 +238,7 @@ if __name__ == "__main__":
             "enable_stun_clients": False,
             "install_path": get_p2pd_install_root()
         }, NET_CONF)
+
 
         # Main node class with chosen ifs and conf.
         node = Node(ifs=ifs, conf=node_conf)
@@ -268,7 +284,7 @@ if __name__ == "__main__":
         #print(addr)
 
 
-        await manager.connect(IP4, NIC_BIND, ADDR_MAP, ADDR_MAP)
+        await manager.connect(ADDR_MAP, ADDR_MAP)
 
         #await tunnel_factory()
 

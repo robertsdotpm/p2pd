@@ -40,3 +40,6 @@ Windows: Requires obscure socket options (IP_UNICAST_IF) or specific routing tab
 macOS: Uses IP_BOUND_IF.
 
 when it comes to binding in the punch engine maybe do it before the reuse options are set so that ports already used error out. then set the sock options? or does it matter
+
+a single NTP reading seems adequate for the new code, the clock skew stuff seems overboard and 
+ive seen the results varey enough that i question whether it even works
