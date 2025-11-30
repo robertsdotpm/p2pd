@@ -306,3 +306,41 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
     return None, None
 
 # TODO: make this work with everything.
+
+def get_if_infos_order(af, route_type, src_map, dest_map):
+    """
+    Given a list of interface details
+    for an address family indexed by interface
+    offset return a list of them directly.
+    """
+    src_infos = list(src_map[af].values())
+    dest_infos = list(dest_map[af].values())
+
+    """
+    Given two lists of interface details, break them into
+    two lists of (src_info, dest_info) pairs. The first
+    contains pairs for which both interface details have the
+    same ext (external address). The other is non-overlapping,
+    where both have different addresses.
+    """
+    overlap, unique = sort_pairs_by_overlap(
+        src_infos,
+        dest_infos
+    )
+
+    """
+    If the route type is external than using the same external
+    address for overlapping pairs is likely not to lead to
+    a connection since both are behind the same router.
+    """
+    if route_type == EXT_BIND:
+        pair_order = unique + overlap
+
+    """
+    For local addresses you want to do the opposite.
+    So you're on the same LAN or NIC if on the same machine.
+    """
+    if route_type == NIC_BIND:
+        pair_order = overlap + unique
+
+    return pair_order
