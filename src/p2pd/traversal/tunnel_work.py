@@ -18,11 +18,22 @@ class Plugin():
     def __init__(self):
         pass
 
-    def set_routing(self, af, src_info, dest_info, nic):
+    def set_routing(self, af, src_info, dest_info, nic, reply=None):
         self.af = af
         self.src_info = src_info
         self.dest_info = dest_info
         self.nic = nic
+
+        # Ensure our selected NIC is what the
+        # remote peer wanted to use for the technique.
+        if reply is not None:
+            if reply.routing.dest_index != src_info["if_index"]:
+                raise Exception("Invalid NIC loaded for plugin.")
+            
+    def set_context(self, same_machine, set_bind, timeout):
+        self.same_machine = same_machine
+        self.set_bind = set_bind
+        self.timeout = timeout
 
 class PluginDirect(Plugin):
     pass
@@ -79,7 +90,7 @@ class PluginManager():
             "class": conf["class"],
             "timeout": conf.get("timeout", 5),
             "cleanup": conf.get("cleanup", None),
-            "same_if": conf.get("same_if", False),
+            "set_bind": conf.get("set_bind", False),
             "max_pairs": conf.get("max_pairs", 6),
         }
 
@@ -90,10 +101,16 @@ class PluginManager():
         for src_info, dest_info in if_infos:
             pass
 
-    async def connect(self, af, route_type, src_map, dest_map):
+    async def connect(self, af, route_type, src_map, dest_map, reply=None):
         # Need AF supported by both.
         if not src_map[af] or not dest_map[af]:
             raise Exception("AF not supported between hosts.")
+        
+        # Is this a connection to a node on the same machine?
+        if dest_map["machine_id"] == src_map["machine_id"]:
+            same_machine = True
+        else:
+            same_machine = False
         
         # Pairs of (src_info, dest_info) based on src / dest map.
         if_infos_order = get_if_infos_order(
@@ -111,10 +128,28 @@ class PluginManager():
             # Loop over the pair of src_info / dest_infos
             # then try them for each plugin.
             for if_info_pair in if_infos_order:
+                # New instance of the plugin using init.
                 plugin = plugin_loader["class"]()
+
+                # Load routing details in plugin.
                 src_info, dest_info = if_info_pair
                 nic = self.nic_map.get(src_info["if_index"], None)
-                plugin.set_routing(af, src_info, dest_info, nic)
+                plugin.set_routing(
+                    af, 
+                    src_info, 
+                    dest_info,
+                    nic, 
+                    reply
+                )
+
+                # Load extra info about pathway.
+                plugin.set_context(
+                    same_machine,
+                    plugin_loader["set_bind"],
+                    plugin_loader["timeout"]
+                )
+
+
                 print(plugin_loader)
                 print(plugin)
 
@@ -167,7 +202,7 @@ if __name__ == "__main__":
             "class": PluginDirect,
             "timeout": 2,
             "cleanup": None,
-            "same_if": 1,
+            "set_bind": 1,
             "max_pairs": 6,
         })
 
@@ -175,7 +210,7 @@ if __name__ == "__main__":
             "class": PluginPunch,
             "timeout": 2,
             "cleanup": None,
-            "same_if": 1,
+            "set_bind": 1,
             "max_pairs": 6,
         })
 
@@ -199,3 +234,13 @@ if __name__ == "__main__":
 
     async_run(tunnel_workspace())
 
+
+"""
+existing tunnel code handles setting up futures
+reply structuries
+routing replies
+cleanup code
+logging
+
+it should just focus on addressing / function running for now
+"""
