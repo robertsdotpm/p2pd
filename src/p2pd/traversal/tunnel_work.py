@@ -1,18 +1,28 @@
+"""
+I think there should be a factory for building Plugins and
+each plugin should have a class that has its addressing details
+filled in and elegantly encapsulated.
+
+existing tunnel code handles setting up futures
+reply structuries
+routing replies
+cleanup code
+logging
+
+it should just focus on addressing / function running for now
+
+for_addr_infos
+    being called when a reply comes and it manually specifies a strat
+    this is very messy maybe dont have reply a param in this code at all?
+
+"""
+
 from collections import OrderedDict
 from ..utility.utils import *
 from ..net.net_defs import *
 from ..nic.interface import *
 from .tunnel_utils import *
 
-
-
-"""
-I think there should be a factory for building Plugins and
-each plugin should have a class that has its addressing details
-filled in and elegantly encapsulated.
-
-
-"""
 
 class Plugin():
     def __init__(self):
@@ -30,10 +40,41 @@ class Plugin():
             if reply.routing.dest_index != src_info["if_index"]:
                 raise Exception("Invalid NIC loaded for plugin.")
             
-    def set_context(self, same_machine, set_bind, timeout):
+    def set_context(self, route_type, same_machine, set_bind, timeout):
+        self.route_type = route_type
         self.same_machine = same_machine
         self.set_bind = set_bind
         self.timeout = timeout
+
+        """
+        Determine the best destination IP to use
+        for the connectivity technique based on
+        addressing and relationships between the
+        two machines (deep networking specific.)
+        """
+        self.dest_info["ip"] = str(
+            select_dest_ipr(
+                self.af,
+                same_machine,
+                self.src_info,
+                self.dest_info,
+                [route_type],
+
+                # can you make this case
+                # run for all
+                # try it
+                set_bind,
+            )
+        )
+
+        # Need a destination address.
+        # Possibly a different address type will work.
+        if self.dest_info["ip"] == "None":
+            raise Exception("Cannot select valid dest IP")
+
+    # TODO: If none of the plugins need these params remove them.
+    async def run(self, pipe_id, pipe_future, reply=None):
+        pass
 
 class PluginDirect(Plugin):
     pass
@@ -83,6 +124,7 @@ class PluginManager():
     def __init__(self, nic_map={}):
         self.plugins = OrderedDict()
         self.nic_map = nic_map
+        self.pipes = {} # by pipe_id
 
     def install_plugin(self, name, conf):
         assert("class" in conf)
@@ -96,11 +138,24 @@ class PluginManager():
 
         self.plugins[name] = conf
 
-    # IP4, EXT_BIND
-    async def plugin_connect(self, af, route_type, if_infos):
-        for src_info, dest_info in if_infos:
-            pass
+    async def run_plugin(self, plugin, reply):
+        # Create a future for pending pipes.
+        if reply is None:
+            pipe_id = to_s(rand_plain(15))
+        else:
+            pipe_id = reply.meta.pipe_id
 
+        if pipe_id not in self.pipes:
+            self.pipes[pipe_id] = asyncio.Future()
+
+        ret = await async_wrap_errors(
+            plugin.run(pipe_id, self.pipes[pipe_id], reply),
+            timeout=plugin.timeout
+        )
+
+        return ret
+
+    # TODO: if reply: conf["addr_families"] = [reply.meta.af]
     async def connect(self, af, route_type, src_map, dest_map, reply=None):
         # Need AF supported by both.
         if not src_map[af] or not dest_map[af]:
@@ -111,14 +166,21 @@ class PluginManager():
             same_machine = True
         else:
             same_machine = False
+
+        # Try select if info based on their chosen offset.
+        if reply:
+            src_info = src_map[af][reply.routing.dest_index]
+            dest_info = dest_map[af][reply.meta.src_index]
+            if_infos_order = [[src_info, dest_info]]
         
         # Pairs of (src_info, dest_info) based on src / dest map.
-        if_infos_order = get_if_infos_order(
-            af,
-            route_type,
-            src_map,
-            dest_map
-        )
+        if not reply:
+            if_infos_order = get_if_infos_order(
+                af,
+                route_type,
+                src_map,
+                dest_map
+            )
 
         # Try every traversial plugin to create a pipe.
         for plugin_name in self.plugins:
@@ -144,12 +206,16 @@ class PluginManager():
 
                 # Load extra info about pathway.
                 plugin.set_context(
+                    route_type,
                     same_machine,
                     plugin_loader["set_bind"],
                     plugin_loader["timeout"]
                 )
 
+                # Run plugin function -- has timeout based on plugin meta.
+                ret = await self.run_plugin(plugin.run, reply)
 
+                # TODO: cleanup: install as destructor
                 print(plugin_loader)
                 print(plugin)
 
@@ -190,7 +256,6 @@ async def setup_node_quick():
     addr = node.p2p_addr
     await node.close()
     return addr
-
 
 
 ADDR_MAP = {IP4: {0: {'netiface_index': 1, 'if_index': 0, 'ext': "45.118.0.1", 'nic': "10.0.1.251", 'nat': {'type': 5, 'delta': {'type': 6, 'value': 0}, 'range': [1, 65535], 'is_open': False, 'can_predict': True, 'is_hard': True, 'is_concurrent': True}, 'port': 3000}}, IP6: {}, 'node_id': '7f9ca6a685ecb37d77057fd02', 'signal': (), 'machine_id': '7a64285df710807300863496142f032a5b2365ce6a4a11f9b400fc1e6b4326e5', 'bytes': b'None-[1,0,45.118.0.1,10.0.1.251,3000,5,6,0]-0-7f9ca6a685ecb37d77057fd02-7a64285df710807300863496142f032a5b2365ce6a4a11f9b400fc1e6b4326e5'}
@@ -235,12 +300,3 @@ if __name__ == "__main__":
     async_run(tunnel_workspace())
 
 
-"""
-existing tunnel code handles setting up futures
-reply structuries
-routing replies
-cleanup code
-logging
-
-it should just focus on addressing / function running for now
-"""
