@@ -24,7 +24,7 @@ if __name__ != '__main__':
     from .utility.clock_skew import SysClock
     from .protocol.stun.stun_client import STUNClient, get_stun_clients
     from .protocol.turn.turn_client import TURNClient
-    from .traversal.plugins.punch.punch_client import TCPPuncher
+    #from .traversal.plugins.punch.punch_client import TCPPuncher
     from .net.daemon import Daemon
     from .protocol.echo.echo_server import *
     from .protocol.http.http_client_lib import ParseHTTPResponse, WebCurl
@@ -33,7 +33,6 @@ if __name__ != '__main__':
     from .protocol.http.http_server_lib import ParseHTTPRequest
     from .node.rest_api import P2PDServer, start_p2pd_server, P2PD_PORT
     from .node.node_addr import *
-    from .traversal.tunnel import *
     from .node.node import Node, NODE_CONF, NODE_PORT
     from .node.node_utils import get_pp_executors, load_signing_key
     from .traversal.signaling.signal_client import SignalMock, is_valid_mqtt

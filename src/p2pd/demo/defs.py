@@ -33,10 +33,10 @@ delta_txt = {
 }
 
 method_txt = {
-    "d": P2P_DIRECT,
-    "r": P2P_REVERSE,
-    "p": P2P_PUNCH,
-    "t": P2P_RELAY,
+    "d": "direct",
+    "r": "reverse",
+    "p": "punch",
+    "t": "relay",
 }
 
 PROGRAM_BANNER = """Universal reachability demo

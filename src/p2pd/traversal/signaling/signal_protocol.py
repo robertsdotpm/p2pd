@@ -45,6 +45,7 @@ class SigProtoHandlers():
         _, strategy, timeout = info
 
         # Connect to chosen address.
+        
         tunnel = Tunnel(msg.meta.src_buf, self.node)
 
         # Get address.

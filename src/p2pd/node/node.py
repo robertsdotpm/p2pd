@@ -10,9 +10,9 @@ from .node_utils import *
 from .nickname import *
 from .node_start import *
 from .node_stop import *
+from .node_protocol import node_protocol
 from ..vendor.machine_id import *
 from ..traversal.traversal_address import *
-from ..traversal.tunnel import *
 from ..traversal.signaling.signal_protocol import *
 from ..traversal.traversal_manager import TraversalManager
 from ..traversal.plugins.direct_connect.main import DirectConnect

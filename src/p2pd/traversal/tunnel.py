@@ -5,7 +5,6 @@ from ..node.node_addr import *
 from ..protocol.turn.turn_client import TURNClient
 from .traversal_utils import *
 from ..node.node_protocol import *
-from .plugins.direct_connect.main import direct_connect
 from .plugins.punch.punch_protocol import PunchProtocol
 from .plugins.turn.main import udp_turn_relay, turn_cleanup
 from .plugins.reverse_connect.main import reverse_connect
@@ -58,7 +57,7 @@ class Tunnel():
         # func, timeout, cleanup, same_if, max_pairs
         self.func_table = {
             # Short timeouts for direct TCP cons.
-            P2P_DIRECT: [direct_connect, 2, None, 1, 6, "direct"],
+            #P2P_DIRECT: [direct_connect, 2, None, 1, 6, "direct"],
             P2P_REVERSE: [reverse_connect, 4, None, 1, 6, "reverse"],
 
             # Large timeout for meetings with a state cleanup.
