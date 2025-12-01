@@ -12,7 +12,7 @@ from ..net.daemon import *
 from .node_addr import *
 from .node_utils import *
 from .nickname import *
-from ..traversal.tunnel_address import *
+from ..traversal.traversal_address import *
 from ..traversal.signaling.signal_protocol import *
 from ..traversal.signaling.signal_utils import *
 from ..traversal.signaling.signal_sender import *

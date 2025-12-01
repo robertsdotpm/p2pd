@@ -11,9 +11,11 @@ from .nickname import *
 from .node_start import *
 from .node_stop import *
 from ..vendor.machine_id import *
-from ..traversal.tunnel_address import *
+from ..traversal.traversal_address import *
 from ..traversal.tunnel import *
 from ..traversal.signaling.signal_protocol import *
+from ..traversal.traversal_manager import TraversalManager
+from ..traversal.plugins.direct_connect.main import DirectConnect
 
 NODE_CONF = dict_child({
     "reuse_addr": False,
@@ -60,6 +62,10 @@ class Node(Daemon):
         # Set on start.
         self.addr_bytes = None
         self.addr_futures = {}
+        self.traversal = TraversalManager(self.pipes, self.ifs)
+        self.traversal.install_plugin("direct", {
+            "class": DirectConnect
+        })
 
     def add_msg_cb(self, msg_cb):
         self.msg_cbs.append(msg_cb)
@@ -115,8 +121,26 @@ class Node(Daemon):
         return self.start().__await__()
     
     # Connect to a remote P2P node using a number of techniques.
-    async def connect(self, pnp_addr, strategies=P2P_STRATEGIES, conf=P2P_PIPE_CONF):
-        return await connect_tunnel(self, pnp_addr, strategies, conf)
+    async def connect(self, af, route_type, pnp_addr, plugin_name=None):
+        # Get most recent address bytes if given a nickname.
+        if pnp_name_has_tld(pnp_addr):
+            addr_bytes = await get_updated_addr_bytes(self, pnp_addr)
+        else:
+            addr_bytes = pnp_addr
+
+        pipe = await self.traversal.start(
+            src_map=self.p2p_addr,
+            dest_map=parse_node_addr(addr_bytes),
+            af=af,
+            route_type=route_type,
+            plugin_name=plugin_name
+        )
+
+        # Install msg handlers.
+        if pipe:
+            pipe.add_msg_cb(self.msg_cb)
+
+        return pipe
 
     # Get our node server's address.
     def address(self):

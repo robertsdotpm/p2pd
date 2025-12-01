@@ -29,77 +29,24 @@ on sig msg recv:
             src_info = src_map[af][reply.routing.dest_index]
             dest_info = dest_map[af][reply.meta.src_index]
             if_infos_order = [[src_info, dest_info]]
+
+todo: set this up after the pipe is done:
+    tunnel.node.msg_cb
 """
 
 from collections import OrderedDict
 from ..utility.utils import *
 from ..net.net_defs import *
 from ..nic.interface import *
-from .tunnel_utils import *
-
-class TraversalPlugin():
-    def __init__(self):
-        pass
-
-    def set_routing(self, af, src_info, dest_info, nic):
-        self.af = af
-        self.src_info = src_info
-        self.dest_info = dest_info
-        self.nic = nic
-
-        # Ensure our selected NIC is what the
-        # remote peer wanted to use for the technique.
-        """
-        if reply is not None:
-            if reply.routing.dest_index != src_info["if_index"]:
-                raise Exception("Invalid NIC loaded for plugin.")
-        """
-            
-    def set_context(self, route_type, same_machine, set_bind, timeout):
-        self.route_type = route_type
-        self.same_machine = same_machine
-        self.set_bind = set_bind
-        self.timeout = timeout
-
-        """
-        Determine the best destination IP to use
-        for the connectivity technique based on
-        addressing and relationships between the
-        two machines (deep networking specific.)
-        """
-        self.dest_info["ip"] = str(
-            select_dest_ipr(
-                self.af,
-                same_machine,
-                self.src_info,
-                self.dest_info,
-                [route_type],
-
-                # can you make this case
-                # run for all
-                # try it
-                set_bind,
-            )
-        )
-
-        # Need a destination address.
-        # Possibly a different address type will work.
-        if self.dest_info["ip"] == "None":
-            raise Exception("Cannot select valid dest IP")
-
-    def set_pipe_id(self, pipe_id, pipe_future):
-        self.pipe_id = pipe_id
-        self.pipe_future = pipe_future
-
-    async def run(self, reply=None):
-        print("run parent.")
+from .traversal_utils import *
+from .plugins.traversal_plugin import TraversalPlugin
 
 class TraversalManager():
-    def __init__(self, pipes={}, nic_map={}):
+    def __init__(self, pipes={}, nics=[]):
         self.plugin_loaders = OrderedDict()
         self.plugins = {} # by pipe id
         self.pipes = pipes # by pipe id
-        self.nic_map = nic_map
+        self.nics = nics
 
     def install_plugin(self, name, conf):
         assert("class" in conf)
@@ -136,12 +83,6 @@ class TraversalManager():
         )
 
         return ret
-    
-    async def close_plugin(self, plugin, reply=None):
-        # Delete unused futures on failure.
-        if hasattr(plugin, "pipe_id"):
-            del self.plugins[plugin.pipe_id]
-            del self.pipes[plugin.pipe_id]
 
     async def plugin_router(self, af, route_type, src_info, dest_info, same_machine, plugin_name, reply=None):
         # Meta data for this specific plugin.
@@ -153,7 +94,7 @@ class TraversalManager():
         print(plugin)
 
         # Load routing details in plugin.
-        nic = self.nic_map.get(src_info["if_index"], None)
+        nic = self.nics[src_info["if_index"]]
         plugin.set_routing(
             af, 
             src_info, 
@@ -173,7 +114,7 @@ class TraversalManager():
         pipe = await self.run_plugin(plugin, reply)
         if pipe: return pipe
 
-    async def connect(self, src_map, dest_map, af=IP4, route_type=NIC_BIND):
+    async def start(self, src_map, dest_map, af=IP4, route_type=NIC_BIND, plugin_name=None):
         # Need AF supported by both.
         if not src_map[af] or not dest_map[af]:
             raise Exception("AF not supported between hosts.")
@@ -193,7 +134,8 @@ class TraversalManager():
         )
 
         # Try every interface info pair for the plugins.
-        for plugin_name in self.plugin_loaders:
+        plugin_names = (plugin_name,) if plugin_name else self.plugin_loaders
+        for plugin_name in plugin_names:
             print(plugin_name)
             for if_infos in if_infos_order:
                 src_info, dest_info = if_infos
@@ -209,6 +151,12 @@ class TraversalManager():
                 # Run plugins for if info pairs.
                 if pipe:
                     return pipe
+                
+    async def close_plugin(self, plugin, reply=None):
+        # Delete unused futures on failure.
+        if hasattr(plugin, "pipe_id"):
+            del self.plugins[plugin.pipe_id]
+            del self.pipes[plugin.pipe_id]
 
 
 if __name__ == "__main__":
@@ -262,7 +210,7 @@ if __name__ == "__main__":
 
 
     async def tunnel_workspace():
-        manager = TraversalManager()
+        manager = TraversalManager(nics=[None])
         manager.install_plugin("direct", {
             "class": PluginDirect,
             "timeout": 2,
@@ -284,7 +232,7 @@ if __name__ == "__main__":
         #print(addr)
 
 
-        await manager.connect(ADDR_MAP, ADDR_MAP)
+        await manager.start(ADDR_MAP, ADDR_MAP)
 
         #await tunnel_factory()
 

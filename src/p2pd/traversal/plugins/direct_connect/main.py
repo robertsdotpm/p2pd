@@ -4,41 +4,43 @@ from ....net.net_utils import *
 from ....net.address import Address
 from ....net.pipe.pipe import *
 from ....node.node_defs import *
+from ..traversal_plugin import TraversalPlugin
 
-async def direct_connect(tunnel, af, pipe_id, src_info, dest_info, iface, addr_type, rsame_machine, reply=None):
-    # Connect to this address.
-    dest = (
-        str(dest_info["ip"]),
-        dest_info["port"],
-    )
+class DirectConnect(TraversalPlugin):
+    async def run(self, reply=None):
+        # Connect to this address.
+        dest = (
+            str(self.dest_info["ip"]),
+            self.dest_info["port"],
+        )
 
-    # (1) Get first interface for AF.
-    # (2) Build a 'route' from it with it's main NIC IP.
-    # (3) Bind to the route at port 0. Return itself.
-    if af == IP4:
-        route = await iface.route(af).bind()
-    if af == IP6:
-        if "fe80" == dest[0][:4]:
-            route = iface.route(af)
-            await route.bind(
-                ips=str(route.link_locals[0])
-            )
-        else:
-            route = await iface.route(af).bind()
+        # (1) Get first interface for AF.
+        # (2) Build a 'route' from it with it's main NIC IP.
+        # (3) Bind to the route at port 0. Return itself.
+        if self.af == IP4:
+            route = await self.nic.route(self.af).bind()
+        if self.af == IP6:
+            if "fe80" == dest[0][:4]:
+                route = self.nic.route(self.af)
+                await route.bind(
+                    ips=str(route.link_locals[0])
+                )
+            else:
+                route = await self.nic.route(self.af).bind()
 
-    # Connect to destination.
-    try:
-        pipe = await Pipe(TCP, dest, route).connect(tunnel.node.msg_cb)
-    except Exception:
-        log_exception()
-        pipe = None
+        # Connect to destination.
+        try:
+            pipe = await Pipe(TCP, dest, route).connect()
+        except Exception:
+            log_exception()
+            pipe = None
 
-    if pipe is None:
-        return
-    
-    if pipe.sock is None:
-        return
+        if pipe is None:
+            return
+        
+        if pipe.sock is None:
+            return
 
-    await pipe.send(CON_ID_MSG + to_b(fstr(" {0}\n", (pipe_id,))))
-    tunnel.node.pipe_ready(pipe_id, pipe)
-    return pipe
+        await pipe.send(CON_ID_MSG + to_b(fstr(" {0}\n", (self.pipe_id,))))
+        self.pipe_future.set_result(pipe)
+        return pipe

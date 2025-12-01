@@ -3,14 +3,14 @@ from collections import OrderedDict
 from ..net.pipe.pipe_events import PipeEvents
 from ..node.node_addr import *
 from ..protocol.turn.turn_client import TURNClient
-from .tunnel_utils import *
+from .traversal_utils import *
 from ..node.node_protocol import *
 from .plugins.direct_connect.main import direct_connect
 from .plugins.punch.punch_protocol import PunchProtocol
 from .plugins.turn.main import udp_turn_relay, turn_cleanup
 from .plugins.reverse_connect.main import reverse_connect
 from ..node.nickname import *
-from .tunnel_address import *
+from .traversal_address import *
 
 async def log_pipe(addr_type, func_txt, pipe):
     path_txt = f_path_txt(addr_type)

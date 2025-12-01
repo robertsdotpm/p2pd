@@ -19,23 +19,19 @@ async def connect_option(node, con_opts):
         dest_addr = await get_dest_addr(last_addr)
 
     # Get connect cmd segments manually if not set.
-    strats = await choose_connection_methods(con_method)
-    addr_types = await choose_pathways(pathway)
-    af_priority = await choose_address_families(addr_type)
-    if "menu" in (strats, addr_types, strats,):
+    plugin_name = await choose_connection_methods(con_method)
+    route_type = await choose_pathways(pathway)
+    af = await choose_address_families(addr_type)
+    if "menu" in (plugin_name, route_type, af,):
         return "menu"
 
     # Data structure to control a tunnel to the remote host.
     cout()
     cout("Connection in progress... Please wait...")
-    pipe_conf = {
-        "addr_types": addr_types,
-        "addr_families": af_priority,
-        "return_msg": False,
-    }
 
     # Attempt to make the tunnel connection to the remote host.
-    pipe = await node.connect(dest_addr, strategies=strats, conf=pipe_conf)
+    pipe = await node.connect(af, route_type, dest_addr, plugin_name)
+    
     try:
         if pipe is None:
             raise TunnelFailed("Connection failed.")
