@@ -34,3 +34,4 @@ RELAY_FAIL = 14
 # It will need a special explanation for the developer.
 # SOCKS might be a better protocol for relaying in the future.
 P2P_STRATEGIES = [P2P_DIRECT, P2P_REVERSE, P2P_PUNCH]
+

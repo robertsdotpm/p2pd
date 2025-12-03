@@ -48,6 +48,9 @@ class TraversalManager():
         self.pipes = pipes # by pipe id
         self.nics = nics
 
+    def get_plugin(self, pipe_id):
+        return self.plugins.get(pipe_id, None)
+
     def install_plugin(self, name, conf):
         assert("class" in conf)
         conf = {
@@ -84,7 +87,7 @@ class TraversalManager():
 
         return ret
 
-    async def plugin_router(self, af, route_type, src_info, dest_info, same_machine, plugin_name, reply=None):
+    async def plugin_router(self, af, route_type, src_info, dest_info, same_machine, plugin_name):
         # Meta data for this specific plugin.
         plugin_loader = self.plugin_loaders[plugin_name]
 
@@ -110,9 +113,7 @@ class TraversalManager():
             plugin_loader["timeout"]
         )
 
-        # Run plugin function -- has timeout based on plugin meta.
-        pipe = await self.run_plugin(plugin, reply)
-        if pipe: return pipe
+        return plugin
 
     async def start(self, src_map, dest_map, af=IP4, route_type=NIC_BIND, plugin_name=None):
         # Need AF supported by both.
@@ -133,13 +134,18 @@ class TraversalManager():
             dest_map
         )
 
+        # Set plugins to try.
+        if plugin_name:
+            plugin_names = (plugin_name,)
+        else:
+            plugin_names = self.plugin_loaders
+
         # Try every interface info pair for the plugins.
-        plugin_names = (plugin_name,) if plugin_name else self.plugin_loaders
         for plugin_name in plugin_names:
             print(plugin_name)
             for if_infos in if_infos_order:
                 src_info, dest_info = if_infos
-                pipe = await self.plugin_router(
+                plugin = await self.plugin_router(
                     af,
                     route_type,
                     src_info,
@@ -147,6 +153,12 @@ class TraversalManager():
                     same_machine,
                     plugin_name
                 )
+
+                # Load overall addr info into the plugin.
+                plugin.set_addrs(src_map, dest_map)
+
+                # Run plugin function -- has timeout based on plugin meta.
+                pipe = await self.run_plugin(plugin)
 
                 # Run plugins for if info pairs.
                 if pipe:
@@ -157,7 +169,6 @@ class TraversalManager():
         if hasattr(plugin, "pipe_id"):
             del self.plugins[plugin.pipe_id]
             del self.pipes[plugin.pipe_id]
-
 
 if __name__ == "__main__":
 

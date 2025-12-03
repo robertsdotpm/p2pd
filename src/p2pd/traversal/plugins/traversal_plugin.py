@@ -4,6 +4,10 @@ class TraversalPlugin():
     def __init__(self):
         pass
 
+    def set_addrs(self, src_map, dest_map):
+        self.src_map = src_map
+        self.dest_map = dest_map
+
     def set_routing(self, af, src_info, dest_info, nic):
         self.af = af
         self.src_info = src_info
@@ -54,5 +58,5 @@ class TraversalPlugin():
         self.pipe_id = pipe_id
         self.pipe_future = pipe_future
 
-    async def run(self, reply=None):
+    async def run(self, reply=None, f_msg_sender=None):
         print("run parent.")

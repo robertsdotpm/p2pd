@@ -2,6 +2,24 @@
 Using offsets for servers is a bad idea as server
 lists need to be updated. Use short, unique IDs or
 index by host name even if its longer.
+
+-----
+
+multiple useless layers of abstraction:
+    signal protocol just wraps proto handlers.proto
+
+handle_msg:
+    designed to pass a reply to a strategy
+    probably uselesssly abstract and terrible naming
+
+"sigprotohandler.proto":
+    figure out type of message
+    check if its meant for us
+    filter already seen
+    filter old msg
+    update dest routing info (our own addr)
+    check if reply for returnaddr
+    pass to handle_msg
 """
 
 from ...utility.utils import *
@@ -9,14 +27,7 @@ from ...vendor.ecies import encrypt, decrypt
 from .signal_msgs import *
 from ..tunnel import Tunnel
 
-SIG_PROTO = {
-    SIG_CON: [ConMsg, P2P_DIRECT, 5],
-    SIG_TCP_PUNCH: [PunchMsg, P2P_PUNCH, 20],
-    SIG_TURN: [TURNMsg, P2P_RELAY, 10],
-    SIG_GET_ADDR: [GetAddr, 0, 5],
-    SIG_RETURN_ADDR: [ReturnAddr, 0, 6],
-    #SIG_ADDR: [AddrMsg, 0, 5],
-}
+
 
 # Used by the MQTT clients.
 async def signal_protocol(self, msg, signal_pipe):
@@ -45,7 +56,7 @@ class SigProtoHandlers():
         _, strategy, timeout = info
 
         # Connect to chosen address.
-        
+
         tunnel = Tunnel(msg.meta.src_buf, self.node)
 
         # Get address.
