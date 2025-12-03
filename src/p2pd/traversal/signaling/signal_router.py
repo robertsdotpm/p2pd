@@ -41,21 +41,6 @@ def discard_old_msg(msg, seen, f_time):
     
     return msg
 
-def handle_get_addr(msg, f_time, addr_bytes, vk):
-    msg = ReturnAddr({
-        "meta": {
-            "ttl": int(f_time()) + 5,
-            "pipe_id": msg.meta.pipe_id,
-            "src_buf": addr_bytes,
-        },
-        "routing": {
-            "dest_buf": msg.meta.src_buf,
-        },
-    })
-
-    msg.cipher.vk = vk
-    return msg
-
 class SignalRouter():
     def __init__(self, f_time, node_id, addr_bytes, sk):
         self.f_time = f_time
@@ -102,26 +87,6 @@ class SignalRouter():
 
         # loads nic and stun client from offsets.
         msg.routing.load_if_extra(self.node) 
-
-        # Handle get addr.
-        if isinstance(msg, GetAddr):
-            reply = handle_get_addr(msg, self.f_time, self.addr_bytes, self.vk)
-            # todo send this.
-            return
-        
-        """
-        Only the dest and author knows the original msg
-        so if they reply with the right pipe_id and vkc
-        there's no need to check vkc.
-        """
-        # TODO?
-        if isinstance(msg, ReturnAddr):
-            if pipe_id not in self.node.addr_futures:
-                log("pipe id not in addr futures")
-                return
-            
-            self.node.addr_futures[pipe_id].set_result(msg)
-            return
         
         # Pass this message on to existing plugin.
         # If one doesn't exist it will be created.
