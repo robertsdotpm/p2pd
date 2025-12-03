@@ -42,12 +42,14 @@ from .traversal_utils import *
 from .plugins.traversal_plugin import TraversalPlugin
 
 class TraversalManager():
-    def __init__(self, pipes={}, nics=[], f_msg_sender=None):
-        self.f_msg_sender = f_msg_sender
+    def __init__(self, pipes={}, nics=[]):
         self.plugin_loaders = OrderedDict()
         self.plugins = {} # by pipe id
         self.pipes = pipes # by pipe id
         self.nics = nics
+    
+    def set_signal_msg_sender(self, signal_msg_sender):
+        self.signal_msg_sender = signal_msg_sender
 
     def install_plugin(self, name, conf):
         assert("class" in conf)
@@ -112,7 +114,7 @@ class TraversalManager():
         )
 
         # Set function for plugin to send replies.
-        plugin.set_msg_sender(self.f_msg_sender)
+        plugin.set_signal_msg_sender(self.signal_msg_sender)
         return plugin
     
     async def get_plugin(self, msg):
@@ -172,7 +174,7 @@ class TraversalManager():
                 # Load overall addr info into the plugin.
                 plugin.set_addrs(src_map, dest_map)
 
-                # Run plugin function -- has timeout based on plugin meta.
+                # Run plugin function -- timeout based on plugin meta.
                 pipe = await self.run_plugin(plugin)
 
                 # Run plugins for if info pairs.

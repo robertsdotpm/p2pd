@@ -50,22 +50,25 @@ class SignalRouter():
         self.vk = to_h(sk.verifying_key.to_string("compressed"))
         self.seen = {}
 
+    def set_signal_pipes(self, signal_pipes):
+        self.signal_pipes = signal_pipes
+
     def set_traversal_manager(self, traversal):
         self.traversal = traversal
 
-    def f_msg_sender(self, msg, plugin, pipe):
+    async def signal_msg_sender(self, msg, plugin):
         msg.meta = SigMsg.Meta.from_dict({
             "ttl": int(self.f_time()) + 30,
             "pipe_id": plugin.pipe_id,
             "af": plugin.af,
-            "src_map": plugin.src_map,
+            "src_buf": plugin.src_map["bytes"],
             "src_index": plugin.src_info["if_index"],
             "addr_types": [plugin.route_type]
         })
 
         msg.routing = SigMsg.Routing.from_dict({
             "af": plugin.af,
-            "dest_map": plugin.dest_map,
+            "dest_buf": plugin.dest_map["bytes"],
             "dest_index": plugin.dest_info["if_index"],
         })
 

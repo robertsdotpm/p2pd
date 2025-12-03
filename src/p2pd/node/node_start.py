@@ -17,6 +17,7 @@ from ..traversal.signaling.signal_protocol import *
 from ..traversal.signaling.signal_utils import *
 from ..traversal.signaling.signal_sender import *
 from ..utility.clock_skew import SysClock
+from ..traversal.signaling.signal_router import *
 
 async def node_start(node, sys_clock=None, out=False, cout=print):
     # Load ifs.
@@ -192,5 +193,24 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         nick = await node.nickname(node.node_id)
         pkt = await node.nick_client.fetch(nick)
         cout("nick pkt vkc = ", pkt.vkc)
+
+    # Used for sending signaling messasges to other nodes.
+    node.signal_router = SignalRouter(
+        node.clock_skew.time,
+        node.node_id,
+        node.addr_bytes,
+        node.sk
+    )
+
+    # Sets up the signaling router to use MQTT clients.
+    node.signal_router.set_signal_pipes(node.signal_pipes)
+
+    # Allow signaling router to pass messages to interested plugins.
+    node.signal_router.set_traversal_manager(node.traversal)
+
+    # Tell the traversal plugin manager how to send signal messages.
+    node.traversal.set_signal_msg_sender(
+        node.signal_router.signal_msg_sender
+    )
 
     return node

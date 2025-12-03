@@ -5,17 +5,9 @@ from ....net.address import Address
 from ....net.pipe.pipe import *
 from ....node.node_defs import *
 from ..traversal_plugin import TraversalPlugin
+from ...signaling.signal_msgs import GetAddr
 
 class GetAddrPlugin(TraversalPlugin):
     async def run(self, reply=None):
-        # todo send get addr to dest
-        msg = GetAddr({
-            "meta": {
-                "ttl": int(node.sys_clock.time()) + 5,
-                "pipe_id": pipe_id,
-                "src_buf": node.addr_bytes,
-            },
-            "routing": {
-                "dest_buf": addr_bytes,
-            },
-        })
+        msg = GetAddr({})
+        await self.signal_msg_sender(msg)
