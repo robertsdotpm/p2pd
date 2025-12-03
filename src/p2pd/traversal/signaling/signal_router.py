@@ -41,6 +41,21 @@ def discard_old_msg(msg, seen, f_time):
     
     return msg
 
+def handle_get_addr(msg, f_time, addr_bytes, vk):
+    msg = ReturnAddr({
+        "meta": {
+            "ttl": int(f_time()) + 5,
+            "pipe_id": msg.meta.pipe_id,
+            "src_buf": addr_bytes,
+        },
+        "routing": {
+            "dest_buf": msg.meta.src_buf,
+        },
+    })
+
+    msg.cipher.vk = vk
+    return msg
+
 class SignalRouter():
     def __init__(self, f_time, node_id, addr_bytes, sk):
         self.f_time = f_time
@@ -53,7 +68,7 @@ class SignalRouter():
     def set_traversal_manager(self, traversal):
         self.traversal = traversal
 
-    async def f_msg_sender(self, msg, plugin):
+    def f_msg_sender(self, msg, plugin, pipe):
         msg.meta = SigMsg.Meta.from_dict({
             "ttl": int(self.f_time()) + 30,
             "pipe_id": plugin.pipe_id,
@@ -79,14 +94,37 @@ class SignalRouter():
         if to_s(msg.routing.dest["node_id"]) != self.node_id:
             raise Exception("Message not meant for us.")
 
+        # Raise exception if this is old.
         discard_old_msg(msg, self.seen, self.f_time)
 
         # Updating routing dest with current addr.
         msg.set_cur_addr(self.addr_bytes)
+
         # loads nic and stun client from offsets.
         msg.routing.load_if_extra(self.node) 
 
+        # Handle get addr.
+        if isinstance(msg, GetAddr):
+            reply = handle_get_addr(msg, self.f_time, self.addr_bytes, self.vk)
+            # todo send this.
+            return
+        
+        """
+        Only the dest and author knows the original msg
+        so if they reply with the right pipe_id and vkc
+        there's no need to check vkc.
+        """
+        # TODO?
+        if isinstance(msg, ReturnAddr):
+            if pipe_id not in self.node.addr_futures:
+                log("pipe id not in addr futures")
+                return
+            
+            self.node.addr_futures[pipe_id].set_result(msg)
+            return
+        
         # Pass this message on to any plugins registered for it.
         plugin = self.traversal.get_plugin(msg.meta.pipe_id)
-        await plugin.run(reply=msg, f_msg_sender=self.f_msg_sender)
+        f_msg_sender = lambda m: self.f_msg_sender(m, plugin, pipe)
+        await plugin.run(reply=msg, f_msg_sender=f_msg_sender)
 
