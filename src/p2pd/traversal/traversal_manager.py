@@ -42,14 +42,12 @@ from .traversal_utils import *
 from .plugins.traversal_plugin import TraversalPlugin
 
 class TraversalManager():
-    def __init__(self, pipes={}, nics=[]):
+    def __init__(self, pipes={}, nics=[], f_msg_sender=None):
+        self.f_msg_sender = f_msg_sender
         self.plugin_loaders = OrderedDict()
         self.plugins = {} # by pipe id
         self.pipes = pipes # by pipe id
         self.nics = nics
-
-    def get_plugin(self, pipe_id):
-        return self.plugins.get(pipe_id, None)
 
     def install_plugin(self, name, conf):
         assert("class" in conf)
@@ -112,6 +110,23 @@ class TraversalManager():
             plugin_loader["set_bind"],
             plugin_loader["timeout"]
         )
+
+        # Set function for plugin to send replies.
+        plugin.set_msg_sender(self.f_msg_sender)
+        return plugin
+    
+    async def get_plugin(self, msg):
+        if msg.meta.pipe_id in self.plugins:
+            plugin = self.plugin.get(msg.meta.pipe_id, None)
+        else:
+            plugin = await self.plugin_router(
+                msg.meta.af,
+                msg.meta.route_type,
+                msg.meta.src_info,
+                msg.meta.dest_info,
+                msg.meta.same_machine,
+                msg.meta.plugin_name
+            )
 
         return plugin
 

@@ -123,8 +123,10 @@ class SignalRouter():
             self.node.addr_futures[pipe_id].set_result(msg)
             return
         
-        # Pass this message on to any plugins registered for it.
-        plugin = self.traversal.get_plugin(msg.meta.pipe_id)
-        f_msg_sender = lambda m: self.f_msg_sender(m, plugin, pipe)
-        await plugin.run(reply=msg, f_msg_sender=f_msg_sender)
+        # Pass this message on to existing plugin.
+        # If one doesn't exist it will be created.
+        plugin = self.traversal.get_plugin(msg)
+        await plugin.run(reply=msg)
+
+
 

@@ -58,5 +58,8 @@ class TraversalPlugin():
         self.pipe_id = pipe_id
         self.pipe_future = pipe_future
 
+    def set_msg_sender(self, f_msg_sender):
+        self.f_msg_sender = f_msg_sender
+
     async def run(self, reply=None, f_msg_sender=None):
         print("run parent.")
