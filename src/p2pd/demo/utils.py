@@ -19,6 +19,7 @@ def cout(*fargs):
             print(*fargs, flush=True)
 
 async def add_echo_support(msg, client_tup, pipe):
+    
     if b"ECHO" == msg[:4]:
         cout()
         cout("\tGot echo proto msg: " + to_s(msg) + fstr(" from {0}", (client_tup,)))
@@ -162,30 +163,21 @@ async def choose_connection_methods(con_method):
     cout("Connection methods (in order):")
     cout("TCP: (d)irect, (r)everse, (p)unch; UDP: (t)urn.")
     cout("Type menu to return.")
-    return "direct" # todo:
-
-    strats = []
     while True:
         # If pressing enter then use the default list of methods in order.
-        con_method = con_method or (await ainput("Enter for default (drp): "))
+        con_method = con_method or (await ainput("Enter for default (d): "))
         if not len(con_method):
-            strats = P2P_STRATEGIES
-            break
+            return "direct"
 
         # Go back to the menu.
-        if con_method.lower().strip() == "menu":
+        con_method = con_method.lower().strip()
+        if con_method == "menu":
             return "menu"
+        
+        if con_method not in method_txt:
+            continue
 
-        # Save a list of only valid choices.
-        strats = []
-        for c in con_method:
-            c = c.lower()
-            if c in method_txt:
-                strats.append(method_txt[c])
-
-        if strats:
-            break
-    return strats
+        return method_txt[con_method]
 
 async def choose_pathways(pathway):
     """

@@ -36,13 +36,15 @@ def discard_old_msg(msg, seen, f_time):
     # Old message?
     pipe_id = msg.meta.pipe_id
     if pipe_id in seen:
-        raise Exception(fstr("p id {0} already seen", (pipe_id,)))
+        log("Discard already seen msg.")
+        return
     else:
         seen[pipe_id] = time.time()
 
     # Check TTL.
     if int(f_time()) >= msg.meta.ttl:
-        raise Exception(fstr("msg ttl reached {0}", (msg.meta.ttl,)))
+        log("Discard old msg.")
+        return
     
     return msg
 
@@ -192,7 +194,9 @@ class SignalRouter():
         print("Got new signal msg = ", msg.to_dict())
 
         # Raise exception if this is old.
-        discard_old_msg(msg, self.seen, self.f_time)
+        msg = discard_old_msg(msg, self.seen, self.f_time)
+        if not msg:
+            return
 
         # Updating routing dest with current addr.
         msg.set_cur_addr(self.addr_bytes)
@@ -200,7 +204,7 @@ class SignalRouter():
         # Pass this message on to existing plugin.
         # If one doesn't exist it will be created.
         plugin = self.traversal.get_plugin(msg)
-        
+
         #TODO: make this pop off older items when it fills.
         self.tasks.append(
             asyncio.create_task(

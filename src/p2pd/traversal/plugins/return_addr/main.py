@@ -13,3 +13,5 @@ class ReturnAddrPlugin(TraversalPlugin):
             await self.signal_msg_sender(msg)
         except:
             what_exception()
+
+        self.result.set_result("Done")

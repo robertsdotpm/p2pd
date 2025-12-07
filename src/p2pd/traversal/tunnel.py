@@ -7,7 +7,7 @@ from .traversal_utils import *
 from ..node.node_protocol import *
 from .plugins.punch.punch_protocol import PunchProtocol
 from .plugins.turn.main import udp_turn_relay, turn_cleanup
-from .plugins.reverse_connect.main import reverse_connect
+from .plugins.reverse_connect.main import ReverseConnectPlugin
 from ..node.nickname import *
 from .traversal_address import *
 
@@ -58,16 +58,16 @@ class Tunnel():
         self.func_table = {
             # Short timeouts for direct TCP cons.
             #P2P_DIRECT: [direct_connect, 2, None, 1, 6, "direct"],
-            P2P_REVERSE: [reverse_connect, 4, None, 1, 6, "reverse"],
+            #P2P_REVERSE: [reverse_connect, 4, None, 1, 6, "reverse"],
 
             # Large timeout for meetings with a state cleanup.
             # <20 timeout can cause timeouts for punching.
             # todo: add cleanup back in
-            P2P_PUNCH: [self.punch_proto.protocol, 20, None, 0, 4, "punch"],
+            #P2P_PUNCH: [self.punch_proto.protocol, 20, None, 0, 4, "punch"],
 
             # Large timeout, end refreshers, disable LAN cons.
             # <20 timeout can cause timeouts for relay setup.
-            P2P_RELAY: [udp_turn_relay, 20, turn_cleanup, 1, 2, "relay"],
+            #P2P_RELAY: [udp_turn_relay, 20, turn_cleanup, 1, 2, "relay"],
         }
 
     def route_msg(self, msg, reply=None, m=0):

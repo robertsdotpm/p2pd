@@ -61,8 +61,9 @@ class TraversalPlugin():
         if self.dest_info["ip"] == "None":
             raise Exception("Cannot select valid dest IP")
 
-    def set_pipe_id(self, pipe_id):
-        self.pipe_id = pipe_id
+    def set_pipes(self, pipes, pipe_id=None):
+        self.pipe_id = pipe_id or self.pipe_id
+        self.pipes = pipes
 
     def set_signal_msg_sender(self, signal_msg_sender):
         self._signal_msg_sender = signal_msg_sender

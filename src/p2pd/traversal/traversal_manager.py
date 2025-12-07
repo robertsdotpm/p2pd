@@ -45,7 +45,12 @@ class TraversalManager():
     def __init__(self, pipes={}, nics=[]):
         self.plugin_loaders = OrderedDict()
         self.plugins = {} # by pipe id
+        self.pipes = pipes
         self.nics = nics
+        self.done_callback = None
+
+    def install_plugin_done_callback(self, done_callback):
+        self.done_callback = done_callback
     
     def set_signal_msg_sender(self, signal_msg_sender):
         self.signal_msg_sender = signal_msg_sender
@@ -92,6 +97,13 @@ class TraversalManager():
         print(plugin_loader)
         print(plugin)
 
+        # Install done callback handler.
+        if self.done_callback:
+            plugin.result.add_done_callback(self.done_callback)
+
+        # Allows plugins to await on pipes from other places.
+        plugin.set_pipes(self.pipes)
+
         # Load routing details in plugin.
         nic = self.nics[src_info["if_index"]]
         plugin.set_routing(
@@ -122,6 +134,9 @@ class TraversalManager():
             if isinstance(msg, GetAddr):
                 msg.meta.plugin_name = "return_addr"
 
+            if isinstance(msg, ConMsg):
+                msg.meta.plugin_name = "direct_connect"
+
             # Check plugin name exists.
             if msg.meta.plugin_name not in self.plugin_loaders:
                 raise Exception("Plugin not installed.")
@@ -144,7 +159,7 @@ class TraversalManager():
             plugin.set_addrs(msg.routing.dest, msg.meta.src)
 
             # Reuse the same pipe_id.
-            plugin.set_pipe_id(msg.meta.pipe_id)
+            plugin.set_pipes(self.pipes, msg.meta.pipe_id)
 
         return plugin
 

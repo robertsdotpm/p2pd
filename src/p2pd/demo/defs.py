@@ -33,8 +33,8 @@ delta_txt = {
 }
 
 method_txt = {
-    "d": "direct",
-    "r": "reverse",
+    "d": "direct_connect",
+    "r": "reverse_connect",
     "p": "punch",
     "t": "relay",
 }

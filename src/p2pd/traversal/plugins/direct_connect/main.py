@@ -42,5 +42,4 @@ class DirectConnect(TraversalPlugin):
             return
 
         await pipe.send(CON_ID_MSG + to_b(fstr(" {0}\n", (self.pipe_id,))))
-        self.pipe_future.set_result(pipe)
-        return pipe
+        self.result.set_result(pipe)

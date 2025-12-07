@@ -18,6 +18,7 @@ from ..traversal.traversal_manager import TraversalManager
 from ..traversal.plugins.direct_connect.main import DirectConnect
 from ..traversal.plugins.get_addr.main import GetAddrPlugin
 from ..traversal.plugins.return_addr.main import ReturnAddrPlugin
+from ..traversal.plugins.reverse_connect.main import ReverseConnectPlugin
 
 NODE_CONF = dict_child({
     "reuse_addr": False,
@@ -65,7 +66,7 @@ class Node(Daemon):
         self.addr_bytes = None
         self.addr_futures = {}
         self.traversal = TraversalManager(self.pipes, self.ifs)
-        self.traversal.install_plugin("direct", {
+        self.traversal.install_plugin("direct_connect", {
             "class": DirectConnect
         })  
         self.traversal.install_plugin("get_addr", {
@@ -74,6 +75,16 @@ class Node(Daemon):
         self.traversal.install_plugin("return_addr", {
             "class": ReturnAddrPlugin
         })
+        self.traversal.install_plugin("reverse_connect", {
+            "class": ReverseConnectPlugin
+        })
+
+        def on_done(future):
+            result = future.result()
+            if isinstance(result, (Pipe, PipeClient,)):
+                result.add_msg_cb(self.msg_cb)
+
+        self.traversal.install_plugin_done_callback(on_done)
 
     def add_msg_cb(self, msg_cb):
         self.msg_cbs.append(msg_cb)

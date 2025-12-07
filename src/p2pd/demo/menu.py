@@ -32,12 +32,12 @@ async def connect_option(node, con_opts):
     # Attempt to make the tunnel connection to the remote host.
     plugin = await node.connect(af, route_type, dest_addr, plugin_name)
     pipe = await plugin.result # todo: timeout
-    if isinstance(pipe, Pipe):
-        pipe.add_msg_cb(node.msg_cb)
-    
+    print("plugin result = ", pipe)
+    print(pipe.sock)
     try:
         if pipe is None:
             raise TunnelFailed("Connection failed.")
+        pipe.subscribe(SUB_ALL)
         return await echo_client(pipe, echo_data)
     finally:
         if pipe:
