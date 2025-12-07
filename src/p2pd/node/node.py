@@ -16,6 +16,8 @@ from ..traversal.traversal_address import *
 from ..traversal.signaling.signal_protocol import *
 from ..traversal.traversal_manager import TraversalManager
 from ..traversal.plugins.direct_connect.main import DirectConnect
+from ..traversal.plugins.get_addr.main import GetAddr
+from ..traversal.plugins.return_addr.main import ReturnAddr
 
 NODE_CONF = dict_child({
     "reuse_addr": False,
@@ -65,6 +67,12 @@ class Node(Daemon):
         self.traversal = TraversalManager(self.pipes, self.ifs)
         self.traversal.install_plugin("direct", {
             "class": DirectConnect
+        })  
+        self.traversal.install_plugin("get_addr", {
+            "class": GetAddr
+        })
+        self.traversal.install_plugin("return_addr", {
+            "class": ReturnAddr
         })
 
     def add_msg_cb(self, msg_cb):
@@ -123,24 +131,36 @@ class Node(Daemon):
     # Connect to a remote P2P node using a number of techniques.
     async def connect(self, af, route_type, pnp_addr, plugin_name=None):
         # Get most recent address bytes if given a nickname.
-        if pnp_name_has_tld(pnp_addr):
-            addr_bytes = await get_updated_addr_bytes(self, pnp_addr)
-        else:
-            addr_bytes = pnp_addr
+        if plugin_name not in ("get_addr", "return_addr",):
+            if pnp_name_has_tld(pnp_addr):
+                addr_bytes = await get_updated_addr_from_mqtt(self, pnp_addr)
+                print("Got updated addr bytes from mqtt = ", addr_bytes)
+            else:
+                addr_bytes = pnp_addr
 
-        pipe = await self.traversal.start(
+        # If af is None select an AF supported by both.
+        src_map = self.p2p_addr
+        dest_map = parse_node_addr(addr_bytes)
+        if not af:
+            for try_af in (IP4, IP6,):
+                if len(src_map[try_af]) and len(dest_map[try_af]):
+                    af = try_af
+                    break
+        
+        # No shared AF found.
+        if not af:
+            raise Exception("No supported shared AF.")
+
+        # Start the traversal plugin method.
+        plugin = await self.traversal.start(
             src_map=self.p2p_addr,
             dest_map=parse_node_addr(addr_bytes),
+            plugin_name=plugin_name,
             af=af,
             route_type=route_type,
-            plugin_name=plugin_name
         )
 
-        # Install msg handlers.
-        if pipe:
-            pipe.add_msg_cb(self.msg_cb)
-
-        return pipe
+        return plugin
 
     # Get our node server's address.
     def address(self):

@@ -45,7 +45,7 @@ class TraversalManager():
     def __init__(self, pipes={}, nics=[]):
         self.plugin_loaders = OrderedDict()
         self.plugins = {} # by pipe id
-        self.pipes = pipes # by pipe id
+        self.results = {} # by pipe id
         self.nics = nics
     
     def set_signal_msg_sender(self, signal_msg_sender):
@@ -76,16 +76,13 @@ class TraversalManager():
             pipe_id = reply.meta.pipe_id
 
         if pipe_id not in self.pipes:
-            self.pipes[pipe_id] = asyncio.Future()
             self.plugins[pipe_id] = plugin
 
         plugin.set_pipe_id(pipe_id, self.pipes[pipe_id])
-        ret = await async_wrap_errors(
+        await async_wrap_errors(
             plugin.run(reply),
             timeout=plugin.timeout
         )
-
-        return ret
 
     async def plugin_router(self, af, route_type, src_info, dest_info, same_machine, plugin_name):
         # Meta data for this specific plugin.
@@ -121,6 +118,15 @@ class TraversalManager():
         if msg.meta.pipe_id in self.plugins:
             plugin = self.plugin.get(msg.meta.pipe_id, None)
         else:
+            # Map getaddr message to returnaddr plugin handler.
+            if isinstance(msg, GetAddr):
+                msg.meta.plugin_name = "ReturnAddr"
+
+            # Check plugin name exists.
+            if msg.meta.plugin_name not in self.plugin_loaders:
+                raise Exception("Plugin not installed.")
+
+            # Load new instance to handle this message.
             plugin = await self.plugin_router(
                 msg.meta.af,
                 msg.meta.route_type,
@@ -132,7 +138,7 @@ class TraversalManager():
 
         return plugin
 
-    async def start(self, src_map, dest_map, af=IP4, route_type=NIC_BIND, plugin_name=None):
+    async def start(self, src_map, dest_map, plugin_name, af=IP4, route_type=NIC_BIND):
         # Need AF supported by both.
         if not src_map[af] or not dest_map[af]:
             raise Exception("AF not supported between hosts.")
@@ -151,35 +157,25 @@ class TraversalManager():
             dest_map
         )
 
-        # Set plugins to try.
-        if plugin_name:
-            plugin_names = (plugin_name,)
-        else:
-            plugin_names = self.plugin_loaders
-
         # Try every interface info pair for the plugins.
-        for plugin_name in plugin_names:
-            print(plugin_name)
-            for if_infos in if_infos_order:
-                src_info, dest_info = if_infos
-                plugin = await self.plugin_router(
-                    af,
-                    route_type,
-                    src_info,
-                    dest_info,
-                    same_machine,
-                    plugin_name
-                )
+        print(plugin_name)
+        for if_infos in if_infos_order:
+            src_info, dest_info = if_infos
+            plugin = await self.plugin_router(
+                af,
+                route_type,
+                src_info,
+                dest_info,
+                same_machine,
+                plugin_name
+            )
 
-                # Load overall addr info into the plugin.
-                plugin.set_addrs(src_map, dest_map)
+            # Load overall addr info into the plugin.
+            plugin.set_addrs(src_map, dest_map)
 
-                # Run plugin function -- timeout based on plugin meta.
-                pipe = await self.run_plugin(plugin)
-
-                # Run plugins for if info pairs.
-                if pipe:
-                    return pipe
+            # Run plugin function -- timeout based on plugin meta.
+            await self.run_plugin(plugin)
+            return plugin
                 
     async def close_plugin(self, plugin, reply=None):
         # Delete unused futures on failure.

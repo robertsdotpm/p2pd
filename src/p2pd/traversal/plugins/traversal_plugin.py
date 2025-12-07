@@ -1,8 +1,9 @@
+import asyncio
 from ..traversal_utils import *
 
 class TraversalPlugin():
     def __init__(self):
-        pass
+        self.result = asyncio.Future()
 
     def set_addrs(self, src_map, dest_map):
         self.src_map = src_map

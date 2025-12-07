@@ -30,7 +30,10 @@ async def connect_option(node, con_opts):
     cout("Connection in progress... Please wait...")
 
     # Attempt to make the tunnel connection to the remote host.
-    pipe = await node.connect(af, route_type, dest_addr, plugin_name)
+    plugin = await node.connect(af, route_type, dest_addr, plugin_name)
+    pipe = await plugin.result # todo: timeout
+    if isinstance(pipe, Pipe):
+        pipe.add_msg_cb(node.msg_cb)
     
     try:
         if pipe is None:

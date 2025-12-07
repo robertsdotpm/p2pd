@@ -140,7 +140,7 @@ class Tunnel():
 async def connect_tunnel(node, pnp_addr, strategies=P2P_STRATEGIES, conf=P2P_PIPE_CONF):
     # Get most recent address bytes if given a nickname.
     if pnp_name_has_tld(pnp_addr):
-        addr_bytes = await get_updated_addr_bytes(node, pnp_addr)
+        addr_bytes = await get_updated_addr_from_mqtt(node, pnp_addr)
     else:
         addr_bytes = pnp_addr
 
