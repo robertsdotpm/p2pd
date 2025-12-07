@@ -33,12 +33,6 @@ async def load_signal_pipe(node, af, offset, servers):
     )
     #print(dest_tup)
 
-    def sig_proto_closure():
-        def closure(msg, signal_pipe):
-            return signal_protocol(node, msg, signal_pipe)
-    
-        return closure
-
     """
     This function does a basic send/recv test with MQTT to help
     ensure the MQTT servers are valid.
@@ -46,7 +40,7 @@ async def load_signal_pipe(node, af, offset, servers):
     #print("load mqtt with self.node id:", node.node_id)
     client = await SignalMock(
         to_s(node.node_id),
-        sig_proto_closure(),
+        lambda x, y, z: None,
         dest_tup
     ).start()
 

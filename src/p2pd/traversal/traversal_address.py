@@ -82,14 +82,11 @@ async def get_updated_addr_bytes(node, dest_addr):
 
     return addr_bytes
 
-async def get_updated_addr_from_mqtt(node, dest_addr):
-    addr_bytes = None
-    if pnp_name_has_tld(dest_addr):
-        af = None # Not relevant for this method
-        route_type = EXT_BIND # Not relevant but as long as it's not NIC_BIND.
-        plugin = await node.connect(af, route_type, dest_addr, "get_addr")
-        addr_bytes = await plugin.result # TODO: timeout.
-    else:
-        raise Exception("dest addr not a pnp name")
-
-    return addr_bytes
+async def get_updated_addr_from_mqtt(node, dest_bytes):
+    af = None # Not relevant for this method
+    route_type = None # Not relevant but as long as it's not NIC_BIND.
+    plugin = await node.connect(af, route_type, dest_bytes, "get_addr")
+    print("get_updated_addr_from_mqtt plug = ", plugin)
+    updated_bytes = await plugin.result # TODO: timeout.
+    print("updated bytes ", updated_bytes)
+    return updated_bytes

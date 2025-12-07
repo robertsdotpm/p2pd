@@ -25,15 +25,12 @@ class SignalMock():
         self.pending_tasks = []
 
     def on_message(self, client, topic, payload, qos, properties):
-        create_task(
-            async_wrap_errors(
-                self.f_proto(payload, self),
-
-                # Set a timeout of 20 seconds to do tasks.
-                # Make everything timeout and end if it meets this.
-                #20
-            )
-        )
+        print("in sig mock on msg ")
+        try:
+            self.f_proto(payload, client, self)
+        except:
+            what_exception()
+            log_exception() # todo disable what except
 
     def on_connect(self, client, flags, rc, properties):
         self.is_connected = True
@@ -66,7 +63,6 @@ class SignalMock():
             return 0
         else:
             return len(msg)
-
 
     async def echo(self, msg, dest_chan):
         out = fstr("ECHO {0} {1}", (self.peer_id, msg,))

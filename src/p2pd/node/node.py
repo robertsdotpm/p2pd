@@ -16,8 +16,8 @@ from ..traversal.traversal_address import *
 from ..traversal.signaling.signal_protocol import *
 from ..traversal.traversal_manager import TraversalManager
 from ..traversal.plugins.direct_connect.main import DirectConnect
-from ..traversal.plugins.get_addr.main import GetAddr
-from ..traversal.plugins.return_addr.main import ReturnAddr
+from ..traversal.plugins.get_addr.main import GetAddrPlugin
+from ..traversal.plugins.return_addr.main import ReturnAddrPlugin
 
 NODE_CONF = dict_child({
     "reuse_addr": False,
@@ -69,10 +69,10 @@ class Node(Daemon):
             "class": DirectConnect
         })  
         self.traversal.install_plugin("get_addr", {
-            "class": GetAddr
+            "class": GetAddrPlugin
         })
         self.traversal.install_plugin("return_addr", {
-            "class": ReturnAddr
+            "class": ReturnAddrPlugin
         })
 
     def add_msg_cb(self, msg_cb):
@@ -130,17 +130,28 @@ class Node(Daemon):
     
     # Connect to a remote P2P node using a number of techniques.
     async def connect(self, af, route_type, pnp_addr, plugin_name=None):
+        # TODO: vk lookup map for node ids -- still relevant?
+        # todo make vk pass on properly for updated addr msg
+
         # Get most recent address bytes if given a nickname.
-        if plugin_name not in ("get_addr", "return_addr",):
-            if pnp_name_has_tld(pnp_addr):
-                addr_bytes = await get_updated_addr_from_mqtt(self, pnp_addr)
-                print("Got updated addr bytes from mqtt = ", addr_bytes)
-            else:
-                addr_bytes = pnp_addr
+        dest_vk = None
+        if pnp_name_has_tld(pnp_addr):
+            pkt = await self.nick_client.fetch(pnp_addr)
+            addr_bytes = pkt.value
+            dest_vk = pkt.vkc
+            print(dest_vk)
+
+            updated_addr_bytes = await get_updated_addr_from_mqtt(self, addr_bytes)
+            print("Got updated addr bytes from mqtt = ", updated_addr_bytes)
+            if updated_addr_bytes:
+                addr_bytes = updated_addr_bytes
+        else:
+            addr_bytes = pnp_addr
 
         # If af is None select an AF supported by both.
         src_map = self.p2p_addr
         dest_map = parse_node_addr(addr_bytes)
+        if dest_vk: dest_map["vk"] = dest_vk
         if not af:
             for try_af in (IP4, IP6,):
                 if len(src_map[try_af]) and len(dest_map[try_af]):
@@ -153,8 +164,8 @@ class Node(Daemon):
 
         # Start the traversal plugin method.
         plugin = await self.traversal.start(
-            src_map=self.p2p_addr,
-            dest_map=parse_node_addr(addr_bytes),
+            src_map=src_map,
+            dest_map=dest_map,
             plugin_name=plugin_name,
             af=af,
             route_type=route_type,

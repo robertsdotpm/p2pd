@@ -4,6 +4,7 @@ from ..traversal_utils import *
 class TraversalPlugin():
     def __init__(self):
         self.result = asyncio.Future()
+        self.pipe_id = to_s(rand_plain(15))
 
     def set_addrs(self, src_map, dest_map):
         self.src_map = src_map
@@ -23,11 +24,16 @@ class TraversalPlugin():
                 raise Exception("Invalid NIC loaded for plugin.")
         """
             
-    def set_context(self, route_type, same_machine, set_bind, timeout):
+    def set_context(self, route_type, same_machine, set_bind, timeout=4):
         self.route_type = route_type
         self.same_machine = same_machine
         self.set_bind = set_bind
         self.timeout = timeout
+
+        # Skip route determination -- not relevant.
+        if not route_type:
+            self.dest_info["ip"] = None
+            return
 
         """
         Determine the best destination IP to use
@@ -55,12 +61,14 @@ class TraversalPlugin():
         if self.dest_info["ip"] == "None":
             raise Exception("Cannot select valid dest IP")
 
-    def set_pipe_id(self, pipe_id, pipe_future):
+    def set_pipe_id(self, pipe_id):
         self.pipe_id = pipe_id
-        self.pipe_future = pipe_future
 
     def set_signal_msg_sender(self, signal_msg_sender):
-        self.signal_msg_sender = signal_msg_sender
+        self._signal_msg_sender = signal_msg_sender
+
+    async def signal_msg_sender(self, msg, relay_no=2):
+        return await self._signal_msg_sender(msg, self, relay_no)
 
     async def run(self, reply=None):
         print("run parent.")

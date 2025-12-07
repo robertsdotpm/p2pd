@@ -333,7 +333,7 @@ def get_if_infos_order(af, route_type, src_map, dest_map):
     address for overlapping pairs is likely not to lead to
     a connection since both are behind the same router.
     """
-    if route_type == EXT_BIND:
+    if route_type in (EXT_BIND, None):
         pair_order = unique + overlap
 
     """

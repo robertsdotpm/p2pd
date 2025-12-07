@@ -30,7 +30,7 @@ from ..tunnel import Tunnel
 
 
 # Used by the MQTT clients.
-async def signal_protocol(self, msg, signal_pipe):
+async def signal_protocol(msg, client_tup, signal_pipe):
     #print("Signal_protocol msg:", msg)
     out = await async_wrap_errors(
         self.sig_proto_handlers.proto(msg)

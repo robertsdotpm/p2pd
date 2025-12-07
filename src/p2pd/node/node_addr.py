@@ -324,6 +324,7 @@ def parse_node_addr(addr):
         "node_id": to_s(af_parts[2]),
         "signal": signal,
         "machine_id": to_s(af_parts[3]),
+        "vk": None,
         "bytes": addr,
     }
 

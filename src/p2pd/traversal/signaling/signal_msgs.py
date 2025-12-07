@@ -42,7 +42,7 @@ class SigMsg():
 
     # Information about the message sender.
     class Meta():
-        def __init__(self, ttl=0, pipe_id=b"", af=IP4, src_buf=b"", src_index=0, addr_types=[EXT_BIND, NIC_BIND]):
+        def __init__(self, ttl=0, pipe_id=b"", af=IP4, src_buf=b"", src_index=0, route_type=EXT_BIND, same_machine=False, plugin_name=None):
             # Load meta data about message.
             self.ttl = to_n(ttl)
             self.pipe_id = to_s(pipe_id)
@@ -50,7 +50,8 @@ class SigMsg():
             self.src_index = to_n(src_index)
             self.af = af
             self.same_machine = False
-            self.addr_types = addr_types
+            self.route_type = route_type
+            self.plugin_name = plugin_name
             if src_buf:
                 self.load_src_addr()
 
@@ -74,7 +75,9 @@ class SigMsg():
                 "af": int(self.af),
                 "src_buf": self.src_buf,
                 "src_index": self.src_index,
-                "addr_types": self.addr_types,
+                "route_type": self.route_type,
+                "same_machine": self.same_machine,
+                "plugin_name": self.plugin_name,
             }
         
         @staticmethod
@@ -85,7 +88,9 @@ class SigMsg():
                 d.get("af", IP4),
                 d.get("src_buf", b""),
                 d.get("src_index", 0),
-                d.get("addr_types", [EXT_BIND, NIC_BIND]),
+                d.get("route_type", EXT_BIND),
+                d.get("same_machine", False),
+                d.get("plugin_name", None),
             )
 
     # The destination node for this msg.
@@ -98,10 +103,9 @@ class SigMsg():
                 self.set_cur_dest(dest_buf)
                 self.cur_dest_buf = None # set later.
 
-        def load_if_extra(self, node):
+        def load_if_extra(self, nics):
             if_index = self.dest_index
-            self.interface = node.ifs[if_index]
-            self.stun = node.stun_clients[self.af][if_index]
+            self.interface = nics[if_index]
 
         """
         Peers usually have dynamic addresses.
@@ -322,15 +326,15 @@ class TURNMsg(SigMsg):
         super().__init__(data, enum)
 
 class ConMsg(SigMsg):        
-    def __init__(self, data, enum=SIG_CON):
+    def __init__(self, data={}, enum=SIG_CON):
         super().__init__(data, enum)
 
 class GetAddr(SigMsg):        
-    def __init__(self, data, enum=SIG_GET_ADDR):
+    def __init__(self, data={}, enum=SIG_GET_ADDR):
         super().__init__(data, enum)
 
 class ReturnAddr(SigMsg):        
-    def __init__(self, data, enum=SIG_RETURN_ADDR):
+    def __init__(self, data={}, enum=SIG_RETURN_ADDR):
         super().__init__(data, enum)
 
 SIG_PROTO = {

@@ -196,7 +196,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Used for sending signaling messasges to other nodes.
     node.signal_router = SignalRouter(
-        node.clock_skew.time,
+        node.sys_clock.time,
         node.node_id,
         node.addr_bytes,
         node.sk

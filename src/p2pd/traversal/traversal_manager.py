@@ -45,7 +45,6 @@ class TraversalManager():
     def __init__(self, pipes={}, nics=[]):
         self.plugin_loaders = OrderedDict()
         self.plugins = {} # by pipe id
-        self.results = {} # by pipe id
         self.nics = nics
     
     def set_signal_msg_sender(self, signal_msg_sender):
@@ -55,7 +54,7 @@ class TraversalManager():
         assert("class" in conf)
         conf = {
             "class": conf["class"],
-            "timeout": conf.get("timeout", 5),
+            "timeout": conf.get("timeout", 4),
             "cleanup": conf.get("cleanup", None),
             "set_bind": conf.get("set_bind", False),
             "max_pairs": conf.get("max_pairs", 6),
@@ -69,27 +68,27 @@ class TraversalManager():
     the pipe gets set somewhere else
     """
     async def run_plugin(self, plugin, reply=None):
-        # Create a future for pending pipes.
-        if reply is None:
-            pipe_id = to_s(rand_plain(15))
-        else:
-            pipe_id = reply.meta.pipe_id
+        # Don't run if result is set.
+        if plugin.result.done():
+            return
 
-        if pipe_id not in self.pipes:
-            self.plugins[pipe_id] = plugin
+        # Set nic fields.
+        if reply:
+            reply.load_if_extra(self.nics)
 
-        plugin.set_pipe_id(pipe_id, self.pipes[pipe_id])
+        print("in run plugin")
         await async_wrap_errors(
             plugin.run(reply),
             timeout=plugin.timeout
         )
 
-    async def plugin_router(self, af, route_type, src_info, dest_info, same_machine, plugin_name):
+    def plugin_router(self, af, route_type, src_info, dest_info, same_machine, plugin_name):
         # Meta data for this specific plugin.
         plugin_loader = self.plugin_loaders[plugin_name]
 
         # New instance of the plugin using init.
         plugin = plugin_loader["class"]()
+        self.plugins[plugin.pipe_id] = plugin
         print(plugin_loader)
         print(plugin)
 
@@ -111,30 +110,41 @@ class TraversalManager():
         )
 
         # Set function for plugin to send replies.
+        print(self.signal_msg_sender)
         plugin.set_signal_msg_sender(self.signal_msg_sender)
         return plugin
     
-    async def get_plugin(self, msg):
+    def get_plugin(self, msg):
         if msg.meta.pipe_id in self.plugins:
-            plugin = self.plugin.get(msg.meta.pipe_id, None)
+            plugin = self.plugins.get(msg.meta.pipe_id, None)
         else:
             # Map getaddr message to returnaddr plugin handler.
             if isinstance(msg, GetAddr):
-                msg.meta.plugin_name = "ReturnAddr"
+                msg.meta.plugin_name = "return_addr"
 
             # Check plugin name exists.
             if msg.meta.plugin_name not in self.plugin_loaders:
                 raise Exception("Plugin not installed.")
 
             # Load new instance to handle this message.
-            plugin = await self.plugin_router(
+            plugin = self.plugin_router(
                 msg.meta.af,
                 msg.meta.route_type,
-                msg.meta.src_info,
-                msg.meta.dest_info,
-                msg.meta.same_machine,
-                msg.meta.plugin_name
+                
+                # We become the new source.
+                src_info=msg.routing.dest_info,
+
+                # They become the new dest.
+                dest_info=msg.meta.src_info,
+                same_machine=msg.meta.same_machine,
+                plugin_name=msg.meta.plugin_name
             )
+
+            # Swap source and dest around.
+            plugin.set_addrs(msg.routing.dest, msg.meta.src)
+
+            # Reuse the same pipe_id.
+            plugin.set_pipe_id(msg.meta.pipe_id)
 
         return plugin
 
@@ -161,7 +171,7 @@ class TraversalManager():
         print(plugin_name)
         for if_infos in if_infos_order:
             src_info, dest_info = if_infos
-            plugin = await self.plugin_router(
+            plugin = self.plugin_router(
                 af,
                 route_type,
                 src_info,
@@ -174,6 +184,7 @@ class TraversalManager():
             plugin.set_addrs(src_map, dest_map)
 
             # Run plugin function -- timeout based on plugin meta.
+            print("running plugin ", plugin)
             await self.run_plugin(plugin)
             return plugin
                 

@@ -43,3 +43,5 @@ when it comes to binding in the punch engine maybe do it before the reuse option
 
 a single NTP reading seems adequate for the new code, the clock skew stuff seems overboard and 
 ive seen the results varey enough that i question whether it even works
+
+node_conf in demo is being ignored -- investigate this

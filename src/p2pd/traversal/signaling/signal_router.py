@@ -5,6 +5,9 @@ from .signal_utils import prioritize_sig_pipe_overlap
 from .signal_client import SignalMock
 
 def try_unpack_msg(buf, sk):
+    print("try unpack msg = ", buf)
+    buf = h_to_b(buf)
+
     # Try to decrypt message if its encrypted.
     is_enc = buf[0]
     if is_enc:
@@ -44,16 +47,17 @@ def discard_old_msg(msg, seen, f_time):
     return msg
 
 async def send_msg_over_mqtt(router, msg, relay_no=2):
-    # Encrypt the message if the public key is known.
-    buf = b"\0" + msg.pack()
-
     # Else loaded from a MSN.
-    if msg.cipher.vk is not None:
-        assert(isinstance(msg.cipher.vk, bytes))
+    dest_vk = msg.routing.dest["vk"]
+    print("Dest vk = ", dest_vk)
+    if dest_vk:
+        assert(isinstance(dest_vk, bytes))
         buf = b"\1" + encrypt(
-            msg.cipher.vk,
+            dest_vk,
             msg.pack(),
         )
+    else:
+        buf = b"\0" + msg.pack()
 
     # UTF-8 messes up binary data in MQTT.
     buf = to_h(buf)
@@ -91,6 +95,7 @@ async def send_msg_over_mqtt(router, msg, relay_no=2):
             continue
 
         # Send message.
+        print("send to ", dest["node_id"], " ", offset)
         sent = await async_wrap_errors(
             sig_pipe.send_msg(
                 buf,
@@ -115,36 +120,37 @@ class SignalRouter():
         self.node_id = to_s(node_id)
         self.addr_bytes = addr_bytes
         self.sk = sk
-        self.vk = to_h(sk.verifying_key.to_string("compressed"))
+        self.vk = sk.verifying_key.to_string("compressed")
+        print("sig vk = ", self.vk)
         self.seen = {}
         self.tasks = []
 
     def set_signal_pipes(self, signal_pipes):
         self.signal_pipes = signal_pipes
+        for index in self.signal_pipes:
+            signal_pipe = self.signal_pipes[index]
+            signal_pipe.f_proto = self.msg_cb
 
     def set_traversal_manager(self, traversal):
         self.traversal = traversal
 
     async def load_signal_pipe(self, af, offset, servers):
+        print("in load signal pipe ", af, offset, servers)
+
         # Lookup IP and port of MQTT server.
         server = servers[offset]
         dest_tup = (server[af], server["port"],)
-
-        def signal_protocol_closure():
-            def closure(msg, signal_pipe):
-                return self.msg_cb(msg, dest_tup, signal_pipe)
-        
-            return closure
-
         """
         This function does a basic send/recv test with MQTT to help
         ensure the MQTT servers are valid.
         """
         client = await SignalMock(
             to_s(self.node_id),
-            signal_protocol_closure(),
+            self.msg_cb,
             dest_tup
         ).start()
+
+        print("client result = ", client)
 
         return client
 
@@ -155,7 +161,8 @@ class SignalRouter():
             "af": plugin.af,
             "src_buf": plugin.src_map["bytes"],
             "src_index": plugin.src_info["if_index"],
-            "addr_types": [plugin.route_type]
+            "route_type": plugin.route_type,
+            "same_machine": plugin.same_machine,
         })
 
         msg.routing = SigMsg.Routing.from_dict({
@@ -168,10 +175,17 @@ class SignalRouter():
         msg.cipher.vk = self.vk
 
         # Send signaling message using MQTT.
-        await send_msg_over_mqtt(self, msg, relay_no)
+        print("in signal msg sender")
+        await async_wrap_errors(
+            send_msg_over_mqtt(self, msg, relay_no)
+        )
+
+        print(msg.to_dict())
 
     def msg_cb(self, msg, client_tup, pipe):
-        msg = try_unpack_msg(msg)
+        print("in signal router msg_cb")
+
+        msg = try_unpack_msg(msg, self.sk)
         if to_s(msg.routing.dest["node_id"]) != self.node_id:
             raise Exception("Message not meant for us.")
         
@@ -182,17 +196,16 @@ class SignalRouter():
 
         # Updating routing dest with current addr.
         msg.set_cur_addr(self.addr_bytes)
-
-        # loads nic and stun client from offsets.
-        msg.routing.load_if_extra(self.node) 
         
         # Pass this message on to existing plugin.
         # If one doesn't exist it will be created.
         plugin = self.traversal.get_plugin(msg)
+        
         #TODO: make this pop off older items when it fills.
         self.tasks.append(
             asyncio.create_task(
                 plugin.run(reply=msg)
+                
             )
         )
 
