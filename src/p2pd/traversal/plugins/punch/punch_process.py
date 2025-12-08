@@ -63,6 +63,7 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         ).connect()
         return pipe
     except Exception as e:
+        log_exception()
         print("error in start_punching_process:", e)
         raise
 
