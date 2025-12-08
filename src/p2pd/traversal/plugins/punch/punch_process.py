@@ -20,10 +20,14 @@ This is the intention and not a bug!
 This code disables that warning.
 """
 def punching_process_entry(args):
-    puncher, child_con = args
-    sock = puncher.run_engine(tcp_selector_punch_engine)
-    send_handle(child_con, sock.fileno(), os.getppid())
-    sock.close()
+    print("punching proc entry")
+    try:
+        puncher, child_con = args
+        sock = puncher.run_engine(tcp_selector_punch_engine)
+        send_handle(child_con, sock.fileno(), os.getppid())
+        sock.close()
+    except:
+        log_exception()
 
 async def start_punching_process(nic, puncher, proc_pool=None):
     parent_con, child_con = mp.Pipe()
@@ -37,7 +41,6 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         args
     )
 
-    #await future.
     await future
     fd = recv_handle(parent_con)
     sock = socket.socket(fileno=fd)

@@ -165,6 +165,7 @@ class SignalRouter():
             "src_index": plugin.src_info["if_index"],
             "route_type": plugin.route_type,
             "same_machine": plugin.same_machine,
+            "plugin_name": msg.meta.plugin_name,
         })
 
         msg.routing = SigMsg.Routing.from_dict({

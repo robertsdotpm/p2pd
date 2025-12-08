@@ -172,6 +172,8 @@ def socket_event_monitor(sel):
     return (inbound, outbound,)
 
 def tcp_selector_punch_engine(af, port_allocs, src_ip, dest_ip, f_sleep_until, our_ip):
+    print("in engine")
+
     # Create listen sockets, bound con socks, and register for selector events.
     listen_infos, pre_connect_infos, sel = setup_engine(af, port_allocs, src_ip)
 

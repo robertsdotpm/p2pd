@@ -1,3 +1,5 @@
+import pickle
+import inspect
 import asyncio
 from ....utility.utils import *
 from ....net.net_utils import *
@@ -11,12 +13,65 @@ from .punch_process import *
 from ..traversal_plugin import TraversalPlugin
 
 
+
+def find_unpicklable(obj, path="obj", seen=None):
+    if seen is None:
+        seen = set()
+
+    # avoid infinite recursion
+    obj_id = id(obj)
+    if obj_id in seen:
+        return None
+    seen.add(obj_id)
+
+    # try direct pickle
+    try:
+        pickle.dumps(obj)
+        return None  # picklable
+    except Exception as e:
+        fail = (path, obj, e)
+
+    # explore container contents
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            r = find_unpicklable(v, f"{path}[{k!r}]", seen)
+            if r:
+                return r
+
+    if isinstance(obj, (list, tuple, set, frozenset)):
+        for i, v in enumerate(obj):
+            r = find_unpicklable(v, f"{path}[{i}]", seen)
+            if r:
+                return r
+
+    # inspect normal objects
+    if hasattr(obj, "__dict__"):
+        for k, v in vars(obj).items():
+            r = find_unpicklable(v, f"{path}.{k}", seen)
+            if r:
+                return r
+
+    return fail
+
+
 class PunchPlugin(TraversalPlugin):
     async def delayed_start_punching_proc(self, nic, puncher):
         # Give time for updated mappings.
         await asyncio.sleep(3)
-        pipe = await start_punching_process(nic, puncher, self.proc_pool)
-        self.pipes[self.pipe_id].set_result(pipe)
+        print("delay start punching proc.")
+        bad = find_unpicklable(puncher)
+        if bad:
+            path, value, error = bad
+            print("Unpicklable at:", path)
+            print("Type:", type(value))
+            print("Error:", error)
+
+        try:
+            pipe = await start_punching_process(nic, puncher, self.proc_pool)
+            self.pipes[self.pipe_id].set_result(pipe)
+        except:
+            log_exception()
+            what_exception()
 
     async def run(self, reply=None):
         # Load TCP punch client for this pipe ID.
@@ -66,11 +121,11 @@ class PunchPlugin(TraversalPlugin):
             self.punch_clients[self.pipe_id] = puncher
 
             # Internal NAT prediction port allocator.
-            puncher.nat_predict_alloc = NATPredictAlloc(stuns)
-            puncher.nat_predict_alloc.set_nat_info(
+            self.nat_predict_alloc = NATPredictAlloc(stuns)
+            self.nat_predict_alloc.set_nat_info(
                 self.src_info["nat"], self.dest_info["nat"]
             )
-            puncher.nat_predict_alloc.set_punch_mode(
+            self.nat_predict_alloc.set_punch_mode(
                 self.same_machine, self.dest_info["ip"]
             )
 
@@ -91,7 +146,8 @@ class PunchPlugin(TraversalPlugin):
             recv_mappings = None
 
         # Update details needed for TCP punching.
-        _, is_end = await puncher.nat_predict_alloc.port_alloc(recv_mappings)
+        port_alloc, is_end = await self.nat_predict_alloc.port_alloc(recv_mappings)
+        puncher.port_allocs = port_alloc
         
         # Protocol done -- return nothing.
         if is_end == 1:
@@ -102,13 +158,13 @@ class PunchPlugin(TraversalPlugin):
 
         # Forward protocol details to peer.
         mappings = []
-        for m in puncher.nat_predict_alloc.send_mappings:
+        for m in self.nat_predict_alloc.send_mappings:
             mappings.append(m.toJSON())
 
         # Protocol layer fills in meta and routing info.
         msg = PunchMsg({
             "payload": {
-                "punch_mode": puncher.nat_predict_alloc.punch_mode,
+                "punch_mode": self.nat_predict_alloc.punch_mode,
                 "mappings": mappings,
                 "ntp": timestamp,
             },

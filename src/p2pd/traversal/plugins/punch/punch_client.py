@@ -120,6 +120,7 @@ class PunchClient:
 
     # Return a socket (punched hole) on success.
     def run_engine(self, f_engine):
+        print("in run engine runner")
         return f_engine(
             af=self.af,
             port_allocs=self.port_allocs,
@@ -139,7 +140,7 @@ if __name__ == "__main__":
         help="Dest IP to punch to"
     )
     args = parser.parse_args()
-    punch = Punch(args.dest_ip)
+    punch = PunchClient(args.dest_ip)
     try:
         # Get unix timestamp from NTP.
         timestamp = timestamp_from_ntp()
