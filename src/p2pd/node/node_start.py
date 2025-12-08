@@ -13,7 +13,6 @@ from .node_addr import *
 from .node_utils import *
 from .nickname import *
 from ..traversal.traversal_address import *
-from ..traversal.signaling.signal_protocol import *
 from ..traversal.signaling.signal_utils import *
 from ..traversal.signaling.signal_sender import *
 from ..utility.clock_skew import SysClock
@@ -128,10 +127,6 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     if node.conf.get("init_clock_skew", True):
         clock_skew = str(node.sys_clock.clock_skew)
         if out: cout(fstr("\t\tClock skew = {0}", (clock_skew,)))
-
-    # Start worker that forwards sig proto messages.
-    if node.conf["sig_pipe_no"]:
-        start_sig_msg_queue_worker(node)
 
     # Simple loop to close idle tasks.
     node.idle_pipe_closer = create_task(

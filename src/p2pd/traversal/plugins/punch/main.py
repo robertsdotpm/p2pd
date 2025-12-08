@@ -1,3 +1,4 @@
+import asyncio
 from ....utility.utils import *
 from ....net.net_utils import *
 from ....nic.nat.nat_predict import *
@@ -14,7 +15,8 @@ class PunchPlugin(TraversalPlugin):
     async def delayed_start_punching_proc(self, nic, puncher):
         # Give time for updated mappings.
         await asyncio.sleep(3)
-        await start_punching_process(nic, puncher, self.proc_pool)
+        pipe = await start_punching_process(nic, puncher, self.proc_pool)
+        self.pipes[self.pipe_id].set_result(pipe)
 
     async def run(self, reply=None):
         # Load TCP punch client for this pipe ID.
@@ -40,7 +42,7 @@ class PunchPlugin(TraversalPlugin):
             
             # Figure out addressing for sockets.
             # Dest IP runs select dest IPR to contextually determine best IP.
-            route = await self.nic.bind(self.af)
+            route = await self.nic.route(self.af).bind()
             dest_ip = self.dest_info["ip"]
             if "fe80" == dest_ip:
                 src_ip = str(route.link_locals[0])
@@ -48,15 +50,17 @@ class PunchPlugin(TraversalPlugin):
                 src_ip = route.nic()
 
             # Create a new puncher for this pipe ID.
-            puncher = PunchClient(dest_ip, src_ip, route.exe())
+            puncher = PunchClient(dest_ip, src_ip, route.ext())
 
             # Set current unix time using NTP as a reference.
             timestamp = self.sys_clock.time()
             puncher.set_timestamp(timestamp)
 
             # Set future punching time.
-            punch_time = reply.payload.ntp if reply else timestamp + 10
-            puncher.set_punch_time(punch_time)
+            if reply:
+                puncher.set_punch_time(reply.payload.ntp)
+            else:
+                puncher.set_punch_time(timestamp + 10)
 
             # Save puncher reference.
             self.punch_clients[self.pipe_id] = puncher
@@ -73,6 +77,7 @@ class PunchPlugin(TraversalPlugin):
             # Schedule punching with a delay to allow for updated mappings.
             # Done like this because a new message may or may not come.
             if self.pipe_id not in self.punch_proc:
+                self.pipes[self.pipe_id] = asyncio.Future()
                 self.punch_proc[self.pipe_id] = asyncio.create_task(
                     self.delayed_start_punching_proc(self.nic, puncher)
                 )
@@ -90,24 +95,28 @@ class PunchPlugin(TraversalPlugin):
         
         # Protocol done -- return nothing.
         if is_end == 1:
-            return DoneMsg()
+            return
 
         # Increase active punchers.
-        self.active_punchers += 1
+        #self.active_punchers += 1
 
         # Forward protocol details to peer.
-        mappings = [m.toJSON() for m in puncher.nat_predict_alloc.send_mappings]
+        mappings = []
+        for m in puncher.nat_predict_alloc.send_mappings:
+            mappings.append(m.toJSON())
 
         # Protocol layer fills in meta and routing info.
         msg = PunchMsg({
             "payload": {
                 "punch_mode": puncher.nat_predict_alloc.punch_mode,
                 "mappings": mappings,
-                "ntp": punch_time,
+                "ntp": timestamp,
             },
         })
 
-        return msg
+        msg.meta.plugin_name = "punch"
+        await self.signal_msg_sender(msg)
+
 
 class PunchPluginFactory():
     def __init__(self, stun_clients, punch_clients, sys_clock=SysClock(None, Dec("0.1")), proc_pool=None):

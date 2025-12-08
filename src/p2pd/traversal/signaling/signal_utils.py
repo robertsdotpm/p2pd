@@ -1,7 +1,6 @@
 from ...settings import *
 from ...net.net_utils import *
 from ...net.address import Address
-from .signal_protocol import signal_protocol
 from .signal_client import SignalMock
 
 def find_signal_pipe(node, addr):

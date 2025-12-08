@@ -46,12 +46,13 @@ async def start_punching_process(nic, puncher, proc_pool=None):
     # Wrap socket in pipe and return it (todo: set node message handler stuff.)
     nic_ip = sock.getsockname()[1]
     route = await nic.route(puncher.af).bind(nic_ip)
-    return await Pipe(
+    pipe = await Pipe(
         TCP, 
         sock.getpeername()[:2], 
         route, 
         sock=sock
     ).connect()
+    return pipe
 
 async def workspace():
     return

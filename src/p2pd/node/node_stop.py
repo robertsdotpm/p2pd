@@ -22,12 +22,6 @@ async def close_with_timeout(p):
 
 # Shutdown the node server and do cleanup.
 async def node_stop(node):
-    # Stop sig message dispatcher.
-    node.sig_msg_queue.put_nowait(None)
-    if node.sig_msg_queue_worker_task is not None:
-        node.sig_msg_queue_worker_task.cancel()
-        node.sig_msg_queue_worker_task = None
-
     # Close other pipes.
     pipe_lists = [
         node.signal_pipes,

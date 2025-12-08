@@ -13,7 +13,6 @@ from .node_stop import *
 from .node_protocol import node_protocol
 from ..vendor.machine_id import *
 from ..traversal.traversal_address import *
-from ..traversal.signaling.signal_protocol import *
 from ..traversal.traversal_manager import TraversalManager
 from ..traversal.plugins.direct_connect.main import DirectConnect
 from ..traversal.plugins.get_addr.main import GetAddrPlugin
@@ -49,11 +48,6 @@ class Node(Daemon):
 
         # Pending TCP punch queue.
         self.pp_executor = None
-
-        # Signal protocol class instance.
-        self.sig_proto_handlers = SigProtoHandlers(self)
-        self.sig_msg_queue = asyncio.Queue()
-        self.sig_msg_queue_worker_task = None
 
         # Fixed reference for long-running tasks.
         self.tasks = []
