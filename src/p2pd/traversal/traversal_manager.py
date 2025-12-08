@@ -92,7 +92,12 @@ class TraversalManager():
         plugin_loader = self.plugin_loaders[plugin_name]
 
         # New instance of the plugin using init.
-        plugin = plugin_loader["class"]()
+        plugin_class = plugin_loader["class"]
+        if hasattr(plugin_class, "build_plugin"):
+            plugin = plugin_class.build_plugin()
+        else:
+            plugin = plugin_class()
+
         self.plugins[plugin.pipe_id] = plugin
         print(plugin_loader)
         print(plugin)

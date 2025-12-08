@@ -18,6 +18,7 @@ from ..traversal.signaling.signal_utils import *
 from ..traversal.signaling.signal_sender import *
 from ..utility.clock_skew import SysClock
 from ..traversal.signaling.signal_router import *
+from ..traversal.plugins.punch.main import PunchPluginFactory 
 
 async def node_start(node, sys_clock=None, out=False, cout=print):
     # Load ifs.
@@ -212,5 +213,15 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     node.traversal.set_signal_msg_sender(
         node.signal_router.signal_msg_sender
     )
+
+    # Used to create new punch plugin instances.
+    node.traversal.install_plugin("punch", {
+        "class": PunchPluginFactory(
+            node.stun_clients,
+            node.punch_clients,
+            node.sys_clock,
+            node.pp_executor,
+        )
+    })
 
     return node

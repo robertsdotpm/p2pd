@@ -5,7 +5,7 @@ from ..node.node_addr import *
 from ..protocol.turn.turn_client import TURNClient
 from .traversal_utils import *
 from ..node.node_protocol import *
-from .plugins.punch.punch_protocol import PunchProtocol
+from .plugins.punch.main import PunchProtocol
 from .plugins.turn.main import udp_turn_relay, turn_cleanup
 from .plugins.reverse_connect.main import ReverseConnectPlugin
 from ..node.nickname import *

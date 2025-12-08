@@ -37,6 +37,12 @@ async def connect_option(node, con_opts):
     try:
         if pipe is None:
             raise TunnelFailed("Connection failed.")
+        
+        """
+        Message queuing isn't enabled by default when callbacks
+        are setup for pipe methods so this says to queue
+        all messages received so they can be awaited.
+        """
         pipe.subscribe(SUB_ALL)
         return await echo_client(pipe, echo_data)
     finally:

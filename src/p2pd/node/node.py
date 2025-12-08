@@ -62,6 +62,10 @@ class Node(Daemon):
         self.last_recv_table = {} # [pipe] -> time
         self.last_recv_queue = [] # FIFO pipe ref
 
+        self.punch_clients = {}
+        self.punch_proc = {}
+        self.active_punchers = 0
+
         # Set on start.
         self.addr_bytes = None
         self.addr_futures = {}
