@@ -59,12 +59,15 @@ class PunchPlugin(TraversalPlugin):
         # Give time for updated mappings.
         await asyncio.sleep(3)
         print("delay start punching proc.")
+
+        """
         bad = find_unpicklable(puncher)
         if bad:
             path, value, error = bad
             print("Unpicklable at:", path)
             print("Type:", type(value))
             print("Error:", error)
+        """
 
         try:
             pipe = await start_punching_process(nic, puncher, self.proc_pool)
@@ -113,6 +116,8 @@ class PunchPlugin(TraversalPlugin):
                 decider_ip = route.nic()
             else:
                 decider_ip = route.ext()
+
+            print("punch dest ip = ", dest_ip)
 
             # Create a new puncher for this pipe ID.
             puncher = PunchClient(dest_ip, src_ip, decider_ip)
