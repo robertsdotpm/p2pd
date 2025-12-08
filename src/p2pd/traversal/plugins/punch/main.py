@@ -60,14 +60,13 @@ class PunchPlugin(TraversalPlugin):
         await asyncio.sleep(3)
         print("delay start punching proc.")
 
-        """
+
         bad = find_unpicklable(puncher)
         if bad:
             path, value, error = bad
             print("Unpicklable at:", path)
             print("Type:", type(value))
             print("Error:", error)
-        """
 
 
         pipe = await start_punching_process(nic, puncher, self.proc_pool)
