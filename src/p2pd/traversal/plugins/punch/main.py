@@ -78,15 +78,19 @@ class PunchPlugin(TraversalPlugin):
         # Load TCP punch client for this pipe ID.
         if self.pipe_id in self.punch_clients:
             puncher = self.punch_clients[self.pipe_id]
+
+            """
+            disable this for now
             assert(self.src_info == puncher.src_info)
             if self.dest_info != puncher.dest_info:
-                """
+                
                 If an address fetch gets an old address a node replies
                 with its current address info in a reply which
                 is passed back to this function.
-                """
+                
                 log(fstr("<punch> Updating dest info {0}", (self.dest_info,)))
                 puncher.dest_info = self.dest_info
+            """
         else:
             # Create a new puncher for this pipe ID.
             if_index = self.src_info["if_index"]
