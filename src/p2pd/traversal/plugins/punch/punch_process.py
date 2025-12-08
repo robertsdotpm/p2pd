@@ -34,6 +34,7 @@ async def start_punching_process(nic, puncher, proc_pool=None):
     parent_con, child_con = mp.Pipe()
     args = (puncher, child_con,)
     print("punch args ", args)
+    print("proc pool = ", proc_pool)
 
     # Schedule TCP punching in process pool executor.
     loop = asyncio.get_event_loop()

@@ -69,12 +69,10 @@ class PunchPlugin(TraversalPlugin):
             print("Error:", error)
         """
 
-        try:
-            pipe = await start_punching_process(nic, puncher, self.proc_pool)
-            self.pipes[self.pipe_id].set_result(pipe)
-        except:
-            log_exception()
-            what_exception()
+
+        pipe = await start_punching_process(nic, puncher, self.proc_pool)
+        self.pipes[self.pipe_id].set_result(pipe)
+
 
     async def run(self, reply=None):
         # Load TCP punch client for this pipe ID.
