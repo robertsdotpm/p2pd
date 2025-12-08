@@ -70,8 +70,7 @@ class PunchPlugin(TraversalPlugin):
 
 
         pipe = await start_punching_process(nic, puncher, self.proc_pool)
-        self.pipes[self.pipe_id].set_result(pipe)
-
+        self.result.set_result(pipe)
 
     async def run(self, reply=None):
         # Load TCP punch client for this pipe ID.
@@ -150,7 +149,6 @@ class PunchPlugin(TraversalPlugin):
             # Schedule punching with a delay to allow for updated mappings.
             # Done like this because a new message may or may not come.
             if self.pipe_id not in self.punch_proc:
-                self.pipes[self.pipe_id] = asyncio.Future()
                 self.punch_proc[self.pipe_id] = asyncio.create_task(
                     self.delayed_start_punching_proc(self.nic, puncher)
                 )

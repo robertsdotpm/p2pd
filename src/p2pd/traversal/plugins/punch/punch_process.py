@@ -73,7 +73,7 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         print("punched sock = ", sock)
 
         # Wrap socket in pipe and return it (todo: set node message handler stuff.)
-        nic_ip = sock.getsockname()[1]
+        nic_ip = sock.getsockname()[0]
         route = await nic.route(puncher.af).bind(nic_ip)
         pipe = await Pipe(
             TCP, 
@@ -81,6 +81,7 @@ async def start_punching_process(nic, puncher, proc_pool=None):
             route, 
             sock=sock
         ).connect()
+        print("return pipe = ", pipe)
         return pipe
     except Exception as e:
         log_exception()
