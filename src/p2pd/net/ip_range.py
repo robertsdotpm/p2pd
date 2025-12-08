@@ -38,7 +38,11 @@ Iterable and sliceable -- returns ip_addr objs.
 """
 @total_ordering
 class IPRange():
-    def __init__(self, ip, netmask=None, cidr=CIDR_WAN):
+    def __init__(self, ip, netmask=None, cidr=CIDR_WAN, af=None):
+        # Set full bit mask based on af.
+        if af:
+            cidr = af_to_cidr(af)
+
         # Prefer netmask over cidr.
         if netmask != None and cidr != None:
             cidr = None

@@ -49,6 +49,7 @@ from .punch_defs import *
 from .port_allocators.boundary_alloc import *
 from .engines.tcp_selector_simple.engine import *
 from .utility.punch_utils import *
+from ....net.ip_range import IPR
 
 
 # TODO: Could even use ARP to find the other node in a LAN
@@ -75,6 +76,15 @@ class PunchClient:
         # Default to inaccurate system clock.
         self.timestamp = int(time.time())
         self.start_time = time.monotonic()
+
+        # Sanity check -- don't punch to self.
+        if IPR(dest_ip, af=self.af) == IPR(our_ip, af=self.af):
+            """
+            No longer want to maintain bizzare and useless features.
+            There's no reason to do this, not even for testing.
+            Testing can be done from VMs or virtual interfaces.
+            """
+            raise Exception("Punching to self is not supported.")
 
     def set_src_ip(self, src_ip):
         self.src_ip = src_ip

@@ -104,8 +104,18 @@ class PunchPlugin(TraversalPlugin):
             else:
                 src_ip = route.nic()
 
+            """
+            This portion is used in the algorithm to determine the
+            "master" or the "slave" for deciding on what sockets
+            to use after openning many possible holes.
+            """
+            if self.route_type == NIC_BIND:
+                decider_ip = route.nic()
+            else:
+                decider_ip = route.ext()
+
             # Create a new puncher for this pipe ID.
-            puncher = PunchClient(dest_ip, src_ip, route.ext())
+            puncher = PunchClient(dest_ip, src_ip, decider_ip)
 
             # Set current unix time using NTP as a reference.
             timestamp = self.sys_clock.time()
