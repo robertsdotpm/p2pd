@@ -30,37 +30,41 @@ def punching_process_entry(args):
         log_exception()
 
 async def start_punching_process(nic, puncher, proc_pool=None):
-    print("start punching proc entry")
-    parent_con, child_con = mp.Pipe()
-    args = (puncher, child_con,)
-    print("punch args ", args)
-    print("proc pool = ", proc_pool)
+    try:
+        print("start punching proc entry")
+        parent_con, child_con = mp.Pipe()
+        args = (puncher, child_con,)
+        print("punch args ", args)
+        print("proc pool = ", proc_pool)
 
-    # Schedule TCP punching in process pool executor.
-    loop = asyncio.get_event_loop()
-    future = loop.run_in_executor(
-        proc_pool,
-        punching_process_entry,
-        args
-    )
+        # Schedule TCP punching in process pool executor.
+        loop = asyncio.get_event_loop()
+        future = loop.run_in_executor(
+            proc_pool,
+            punching_process_entry,
+            args
+        )
 
-    print("before run exec")
-    await future
-    print("after run exec")
-    fd = recv_handle(parent_con)
-    sock = socket.socket(fileno=fd)
-    print("punched sock = ", sock)
+        print("before run exec")
+        await future
+        print("after run exec")
+        fd = recv_handle(parent_con)
+        sock = socket.socket(fileno=fd)
+        print("punched sock = ", sock)
 
-    # Wrap socket in pipe and return it (todo: set node message handler stuff.)
-    nic_ip = sock.getsockname()[1]
-    route = await nic.route(puncher.af).bind(nic_ip)
-    pipe = await Pipe(
-        TCP, 
-        sock.getpeername()[:2], 
-        route, 
-        sock=sock
-    ).connect()
-    return pipe
+        # Wrap socket in pipe and return it (todo: set node message handler stuff.)
+        nic_ip = sock.getsockname()[1]
+        route = await nic.route(puncher.af).bind(nic_ip)
+        pipe = await Pipe(
+            TCP, 
+            sock.getpeername()[:2], 
+            route, 
+            sock=sock
+        ).connect()
+        return pipe
+    except Exception as e:
+        print("error in start_punching_process:", e)
+        raise
 
 async def workspace():
     return
