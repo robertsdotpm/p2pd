@@ -30,8 +30,10 @@ def punching_process_entry(args):
         log_exception()
 
 async def start_punching_process(nic, puncher, proc_pool=None):
+    print("start punching proc entry")
     parent_con, child_con = mp.Pipe()
     args = (puncher, child_con,)
+    print("punch args ", args)
 
     # Schedule TCP punching in process pool executor.
     loop = asyncio.get_event_loop()
@@ -41,7 +43,9 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         args
     )
 
+    print("before run exec")
     await future
+    print("after run exec")
     fd = recv_handle(parent_con)
     sock = socket.socket(fileno=fd)
     print("punched sock = ", sock)
