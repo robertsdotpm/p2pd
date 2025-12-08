@@ -161,6 +161,7 @@ class PunchPlugin(TraversalPlugin):
         # Update details needed for TCP punching.
         port_alloc, is_end = await self.nat_predict_alloc.port_alloc(recv_mappings)
         puncher.port_allocs = port_alloc
+        print(puncher.port_allocs)
         
         # Protocol done -- return nothing.
         if is_end == 1:

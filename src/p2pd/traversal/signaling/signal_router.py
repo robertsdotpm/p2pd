@@ -209,8 +209,9 @@ class SignalRouter():
         #TODO: make this pop off older items when it fills.
         self.tasks.append(
             asyncio.create_task(
-                plugin.run(reply=msg)
-                
+                async_wrap_errors(
+                    plugin.run(reply=msg)
+                )
             )
         )
 
