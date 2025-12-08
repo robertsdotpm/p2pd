@@ -22,8 +22,7 @@ This code disables that warning.
 def punching_process_entry(args):
     print("punching proc entry")
     try:
-        puncher, con_fd = args
-        child_con = mp.connection.Connection(con_fd) 
+        puncher, child_con = args
 
         sock = puncher.run_engine(tcp_selector_punch_engine)
         if sock:
@@ -49,7 +48,7 @@ async def start_punching_process(nic, puncher, proc_pool=None):
     try:
         print("start punching proc entry")
         parent_con, child_con = mp.Pipe()
-        args = (puncher, child_con.fileno(),)
+        args = (puncher, child_con,)
         print("punch args ", args)
         print("proc pool = ", proc_pool)
 

@@ -129,9 +129,11 @@ class PunchPlugin(TraversalPlugin):
 
             # Set future punching time.
             if reply:
+                punch_time = reply.payload.ntp
                 puncher.set_punch_time(reply.payload.ntp)
             else:
-                puncher.set_punch_time(timestamp + 10)
+                punch_time = timestamp + 10
+                puncher.set_punch_time(punch_time)
 
             # Save puncher reference.
             self.punch_clients[self.pipe_id] = puncher
@@ -183,7 +185,7 @@ class PunchPlugin(TraversalPlugin):
             "payload": {
                 "punch_mode": self.nat_predict_alloc.punch_mode,
                 "mappings": mappings,
-                "ntp": timestamp,
+                "ntp": punch_time,
             },
         })
 
