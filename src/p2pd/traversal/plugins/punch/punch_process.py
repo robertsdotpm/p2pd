@@ -21,19 +21,32 @@ This code disables that warning.
 """
 def punching_process_entry(args):
     print("punching proc entry")
-    try:
-        puncher, child_con = args
-        sock = puncher.run_engine(tcp_selector_punch_engine)
+    puncher, con_fd = args
+    child_con = mp.connection.Connection(con_fd) 
+
+    sock = puncher.run_engine(tcp_selector_punch_engine)
+    if sock:
         send_handle(child_con, sock.fileno(), os.getppid())
         sock.close()
-    except:
-        log_exception()
+
+async def recv_handle_async(parent_con, timeout=None):
+    loop = asyncio.get_event_loop()
+    
+    # Run the blocking call in a thread
+    fut = loop.run_in_executor(None, recv_handle, parent_con)
+    
+    try:
+        fd = await asyncio.wait_for(fut, timeout=timeout)
+        return fd
+    except asyncio.TimeoutError:
+        # handle timeout: maybe return None or raise
+        return None
 
 async def start_punching_process(nic, puncher, proc_pool=None):
     try:
         print("start punching proc entry")
         parent_con, child_con = mp.Pipe()
-        args = (puncher, child_con,)
+        args = (puncher, child_con.fileno(),)
         print("punch args ", args)
         print("proc pool = ", proc_pool)
 
@@ -46,9 +59,14 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         )
 
         print("before run exec")
-        await future
+        await asyncio.wait_for(future, timeout=20) # TODO
         print("after run exec")
-        fd = recv_handle(parent_con)
+        fd = await recv_handle_async(parent_con, timeout=5)
+        if fd is None:
+            raise Exception("recv_handle timed out")
+        else:
+            print("got FD", fd)
+
         sock = socket.socket(fileno=fd)
         print("punched sock = ", sock)
 
