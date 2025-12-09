@@ -22,20 +22,22 @@ This code disables that warning.
 def punching_process_entry(args):
     print("punching proc entry")
     try:
-        puncher, child_con = args
+        #puncher, child_con = args
+        child_con = args[0]
 
-        sock = puncher.run_engine(tcp_selector_punch_engine)
+        #sock = puncher.run_engine(tcp_selector_punch_engine)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if sock:
             send_handle(child_con, sock.fileno(), os.getppid())
             sock.close()
     except:
         what_exception()
 
-async def recv_handle_async(parent_con, timeout=None):
+async def recv_handle_async(parent_con, proc_pool=None, timeout=None):
     loop = asyncio.get_event_loop()
     
     # Run the blocking call in a thread
-    fut = loop.run_in_executor(None, recv_handle, parent_con)
+    fut = loop.run_in_executor(proc_pool, recv_handle, parent_con)
     
     try:
         fd = await asyncio.wait_for(fut, timeout=timeout)
@@ -49,13 +51,14 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         print("start punching proc entry")
         parent_con, child_con = mp.Pipe()
         args = (puncher, child_con,)
+        args = (child_con,)
         print("punch args ", args)
         print("proc pool = ", proc_pool)
 
         # Schedule TCP punching in process pool executor.
         loop = asyncio.get_event_loop()
         future = loop.run_in_executor(
-            None, # Disable proc exe for now
+            proc_pool, # Disable proc exe for now
             punching_process_entry,
             args
         )
