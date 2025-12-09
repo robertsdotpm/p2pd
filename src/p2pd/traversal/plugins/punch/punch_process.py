@@ -24,9 +24,12 @@ def punching_process_entry(args):
     try:
         #puncher, child_con = args
         child_con = args[0]
+        print(child_con)
 
         #sock = puncher.run_engine(tcp_selector_punch_engine)
+
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        print("about to send handle ", os.getppid(), " fd ", sock.fileno())
         if sock:
             send_handle(child_con, sock.fileno(), os.getppid())
             sock.close()
@@ -51,7 +54,8 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         print("start punching proc entry")
         parent_con, child_con = mp.Pipe()
         args = (puncher, child_con,)
-        args = (child_con,)
+        args = (child_con,) 
+        #args = (1,)
         print("punch args ", args)
         print("proc pool = ", proc_pool)
 
