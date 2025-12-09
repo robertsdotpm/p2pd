@@ -132,5 +132,6 @@ async def load_stun_clients(node, limit=USE_MAP_NO):
             )
 
 async def setup_punch_coordination(node, sys_clock):
-    node.max_punchers, node.pp_executor = await get_pp_executors()
+    #node.max_punchers, node.pp_executor = await get_pp_executors()
+    node.max_punchers, node.pp_executor = 10, None
     node.sys_clock = sys_clock
