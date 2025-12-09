@@ -1,3 +1,13 @@
+"""
+Tricks to pass FDs around processes work well with threading.
+But the approach is --not-- reliable for every OS. The best design
+so far is just having a reverse connecting back to a listen server
+in the main process (like so):
+
+            punch proc         |      main proc
+punched sock <--> reverse con <-->  listen socket
+"""
+
 import multiprocessing as mp
 import socket
 from multiprocessing.reduction import send_handle, recv_handle
