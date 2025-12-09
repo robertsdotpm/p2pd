@@ -20,12 +20,10 @@ warns that the socket wasn't closed properly.
 This is the intention and not a bug!
 This code disables that warning.
 """
-def punching_process_entry(args):
+def punching_process_entry(child_con):
     print("punching proc entry")
     try:
         #puncher, child_con = args
-        child_con_fd = args[0]
-        child_con = _Connection(child_con_fd)
         print(child_con)
 
         #sock = puncher.run_engine(tcp_selector_punch_engine)
@@ -56,7 +54,7 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         print("start punching proc entry")
         parent_con, child_con = mp.Pipe() # can old platforms not serialise child_con?
         args = (puncher, child_con,)
-        args = (child_con.fileno(),) 
+        args = (child_con,) 
         #args = (1,)
         print("punch args ", args)
         print("proc pool = ", proc_pool)
