@@ -1,4 +1,5 @@
 import multiprocessing as mp
+from multiprocessing.connection import _Connection
 import socket
 from multiprocessing.reduction import send_handle, recv_handle
 import os
@@ -23,7 +24,8 @@ def punching_process_entry(args):
     print("punching proc entry")
     try:
         #puncher, child_con = args
-        child_con = args[0]
+        child_con_fd = args[0]
+        child_con = _Connection(child_con_fd)
         print(child_con)
 
         #sock = puncher.run_engine(tcp_selector_punch_engine)
@@ -52,9 +54,9 @@ async def recv_handle_async(parent_con, proc_pool=None, timeout=None):
 async def start_punching_process(nic, puncher, proc_pool=None):
     try:
         print("start punching proc entry")
-        parent_con, child_con = mp.Pipe()
+        parent_con, child_con = mp.Pipe() # can old platforms not serialise child_con?
         args = (puncher, child_con,)
-        args = (child_con,) 
+        args = (child_con.fileno(),) 
         #args = (1,)
         print("punch args ", args)
         print("proc pool = ", proc_pool)
