@@ -1,5 +1,4 @@
 import multiprocessing as mp
-from multiprocessing.connection import _Connection
 import socket
 from multiprocessing.reduction import send_handle, recv_handle
 import os
