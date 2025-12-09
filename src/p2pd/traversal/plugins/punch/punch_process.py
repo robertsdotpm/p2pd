@@ -59,17 +59,25 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         print("proc pool = ", proc_pool)
 
         # Schedule TCP punching in process pool executor.
+        p = mp.Process(target=punching_process_entry, args=args)
+        p.start()
+
+        """
         loop = asyncio.get_event_loop()
         future = loop.run_in_executor(
             proc_pool, # Disable proc exe for now
             punching_process_entry,
             args
         )
+        """
 
-        print("before run exec")
-        await asyncio.wait_for(future, timeout=20) # TODO
+        #print("before run exec")
+        #await asyncio.wait_for(future, timeout=20) # TODO
         print("after run exec")
-        fd = await recv_handle_async(parent_con, timeout=5)
+        fd = recv_handle(parent_con)
+
+
+        #fd = await recv_handle_async(parent_con, timeout=5)
         if fd is None:
             raise Exception("recv_handle timed out")
         else:
