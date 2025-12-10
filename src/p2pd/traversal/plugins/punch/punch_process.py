@@ -30,10 +30,14 @@ warns that the socket wasn't closed properly.
 This is the intention and not a bug!
 This code disables that warning.
 """
-def punching_process_entry(puncher, listen_tup):
+def punching_process_entry(start_event, puncher, listen_tup):
     print("punching proc entry")
-    punched_sock = puncher.run_engine(tcp_selector_punch_engine)
-    selector_proxy(punched_sock, listen_tup)
+    try:
+        start_event.set()
+        punched_sock = puncher.run_engine(tcp_selector_punch_engine)
+        selector_proxy(punched_sock, listen_tup)
+    except:
+        log_exception()
 
 async def start_punching_process(nic, puncher, proc_pool=None):
     try:
@@ -41,7 +45,9 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         route = await nic.route(puncher.af)
         listen_pipe = await Pipe(TCP, None, route).connect()
         listen_tup = (route.nic(), listen_pipe.sock.getsockname()[1])
-        args = (puncher, listen_tup,)
+
+        start_event = mp.Event()
+        args = (start_event, puncher, listen_tup,)
 
         # Start the punching process in a thread.
         loop = asyncio.get_event_loop()
@@ -50,6 +56,9 @@ async def start_punching_process(nic, puncher, proc_pool=None):
             punching_process_entry,
             args
         )
+
+        # Wait until process signals it has started
+        await loop.run_in_executor(None, start_event.wait)
 
         # Get client pipe from listen server.
         listen_client_pipe = await listen_pipe.pipe_events # <--- accept()
