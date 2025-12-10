@@ -21,6 +21,7 @@ from ....net.asyncio.event_loop import *
 from ....net.pipe.pipe import *
 from ....node.node_defs import *
 from .engines.tcp_selector_simple.engine import *
+from ....net.selector_proxy import selector_proxy
 
 """
 Punching is done in its own process.
@@ -29,84 +30,37 @@ warns that the socket wasn't closed properly.
 This is the intention and not a bug!
 This code disables that warning.
 """
-def punching_process_entry(child_con):
+def punching_process_entry(puncher, listen_tup):
     print("punching proc entry")
-    try:
-        #puncher, child_con = args
-        print(child_con)
-
-        #sock = puncher.run_engine(tcp_selector_punch_engine)
-
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        print("about to send handle ", os.getppid(), " fd ", sock.fileno())
-        if sock:
-            send_handle(child_con, sock.fileno(), os.getppid())
-            sock.close()
-    except:
-        what_exception()
-
-async def recv_handle_async(parent_con, proc_pool=None, timeout=None):
-    loop = asyncio.get_event_loop()
-    
-    # Run the blocking call in a thread
-    fut = loop.run_in_executor(proc_pool, recv_handle, parent_con)
-    
-    try:
-        fd = await asyncio.wait_for(fut, timeout=timeout)
-        return fd
-    except asyncio.TimeoutError:
-        # handle timeout: maybe return None or raise
-        return None
+    punched_sock = puncher.run_engine(tcp_selector_punch_engine)
+    selector_proxy(punched_sock, listen_tup)
 
 async def start_punching_process(nic, puncher, proc_pool=None):
     try:
         print("start punching proc entry")
-        parent_con, child_con = mp.Pipe() # can old platforms not serialise child_con?
-        args = (puncher, child_con,)
-        args = (child_con,) 
-        #args = (1,)
-        print("punch args ", args)
-        print("proc pool = ", proc_pool)
+        route = await nic.route(puncher.af)
+        listen_pipe = await Pipe(TCP, None, route).connect()
+        listen_tup = listen_pipe.sock.getsockname()[:2]
+        args = (puncher, listen_tup,)
 
-        # Schedule TCP punching in process pool executor.
-        p = mp.Process(target=punching_process_entry, args=args)
-        p.start()
-
-        """
+        # Start the punching process in a thread.
         loop = asyncio.get_event_loop()
         future = loop.run_in_executor(
-            proc_pool, # Disable proc exe for now
+            proc_pool, 
             punching_process_entry,
             args
         )
-        """
 
-        #print("before run exec")
-        #await asyncio.wait_for(future, timeout=20) # TODO
-        print("after run exec")
-        fd = recv_handle(parent_con)
+        # Get client pipe from listen server.
+        listen_client_pipe = await listen_pipe
 
+        # Close original listen server.
+        # Client pipe is still connected so this is fine.
+        await listen_pipe.close()
 
-        #fd = await recv_handle_async(parent_con, timeout=5)
-        if fd is None:
-            raise Exception("recv_handle timed out")
-        else:
-            print("got FD", fd)
-
-        sock = socket.socket(fileno=fd)
-        print("punched sock = ", sock)
-
-        # Wrap socket in pipe and return it (todo: set node message handler stuff.)
-        nic_port = sock.getsockname()[1]
-        route = await nic.route(puncher.af).bind(port=nic_port)
-        pipe = await Pipe(
-            TCP, 
-            sock.getpeername()[:2], 
-            route, 
-            sock=sock
-        ).connect()
-        print("return pipe = ", pipe)
-        return pipe
+        print("return pipe = ", listen_client_pipe)
+        #pipe = sock_to_pipe(sock, nic)
+        return listen_client_pipe
     except Exception as e:
         log_exception()
         print("error in start_punching_process:", e)

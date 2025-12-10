@@ -431,3 +431,44 @@ class Pipe:
         self.sock = None
         self.owns_socket = False
         self._closed = True
+
+async def sock_to_pipe(sock, nic):
+    # Useful variables from the socket.
+    af = sock.family
+    bind_tup = sock.getsockname()
+    bind_ipr = IPR(bind_tup[0], af=af)
+    bind_port = bind_tup[1] 
+
+    # Find a pre-existing route for this bind IP.
+    # Comparisons use IPRange to normalise IPs.
+    use_route = None
+    for route in nic.rp[af]:
+        if bind_ipr in route.nic_ips:
+            use_route = route
+            break
+
+    """
+    If the associated route for the bind IP can't be found
+    for the NIC then raise an exception. If the bind IP
+    was set to loopback or all addresses -- set to new route.
+    """
+    if not use_route:
+        not_nic_ips = VALID_LOOPBACKS + VALID_ANY_ADDR
+        if bind_tup[0] in not_nic_ips:
+            use_route = nic.route(af)
+        else:
+            raise Exception("Cannot find associated route for NIC bind.")
+
+    # Associate a particular route with a bound port.
+    await use_route.bind(port=bind_port)
+
+    # Setup the pipe at that route.
+    pipe = await Pipe(
+        sock.type, # Transport protocol.
+        bind_tup[:2], # Dest tup turned to Addr by resolving (no DNS calls.)
+        use_route, # Route associated with a nic and bind details.
+        sock=sock # The actual socket.
+    ).connect() # Won't connect when socket is passed.
+
+    # Return pipe.
+    return pipe
