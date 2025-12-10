@@ -76,8 +76,8 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         I think the issue with this is it does call code to cleanup the
         client socks so I guess lets fix that.
         """
-        #listen_pipe.pipe_events.tcp_clients = []
-        #await listen_pipe.close()
+        listen_pipe.pipe_events.tcp_clients = []
+        await listen_pipe.close()
 
         print("return pipe = ", listen_client_pipe)
         #pipe = sock_to_pipe(sock, nic)

@@ -45,3 +45,8 @@ a single NTP reading seems adequate for the new code, the clock skew stuff seems
 ive seen the results varey enough that i question whether it even works
 
 node_conf in demo is being ignored -- investigate this
+
+todo: 
+
+- add timeout for get addr from MQTT
+- actually validate our nic offsets and addring details -- invalid nic offsets crash the node
