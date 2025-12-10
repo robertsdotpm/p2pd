@@ -52,7 +52,7 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         )
 
         # Get client pipe from listen server.
-        listen_client_pipe = await listen_pipe
+        listen_client_pipe = await listen_pipe.pipe_events # <--- accept()
 
         # Close original listen server.
         # Client pipe is still connected so this is fine.
