@@ -79,7 +79,9 @@ class Node(Daemon):
 
         def on_done(future):
             result = future.result()
-            if isinstance(result, (Pipe, PipeClient,)):
+            pipe_like = (Pipe, PipeClient, TCPClientProtocol, PipeEvents)
+            if isinstance(result, pipe_like):
+                print("add msg cb ", result, self.msg_cb)
                 result.add_msg_cb(self.msg_cb)
 
         self.traversal.install_plugin_done_callback(on_done)

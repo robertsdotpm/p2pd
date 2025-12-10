@@ -106,7 +106,7 @@ class PunchPlugin(TraversalPlugin):
         if_index = self.src_info["if_index"]
         stuns = self.stun_clients[self.af][if_index]
 
-        # 🛑 Skip if no STUN clients loaded.
+        # Skip if no STUN clients loaded.
         if not len(stuns):
             return None, None
         
