@@ -66,10 +66,12 @@ async def start_punching_process(nic, puncher, proc_pool=None):
 
         listen_client_pipe = await listen_pipe.pipe_events # <--- accept()
         print("after listen client pipe")
+        print("listen client pipe sock = ", listen_client_pipe.sock)
+
 
         # Close original listen server.
         # Client pipe is still connected so this is fine.
-        await listen_pipe.close()
+        #await listen_pipe.close()
 
         print("return pipe = ", listen_client_pipe)
         #pipe = sock_to_pipe(sock, nic)
