@@ -40,7 +40,7 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         print("start punching proc entry")
         route = await nic.route(puncher.af)
         listen_pipe = await Pipe(TCP, None, route).connect()
-        listen_tup = listen_pipe.sock.getsockname()[:2]
+        listen_tup = (route.nic(), listen_pipe.sock.getsockname()[1])
         args = (puncher, listen_tup,)
 
         # Start the punching process in a thread.
