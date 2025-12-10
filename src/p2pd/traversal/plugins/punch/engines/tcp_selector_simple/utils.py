@@ -22,6 +22,9 @@ def bind_tcp_sockets(af, port_allocs, src_ip=None):
     else:
         bind_ip = "0.0.0.0" if af == socket.AF_INET else "::"
 
+    print(af)
+    print(bind_ip)
+
     # List of bound TCP sockets.
     bound_socks = []
     for p in port_allocs:

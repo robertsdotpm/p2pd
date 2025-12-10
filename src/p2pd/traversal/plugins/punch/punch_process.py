@@ -81,6 +81,9 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         code specific. It's still fairly safe to keep it around, should
         set the server to not accept any more clients though.
 
+        might make more sense to use blocking listen accept in a thread
+        then return the client sock and close listener, keep it simple
+
         """
         #listen_pipe.pipe_events.tcp_clients = []
         #await listen_pipe.close()

@@ -62,7 +62,7 @@ class PunchClient:
             self.af = socket.AF_INET6
 
         # Fallback to default interface.
-        self.src_ip = src_ip or "0.0.0.0"
+        self.src_ip = src_ip
         self.dest_ip = dest_ip
         self.our_ip = our_ip
         
@@ -78,13 +78,14 @@ class PunchClient:
         self.start_time = time.monotonic()
 
         # Sanity check -- don't punch to self.
-        if IPR(dest_ip, af=self.af) == IPR(our_ip, af=self.af):
-            """
-            No longer want to maintain bizzare and useless features.
-            There's no reason to do this, not even for testing.
-            Testing can be done from VMs or virtual interfaces.
-            """
-            raise Exception("Punching to self is not supported.")
+        if our_ip:
+            if IPR(dest_ip, af=self.af) == IPR(our_ip, af=self.af):
+                """
+                No longer want to maintain bizzare and useless features.
+                There's no reason to do this, not even for testing.
+                Testing can be done from VMs or virtual interfaces.
+                """
+                raise Exception("Punching to self is not supported.")
 
     def set_src_ip(self, src_ip):
         self.src_ip = src_ip
@@ -151,6 +152,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     punch = PunchClient(args.dest_ip)
+
     try:
         # Get unix timestamp from NTP.
         timestamp = timestamp_from_ntp()
