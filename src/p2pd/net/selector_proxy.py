@@ -1,80 +1,72 @@
-import socket
 import selectors
+import socket
 from ..utility.error_logger import *
 
 def selector_proxy(socket_p, destination):
     """
     Bridges an existing connected socket P to a new socket R (connected to destination).
-    Supports IPv4 and IPv6 automatically.
+    Supports IPv4 and IPv6 automatically. Loops forever until both sides close.
     """
     selector = selectors.DefaultSelector()
-    
-    try:
-        # 1. Create the 'Reverse' connection R
-        # socket.create_connection automatically handles IPv4 vs IPv6
-        socket_r = socket.create_connection(destination, timeout=10)
 
-        # 2. Set both sockets to non-blocking mode
+    try:
+        socket_r = socket.create_connection(destination, timeout=10)
         socket_p.setblocking(False)
         socket_r.setblocking(False)
 
-        # 3. Initialize state
-        sockets = [socket_p, socket_r]
         peers = {socket_p: socket_r, socket_r: socket_p}
         buffers = {socket_p: b'', socket_r: b''}
 
-        # 4. Register sockets with the selector for READING initially
-        for s in sockets:
+        for s in peers:
             selector.register(s, selectors.EVENT_READ)
 
-        # 5. The Event Loop
-        while True:
-            # Block until at least one socket is ready
+        while peers:
             events = selector.select(timeout=None)
-
             for key, mask in events:
                 sock = key.fileobj
                 peer = peers[sock]
 
-                # --- HANDLE READS ---
+                # --- READ ---
                 if mask & selectors.EVENT_READ:
                     try:
                         data = sock.recv(4096)
                         if data:
-                            # If peer wasn't already waiting to write, register it for WRITING
-                            if not buffers[peer]:
-                                peer_mask = selector.get_key(peer).events
-                                selector.modify(peer, peer_mask | selectors.EVENT_WRITE)
                             buffers[peer] += data
+                            selector.modify(peer, selector.get_key(peer).events | selectors.EVENT_WRITE)
                         else:
-                            # Empty bytes means connection closed by the other side
-                            return
+                            # peer closed, stop reading from this socket
+                            selector.unregister(sock)
+                            sock.close()
+                            del peers[sock]
+                            del buffers[sock]
+                            continue
                     except (ConnectionResetError, OSError):
-                        return
+                        selector.unregister(sock)
+                        sock.close()
+                        del peers[sock]
+                        del buffers[sock]
+                        continue
 
-                # --- HANDLE WRITES ---
-                if mask & selectors.EVENT_WRITE:
-                    if buffers[sock]:
-                        try:
-                            sent = sock.send(buffers[sock])
-                            buffers[sock] = buffers[sock][sent:]
-                            
-                            # If buffer is empty, stop watching for WRITE events
-                            if not buffers[sock]:
-                                current_mask = selector.get_key(sock).events
-                                selector.modify(sock, current_mask & ~selectors.EVENT_WRITE)
-                        except (BrokenPipeError, OSError):
-                            return
+                # --- WRITE ---
+                if mask & selectors.EVENT_WRITE and buffers[sock]:
+                    try:
+                        sent = sock.send(buffers[sock])
+                        buffers[sock] = buffers[sock][sent:]
+                        if not buffers[sock]:
+                            selector.modify(sock, selector.get_key(sock).events & ~selectors.EVENT_WRITE)
+                    except (BrokenPipeError, OSError):
+                        selector.unregister(sock)
+                        sock.close()
+                        del peers[sock]
+                        del buffers[sock]
 
-    except Exception as e:
+    except Exception:
+        # optional logging function
         log_exception()
-
     finally:
-        try:
-            socket_p.close()
-        except: pass
-        try:
-            if 'socket_r' in locals():
-                socket_r.close()
-        except: pass
+        for s in [socket_p, locals().get('socket_r')]:
+            if s:
+                try:
+                    s.close()
+                except: pass
         selector.close()
