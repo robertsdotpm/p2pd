@@ -78,7 +78,7 @@ class PunchClient:
         self.start_time = time.monotonic()
 
         # Sanity check -- don't punch to self.
-        if our_ip:
+        if our_ip and 0: # TODO: disabled
             if IPR(dest_ip, af=self.af) == IPR(our_ip, af=self.af):
                 """
                 No longer want to maintain bizzare and useless features.
@@ -150,9 +150,14 @@ if __name__ == "__main__":
         required=True,
         help="Dest IP to punch to"
     )
+    parser.add_argument(
+        "--src_ip",
+        type=str,
+        required=False,
+        help="SRC IP to punch from"
+    )
     args = parser.parse_args()
-    punch = PunchClient(args.dest_ip)
-
+    punch = PunchClient(args.dest_ip, args.src_ip)
     try:
         # Get unix timestamp from NTP.
         timestamp = timestamp_from_ntp()

@@ -26,7 +26,10 @@ RETRY_INTERVAL = 0.05
 def setup_engine(af, port_allocs, src_ip):
     # The same port is reused for listen() and connect.
     pre_listen_infos = bind_tcp_sockets(af, port_allocs, src_ip)
+    print("pre listen infos ", pre_listen_infos)
+
     listen_infos = listen_on_tcp_sockets(pre_listen_infos)
+    print(listen_infos)
     if not listen_infos:
         raise Exception("Engine failed to listen at all.")
 
