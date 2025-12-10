@@ -50,18 +50,22 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         args = (start_event, puncher, listen_tup,)
 
         # Start the punching process in a thread.
+        print("before run in ex")
         loop = asyncio.get_event_loop()
         future = loop.run_in_executor(
             proc_pool, 
             punching_process_entry,
-            args
+            *args
         )
+        print("after run in exec")
 
         # Wait until process signals it has started
         await loop.run_in_executor(None, start_event.wait)
 
         # Get client pipe from listen server.
+
         listen_client_pipe = await listen_pipe.pipe_events # <--- accept()
+        print("after listen client pipe")
 
         # Close original listen server.
         # Client pipe is still connected so this is fine.
