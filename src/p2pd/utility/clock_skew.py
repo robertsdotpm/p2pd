@@ -128,7 +128,7 @@ async def test_clock_skew(): # pragma: no cover
     interface = await Interface()
 
 
-
+    print("loaded")
     s = await SysClock(interface=interface)
     print(s.time())
     time.sleep(1)

@@ -136,7 +136,9 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     )
 
     # Start the server for the node protocol.
+    print("start listening")
     await node.listen_on_ifs()
+    print("end listening")
 
     # Skip port forwarding if all NICs aren't behind NATs.
     all_open_internet = True
@@ -148,6 +150,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     # Port forward all listen servers.
     if node.conf["enable_upnp"] and not all_open_internet:
         if out: cout("\tStarting UPnP task...")
+        print("do node forward")
 
         # Put slow forwarding task in the background.
         forward = asyncio.create_task(
@@ -158,6 +161,8 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Build P2P address bytes.
     assert(node.node_id is not None)
+
+    print("start ndoe addr create")
     node.addr_bytes = make_node_addr(
         node.node_id,
         node.machine_id,
@@ -165,6 +170,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         list(node.signal_pipes),
         port=node.listen_port,
     )
+    print("end node addr")
 
     # Log address.
     msg = fstr("Starting node = '{0}'", (node.addr_bytes,))
@@ -187,10 +193,13 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         node.sys_clock,
     )
     
+    # Update nickname in the background.
     if node.conf.get("enable_nickname", True):
-        nick = await node.nickname(node.node_id)
-        pkt = await node.nick_client.fetch(nick)
-        cout("nick pkt vkc = ", pkt.vkc)
+        nick = asyncio.create_task(
+            node.nickname(node.node_id)
+        )
+        #pkt = await node.nick_client.fetch(nick)
+        #cout("nick pkt vkc = ", pkt.vkc)
 
     # Used for sending signaling messasges to other nodes.
     node.signal_router = SignalRouter(
