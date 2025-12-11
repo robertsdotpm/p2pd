@@ -446,6 +446,9 @@ async def sock_to_pipe(sock, nic):
         if bind_ipr in route.nic_ips:
             use_route = route
             break
+        if bind_ipr in route.link_locals:
+            use_route = route
+            break
 
     """
     If the associated route for the bind IP can't be found
