@@ -468,7 +468,10 @@ async def sock_to_pipe(sock, nic):
     # Setup the pipe at that route.
     pipe = await Pipe(
         sock.type, # Transport protocol.
-        bind_tup[:2], # Dest tup turned to Addr by resolving (no DNS calls.)
+
+        # Allows messages to be routed back to the handle.
+        # TODO: this is really a bad mechanism?
+        sock.getpeername()[:2], # Dest tup turned to Addr by resolving
         use_route, # Route associated with a nic and bind details.
         sock=sock # The actual socket.
     ).connect() # Won't connect when socket is passed.
