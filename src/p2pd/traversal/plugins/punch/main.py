@@ -129,7 +129,7 @@ class PunchPlugin(TraversalPlugin):
         print("punch dest ip = ", dest_ip)
 
         # 3. Create and Configure PunchClient
-        nic_id = to_s(self.nic.nic_id)
+        nic_id = to_s(self.nic.id)
         print("nic id = ", nic_id)
         print("src ip = ", src_ip)
         print("decider ip = ", decider_ip)
