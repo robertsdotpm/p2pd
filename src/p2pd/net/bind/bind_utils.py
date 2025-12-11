@@ -1,5 +1,6 @@
 from ...utility.utils import *
 from ..net_utils import *
+from ..ip_range import IPR
 
 def ip6_patch_bind_ip(bind_ip, nic_id):
     # Add interface descriptor if it's link local.
@@ -18,6 +19,29 @@ def ip6_patch_bind_ip(bind_ip, nic_id):
             )
 
     return bind_ip
+
+def patch_connect_ip(af, ip, nic_id, ipr=None):
+    """
+    When a daemon is bound to the any address you can't just
+    use that address to connect to as it's not a valid addr.
+    In that case -- rewrite the addr to loopback.
+    """
+    ipr = ipr or IPR(ip, af=af)
+    if ipr.ip in VALID_ANY_ADDR:
+        if ipr.af == IP4:
+            return "127.0.0.1"
+        else:
+            return "::1"
+        
+    # Patch link local addresses.
+    if ipr.af == IP6 and ip not in ["::", "::1"]:
+        if ipr.is_private:
+            return ip6_patch_bind_ip(
+                ip,
+                nic_id
+            )
+
+    return ip
 
 async def get_high_port_socket(route, socket_factory, sock_type=TCP):
     # Minimal config to pass socket factory.

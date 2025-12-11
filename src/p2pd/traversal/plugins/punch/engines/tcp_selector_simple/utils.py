@@ -2,6 +2,8 @@ import socket
 import time
 import selectors
 from ...punch_defs import *
+from ......net.bind.bind_rules import binder_sync
+from ......net.net_utils import ip_strip_if
 
 """
 These magic sock options are required for TCP hole punching on
@@ -15,7 +17,7 @@ def sock_opt_voodoo(s):
     except Exception:
         pass # SO_REUSEPORT is not available on all systems
 
-def bind_tcp_sockets(af, port_allocs, src_ip=None):
+def bind_tcp_sockets(af, nic_id, port_allocs, src_ip=None):
     # Listen address.
     if src_ip:
         bind_ip = src_ip
@@ -27,10 +29,10 @@ def bind_tcp_sockets(af, port_allocs, src_ip=None):
     for p in port_allocs:
         s = socket.socket(af, socket.SOCK_STREAM)
         sock_opt_voodoo(s)
-
-        # Bind to the right listen address (simplified)
+        bind_tup = binder_sync(af, ip_strip_if(bind_ip), p.src_port, nic_id)
+        print(bind_tup)
         try:
-            s.bind((bind_ip, p.src_port))
+            s.bind(bind_tup)
             bound_socks.append((p, s))
         except OSError as e:
             # print(f"Could not bind to port {p}: {e}")
@@ -57,6 +59,7 @@ def connect_on_tcp_sockets(sel, bound_infos, dest_ip):
         p, s = bound_info
         try:
             # Initiate non-blocking connect (the "punch")
+            # TODO: ipv6?
             s.connect_ex((dest_ip, p.dest_port))
             connect_infos.append((p, s))
         except OSError as e:

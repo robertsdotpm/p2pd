@@ -1,23 +1,17 @@
+import asyncio
+import socket
+import platform
 from ...utility.utils import *
 from ..net_utils import *
 from .bind_utils import *
 
-"""
-Returns the correct bind tuple given an af and listen IP.
+# --- Reusable Logic Functions ---
 
-Designed to support all kinds of common listen addresses
-and interface-specific addresses across platforms.
-Special attention has been paid to simplifying IPv6 support.
-
-The knowledge within this function has come from testing
-many different address types across operating systems
-and uses a data-driven table of edge-cases over implementing
-edge-case code directly. This greatly simplifies the
-original code while improving maintainability.
-"""
-async def binder(af, ip="", port=0, nic_id=None, loop=None, plat=platform.system()):
-    # Table of edge-cases for bind() across platforms and AFs.
-    bind_magic = [
+def get_bind_magic_table(af):
+    """
+    Generates the table of edge-cases for bind() across platforms and AFs.
+    """
+    return [
         # Bypasses the need for interface details for localhost binds.
         ["*", VALID_AFS, IP_APPEND, VALID_LOCALHOST, LOCALHOST_LOOKUP[af], ""],
 
@@ -43,61 +37,110 @@ async def binder(af, ip="", port=0, nic_id=None, loop=None, plat=platform.system
         ["Windows", IP6, IP_BIND_TUP, IP_PRIVATE, None, [3, "nic_id"]],
     ]
 
-    # Process IP_APPEND bind rules.
-    bind_tup = None
+def resolve_bind_ip(ip, af, nic_id, plat, bind_magic):
+    """
+    Processes IP_APPEND rules to normalize the IP string before lookup.
+    """
     for bind_rule in bind_magic:
-        bind_rule = match_bind_rule(ip, af, plat, bind_rule, IP_APPEND)
-        if not bind_rule:
+        rule_match = match_bind_rule(ip, af, plat, bind_rule, IP_APPEND)
+        if not rule_match:
             continue
 
         # Do norm rule.
-        if bind_rule.norm == "":
+        if rule_match.norm == "":
             pass # Todo: norm IP.
-        else:
-            if bind_rule.norm is not None:
-                ip = bind_rule.norm
+        elif rule_match.norm is not None:
+            ip = rule_match.norm
 
         # Do logic specific to IP_APPEND.
-        if bind_rule.change is not None:
-            if bind_rule.change == "nic_id":
+        if rule_match.change is not None:
+            if rule_match.change == "nic_id":
                 ip += fstr("%{0}", (nic_id,))
             else:
-                ip += bind_rule.change
+                ip += rule_match.change
 
         # Only one rule ran per type.
         break
-
-    # Lookup correct bind tuples to use.
-    loop = loop or asyncio.get_event_loop()
-    try:
-        addr_infos = await loop.getaddrinfo(ip, port)
-    except Exception:
-        addr_infos = []
-
-    if not len(addr_infos):
-        raise Exception(fstr("Can't resolve {0} for bind.", (ip,)))
     
-    # Set initial bind tup.
-    bind_tup = addr_infos[0][4]
-        
-    # Process IP_BIND_TUP if needed.
+    return ip
+
+def resolve_bind_tuple(initial_tup, ip, af, nic_id, plat, bind_magic):
+    """
+    Processes IP_BIND_TUP rules to modify the tuple (e.g. Scope IDs) after lookup.
+    """
+    bind_tup = initial_tup
+
     for bind_rule in bind_magic:
         # Skip rule types we're not processing.
-        bind_rule = match_bind_rule(ip, af, plat, bind_rule, IP_BIND_TUP)
-        if not bind_rule:
+        rule_match = match_bind_rule(ip, af, plat, bind_rule, IP_BIND_TUP)
+        if not rule_match:
             continue
 
         # Apply changes to the bind tuple.
-        offset, val_str = bind_rule.change
+        offset, val_str = rule_match.change
         if val_str == "nic_id":
             val = nic_id
         else:
             val = val_str
+            
         bind_tup = list(bind_tup)
-        bind_tup[offset] = val
+        # Check offset range to be safe
+        if offset < len(bind_tup):
+            bind_tup[offset] = val
+            
         bind_tup = tuple(bind_tup)
             
         # Only one rule ran per type.
         break
-
+    
     return bind_tup
+
+# --- Main Functions ---
+
+async def binder_async(af, ip="", port=0, nic_id=None, plat=platform.system()):
+    """
+    Async version of the binder.
+    """
+    # 1. Get Rules and Prepare IP
+    bind_magic = get_bind_magic_table(af)
+    ip = resolve_bind_ip(ip, af, nic_id, plat, bind_magic)
+
+    # 2. Lookup correct bind tuples to use (Async)
+    loop = asyncio.get_event_loop()
+    try:
+        addr_infos = await loop.getaddrinfo(ip, port)
+    except Exception:
+        addr_infos = []
+    
+    # Fail gracefully if lookup failed (or handle as per original logic)
+    if not addr_infos:
+        return None 
+
+    initial_tup = addr_infos[0][4]
+
+    # 3. Finalize Tuple
+    return resolve_bind_tuple(initial_tup, ip, af, nic_id, plat, bind_magic)
+
+
+def binder_sync(af, ip="", port=0, nic_id=None, plat=platform.system()):
+    """
+    Synchronous version of the binder.
+    """
+    # 1. Get Rules and Prepare IP
+    bind_magic = get_bind_magic_table(af)
+    ip = resolve_bind_ip(ip, af, nic_id, plat, bind_magic)
+
+    # 2. Lookup correct bind tuples to use (Sync)
+    try:
+        addr_infos = socket.getaddrinfo(ip, port)
+    except Exception:
+        addr_infos = []
+
+    # Fail gracefully if lookup failed (or handle as per original logic)
+    if not addr_infos:
+        return None
+
+    initial_tup = addr_infos[0][4]
+
+    # 3. Finalize Tuple
+    return resolve_bind_tuple(initial_tup, ip, af, nic_id, plat, bind_magic)

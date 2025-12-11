@@ -51,11 +51,10 @@ from .engines.tcp_selector_simple.engine import *
 from .utility.punch_utils import *
 from ....net.ip_range import IPR
 
-
 # TODO: Could even use ARP to find the other node in a LAN
 # running the same tool so the dest IP doesn't have to be specified.
 class PunchClient:
-    def __init__(self, dest_ip, src_ip=None, our_ip=None):
+    def __init__(self, dest_ip, src_ip=None, our_ip=None, nic_id=None):
         # Fallback to IP4
         self.af = socket.AF_INET
         if ":" in dest_ip:
@@ -65,6 +64,15 @@ class PunchClient:
         self.src_ip = src_ip
         self.dest_ip = dest_ip
         self.our_ip = our_ip
+
+        # NIC ID = name of a NIC or its number.
+        # The value is needed mostly for IPv6.
+        self.nic_id = nic_id
+        if not nic_id and src_ip:
+            # Try to extract the idea from % part of src_ip
+            # if its found of course.
+            if self.af == IP6 and "%" in src_ip:
+                self.nic_id = src_ip.split("%")[1]
         
         # Listen bind / dest connect matrixes.
         self.port_allocs = [] # [ src bind, dest port ]
@@ -86,6 +94,23 @@ class PunchClient:
                 Testing can be done from VMs or virtual interfaces.
                 """
                 raise Exception("Punching to self is not supported.")
+            
+        # Normalise all ips.
+        # This strips all cidrs, $ stuff etc.
+        self.dest_ip = ip_norm(self.dest_ip)
+        if self.src_ip: 
+            self.src_ip = ip_norm(self.src_ip)
+        if self.our_ip:
+            self.our_ip = ip_norm(self.our_ip)
+            
+        # Patch dest IP based on special bind rules.
+        self.dest_ip = patch_connect_ip(
+            self.af, 
+            self.dest_ip,
+            self.nic_id
+        )
+
+        print(self.dest_ip)
 
     def set_src_ip(self, src_ip):
         self.src_ip = src_ip
@@ -134,6 +159,7 @@ class PunchClient:
         print("in run engine runner")
         return f_engine(
             af=self.af,
+            nic_id=self.nic_id,
             port_allocs=self.port_allocs,
             src_ip=self.src_ip,
             dest_ip=self.dest_ip,
@@ -142,44 +168,55 @@ class PunchClient:
         )
 
 if __name__ == "__main__":
-    # Get the dest IP.
-    parser = argparse.ArgumentParser(description="Test main punching algorithm")
-    parser.add_argument(
-        "--dest_ip",
-        type=str,
-        required=True,
-        help="Dest IP to punch to"
-    )
-    parser.add_argument(
-        "--src_ip",
-        type=str,
-        required=False,
-        help="SRC IP to punch from"
-    )
-    args = parser.parse_args()
-    punch = PunchClient(args.dest_ip, args.src_ip)
-    try:
-        # Get unix timestamp from NTP.
-        timestamp = timestamp_from_ntp()
-        punch.set_timestamp(timestamp)
+    async def main():
+        #from ....nic.interface import Interface
+        #nic = await Interface()
 
-        # Calculate a future timestamp to use as the punch time.
-        _, punch_time = compute_rendezvous(timestamp)
-        punch.set_punch_time(punch_time)
-        print("future punch time = ", punch_time)
-        print("Current ntp time = ", timestamp)
-    except RuntimeError as e:
-        print(f"CRITICAL ERROR: {e}")
-        sys.exit(1)
+        # Get the dest IP.
+        parser = argparse.ArgumentParser(description="Test main punching algorithm")
+        parser.add_argument(
+            "--dest_ip",
+            type=str,
+            required=True,
+            help="Dest IP to punch to"
+        )
+        parser.add_argument(
+            "--src_ip",
+            type=str,
+            required=False,
+            help="SRC IP to punch from"
+        )
+        parser.add_argument(
+            "--nic_id",
+            type=str,
+            required=False,
+            help="NIC ID of nic to send from"
+        )
+        args = parser.parse_args()
+        punch = PunchClient(args.dest_ip, args.src_ip, nic_id=args.nic_id)
+        try:
+            # Get unix timestamp from NTP.
+            timestamp = timestamp_from_ntp()
+            punch.set_timestamp(timestamp)
 
-    # Default uses deterministic ports from NTP boundaries.
-    punch.add_port_allocator(boundary_port_alloc)
-    #out = pickle.dumps(punch)
-    #l = pickle.loads(out)
-    #print(l)
+            # Calculate a future timestamp to use as the punch time.
+            _, punch_time = compute_rendezvous(timestamp)
+            punch.set_punch_time(punch_time)
+            print("future punch time = ", punch_time)
+            print("Current ntp time = ", timestamp)
+        except RuntimeError as e:
+            print(f"CRITICAL ERROR: {e}")
+            sys.exit(1)
 
-    # New punching engine uses non-blocking selector events.
-    sock = punch.run_engine(tcp_selector_punch_engine)
-    print(sock)
+        # Default uses deterministic ports from NTP boundaries.
+        punch.add_port_allocator(boundary_port_alloc)
+        #out = pickle.dumps(punch)
+        #l = pickle.loads(out)
+        #print(l)
 
+        # New punching engine uses non-blocking selector events.
+        sock = punch.run_engine(tcp_selector_punch_engine)
+        print(sock)
+
+    asyncio.run(main())
 

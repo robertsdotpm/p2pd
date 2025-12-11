@@ -23,20 +23,17 @@ from ...utility.punch_utils import *
 CONNECT_TIMEOUT = 5.0
 RETRY_INTERVAL = 0.05
 
-def setup_engine(af, port_allocs, src_ip):
+def setup_engine(af, port_allocs, src_ip, nic_id):
     # The same port is reused for listen() and connect.
-    pre_listen_infos = bind_tcp_sockets(af, port_allocs, src_ip)
-    print("pre listen infos ", pre_listen_infos)
-
+    pre_listen_infos = bind_tcp_sockets(af, nic_id, port_allocs, src_ip)
     listen_infos = listen_on_tcp_sockets(pre_listen_infos)
-    print(listen_infos)
     if not listen_infos:
         raise Exception("Engine failed to listen at all.")
 
     # Reuse the same listen ports for outbound connects.
     # Hence the cryptic socket options.
     port_allocs = [info[0] for info in listen_infos]
-    pre_connect_infos = bind_tcp_sockets(af, port_allocs, src_ip)
+    pre_connect_infos = bind_tcp_sockets(af, nic_id, port_allocs, src_ip)
 
     # Register listening sockets for events.
     sel = selectors.DefaultSelector()
@@ -104,16 +101,17 @@ def socket_event_monitor(sel):
 
     return (inbound, outbound,)
 
-def tcp_selector_punch_engine(af, port_allocs, src_ip, dest_ip, f_sleep_until, our_ip):
+def tcp_selector_punch_engine(af, nic_id, port_allocs, src_ip, dest_ip, f_sleep_until, our_ip):
     print("in engine")
 
     # Create listen sockets, bound con socks, and register for selector events.
-    listen_infos, pre_connect_infos, sel = setup_engine(af, port_allocs, src_ip)
+    listen_infos, pre_connect_infos, sel = setup_engine(af, port_allocs, src_ip, nic_id)
 
     # Wait for synchronized punch time frame.
     f_sleep_until()
 
     # Make outbound connections to the designated ports.
+    print("dest ip = ", dest_ip)
     connect_infos = connect_on_tcp_sockets(sel, pre_connect_infos, dest_ip)
 
     # Return set of successful connections (if any.)
@@ -124,5 +122,8 @@ def tcp_selector_punch_engine(af, port_allocs, src_ip, dest_ip, f_sleep_until, o
 
     # chosoe sock(our_wan, sock.getpeer..)
     sock_list = list(inbound) + list(outbound)
+
+    # TODO: Not too sure this code is ideal
+    # Might need to just send a header and look for it on the other side.
     sock = choose_winning_tcp_sock(dest_ip, sock_list, our_ip)
     return sock

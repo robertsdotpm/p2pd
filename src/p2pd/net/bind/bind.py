@@ -20,7 +20,7 @@ class Bind():
         # Will store a tuple that can be passed to bind.
         self._bind_tups = ()
         if not hasattr(self, "bind"):
-            self.bind = bind_closure(self, binder)
+            self.bind = bind_closure(self, binder_async)
 
     def __await__(self):
         return self.bind().__await__()

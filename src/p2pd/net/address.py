@@ -1,6 +1,6 @@
 from ..utility.utils import *
 from .net_utils import *
-from .bind import *
+from .bind.bind_utils import *
 from .ip_range import *
 
 DNS_NAMESERVERS = {
@@ -102,28 +102,6 @@ class Address():
         self.v6_ipr = self.v4_ipr = None
         self.resolved = False
     
-    def patch_ip(self, ip, ipr, nic_id=None):
-        """
-        When a daemon is bound to the any address you can't just
-        use that address to connect to as it's not a valid addr.
-        In that case -- rewrite the addr to loopback.
-        """
-        if ipr.ip in VALID_ANY_ADDR:
-            if ipr.af == IP4:
-                return "127.0.0.1"
-            else:
-                return "::1"
-            
-        # Patch link local addresses.
-        if ipr.af == IP6 and ip not in ["::", "::1"]:
-            if ipr.is_private:
-                return ip6_patch_bind_ip(
-                    ip,
-                    nic_id
-                )
-
-        return ip
-
     async def res(self, route=None, host=None):
         host = host or self.host
         try:
@@ -148,7 +126,8 @@ class Address():
                 nic_id = None
         
             # Apply any needed IP patches.
-            ip = self.patch_ip(ipr_norm(ipr), ipr, nic_id)
+            #ip = self.patch_ip(ipr_norm(ipr), ipr, nic_id)
+            ip = patch_connect_ip(ipr.af, ipr_norm(ipr), nic_id, ipr)
             if ip in VALID_LOOPBACKS:
                 ipr.is_loopback = True
 
