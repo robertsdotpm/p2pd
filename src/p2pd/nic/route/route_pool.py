@@ -169,6 +169,7 @@ class RoutePool():
             ext_ips=[wan_ip],
             interface=route.interface
         )
+        new_route.set_link_locals(copy.deepcopy(route.link_locals))
         new_route.set_offsets(route_offset, abs_host_offset)
         new_route.link_route_pool(self)
 
