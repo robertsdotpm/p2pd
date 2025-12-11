@@ -214,6 +214,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     # Used to create new punch plugin instances.
     node.traversal.install_plugin("punch", {
         "class": PunchPluginFactory(
+            node.stop_node,
             node.stun_clients,
             node.punch_clients,
             node.sys_clock,

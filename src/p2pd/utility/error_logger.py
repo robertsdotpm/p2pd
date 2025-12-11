@@ -102,7 +102,7 @@ def log(message):
     """Enqueue a message to be logged."""
     if not IS_DEBUG:
         return
-    print(message)
+    #print(message)
     _log_queue.put(message)
 
 def log_exception():
@@ -116,7 +116,7 @@ def log_exception():
     exc_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
     
     # Enqueue the formatted string
-    log("EXCEPTION: " + exc_text.strip())
+    log("EXCEPTION: " + str(exc_text.strip()))
 
 def log_p2p(msg, node_id):
     buf = fstr("p2p <{0}>: {1}", (node_id, msg,))

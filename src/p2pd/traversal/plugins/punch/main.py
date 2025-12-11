@@ -95,7 +95,13 @@ class PunchPlugin(TraversalPlugin):
             print("Type:", type(value))
             print("Error:", error)
 
-        pipe = await start_punching_process(nic, puncher, self.proc_pool)
+        pipe = await start_punching_process(
+            nic, 
+            puncher, 
+            self.stop_node, 
+            self.proc_pool
+        )
+        
         self.result.set_result(pipe)
 
     async def setup_puncher_client(self, reply):
@@ -206,8 +212,6 @@ class PunchPlugin(TraversalPlugin):
 
         msg.meta.plugin_name = "punch"
         return msg
-
-
 
 class PunchPluginFactory():
     def __init__(self, stun_clients, punch_clients, sys_clock=SysClock(None, Dec("0.1")), proc_pool=None):

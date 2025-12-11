@@ -4,6 +4,7 @@ Reusing address can hide socket errors and
 make servers appear broken when they're not.
 """
 import asyncio
+import multiprocessing
 from ..net.daemon import *
 from .node_addr import *
 from .node_utils import *
@@ -32,6 +33,7 @@ class Node(Daemon):
         super().__init__()
         self.__name__ = "P2PNode"
         self.install_path = conf["install_path"]
+        self.stop_node = multiprocessing.Event()
         
         # Main variables for the class.
         self.conf = conf
@@ -63,7 +65,7 @@ class Node(Daemon):
         # Set on start.
         self.addr_bytes = None
         self.addr_futures = {}
-        self.traversal = TraversalManager(self.pipes, self.ifs)
+        self.traversal = TraversalManager(self.stop_node, self.pipes, self.ifs)
         self.traversal.install_plugin("direct_connect", {
             "class": DirectConnect
         })  

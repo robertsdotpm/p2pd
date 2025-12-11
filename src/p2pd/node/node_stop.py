@@ -22,6 +22,9 @@ async def close_with_timeout(p):
 
 # Shutdown the node server and do cleanup.
 async def node_stop(node):
+    if not node.stop_node:
+        node.stop_node.set()
+
     # Close other pipes.
     pipe_lists = [
         node.signal_pipes,

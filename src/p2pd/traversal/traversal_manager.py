@@ -42,7 +42,8 @@ from .traversal_utils import *
 from .plugins.traversal_plugin import TraversalPlugin
 
 class TraversalManager():
-    def __init__(self, pipes={}, nics=[]):
+    def __init__(self, stop_node, pipes={}, nics=[]):
+        self.stop_node = stop_node
         self.plugin_loaders = OrderedDict()
         self.plugins = {} # by pipe id
         self.pipes = pipes
@@ -98,6 +99,7 @@ class TraversalManager():
         else:
             plugin = plugin_class()
 
+        plugin.stop_node = self.stop_node
         self.plugins[plugin.pipe_id] = plugin
         print(plugin_loader)
         print(plugin)
