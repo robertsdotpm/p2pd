@@ -130,6 +130,9 @@ class PunchPlugin(TraversalPlugin):
 
         # 3. Create and Configure PunchClient
         nic_id = to_s(self.nic.nic_id)
+        print("nic id = ", nic_id)
+        print("src ip = ", src_ip)
+        print("decider ip = ", decider_ip)
         puncher = PunchClient(dest_ip, src_ip, decider_ip, nic_id)
 
         # 4. Set Coordinated Time References

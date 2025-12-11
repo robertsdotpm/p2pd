@@ -66,8 +66,13 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         # Start the punching in a new process.
         # Applies rules to make different kinds of IPs work.
         reverse_ip = patch_connect_ip(puncher.af, puncher.src_ip, puncher.nic_id)
+
+
         listening_tup = (reverse_ip, listen_sock.getsockname()[1])
         args = (puncher, listening_tup,)
+        print("punch proc args = ", args)
+
+
         print("before run in ex")
         loop.run_in_executor(
             proc_pool, 
@@ -78,7 +83,11 @@ async def start_punching_process(nic, puncher, proc_pool=None):
 
         # Wait for the reverse connect client sock on the listen server.
         # Note: this uses threads and not processes.
-        client_sock = await asyncio.wait_for(
+        client_sock = accept_reverse_connect_from_punching_proc(listen_sock)
+        
+        
+        """
+        await asyncio.wait_for(
             loop.run_in_executor(
                 None, # Uses threads!
                 accept_reverse_connect_from_punching_proc,
@@ -86,8 +95,10 @@ async def start_punching_process(nic, puncher, proc_pool=None):
             ),
             timeout=10
         )
+        """
 
         # Wrap client sock in a pipe.
+        
         client_pipe = await sock_to_pipe(client_sock, nic)
         print("after listen client pipe")
         print("listen client pipe sock = ", client_sock)
