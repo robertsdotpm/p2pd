@@ -113,8 +113,7 @@ class PunchPlugin(TraversalPlugin):
         # 1. Determine IP Addresses via Routing
         route = await self.nic.route(self.af).bind()
         dest_ip = self.dest_info["ip"]
-        
-        if "fe80" == dest_ip:
+        if "fe80" == dest_ip[:4]:
             # Use link-local source for link-local destination
             src_ip = str(route.link_locals[0])
         else:
@@ -123,14 +122,15 @@ class PunchPlugin(TraversalPlugin):
 
         # 2. Determine the 'Decider' IP for Master/Slave Role Selection
         if self.route_type == NIC_BIND:
-            decider_ip = route.nic()
+            decider_ip = src_ip
         else:
             decider_ip = route.ext()
 
         print("punch dest ip = ", dest_ip)
 
         # 3. Create and Configure PunchClient
-        puncher = PunchClient(dest_ip, src_ip, decider_ip)
+        nic_id = to_s(self.nic.nic_id)
+        puncher = PunchClient(dest_ip, src_ip, decider_ip, nic_id)
 
         # 4. Set Coordinated Time References
         timestamp = self.sys_clock.time()

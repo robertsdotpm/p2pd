@@ -30,75 +30,69 @@ warns that the socket wasn't closed properly.
 This is the intention and not a bug!
 This code disables that warning.
 """
-def punching_process_entry(start_event, puncher, listen_tup):
+def punching_process_entry(puncher, listening_tup):
     print("punching proc entry")
     try:
-        start_event.set()
+        # New punched TCP sock to destination.
         punched_sock = puncher.run_engine(tcp_selector_punch_engine)
-        selector_proxy(punched_sock, listen_tup)
+
+        # Make reverse connect to listen server in main process.
+        # Handles passing messages between the punch sock <--> reverse con.
+        selector_proxy(punched_sock, listening_tup)
     except:
         log_exception()
 
+def accept_reverse_connect_from_punching_proc(listen_sock):
+    listen_sock.setblocking(1)
+    listen_sock.listen(1)
+    client_socket, _ = listen_sock.accept()
+    listen_sock.close()
+    return client_socket
+
 async def start_punching_process(nic, puncher, proc_pool=None):
+    loop = asyncio.get_event_loop()
     try:
         print("start punching proc entry")
-        route = await nic.route(puncher.af)
-        listen_pipe = await Pipe(TCP, None, route).connect()
-        listen_tup = (route.nic(), listen_pipe.sock.getsockname()[1])
 
-        start_event = mp.Event()
-        args = (start_event, puncher, listen_tup,)
+        # Start the listen server used for reverse connect.
+        listen_sock = socket.socket(puncher.af, socket.SOCK_STREAM)
+        listen_any_tup = await binder_async(
+            puncher.af, 
+            ip=puncher.src_ip, 
+            nic_id=puncher.nic_id
+        )
+        listen_sock.bind(listen_any_tup)
 
-        # Start the punching process in a thread.
+        # Start the punching in a new process.
+        # Applies rules to make different kinds of IPs work.
+        reverse_ip = patch_connect_ip(puncher.af, puncher.src_ip, puncher.nic_id)
+        listening_tup = (reverse_ip, listen_sock.getsockname()[1])
+        args = (puncher, listening_tup,)
         print("before run in ex")
-        loop = asyncio.get_event_loop()
-        future = loop.run_in_executor(
+        loop.run_in_executor(
             proc_pool, 
             punching_process_entry,
             *args
         )
         print("after run in exec")
 
-        # Wait until process signals it has started
-        await loop.run_in_executor(None, start_event.wait)
+        # Wait for the reverse connect client sock on the listen server.
+        # Note: this uses threads and not processes.
+        client_sock = await asyncio.wait_for(
+            loop.run_in_executor(
+                None, # Uses threads!
+                accept_reverse_connect_from_punching_proc,
+                listen_sock
+            ),
+            timeout=10
+        )
 
-        # Get client pipe from listen server.
-
-        listen_client_pipe = await listen_pipe.pipe_events # <--- accept()
+        # Wrap client sock in a pipe.
+        client_pipe = await sock_to_pipe(client_sock, nic)
         print("after listen client pipe")
-        print("listen client pipe sock = ", listen_client_pipe.sock)
-
-
-        # Close original listen server.
-        # Client pipe is still connected so this is fine.
-
-        """
-        I think the issue with this is it does call code to cleanup the
-        client socks so I guess lets fix that.
-
-        TODO:
-        Closing this does seem to kill the client sock. it may be transport
-        code specific. It's still fairly safe to keep it around, should
-        set the server to not accept any more clients though.
-
-        might make more sense to use blocking listen accept in a thread
-        then return the client sock and close listener, keep it simple
-
-        """
-        #listen_pipe.pipe_events.tcp_clients = []
-        #await listen_pipe.close()
-
-        print("return pipe = ", listen_client_pipe)
-        #pipe = sock_to_pipe(sock, nic)
-
-        """
-        temp prevent garbage collection of listen server.
-        for testing.
-        """
-        listen_client_pipe.listen_server = listen_pipe
-
-
-        return listen_client_pipe
+        print("listen client pipe sock = ", client_sock)
+        print("return pipe = ", client_pipe)
+        return client_pipe
     except Exception as e:
         log_exception()
         print("error in start_punching_process:", e)
