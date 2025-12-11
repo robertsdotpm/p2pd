@@ -85,30 +85,18 @@ class Nickname():
         self.clients = {IP4: {}, IP6: {}}
         self.started = False
 
-    # A client for each PNP server is loaded by index.
-    async def start(self):
-        success_no = 0
-        for index in range(0, len(PNP_SERVERS[IP4])):
-            """
-            Prefer IPv4 -- the reason is v6 blocks are more likely
-            to be unique per customer meaning names won't get
-            spammed forcing an expiry wait for usage.
-            """
+    async def start(self, timeout=2):
+        tasks = []
+
+        for index in range(len(PNP_SERVERS[IP4])):
             for af in [IP4, IP6]:
-                # Skip AF if not supported.
                 if af not in self.interface.supported():
                     self.clients[af][index] = None
                     continue
 
-                # Uses direct IPs to avoid domain names.
                 serv_info = PNP_SERVERS[af][index]
-                #print(serv_info)
-                dest = (
-                    serv_info["ip"],
-                    serv_info["port"],
-                )
+                dest = (serv_info["ip"], serv_info["port"])
 
-                # Single PNP client for dest.
                 client = PNPClient(
                     self.sk,
                     dest,
@@ -117,26 +105,36 @@ class Nickname():
                     self.sys_clock,
                 )
 
-                # Test connectivity.
-                pipe = None
-                try:
-                    pipe = await client.get_dest_pipe()
-                    if pipe is None:
-                        self.clients[af][index] = None
-                        continue
-                except Exception:
-                    log_exception()
-                finally:
-                    if pipe is not None:
-                        await pipe.close()
+                async def job(af=af, index=index, client=client):
+                    pipe = None
+                    try:
+                        pipe = await asyncio.wait_for(
+                            client.get_dest_pipe(), 
+                            timeout=timeout
+                        )
+                        if pipe is None:
+                            return (af, index, None)
+                    except Exception:
+                        log_exception()
+                        return (af, index, None)
+                    finally:
+                        if pipe is not None:
+                            await pipe.close()
+                    return (af, index, client)
 
-                # Good client so save.
-                self.clients[af][index] = client
+                tasks.append(asyncio.create_task(job()))
+
+        results = await asyncio.gather(*tasks, return_exceptions=False)
+
+        success_no = 0
+        for af, index, client in results:
+            self.clients[af][index] = client
+            if client is not None:
                 success_no += 1
-        
+
         if not success_no:
             raise StartNodeNicknameFailed()
-        
+
         self.started = True
         return self
 
