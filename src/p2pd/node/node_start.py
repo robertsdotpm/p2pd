@@ -99,6 +99,8 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # MQTT server offsets for signal protocol.
     if node.conf["sig_pipe_no"]:
+        print("sig pipe no = ", node.conf["sig_pipe_no"])
+
         if out: cout("\tLoading MQTT clients...")
         await load_signal_pipes(node, node.node_id)
         if out:
@@ -109,24 +111,24 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
             cout(buf)
 
     if sys_clock is None:
-        if node.conf.get("init_clock_skew", True):
+        if node.conf["init_clock_skew"]:
             sys_clock = SysClock(
                 interface=node.ifs[0]
             )
             await sys_clock.start()
         else:
-            sys_clock = SysClock(node.ifs[0], clock_skew=Dec(0.1))
+            sys_clock = SysClock(node.ifs[0], ntp=time.time())
             node.sys_clock = sys_clock
 
     # Multiprocess support for TCP punching and NTP sync.
     t = time.time()
     if out: cout("\tLoading NTP clock skew...")
-    if node.conf.get("enable_punching", True):
+    if node.conf["enable_punching"]:
         await setup_punch_coordination(node, sys_clock)
 
-    if node.conf.get("init_clock_skew", True):
-        clock_skew = str(node.sys_clock.clock_skew)
-        if out: cout(fstr("\t\tClock skew = {0}", (clock_skew,)))
+    if node.conf["init_clock_skew"]:
+        ntp = str(node.sys_clock.ntp)
+        if out: cout(fstr("\t\tClock ntp = {0}", (ntp,)))
 
     # Simple loop to close idle tasks.
     node.idle_pipe_closer = create_task(

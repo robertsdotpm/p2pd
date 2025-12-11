@@ -5,7 +5,7 @@ from .cmd_arg_defs import *
 from .utils import *
 
 if args.disable_upnp:
-    node_conf["enable_upnp"] = False
+    demo_node_conf["enable_upnp"] = False
 
 if args.pnp_server:
     patch_server_af_dict(args.pnp_server, PNP_SERVERS)
@@ -17,11 +17,11 @@ if args.mqtt_server:
     patch_server_list(args.mqtt_server, MQTT_SERVERS)
 
 if args.cmd == "get_nickname":
-    node_conf["sig_pipe_no"] = 0
-    node_conf["enable_upnp"] = False
-    node_conf["init_clock_skew"] = False
-    node_conf["enable_punching"] = False
+    demo_node_conf["sig_pipe_no"] = 0
+    demo_node_conf["enable_upnp"] = False
+    demo_node_conf["init_clock_skew"] = False
+    demo_node_conf["enable_punching"] = False
     #node_conf["enable_nickname"] = False
 
 if args.install_path:
-    node_conf["install_path"] = args.install_path
+    demo_node_conf["install_path"] = args.install_path

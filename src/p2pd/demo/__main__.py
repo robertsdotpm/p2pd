@@ -44,7 +44,7 @@ async def setup_node():
     display_ifs_loaded(ifs)
 
     # Main node class with chosen ifs and conf.
-    node = Node(ifs=ifs, conf=node_conf)
+    node = Node(ifs=ifs, conf=demo_node_conf)
     if args.port:
         node.listen_port = args.port
 

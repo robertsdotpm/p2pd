@@ -2,11 +2,11 @@ from ..do_imports import *
 
 IS_DEBUG = 2
 
-node_conf = dict_child({
+demo_node_conf = dict_child({
     "init_clock_skew": True,
     "reuse_addr": False,
     "enable_upnp": True,
-    "sig_pipe_no": SIGNAL_PIPE_NO,
+    "sig_pipe_no": 0,
     "enable_punching": True,
     "enable_nickname": True,
     "enable_stun_clients": True,

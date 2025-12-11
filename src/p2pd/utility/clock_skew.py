@@ -18,6 +18,7 @@ Address hence it defaults to the default route.
 https://datatracker.ietf.org/doc/html/rfc5905#section-6
 """
 
+import time
 import random
 from decimal import Decimal as Dec
 from ..net.address import *
@@ -63,225 +64,75 @@ async def get_ntp(af, interface, server=None, retry=NTP_RETRY):
     except Exception as e:
         log_exception()
         return None
+    
+async def get_ntp_from_dest(af, nic, dest, retry=NTP_RETRY):
+    # The NTP client uses UDP so retry on failure.
+    try:
+        for _ in range(retry):
+            client = NTPClient(af, nic)
+            response = await client.request(
+                dest,
+                version=3
+            )
+            if response is None:
+                continue
+
+            ntp = response.tx_time
+            return ntp
+    except Exception as e:
+        log_exception()
+        return None
 
 class SysClock:
-    def __init__(self, interface, clock_skew=Dec(0)):
+    def __init__(self, interface, ntp=0):
+        self.start_time = time.monotonic()
         self.interface = interface
-        self.enough_data = 40
-        self.min_data = 10
-        self.max_sdev = 60
-        self.clean_steps = 3
-        self.data_points = []
-        self.clock_skew = clock_skew
-        if self.clock_skew != Dec(0):
-            self.clock_skew = Dec(clock_skew)
+        self.ntp = ntp
 
     async def start(self):
-        if not self.clock_skew:
-            # Test whether this host has an NTPD.
-            """
-            'NTP can usually maintain time to within tens of milliseconds over the public Internet, and can achieve better than one millisecond accuracy in local area networks under ideal conditions.'
-            Plenty accurate for hole punching.
-            """
-            # NTPD listens on all interfaces so
-            # the LAN IP doesn't matter.
-            server = None
-            local_ip = "localhost"
-            ntp_ret = await async_wrap_errors(
-                get_ntp(
-                    self.interface.supported()[0],
-                    self.interface,
-                    (local_ip, 123)
-                ),
-                timeout=NTP_RETRY * NTP_TIMEOUT
-            )
+        if self.ntp:
+            return
+        
+        for i in range(0, 5):
+            for af in self.interface.supported():
+                try:
+                    serv = random.choice(NTP_SERVERS)
+                    addr = await Address(serv["host"], 123, self.interface).res()
+                    tup = addr.select_ip(af)
+                    ntp = await get_ntp_from_dest(
+                        af=af,
+                        nic=self.interface,
+                        dest=tup
+                    )
 
-            if ntp_ret is not None:
-                log("> clockskew using local ntp daemon")
-                server = local_ip
+                    if ntp:
+                        self.ntp = ntp
+                        return self
+                except:
+                    continue
 
-            # Calculate clock skew.
-            for i in range(0, 3):
-                if self.clock_skew == Dec(0):
-                    await self.collect_data_points(server=server)
-                    if not len(self.data_points):
-                        continue
-
-                    self.clock_skew = self.calculate_clock_skew()
-                else:
-                    break
-    
         return self
 
     def __await__(self):
         return self.start().__await__()
 
-    def __str__(self):
-        return '{0:f}'.format(self.clock_skew)
-
-    def __repr__(self):
-        return fstr('Dec("{0}")', (str(self),))
-
     def time(self):
-        return Dec(timestamp(1)) - self.clock_skew
-
-    async def collect_data_points(self, server=None):
-        async def get_clock_skew():
-            ntp_ret = await async_wrap_errors(
-                get_ntp(
-                    self.interface.supported()[0],
-                    self.interface,
-                    server=server
-                ),
-                timeout=NTP_RETRY * NTP_TIMEOUT
-            )
-
-            if ntp_ret is None:
-                return None
-
-            return Dec(timestamp(1)) - Dec(ntp_ret)
-
-        tasks = []
-        for _ in range(0, self.enough_data + 10):
-            tasks.append(
-                get_clock_skew()
-            )
-
-        results = await asyncio.gather(*tasks)
-        results = strip_none(results)
-        self.data_points += results
-
-    def statx_n(self, data_points):
-        return len(data_points)
-
-    def statx_avg(self, data_points):
-        total = Dec("0")
-        n = self.statx_n(data_points)
-        for i in range(0, n):
-            total += data_points[i]
-
-        return total / Dec(n)
-
-    def statx_sdev(self, data_points):
-        def _ss(data):
-            # Return sum of square deviations
-            # of sequence data.
-            c = self.statx_avg(data)
-            return sum( (x - c ) ** 2 for x in data )
-
-        def pstdev(data):
-            # Calculates the population standard deviation.
-            n = len(data)
-            if n < 2:
-                raise ValueError('variance requires at least two data points')
-
-            ss = _ss(data)
-            pvar = ss / n  # the population variance
-
-            return pvar ** Dec("0.5")
-
-        return pstdev(data_points)
-
-    def calculate_clock_skew(self):
-        """
-        Computer average and standard deviation
-        using all the data points.
-        """
-        n = self.statx_n(self.data_points)
-
-        """
-        Required to be able to compute the standard
-        deviation.
-        """
-        if n < 1:
-            log("n < 1 in cal clock skew")
-            return Dec("0")
-
-        avg = self.statx_avg(self.data_points)
-        sdev = self.statx_sdev(self.data_points)
-
-        """
-        Incrementally remove aberration points.
-        """
-        for k in range(0, self.clean_steps):
-            """
-            Remove aberration points: keep only
-            the sigma range around the average.
-            """
-            min_val = avg - sdev
-            max_val = avg + sdev
-
-            cleaned_data_points = []
-            for i in range(0, n):
-                v = self.data_points[i]
-                if v < min_val or v > max_val:
-                    continue
-
-                cleaned_data_points.append(v)
-
-            self.data_points = cleaned_data_points[:]
-
-            """
-            Recompute the new average using the
-            "sound" points we kept.
-            """
-            n = self.statx_n(self.data_points)
-
-            """
-            Not enough data to compute standard
-            deviation.
-            """
-            if n < 2:
-                break
-
-            avg = self.statx_avg(self.data_points)
-            sdev = self.statx_sdev(self.data_points)
-            if sdev <= self.max_sdev or n < self.min_data:
-                break
-
-        """
-        If standard deviation is too large still, we
-        cannot update our clock. Collect more points.
-
-        If we don't have a minimum amount of data,
-        don't attempt the update yet, continue collecting.
-        """
-        if sdev > self.max_sdev or n < self.min_data:
-            return Dec("0")
-
-        return avg
-
-    def to_dict(self):
-        return {
-            "if": self.interface.to_dict(),
-            "clock_skew": '{0:f}'.format(self.clock_skew)
-        }
-
-    @staticmethod
-    def from_dict(d):
-        i = Interface.from_dict(d["if"])
-        x = SysClock(interface=i, clock_skew=d["clock_skew"])
-        return x
-
-    # Pickle.
-    def __getstate__(self):
-        return self.to_dict()
-
-    # Unpickle.
-    def __setstate__(self, state):
-        o = self.from_dict(state)
-        self.__dict__ = o.__dict__
+        if not self.ntp:
+            raise Exception("clock skew not loaded")
+        
+        elapsed = time.monotonic() - self.start_time
+        return self.ntp + elapsed
 
 async def test_clock_skew(): # pragma: no cover
-    from p2pd import p2pd_setup_netifaces, Interface
+    from p2pd.nic.interface import Interface
     interface = await Interface()
-    ret = await get_ntp(IP4, interface)
-    print(ret)
-    return
+
 
 
     s = await SysClock(interface=interface)
-    print(repr(s))
+    print(s.time())
+    time.sleep(1)
+    print(s.time())
 
 
     return
