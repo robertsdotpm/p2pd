@@ -281,7 +281,7 @@ class Daemon():
                         # Avoid bind limit.
                         if limit is not None:
                             if total > limit:
-                                return
+                                break
 
                         # Don't modify the route table directly.
                         # Note: only binds to first IP.
@@ -304,7 +304,7 @@ class Daemon():
                     # Avoid bind limit.
                     if limit is not None:
                         if total > limit:
-                            return
+                            break
 
                     # Bind to link local.
                     local = nic.route(af)

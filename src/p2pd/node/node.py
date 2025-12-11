@@ -220,10 +220,12 @@ class Node(Daemon):
         # Multi-iface connection facilitation.
         for nic in self.ifs:
             # Listen on first route for AFs.
-            outs = await self.listen_local(
-                TCP,
-                self.listen_port,
-                nic
+            out = await async_wrap_errors(
+                self.listen_local(
+                    TCP,
+                    self.listen_port,
+                    nic
+                )
             )
 
             # Add global address listener.
@@ -232,8 +234,9 @@ class Node(Daemon):
                     port=self.listen_port
                 )
 
-                out = await self.add_listener(TCP, route)
-                outs.append(out)
+                out = await async_wrap_errors(
+                    self.add_listener(TCP, route)
+                )
 
     def pipe_future(self, pipe_id):
         if pipe_id not in self.pipes:

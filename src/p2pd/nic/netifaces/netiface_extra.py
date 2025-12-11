@@ -139,7 +139,7 @@ async def netiface_addr_to_ipr(af, nic_id, info):
         for host_index in [0, -1]:
             ip_obj = nic_ipr[host_index]
             bind_ip = str(ip_obj)
-            bind_tup = await binder(
+            bind_tup = await binder_async(
                 af,
                 bind_ip,
                 nic_id=nic_id
