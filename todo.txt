@@ -52,3 +52,5 @@ todo:
 - actually validate our nic offsets and addring details -- invalid nic offsets crash the node
 
 todo: get ipv6 punching working. use isolated engine stuff first.
+
+a sig pipe seems to be disconnecting and the error logger doesnt write all errors

@@ -7,7 +7,7 @@ def ip6_patch_bind_ip(bind_ip, nic_id):
     if to_s(bind_ip[0:2]).lower() in ["fe", "fd"]:
         # Interface specified by no on windows.
         if platform.system() == "Windows":
-            bind_ip = "%s%%%d" % (
+            bind_ip = "%s%%%s" % (
                 bind_ip,
                 nic_id
             )
@@ -38,7 +38,7 @@ def patch_connect_ip(af, ip, nic_id, ipr=None):
         if ipr.is_private:
             return ip6_patch_bind_ip(
                 ip,
-                nic_id
+                str(nic_id)
             )
 
     return ip
