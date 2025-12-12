@@ -20,6 +20,17 @@ async def close_with_timeout(p):
     except asyncio.TimeoutError:
         log("Timeout closing " + str(p) + " endpoint t = " + str(p.endpoint_type))
 
+async def shutdown_executor_with_timeout(executor, timeout=3):
+    loop = asyncio.get_running_loop()
+    # Run shutdown in a separate thread
+    shutdown_future = loop.run_in_executor(None, executor.shutdown, True)
+    
+    try:
+        await asyncio.wait_for(shutdown_future, timeout=timeout)
+    except asyncio.TimeoutError:
+        # Still blocking after timeout
+        log("Warning: executor shutdown timed out")
+
 # Shutdown the node server and do cleanup.
 async def node_stop(node):
     if not node.stop_node:
@@ -52,16 +63,14 @@ async def node_stop(node):
         await asyncio.gather(*tasks, return_exceptions=True)
 
     # Try close the multiprocess manager.
-    """
-    Node close will throw: 
-    Exception ignored in: <function BaseEventLoop.__del__
-    with socket error -1
-
-    So you need to make sure to wrap coroutines for exceptions.
-    """
     if node.pp_executor:
+        """
+        Process pool executor is not that great at shut down.
+        At least prevent it from hanging forever by using a thread
+        with a 3 second upper bound on shutdown blocking.
+        """
         log("trying to shut down pp executor waiting.")
-        node.pp_executor.shutdown(wait=True)
+        await shutdown_executor_with_timeout(node.pp_executor)
         log("shutdown for pp executor done.")
 
     log("stop node () ending")

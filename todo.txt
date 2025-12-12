@@ -48,7 +48,7 @@ node_conf in demo is being ignored -- investigate this
 
 todo: 
 
-- add timeout for get addr from MQTT
+
 - actually validate our nic offsets and addring details -- invalid nic offsets crash the node
 
 a sig pipe seems to be disconnecting and the error logger doesnt write all errors
@@ -64,3 +64,5 @@ refactor out delta test from nat test and load interface, its not that
 useful here
 
 multiple mqtt servers are failing leading to errors and slow loading signal pipes in the software
+
+clean exiting from processing.

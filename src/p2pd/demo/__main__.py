@@ -193,18 +193,10 @@ async def main():
         log("end of stop nodes clause.")
 
 if __name__ == "__main__":
-    # explore the sigterm handling last.
-    #loop.add_signal_handler(signal.SIGTERM, cancel_all_tasks)
-    # Seperate thread for processing a queue of log messages.
-    # Avoids dead locks with Python's simple logger.
     try:
         async_run(main())
         log("main task done.")
     except KeyboardInterrupt:
         print("keyboard interrupt")
         log("keyboard interrupt clause reached.")
-
-        # Needed when using older run_until_complete.
-        #loop.run_until_complete(cancel_all_tasks())
-        #cancellation_future = asyncio.ensure_future(cancel_all_tasks(), loop=loop)
         print("ended")

@@ -1,7 +1,55 @@
 from ...utility.utils import *
 from .signal_msgs import *
 from .signal_utils import *
-from .signal_client import SignalMock
+
+async def send_msg_over_mqtt(router, msg, relay_limit=2):
+    # Else loaded from a MSN.
+    buf = sig_msg_to_buf(msg)
+
+    # Try not to load a new signal pipe if
+    # one already exists for the dest.
+    dest = msg.routing.dest
+    offsets = dest["signal"]
+    offsets = prioritize_sig_pipe_overlap(router, offsets)
+
+    # Try signal pipes in order.
+    # If connect fails try another.
+    for i in range(0, len(offsets)):
+        offset = offsets[i]
+
+        # Use existing sig pipe.
+        if offset in router.signal_pipes:
+            sig_pipe = router.signal_pipes[offset]
+
+        # Or load new server offset.
+        if offset not in router.signal_pipes:
+            sig_pipe = await async_wrap_errors(
+                load_signal_pipe(
+                    router.node_id,
+                    msg.routing.af,
+                    offset,
+                    MQTT_SERVERS,
+                    router.msg_cb
+                )
+            )
+
+        # Record it if success.
+        if sig_pipe:
+            router.signal_pipes[offset] = sig_pipe
+        else:
+            continue
+
+        # Send message.
+        print("send to ", dest["node_id"], " ", offset)
+        await async_wrap_errors(
+            sig_pipe.send_msg(
+                buf,
+                to_s(dest["node_id"])
+            )
+        )
+        
+    # TODO: no paths to host.
+    # Need fallback plan here.
 
 class SignalRouter():
     def __init__(self, f_time, node_id, addr_bytes, sk):

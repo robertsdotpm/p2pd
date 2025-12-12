@@ -242,8 +242,6 @@ class Pipe:
             loop = await self.get_loop()
             self.sock.settimeout(0)
             self.sock.setblocking(0)
-            timeout = self.conf.get("con_timeout", 5)
-            success = False
             con_task = asyncio.create_task(
                 loop.sock_connect(
                     self.sock, 
