@@ -29,11 +29,11 @@ NODE_CONF = dict_child({
 
 # Main class for the P2P node server.
 class Node(Daemon):
-    def __init__(self, ifs=[], port=3000, conf=NODE_CONF):
+    def __init__(self, ifs=[], port=3000, stop_node=None, conf=NODE_CONF):
         super().__init__()
         self.__name__ = "P2PNode"
         self.install_path = conf["install_path"]
-        self.stop_node = multiprocessing.Event()
+        self.stop_node = stop_node or multiprocessing.Event()
         
         # Main variables for the class.
         self.conf = conf
