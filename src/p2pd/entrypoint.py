@@ -167,6 +167,7 @@ def p2pd_setup_event_loop():
         asyncio.set_event_loop_policy(CustomEventLoopPolicy())
 
     #sys.excepthook = my_except_hook
+    start_logger()
 
 p2pd_setup_event_loop()
 

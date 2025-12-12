@@ -102,7 +102,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         print("sig pipe no = ", node.conf["sig_pipe_no"])
 
         if out: cout("\tLoading MQTT clients...")
-        await load_signal_pipes(node, node.node_id)
+        await load_signal_pipes(node, node.node_id, min_success=node.conf["sig_pipe_no"])
         if out:
             buf = "\t\tmqtt = ("
             for index in list(node.signal_pipes):

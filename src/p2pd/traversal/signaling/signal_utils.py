@@ -37,6 +37,7 @@ async def load_signal_pipe(node, af, offset, servers):
     ensure the MQTT servers are valid.
     """
     #print("load mqtt with self.node id:", node.node_id)
+
     client = await SignalMock(
         to_s(node.node_id),
         lambda x, y, z: None,
@@ -61,70 +62,68 @@ bound to the wrong event loop.
 TODO: investigate this.
 TODO: maybe load MQTT servers concurrently.
 """
-async def load_signal_pipes(node, node_id, servers=None, min_success=2, max_attempt_no=10):
-    # Offsets for MQTT servers.
+async def load_signal_pipes(node, node_id, servers=None, min_success=2, max_attempt_no=3):
     servers = servers or MQTT_SERVERS
     offsets = [n for n in range(0, len(servers))]
     shuffled = []
 
-    """
-    The server offsets are put in a deterministic order
-    based on the node_id. This is so restarting a server
-    lands on the same signal servers and peers with the
-    old address can still reach that node.
-    """
+    # Deterministic shuffle
     x = dhash(node_id)
-    while len(offsets):
+    while offsets:
         pos = field_wrap(x, [0, len(offsets) - 1])
         index = offsets[pos]
         shuffled.append(index)
         offsets.remove(index)
 
-    """
-    Load the signal pipes based on the limit.
-    """
-    success_no = {IP4: 0, IP6: 0}
     supported_afs = node.supported()
+    success_no = {af: 0 for af in supported_afs}
+
+    batch_size = min_success + 2
     attempt_no = 0
-    for index in shuffled:
-        # Try current server offset against the clients supported AFs.
-        # Skip if it doesn't support the AF.
+    cursor = 0
+
+    async def try_one(af, index):
+        server = servers[index]
+        if server[af] is None:
+            return None, af
+        ret = await async_wrap_errors(
+            load_signal_pipe(node, af, index, servers),
+            timeout=2
+        )
+        return ret, af
+
+    def met_requirements():
         for af in supported_afs:
-            # Update host IP if it's set.
-            server = servers[index]
-            if server["host"] is not None:
-                try:
-                    addr = await Address(server["host"], 123)
-                    server[af] = addr.select_ip(af).ip
-                except KeyError:
-                    log_exception()
+            if success_no[af] < min_success:
+                return False
+        return True
 
-            # Skip unsupported servers.
-            if server[af] is None:
+    while cursor < len(shuffled):
+        if attempt_no > max_attempt_no:
+            break
+
+        batch = shuffled[cursor:cursor + batch_size]
+        cursor += batch_size
+        attempt_no += 1
+
+        tasks = []
+        for index in batch:
+            for af in supported_afs:
+                if servers[index][af] is None:
+                    continue
+                tasks.append(try_one(af, index))
+
+        if not tasks:
+            continue
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for r in results:
+            if isinstance(r, Exception):
                 continue
-
-            # Attempt to get a handle to the MQTT server.
-            ret = await async_wrap_errors(
-                load_signal_pipe(node, af, index, servers),
-                timeout=2
-            )
-
-            # Valid signal pipe.
+            ret, af = r
             if ret is not None:
                 success_no[af] += 1
 
-        # Find count of current successes.
-        success_target = len(supported_afs) * min_success
-        total_success = 0
-        for af in supported_afs:
-            total_success += success_no[af]
-
-        # Exit if min loaded for supported AFs.
-        if total_success >= success_target:
-            break
-
-        # There may be many MQTT -- don't try forever.
-        # Safeguard to help prevent hangs.
-        attempt_no += 1
-        if attempt_no > max_attempt_no:
+        if met_requirements():
             break

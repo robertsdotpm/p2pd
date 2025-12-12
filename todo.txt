@@ -51,6 +51,16 @@ todo:
 - add timeout for get addr from MQTT
 - actually validate our nic offsets and addring details -- invalid nic offsets crash the node
 
-todo: get ipv6 punching working. use isolated engine stuff first.
-
 a sig pipe seems to be disconnecting and the error logger doesnt write all errors
+
+i see this get delta error:
+
+  File "/home/x/projects/p2pd/src/p2pd/nic/nat/nat_utils.py", line 199, in get_delta_value
+    if results[i - 1][MAPPED_INDEX] is not None:
+
+ive seen xml errors in get upnp
+
+refactor out delta test from nat test and load interface, its not that
+useful here
+
+multiple mqtt servers are failing leading to errors and slow loading signal pipes in the software

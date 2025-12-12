@@ -6,7 +6,7 @@ demo_node_conf = dict_child({
     "init_clock_skew": True,
     "reuse_addr": False,
     "enable_upnp": True,
-    "sig_pipe_no": 0,
+    "sig_pipe_no": 1,
     "enable_punching": True,
     "enable_nickname": True,
     "enable_stun_clients": True,

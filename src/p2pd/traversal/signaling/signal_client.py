@@ -29,7 +29,6 @@ class SignalMock():
         try:
             self.f_proto(payload, client, self)
         except:
-            what_exception()
             log_exception() # todo disable what except
 
     def on_connect(self, client, flags, rc, properties):
@@ -69,7 +68,15 @@ class SignalMock():
         await self.send_msg(to_s(out), to_s(dest_chan))
 
     async def get_client(self, mqtt_server):
-        client = MQTTClient(self.peer_id)
+        """
+        I've learned recently with a session ID anyone can use it and boot
+        off the person using that session. Reusing session IDs or making them
+        guessable is not how MQTT is meant to work. MQTT doesn't show
+        session IDs of recived messages but I guess plain text mqtt leaks them.
+        TODO: Use TLS only.
+        """
+        session_id = rand_plain(10)
+        client = MQTTClient(session_id, clean_session=True)
         client.set_config({
             'reconnect_retries': -1,
             'reconnect_delay': 60
@@ -84,7 +91,7 @@ class SignalMock():
                 host=mqtt_server[0],
                 port=mqtt_server[1]
             ),
-            5
+            2
         )
 
         return client
@@ -98,7 +105,7 @@ async def is_valid_mqtt(dest):
 
     # Executed on receipt of a new MQTT message.
     def mqtt_proto_closure(ret):
-        async def mqtt_proto(payload, client):
+        def mqtt_proto(payload, client_tup, signal_client):
             found_msg.put_nowait(payload)
 
         return mqtt_proto
@@ -128,7 +135,7 @@ async def is_valid_mqtt(dest):
 
     # Wait for a reply.
     try:
-        await asyncio.wait_for(found_msg.get(), 1.0)
+        out = await asyncio.wait_for(found_msg.get(), 4.0)
         await client.close()
         return client
     except asyncio.TimeoutError:
