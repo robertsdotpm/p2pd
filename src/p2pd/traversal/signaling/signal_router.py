@@ -14,7 +14,9 @@ async def send_msg_over_mqtt(router, msg, relay_limit=2):
 
     # Try signal pipes in order.
     # If connect fails try another.
+    relay_count = 0
     for i in range(0, len(offsets)):
+        # Get index referencing an MQTT server.
         offset = offsets[i]
 
         # Use existing sig pipe.
@@ -33,10 +35,12 @@ async def send_msg_over_mqtt(router, msg, relay_limit=2):
                 )
             )
 
-        # Record it if success.
-        if sig_pipe:
-            router.signal_pipes[offset] = sig_pipe
-        else:
+            # Record it if success.
+            if sig_pipe:
+                router.signal_pipes[offset] = sig_pipe
+
+        # Skip invalid sig pipes.
+        if not sig_pipe:
             continue
 
         # Send message.
@@ -47,6 +51,14 @@ async def send_msg_over_mqtt(router, msg, relay_limit=2):
                 to_s(dest["node_id"])
             )
         )
+
+        """
+        Relay message across a minimum no of MQTT servers
+        to help ensure message is received.
+        """
+        relay_count += 1
+        if relay_count >= relay_limit:
+            break
         
     # TODO: no paths to host.
     # Need fallback plan here.
