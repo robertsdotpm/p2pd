@@ -28,7 +28,7 @@ class SignalMock():
         print("in sig mock on msg ")
         try:
             self.f_proto(payload, client, self)
-        except:
+        except Exception:
             log_exception() # todo disable what except
 
     def on_connect(self, client, flags, rc, properties):

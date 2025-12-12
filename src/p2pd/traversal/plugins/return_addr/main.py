@@ -11,7 +11,7 @@ class ReturnAddrPlugin(TraversalPlugin):
         # Send this message to the dest_addr for this plugin instance.
         try:
             await self.signal_msg_sender(msg)
-        except:
+        except Exception:
             what_exception()
 
         self.result.set_result("Done")

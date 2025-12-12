@@ -68,6 +68,6 @@ def selector_proxy(socket_p, destination, stop_node):
             if s:
                 try:
                     s.close()
-                except: pass
-                
+                except Exception: pass
+
         selector.close()

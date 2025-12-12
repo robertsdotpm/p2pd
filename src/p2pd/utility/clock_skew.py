@@ -108,7 +108,7 @@ class SysClock:
                     if ntp:
                         self.ntp = ntp
                         return self
-                except:
+                except Exception:
                     continue
 
         return self

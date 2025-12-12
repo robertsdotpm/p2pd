@@ -39,7 +39,7 @@ def punching_process_entry(puncher, listening_tup, stop_node):
         # Make reverse connect to listen server in main process.
         # Handles passing messages between the punch sock <--> reverse con.
         selector_proxy(punched_sock, listening_tup, stop_node)
-    except:
+    except Exception:
         log_exception()
 
 def accept_reverse_connect_from_punching_proc(listen_sock):

@@ -154,10 +154,16 @@ class Node(Daemon):
             dest_vk = pkt.vkc
             print(dest_vk)
 
-            updated_addr_bytes = await get_updated_addr_from_mqtt(self, addr_bytes)
-            print("Got updated addr bytes from mqtt = ", updated_addr_bytes)
-            if updated_addr_bytes:
-                addr_bytes = updated_addr_bytes
+            try:
+                updated_addr_bytes = await asyncio.wait_for(
+                    get_updated_addr_from_mqtt(self, addr_bytes),
+                    timeout=3
+                )
+                print("Got updated addr bytes from mqtt = ", updated_addr_bytes)
+                if updated_addr_bytes:
+                    addr_bytes = updated_addr_bytes
+            except asyncio.TimeoutError:
+                log("Timeout MQTT get updated bytes " + str(pnp_addr))
         else:
             addr_bytes = pnp_addr
 
