@@ -104,6 +104,7 @@ async def for_server_in_daemon(daemon, func):
             for port in daemon.servers[af][proto]:
                 for ip in daemon.servers[af][proto][port]:
                     server = daemon.servers[af][proto][port][ip]
+                    print(server, func)
                     await async_wrap_errors(
                         func(server)
                     )

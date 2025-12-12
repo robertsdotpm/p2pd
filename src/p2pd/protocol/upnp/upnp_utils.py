@@ -154,6 +154,7 @@ async def get_upnp_forwarding_services(route, dest, path):
 
         # Convert to a list of services.
         services = find_upnp_service_by_type(d, service_types[route.af])
+        log("upnp got:" + str(dest))
         if len(services):
             return (dest, services)
     except Exception:

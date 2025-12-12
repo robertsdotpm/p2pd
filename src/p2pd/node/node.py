@@ -277,6 +277,8 @@ class Node(Daemon):
     # Accomplishes port forwarding and pin hole rules.
     async def forward(self, port):
         async def forward_server(server):
+            print(server.route)
+            print(route.af)
             ret = await server.route.forward(port=port)
             msg = fstr("<upnp> Forwarded {0}:{1}", (server.route.ext(), port,))
             msg += fstr(" on {0}", (server.route.interface.name,))
