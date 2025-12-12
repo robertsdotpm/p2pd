@@ -30,14 +30,23 @@ async def connect_option(node, con_opts):
     cout("Connection in progress... Please wait...")
 
     # Attempt to make the tunnel connection to the remote host.
-    plugin = await node.connect(af, route_type, dest_addr, plugin_name)
-    pipe = await plugin.result # todo: timeout
-    print("plugin result = ", pipe)
-    print(pipe.sock)
+    async def get_pipe():
+        plugin = await node.connect(af, route_type, dest_addr, plugin_name)
+        pipe = await plugin.result
+        return pipe
+    
+    pipe = await async_wrap_errors(
+        get_pipe(),
+        timeout=10
+    )
+
     try:
         if pipe is None:
-            raise TunnelFailed("Connection failed.")
+            cout("Connection failed.")
+            return "menu"
         
+        cout("plugin result = ", pipe)
+        cout(pipe.sock)
         """
         Message queuing isn't enabled by default when callbacks
         are setup for pipe methods so this says to queue

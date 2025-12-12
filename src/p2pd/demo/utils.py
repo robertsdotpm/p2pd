@@ -19,7 +19,7 @@ def cout(*fargs):
             print(*fargs, flush=True)
 
 async def add_echo_support(msg, client_tup, pipe):
-    
+
     if b"ECHO" == msg[:4]:
         cout()
         cout("\tGot echo proto msg: " + to_s(msg) + fstr(" from {0}", (client_tup,)))
@@ -235,11 +235,9 @@ async def echo_client(pipe, echo_data):
     cout(pipe.sock)
     cout()
     cout("Basic echo protocol.")
-    cout("Enter menu to return to menu or exit to quit.")
+    cout("Enter menu to return to menu.")
     while not shut_down.is_set():
         send_buf = echo_data or to_b(await ainput("Echo: "))
-        if send_buf in (b"quit", b"exit"):
-            return "exit"
         if send_buf in (b"menu"):
             send_buf = b""
             return "menu"
