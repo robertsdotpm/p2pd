@@ -101,7 +101,7 @@ class PunchPlugin(TraversalPlugin):
             self.stop_node, 
             self.proc_pool
         )
-        
+
         self.result.set_result(pipe)
 
     async def setup_puncher_client(self, reply):
@@ -214,7 +214,7 @@ class PunchPlugin(TraversalPlugin):
         return msg
 
 class PunchPluginFactory():
-    def __init__(self, stun_clients, punch_clients, sys_clock=SysClock(None, Dec("0.1")), proc_pool=None):
+    def __init__(self, stun_clients, punch_clients, sys_clock=SysClock(None, 0.1), proc_pool=None):
         self.stun_clients = stun_clients # af if index
         self.sys_clock = sys_clock
         self.proc_pool = proc_pool
@@ -234,6 +234,7 @@ class PunchPluginFactory():
         #plugin.active_punchers = self.active_punchers
         return plugin
         
+# TODO
 async def tcp_punch_cleanup(tunnel, ):
     tunnel.node.active_punchers = max(
         0,

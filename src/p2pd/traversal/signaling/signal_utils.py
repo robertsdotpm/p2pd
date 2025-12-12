@@ -2,6 +2,7 @@ from ...settings import *
 from ...net.net_utils import *
 from ...net.address import Address
 from .signal_client import SignalMock
+from ...vendor.ecies import encrypt, decrypt
 
 def find_signal_pipe(node, addr):
     our_offsets = list(node.signal_pipes)
@@ -23,33 +24,23 @@ def prioritize_sig_pipe_overlap(node, offsets):
 
     return overlap + non_overlap
 
-async def load_signal_pipe(node, af, offset, servers):
+async def load_signal_pipe(node_id, af, offset, servers, msg_cb=None):
     # Lookup IP and port of MQTT server.
     server = servers[offset]
-    dest_tup = (
-        server[af],
-        server["port"],
-    )
-    #print(dest_tup)
-
+    dest_tup = (server[af], server["port"],)
     """
     This function does a basic send/recv test with MQTT to help
     ensure the MQTT servers are valid.
     """
-    #print("load mqtt with self.node id:", node.node_id)
-
+    msg_cb = msg_cb or (lambda x, y, z: None)
     client = await SignalMock(
-        to_s(node.node_id),
-        lambda x, y, z: None,
+        to_s(node_id),
+        msg_cb,
         dest_tup
     ).start()
 
-    if client is not None:
-        node.signal_pipes[offset] = client
-
-    #print("mqtt client", client)
-
     return client
+
 
 """
 There's a massive problem with the MQTT client
@@ -86,10 +77,20 @@ async def load_signal_pipes(node, node_id, servers=None, min_success=2, max_atte
         server = servers[index]
         if server[af] is None:
             return None, af
+        
         ret = await async_wrap_errors(
-            load_signal_pipe(node, af, index, servers),
+            load_signal_pipe(
+                node_id, 
+                af, 
+                index, 
+                servers
+            ),
             timeout=2
         )
+
+        if ret is not None:
+            node.signal_pipes[index] = ret
+
         return ret, af
 
     def met_requirements():
@@ -127,3 +128,113 @@ async def load_signal_pipes(node, node_id, servers=None, min_success=2, max_atte
 
         if met_requirements():
             break
+
+def try_unpack_msg(buf, sk, sig_proto_map):
+    print("try unpack msg = ", buf)
+    buf = h_to_b(buf)
+
+    # Try to decrypt message if its encrypted.
+    is_enc = buf[0]
+    if is_enc:
+        # Ensure a SK is set for decryption.
+        if not sk:
+            raise Exception("No sk set for decryption.")
+
+        # Will raise if it can't decrypt.
+        buf = decrypt(
+            sk,
+            buf[1:]
+        )
+        log(fstr("Recv decrypted {0}", (buf,)))
+    
+    # Otherwise buffer is not encrypted -- use as is.
+    if not is_enc:
+        buf = buf[1:]
+
+    # Unpack message into fields.
+    msg_info = sig_proto_map[buf[0]]
+    msg_class = msg_info[0]
+    msg = msg_class.unpack(buf[1:])
+    return msg
+
+def discard_old_msg(msg, seen, f_time):
+    # Old message?
+    pipe_id = msg.meta.pipe_id
+    if pipe_id in seen:
+        log("Discard already seen msg.")
+        return
+    else:
+        seen[pipe_id] = time.time()
+
+    # Check TTL.
+    if int(f_time()) >= msg.meta.ttl:
+        log("Discard old msg.")
+        return
+    
+    return msg
+
+def sig_msg_to_buf(msg):
+    # Else loaded from a MSN.
+    dest_vk = msg.routing.dest["vk"]
+    print("Dest vk = ", dest_vk)
+    if dest_vk:
+        assert(isinstance(dest_vk, bytes))
+        buf = b"\1" + encrypt(
+            dest_vk,
+            msg.pack(),
+        )
+    else:
+        buf = b"\0" + msg.pack()
+
+    # UTF-8 messes up binary data in MQTT.
+    buf = to_h(buf)
+    return buf
+
+async def send_msg_over_mqtt(router, msg, relay_limit=2):
+    # Else loaded from a MSN.
+    buf = sig_msg_to_buf(msg)
+
+    # Try not to load a new signal pipe if
+    # one already exists for the dest.
+    dest = msg.routing.dest
+    offsets = dest["signal"]
+    offsets = prioritize_sig_pipe_overlap(router, offsets)
+
+    # Try signal pipes in order.
+    # If connect fails try another.
+    for i in range(0, len(offsets)):
+        offset = offsets[i]
+
+        # Use existing sig pipe.
+        if offset in router.signal_pipes:
+            sig_pipe = router.signal_pipes[offset]
+
+        # Or load new server offset.
+        if offset not in router.signal_pipes:
+            sig_pipe = await async_wrap_errors(
+                load_signal_pipe(
+                    router.node_id,
+                    msg.routing.af,
+                    offset,
+                    MQTT_SERVERS,
+                    router.msg_cb
+                )
+            )
+
+        # Record it if success.
+        if sig_pipe:
+            router.signal_pipes[offset] = sig_pipe
+        else:
+            continue
+
+        # Send message.
+        print("send to ", dest["node_id"], " ", offset)
+        await async_wrap_errors(
+            sig_pipe.send_msg(
+                buf,
+                to_s(dest["node_id"])
+            )
+        )
+        
+    # TODO: no paths to host.
+    # Need fallback plan here.
