@@ -66,3 +66,8 @@ useful here
 multiple mqtt servers are failing leading to errors and slow loading signal pipes in the software
 
 clean exiting from processing.
+
+this idea of using offsets for server mqtts in the address
+is a bad idea because if the config changes and the server positions change
+then the offsets point to the wrong server. there needs to be a
+unique, canonical identity for each server.
