@@ -1,7 +1,7 @@
 <?php
 
 // Disable warnings.
-error_reporting(E_ERROR | E_PARSE);
+//error_reporting(E_ERROR | E_PARSE);
 
 // Settings.
 $MAX_PORT = 65535;
@@ -9,14 +9,14 @@ $MAX_PORT = 65535;
 // Return true if a str is a valid IPv6.
 function is_ipv6($ip)
 {
-   if ( false === filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) )
-   {
-       return false;
-   }
-   else
-   {
-       return true;
-   }
+    if ( false === filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) )
+    {
+        return false;
+    }
+    else
+    {
+        return true;
+    }
 }
 
 // Basic API for testing network services.
@@ -33,6 +33,14 @@ switch($action)
         Todo: expect reply?
     */
     case 'hello':
+        /*
+        Well send back the socket a single bell character. This makes
+        wondering if a port is open simple. A program doesn't need to
+        implement a full chucked stream reader for TCP (it can wait for
+        a single bell or timeout) and UDP can wait for any packet.
+        */
+        $buf = chr(7); // \a
+
         // Control timeout (TCP only.)
         $timeout = $_GET['timeout'] ?? 2;
         if(!is_numeric($timeout))
@@ -55,10 +63,9 @@ switch($action)
             die("Invalid port.");
         }
         
-        echo($port);
-        
         // Format host properly for IPv6.
         $host = $_GET['host'] ?? $_SERVER['REMOTE_ADDR'];
+        echo($host);
         if(is_ipv6($host))
         {
             $af = AF_INET6;
@@ -70,7 +77,7 @@ switch($action)
         }
         
         // Setup bind / listen port.
-        $bind = $_GET["bind"] ?? 0;
+        $bind = 0;
         if(!is_numeric($bind))
         {
             die('invalid bind port');
@@ -91,30 +98,33 @@ switch($action)
         // Create a new socket.
         $sock = socket_create($af, $type, $proto);
         
+        
         // Bind the socket to a specific port.
         socket_bind($sock, 0, (int) $bind);
         
         // Connect the socket if it's TCP.
         if($proto == SOL_TCP)
         {
+            socket_set_option($sock, SOL_TCP, TCP_NODELAY, 1);
             socket_connect($sock, $host, (int) $port);
-            socket_write($sock, "hello");
+            socket_write($sock, $buf);
         }
         
         // Send hello down socket if it's UDP.
         if($proto == SOL_UDP)
         {
-            $buf = "hello";
+            socket_sendto($sock, $buf, strlen($buf), 0, $host, (int) $port);
+            socket_sendto($sock, $buf, strlen($buf), 0, $host, (int) $port);
             socket_sendto($sock, $buf, strlen($buf), 0, $host, (int) $port);
         }
         
         
-        $buf = '';
-        $bytes_received = socket_recvfrom($sock, $buf, 65536, $host, (int) $port);
+        //$buf = '';
+        //$bytes_received = socket_recvfrom($sock, $buf, 65536, $host, (int) $port);
         
         // Cleanup.
         socket_close($sock);
-        die($buf);
+        die();
         break;
         
     case 'host':

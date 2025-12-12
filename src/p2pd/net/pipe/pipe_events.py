@@ -351,7 +351,7 @@ class PipeEvents(BaseACKProto):
     # Single TCP connection.
     def data_received(self, data):
         try:
-            #log(f"Base proto recv tcp = {data}")
+            log(fstr("Base proto recv tcp = {0}", (data,)))
             if self.transport is None:
                 log(fstr("Skipping process data cause transport none 2."))
                 return

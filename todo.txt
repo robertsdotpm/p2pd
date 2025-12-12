@@ -41,10 +41,7 @@ macOS: Uses IP_BOUND_IF.
 
 when it comes to binding in the punch engine maybe do it before the reuse options are set so that ports already used error out. then set the sock options? or does it matter
 
-a single NTP reading seems adequate for the new code, the clock skew stuff seems overboard and 
-ive seen the results varey enough that i question whether it even works
 
-node_conf in demo is being ignored -- investigate this
 
 todo: 
 
@@ -63,11 +60,20 @@ ive seen xml errors in get upnp
 refactor out delta test from nat test and load interface, its not that
 useful here
 
-multiple mqtt servers are failing leading to errors and slow loading signal pipes in the software
-
 clean exiting from processing.
 
 this idea of using offsets for server mqtts in the address
 is a bad idea because if the config changes and the server positions change
 then the offsets point to the wrong server. there needs to be a
 unique, canonical identity for each server.
+  dont have time to fix it -- just need to maintain order of servers when
+  adding them, the output algorthim will need to take the old list + the new one
+  and merge the results into a new list
+
+http://p2pd.net/p2pd/net_debug.php?action=hello&proto=tcp&port=1337
+    req from iface and afs for the node
+      register msg_cb:
+        event back on TCP server based on bell char received or timeout
+        set future result
+
+      unregister when done
