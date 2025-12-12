@@ -46,7 +46,6 @@ Coded by matthew@roberts.pm
 
 MENU_BANNER = """(0) Connect to a node using its nickname or address.
 (1) Start accepting connections (this stops the input loop)
-(2) Start additional node for testing (needed for self punch.)
-(3) Register a unique nickname for your node.
-(4) Exit program.
+(2) Register a unique nickname for your node.
+(3) Exit program.
 """
