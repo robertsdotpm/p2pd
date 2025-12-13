@@ -53,6 +53,8 @@ https://stackoverflow.com/questions/54802371/upnp-ssdp-discovery-with-ipv6
     - Programming references on UPnP port forwarding mostly
 https://community.ui.com/questions/Ports-required-for-upnp2/6692d89e-1dd6-4abd-a6fa-350cf3444832
     - Reference for some default ports for SSDP services.
+
+http://10.0.1.1:1900/igd.xml
 """
 
 import socket

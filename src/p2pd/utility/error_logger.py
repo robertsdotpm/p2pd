@@ -102,7 +102,7 @@ def log(message):
     """Enqueue a message to be logged."""
     if not IS_DEBUG:
         return
-    #print(message)
+    print(message)
     _log_queue.put(message)
 
 def log_exception():

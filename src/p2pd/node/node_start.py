@@ -149,12 +149,16 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     # Port forward all listen servers.
     if node.conf["enable_upnp"] and not all_open_internet:
         if out: cout("\tStarting UPnP task...")
+        node.add_msg_cb(node.remote_reachability_cb)
+
         print("do node forward")
         print(node.servers) # daemon bound list
 
         # Put slow forwarding task in the background.
         forward = asyncio.create_task(
-            node.forward(node.listen_port)
+            async_wrap_errors(
+                node.forward(node.listen_port)
+            )
         )
         node.tasks.append(forward)
         await asyncio.sleep(2)

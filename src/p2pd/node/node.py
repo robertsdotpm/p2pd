@@ -34,6 +34,7 @@ class Node(Daemon):
         self.__name__ = "P2PNode"
         self.install_path = conf["install_path"]
         self.stop_node = stop_node or multiprocessing.Event()
+        self.reachability = {IP4: {}, IP6: {}}
         
         # Main variables for the class.
         self.conf = conf
@@ -274,17 +275,92 @@ class Node(Daemon):
                 app_id
             )
 
+    async def remote_reachability_cb(self, msg, client_tup, pipe):
+        print("reachability cb ", msg, client_tup)
+
+        # Check for eply from p2pd.net for port reachability.
+        client_ip = IPR(client_tup[0], af=pipe.route.af)
+        p2pd_ips = (IPR("2607:5300:60:80b0::1", af=IP6), IPR("158.69.27.176", af=IP4),)
+        if client_ip not in p2pd_ips:
+            return
+
+        # Set reply future for interface and AF.
+        nic = pipe.route.interface
+        af = pipe.route.af
+        if nic.id in self.reachability[af]:
+            future = self.reachability[af][nic.id]
+            if not future.done():
+                future.set_result(True)
+
     # Accomplishes port forwarding and pin hole rules.
     async def forward(self, port):
-        async def forward_server(server):
-            print(server.route)
-            print(route.af)
-            ret = await server.route.forward(port=port)
-            msg = fstr("<upnp> Forwarded {0}:{1}", (server.route.ext(), port,))
-            msg += fstr(" on {0}", (server.route.interface.name,))
-            if ret:
-                log_p2p(msg, self.node_id[:8])
 
-        # Loop over all listen pipes for this node.
-        await for_server_in_daemon(self, forward_server)
+        print("in node forward")
 
+        # Run all forwarding tasks concurrently.
+        tasks = []
+        for nic in self.ifs:
+            print(nic.supported())
+
+            for af in nic.supported():
+                print(af)
+
+                # Future where replies will be returned.
+                self.reachability[af][nic.id] = asyncio.Future()
+
+                # Add forwarding task.
+                route = await nic.route(af).bind()
+                print(route.resolved)
+                task = route.forward(port=port)
+                tasks.append(task)
+
+        print("Forward tasks = ", tasks)
+        print(tasks)
+
+        # Do all the forwarding tasks concurrently.
+        ret = await asyncio.gather(*tasks, return_exceptions=True)
+        print(ret)
+
+        # Give enough time for forwarding to be done.
+        await asyncio.sleep(4)
+        test_addr = {
+            IP4: "158.69.27.176",
+            IP6: "2607:5300:60:80b0::1",
+        }
+
+        # Now trigger forwarding tests from p2pd.net.
+        # My HTTP client sucks so this prob won't even work.
+        async def reachability_test(af, nic, port, test_addr):
+            # Setup the HTTP client.
+            route = nic.route(af)
+
+            dest = (test_addr[af], 80)
+            curl = WebCurl(dest, route, do_close=0)
+
+            # Trigger the server to test the service reachability.
+            resp = await curl.vars({
+                "action": "hello",
+                "proto": "tcp",
+                "port": str(port)
+            }).get("/p2pd/net_debug.php")
+
+        # Build reachability tests after forwarding.
+        tasks = []
+        for nic in self.ifs:
+            for af in nic.supported():
+                task = reachability_test(af, nic, port, test_addr)
+                tasks.append(task)
+
+        # Run reachability tests.
+        ret = await asyncio.gather(*tasks, return_exceptions=True)
+        print(ret)
+
+        # Return reachability results
+        reachable = []
+        for af in (IP4, IP6):
+            for nic_id in self.reachability[af]:
+                if self.reachability[af][nic_id].done():
+                    reachable.append((af, nic_id))
+
+        print(reachable)
+        return reachable

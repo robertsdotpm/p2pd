@@ -110,6 +110,8 @@ class PipeEvents(BaseACKProto):
         self.is_running = True
         self.proc_lock = None
 
+        self.reachability = {IP4: {}, IP6: {}}
+
     # Indicates the type of endpoint this is.
     def set_endpoint_type(self, endpoint_type):
         self.endpoint_type = endpoint_type
