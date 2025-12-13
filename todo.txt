@@ -55,7 +55,6 @@ i see this get delta error:
   File "/home/x/projects/p2pd/src/p2pd/nic/nat/nat_utils.py", line 199, in get_delta_value
     if results[i - 1][MAPPED_INDEX] is not None:
 
-ive seen xml errors in get upnp
 
 refactor out delta test from nat test and load interface, its not that
 useful here
@@ -70,14 +69,6 @@ unique, canonical identity for each server.
   adding them, the output algorthim will need to take the old list + the new one
   and merge the results into a new list
 
-http://p2pd.net/p2pd/net_debug.php?action=hello&proto=tcp&port=1337
-    req from iface and afs for the node
-      register msg_cb:
-        event back on TCP server based on bell char received or timeout
-        set future result
-
-      unregister when done
-
 
   File "/home/x/projects/p2pd/src/p2pd/protocol/pnp/pnp_client.py", line 66, in return_resp
     buf = decrypt(self.reply_sk, buf)
@@ -86,4 +77,5 @@ http://p2pd.net/p2pd/net_debug.php?action=hello&proto=tcp&port=1337
     ephemeral_pk = msg[0:33]
                    ~~~^^^^^^
 
-the upnp code is too busy and likely to exhaust sockets on older machines.
+just make sure proto and node and plugin cant crash on invalid input
+port turn plugin to new plugin

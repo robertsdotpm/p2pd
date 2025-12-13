@@ -158,7 +158,11 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         if out: cout("\tStarting UPnP forwarding...")
 
         # Put slow forwarding task in the background.
-        forward_success, reachable = await upnp_task
+        upnp_ret = await upnp_task
+        if upnp_ret:
+            forward_success, reachable = upnp_ret
+        else:
+            forward_success = reachable = None
 
         # Output AFs and NICs where UPnP succeeded on.
         if forward_success or reachable:
