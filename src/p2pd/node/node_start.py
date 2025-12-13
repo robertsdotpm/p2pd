@@ -37,6 +37,28 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     # Managed to load IFs?
     if not len(node.ifs):
         raise Exception("p2p node could not load ifs.")
+    
+    # Skip port forwarding if all NICs aren't behind NATs.
+    all_open_internet = True
+    for nic in node.ifs:
+        if nic.nat["type"] != OPEN_INTERNET:
+            all_open_internet = False
+            break
+    
+    # Port forward all listen servers.
+    upnp_task = None
+    if node.conf["enable_upnp"] and not all_open_internet:
+        # Handler detects packets from test server.
+        # To confirm if UPnP worked.
+        node.add_msg_cb(node.remote_reachability_cb)
+
+        # Put slow forwarding task in the background.
+        upnp_task = asyncio.create_task(
+            async_wrap_errors(
+                node.forward(node.listen_port),
+                timeout=20
+            )
+        )
 
     # Set machine id.
     node.machine_id = await node.load_machine_id(
@@ -60,11 +82,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Cryptography for authenticated messages.
     node.sk = load_signing_key(node.listen_port, node.conf["install_path"])
-    cout("sk:", node.sk)
-
     node.vk = node.sk.verifying_key
-    cout("vk:", node.vk)
-
     node.node_id = hashlib.sha256(
         node.vk.to_string("compressed")
     ).hexdigest()[:25]
@@ -135,26 +153,12 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     # Start the server for the node protocol.
     await node.listen_on_ifs()
 
-    # Skip port forwarding if all NICs aren't behind NATs.
-    all_open_internet = True
-    for nic in node.ifs:
-        if nic.nat["type"] != OPEN_INTERNET:
-            all_open_internet = False
-            break
-
     # Port forward all listen servers.
     if node.conf["enable_upnp"] and not all_open_internet:
         if out: cout("\tStarting UPnP forwarding...")
 
-        # Handler detects packets from test server.
-        # To confirm if UPnP worked.
-        node.add_msg_cb(node.remote_reachability_cb)
-
         # Put slow forwarding task in the background.
-        upnp_success = await async_wrap_errors(
-            node.forward(node.listen_port),
-            timeout=20
-        )
+        upnp_success = await upnp_task
 
         # Output AFs and NICs where UPnP succeeded on.
         if upnp_success:

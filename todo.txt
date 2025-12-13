@@ -85,3 +85,5 @@ http://p2pd.net/p2pd/net_debug.php?action=hello&proto=tcp&port=1337
   File "/home/x/projects/p2pd/src/p2pd/vendor/ecies/__init__.py", line 38, in decrypt
     ephemeral_pk = msg[0:33]
                    ~~~^^^^^^
+
+the upnp code is too busy and likely to exhaust sockets on older machines.

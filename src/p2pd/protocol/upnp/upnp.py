@@ -261,6 +261,24 @@ or every possibilities is exhausted. Concurrency is used for speed
 here by not excessively to avoid exhausting open socket limit.
 """
 async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
+    """
+    This process is very slow and will be done in the background
+    incrementally. This is because there is a 64 socket max limit
+    on Windows selector event loop so async gather will cause an error.
+    """
+    brute_force_task = asyncio.create_task(
+        async_wrap_errors(
+            brute_force_port_forward(
+                af,
+                interface,
+                ext_port,
+                src_tup,
+                desc,
+                proto
+            )
+        )
+    )
+
     # Account for errors in the main multicast code.
     try:
         # Get list of possible devices supporting UPNP.
@@ -286,32 +304,14 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
             proto,
             service_infos,
         )
+
+        if forward_success:
+            brute_force_task.cancel()
     except Exception:
         log_exception()
         forward_success = False
 
-    """
-    If forwarding or pin hole was not successful using the standard
-    multicast process attempt to brute force possible service URLs.
-    This process is very slow and will be done in the background
-    incrementally. This is because there is a 64 socket max limit
-    on Windows selector event loop so async gather will cause an error.
-    """
-    if not forward_success:
-        return await asyncio.create_task(
-            async_wrap_errors(
-                brute_force_port_forward(
-                    af,
-                    interface,
-                    ext_port,
-                    src_tup,
-                    desc,
-                    proto
-                )
-            )
-        )
-    else:
-        return 1
+    return forward_success
 
 if __name__ == "__main__":
     async def upnp_main():

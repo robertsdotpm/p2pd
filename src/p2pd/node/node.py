@@ -284,7 +284,6 @@ class Node(Daemon):
             )
 
             # Check for eply from p2pd.net for port reachability.
-            print("reachability cb ", msg, client_tup)
             client_ip = IPR(client_tup[0], af=pipe.route.af)
             if client_ip not in p2pd_ips:
                 return
@@ -311,7 +310,10 @@ class Node(Daemon):
                     # Future where replies will be returned.
                     self.reachability[af][nic.id] = asyncio.Future()
                     route = await nic.route(af).bind()
-                    await route.forward(port=port)
+                    await asyncio.wait_for(
+                        route.forward(port=port),
+                        timeout=8
+                    )
 
                 tasks.append(do_forward(af, nic))
 
@@ -319,7 +321,6 @@ class Node(Daemon):
         await asyncio.gather(*tasks, return_exceptions=True)
 
         # Give enough time for forwarding to be done.
-        await asyncio.sleep(4)
         test_addr = {
             IP4: "158.69.27.176",
             IP6: "2607:5300:60:80b0::1",

@@ -70,7 +70,6 @@ class SignalRouter():
         self.addr_bytes = addr_bytes
         self.sk = sk
         self.vk = sk.verifying_key.to_string("compressed")
-        print("sig vk = ", self.vk)
         self.seen = {}
         self.tasks = []
 
