@@ -4,6 +4,11 @@ from ...vendor import xmltodict
 from ...net.net_utils import *
 from ...protocol.http.http_client_lib import *
 
+UPNP_CONF = dict_child(NET_CONF, {
+    "con_timeout": 0.5, # 50 ms
+    "recv_timeout": 0.5, # 50 ms recv timoue
+})
+
 UPNP_LEASE_TIME = 86399
 UPNP_PORT = 1900
 UPNP_IP   = {
@@ -145,7 +150,7 @@ async def get_upnp_forwarding_services(route, dest, path):
     # Get main XML for device.
     try:
         # Request rootDesc.xml.
-        http_resp = await WebCurl(dest, route).vars().get(path)
+        http_resp = await WebCurl(dest, route).vars().get(path, conf=UPNP_CONF)
         if http_resp is None:
             return []
 
@@ -256,7 +261,8 @@ async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext
     )
 
     return await WebCurl(dest, route, hdrs=headers).vars(body=payload).post(
-        service["controlURL"]
+        service["controlURL"],
+        conf=UPNP_CONF
     )
 
 def sort_upnp_replies_by_unique_location(replies):

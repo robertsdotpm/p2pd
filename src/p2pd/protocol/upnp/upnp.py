@@ -71,7 +71,7 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
         dest = (host, port)
         route = await interface.route(af).bind()
         try:
-            pipe = await Pipe(TCP, dest, route).connect()
+            pipe = await Pipe(TCP, dest, route, conf=UPNP_CONF).connect()
             await pipe.close()
             return dest
         except Exception:
@@ -171,7 +171,7 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
             )
 
         # Socket limit to port list * ifs.
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         dests += strip_none(results)
 
     # Build list of tasks.
@@ -187,7 +187,7 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
                 )
 
             # Socket limit to path list * ifs.
-            results = await asyncio.gather(*tasks)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
             if 1 in results:
                 return 1
 
@@ -249,6 +249,37 @@ async def discover_upnp_devices(af, nic):
     await pipe.close()
     return replies
 
+async def port_forward_from_multicast(af, interface, ext_port, src_tup, desc, proto="TCP"):
+    try:
+        # Get list of possible devices supporting UPNP.
+        # I think NAT-PMP devices also reply here.
+        replies = await discover_upnp_devices(af, interface)
+        replies = sort_upnp_replies_by_unique_location(replies)
+
+        # Get a list of service URLs that match forwarding or pin hole.
+        service_infos = await get_upnp_forwarding_services_for_replies(
+            af,
+            src_tup,
+            interface,
+            replies
+        )
+
+        # Try to use the service URLs for forwarding.
+        forward_success = await use_upnp_forwarding_services(
+            af,
+            interface,
+            ext_port,
+            src_tup,
+            desc,
+            proto,
+            service_infos,
+        )
+
+        return forward_success
+    except Exception:
+        log_exception()
+        return False
+
 """
 1. Attempt to forward or pin hole a service. Success is based on
 response from the first compatible UPnP service. Continue until
@@ -279,39 +310,25 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
         )
     )
 
-    # Account for errors in the main multicast code.
-    try:
-        # Get list of possible devices supporting UPNP.
-        # I think NAT-PMP devices also reply here.
-        replies = await discover_upnp_devices(af, interface)
-        replies = sort_upnp_replies_by_unique_location(replies)
-
-        # Get a list of service URLs that match forwarding or pin hole.
-        service_infos = await get_upnp_forwarding_services_for_replies(
-            af,
-            src_tup,
-            interface,
-            replies
+    multicast_task = asyncio.create_task(
+        port_forward_from_multicast(
+            af, interface, ext_port, src_tup, desc, proto="TCP"
         )
+    )
 
-        # Try to use the service URLs for forwarding.
-        forward_success = await use_upnp_forwarding_services(
-            af,
-            interface,
-            ext_port,
-            src_tup,
-            desc,
-            proto,
-            service_infos,
-        )
+    tasks = {brute_force_task, multicast_task}
+    for done in asyncio.as_completed(tasks):
+        result = await done
+        if result == 1:
+            # Cancel the other task
+            for t in tasks:
+                if t is not done:
+                    t.cancel()
+                    
+            return 1
 
-        if forward_success:
-            brute_force_task.cancel()
-    except Exception:
-        log_exception()
-        forward_success = False
-
-    return forward_success
+    # If neither returned 1
+    return 0
 
 if __name__ == "__main__":
     async def upnp_main():

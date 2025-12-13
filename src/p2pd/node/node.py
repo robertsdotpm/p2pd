@@ -312,7 +312,7 @@ class Node(Daemon):
                     route = await nic.route(af).bind()
                     await asyncio.wait_for(
                         route.forward(port=port),
-                        timeout=8
+                        timeout=5
                     )
 
                 tasks.append(do_forward(af, nic))

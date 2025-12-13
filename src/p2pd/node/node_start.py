@@ -56,7 +56,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         upnp_task = asyncio.create_task(
             async_wrap_errors(
                 node.forward(node.listen_port),
-                timeout=20
+                timeout=10
             )
         )
 
