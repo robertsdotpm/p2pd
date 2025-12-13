@@ -160,14 +160,14 @@ def p2pd_setup_event_loop():
         if start_method is None:
             multiprocessing.set_start_method("spawn")
 
-
     patch_asyncio_backports(CustomEventLoop)
     policy = asyncio.get_event_loop_policy()
     if not isinstance(policy, CustomEventLoopPolicy):
         asyncio.set_event_loop_policy(CustomEventLoopPolicy())
 
     #sys.excepthook = my_except_hook
-    start_logger()
+    if IS_DEBUG:
+        start_logger()
 
 p2pd_setup_event_loop()
 

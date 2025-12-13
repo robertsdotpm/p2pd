@@ -276,11 +276,13 @@ class Node(Daemon):
             )
 
     async def remote_reachability_cb(self, msg, client_tup, pipe):
-        print("reachability cb ", msg, client_tup)
+        p2pd_ips = (
+            IPR("2607:5300:60:80b0::1", af=IP6), 
+            IPR("158.69.27.176", af=IP4),
+        )
 
         # Check for eply from p2pd.net for port reachability.
         client_ip = IPR(client_tup[0], af=pipe.route.af)
-        p2pd_ips = (IPR("2607:5300:60:80b0::1", af=IP6), IPR("158.69.27.176", af=IP4),)
         if client_ip not in p2pd_ips:
             return
 
@@ -294,32 +296,20 @@ class Node(Daemon):
 
     # Accomplishes port forwarding and pin hole rules.
     async def forward(self, port):
-
-        print("in node forward")
-
         # Run all forwarding tasks concurrently.
         tasks = []
         for nic in self.ifs:
-            print(nic.supported())
-
             for af in nic.supported():
-                print(af)
-
                 # Future where replies will be returned.
                 self.reachability[af][nic.id] = asyncio.Future()
 
                 # Add forwarding task.
                 route = await nic.route(af).bind()
-                print(route.resolved)
                 task = route.forward(port=port)
                 tasks.append(task)
 
-        print("Forward tasks = ", tasks)
-        print(tasks)
-
         # Do all the forwarding tasks concurrently.
         ret = await asyncio.gather(*tasks, return_exceptions=True)
-        print(ret)
 
         # Give enough time for forwarding to be done.
         await asyncio.sleep(4)
@@ -353,7 +343,6 @@ class Node(Daemon):
 
         # Run reachability tests.
         ret = await asyncio.gather(*tasks, return_exceptions=True)
-        print(ret)
 
         # Return reachability results
         reachable = []
@@ -362,5 +351,4 @@ class Node(Daemon):
                 if self.reachability[af][nic_id].done():
                     reachable.append((af, nic_id))
 
-        print(reachable)
         return reachable

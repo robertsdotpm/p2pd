@@ -36,6 +36,9 @@ async def node_stop(node):
     if not node.stop_node:
         node.stop_node.set()
 
+    # Stop error logging thread.
+    log(None)
+
     # Close other pipes.
     pipe_lists = [
         node.signal_pipes,

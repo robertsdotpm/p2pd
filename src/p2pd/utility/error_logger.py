@@ -4,120 +4,83 @@ import logging
 import traceback
 import threading
 import queue
-import atexit
 from .fstr import *
 
-# --- Configuration & Initialization ---
 IS_DEBUG = "P2PD_DEBUG" in os.environ
 
-# 1. Cleaner Log Path Setup (Kept simple, but noted argparse is an option)
-log_path = "program.log"
-for arg in sys.argv:
-    if "--log_path=" in arg:
-        log_path = arg.split("--log_path=")[1]
-        break
+# Global state
+logging_queue = queue.Queue()
+logging_thread = None
+app_logger = None
 
-log_path = os.path.abspath(log_path)
-_log_queue = queue.Queue()
-_log_thread = None
-_stop_sentinel = object()
+def init_logger():
+    global app_logger
+    log_path = "program.log"
+    for arg in sys.argv:
+        if arg.startswith("--log_path="):
+            log_path = arg.split("=", 1)[1]
+            break
 
-if IS_DEBUG:
-    # Standard Python logging setup
-    handler = logging.FileHandler(log_path, mode='a', encoding='utf-8')
-    handler.setFormatter(
-        logging.Formatter(
-            '[%(filename)s:%(lineno)d] %(message)s',
-            '%Y-%m-%d %H:%M:%S'
-        )
-    )
-    
-    # Get the root logger
-    logger = logging.getLogger()
-    logger.addHandler(handler)
+    log_path = os.path.abspath(log_path)
+    logger = logging.getLogger("p2pd")
     logger.setLevel(logging.DEBUG)
+    logger.propagate = False
 
-# --- Core Worker Thread ---
-def _log_worker():
-    """Background thread consuming the log queue."""
-    # We rely on the existing handlers attached to the root logger
-    logger = logging.getLogger()
-    while True:
-        # Blocks until a message is available
-        message = _log_queue.get() 
-        if message is _stop_sentinel:
-            # Drain the queue before exiting (optional, but safer)
-            break # Exit the loop and thread
-        try:
-            # Use logging.info() to the configured FileHandler
-            logging.info(str(message))
-            
-            # Flush the handlers. This is essential for log file immediacy.
-            # Cleaner than iterating over getLogger().handlers
-            for h in logger.handlers: 
-                h.flush()
-        except Exception:
-            # Catching and suppressing errors during logging itself (robustness)
-            pass
-        finally:
-            _log_queue.task_done()
+    if not any(
+        isinstance(h, logging.FileHandler) and h.baseFilename == log_path
+        for h in logger.handlers
+    ):
+        handler = logging.FileHandler(log_path, "a", encoding="utf-8")
+        handler.setFormatter(
+            logging.Formatter(
+                "[%(filename)s:%(lineno)d] %(message)s",
+                "%Y-%m-%d %H:%M:%S",
+            )
+        )
+        logger.addHandler(handler)
 
-# --- Public Interface and Lifecycle ---
-def start_logger():
-    """
-    Start the background thread and register the stop function.
-    The thread is daemon=True, but atexit ensures graceful shutdown on normal exit.
-    """
-    global _log_thread
-    if not IS_DEBUG or _log_thread is not None:
-        return
-        
-    _log_thread = threading.Thread(target=_log_worker, daemon=True)
-    _log_thread.start()
-    
-    # 2. Use atexit for Graceful Shutdown
-    atexit.register(stop_logger)
+    app_logger = logger
 
-def stop_logger():
-    """Stop the background thread gracefully by sending a sentinel and joining."""
-    global _log_thread
-    if not IS_DEBUG or _log_thread is None:
-        return
-        
-    # Send sentinel to unblock the worker thread
-    _log_queue.put(_stop_sentinel)
-    
-    # Wait for the worker thread to finish processing and exit
-    _log_thread.join()
-    _log_thread = None
-    
-    # Unregister to prevent re-running if stop_logger is called multiple times
+def log_worker():
     try:
-        atexit.unregister(stop_logger)
-    except AttributeError:
-        # unregister isn't available in Python < 3.8
-        pass 
+        logger = app_logger
+        while True:
+            # Blocking call, waits indefinitely for an item
+            msg = logging_queue.get()
 
-def log(message):
-    """Enqueue a message to be logged."""
+            # Exit signal check
+            if msg is None:
+                break
+            
+            # Write to log
+            if logger:
+                logger.info(str(msg))
+    except Exception:
+        return
+
+def start_logger():
+    global logging_thread
+    
+    if not IS_DEBUG or logging_thread is not None:
+        return
+
+    init_logger()
+    logging_thread = threading.Thread(target=log_worker, daemon=True)
+    logging_thread.start()
+
+def log(msg):
+    global logging_queue
     if not IS_DEBUG:
         return
-    print(message)
-    _log_queue.put(message)
+
+    logging_queue.put_nowait(msg)
 
 def log_exception():
-    """Log current exception."""
     if not IS_DEBUG:
         return
-        
-    exc_type, exc_value, exc_tb = sys.exc_info()
-    
-    # Use standard library formatting for the traceback
-    exc_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
-    
-    # Enqueue the formatted string
-    log("EXCEPTION: " + str(exc_text.strip()))
+
+    exc = "".join(traceback.format_exception(*sys.exc_info()))
+    log("EXCEPTION: " + exc.strip())
 
 def log_p2p(msg, node_id):
-    buf = fstr("p2p <{0}>: {1}", (node_id, msg,))
-    log(buf)
+    log(fstr("p2p <{0}>: {1}", (node_id, msg)))
