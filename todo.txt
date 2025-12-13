@@ -77,3 +77,11 @@ http://p2pd.net/p2pd/net_debug.php?action=hello&proto=tcp&port=1337
         set future result
 
       unregister when done
+
+
+  File "/home/x/projects/p2pd/src/p2pd/protocol/pnp/pnp_client.py", line 66, in return_resp
+    buf = decrypt(self.reply_sk, buf)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/x/projects/p2pd/src/p2pd/vendor/ecies/__init__.py", line 38, in decrypt
+    ephemeral_pk = msg[0:33]
+                   ~~~^^^^^^

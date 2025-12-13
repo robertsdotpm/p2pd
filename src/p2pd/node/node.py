@@ -276,23 +276,29 @@ class Node(Daemon):
             )
 
     async def remote_reachability_cb(self, msg, client_tup, pipe):
-        p2pd_ips = (
-            IPR("2607:5300:60:80b0::1", af=IP6), 
-            IPR("158.69.27.176", af=IP4),
-        )
+        try:
+            # P2PD.net server IPs
+            p2pd_ips = (
+                IPR("2607:5300:60:80b0::1", af=IP6), 
+                IPR("158.69.27.176", af=IP4),
+            )
 
-        # Check for eply from p2pd.net for port reachability.
-        client_ip = IPR(client_tup[0], af=pipe.route.af)
-        if client_ip not in p2pd_ips:
-            return
+            # Check for eply from p2pd.net for port reachability.
+            print("reachability cb ", msg, client_tup)
+            client_ip = IPR(client_tup[0], af=pipe.route.af)
+            if client_ip not in p2pd_ips:
+                return
 
-        # Set reply future for interface and AF.
-        nic = pipe.route.interface
-        af = pipe.route.af
-        if nic.id in self.reachability[af]:
-            future = self.reachability[af][nic.id]
-            if not future.done():
-                future.set_result(True)
+            # Set reply future for interface and AF.
+            nic = pipe.route.interface
+            af = pipe.route.af
+            if nic.id in self.reachability[af]:
+                future = self.reachability[af][nic.id]
+                if not future.done():
+                    future.set_result(True)
+        except Exception:
+            log("unknown exception in reachability cb")
+            log_exception()
 
     # Accomplishes port forwarding and pin hole rules.
     async def forward(self, port):
@@ -300,16 +306,17 @@ class Node(Daemon):
         tasks = []
         for nic in self.ifs:
             for af in nic.supported():
-                # Future where replies will be returned.
-                self.reachability[af][nic.id] = asyncio.Future()
-
                 # Add forwarding task.
-                route = await nic.route(af).bind()
-                task = route.forward(port=port)
-                tasks.append(task)
+                async def do_forward(af, nic):
+                    # Future where replies will be returned.
+                    self.reachability[af][nic.id] = asyncio.Future()
+                    route = await nic.route(af).bind()
+                    await route.forward(port=port)
+
+                tasks.append(do_forward(af, nic))
 
         # Do all the forwarding tasks concurrently.
-        ret = await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
 
         # Give enough time for forwarding to be done.
         await asyncio.sleep(4)
@@ -328,7 +335,8 @@ class Node(Daemon):
             curl = WebCurl(dest, route, do_close=0)
 
             # Trigger the server to test the service reachability.
-            resp = await curl.vars({
+            # Get uses conf=NET_CONF = 2 sec recv and con TCP timeout.
+            await curl.vars({
                 "action": "hello",
                 "proto": "tcp",
                 "port": str(port)
@@ -342,7 +350,10 @@ class Node(Daemon):
                 tasks.append(task)
 
         # Run reachability tests.
-        ret = await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Give enough time for the server response to arrive.
+        await asyncio.sleep(2)
 
         # Return reachability results
         reachable = []

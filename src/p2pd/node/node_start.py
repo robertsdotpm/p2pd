@@ -98,8 +98,6 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # MQTT server offsets for signal protocol.
     if node.conf["sig_pipe_no"]:
-        print("sig pipe no = ", node.conf["sig_pipe_no"])
-
         if out: cout("\tLoading MQTT clients...")
         await load_signal_pipes(node, node.node_id, min_success=node.conf["sig_pipe_no"])
         if out:
@@ -135,9 +133,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     )
 
     # Start the server for the node protocol.
-    print("start listening")
     await node.listen_on_ifs()
-    print("end listening")
 
     # Skip port forwarding if all NICs aren't behind NATs.
     all_open_internet = True
@@ -148,25 +144,26 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Port forward all listen servers.
     if node.conf["enable_upnp"] and not all_open_internet:
-        if out: cout("\tStarting UPnP task...")
+        if out: cout("\tStarting UPnP forwarding...")
+
+        # Handler detects packets from test server.
+        # To confirm if UPnP worked.
         node.add_msg_cb(node.remote_reachability_cb)
 
-        print("do node forward")
-        print(node.servers) # daemon bound list
-
         # Put slow forwarding task in the background.
-        forward = asyncio.create_task(
-            async_wrap_errors(
-                node.forward(node.listen_port)
-            )
+        upnp_success = await async_wrap_errors(
+            node.forward(node.listen_port),
+            timeout=20
         )
-        node.tasks.append(forward)
-        await asyncio.sleep(2)
+
+        # Output AFs and NICs where UPnP succeeded on.
+        if upnp_success:
+            if out: cout("\t\tUPnP success = ", upnp_success)
+        else:
+            if out: cout("\t\tUPnP failed: reverse connect won't work.")
 
     # Build P2P address bytes.
     assert(node.node_id is not None)
-
-    print("start ndoe addr create")
     node.addr_bytes = make_node_addr(
         node.node_id,
         node.machine_id,
@@ -174,7 +171,6 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         list(node.signal_pipes),
         port=node.listen_port,
     )
-    print("end node addr")
 
     # Log address.
     msg = fstr("Starting node = '{0}'", (node.addr_bytes,))

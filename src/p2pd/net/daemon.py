@@ -99,15 +99,19 @@ A coroutine func receives a server (pipe) for every server
 being listened on in a daemon class.
 """
 async def for_server_in_daemon(daemon, func):
+    tasks = []
     for af in VALID_AFS:
         for proto in [TCP, UDP]:
             for port in daemon.servers[af][proto]:
                 for ip in daemon.servers[af][proto][port]:
                     server = daemon.servers[af][proto][port][ip]
-                    print(server, func)
-                    await async_wrap_errors(
-                        func(server)
+                    tasks.append(
+                        async_wrap_errors(
+                            func(server)
+                        )
                     )
+    
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 class Daemon():
     def __init__(self, conf=DAEMON_CONF):
