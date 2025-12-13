@@ -197,7 +197,8 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
 async def discover_upnp_devices(af, nic):
     # Set protocol family for multicast socket.
     sock_conf = dict_child({
-        "sock_proto": socket.IPPROTO_UDP
+        "sock_proto": socket.IPPROTO_UDP,
+        "reuse_addr": True,
     }, NET_CONF)
 
     # Make multicast socket for M-search.
@@ -206,9 +207,12 @@ async def discover_upnp_devices(af, nic):
     if sock is None:
         log(fstr("discover upnp sock none {0}", (af,)))
 
+    if af == IP4:
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+
     if af == IP6:
-        sock.setsockopt(socket.IPPROTO_IPV6, socket.IP_MULTICAST_TTL, 2)
-        sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_HOPS, 255)
+        #sock.setsockopt(socket.IPPROTO_IPV6, socket.IP_MULTICAST_TTL, 2)
+        sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_HOPS, 22)
 
     # Create async pipe wrapper for multicast socket.
     dest = (UPNP_IP[af], UPNP_PORT)
@@ -217,6 +221,8 @@ async def discover_upnp_devices(af, nic):
     except Exception:
         log_exception()
         pipe = None
+
+    #print("discover upnp devs ", af, pipe)
 
     if pipe is None:
         log(fstr("discover upnp pipe none {0} {1}", (af, nic.name,)))
@@ -232,13 +238,17 @@ async def discover_upnp_devices(af, nic):
 
     # Get list of HTTP replies from M-Search message.
     replies = []
-    for _ in range(0, 5):
-        out = await pipe.recv(timeout=1)
+    timeout = 2
+    start_time = time.monotonic()
+    while time.monotonic() - start_time < timeout:
+        out = await pipe.recv(timeout=0.1)
         if out is None:
             continue
 
         try:
             reply = ParseHTTPResponse(out)
+            await pipe.close()
+            return [reply]
         except Exception:
             log_exception()
             continue
@@ -246,7 +256,6 @@ async def discover_upnp_devices(af, nic):
         replies.append(reply)
 
     # Cleanup multicast socket.
-    await pipe.close()
     return replies
 
 async def port_forward_from_multicast(af, interface, ext_port, src_tup, desc, proto="TCP"):
@@ -275,21 +284,18 @@ async def port_forward_from_multicast(af, interface, ext_port, src_tup, desc, pr
             service_infos,
         )
 
+        #print("multi forward ", forward_success)
+
         return forward_success
     except Exception:
+        what_exception()
         log_exception()
         return False
 
 """
-1. Attempt to forward or pin hole a service. Success is based on
-response from the first compatible UPnP service. Continue until
-exhausted or success.
-
-2. If continue then try to brute force forwarding or pin hole.
-A list of possible hosts and ports are probed for open ports.
-Then XML URLs are checked for services. Continue until success
-or every possibilities is exhausted. Concurrency is used for speed
-here by not excessively to avoid exhausting open socket limit.
+Two algorithms are run concurrently to try do UPnP based on the AF.
+Which ever succeeds first causes the other task to be cancelled and
+the function returns as soon as possible.
 """
 async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
     """
@@ -316,15 +322,17 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
         )
     )
 
-    tasks = {brute_force_task, multicast_task}
+    tasks = [brute_force_task, multicast_task]
     for done in asyncio.as_completed(tasks):
         result = await done
-        if result == 1:
+        if result:
             # Cancel the other task
             for t in tasks:
-                if t is not done:
+                try:
                     t.cancel()
-                    
+                except Exception:
+                    pass
+
             return 1
 
     # If neither returned 1

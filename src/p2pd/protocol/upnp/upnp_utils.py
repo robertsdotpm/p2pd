@@ -5,8 +5,8 @@ from ...net.net_utils import *
 from ...protocol.http.http_client_lib import *
 
 UPNP_CONF = dict_child(NET_CONF, {
-    "con_timeout": 0.5, # 50 ms
-    "recv_timeout": 0.5, # 50 ms recv timoue
+    "con_timeout": 1, 
+    "recv_timeout": 1, 
 })
 
 UPNP_LEASE_TIME = 86399
@@ -113,7 +113,7 @@ def build_upnp_discover_buf(af):
     fstr('M-SEARCH * HTTP/1.1\r\n') + \
     fstr('HOST: {0}:{1}\r\n', (host, UPNP_PORT,)) + \
     fstr('ST: upnp:rootdevice\r\n') + \
-    fstr('MX: 5\r\n') + \
+    fstr('MX: 1\r\n') + \
     fstr('MAN: "ssdp:discover"\r\n') + \
     fstr('\r\n')
 
@@ -188,7 +188,7 @@ async def get_upnp_forwarding_services_for_replies(af, src_tup, nic, replies):
         )
         tasks.append(task)
 
-    results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
     return strip_none(results)
 
 async def add_upnp_forwarding_rule(af, nic, dest, service, lan_ip, lan_port, ext_port, proto, desc):
@@ -281,7 +281,7 @@ def sort_upnp_replies_by_unique_location(replies):
     return list(unique.values())
 
 async def use_upnp_forwarding_services(af, interface, ext_port, src_tup, desc, proto, service_infos):
-    for service_info in service_infos:
+    async def worker(service_info):
         resp = await add_upnp_forwarding_rule(
             af,
             interface,
@@ -294,21 +294,30 @@ async def use_upnp_forwarding_services(af, interface, ext_port, src_tup, desc, p
             desc,
         )
 
-        """
-        If you call mapping multiple times with the same details
-        you can get a conflict error even though the mapping succeeded.
-        So this is considered a 'success'
-        """
+        # Consider these as success indicators
         map_success_list = [
             b"ConflictInMappingEntry",
             b"AddPortMappingResponse",
             b"AddPinholeResponse",
         ]
 
-        # Look for success indication in output.
         out = resp.out
         for map_success in map_success_list:
             if map_success in out:
-                return True
+                return 1
+            
+        return 0
 
-    return False
+    # Launch all workers concurrently
+    tasks = [asyncio.create_task(worker(si)) for si in service_infos]
+    for done in asyncio.as_completed(tasks):
+        result = await done
+        if result:
+            # Cancel remaining tasks
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+
+            return 1
+
+    return 0

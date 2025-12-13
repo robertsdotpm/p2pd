@@ -310,15 +310,16 @@ class Node(Daemon):
                     # Future where replies will be returned.
                     self.reachability[af][nic.id] = asyncio.Future()
                     route = await nic.route(af).bind()
-                    await asyncio.wait_for(
-                        route.forward(port=port),
-                        timeout=5
-                    )
+                    ret = await route.forward(port=port)
+                    if ret:
+                        return [af, nic.id]
 
                 tasks.append(do_forward(af, nic))
 
         # Do all the forwarding tasks concurrently.
-        await asyncio.gather(*tasks, return_exceptions=True)
+        forward_success = await asyncio.gather(*tasks, return_exceptions=True)
+        forward_success = strip_none(forward_success)
+        #print(forward_success)
 
         # Give enough time for forwarding to be done.
         test_addr = {
@@ -331,17 +332,19 @@ class Node(Daemon):
         async def reachability_test(af, nic, port, test_addr):
             # Setup the HTTP client.
             route = nic.route(af)
-
             dest = (test_addr[af], 80)
             curl = WebCurl(dest, route, do_close=0)
 
             # Trigger the server to test the service reachability.
             # Get uses conf=NET_CONF = 2 sec recv and con TCP timeout.
-            await curl.vars({
-                "action": "hello",
-                "proto": "tcp",
-                "port": str(port)
-            }).get("/p2pd/net_debug.php")
+            try:
+                await curl.vars({
+                    "action": "hello",
+                    "proto": "tcp",
+                    "port": str(port)
+                }).get("/p2pd/net_debug.php")
+            except asyncio.TimeoutError:
+                return None
 
         # Build reachability tests after forwarding.
         tasks = []
@@ -363,4 +366,4 @@ class Node(Daemon):
                 if self.reachability[af][nic_id].done():
                     reachable.append((af, nic_id))
 
-        return reachable
+        return forward_success, reachable
