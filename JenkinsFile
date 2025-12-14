@@ -1,7 +1,5 @@
 pipeline {
-    agent {
-        dockerContainer { image 'python:3.12' }
-    }
+    agent any
 
     stages {
         stage('Checkout') {
@@ -12,7 +10,6 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                sh 'python3 -m pip install --upgrade pip'
                 sh 'pip install pytest'
             }
         }
