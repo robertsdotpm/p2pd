@@ -1,3 +1,8 @@
+"""
+if ~/p2pd/logs exists -- write logs
+otherwise do nothing
+"""
+
 import os
 import sys
 import traceback
@@ -6,41 +11,41 @@ import threading
 from .fstr import *
 from ..install import get_p2pd_install_root
 
-IS_DEBUG = "P2PD_DEBUG" in os.environ
 LOGS_ROOT_PATH = os.path.join(
     get_p2pd_install_root(),
     "logs"
 )
 
-if not os.path.exists(LOGS_ROOT_PATH):
-    os.mkdir(LOGS_ROOT_PATH)
-
-fd = None
-lock = threading.Lock()
+error_fd = None
 
 def open_log_fd():
-    global fd
-    if fd is None:
+    global error_fd
+    if error_fd is None:
         path = os.path.join(
             LOGS_ROOT_PATH,
-            "program_" + str(os.getpid()) + ".log",
+            "".join([
+                "p2pd_",
+                str(os.getpid()),
+                "_",
+                threading.get_ident(),
+                ".log"
+            ]),
         )
         
-        fd = os.open(
+        error_fd = os.open(
             path,
             os.O_WRONLY | os.O_CREAT | os.O_APPEND,
             0o644,
         )
 
 def log(msg):
-    open_log_fd()
-    with lock:
-        os.write(fd, msg.encode("utf-8") + b"\n")
-
-def log_exception():
-    if not IS_DEBUG:
+    if not os.path.exists(LOGS_ROOT_PATH):
         return
 
+    open_log_fd()
+    os.write(error_fd, msg.encode("utf-8") + b"\n")
+
+def log_exception():
     exc = "".join(traceback.format_exception(*sys.exc_info()))
     log("EXCEPTION: " + exc.strip())
 
