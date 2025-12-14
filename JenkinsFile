@@ -10,13 +10,13 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                sh 'pip install pytest'
+                sh 'pip install --user pytest'
             }
         }
 
         stage('Run Test') {
             steps {
-                sh 'pytest tests/test_hello_world.py'
+                sh 'python3 -m unittest tests/test_hello_world.py'
             }
         }
     }
