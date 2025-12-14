@@ -73,7 +73,7 @@ def log(msg):
     if not IS_DEBUG:
         return
 
-    #print(msg)
+    print(msg)
     logging_queue.put_nowait(msg)
 
 def log_exception():
