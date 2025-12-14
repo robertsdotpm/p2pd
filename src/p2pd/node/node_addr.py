@@ -199,7 +199,7 @@ def validate_node_addr(addr):
             return None
         
     # Too many signal pipe offsets.
-    if len(addr["signal"]) > (SIGNAL_PIPE_NO + 3):
+    if len(addr["signal"]) > len(MQTT_SERVERS):
         log("p2p addr invalid signal no for p2p addr")
         return None
     

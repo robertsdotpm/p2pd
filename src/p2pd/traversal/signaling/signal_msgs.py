@@ -226,7 +226,7 @@ class PunchMsg(SigMsg):
         def to_dict(self):
             return {
                 "punch_mode": self.punch_mode,
-                "ntp": str(self.ntp),
+                "ntp": self.ntp,
                 "mappings": self.mappings,
             }
         
