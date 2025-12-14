@@ -219,7 +219,7 @@ class PunchMsg(SigMsg):
     # The main contents of this message.
     class Payload():
         def __init__(self, punch_mode, ntp, mappings):
-            self.ntp = Dec(ntp)
+            self.ntp = ntp
             self.mappings = mappings
             self.punch_mode = int(punch_mode)
 

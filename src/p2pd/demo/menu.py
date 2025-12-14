@@ -62,7 +62,7 @@ async def connect_option(node, con_opts):
     return "menu"
 
 async def accept_option(nick):
-    print("Listen on PNP: \n", nick, flush=True)
+    print("\tListen on PNP: ", nick, flush=True)
     while not shut_down.is_set():
         await asyncio.sleep(1)
 

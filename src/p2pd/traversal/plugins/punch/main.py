@@ -257,7 +257,7 @@ if __name__ == "__main__":
             }
         }
 
-        sys_clock = SysClock(nic, Dec("0.1"))
+        sys_clock = SysClock(nic, 0.1)
         _, proc_pool = await get_pp_executors()
         punch_proto = PunchPluginFactory(
             stun_client_table,

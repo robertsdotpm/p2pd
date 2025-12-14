@@ -68,6 +68,7 @@ async def setup_node():
         log_exception()
         cout("node id default nickname didnt load")
         cout("might have been taken over or all servers down.")
+        cout("")
 
     nodes = [node]
     return nodes, ifs, nick
