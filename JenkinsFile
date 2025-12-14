@@ -8,15 +8,23 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Setup Virtualenv') {
             steps {
-                sh 'pip install --user pytest'
+                sh '''
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
+                    pip install pytest
+                '''
             }
         }
 
         stage('Run Test') {
             steps {
-                sh 'python3 -m unittest tests/test_hello_world.py'
+                sh '''
+                    . venv/bin/activate
+                    python3 -m unittest tests/test_hello_world.py
+                '''
             }
         }
     }
