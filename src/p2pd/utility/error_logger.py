@@ -1,80 +1,41 @@
 import os
 import sys
-import logging
 import traceback
+import os
 import threading
-import queue
 from .fstr import *
+from ..install import get_p2pd_install_root
 
 IS_DEBUG = "P2PD_DEBUG" in os.environ
+LOGS_ROOT_PATH = os.path.join(
+    get_p2pd_install_root(),
+    "logs"
+)
 
-# Global state
-logging_queue = queue.Queue()
-logging_thread = None
-app_logger = None
+if not os.path.exists(LOGS_ROOT_PATH):
+    os.mkdir(LOGS_ROOT_PATH)
 
-def init_logger():
-    global app_logger
-    log_path = "program.log"
-    for arg in sys.argv:
-        if arg.startswith("--log_path="):
-            log_path = arg.split("=", 1)[1]
-            break
+fd = None
+lock = threading.Lock()
 
-    log_path = os.path.abspath(log_path)
-    logger = logging.getLogger("p2pd")
-    logger.setLevel(logging.DEBUG)
-    logger.propagate = False
-
-    if not any(
-        isinstance(h, logging.FileHandler) and h.baseFilename == log_path
-        for h in logger.handlers
-    ):
-        handler = logging.FileHandler(log_path, "a", encoding="utf-8")
-        handler.setFormatter(
-            logging.Formatter(
-                "[%(filename)s:%(lineno)d] %(message)s",
-                "%Y-%m-%d %H:%M:%S",
-            )
+def open_log_fd():
+    global fd
+    if fd is None:
+        path = os.path.join(
+            LOGS_ROOT_PATH,
+            "program_" + str(os.getpid()) + ".log",
         )
-        logger.addHandler(handler)
-
-    app_logger = logger
-
-def log_worker():
-    try:
-        logger = app_logger
-        while True:
-            # Blocking call, waits indefinitely for an item
-            msg = logging_queue.get()
-
-            # Exit signal check
-            if msg is None:
-                break
-            
-            # Write to log
-            if logger:
-                logger.info(str(msg))
-    except Exception:
-        return
-
-def start_logger():
-    global logging_thread
-    
-    if not IS_DEBUG or logging_thread is not None:
-        return
-
-    init_logger()
-    logging_thread = threading.Thread(target=log_worker, daemon=True)
-    logging_thread.start()
+        
+        fd = os.open(
+            path,
+            os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+            0o644,
+        )
 
 def log(msg):
-    global logging_queue
-    if not IS_DEBUG:
-        return
-
-    print(msg)
-    logging_queue.put_nowait(msg)
+    open_log_fd()
+    with lock:
+        os.write(fd, msg.encode("utf-8") + b"\n")
 
 def log_exception():
     if not IS_DEBUG:

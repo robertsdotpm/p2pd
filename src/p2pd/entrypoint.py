@@ -165,10 +165,6 @@ def p2pd_setup_event_loop():
     if not isinstance(policy, CustomEventLoopPolicy):
         asyncio.set_event_loop_policy(CustomEventLoopPolicy())
 
-    #sys.excepthook = my_except_hook
-    if IS_DEBUG:
-        start_logger()
-
 p2pd_setup_event_loop()
 
 async def entrypoint_test():
