@@ -16,34 +16,29 @@ LOGS_ROOT_PATH = os.path.join(
     "logs"
 )
 
-error_fd = None
+log_fds = {}
 
 def open_log_fd():
-    global error_fd
-    if error_fd is None:
+    tid = threading.get_ident()
+    if tid not in log_fds:
         path = os.path.join(
             LOGS_ROOT_PATH,
-            "".join([
-                "p2pd_",
-                str(os.getpid()),
-                "_",
-                threading.get_ident(),
-                ".log"
-            ]),
+            "p2pd_" + str(os.getpid()) + "_" + str(tid) + ".log"
         )
         
-        error_fd = os.open(
+        log_fds[tid] = os.open(
             path,
             os.O_WRONLY | os.O_CREAT | os.O_APPEND,
-            0o644,
+            0o644
         )
 
 def log(msg):
     if not os.path.exists(LOGS_ROOT_PATH):
         return
 
+    tid = threading.get_ident()
     open_log_fd()
-    os.write(error_fd, msg.encode("utf-8") + b"\n")
+    os.write(log_fds[tid], msg.encode("utf-8") + b"\n")
 
 def log_exception():
     exc = "".join(traceback.format_exception(*sys.exc_info()))
