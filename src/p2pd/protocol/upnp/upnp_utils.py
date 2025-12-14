@@ -4,10 +4,10 @@ from ...vendor import xmltodict
 from ...net.net_utils import *
 from ...protocol.http.http_client_lib import *
 
-UPNP_CONF = dict_child(NET_CONF, {
+UPNP_CONF = dict_child({
     "con_timeout": 1, 
     "recv_timeout": 1, 
-})
+}, NET_CONF)
 
 UPNP_LEASE_TIME = 86399
 UPNP_PORT = 1900

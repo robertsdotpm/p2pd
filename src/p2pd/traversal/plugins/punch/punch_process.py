@@ -72,6 +72,7 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         listening_tup = (reverse_ip, listen_sock.getsockname()[1])
         args = (puncher, listening_tup)
         print("punch proc args = ", args)
+        print("proc pool = ", proc_pool)
 
 
         print("before run in ex")

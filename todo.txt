@@ -85,3 +85,5 @@ add the deterministic mappings
 
   need to eventually integrate the server monitoring stuff
     -- and show freshness of servers in demo
+
+  make the final changes and then focus the next few weeks on stability and making the software work without crashing
