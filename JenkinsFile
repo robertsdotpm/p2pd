@@ -1,5 +1,7 @@
 pipeline {
-    agent any
+    agent {
+        docker { image 'python:3.12' }
+    }
 
     stages {
         stage('Checkout') {
@@ -17,7 +19,7 @@ pipeline {
 
         stage('Run Test') {
             steps {
-                sh 'pytest tests/test_example.py'
+                sh 'pytest tests/test_hello_world.py'
             }
         }
     }
