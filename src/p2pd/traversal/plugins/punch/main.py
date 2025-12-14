@@ -97,8 +97,7 @@ class PunchPlugin(TraversalPlugin):
 
         pipe = await start_punching_process(
             nic, 
-            puncher, 
-            self.stop_node, 
+            puncher,
             self.proc_pool
         )
 

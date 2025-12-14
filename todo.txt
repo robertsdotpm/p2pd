@@ -79,3 +79,9 @@ unique, canonical identity for each server.
 
 just make sure proto and node and plugin cant crash on invalid input
 port turn plugin to new plugin
+
+add the deterministic mappings
+  change the sock selection algorithm based on a recv byte
+
+  need to eventually integrate the server monitoring stuff
+    -- and show freshness of servers in demo

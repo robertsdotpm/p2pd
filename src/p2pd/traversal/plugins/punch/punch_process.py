@@ -30,7 +30,7 @@ warns that the socket wasn't closed properly.
 This is the intention and not a bug!
 This code disables that warning.
 """
-def punching_process_entry(puncher, listening_tup, stop_node):
+def punching_process_entry(puncher, listening_tup):
     print("punching proc entry")
     try:
         # New punched TCP sock to destination.
@@ -38,7 +38,7 @@ def punching_process_entry(puncher, listening_tup, stop_node):
 
         # Make reverse connect to listen server in main process.
         # Handles passing messages between the punch sock <--> reverse con.
-        selector_proxy(punched_sock, listening_tup, stop_node)
+        selector_proxy(punched_sock, listening_tup)
     except Exception:
         log_exception()
 
@@ -49,8 +49,9 @@ def accept_reverse_connect_from_punching_proc(listen_sock):
     listen_sock.close()
     return client_socket
 
-async def start_punching_process(nic, puncher, stop_node, proc_pool=None):
+async def start_punching_process(nic, puncher, proc_pool=None):
     loop = asyncio.get_event_loop()
+    
     try:
         print("start punching proc entry")
 
@@ -69,7 +70,7 @@ async def start_punching_process(nic, puncher, stop_node, proc_pool=None):
 
 
         listening_tup = (reverse_ip, listen_sock.getsockname()[1])
-        args = (puncher, listening_tup, stop_node)
+        args = (puncher, listening_tup)
         print("punch proc args = ", args)
 
 

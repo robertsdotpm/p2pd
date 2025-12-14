@@ -2,7 +2,7 @@ import selectors
 import socket
 from ..utility.error_logger import *
 
-def selector_proxy(socket_p, destination, stop_node):
+def selector_proxy(socket_p, destination):
     """
     Bridges an existing connected socket P to a new socket R (connected to destination).
     Supports IPv4 and IPv6 automatically. Loops forever until both sides close.
@@ -20,7 +20,7 @@ def selector_proxy(socket_p, destination, stop_node):
         for s in peers:
             selector.register(s, selectors.EVENT_READ)
 
-        while peers and not stop_node.is_set():
+        while peers:
             events = selector.select(timeout=None)
             for key, mask in events:
                 sock = key.fileobj
