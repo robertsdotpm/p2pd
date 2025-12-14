@@ -1,0 +1,24 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'python3 -m pip install --upgrade pip'
+                sh 'pip install pytest'
+            }
+        }
+
+        stage('Run Test') {
+            steps {
+                sh 'pytest tests/test_example.py'
+            }
+        }
+    }
+}

@@ -18,8 +18,7 @@ LOGS_ROOT_PATH = os.path.join(
 
 log_fds = {}
 
-def open_log_fd():
-    tid = threading.get_ident()
+def open_log_fd(tid):
     if tid not in log_fds:
         path = os.path.join(
             LOGS_ROOT_PATH,
@@ -31,14 +30,16 @@ def open_log_fd():
             os.O_WRONLY | os.O_CREAT | os.O_APPEND,
             0o644
         )
+        
+    return log_fds[tid]
 
 def log(msg):
     if not os.path.exists(LOGS_ROOT_PATH):
         return
 
     tid = threading.get_ident()
-    open_log_fd()
-    os.write(log_fds[tid], msg.encode("utf-8") + b"\n")
+    fd = open_log_fd(tid)
+    os.write(fd, msg.encode("utf-8") + b"\n")
 
 def log_exception():
     exc = "".join(traceback.format_exception(*sys.exc_info()))
