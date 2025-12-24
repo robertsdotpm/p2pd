@@ -6,6 +6,36 @@
 
 [Watch demo on Asciinema](https://asciinema.org/a/EhADOwnoPt5KBiQDbwR69bNHS)
 
+Update 3: I've been in the process of cleaning up all the code here. There's over
+20k lines and while it was once fine for a "demo" actually using it was quite horrible.
+I decided to take the step of split the project up into different packages.
+
+[aionetiface](https://github.com/robertsdotpm/aionetiface) -- will now handle just the networking. This is Python3 package that brings interface support and proper address
+handling to Python. There's more to it than that -- but the code is working well.
+
+[namebump](https://github.com/robertsdotpm/namebump) -- this is a new kind of
+public-access key-value store. It's a KVS that anyone can use. The database has
+resource limits per IP and names that aren't used expire over time.
+
+[dogdorm](https://github.com/robertsdotpm/dogdorm) -- this is a system for monitoring
+public servers used by peer-to-peer software (like STUN, TURN, MQTT, etc.) It
+is used to determine the reliability of public infrastructure so that software can
+be both decentralized and reliable.
+
+Finally, there will be a yet unreleased NAT traversal work that depends on all of
+the above packages. It features a brand new algorithm for doing hole punching that
+is vastly improved over anything else I've previously seen. I will probably release
+this as a new package and deprecate this one because the name for P2PD isn't that
+allusive. ETA on everything finished I'm not sure -- but releasing the above
+to show you what I've already done.
+
+Here's a teaser so far of a very beautiful hole punching algorithm that depends
+on math and cryptography rather than complex network protocols:
+
+[punch.py](https://raw.githubusercontent.com/robertsdotpm/p2pd/refs/heads/folders_windows/examples/punch.py)
+
+---
+
 Update 2: P2P stuff is broken at the moment. I'm slowly fixing it and will build
 better tooling for testing in the future.
 Update: Great news everyone! I am over my burn out and feel inspired to hack again. Some things I want to do now:

@@ -203,13 +203,12 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
     async def test_pnp_client(self):
         hosts = [0, 1]
         nic = await Interface(NIC_NAME)
-        sys_clock = await SysClock(nic, clock_skew=Dec(0))
+        sys_clock = await SysClock(nic, ntp=0.1)
 
         # Pub key crap -- used for signing PNP messages.
         # Pub key will be used as a static name for testing too.
-        node_extra = P2PNodeExtra()
-        node_extra.listen_port = NODE_PORT
-        sk = node_extra.load_signing_key()
+        install_path = get_p2pd_install_root()
+        sk = load_signing_key(NODE_PORT, install_path)
 
         # Try all IPs and AFs.
         name = sk.verifying_key.to_string("compressed")
@@ -253,8 +252,6 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
 
                 if not failed:
                     print(fstr("pnp {0} {1} success", (af, dest,)))
-
-
 
     async def test_nickname(self):
         print(PNP_SERVERS)
