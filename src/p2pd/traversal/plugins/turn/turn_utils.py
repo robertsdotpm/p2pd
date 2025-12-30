@@ -1,6 +1,4 @@
-from ....net.net_utils import *
-from ....settings import *
-from ....utility.utils import *
+from aionetiface import *
 from ....protocol.turn.turn_client import TURNClient
 
 async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=None, msg_cb=None):

@@ -26,10 +26,8 @@ matrix.org seems to use them over static credentials
 
 import asyncio
 from struct import pack
-from ...net.address import *
-from ...nic.interface import *
+from aionetiface import *
 from .turn_process import *
-from ...protocol.stun.stun_defs import *
 from .turn_defs import *
 
 # Main class for handling TURN sessions with a server.

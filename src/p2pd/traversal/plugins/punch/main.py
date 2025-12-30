@@ -1,9 +1,7 @@
 import pickle
 import inspect
 import asyncio
-from ....utility.utils import *
-from ....net.net_utils import *
-from ....nic.nat.nat_predict import *
+from aionetiface import *
 from ...signaling.signal_msgs import PunchMsg, DoneMsg
 from .punch_defs import *
 from .utility.punch_utils import *

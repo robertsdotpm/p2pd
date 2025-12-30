@@ -2,8 +2,8 @@ import socket
 import time
 import selectors
 from ...punch_defs import *
-from ......net.bind.bind_rules import binder_sync
-from ......net.net_utils import ip_strip_if
+from aionetiface.net.bind.bind_rules import binder_sync
+from aionetiface.net.net_utils import ip_strip_if
 
 """
 These magic sock options are required for TCP hole punching on

@@ -9,7 +9,7 @@ the -m switch to run a module directly. Python modules are lolz.
 if not '-m' in sys.argv:
     from .do_imports import *
 
-from .entrypoint import *
+
 
 
 __version__ = '2.7.9'

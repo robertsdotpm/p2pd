@@ -4,10 +4,9 @@ lists need to be updated. Use short, unique IDs or
 index by host name even if its longer.
 """
 
-from ..utility.utils import *
+from aionetiface import *
 from ..traversal.signaling.signal_msgs import *
 from .node_defs import (CON_ID_MSG)
-from ..vendor.ecies import encrypt, decrypt
 
 async def node_protocol(self, msg, client_tup, pipe):
     log(fstr("> node proto = {0}, {1}", (msg, client_tup,)))

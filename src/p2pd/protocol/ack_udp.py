@@ -2,7 +2,7 @@ import asyncio
 import struct
 import random
 from struct import pack
-from ..utility.utils import *
+from aionetiface import *
 
 UDP_MAX_DICT_LEN = 1000
 

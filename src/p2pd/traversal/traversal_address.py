@@ -1,4 +1,4 @@
-from ..utility.utils import *
+from aionetiface import *
 from ..node.node_addr import *
 from ..node.nickname import *
 from .signaling.signal_msgs import GetAddr

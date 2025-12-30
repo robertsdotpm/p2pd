@@ -3,11 +3,7 @@ import time
 import socket
 import struct
 import selectors
-from .....net.ip_range import *
-from .....nic.nat.nat_utils import *
-from .....nic.nat.nat_predict import *
-from .....nic.interface import *
-from .....utility.clock_skew import *
+from aionetiface import *
 from ..punch_defs import *
 
 # --- NTP Constants ---

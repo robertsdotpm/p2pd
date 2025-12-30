@@ -45,11 +45,12 @@ import sys
 import argparse
 import socket
 import pickle
+from aionetiface import *
 from .punch_defs import *
 from .port_allocators.boundary_alloc import *
 from .engines.tcp_selector_simple.engine import *
 from .utility.punch_utils import *
-from ....net.ip_range import IPR
+
 
 # TODO: Could even use ARP to find the other node in a LAN
 # running the same tool so the dest IP doesn't have to be specified.

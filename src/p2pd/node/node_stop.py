@@ -1,6 +1,7 @@
 import asyncio
+from aionetiface import *
 from ..errors import AlreadyClosedError
-from ..utility.utils import *
+
 
 async def close_helper(p):
     try:

@@ -1,5 +1,4 @@
-from ..net.net_utils import *
-from ..utility.utils import *
+from aionetiface import *
 from .signaling.signal_msgs import *
 
 f_path_txt = lambda x: "local" if x == NIC_BIND else "external"

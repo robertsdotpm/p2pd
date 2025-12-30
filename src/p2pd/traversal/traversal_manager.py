@@ -35,9 +35,7 @@ todo: set this up after the pipe is done:
 """
 
 from collections import OrderedDict
-from ..utility.utils import *
-from ..net.net_defs import *
-from ..nic.interface import *
+from aionetiface import *
 from .traversal_utils import *
 from .plugins.traversal_plugin import TraversalPlugin
 

@@ -58,11 +58,7 @@ http://10.0.1.1:1900/igd.xml
 """
 
 import socket
-from ...utility.utils import *
-from ...net.net_utils import *
-from ...net.address import *
-from ...net.pipe.pipe import *
-from ...protocol.http.http_client_lib import *
+from aionetiface import *
 from .upnp_utils import *
 
 async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto, add_host=None):

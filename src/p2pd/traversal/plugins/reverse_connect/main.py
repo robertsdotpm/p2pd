@@ -1,5 +1,5 @@
 import asyncio
-from ....utility.utils import *
+from aionetiface import *
 from ..traversal_plugin import TraversalPlugin
 from ...signaling.signal_msgs import ConMsg
 

@@ -1,5 +1,4 @@
-from ...net.daemon import *
-from ...utility.fstr import fstr
+from aionetiface import *
 
 class EchoServer(Daemon):
     def __init__(self):
@@ -33,9 +32,6 @@ if __name__ == "__main__": # pragma: no cover
             print(fstr("Connection closed from {0}", (addr,)))
 
     async def echo_main():
-        from p2pd.src.p2pd.net.net_utils import IP4, TCP
-        from p2pd.nic.interface import Interface
-
         loop = asyncio.get_running_loop()
         server = await loop.create_server(
             lambda: EchoProtocol(),

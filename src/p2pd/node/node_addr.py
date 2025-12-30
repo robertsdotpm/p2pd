@@ -1,7 +1,5 @@
 import struct
-from ..settings import *
-from ..nic.nat.nat_utils import *
-from ..net.ip_range import *
+from aionetiface import *
 from .node_defs import *
 
 

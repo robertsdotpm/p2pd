@@ -2,11 +2,9 @@ import asyncio
 import io
 from struct import unpack
 from hashlib import md5
-from ...utility.utils import *
-from ...net.address import *
+from aionetiface import *
 from .turn_defs import *
-from ...protocol.stun.stun_utils import *
-from ...net.pipe.pipe_client import *
+
 
 # Parse a TURN message.
 # Use bitwise OPs to get valid method and status codes.

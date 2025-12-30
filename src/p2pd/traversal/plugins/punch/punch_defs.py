@@ -1,4 +1,4 @@
-from ....net.net_defs import *
+from aionetiface import *
 
 # Punch modes.
 TCP_PUNCH_LAN = 1

@@ -5,14 +5,13 @@ make servers appear broken when they're not.
 """
 import asyncio
 import multiprocessing
-from ..net.daemon import *
+from aionetiface import *
 from .node_addr import *
 from .node_utils import *
 from .nickname import *
 from .node_start import *
 from .node_stop import *
 from .node_protocol import node_protocol
-from ..vendor.machine_id import *
 from ..traversal.traversal_address import *
 from ..traversal.traversal_manager import TraversalManager
 from ..traversal.plugins.direct_connect.main import DirectConnect

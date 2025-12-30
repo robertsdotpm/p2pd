@@ -1,8 +1,5 @@
-
-from ...utility.utils import *
+from aionetiface import *
 from ...vendor import xmltodict
-from ...net.net_utils import *
-from ...protocol.http.http_client_lib import *
 
 UPNP_CONF = dict_child({
     "con_timeout": 1, 

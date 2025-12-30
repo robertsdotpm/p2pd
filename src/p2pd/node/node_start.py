@@ -6,15 +6,12 @@ make servers appear broken when they're not.
 import asyncio
 import hashlib
 import time
-from ..nic.interface import load_interfaces
-from ..nic.select_interface import list_interfaces
-from ..net.daemon import *
+from aionetiface import *
 from .node_addr import *
 from .node_utils import *
 from .nickname import *
 from ..traversal.traversal_address import *
 from ..traversal.signaling.signal_utils import *
-from ..utility.clock_skew import SysClock
 from ..traversal.signaling.signal_router import *
 from ..traversal.plugins.punch.main import PunchPluginFactory 
 

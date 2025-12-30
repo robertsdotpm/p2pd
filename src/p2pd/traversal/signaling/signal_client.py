@@ -1,8 +1,6 @@
 import asyncio
-from ...utility.utils import *
+from aionetiface import *
 from ...vendor.gmqtt import Client as MQTTClient
-from ...net.net_utils import *
-from ...settings import *
 from .signal_defs import *
 
 async def f_proto_print(data):

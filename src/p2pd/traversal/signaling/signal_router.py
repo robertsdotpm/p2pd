@@ -1,4 +1,4 @@
-from ...utility.utils import *
+from aionetiface import *
 from .signal_msgs import *
 from .signal_utils import *
 

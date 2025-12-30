@@ -1,8 +1,5 @@
-from ...settings import *
-from ...net.net_utils import *
-from ...net.address import Address
+from aionetiface import *
 from .signal_client import SignalMock
-from ...vendor.ecies import encrypt, decrypt
 
 def find_signal_pipe(node, addr):
     our_offsets = list(node.signal_pipes)

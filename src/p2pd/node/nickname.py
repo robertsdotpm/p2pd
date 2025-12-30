@@ -5,10 +5,7 @@ multiple ifaces; Otherwise use what we've got
 python3 run_pnp_serv.py
 """
 
-from ..settings import *
-from ..utility.utils import *
-from ..protocol.pnp.pnp_client import *
-from ..nic.interface import *
+from aionetiface import *
 from ..errors import *
 from ecdsa import SigningKey
 

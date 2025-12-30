@@ -1,5 +1,4 @@
-from ...utility.utils import *
-from ...net.net_defs import *
+from aionetiface import *
 
 MQTT_CONF = dict_child({
     "con_timeout": 4,

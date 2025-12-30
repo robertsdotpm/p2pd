@@ -4,14 +4,7 @@ import os
 import socket
 from ecdsa import SigningKey, SECP256k1
 import pathlib
-from ..settings import *
-from ..utility.utils import *
-from ..install import *
-from ..net.address import Address
-from ..net.net_utils import *
-from ..nic.interface import get_default_iface, get_mac_address
-from ..protocol.stun.stun_client import get_n_stun_clients
-from ..nic.nat.nat_utils import USE_MAP_NO
+from aionetiface import *
 from ..traversal.plugins.punch.punch_defs import PUNCH_CONF
 
 def load_signing_key(listen_port, install_path):

@@ -13,15 +13,12 @@ import socket
 from multiprocessing.reduction import send_handle, recv_handle
 import os
 import asyncio
-from ....nic.nat.nat_predict import *
+from aionetiface import *
 from .utility.punch_utils import *
 from .punch_defs import *
-from ....utility.clock_skew import *
-from ....net.asyncio.event_loop import *
-from ....net.pipe.pipe import *
 from ....node.node_defs import *
 from .engines.tcp_selector_simple.engine import *
-from ....net.selector_proxy import selector_proxy
+from aionetiface.net.selector_proxy import selector_proxy
 
 """
 Punching is done in its own process.

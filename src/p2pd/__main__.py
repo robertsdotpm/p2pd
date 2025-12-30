@@ -11,15 +11,14 @@ import multiprocessing
 import platform
 from asyncio import futures
 
+
 vmaj, vmin, _ = platform.python_version_tuple()
 if int(vmin) < 8:
     print("P2PD REPL needs >= Python 3.8")
     exit()
 
 from . import __version__ as p2pdv
-from .net.asyncio.event_loop import *
-from .utility.fstr import fstr
-
+from aionetiface import *
 
 class AsyncIOInteractiveConsole(code.InteractiveConsole):
 

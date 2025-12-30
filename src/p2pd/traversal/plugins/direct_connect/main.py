@@ -1,8 +1,5 @@
 import asyncio
-from ....utility.utils import *
-from ....net.net_utils import *
-from ....net.address import Address
-from ....net.pipe.pipe import *
+from aionetiface import *
 from ....node.node_defs import *
 from ..traversal_plugin import TraversalPlugin
 
