@@ -211,9 +211,9 @@ class PunchPlugin(TraversalPlugin):
         return msg
 
 class PunchPluginFactory():
-    def __init__(self, stun_clients, punch_clients, sys_clock=SysClock(None, 0.1), proc_pool=None):
+    def __init__(self, stun_clients, punch_clients, sys_clock=None, proc_pool=None):
         self.stun_clients = stun_clients # af if index
-        self.sys_clock = sys_clock
+        self.sys_clock = sys_clock or SysClock(None, 0.1)
         self.proc_pool = proc_pool
         self.punch_clients = punch_clients
         self.punch_proc = {} # pipe_id: delayed start punching proc task

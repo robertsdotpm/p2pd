@@ -1,8 +1,13 @@
+import unittest
 
-
+from aionetiface.utility.test_init import *
 from p2pd import *
+import namebump
+
+
 from ecdsa import SigningKey, SECP256k1
 import hashlib
+
 
 #     python -W ignore::ResourceWarning your_script.py
 NIC_NAME = ""
@@ -26,14 +31,9 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                     tups[tup] = 1
 
     async def test_clock_skew(self):
-        nic = await Interface(NIC_NAME)
+        nic = await Interface("default")
         clock = await SysClock(nic)
-        if not len(clock.data_points):
-            print(fstr("clock skew failed to get data points"))
-        elif len(clock.data_points) < clock.min_data:
-            print(fstr("clock skew failed to get min data points"))
-        else:
-            print(fstr("clock skew succeeded"))
+        assert(clock.time())
 
     async def test_mqtt_client(self):
         msg = "test msg"
@@ -41,12 +41,13 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         #nic = await Interface()
         #print(nic.supported())
         servs = [{
-            IP4: "127.0.0.1",
-            IP6: "127.0.0.1",
+            IP4: "158.69.27.176",
+            IP6: "2607:5300:60:80b0::1",
             "port": 1883
         }]
 
-        for af in (IP4,):
+        nic = Interface("default")
+        for af in nic.supported():
             count = 0
             for serv_info in servs:
                 if not serv_info[af]:
@@ -58,7 +59,6 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                     break
 
                 dest = (serv_info[af], serv_info["port"])
-                print(dest)
                 client = await is_valid_mqtt(dest)
                 if client:
                     print("valid ", dest)
@@ -202,12 +202,12 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
 
     async def test_pnp_client(self):
         hosts = [0, 1]
-        nic = await Interface(NIC_NAME)
-        sys_clock = await SysClock(nic, ntp=0.1)
+        nic = await Interface("default")
+        sys_clock = await SysClock(nic)
 
         # Pub key crap -- used for signing PNP messages.
         # Pub key will be used as a static name for testing too.
-        install_path = get_p2pd_install_root()
+        install_path = get_aionetiface_install_root()
         sk = load_signing_key(NODE_PORT, install_path)
 
         # Try all IPs and AFs.
@@ -217,22 +217,23 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
             for host in hosts:
                 serv = PNP_SERVERS[af][host]
                 dest = (serv["ip"], serv["port"])
-                client = PNPClient(
-                    sk=sk,
+                client = namebump.Client(
                     dest=dest,
                     dest_pk=h_to_b(serv["pk"]),
                     nic=nic,
                     sys_clock=sys_clock,
                 )
+                await client.start()
 
+                client.kp = namebump.Keypair(sk)
                 failed = False
                 val = rand_plain(10)
 
                 calls = [
-                    (client.push, (name, val,)),
-                    (client.fetch, (name,)),
-                    (client.delete, (name,)),
-                    (client.fetch, (name,)),
+                    (client.put, (name, val, client.kp)),
+                    (client.get, (name,)),
+                    (client.delete, (name, client.kp)),
+                    (client.get, (name,)),
                 ]
 
                 out = None

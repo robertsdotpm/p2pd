@@ -1,10 +1,10 @@
 
 import os
-from aionetiface import *
+
 
 if __name__ != '__main__':
     os.environ["PYTHONIOENCODING"] = "utf-8"
-
+    from aionetiface import *
     from .errors import *
     from .protocol.upnp.upnp import port_forward
     from .protocol.turn.turn_client import TURNClient
