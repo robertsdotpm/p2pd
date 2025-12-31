@@ -11,19 +11,9 @@ here = path.abspath(path.dirname(__file__))
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
-install_reqs = ["ntplib", "ecdsa"]
-if (sys.version_info >= (3, 6)) or sys.platform != "win32":
-    install_reqs += ["fasteners"]
-
-if sys.platform != "win32":
-    install_reqs += ["netifaces"]
-    if sys.platform != "darwin":
-        install_reqs += ["pyroute2"]
-else:
-    install_reqs += ["winregistry"]
-
+install_reqs = ["aionetiface", "namebump"]
 setup(
-    version='3.1.10',
+    version='4.0.0',
     name='p2pd',
     description='Asynchronous P2P networking library and service',
     keywords=('NAT traversal, TCP hole punching, simultaneous open, UPnP, STUN, TURN, SIP, DHCP, add IP to interface, NATPMP, P2P, Peer-to-peer networking library, python'),
