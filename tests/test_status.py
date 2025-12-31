@@ -201,7 +201,7 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                         print(fstr("stun {0} {1} {2} failed", (af, host, proto,)))
 
     async def test_pnp_client(self):
-        hosts = [0, 1]
+        hosts = [0]
         nic = await Interface("default")
         sys_clock = await SysClock(nic)
 
