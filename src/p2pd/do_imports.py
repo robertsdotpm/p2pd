@@ -9,7 +9,6 @@ if __name__ != '__main__':
     from .protocol.upnp.upnp import port_forward
     from .protocol.turn.turn_client import TURNClient
     from .protocol.echo.echo_server import *
-    from .node.rest_api import P2PDServer, start_p2pd_server, P2PD_PORT
     from .node.node_addr import *
     from .node.node import Node, NODE_CONF, NODE_PORT
     from .node.node_utils import get_pp_executors, load_signing_key

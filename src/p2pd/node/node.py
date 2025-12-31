@@ -18,12 +18,13 @@ from ..traversal.plugins.direct_connect.main import DirectConnect
 from ..traversal.plugins.get_addr.main import GetAddrPlugin
 from ..traversal.plugins.return_addr.main import ReturnAddrPlugin
 from ..traversal.plugins.reverse_connect.main import ReverseConnectPlugin
+from ..vendor.machine_id import *
 
 NODE_CONF = dict_child({
     "reuse_addr": False,
     "enable_upnp": True,
     "sig_pipe_no": SIGNAL_PIPE_NO,
-    "install_path": get_p2pd_install_root()
+    "install_path": get_aionetiface_install_root()
 }, NET_CONF)
 
 # Main class for the P2P node server.

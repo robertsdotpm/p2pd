@@ -7,6 +7,7 @@ import pathlib
 from aionetiface import *
 from ..traversal.plugins.punch.punch_defs import PUNCH_CONF
 
+
 def load_signing_key(listen_port, install_path):
     # Make install dir if needed.
     pathlib.Path(install_path).mkdir(
@@ -132,6 +133,33 @@ async def load_stun_clients(node, limit=USE_MAP_NO):
     results = await asyncio.gather(*tasks, return_exceptions=False)
     for af, if_index, clients in results:
         node.stun_clients[af][if_index] = clients
+
+async def get_pp_executors(workers=None):
+    workers = workers or min(32, os.cpu_count() + 4)
+    pp_executor = None
+    #return 0, None
+    try:
+        pp_executor = ProcessPoolExecutor(max_workers=workers)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        """
+        Not all platform have a working implementation of sem_open / semaphores.
+        Android is one such platform. It does support multiprocessing but
+        this semaphore feature is missing and will throw an error here.
+        In this case -- log the error and revert to using a single event loop.
+        """
+        log_exception()
+    
+    return workers, pp_executor
+    loop = asyncio.get_event_loop()
+    tasks = []
+    for i in range(0, workers):
+        tasks.append(loop.run_in_executor(
+            pp_executor, init_process_pool
+        ))
+    await asyncio.gather(*tasks)
+    return pp_executor
 
 async def setup_punch_coordination(node, sys_clock):
     node.max_punchers, node.pp_executor = await get_pp_executors()

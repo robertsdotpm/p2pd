@@ -6,6 +6,7 @@ python3 run_pnp_serv.py
 """
 
 from aionetiface import *
+import namebump
 from ..errors import *
 from ecdsa import SigningKey
 
@@ -93,16 +94,16 @@ class Nickname():
 
                 serv_info = PNP_SERVERS[af][index]
                 dest = (serv_info["ip"], serv_info["port"])
-
-                client = PNPClient(
-                    self.sk,
+                client = namebump.client(
                     dest,
                     h_to_b(serv_info["pk"]),
-                    self.interface,
-                    self.sys_clock,
+                    sys_clock=self.sys_clock,
+                    nic=self.interface
                 )
+                client.kp = namebump.Keypair(self.sk)
 
                 async def job(af=af, index=index, client=client):
+                    await client.start()
                     pipe = None
                     try:
                         pipe = await asyncio.wait_for(
@@ -135,7 +136,7 @@ class Nickname():
         self.started = True
         return self
 
-    async def push(self, name, value, behavior=BEHAVIOR_DO_BUMP, timeout=NAMING_TIMEOUT):
+    async def put(self, name, value, behavior=namebump.DO_BUMP, timeout=NAMING_TIMEOUT):
         assert(self.started)
         name = pnp_strip_tlds(name)
 
@@ -145,7 +146,7 @@ class Nickname():
                 try:
                     client = self.clients[af][offset]
                     if client is None: continue
-                    ret = await client.push(name, value, behavior)
+                    ret = await client.put(name, value, client.kp, behavior)
                     if ret is None: continue
                     if ret.value is not None:
                         return offset
@@ -172,7 +173,7 @@ class Nickname():
         tld = pnp_get_tld(offsets)
         return fstr("{0}{1}", (name, tld,))
 
-    async def fetch(self, name, timeout=NAMING_TIMEOUT):
+    async def get(self, name, timeout=NAMING_TIMEOUT):
         assert(self.started)
 
         async def worker(offset, name):
@@ -180,7 +181,7 @@ class Nickname():
                 try:
                     client = self.clients[af][offset]
                     if client is None: continue
-                    ret = await client.fetch(name)
+                    ret = await client.get(name)
                     if ret is not None:
                         return ret
                 except asyncio.CancelledError:
@@ -222,7 +223,7 @@ class Nickname():
                 try:
                     client = self.clients[af][offset]
                     if client is None: continue
-                    ret = await client.delete(name)
+                    ret = await client.delete(name, client.kp)
                     if ret is not None:
                         return ret
                 except Exception:

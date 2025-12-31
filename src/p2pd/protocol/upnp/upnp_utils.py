@@ -1,5 +1,5 @@
 from aionetiface import *
-from ...vendor import xmltodict
+from aionetiface.vendor import xmltodict
 
 UPNP_CONF = dict_child({
     "con_timeout": 1, 
