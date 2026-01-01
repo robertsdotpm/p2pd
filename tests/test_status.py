@@ -1,10 +1,7 @@
 import unittest
-
 from aionetiface.utility.test_init import *
 from p2pd import *
 import namebump
-
-
 from ecdsa import SigningKey, SECP256k1
 import hashlib
 
@@ -309,9 +306,9 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
     async def test_encryption(self):
         # Pub key crap -- used for signing PNP messages.
         # Pub key will be used as a static name for testing too.
-        node_extra = P2PNodeExtra()
-        node_extra.listen_port = NODE_PORT
-        sk = node_extra.load_signing_key()
+        install_path = get_aionetiface_install_root()
+        listen_port = NODE_PORT
+        sk = load_signing_key(listen_port, install_path)
 
         dest_sk = ecdsa.SigningKey.generate(curve=SECP256k1)
         dest_vk = dest_sk.verifying_key.to_string("compressed")
@@ -325,28 +322,7 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
             print(fstr("Encryption works"))
 
     async def test_start_node_server(self):
-        conf = dict_child({
-            "reuse_addr": False,
-            "enable_upnp": False,
-            "sig_pipe_no": 3,
-        }, NET_CONF)
-
-        n = await P2PNode(conf=conf)
-        print(n.ifs)
-        print(n.addr_bytes)
-        print(n.listen_port)
-        await n.close()
-
-    async def test_node_simple(self):
-        conf = dict_child({
-            "reuse_addr": False,
-            "enable_upnp": False,
-            "sig_pipe_no": 3,
-        }, NET_CONF)
-
-        nic = get_cached_if()
-        n = P2PNode(ifs=[nic], conf=conf)
-        await n.dev()
+        n = await Node(conf=NODE_TEST_CONF)
         print(n.ifs)
         print(n.addr_bytes)
         print(n.listen_port)

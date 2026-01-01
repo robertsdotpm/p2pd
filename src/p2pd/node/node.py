@@ -20,19 +20,15 @@ from ..traversal.plugins.return_addr.main import ReturnAddrPlugin
 from ..traversal.plugins.reverse_connect.main import ReverseConnectPlugin
 from ..vendor.machine_id import *
 
-NODE_CONF = dict_child({
-    "reuse_addr": False,
-    "enable_upnp": True,
-    "sig_pipe_no": SIGNAL_PIPE_NO,
-    "install_path": get_aionetiface_install_root()
-}, NET_CONF)
+
 
 # Main class for the P2P node server.
 class Node(Daemon):
     def __init__(self, ifs=[], port=3000, stop_node=None, conf=NODE_CONF):
         super().__init__()
+        conf = dict_child(conf, NET_CONF)
         self.__name__ = "P2PNode"
-        self.install_path = conf["install_path"]
+        self.install_path = conf["install_path"] or get_aionetiface_install_root()
         self.stop_node = stop_node or multiprocessing.Event()
         self.reachability = {IP4: {}, IP6: {}}
         

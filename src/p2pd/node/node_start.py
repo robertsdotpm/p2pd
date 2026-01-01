@@ -78,7 +78,8 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         )
 
     # Cryptography for authenticated messages.
-    node.sk = load_signing_key(node.listen_port, node.conf["install_path"])
+    install_path = node.conf["install_path"] or get_aionetiface_install_root()
+    node.sk = load_signing_key(node.listen_port, install_path)
     node.vk = node.sk.verifying_key
     node.node_id = hashlib.sha256(
         node.vk.to_string("compressed")

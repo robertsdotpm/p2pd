@@ -11,3 +11,26 @@ NODE_ADDR_MAX_INTERFACES = 4
 SIGNAL_PIPE_NO = 1 # TODO: change back to 3
 
 shut_down = multiprocessing.Event()
+
+NODE_CONF = {
+    "reuse_addr": False,
+    "enable_upnp": True,
+    "sig_pipe_no": SIGNAL_PIPE_NO,
+    "install_path": None,
+    "init_clock_skew": True,
+    "enable_punching": True,
+    "enable_nickname": True,
+    "enable_stun_clients": True,
+
+}
+
+NODE_TEST_CONF =  {
+    "reuse_addr": False,
+    "enable_upnp": False,
+    "sig_pipe_no": 0,
+    "install_path": None,
+    "init_clock_skew": False,
+    "enable_punching": True,
+    "enable_nickname": False,
+    "enable_stun_clients": False,
+}
