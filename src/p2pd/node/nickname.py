@@ -94,7 +94,7 @@ class Nickname():
 
                 serv_info = PNP_SERVERS[af][index]
                 dest = (serv_info["ip"], serv_info["port"])
-                client = namebump.client(
+                client = namebump.Client(
                     dest,
                     h_to_b(serv_info["pk"]),
                     sys_clock=self.sys_clock,

@@ -256,15 +256,15 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
 
     async def test_nickname(self):
         print(PNP_SERVERS)
-        nic = await Interface(NIC_NAME)
-        sys_clock = await SysClock(nic, clock_skew=Dec(0))
+        nic = await Interface("default")
+        sys_clock = await SysClock(nic)
         print(nic)
 
         # Pub key crap -- used for signing PNP messages.
         # Pub key will be used as a static name for testing too.
-        node_extra = P2PNodeExtra()
-        node_extra.listen_port = NODE_PORT
-        sk = node_extra.load_signing_key()
+        install_path = get_aionetiface_install_root()
+        listen_port = NODE_PORT
+        sk = load_signing_key(listen_port, install_path)
         print(sk)
 
         # Load nickname client.
@@ -282,10 +282,10 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
 
         fqn = None
         calls = [
-            (nick.push, (name, "1"), 1),
-            (nick.fetch, None, 1),
+            (nick.put, (name, "1"), 1),
+            (nick.get, None, 1),
             (nick.delete, None, 1),
-            (nick.fetch, None, 0),
+            (nick.get, None, 0),
         ]
 
         for call in calls:
