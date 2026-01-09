@@ -7,10 +7,13 @@ import asyncio
 import hashlib
 import time
 from aionetiface import *
+from sidewire import *
 from .node_utils import *
 from .nickname import *
 from ..traversal.traversal_address import *
 from ..traversal.plugins.punch.main import PunchPluginFactory 
+from ..protocol.signaling.signal_msgs import SIG_PROTO
+
 
 async def node_start(node, sys_clock=None, out=False, cout=print):
     # Load ifs.
@@ -112,7 +115,20 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     # MQTT server offsets for signal protocol.
     if node.conf["sig_pipe_no"]:
         if out: cout("\tLoading MQTT clients...")
-        await load_signal_pipes(node, node.node_id, min_success=node.conf["sig_pipe_no"])
+
+        nic_afs = get_nic_for_af(node.ifs)
+        sig_pipes = []
+        for af in nic_afs:
+            nic = nic_afs[af]
+            print(af)
+            sig_pipes += await load_signal_pipes(
+                af, 
+                nic, 
+                node.node_id,
+                node.conf["sig_pipe_no"]
+            )
+
+
         if out:
             buf = "\t\tmqtt = ("
             for index in list(node.signal_pipes):
@@ -210,7 +226,8 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         node.sys_clock.time,
         node.node_id,
         node.addr_bytes,
-        node.sk
+        node.sk,
+        SIG_PROTO
     )
 
     # Sets up the signaling router to use MQTT clients.
