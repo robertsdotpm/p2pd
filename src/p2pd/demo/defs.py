@@ -1,3 +1,4 @@
+from aionetiface import *
 from ..do_imports import *
 
 IS_DEBUG = 2
@@ -10,7 +11,7 @@ demo_node_conf = dict_child({
     "enable_punching": True,
     "enable_nickname": True,
     "enable_stun_clients": True,
-    "install_path": get_p2pd_install_root()
+    "install_path": get_aionetiface_install_root()
 }, NET_CONF)
 
 nat_txt = {

@@ -1,5 +1,5 @@
 from aionetiface import *
-from .signaling.signal_msgs import *
+from sidewire import *
 
 f_path_txt = lambda x: "local" if x == NIC_BIND else "external"
 

@@ -6,7 +6,7 @@ make servers appear broken when they're not.
 import asyncio
 import multiprocessing
 from aionetiface import *
-from .node_addr import *
+from .node_defs import *
 from .node_utils import *
 from .nickname import *
 from .node_start import *
@@ -19,8 +19,6 @@ from ..traversal.plugins.get_addr.main import GetAddrPlugin
 from ..traversal.plugins.return_addr.main import ReturnAddrPlugin
 from ..traversal.plugins.reverse_connect.main import ReverseConnectPlugin
 from ..vendor.machine_id import *
-
-
 
 # Main class for the P2P node server.
 class Node(Daemon):

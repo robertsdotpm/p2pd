@@ -1,8 +1,7 @@
 import pickle
-import inspect
 import asyncio
 from aionetiface import *
-from ...signaling.signal_msgs import PunchMsg, DoneMsg
+from ....protocol.signaling.signal_msgs import PunchMsg, DoneMsg
 from .punch_defs import *
 from .utility.punch_utils import *
 from .punch_client import *

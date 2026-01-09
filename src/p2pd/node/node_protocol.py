@@ -5,7 +5,6 @@ index by host name even if its longer.
 """
 
 from aionetiface import *
-from ..traversal.signaling.signal_msgs import *
 from .node_defs import (CON_ID_MSG)
 
 async def node_protocol(self, msg, client_tup, pipe):

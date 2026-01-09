@@ -1,7 +1,7 @@
 import asyncio
 from aionetiface import *
 from ..traversal_plugin import TraversalPlugin
-from ...signaling.signal_msgs import ConMsg
+from ....protocol.signaling.signal_msgs import ConMsg
 
 class ReverseConnectPlugin(TraversalPlugin):
     async def run(self, reply=None):

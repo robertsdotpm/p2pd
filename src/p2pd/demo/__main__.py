@@ -15,6 +15,7 @@ from .cmd_arg_defs import *
 from .utils import *
 from .cmd_arg_proc import *
 from .menu import *
+from ..node.node_defs import *
 
 """Load interfaces, start node, and return node info."""
 async def setup_node():
@@ -25,11 +26,13 @@ async def setup_node():
     cout("Loading networking interfaces...")
     get_nickname = args.cmd == "get_nickname"
     if_names = await list_interfaces()
+    print(if_names)
+
     ifs = await load_interfaces(
         if_names,
         Interface,
-        min_agree=1 if get_nickname else 2,
-        max_agree=2 if get_nickname else 5,
+        min_agree=1,
+        max_agree=2,
         timeout=4
     )
 

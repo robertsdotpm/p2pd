@@ -1,7 +1,5 @@
 from aionetiface import *
-from ..node.node_addr import *
 from ..node.nickname import *
-from .signaling.signal_msgs import GetAddr
 
 """
 A nodes PNS address gets resolved to address bytes.

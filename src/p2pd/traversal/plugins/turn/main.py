@@ -1,5 +1,5 @@
 from aionetiface import *
-from ...signaling.signal_msgs import TURNMsg
+from ....protocol.signaling.signal_msgs import TURNMsg
 from .turn_utils import get_first_working_turn_client
 
 async def udp_turn_relay(self, af, pipe_id, src_info, dest_info, iface, addr_type, same_machine, reply=None):
