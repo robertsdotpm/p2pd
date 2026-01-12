@@ -122,6 +122,7 @@ async def load_stun_clients(node, limit=USE_MAP_NO):
                 clients = await get_n_stun_clients(
                     af=af,
                     n=limit,
+                    mode=RFC5389,
                     interface=interface,
                     proto=TCP,
                     conf=PUNCH_CONF,

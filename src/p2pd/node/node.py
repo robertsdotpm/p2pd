@@ -144,7 +144,7 @@ class Node(Daemon):
         # Get most recent address bytes if given a nickname.
         dest_vk = None
         if pnp_name_has_tld(pnp_addr):
-            pkt = await self.nick_client.fetch(pnp_addr)
+            pkt = await self.nick_client.get(pnp_addr)
             addr_bytes = pkt.value
             dest_vk = pkt.vkc
             print(dest_vk)
@@ -195,7 +195,7 @@ class Node(Daemon):
     # Returns your nickname + a tld designating server.
     async def nickname(self, name, value=None):
         value = value or self.address()
-        name = await self.nick_client.push(
+        name = await self.nick_client.put(
             name,
             value
         )

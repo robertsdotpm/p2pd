@@ -94,6 +94,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     }
 
     # Used by TCP punch clients.
+
     if node.conf.get("enable_punching", True):
         if out: cout("\tLoading STUN clients...")
         # Returns TCP STUN clients using PUNCH_CONF.
@@ -112,12 +113,16 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
                 #buf += "\n"
             cout(buf)
 
+    print(node.stun_clients)
+    
+
+
     # MQTT server offsets for signal protocol.
+    sig_pipes = []
     if node.conf["sig_pipe_no"]:
         if out: cout("\tLoading MQTT clients...")
 
         nic_afs = get_nic_for_af(node.ifs)
-        sig_pipes = []
         for af in nic_afs:
             nic = nic_afs[af]
             print(af)
@@ -127,6 +132,8 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
                 node.node_id,
                 node.conf["sig_pipe_no"]
             )
+
+        print(sig_pipes)
 
 
         if out:
@@ -184,13 +191,17 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Build P2P address bytes.
     assert(node.node_id is not None)
+    sig_dests = [[s.af, s.host, s.port] for s in sig_pipes]
+    print(sig_dests)
+
     node.addr_bytes = make_node_addr(
         node.node_id,
         node.machine_id,
         node.ifs,
-        list(node.signal_pipes),
+        sig_dests,
         port=node.listen_port,
     )
+
 
     # Log address.
     msg = fstr("Starting node = '{0}'", (node.addr_bytes,))
