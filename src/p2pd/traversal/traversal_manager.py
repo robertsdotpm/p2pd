@@ -38,6 +38,7 @@ from collections import OrderedDict
 from aionetiface import *
 from .traversal_utils import *
 from .plugins.traversal_plugin import TraversalPlugin
+from ..protocol.signaling.signal_msgs import GetAddr, ConMsg
 
 class TraversalManager():
     def __init__(self, stop_node, pipes={}, nics=[]):
@@ -132,7 +133,10 @@ class TraversalManager():
         return plugin
     
     def get_plugin(self, msg):
-        if msg.meta.pipe_id in self.plugins:
+        """
+        Edge-case where you're connecting to yourself.
+        """
+        if msg.meta.pipe_id in self.plugins and not msg.meta.same_machine:
             plugin = self.plugins.get(msg.meta.pipe_id, None)
         else:
             # Map getaddr message to returnaddr plugin handler.
@@ -245,7 +249,6 @@ if __name__ == "__main__":
 
         # Main node class with chosen ifs and conf.
         node = Node(ifs=ifs, conf=node_conf)
-
 
         # Start the node and install echo protocol handler.
         await node.start(out=True)

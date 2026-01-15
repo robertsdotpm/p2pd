@@ -147,6 +147,7 @@ class Node(Daemon):
             pkt = await self.nick_client.get(pnp_addr)
             addr_bytes = pkt.value
             dest_vk = pkt.vkc
+            print("Dest addr res from namebump = ", pkt.value)
             print(dest_vk)
 
             try:
@@ -158,6 +159,7 @@ class Node(Daemon):
                 if updated_addr_bytes:
                     addr_bytes = updated_addr_bytes
             except asyncio.TimeoutError:
+                print("Unable to get updated addr bytes from mqtt")
                 log("Timeout MQTT get updated bytes " + str(pnp_addr))
         else:
             addr_bytes = pnp_addr

@@ -191,7 +191,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Build P2P address bytes.
     assert(node.node_id is not None)
-    sig_dests = [[s.af, s.host, s.port] for s in sig_pipes]
+    sig_dests = [[af_to_v(s.af), s.host, s.port] for s in sig_pipes]
     print(sig_dests)
 
     node.addr_bytes = make_node_addr(
@@ -242,7 +242,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     )
 
     # Sets up the signaling router to use MQTT clients.
-    node.signal_router.set_signal_pipes(node.signal_pipes)
+    node.signal_router.set_signal_pipes(sig_pipes)
 
     # Allow signaling router to pass messages to interested plugins.
     node.signal_router.set_traversal_manager(node.traversal)

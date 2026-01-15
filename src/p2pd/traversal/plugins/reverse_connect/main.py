@@ -5,6 +5,8 @@ from ....protocol.signaling.signal_msgs import ConMsg
 
 class ReverseConnectPlugin(TraversalPlugin):
     async def run(self, reply=None):
+        print("inside reverse connect plugin")
+        print("using pipe id = ", self.pipe_id)
         msg = ConMsg()
         msg.meta.plugin_name = "direct_connect"
 
