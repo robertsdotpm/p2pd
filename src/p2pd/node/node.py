@@ -22,7 +22,7 @@ from ..vendor.machine_id import *
 
 # Main class for the P2P node server.
 class Node(Daemon):
-    def __init__(self, ifs=[], ip=None, port=3000, stop_node=None, conf=NODE_CONF):
+    def __init__(self, ifs=[], ip=[], port=NODE_PORT, stop_node=None, conf=NODE_CONF):
         super().__init__()
         conf = dict_child(conf, NET_CONF)
         self.__name__ = "P2PNode"
@@ -225,13 +225,27 @@ class Node(Daemon):
     async def listen_on_ifs(self):
         # Multi-iface connection facilitation.
         for nic in self.ifs:
+            """
+            Given a list of IP strings to listen on listen on all IPs
+            that match a given interface.
+            """
             if self.listen_ips:
-                for listen_ip in self.listen_ips:
-                    listen_ipr = IPR(listen_ip)
-                    
+                listen_iprs = [IPR(ip) for ip in self.listen_ips]
+                for nic_ipr in nic:
+                    if nic_ipr not in listen_iprs:
+                        continue
+
+                    route = await nic_ipr.route.bind(
+                        port=self.listen_port
+                    )
+
+                    await async_wrap_errors(
+                        self.add_listener(TCP, route)
+                    )
+
+                # Don't process the following the listen statements.
                 continue
-
-
+                        
             # Listen on first route for AFs.
             out = await async_wrap_errors(
                 self.listen_local(

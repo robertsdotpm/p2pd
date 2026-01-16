@@ -1,5 +1,6 @@
 import multiprocessing
 
+NODE_PORT = 10001
 TRY_OVERLAP_EXTS = 1
 TRY_NOT_TO_OVERLAP_EXTS = 2
 CON_ID_MSG = b"P2P_CON_ID_EQ"

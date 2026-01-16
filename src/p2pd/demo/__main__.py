@@ -50,9 +50,13 @@ async def setup_node():
     display_ifs_loaded(ifs)
 
     # Main node class with chosen ifs and conf.
-    node = Node(ifs=ifs, stop_node=shut_down, conf=demo_node_conf)
-    if args.port:
-        node.listen_port = args.port
+    node = Node(
+        ifs=ifs, 
+        ip=args.ip, 
+        port=args.port, 
+        stop_node=shut_down, 
+        conf=demo_node_conf
+    )
 
     # Start the node and install echo protocol handler.
     cout("Starting node on %d..." % (node.listen_port,))
