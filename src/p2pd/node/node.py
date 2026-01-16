@@ -22,7 +22,7 @@ from ..vendor.machine_id import *
 
 # Main class for the P2P node server.
 class Node(Daemon):
-    def __init__(self, ifs=[], port=3000, stop_node=None, conf=NODE_CONF):
+    def __init__(self, ifs=[], ip=None, port=3000, stop_node=None, conf=NODE_CONF):
         super().__init__()
         conf = dict_child(conf, NET_CONF)
         self.__name__ = "P2PNode"
@@ -32,6 +32,7 @@ class Node(Daemon):
         
         # Main variables for the class.
         self.conf = conf
+        self.listen_ips = ip
         self.listen_port = port
         self.ifs = ifs
 
@@ -224,6 +225,13 @@ class Node(Daemon):
     async def listen_on_ifs(self):
         # Multi-iface connection facilitation.
         for nic in self.ifs:
+            if self.listen_ips:
+                for listen_ip in self.listen_ips:
+                    listen_ipr = IPR(listen_ip)
+                    
+                continue
+
+
             # Listen on first route for AFs.
             out = await async_wrap_errors(
                 self.listen_local(

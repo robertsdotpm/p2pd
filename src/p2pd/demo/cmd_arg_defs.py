@@ -10,6 +10,7 @@ parser.add_argument("--ntp_server", type=str, required=False, help="Specify usin
 parser = argparse.ArgumentParser(description="A simple greeting script")
 parser.add_argument("--nics", type=str, required=False, help="Limit to specific nics, comma separated")
 parser.add_argument("--port", type=int, required=False, help="Start node on specific port")
+parser.add_argument('--ip', action='append', help='IP address(es) to listen on')
 parser.add_argument("--pnp_server", type=str, required=False, help="Specify using a specific PNP server")
 parser.add_argument("--turn_server", type=str, required=False, help="Specify using a specific TURN server")
 parser.add_argument("--mqtt_server", type=str, required=False, help="Specify using a specific STUN server")

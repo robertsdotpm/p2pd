@@ -5,6 +5,9 @@ I did delete the thing that saves send msg tasks in the mqtt client
 idk if thats relevant.
 
 python3 -m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd 0dl4 --dest_addr 5b5ed965936a5f28c2795724a.p2p --echo "hello world"
+
+python3 -m p2pd.demo --disable_upnp 1 --pnp_server 0,4,10.0.1.204,5300 --ip 10.0.1.230
+python3 -m p2pd.demo --disable_upnp 1 --pnp_server 0,4,10.0.1.204,5300 --ip 10.0.1.19
 """
 
 import asyncio
