@@ -37,7 +37,7 @@ async def connect_option(node, con_opts):
     
     pipe = await async_wrap_errors(
         get_pipe(),
-        timeout=10
+        timeout=20
     )
 
     try:

@@ -89,7 +89,7 @@ async def start_punching_process(nic, puncher, proc_pool=None):
                 accept_reverse_connect_from_punching_proc,
                 listen_sock
             ),
-            timeout=10
+            timeout=20
         )
         
 
@@ -101,6 +101,7 @@ async def start_punching_process(nic, puncher, proc_pool=None):
         return client_pipe
     except Exception as e:
         log_exception()
+        what_exception()
         print("error in start_punching_process:", e)
         raise
 

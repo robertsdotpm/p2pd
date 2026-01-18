@@ -136,12 +136,14 @@ class TraversalManager():
         """
         Edge-case where you're connecting to yourself.
         """
-        if msg.meta.pipe_id in self.plugins and not msg.meta.same_machine:
+        if msg.meta.pipe_id in self.plugins: # and not msg.meta.same_machine
             plugin = self.plugins.get(msg.meta.pipe_id, None)
         else:
             # Map getaddr message to returnaddr plugin handler.
+            """
             if isinstance(msg, GetAddr):
                 msg.meta.plugin_name = "return_addr"
+            """
 
             if isinstance(msg, ConMsg):
                 msg.meta.plugin_name = "direct_connect"

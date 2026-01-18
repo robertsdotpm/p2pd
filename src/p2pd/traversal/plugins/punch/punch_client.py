@@ -138,6 +138,8 @@ class PunchClient:
         # Limit max sleep if current host is far behind.
         if sleep_time > max_sleep:
             sleep_time = max_sleep
+
+        print("sleep until = ", sleep_time)
             
         # No sleep needed if far behind.
         if sleep_time > 0:

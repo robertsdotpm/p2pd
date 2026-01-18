@@ -123,14 +123,15 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         if out: cout("\tLoading MQTT clients...")
 
         nic_afs = get_nic_for_af(node.ifs)
+        del nic_afs[IP6] # TODO -- limit to one for testing
         for af in nic_afs:
             nic = nic_afs[af]
             print(af)
             sig_pipes += await load_signal_pipes(
                 af, 
                 nic, 
-                node.node_id, # node.node_id
-                node.conf["sig_pipe_no"]
+                node.node_id, # node.node_id # TODO -- fixed to same seed for testing
+                1 or node.conf["sig_pipe_no"] # TODO -- limit to 1 for testing
             )
 
         print(sig_pipes)
@@ -260,7 +261,8 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
             node.punch_clients,
             node.sys_clock,
             node.pp_executor,
-        )
+        ),
+        "timeout": 20
     })
 
     return node

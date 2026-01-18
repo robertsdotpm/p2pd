@@ -59,6 +59,7 @@ class PunchPlugin(TraversalPlugin):
             # Case 2: Start a new NAT traversal exchange
             puncher, stuns = await self.setup_puncher_client(reply)
             if puncher is None:
+                print("alert puncher is none")
                 return # Abort if no STUN configuration is available
             
             # Setup predictions and start process waiter.
@@ -105,11 +106,13 @@ class PunchPlugin(TraversalPlugin):
         Determines the source/destination addresses and the decider IP, 
         creates a new PunchClient, and sets the coordinated time references.
         """
+        print("in setup punching client.")
         if_index = self.src_info["if_index"]
         stuns = self.stun_clients[self.af][if_index]
 
         # Skip if no STUN clients loaded.
         if not len(stuns):
+            print("no stun clients in setup puncher client.")
             return None, None
         
         # 1. Determine IP Addresses via Routing
@@ -140,6 +143,8 @@ class PunchPlugin(TraversalPlugin):
         timestamp = self.sys_clock.time()
         puncher.set_timestamp(timestamp)
 
+        print("using time stamp = ", timestamp + 10)
+
         if reply:
             # Use peer's synchronized NTP time
             punch_time = reply.payload.ntp
@@ -147,6 +152,7 @@ class PunchPlugin(TraversalPlugin):
             # Schedule for 10 seconds from now
             punch_time = timestamp + 10
             
+        
         puncher.set_punch_time(punch_time)
             
         # Return the new puncher and the STUN clients
