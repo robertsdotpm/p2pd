@@ -32,7 +32,7 @@ class Node(Daemon):
         
         # Main variables for the class.
         self.conf = conf
-        self.listen_ips = ip
+        self.listen_ips = norm_listen_ips(ip)
         self.listen_port = port
         self.ifs = ifs
 

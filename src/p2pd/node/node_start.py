@@ -79,7 +79,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Cryptography for authenticated messages.
     install_path = node.conf["install_path"] or get_aionetiface_install_root()
-    node.sk = load_signing_key(node.listen_port, install_path)
+    node.sk = load_signing_key(node.listen_ips, node.listen_port, install_path)
     node.vk = node.sk.verifying_key
     node.node_id = hashlib.sha256(
         node.vk.to_string("compressed")
@@ -129,7 +129,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
             sig_pipes += await load_signal_pipes(
                 af, 
                 nic, 
-                node.node_id,
+                node.node_id, # node.node_id
                 node.conf["sig_pipe_no"]
             )
 
@@ -234,6 +234,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Used for sending signaling messasges to other nodes.
     node.signal_router = SignalRouter(
+        node.ifs,
         node.sys_clock.time,
         node.node_id,
         node.addr_bytes,

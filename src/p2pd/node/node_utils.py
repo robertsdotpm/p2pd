@@ -7,8 +7,23 @@ import pathlib
 from aionetiface import *
 from ..traversal.plugins.punch.punch_defs import PUNCH_CONF
 
+def norm_listen_ips(listen_ips):
+    # Skip if empty.
+    if not listen_ips:
+        return listen_ips
 
-def load_signing_key(listen_port, install_path):
+    # Norm the IPs.
+    listen_ips = [ip_norm(ip) for ip in listen_ips]
+
+    # Remove duplicates.
+    listen_ips = list(set(listen_ips))
+
+    # Sort it deterministically.
+    listen_ips = sorted(listen_ips)
+
+    return listen_ips
+
+def load_signing_key(listen_ips, listen_port, install_path):
     # Make install dir if needed.
     pathlib.Path(install_path).mkdir(
         parents=True,
@@ -16,10 +31,12 @@ def load_signing_key(listen_port, install_path):
     )
 
     # Store cryptographic random bytes here for ECDSA ident.
+    listen_str = ",".join(listen_ips) + ":" + str(listen_port)
+    listen_hash = hash160(listen_str) # hex
     sk_path = os.path.realpath(
         os.path.join(
             install_path,
-            fstr("SECRET_KEY_DONT_SHARE_{0}.hex", (listen_port,))
+            fstr("PRIV_KEY_DONT_SHARE_{0}.hex", (listen_hash,))
         )
     )
 
