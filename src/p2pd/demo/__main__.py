@@ -12,6 +12,7 @@ python3 -m p2pd.demo --disable_upnp 1 --pnp_server 0,4,10.0.1.204,5300 --ip 10.0
 
 import asyncio
 import signal
+import os
 from ..do_imports import *
 from .defs import *
 from .cmd_arg_defs import *
@@ -24,6 +25,7 @@ from ..node.node_defs import *
 async def setup_node():
     # Display program banner.
     cout(PROGRAM_BANNER)
+    cout("pid = " + str(os.getpid()))
 
     # Load interfaces on machine.
     cout("Loading networking interfaces...")
