@@ -84,23 +84,9 @@ class PunchPlugin(TraversalPlugin):
 
     # ... (other methods, including delayed_start_punching_proc) ...
     async def delayed_start_punching_proc(self, nic, puncher):
-        # Wait for reply and return immediately as it's received.
-        """
-        await asyncio.wait_for(
-            self.has_reply.wait(),
-            3
-        )
-        """
-
-        try:
-            await asyncio.wait_for(
-                self.has_reply.wait(),
-                6
-            )
-        except Exception:
-            what_exception()
-
-        await asyncio.sleep(3)
+        # Wait for recv to send updated mappings if any.
+        # Sender also has to wait to stay in sync.
+        await asyncio.sleep(2)
         print("delay start punching proc.")
 
         bad = find_unpicklable(puncher)
@@ -179,6 +165,9 @@ class PunchPlugin(TraversalPlugin):
     
         # Set punch time.
         puncher.set_punch_time(punch_time)
+
+        # Deterministic predictions based on boundary math.
+        puncher.add_port_allocator(boundary_port_alloc)
             
         # Return the new puncher and the STUN clients
         return puncher, stuns
@@ -218,7 +207,7 @@ class PunchPlugin(TraversalPlugin):
 
         # 2. Calculate Next Port Allocations (Core NAT Prediction Logic)
         port_alloc, is_end = await self.nat_alloc.port_alloc(recv_mappings)
-        puncher.port_allocs = port_alloc
+        puncher.port_allocs += port_alloc
         print(puncher.port_allocs)
         
         # 3. Protocol Termination Check

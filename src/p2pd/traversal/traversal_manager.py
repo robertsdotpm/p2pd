@@ -84,7 +84,7 @@ class TraversalManager():
                 plugin.has_reply.set()
 
             # Sets self.interface based on if_index for dest.
-            reply.load_if_extra(self.nics)
+            reply.routing.load_if_extra(self.nics)
 
         print("in run plugin")
         await async_wrap_errors(
