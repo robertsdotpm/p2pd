@@ -104,6 +104,7 @@ async def setup_punch_coordination(node, sys_clock=None):
     node.max_punchers, node.pp_executor = await get_pp_executors()
     node.sys_clock = sys_clock
 
+
 def wait_for_one_remaining(sockets, timeout=5.0):
     """
     Waits up to 5 seconds for all but one socket to close.
@@ -111,31 +112,39 @@ def wait_for_one_remaining(sockets, timeout=5.0):
     """
     sel = selectors.DefaultSelector()
     remaining = set(sockets)
-    
+
     for s in sockets:
+        s.setblocking(False)
         sel.register(s, selectors.EVENT_READ)
 
     deadline = time.monotonic() + timeout
     while len(remaining) > 1:
         wait_time = deadline - time.monotonic()
         if wait_time <= 0:
-            break # Hard stop at 5 seconds
+            break  # Hard stop at 5 seconds
 
         events = sel.select(timeout=wait_time)
         for key, _ in events:
             s = key.fileobj
             try:
-                # Peek to see if it's empty (closed) without consuming data
-                if s.recv(1, socket.MSG_PEEK) == b"":
+                # recv() returning b"" is the canonical EOF signal
+                data = s.recv(4096)
+                if data == b"":
                     remaining.discard(s)
-                    sel.unregister(s)
+                    try:
+                        sel.unregister(s)
+                    except Exception:
+                        pass
             except Exception:
                 # Any error (connection reset, etc) counts as "gone"
                 remaining.discard(s)
-                sel.unregister(s)
+                try:
+                    sel.unregister(s)
+                except Exception:
+                    pass
 
     sel.close()
-    
+
     # Return the winner, or None if everyone died/timed out
     return list(remaining)[0] if remaining else None
 
@@ -145,9 +154,10 @@ def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
         return None
 
     our_ip = our_ip or sock_list[0].getsockname()[0]
+    winner = None
 
     # Master side closes all others immediately
-    if hash(our_ip) > hash(their_ip):
+    if our_ip > their_ip:
         winner = sock_list.pop()
         for loser in sock_list:
             try:

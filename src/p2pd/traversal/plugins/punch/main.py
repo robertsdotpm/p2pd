@@ -206,6 +206,7 @@ class PunchPlugin(TraversalPlugin):
             assert(recv_mappings)
 
         # 2. Calculate Next Port Allocations (Core NAT Prediction Logic)
+        print("recv mappings = ", recv_mappings)
         port_alloc, is_end = await self.nat_alloc.port_alloc(recv_mappings)
         puncher.port_allocs += port_alloc
         print(puncher.port_allocs)
