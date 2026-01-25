@@ -148,17 +148,54 @@ def wait_for_one_remaining(sockets, timeout=5.0):
     # Return the winner, or None if everyone died/timed out
     return list(remaining)[0] if remaining else None
 
+def wait_for_first_with_data(sockets, timeout=5.0):
+    """
+    Wait until one of the sockets has data, then read and return it.
+    Returns (socket, data) or (None, None) if timed out.
+    """
+    sel = selectors.DefaultSelector()
+
+    for s in sockets:
+        s.setblocking(False)
+        sel.register(s, selectors.EVENT_READ)
+
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            wait_time = deadline - time.monotonic()
+            if wait_time <= 0:
+                return None, None
+
+            events = sel.select(timeout=wait_time)
+            if not events:
+                return None, None
+
+            for key, _ in events:
+                s = key.fileobj
+                try:
+                    data = s.recv(1)
+                    if data:  # data available
+                        return s
+                    # else: recv returned 0 → socket closed
+                    # let caller handle it if needed
+                except BlockingIOError:
+                    continue  # not actually ready
+                except Exception:
+                    continue  # ignore closed/reset sockets
+    finally:
+        sel.close()
+
 # In a LAN = lan ip, or for WAN targets = wan IPs.
 def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
-    if not sock_list:
+    # No open sockets.
+    if not sock_list: 
         return None
 
-    our_ip = our_ip or sock_list[0].getsockname()[0]
-    winner = None
-
     # Master side closes all others immediately
+    our_ip = our_ip or sock_list[0].getsockname()[0]
     if our_ip > their_ip:
         winner = sock_list.pop()
+        winner.send(b"$")
         for loser in sock_list:
             try:
                 loser.shutdown(socket.SHUT_RDWR)
@@ -168,6 +205,6 @@ def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
             loser.close()
     else:
         # Non-master side waits for the first completed connection
-        winner = wait_for_one_remaining(sock_list)
+        winner = wait_for_first_with_data(sock_list)
 
     return winner
