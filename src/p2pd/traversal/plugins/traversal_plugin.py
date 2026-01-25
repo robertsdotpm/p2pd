@@ -5,6 +5,7 @@ class TraversalPlugin():
     def __init__(self):
         self.result = asyncio.Future()
         self.pipe_id = to_s(rand_plain(15))
+        self.has_reply = asyncio.Event()
 
     def set_addrs(self, src_map, dest_map):
         self.src_map = src_map
@@ -24,7 +25,7 @@ class TraversalPlugin():
                 raise Exception("Invalid NIC loaded for plugin.")
         """
             
-    def set_context(self, route_type, same_machine, set_bind, timeout=4):
+    def set_context(self, route_type, same_machine, set_bind, timeout):
         self.route_type = route_type
         self.same_machine = same_machine
         self.set_bind = set_bind

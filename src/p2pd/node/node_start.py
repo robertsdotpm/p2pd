@@ -114,8 +114,6 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
             cout(buf)
 
     print(node.stun_clients)
-    
-
 
     # MQTT server offsets for signal protocol.
     sig_pipes = []
@@ -262,7 +260,9 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
             node.sys_clock,
             node.pp_executor,
         ),
-        "timeout": 20
+        "timeout": 40
     })
+
+    print(node.traversal.plugin_loaders)
 
     return node

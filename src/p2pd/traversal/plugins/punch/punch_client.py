@@ -55,7 +55,7 @@ from .utility.punch_utils import *
 # TODO: Could even use ARP to find the other node in a LAN
 # running the same tool so the dest IP doesn't have to be specified.
 class PunchClient:
-    def __init__(self, dest_ip, src_ip=None, our_ip=None, nic_id=None):
+    def __init__(self, dest_ip, src_ip=None, our_ip=None, nic_id=None, max_sleep=10):
         # Fallback to IP4
         self.af = socket.AF_INET
         if ":" in dest_ip:
@@ -85,6 +85,7 @@ class PunchClient:
         # Default to inaccurate system clock.
         self.timestamp = int(time.time())
         self.start_time = time.monotonic()
+        self.max_sleep = max_sleep
 
         # Sanity check -- don't punch to self.
         if our_ip and 0: # TODO: disabled
@@ -125,7 +126,7 @@ class PunchClient:
     def set_punch_time(self, punch_time):
         self.punch_time = punch_time
 
-    def sleep_until(self, max_sleep=MAX_SLEEP):
+    def sleep_until(self):
         # Time elapsed in seconds since first starting.
         elapsed = time.monotonic() - self.start_time
 
@@ -136,8 +137,8 @@ class PunchClient:
         sleep_time = max(0, self.punch_time - elapsed_abs)
         
         # Limit max sleep if current host is far behind.
-        if sleep_time > max_sleep:
-            sleep_time = max_sleep
+        if sleep_time > self.max_sleep:
+            sleep_time = self.max_sleep
 
         print("sleep until = ", sleep_time)
             

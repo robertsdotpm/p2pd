@@ -79,6 +79,11 @@ class TraversalManager():
 
         # Set nic fields.
         if reply:
+            # Set an event if there's a reply.
+            if not plugin.has_reply.is_set():
+                plugin.has_reply.set()
+
+            # Sets self.interface based on if_index for dest.
             reply.load_if_extra(self.nics)
 
         print("in run plugin")

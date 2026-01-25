@@ -9,6 +9,8 @@ from .port_allocators.nat_predict_alloc import *
 from .punch_process import *
 from ..traversal_plugin import TraversalPlugin
 
+
+
 def find_unpicklable(obj, path="obj", seen=None):
     if seen is None:
         seen = set()
@@ -82,7 +84,22 @@ class PunchPlugin(TraversalPlugin):
 
     # ... (other methods, including delayed_start_punching_proc) ...
     async def delayed_start_punching_proc(self, nic, puncher):
-        # Give time for updated mappings.
+        # Wait for reply and return immediately as it's received.
+        """
+        await asyncio.wait_for(
+            self.has_reply.wait(),
+            3
+        )
+        """
+
+        try:
+            await asyncio.wait_for(
+                self.has_reply.wait(),
+                6
+            )
+        except Exception:
+            what_exception()
+
         await asyncio.sleep(3)
         print("delay start punching proc.")
 
@@ -137,22 +154,30 @@ class PunchPlugin(TraversalPlugin):
         print("nic id = ", self.nic.id)
         print("src ip = ", src_ip)
         print("decider ip = ", decider_ip)
-        puncher = PunchClient(dest_ip, src_ip, decider_ip, self.nic.id)
+        puncher = PunchClient(
+            dest_ip, 
+            src_ip, 
+            decider_ip, 
+            self.nic.id,
+            max_sleep=PUNCH_MAX_SLEEP
+        )
 
         # 4. Set Coordinated Time References
         timestamp = self.sys_clock.time()
         puncher.set_timestamp(timestamp)
+        print("using time stamp = ", timestamp)
 
-        print("using time stamp = ", timestamp + 10)
-
+        """
         if reply:
             # Use peer's synchronized NTP time
             punch_time = reply.payload.ntp
         else:
-            # Schedule for 10 seconds from now
-            punch_time = timestamp + 10
-            
-        
+        """
+
+        # Calculate a future timestamp to use as the punch time.
+        _, punch_time = compute_rendezvous(timestamp)
+    
+        # Set punch time.
         puncher.set_punch_time(punch_time)
             
         # Return the new puncher and the STUN clients

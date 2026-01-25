@@ -89,7 +89,7 @@ async def start_punching_process(nic, puncher, proc_pool=None):
                 accept_reverse_connect_from_punching_proc,
                 listen_sock
             ),
-            timeout=20
+            timeout=40
         )
         
 

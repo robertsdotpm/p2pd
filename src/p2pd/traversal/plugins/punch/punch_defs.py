@@ -15,6 +15,7 @@ RECIPIENT = 2
 
 # Number of seconds in the future from an NTP time
 # for hole punching to occur.
+PUNCH_MAX_SLEEP = 3
 NTP_MEET_STEP = 6
 
 # Fine tune various network settings.
