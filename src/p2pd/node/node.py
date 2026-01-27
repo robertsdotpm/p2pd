@@ -37,23 +37,39 @@ class Node(Daemon):
         self.ifs = ifs
 
         # If listen IPs are set then route pool is restricted to just those IPs.
+        print("ip = ", ip)
+        print("listen ips = ", self.listen_ips)
+
+        # this really needs to be a function
         for nic in self.ifs:
             rp = {IP4: [], IP6: []}
             for listen_ip in self.listen_ips:
                 listen_ipr = IPR(listen_ip)
                 for nic_ipr in nic:
-                    if nic_ipr != listen_ipr:
+                    print("nic ipr = ", nic_ipr)
+                    print(nic_ipr, nic_ipr.route.link_locals)
+                    if listen_ipr not in [nic_ipr] + nic_ipr.route.link_locals:
                         continue
 
-                    route = Route(nic_ipr.af, [listen_ipr], nic_ipr.route.ext_ips, nic)
+                    # route is not constructed correctly for ipv6
+                    route = Route(
+                        nic_ipr.af, 
+                        [listen_ipr], 
+                        nic_ipr.route.ext_ips, 
+                        nic
+                    )
+
                     route.link_locals = nic_ipr.route.link_locals
                     rp[route.af].append(route)
 
-            print("rp = ", rp)
+
             for af in (IP4, IP6):
                 if rp[af]:
                     link_locals = [] if af == IP4 else rp[af][0].link_locals
                     nic.rp[af] = RoutePool(rp[af], link_locals)
+
+            
+            print(nic.rp[IP6][0])
 
         # Handlers for the node protocol.
         self.msg_cbs = []

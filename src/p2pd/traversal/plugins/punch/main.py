@@ -209,7 +209,7 @@ class PunchPlugin(TraversalPlugin):
         print("recv mappings = ", recv_mappings)
         port_alloc, is_end = await self.nat_alloc.port_alloc(recv_mappings)
         puncher.port_allocs += port_alloc
-        print(puncher.port_allocs)
+        #print(puncher.port_allocs)
         
         # 3. Protocol Termination Check
         if is_end == 1:
