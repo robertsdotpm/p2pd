@@ -40,36 +40,12 @@ class Node(Daemon):
         print("ip = ", ip)
         print("listen ips = ", self.listen_ips)
 
-        # this really needs to be a function
-        for nic in self.ifs:
-            rp = {IP4: [], IP6: []}
-            for listen_ip in self.listen_ips:
-                listen_ipr = IPR(listen_ip)
-                for nic_ipr in nic:
-                    print("nic ipr = ", nic_ipr)
-                    print(nic_ipr, nic_ipr.route.link_locals)
-                    if listen_ipr not in [nic_ipr] + nic_ipr.route.link_locals:
-                        continue
-
-                    # route is not constructed correctly for ipv6
-                    route = Route(
-                        nic_ipr.af, 
-                        [listen_ipr], 
-                        nic_ipr.route.ext_ips, 
-                        nic
-                    )
-
-                    route.link_locals = nic_ipr.route.link_locals
-                    rp[route.af].append(route)
-
-
-            for af in (IP4, IP6):
-                if rp[af]:
-                    link_locals = [] if af == IP4 else rp[af][0].link_locals
-                    nic.rp[af] = RoutePool(rp[af], link_locals)
-
-            
-            print(nic.rp[IP6][0])
+        # Listen on arbitrary IPs (may be WAN, LAN, or link-local.
+        if self.listen_ips:
+            by_nic = sort_ips_by_nic(self.listen_ips, self.ifs)
+            for nic in self.ifs:
+                if by_nic[nic.id]:
+                    nic.rp = route_pool_from_ips(by_nic[nic.id], nic)
 
         # Handlers for the node protocol.
         self.msg_cbs = []
