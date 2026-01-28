@@ -37,9 +37,12 @@ def setup_engine(af, port_allocs, src_ip, nic_id):
 
     # Register listening sockets for events.
     sel = selectors.DefaultSelector()
+
+    """
     for listen_info in listen_infos:
         _, s = listen_info
         sel.register(s, selectors.EVENT_READ)
+    """
 
     return (listen_infos, pre_connect_infos, sel)
 
