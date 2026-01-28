@@ -116,6 +116,7 @@ def tcp_selector_punch_engine(af, nic_id, port_allocs, src_ip, dest_ip, f_sleep_
     # Make outbound connections to the designated ports.
     print("dest ip = ", dest_ip)
     connect_infos = connect_on_tcp_sockets(sel, pre_connect_infos, dest_ip)
+    print("connect infos = ", connect_infos)
 
     # Return set of successful connections (if any.)
     inbound, outbound = socket_event_monitor(sel)
@@ -130,5 +131,5 @@ def tcp_selector_punch_engine(af, nic_id, port_allocs, src_ip, dest_ip, f_sleep_
     # TODO: Not too sure this code is ideal
     # Might need to just send a header and look for it on the other side.
     sock = choose_winning_tcp_sock(dest_ip, sock_list, our_ip)
-    
+
     return sock
