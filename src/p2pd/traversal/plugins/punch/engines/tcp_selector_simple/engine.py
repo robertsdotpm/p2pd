@@ -125,8 +125,10 @@ def tcp_selector_punch_engine(af, nic_id, port_allocs, src_ip, dest_ip, f_sleep_
 
     # chosoe sock(our_wan, sock.getpeer..)
     sock_list = list(inbound) + list(outbound)
+    print("sock list = ", sock_list)
 
     # TODO: Not too sure this code is ideal
     # Might need to just send a header and look for it on the other side.
     sock = choose_winning_tcp_sock(dest_ip, sock_list, our_ip)
+    
     return sock
