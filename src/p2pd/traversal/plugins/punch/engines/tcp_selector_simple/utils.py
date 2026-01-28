@@ -1,6 +1,7 @@
 import socket
 import time
 import selectors
+import errno
 from ...punch_defs import *
 from aionetiface.net.bind.bind_rules import binder_sync
 from aionetiface.net.net_utils import ip_strip_if
@@ -54,20 +55,17 @@ def listen_on_tcp_sockets(bound_infos):
     return listen_infos
 
 def connect_on_tcp_sockets(sel, bound_infos, dest_ip):
-    connect_infos = []
-    for bound_info in bound_infos:  
-        p, s = bound_info
-        try:
-            # Initiate non-blocking connect (the "punch")
-            # TODO: ipv6?
-            s.connect_ex((dest_ip, p.dest_port))
-            connect_infos.append((p, s))
-        except OSError as e:
-            s.close()
-            # print(f"Could not bind/connect outbound on port {port}: {e}")
-            continue
+    start = time.monotonic()
+    end = start + 5
+    while time.monotonic() < end:
+        for p, s in bound_infos:
+            try:
+                err = s.connect_ex((dest_ip, p.dest_port))
+            except OSError:
+                pass
 
-    return connect_infos
+        # High-frequency pressure keeps NAT mapping and races peer
+        time.sleep(0.01)   # 10ms is typical sweet spot
 
 def sleep_until(punch_time, f_timer, max_sleep=10):
     now = f_timer()

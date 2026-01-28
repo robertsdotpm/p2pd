@@ -87,7 +87,7 @@ def tcp_selector_punch_engine(af, nic_id, port_allocs, src_ip, dest_ip, f_sleep_
     print("dest ip = ", dest_ip)
 
     # Initiate simultaneous open
-    connect_infos = connect_on_tcp_sockets(sel, pre_connect_infos, dest_ip)
+    connect_on_tcp_sockets(sel, pre_connect_infos, dest_ip)
 
     # Immediately monitor, no blind sleep
     successful = socket_event_monitor(sel)
