@@ -67,8 +67,6 @@ def connect_on_tcp_sockets(sel, bound_infos, dest_ip):
             # print(f"Could not bind/connect outbound on port {port}: {e}")
             continue
 
-        sel.register(s, selectors.EVENT_WRITE)
-
     return connect_infos
 
 def sleep_until(punch_time, f_timer, max_sleep=10):

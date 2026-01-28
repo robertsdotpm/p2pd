@@ -16,7 +16,7 @@
 
 import selectors
 import socket
-import os
+import time
 from .utils import *
 from ...utility.punch_utils import *
 
@@ -24,115 +24,80 @@ CONNECT_TIMEOUT = 5.0
 RETRY_INTERVAL = 0.05
 
 def setup_engine(af, port_allocs, src_ip, nic_id):
-    # The same port is reused for listen() and connect.
-    #pre_listen_infos = bind_tcp_sockets(af, nic_id, port_allocs, src_ip)
-    #listen_infos = listen_on_tcp_sockets(pre_listen_infos)
-    """
-    if not listen_infos:
-        raise Exception("Engine failed to listen at all.")
-        """
-
-    # Reuse the same listen ports for outbound connects.
-    # Hence the cryptic socket options.
-    #port_allocs = [info[0] for info in listen_infos]
+    # TCP hole punching uses ONE socket per port.
+    # No listen sockets. Each socket will perform active open only.
     pre_connect_infos = bind_tcp_sockets(af, nic_id, port_allocs, src_ip)
 
-    # Register listening sockets for events.
     sel = selectors.DefaultSelector()
 
-    """
-    for listen_info in listen_infos:
-        _, s = listen_info
-        sel.register(s, selectors.EVENT_READ)
-    """
+    # Register all sockets before connect so we do not miss early SYN/SYN-ACK
+    for _, s in pre_connect_infos:
+        s.setblocking(False)
+        sel.register(s, selectors.EVENT_WRITE | selectors.EVENT_READ)
 
     return (pre_connect_infos, sel)
 
 def socket_event_monitor(sel):
-    # Debouncing sets
-    outbound = set()
+    successful = set()
 
-    # This set stores the successful listener sockets
-    inbound = set() 
-
-    # When to stop checking for events.
     start_time = time.monotonic()
     end = start_time + CONNECT_TIMEOUT
+
     while time.monotonic() < end:
-        # Check for events on both listeners (read) and connectors (write)
         events = sel.select(timeout=RETRY_INTERVAL)
+
         for key, mask in events:
             sock = key.fileobj
-            
-            # --- Inbound accept events (Listener Sockets) ---
-            if mask & selectors.EVENT_READ:
-                # Check if this listener has already accepted a connection
-                if sock not in inbound:
-                    try:
-                        # Accept a new client socket from the listener.
-                        client, addr = sock.accept()
-                        client.setblocking(False)
 
-                        # Record the socket.
-                        inbound.add(client)
-
-                        # Close the initial server.
-                        sock.close()
-
-                        # Don't wait for any more read events.
-                        sel.unregister(sock)
-                    except Exception:
-                        pass # Ignore temporary errors
-
-            # --- Outbound connect events (Connector Sockets) ---
+            # WRITE means connect() completion path
             if mask & selectors.EVENT_WRITE:
-                if sock not in outbound:
-                    try:
-                        err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-                        if err == 0:
-                            # If we aren't truly connected, this throws OSError.
-                            sock.getpeername()
+                try:
+                    err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                    if err == 0:
+                        # Confirms TCP state reached ESTABLISHED
+                        sock.getpeername()
+                        successful.add(sock)
+                        sel.modify(sock, selectors.EVENT_READ)
+                except Exception:
+                    pass
 
-                            # Otherwise safe to record.
-                            outbound.add(sock)
+            # READ means either data or simultaneous-open completion traffic
+            if mask & selectors.EVENT_READ:
+                try:
+                    # Non-consuming probe
+                    data = sock.recv(1, socket.MSG_PEEK)
+                    if data:
+                        successful.add(sock)
+                except BlockingIOError:
+                    # No payload yet, but socket alive
+                    successful.add(sock)
+                except Exception:
+                    pass
 
-                            # Stop checking for connection completion
-                            sel.unregister(sock) 
-                        else:
-                            # Connection failed with error (e.g., ECONNREFUSED)
-                            pass
-                    except Exception:
-                        pass # Ignore exceptions during getsockopt
-
-    return (inbound, outbound,)
+    return successful
 
 def tcp_selector_punch_engine(af, nic_id, port_allocs, src_ip, dest_ip, f_sleep_until, our_ip):
     print("in engine")
 
-    # Create listen sockets, bound con socks, and register for selector events.
     pre_connect_infos, sel = setup_engine(af, port_allocs, src_ip, nic_id)
 
-    # Wait for synchronized punch time frame.
+    # Wait for synchronized punch time frame
     f_sleep_until()
 
-    # Make outbound connections to the designated ports.
     print("dest ip = ", dest_ip)
+
+    # Initiate simultaneous open
     connect_infos = connect_on_tcp_sockets(sel, pre_connect_infos, dest_ip)
-    time.sleep(4)
-    print("connect infos = ", connect_infos)
 
-    # Return set of successful connections (if any.)
-    inbound, outbound = socket_event_monitor(sel)
-    for con_set in (inbound, outbound):
-        print(con_set)
-        pass
+    # Immediately monitor, no blind sleep
+    successful = socket_event_monitor(sel)
 
-    # chosoe sock(our_wan, sock.getpeer..)
-    sock_list = list(inbound) + list(outbound)
+    print("successful = ", successful)
+
+    sock_list = list(successful)
     print("sock list = ", sock_list)
 
-    # TODO: Not too sure this code is ideal
-    # Might need to just send a header and look for it on the other side.
+    # Application-level validation should still be done after this
     sock = choose_winning_tcp_sock(dest_ip, sock_list, our_ip)
 
     return sock
