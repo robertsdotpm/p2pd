@@ -116,6 +116,7 @@ def tcp_selector_punch_engine(af, nic_id, port_allocs, src_ip, dest_ip, f_sleep_
     # Make outbound connections to the designated ports.
     print("dest ip = ", dest_ip)
     connect_infos = connect_on_tcp_sockets(sel, pre_connect_infos, dest_ip)
+    time.sleep(4)
     print("connect infos = ", connect_infos)
 
     # Return set of successful connections (if any.)
