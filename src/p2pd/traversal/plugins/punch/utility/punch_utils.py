@@ -164,11 +164,11 @@ def wait_for_first_with_data(sockets, timeout=5.0):
         while True:
             wait_time = deadline - time.monotonic()
             if wait_time <= 0:
-                return None, None
+                return None
 
             events = sel.select(timeout=wait_time)
             if not events:
-                return None, None
+                return None
 
             for key, _ in events:
                 s = key.fileobj

@@ -25,14 +25,16 @@ RETRY_INTERVAL = 0.05
 
 def setup_engine(af, port_allocs, src_ip, nic_id):
     # The same port is reused for listen() and connect.
-    pre_listen_infos = bind_tcp_sockets(af, nic_id, port_allocs, src_ip)
-    listen_infos = listen_on_tcp_sockets(pre_listen_infos)
+    #pre_listen_infos = bind_tcp_sockets(af, nic_id, port_allocs, src_ip)
+    #listen_infos = listen_on_tcp_sockets(pre_listen_infos)
+    """
     if not listen_infos:
         raise Exception("Engine failed to listen at all.")
+        """
 
     # Reuse the same listen ports for outbound connects.
     # Hence the cryptic socket options.
-    port_allocs = [info[0] for info in listen_infos]
+    #port_allocs = [info[0] for info in listen_infos]
     pre_connect_infos = bind_tcp_sockets(af, nic_id, port_allocs, src_ip)
 
     # Register listening sockets for events.
@@ -44,7 +46,7 @@ def setup_engine(af, port_allocs, src_ip, nic_id):
         sel.register(s, selectors.EVENT_READ)
     """
 
-    return (listen_infos, pre_connect_infos, sel)
+    return (pre_connect_infos, sel)
 
 def socket_event_monitor(sel):
     # Debouncing sets
@@ -108,7 +110,7 @@ def tcp_selector_punch_engine(af, nic_id, port_allocs, src_ip, dest_ip, f_sleep_
     print("in engine")
 
     # Create listen sockets, bound con socks, and register for selector events.
-    listen_infos, pre_connect_infos, sel = setup_engine(af, port_allocs, src_ip, nic_id)
+    pre_connect_infos, sel = setup_engine(af, port_allocs, src_ip, nic_id)
 
     # Wait for synchronized punch time frame.
     f_sleep_until()
