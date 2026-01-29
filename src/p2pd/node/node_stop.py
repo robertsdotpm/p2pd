@@ -34,8 +34,8 @@ async def shutdown_executor_with_timeout(executor, timeout=3):
 
 # Shutdown the node server and do cleanup.
 async def node_stop(node):
-    if not node.stop_node:
-        node.stop_node.set()
+    # Send stop signal (any amount of data.)
+    node.stop_writer.send(b"Meow")
 
     # Stop error logging thread.
     log(None)

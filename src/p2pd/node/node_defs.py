@@ -1,4 +1,5 @@
-import multiprocessing
+import socket
+import selectors
 
 NODE_PORT = 10001
 TRY_OVERLAP_EXTS = 1
@@ -11,7 +12,9 @@ NODE_ADDR_MAX_INTERFACES = 4
 # No more than n signal pipes to send signals to nodes.
 SIGNAL_PIPE_NO = 1 # TODO: change back to 3
 
-shut_down = multiprocessing.Event()
+# create socket pair
+stop_rw = socket.socketpair()
+stop_rw[0].setblocking(False)
 
 NODE_CONF = {
     "reuse_addr": False,

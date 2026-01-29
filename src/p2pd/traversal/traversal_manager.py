@@ -41,8 +41,8 @@ from .plugins.traversal_plugin import TraversalPlugin
 from ..protocol.signaling.signal_msgs import GetAddr, ConMsg
 
 class TraversalManager():
-    def __init__(self, stop_node, pipes={}, nics=[]):
-        self.stop_node = stop_node
+    def __init__(self, stop_reader, pipes={}, nics=[]):
+        self.stop_reader = stop_reader
         self.plugin_loaders = OrderedDict()
         self.plugins = {} # by pipe id
         self.pipes = pipes
@@ -103,7 +103,7 @@ class TraversalManager():
         else:
             plugin = plugin_class()
 
-        plugin.stop_node = self.stop_node
+        plugin.stop_reader = self.stop_reader
         self.plugins[plugin.pipe_id] = plugin
         print(plugin_loader)
         print(plugin)

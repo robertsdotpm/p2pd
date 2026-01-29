@@ -22,12 +22,20 @@ from ..vendor.machine_id import *
 
 # Main class for the P2P node server.
 class Node(Daemon):
-    def __init__(self, ifs=[], ip=[], port=NODE_PORT, stop_node=None, conf=NODE_CONF):
+    def __init__(self, ifs=[], ip=[], port=NODE_PORT, stop_rw=None, conf=NODE_CONF):
         super().__init__()
         conf = dict_child(conf, NET_CONF)
         self.__name__ = "P2PNode"
         self.install_path = conf["install_path"] or get_aionetiface_install_root()
-        self.stop_node = stop_node or multiprocessing.Event()
+
+        # Using simple sockets for cross-process signals.
+        if not stop_rw:
+            stop_rw = socket.socketpair()
+            stop_rw[0].setblocking(False)
+
+        if stop_rw:
+            self.stop_reader, self.stop_writer = stop_rw
+
         self.reachability = {IP4: {}, IP6: {}}
         
         # Main variables for the class.
@@ -72,7 +80,7 @@ class Node(Daemon):
         # Set on start.
         self.addr_bytes = None
         self.addr_futures = {}
-        self.traversal = TraversalManager(self.stop_node, self.pipes, self.ifs)
+        self.traversal = TraversalManager(self.stop_reader, self.pipes, self.ifs)
         self.traversal.install_plugin("direct_connect", {
             "class": DirectConnect
         })  

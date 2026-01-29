@@ -52,11 +52,12 @@ async def setup_node():
     display_ifs_loaded(ifs)
 
     # Main node class with chosen ifs and conf.
+    print(stop_rw)
     node = Node(
         ifs=ifs, 
         ip=args.ip, 
         port=args.port, 
-        stop_node=shut_down, 
+        stop_rw=stop_rw, 
         conf=demo_node_conf
     )
 

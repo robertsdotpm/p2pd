@@ -18,6 +18,11 @@ def sock_opt_voodoo(s):
     except Exception:
         pass # SO_REUSEPORT is not available on all systems
 
+    try:
+        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_SYNCNT, 2)
+    except Exception:
+        pass
+
 def bind_tcp_sockets(af, nic_id, port_allocs, src_ip=None):
     # Listen address.
     if src_ip:
