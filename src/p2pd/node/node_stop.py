@@ -1,4 +1,6 @@
 import asyncio
+import sys
+import multiprocessing
 from aionetiface import *
 from ..errors import AlreadyClosedError
 
@@ -74,7 +76,37 @@ async def node_stop(node):
         with a 3 second upper bound on shutdown blocking.
         """
         log("trying to shut down pp executor waiting.")
-        await shutdown_executor_with_timeout(node.pp_executor)
+
+        """
+        Attempts a clean shutdown, but forces termination after 'timeout' seconds.
+        """
+        # 1. Trigger the standard shutdown
+        if sys.version_info >= (3, 9):
+            node.pp_executor.shutdown(wait=True, cancel_futures=True)
+        else:
+            node.pp_executor.shutdown(wait=True)
+
+        # 2. Poll for active children until timeout
+        """
+        start_time = time.time()
+        while (time.time() - start_time) < 3:
+            active = multiprocessing.active_children()
+            if not active:
+                break
+
+            await asyncio.sleep(0.5)  # Yield to the event loop
+        """
+
+        # 3. Timeout reached: The "Hammer"
+        for child in multiprocessing.active_children():
+            # This sends SIGTERM on Linux and TerminateProcess on Windows
+            child.terminate()
+            
+        # Final check to ensure they are cleaned up
+        for child in multiprocessing.active_children():
+            child.join(timeout=0.5)
+
+        #await shutdown_executor_with_timeout(node.pp_executor)
         log("shutdown for pp executor done.")
 
     log("stop node () ending")

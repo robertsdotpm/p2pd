@@ -217,4 +217,5 @@ if __name__ == "__main__":
         log("keyboard interrupt clause reached.")
         print("ended")
     finally:
-        pass
+        # Force exit to prevent Windows from hanging on dead threads
+        sys.exit(0)
