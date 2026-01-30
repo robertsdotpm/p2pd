@@ -96,11 +96,19 @@ async def node_stop(node):
         """
         Attempts a clean shutdown, but forces termination after 'timeout' seconds.
         """
-        # Trigger the standard shutdown
+        # 1. Trigger the standard shutdown
         if sys.version_info >= (3, 9):
-            node.pp_executor.shutdown(wait=True, cancel_futures=True)
+            node.pp_executor.shutdown(wait=False, cancel_futures=True)
         else:
-            node.pp_executor.shutdown(wait=True)
+            node.pp_executor.shutdown(wait=False)
+
+        # 2. Poll for active children until timeout
+        start_time = time.time()
+        while (time.time() - start_time) < 3:
+            active = multiprocessing.active_children()
+            if not active:
+                return
+            await asyncio.sleep(0.5)  # Yield to the event loop
 
         # Timeout reached: forceful shutdown.
         for child in multiprocessing.active_children():
