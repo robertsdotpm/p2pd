@@ -37,8 +37,7 @@ async def add_echo_support(msg, client_tup, pipe):
                 await asyncio.sleep(0.1)
 
 
-            if not shut_down.is_set():
-                shut_down.set()
+            stop_rw[1].send(b"Clean shutdown.")
 
             return
 
@@ -188,7 +187,7 @@ async def choose_pathways(pathway):
     cout("Choose connection pathway:")
     cout("WAN: (e)xternal, LAN: (l)ocal")
     cout("Type menu to return.")
-    while not shut_down.is_set():
+    while not sock_has_data(stop_rw[0]):
         pathway = pathway or (await ainput("Enter for default (e): "))
         if not len(pathway):
             return EXT_BIND
@@ -212,7 +211,7 @@ async def choose_address_families(addr_type):
     cout("Address family priority:")
     cout("(4) IPv4, (6) IPv6")
     cout("Type menu to return.")
-    while not shut_down.is_set():
+    while not sock_has_data(stop_rw[0]):
         addr_type = addr_type or (await ainput("Enter for default (4): "))
         if not len(addr_type):
             return IP4
@@ -236,7 +235,7 @@ async def echo_client(pipe, echo_data):
     cout()
     cout("Basic echo protocol.")
     cout("Enter menu to return to menu.")
-    while not shut_down.is_set():
+    while not sock_has_data(stop_rw[0]):
         send_buf = echo_data or to_b(await ainput("Echo: "))
         if send_buf in (b"menu"):
             send_buf = b""

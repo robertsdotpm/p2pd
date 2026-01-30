@@ -148,7 +148,8 @@ class PunchPlugin(TraversalPlugin):
             src_ip, 
             decider_ip, 
             self.nic.id,
-            max_sleep=PUNCH_MAX_SLEEP
+            max_sleep=PUNCH_MAX_SLEEP,
+            same_machine=self.same_machine,
         )
 
         # 4. Set Coordinated Time References

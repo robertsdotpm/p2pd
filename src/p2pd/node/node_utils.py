@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import os
 import socket
+import signal
 from ecdsa import SigningKey, SECP256k1
 import pathlib
 from aionetiface import *
@@ -79,7 +80,7 @@ async def close_idle_pipes(node):
 
     floor_check = 300
     ceil_check = 7200
-    while not node.stop_node.is_set():
+    while not sock_has_data(node.stop_reader):
         # Recalculate abs_placement dynamically
         alloc_pcent = node.active_punchers / node.max_punchers
         num_space = ceil_check - floor_check
@@ -152,12 +153,23 @@ async def load_stun_clients(node, limit=USE_MAP_NO):
     for af, if_index, clients in results:
         node.stun_clients[af][if_index] = clients
 
+def worker_init():
+    """
+    This runs when each worker process starts.
+    We tell the worker to ignore SIGINT.
+    """
+    try:
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+    except Exception:
+        # Fallback for edge cases or embedded environments
+        pass
+
 async def get_pp_executors(workers=None):
     workers = workers or min(32, os.cpu_count() + 4)
     pp_executor = None
     #return 0, None
     try:
-        pp_executor = ProcessPoolExecutor(max_workers=workers)
+        pp_executor = ProcessPoolExecutor(max_workers=workers, initializer=worker_init)
     except asyncio.CancelledError:
         raise
     except Exception:

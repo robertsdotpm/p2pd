@@ -13,6 +13,7 @@ class ReturnAddrPlugin(TraversalPlugin):
         try:
             await self.signal_msg_sender(msg)
         except Exception:
+            print("ReturnAddrPlugin error in addr")
             what_exception()
 
         self.result.set_result("Done")

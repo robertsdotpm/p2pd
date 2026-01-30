@@ -55,7 +55,7 @@ from .utility.punch_utils import *
 # TODO: Could even use ARP to find the other node in a LAN
 # running the same tool so the dest IP doesn't have to be specified.
 class PunchClient:
-    def __init__(self, dest_ip, src_ip=None, our_ip=None, nic_id=None, max_sleep=10):
+    def __init__(self, dest_ip, src_ip=None, our_ip=None, nic_id=None, max_sleep=10, same_machine=False):
         # Fallback to IP4
         self.af = socket.AF_INET
         if ":" in dest_ip:
@@ -65,6 +65,7 @@ class PunchClient:
         self.src_ip = src_ip
         self.dest_ip = dest_ip
         self.our_ip = our_ip
+        self.same_machine = same_machine
 
         # NIC ID = name of a NIC or its number.
         # The value is needed mostly for IPv6.
@@ -168,7 +169,8 @@ class PunchClient:
             src_ip=self.src_ip,
             dest_ip=self.dest_ip,
             f_sleep_until=self.sleep_until,
-            our_ip=self.our_ip
+            our_ip=self.our_ip,
+            same_machine=self.same_machine
         )
 
 if __name__ == "__main__":
@@ -209,7 +211,7 @@ if __name__ == "__main__":
             print("future punch time = ", punch_time)
             print("Current ntp time = ", timestamp)
         except RuntimeError as e:
-            print(f"CRITICAL ERROR: {e}")
+            print("CRITICAL ERROR: ", e)
             sys.exit(1)
 
         # Default uses deterministic ports from NTP boundaries.

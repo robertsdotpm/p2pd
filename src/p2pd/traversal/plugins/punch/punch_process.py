@@ -10,6 +10,7 @@ punched sock <--> reverse con <-->  listen socket
 
 import multiprocessing as mp
 import socket
+import signal
 from multiprocessing.reduction import send_handle, recv_handle
 import os
 import asyncio
@@ -20,6 +21,8 @@ from ....node.node_defs import *
 from .engines.tcp_selector_simple.engine import *
 from aionetiface.net.selector_proxy import selector_proxy
 
+
+
 """
 Punching is done in its own process.
 The process returns an open socket and Python
@@ -28,14 +31,22 @@ This is the intention and not a bug!
 This code disables that warning.
 """
 def punching_process_entry(puncher, listening_tup, stop_reader):
-    print("punching proc entry")
     try:
+        print("punching proc entry")
+
         # New punched TCP sock to destination.
         punched_sock = puncher.run_engine(tcp_selector_punch_engine)
+        if not punched_sock:
+            log("Unable to punch hole with tcp puncher engine.")
+            return
 
         # Make reverse connect to listen server in main process.
         # Handles passing messages between the punch sock <--> reverse con.
         selector_proxy(punched_sock, listening_tup, stop_reader)
+    except KeyboardInterrupt:
+        # On Windows, sometimes the signal still gets through.
+        # Catching it here ensures the worker dies silently.
+        pass
     except Exception:
         log_exception()
 
@@ -70,14 +81,16 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
         args = (puncher, listening_tup, stop_reader)
         print("punch proc args = ", args)
         print("proc pool = ", proc_pool)
-
-
         print("before run in ex")
-        loop.run_in_executor(
-            proc_pool, 
-            punching_process_entry,
-            *args
-        )
+
+        #with proc_pool as executor:
+        try:
+            loop.run_in_executor(proc_pool, punching_process_entry, *args)
+        except asyncio.CancelledError:
+            print("\nMain task cancelled, shutting down executor...")
+            # The 'with' block will automatically call executor.shutdown(wait=True)
+            raise
+
         print("after run in exec")
 
         # Wait for the reverse connect client sock on the listen server.
@@ -103,7 +116,7 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
         log_exception()
         what_exception()
         print("error in start_punching_process:", e)
-        raise
+        #raise
 
 async def workspace():
     return

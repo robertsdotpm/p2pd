@@ -32,6 +32,7 @@ class Node(Daemon):
         if not stop_rw:
             stop_rw = socket.socketpair()
             stop_rw[0].setblocking(False)
+            stop_rw[1].setblocking(True)
 
         if stop_rw:
             self.stop_reader, self.stop_writer = stop_rw
@@ -148,9 +149,6 @@ class Node(Daemon):
         return self
     
     async def close(self):
-        if not shut_down.is_set():
-            shut_down.set()
-            
         await node_stop(self)
     
     def __await__(self):

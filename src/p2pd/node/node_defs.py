@@ -15,6 +15,7 @@ SIGNAL_PIPE_NO = 1 # TODO: change back to 3
 # create socket pair
 stop_rw = socket.socketpair()
 stop_rw[0].setblocking(False)
+stop_rw[1].setblocking(True)
 
 NODE_CONF = {
     "reuse_addr": False,

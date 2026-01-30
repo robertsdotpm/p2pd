@@ -108,7 +108,7 @@ async def run_node_loop(nodes, ifs, nick):
 
     # Show menu and choose option.
     con_opts = (last_addr, echo_data, cmd_opts,)
-    while not shut_down.is_set():
+    while not sock_has_data(stop_rw[0]):
         try:
             # Show menu choices.
             cout(MENU_BANNER)
@@ -137,11 +137,14 @@ Also waits for close events and handles cleanup.
 """
 async def main():
     # Catch process exit signals (not supported on win32.)
+    nodes = []
     if sys.platform != "win32":
         # Caught properly by async_run and wrapped catch.
         def set_shut_down():
-            if not shut_down.is_set():
-                shut_down.set()
+            sock_has_data(stop_rw[1]).send(b"Shut down.")
+            nodes[0].pp_executor.shutdown(wait=False)
+            nodes[0].pp_executor = None
+
 
         # Install SIGTERM handler.
         loop = asyncio.get_event_loop()
@@ -161,7 +164,6 @@ async def main():
             print()
 
     # Start the program loop.
-    nodes = []
     try:
         # Setup node
         start_time = int(time.time())
@@ -214,3 +216,5 @@ if __name__ == "__main__":
         print("keyboard interrupt")
         log("keyboard interrupt clause reached.")
         print("ended")
+    finally:
+        pass

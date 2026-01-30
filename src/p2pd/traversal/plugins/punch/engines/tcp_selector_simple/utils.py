@@ -18,10 +18,12 @@ def sock_opt_voodoo(s):
     except Exception:
         pass # SO_REUSEPORT is not available on all systems
 
+    """
     try:
         s.setsockopt(socket.IPPROTO_TCP, socket.TCP_SYNCNT, 2)
     except Exception:
         pass
+    """
 
 def bind_tcp_sockets(af, nic_id, port_allocs, src_ip=None):
     # Listen address.
@@ -59,7 +61,7 @@ def listen_on_tcp_sockets(bound_infos):
 
     return listen_infos
 
-def connect_on_tcp_sockets(sel, bound_infos, dest_ip):
+def connect_on_tcp_sockets(same_machine, bound_infos, dest_ip):
     start = time.monotonic()
     end = start + 5
     while time.monotonic() < end:
@@ -70,7 +72,15 @@ def connect_on_tcp_sockets(sel, bound_infos, dest_ip):
                 pass
 
         # High-frequency pressure keeps NAT mapping and races peer
-        time.sleep(0.01)   # 10ms is typical sweet spot
+        if not same_machine:
+            # TODO -- what works best for WAN
+            """
+            0 -- yield to kernel
+            n -- another micro value?
+            x -- based on rtt?
+            ?
+            """
+            time.sleep(0.01)   # 10ms is typical sweet spot
 
 def sleep_until(punch_time, f_timer, max_sleep=10):
     now = f_timer()
