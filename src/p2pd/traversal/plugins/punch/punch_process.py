@@ -51,11 +51,16 @@ def punching_process_entry(puncher, listening_tup, stop_reader):
         log_exception()
 
 def accept_reverse_connect_from_punching_proc(listen_sock):
-    listen_sock.setblocking(1)
-    listen_sock.listen(1)
-    client_socket, _ = listen_sock.accept()
-    listen_sock.close()
-    return client_socket
+    with listen_sock:
+        listen_sock.setblocking(1)
+        listen_sock.listen(1)
+        
+        # Accept the connection
+        client_socket, _ = listen_sock.accept()
+        
+        # The listening socket closes automatically 
+        # when we exit this block
+        return client_socket
 
 async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
     loop = asyncio.get_event_loop()
@@ -96,15 +101,22 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
         # Wait for the reverse connect client sock on the listen server.
         # Note: this uses threads and not processes.
         #client_sock = accept_reverse_connect_from_punching_proc(listen_sock)
-        client_sock = await asyncio.wait_for(
-            loop.run_in_executor(
-                None, # Uses threads!
-                accept_reverse_connect_from_punching_proc,
-                listen_sock
-            ),
-            timeout=40
-        )
-        
+        client_sock = None
+        try:
+            client_sock = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None, # Uses threads!
+                    accept_reverse_connect_from_punching_proc,
+                    listen_sock
+                ),
+                timeout=40
+            )
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            log("Client pipe from accept reverse cancel or timeout")
+            if client_sock: 
+                client_sock.close()
+
+            return 
 
         # Wrap client sock in a pipe.
         client_pipe = await sock_to_pipe(client_sock, nic)

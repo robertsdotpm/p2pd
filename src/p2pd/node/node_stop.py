@@ -42,11 +42,24 @@ async def node_stop(node):
     # Stop error logging thread.
     log(None)
 
+    # Close all pipes stored in plugins.
+    for pipe_id in node.traversal.plugins:
+        plugin = node.traversal.plugins[pipe_id]
+        result = plugin.result
+        if isinstance(result, asyncio.Future):
+            if result.done():
+                pipe = result.result()
+                if hasattr(pipe, "close"):
+                    try:
+                        await pipe.close()
+                    except Exception:
+                        pass
+
     # Close other pipes.
     pipe_lists = [
         node.signal_pipes,
         node.turn_clients,
-        node.pipes,
+        #node.pipes,
     ]
 
     # For all active pipes, attempt to close them.
@@ -68,6 +81,9 @@ async def node_stop(node):
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
 
+    # Stop node server.
+    await super(node.__class__, node).close()
+
     # Try close the multiprocess manager.
     if node.pp_executor:
         """
@@ -80,24 +96,13 @@ async def node_stop(node):
         """
         Attempts a clean shutdown, but forces termination after 'timeout' seconds.
         """
-        # 1. Trigger the standard shutdown
+        # Trigger the standard shutdown
         if sys.version_info >= (3, 9):
             node.pp_executor.shutdown(wait=True, cancel_futures=True)
         else:
             node.pp_executor.shutdown(wait=True)
 
-        # 2. Poll for active children until timeout
-        """
-        start_time = time.time()
-        while (time.time() - start_time) < 3:
-            active = multiprocessing.active_children()
-            if not active:
-                break
-
-            await asyncio.sleep(0.5)  # Yield to the event loop
-        """
-
-        # 3. Timeout reached: The "Hammer"
+        # Timeout reached: forceful shutdown.
         for child in multiprocessing.active_children():
             # This sends SIGTERM on Linux and TerminateProcess on Windows
             child.terminate()
@@ -110,6 +115,3 @@ async def node_stop(node):
         log("shutdown for pp executor done.")
 
     log("stop node () ending")
-
-    # Stop node server.
-    await super(node.__class__, node).close()
