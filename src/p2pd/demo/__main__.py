@@ -153,16 +153,6 @@ async def main():
         except NotImplementedError:
             log("This platform doesn't support sigterm handling.")
 
-    # Additional optional module to improve UX for cnt + c.
-    # Otherwise input() is used which still needs enter for exit.
-    try:
-        import aioconsole
-    except ImportError:
-        if not args.cmd:
-            print("Note: No aioconsole installed.")
-            print("Install it for cnt + c to work better on input.")
-            print()
-
     # Start the program loop.
     try:
         # Setup node
@@ -191,10 +181,14 @@ async def main():
             await run_node_loop(nodes, ifs, nick)
     except asyncio.TimeoutError:
         log("Command run time met.")
+        what_exception()
     except asyncio.CancelledError:
         log("Main task cancelled!")
+        log_exception()
+        what_exception()
     finally:
         log("stop nodes clause reached.")
+        what_exception()
 
         # Stop all nodes
         if nodes:

@@ -94,7 +94,6 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
         except asyncio.CancelledError:
             print("\nMain task cancelled, shutting down executor...")
             # The 'with' block will automatically call executor.shutdown(wait=True)
-            raise
 
         print("after run in exec")
 

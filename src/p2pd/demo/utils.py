@@ -3,11 +3,7 @@ from ..do_imports import *
 from .cmd_arg_defs import *
 
 async def ainput(prompt):
-    try:
-        import aioconsole
-        return await aioconsole.ainput(prompt)
-    except ImportError:
-        return input(prompt)
+    return input(prompt)
 
 def cout(*fargs):
     if args.cmd:
@@ -239,7 +235,9 @@ async def echo_client(pipe, echo_data):
         send_buf = echo_data or to_b(await ainput("Echo: "))
         if send_buf in (b"menu"):
             send_buf = b""
+
             return "menu"
+        
         await pipe.send(b"ECHO " + send_buf + b"\n")
         buf = await pipe.recv(timeout=4)
         cout(b"recv = ", buf, b"\n")
