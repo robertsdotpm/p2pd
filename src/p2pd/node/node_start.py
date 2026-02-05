@@ -79,7 +79,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Cryptography for authenticated messages.
     install_path = node.conf["install_path"] or get_aionetiface_install_root()
-    node.sk = load_signing_key(node.listen_ips, node.listen_port, install_path)
+    node.sk = load_signing_key(node.ifs, node.listen_ips, node.listen_port, install_path)
     node.vk = node.sk.verifying_key
     node.node_id = hashlib.sha256(
         node.vk.to_string("compressed")
@@ -124,6 +124,8 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         del nic_afs[IP6] # TODO -- limit to one for testing
         for af in nic_afs:
             nic = nic_afs[af]
+            if not nic:
+                continue
             print(af)
             sig_pipes += await load_signal_pipes(
                 af, 

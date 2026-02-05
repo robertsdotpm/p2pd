@@ -8,6 +8,9 @@ python3 -m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd 0dl4 --dest_addr 5b5
 
 python3 -m p2pd.demo --disable_upnp 1 --pnp_server 0,4,10.0.1.204,5300 --ip 10.0.1.230
 python3 -m p2pd.demo --disable_upnp 1 --pnp_server 0,4,10.0.1.204,5300 --ip 10.0.1.19
+
+python3 -m p2pd.demo --disable_upnp 1 --nic 000c2957d05c
+python3 -m p2pd.demo --disable_upnp 1 --nic ens34
 """
 
 import asyncio
@@ -31,7 +34,16 @@ async def setup_node():
     cout("Loading networking interfaces...")
     get_nickname = args.cmd == "get_nickname"
     if_names = await list_interfaces()
-    print(if_names)
+    if args.nic:
+        filtered_nics = list(find_intersect(if_names, args.nic))
+        if filtered_nics:
+            if_names = filtered_nics
+
+            # NIC list used as names -- disable for mac filtering.
+            args.nic = [] 
+
+    #print(if_names)
+
 
     ifs = await load_interfaces(
         if_names,
@@ -41,12 +53,15 @@ async def setup_node():
         timeout=4
     )
 
+    print(ifs)
+
+
     """
     If the NICs flag has been set then filter the interface list
     to match only the MAC addresses indicated.
     """
-    if args.nics:
-        ifs = filter_nics_by_mac(args.nics, ifs)
+    if args.nic:
+        ifs = filter_nics_by_mac(args.nic, ifs)
 
     # Show the ifs loaded.
     display_ifs_loaded(ifs)
@@ -65,6 +80,7 @@ async def setup_node():
     cout("Starting node on %d..." % (node.listen_port,))
     node.add_msg_cb(add_echo_support)
     await node.start(out=True, cout=cout)
+    print(node.pp_executor)
 
     # Show the nodes address and listen port.
     cout()
@@ -103,8 +119,8 @@ async def run_node_loop(nodes, ifs, nick):
     # To simulate a "pointer" we exploit objects in Python are
     # passed by reference as use last_addr["addr"] as the pointer.
     last_addr = {}
-    if args.dest_addr:
-        last_addr = args.dest_addr
+    if args.dest:
+        last_addr = args.dest
 
     # Show menu and choose option.
     con_opts = (last_addr, echo_data, cmd_opts,)
@@ -193,7 +209,9 @@ async def main():
         # Stop all nodes
         if nodes:
             try:
-                await stop_nodes_option(nodes)
+                await async_wrap_errors(
+                    stop_nodes_option(nodes)
+                )
             except asyncio.CancelledError:
                 # ignore cancellation during cleanup
                 pass
@@ -212,4 +230,5 @@ if __name__ == "__main__":
         print("ended")
     finally:
         # Force exit to prevent Windows from hanging on dead threads
+        
         sys.exit(0)

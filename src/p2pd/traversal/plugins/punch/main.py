@@ -196,7 +196,9 @@ class PunchPlugin(TraversalPlugin):
         # 7. Schedule the Punching Process (with delay)
         if self.pipe_id not in self.punch_proc:
             self.punch_proc[self.pipe_id] = asyncio.create_task(
-                self.delayed_start_punching_proc(self.nic, puncher)
+                async_wrap_errors(
+                    self.delayed_start_punching_proc(self.nic, puncher)
+                )
             )
             
         return puncher

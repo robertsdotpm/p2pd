@@ -55,12 +55,7 @@ def get_req_serv_parts(parts):
 
 def patch_server_af_dict(arg_list, serv_dict):
     # offset, af, ip, port
-    if ";" in arg_list:
-        serv_infos = arg_list.split(";")
-    else:
-        serv_infos = [arg_list]
-
-
+    serv_infos = arg_list
     for serv_info in serv_infos:
         parts = serv_info.split(",")
         offset, af, ip, port = get_req_serv_parts(parts)
@@ -72,11 +67,7 @@ def patch_server_af_dict(arg_list, serv_dict):
 
 def patch_server_list(arg_list, server_list):
     # offset, af, ip, port, (optional) user, (optional) password
-    if ";" in arg_list:
-        serv_infos = arg_list.split(";")
-    else:
-        serv_infos = [arg_list]
-
+    serv_infos = arg_list
     for serv_info in serv_infos:
         parts = serv_info.split(",")
         offset, af, ip, port = get_req_serv_parts(parts)
@@ -103,12 +94,7 @@ def patch_server_list(arg_list, server_list):
         entry["afs"].append(af)
         server_list[offset] = entry
 
-def filter_nics_by_mac(mac_str, ifs):
-    if "," in mac_str:
-        mac_list = mac_str.split(",")
-    else:
-        mac_list = [mac_str]
-
+def filter_nics_by_mac(mac_list, ifs):
     mac_list = [mac_norm(mac) for mac in mac_list]
     new_ifs = []
     for nic in ifs:

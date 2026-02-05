@@ -69,6 +69,7 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
         print("start punching proc entry")
 
         # Start the listen server used for reverse connect.
+        """
         listen_sock = socket.socket(puncher.af, socket.SOCK_STREAM)
         listen_any_tup = await binder_async(
             puncher.af, 
@@ -76,30 +77,43 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
             nic_id=puncher.nic_id
         )
         listen_sock.bind(listen_any_tup)
+        """
+
+        listen_route = nic.route(puncher.af)
+        listen_route = await listen_route.bind(ips=puncher.src_ip)
+        listen_pipe = await Pipe(
+            TCP, 
+            None, 
+            listen_route
+        ).connect()
 
         # Start the punching in a new process.
         # Applies rules to make different kinds of IPs work.
         reverse_ip = patch_connect_ip(puncher.af, puncher.src_ip, puncher.nic_id)
-
-
-        listening_tup = (reverse_ip, listen_sock.getsockname()[1])
+        listening_tup = (reverse_ip, listen_pipe.sock.getsockname()[1])
         args = (puncher, listening_tup, stop_reader)
+        print("listening tup", listening_tup)
+        print("listen reverse sock = ", listen_pipe.sock)
         print("punch proc args = ", args)
         print("proc pool = ", proc_pool)
         print("before run in ex")
 
         #with proc_pool as executor:
+        
         try:
             loop.run_in_executor(proc_pool, punching_process_entry, *args)
         except asyncio.CancelledError:
             print("\nMain task cancelled, shutting down executor...")
             # The 'with' block will automatically call executor.shutdown(wait=True)
+        
 
         print("after run in exec")
 
         # Wait for the reverse connect client sock on the listen server.
         # Note: this uses threads and not processes.
         #client_sock = accept_reverse_connect_from_punching_proc(listen_sock)
+
+        """
         client_sock = None
         try:
             client_sock = await asyncio.wait_for(
@@ -116,11 +130,16 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
                 client_sock.close()
 
             return 
+        """
 
         # Wrap client sock in a pipe.
-        client_pipe = await sock_to_pipe(client_sock, nic)
+        #client_pipe = await sock_to_pipe(client_sock, nic)
+        client_pipe = await asyncio.wait_for(
+            listen_pipe.accept(),
+            timeout=40
+        )
         print("after listen client pipe")
-        print("listen client pipe sock = ", client_sock)
+        print("listen client pipe sock = ", client_pipe.sock)
         print("return pipe = ", client_pipe)
         return client_pipe
     except Exception as e:

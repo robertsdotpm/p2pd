@@ -24,7 +24,7 @@ def norm_listen_ips(listen_ips):
 
     return listen_ips
 
-def load_signing_key(listen_ips, listen_port, install_path):
+def load_signing_key(nics, listen_ips, listen_port, install_path):
     # Make install dir if needed.
     pathlib.Path(install_path).mkdir(
         parents=True,
@@ -33,7 +33,8 @@ def load_signing_key(listen_ips, listen_port, install_path):
 
     # Store cryptographic random bytes here for ECDSA ident.
     listen_str = ",".join(listen_ips) + ":" + str(listen_port)
-    listen_hash = hash160(listen_str) # hex
+    nic_str = ";".join([n.name for n in nics])
+    listen_hash = hash160(nic_str + ">" + listen_str) # hex
     sk_path = os.path.realpath(
         os.path.join(
             install_path,
@@ -160,6 +161,7 @@ def worker_init():
     """
     try:
         signal.signal(signal.SIGINT, signal.SIG_IGN)
+        
     except Exception:
         # Fallback for edge cases or embedded environments
         pass

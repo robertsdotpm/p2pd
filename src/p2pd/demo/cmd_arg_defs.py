@@ -8,13 +8,15 @@ parser.add_argument("--ntp_server", type=str, required=False, help="Specify usin
 """
 
 parser = argparse.ArgumentParser(description="P2P args")
-parser.add_argument("--nics", type=str, required=False, help="Limit to specific nics, comma separated")
+parser.add_argument("--nic", action='append', default=[], required=False, help="Limit to specific nics, comma separated")
 parser.add_argument("--port", type=int, required=False, default=NODE_PORT, help="Start node on specific port")
 parser.add_argument('--ip', action='append', default=[], help='IP address(es) to listen on')
-parser.add_argument("--pnp_server", type=str, required=False, help="Specify using a specific PNP server")
-parser.add_argument("--turn_server", type=str, required=False, help="Specify using a specific TURN server")
-parser.add_argument("--mqtt_server", type=str, required=False, help="Specify using a specific STUN server")
-parser.add_argument("--dest_addr", type=str, required=False, help="Destination to connect to")
+parser.add_argument("--pnp", action='append', default=[], required=False, help="Specify using a specific PNP server")
+
+
+parser.add_argument("--turn", type=str, required=False, help="Specify using a specific TURN server")
+parser.add_argument("--mqtt", type=str, required=False, help="Specify using a specific STUN server")
+parser.add_argument("--dest", type=str, required=False, help="Destination to connect to")
 parser.add_argument("--echo", type=str, required=False, help="Text to send down the connection")
 parser.add_argument("--cmd", type=str, required=False, help="Command to run")
 parser.add_argument("--install_path", type=str, required=False, help="Directory path to use to store some of P2PDs data files. Defaults to user home/p2pd")

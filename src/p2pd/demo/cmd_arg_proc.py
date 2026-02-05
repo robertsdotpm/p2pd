@@ -7,14 +7,14 @@ from .utils import *
 if args.disable_upnp:
     demo_node_conf["enable_upnp"] = False
 
-if args.pnp_server:
-    patch_server_af_dict(args.pnp_server, PNP_SERVERS)
+if args.pnp:
+    patch_server_af_dict(args.pnp, PNP_SERVERS)
 
-if args.turn_server:
-    patch_server_list(args.turn_server, TURN_SERVERS)
+if args.turn:
+    patch_server_list(args.turn, TURN_SERVERS)
 
-if args.mqtt_server:
-    patch_server_list(args.mqtt_server, MQTT_SERVERS)
+if args.mqtt:
+    patch_server_list(args.mqtt, MQTT_SERVERS)
 
 if args.cmd == "get_nickname":
     demo_node_conf["sig_pipe_no"] = 0
