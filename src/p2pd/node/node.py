@@ -51,6 +51,7 @@ class Node(Daemon):
 
         # Listen on arbitrary IPs (may be WAN, LAN, or link-local.
         if self.listen_ips:
+            
             by_nic = sort_ips_by_nic(self.listen_ips, self.ifs)
             for nic in self.ifs:
                 if by_nic[nic.id]:

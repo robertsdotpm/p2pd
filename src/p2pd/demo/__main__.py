@@ -42,9 +42,6 @@ async def setup_node():
             # NIC list used as names -- disable for mac filtering.
             args.nic = [] 
 
-    #print(if_names)
-
-
     ifs = await load_interfaces(
         if_names,
         Interface,
@@ -53,15 +50,15 @@ async def setup_node():
         timeout=4
     )
 
-    print(ifs)
-
-
     """
     If the NICs flag has been set then filter the interface list
     to match only the MAC addresses indicated.
     """
     if args.nic:
         ifs = filter_nics_by_mac(args.nic, ifs)
+
+    if not ifs:
+        raise Exception("Failed to load interfaces.")
 
     # Show the ifs loaded.
     display_ifs_loaded(ifs)

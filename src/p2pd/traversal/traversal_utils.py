@@ -72,7 +72,7 @@ def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=T
             if not has_set_bind:
                 # Choose the same NIC IP for both sides.
                 # That chooses the same interface.
-                if different_ifs_on_host:
+                if different_ifs_on_host and 0: ## Bug here.
                     return sorted([
                         dest_info["nic"],
                         src_info["nic"]

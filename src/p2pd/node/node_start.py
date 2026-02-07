@@ -18,7 +18,7 @@ from ..protocol.signaling.signal_msgs import SIG_PROTO
 async def node_start(node, sys_clock=None, out=False, cout=print):
     # Load ifs.
     if not len(node.ifs):
-        #print("\tLoading networking interfaces again...")
+        print("\tLoading networking interfaces again...")
         try:
             if_names = await list_interfaces()
             node.ifs = await load_interfaces(if_names, Interface)
@@ -77,13 +77,19 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
             [10000, 60000]
         )
 
+    print(node.ifs)
+
     # Cryptography for authenticated messages.
     install_path = node.conf["install_path"] or get_aionetiface_install_root()
     node.sk = load_signing_key(node.ifs, node.listen_ips, node.listen_port, install_path)
     node.vk = node.sk.verifying_key
+
     node.node_id = hashlib.sha256(
         node.vk.to_string("compressed")
     ).hexdigest()[:25]
+    print(node.node_id)
+
+
 
     # Table of authenticated users.
     node.auth = {
