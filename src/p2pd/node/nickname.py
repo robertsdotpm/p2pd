@@ -6,7 +6,7 @@ python3 run_pnp_serv.py
 """
 
 from aionetiface import *
-import namebump.namebump as namebump
+import namebump
 from ..errors import *
 from ecdsa import SigningKey
 

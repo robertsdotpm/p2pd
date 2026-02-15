@@ -14,9 +14,45 @@ from ..traversal.traversal_address import *
 from ..traversal.plugins.punch.main import PunchPluginFactory 
 from ..protocol.signaling.signal_msgs import SIG_PROTO
 
-
+# ==========================================
+# Orchestrates the startup sequence for a P2P node.
+# ==========================================
 async def node_start(node, sys_clock=None, out=False, cout=print):
-    # Load ifs.
+    # Hardware & Network Setup
+    await load_network_interfaces(node)
+    upnp_task = start_background_port_forwarding(node)
+
+    # Identity & Security
+    await load_machine_identity(node)
+    load_cryptography_and_auth(node)
+
+    # Connectivity Clients
+    await load_p2p_stun_clients(node, out, cout)
+    sig_pipes = await load_p2p_signal_pipes(node, out, cout)
+
+    # Time & Synchronization
+    await initialize_system_clock(node, sys_clock, out, cout)
+    await initialize_punch_coordination(node, out, cout)
+
+    # Start Servers
+    start_maintenance_tasks(node)
+    await node.listen_on_ifs()
+    
+    # Finalize Connectivity
+    await finalize_port_forwarding(node, upnp_task, out, cout)
+    build_node_address(node, sig_pipes, out)
+
+    # High-Level Services
+    await setup_nickname_service(node)
+    setup_signal_router(node, sig_pipes)
+    setup_traversal_plugins(node)
+
+    return node
+
+# ==========================================
+# Phase: Hardware & Network Setup
+# ==========================================
+async def load_network_interfaces(node):
     if not len(node.ifs):
         print("\tLoading networking interfaces again...")
         try:
@@ -28,58 +64,57 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
             log_exception()
             node.ifs = []
 
-    # Make sure ifs are in the same order.
+    # Ensure deterministic order
     node.ifs = sorted(node.ifs, key=lambda x: x.name)
 
-    # Managed to load IFs?
     if not len(node.ifs):
         raise Exception("p2p node could not load ifs.")
-    
-    # Skip port forwarding if all NICs aren't behind NATs.
+
+def start_background_port_forwarding(node):
+    # Check if all NICs are already open
     all_open_internet = True
     for nic in node.ifs:
         if nic.nat["type"] != OPEN_INTERNET:
             all_open_internet = False
             break
     
-    # Port forward all listen servers.
-    upnp_task = None
+    # If UPnP is enabled and we are behind NAT, start the task
     if node.conf["enable_upnp"] and not all_open_internet:
-        # Handler detects packets from test server.
-        # To confirm if UPnP worked.
+        # Handler detects packets from test server to confirm if UPnP worked
         node.add_msg_cb(node.remote_reachability_cb)
 
-        # Put slow forwarding task in the background.
-        upnp_task = asyncio.create_task(
+        # Return the task so we can await it later
+        return asyncio.create_task(
             async_wrap_errors(
                 node.forward(node.listen_port),
                 timeout=10
             )
         )
+    return None
 
-    # Set machine id.
+# ==========================================
+# Phase: Identity & Security
+# ==========================================
+async def load_machine_identity(node):
     node.machine_id = await node.load_machine_id(
         "p2pd",
         node.ifs[0].netifaces
     )
 
-    # Managed to load machine IDs?
     if node.machine_id in (None, ""):
         raise Exception("Could not load machine id.")
     
-    """
-    The listen port is set deterministically to avoid conflicts
-    with port forwarding with multiple nodes in the LAN.
-    """
+    # The listen port is set deterministically to avoid conflicts
+    # with port forwarding with multiple nodes in the LAN.
     if node.listen_port is None:
         node.listen_port = field_wrap(
             dhash(node.machine_id),
             [10000, 60000]
         )
-
+    
     print(node.ifs)
 
-    # Cryptography for authenticated messages.
+def load_cryptography_and_auth(node):
     install_path = node.conf["install_path"] or get_aionetiface_install_root()
     node.sk = load_signing_key(node.ifs, node.listen_ips, node.listen_port, install_path)
     node.vk = node.sk.verifying_key
@@ -89,9 +124,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     ).hexdigest()[:25]
     print(node.node_id)
 
-
-
-    # Table of authenticated users.
+    # Table of authenticated users
     node.auth = {
         node.node_id: {
             "sk": node.sk,
@@ -99,12 +132,15 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         }
     }
 
-    # Used by TCP punch clients.
-
+# ==========================================
+# Phase: Connectivity Clients
+# ==========================================
+async def load_p2p_stun_clients(node, out, cout):
     if node.conf.get("enable_punching", True):
         if out: cout("\tLoading STUN clients...")
         # Returns TCP STUN clients using PUNCH_CONF.
         await load_stun_clients(node)
+        
         if out:
             buf = ""
             for if_index in range(0, len(node.ifs)):
@@ -116,18 +152,20 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
                         af_txt, 
                         str(len(node.stun_clients[af][if_index])),
                     ))
-                #buf += "\n"
             cout(buf)
-
+    
     print(node.stun_clients)
 
-    # MQTT server offsets for signal protocol.
+async def load_p2p_signal_pipes(node, out, cout):
     sig_pipes = []
     if node.conf["sig_pipe_no"]:
         if out: cout("\tLoading MQTT clients...")
 
         nic_afs = get_nic_for_af(node.ifs)
-        del nic_afs[IP6] # TODO -- limit to one for testing
+        # TODO -- limit to one for testing
+        if IP6 in nic_afs:
+            del nic_afs[IP6] 
+
         for af in nic_afs:
             nic = nic_afs[af]
             if not nic:
@@ -136,20 +174,27 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
             sig_pipes += await load_signal_pipes(
                 af, 
                 nic, 
-                node.node_id, # node.node_id # TODO -- fixed to same seed for testing
+                node.node_id, 
                 1 or node.conf["sig_pipe_no"] # TODO -- limit to 1 for testing
             )
 
         print(sig_pipes)
 
-
         if out:
+            # Note: This logic assumes node.signal_pipes might be populated elsewhere 
+            # or relies on the loop logic in the original. 
             buf = "\t\tmqtt = ("
             for index in list(node.signal_pipes):
                 buf += fstr("{0},", (index,))
             buf += ")"
             cout(buf)
+            
+    return sig_pipes
 
+# ==========================================
+# Phase: Time & Synchronization
+# ==========================================
+async def initialize_system_clock(node, sys_clock, out, cout):
     if sys_clock is None:
         if node.conf["init_clock_skew"]:
             sys_clock = SysClock(
@@ -159,30 +204,40 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         else:
             sys_clock = SysClock(node.ifs[0], ntp=time.time())
             node.sys_clock = sys_clock
+    
+    # Store reference if passed in or created
+    if not hasattr(node, 'sys_clock') or node.sys_clock is None:
+        node.sys_clock = sys_clock
 
-    # Multiprocess support for TCP punching and NTP sync.
-    t = time.time()
+async def initialize_punch_coordination(node, out, cout):
     if out: cout("\tLoading NTP clock skew...")
+    
+    # Multiprocess support for TCP punching and NTP sync.
     if node.conf["enable_punching"]:
-        await setup_punch_coordination(node, sys_clock)
+        await setup_punch_coordination(node, node.sys_clock)
 
     if node.conf["init_clock_skew"]:
         ntp = str(node.sys_clock.ntp)
         if out: cout(fstr("\t\tClock ntp = {0}", (ntp,)))
 
+# ==========================================
+# Phase: Start Servers
+# ==========================================
+def start_maintenance_tasks(node):
     # Simple loop to close idle tasks.
     node.idle_pipe_closer = create_task(
         close_idle_pipes(node)
     )
 
-    # Start the server for the node protocol.
-    await node.listen_on_ifs()
+# Note: node.listen_on_ifs() is called directly in main sequence
 
-    # Port forward all listen servers.
-    if node.conf["enable_upnp"] and not all_open_internet:
+# ==========================================
+# Phase: Finalize Connectivity
+# ==========================================
+async def finalize_port_forwarding(node, upnp_task, out, cout):
+    if upnp_task:
         if out: cout("\tStarting UPnP forwarding...")
 
-        # Put slow forwarding task in the background.
         upnp_ret = await upnp_task
         if upnp_ret:
             forward_success, reachable = upnp_ret
@@ -196,8 +251,9 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         else:
             if out: cout("\t\tUPnP failed: reverse connect won't work.")
 
-    # Build P2P address bytes.
+def build_node_address(node, sig_pipes, out):
     assert(node.node_id is not None)
+    
     sig_dests = [[af_to_v(s.af), s.host, s.port] for s in sig_pipes]
     print(sig_dests)
 
@@ -208,7 +264,6 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         sig_dests,
         port=node.listen_port,
     )
-
 
     # Log address.
     msg = fstr("Starting node = '{0}'", (node.addr_bytes,))
@@ -224,22 +279,23 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         log_exception()
         raise Exception("Can't parse nodes p2p addr.")
 
-    # Used for setting nicknames for the node.
+
+# ==========================================
+# Phase: High-Level Services
+# ==========================================
+async def setup_nickname_service(node):
     node.nick_client = await Nickname(
         node.sk,
         node.ifs,
         node.sys_clock,
     )
     
-    # Update nickname in the background.
     if node.conf.get("enable_nickname", True):
-        nick = asyncio.create_task(
+        asyncio.create_task(
             node.nickname(node.node_id)
         )
-        #pkt = await node.nick_client.fetch(nick)
-        #cout("nick pkt vkc = ", pkt.vkc)
 
-    # Used for sending signaling messasges to other nodes.
+def setup_signal_router(node, sig_pipes):
     node.signal_router = SignalRouter(
         node.ifs,
         node.sys_clock.time,
@@ -260,7 +316,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         node.signal_router.signal_msg_sender
     )
 
-    # Used to create new punch plugin instances.
+def setup_traversal_plugins(node):
     node.traversal.install_plugin("punch", {
         "class": PunchPluginFactory(
             node.stun_clients,
@@ -270,7 +326,5 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
         ),
         "timeout": 40
     })
-
+    
     print(node.traversal.plugin_loaders)
-
-    return node
