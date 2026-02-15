@@ -1,7 +1,7 @@
 import asyncio
 import copy
 from aionetiface import *
-from aionetiface.nic.nat.nat_predict import *
+from p2pd.traversal.libs.nat_predict import *
 from ..utility.punch_utils import *
 from ..punch_defs import *
 

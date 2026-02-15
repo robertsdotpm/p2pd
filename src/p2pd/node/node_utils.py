@@ -6,7 +6,7 @@ import signal
 from ecdsa import SigningKey, SECP256k1
 import pathlib
 from aionetiface import *
-from ..traversal.plugins.punch.punch_defs import PUNCH_CONF
+from ..traversal.libs.punch.punch_defs import PUNCH_CONF
 
 def norm_listen_ips(listen_ips):
     # Skip if empty.
@@ -161,7 +161,7 @@ def worker_init():
     """
     try:
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        
+
     except Exception:
         # Fallback for edge cases or embedded environments
         pass

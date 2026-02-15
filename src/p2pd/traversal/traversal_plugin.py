@@ -1,5 +1,5 @@
 import asyncio
-from ..traversal_utils import *
+from .traversal_utils import *
 
 class TraversalPlugin():
     def __init__(self):

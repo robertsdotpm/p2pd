@@ -1,7 +1,7 @@
 import asyncio
 from aionetiface import *
 from ....node.node_defs import *
-from ..traversal_plugin import TraversalPlugin
+from ...traversal_plugin import TraversalPlugin
 
 class DirectConnect(TraversalPlugin):
     async def run(self, reply=None):

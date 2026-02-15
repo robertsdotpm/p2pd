@@ -1,5 +1,5 @@
 from aionetiface import *
-from ..traversal_plugin import TraversalPlugin
+from ...traversal_plugin import TraversalPlugin
 from ....protocol.signaling.signal_msgs import GetAddr
 
 class GetAddrPlugin(TraversalPlugin):

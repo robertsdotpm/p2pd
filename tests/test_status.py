@@ -1,7 +1,7 @@
 import unittest
 from aionetiface.utility.test_init import *
 from p2pd import *
-import namebump
+import namebump.namebump as namebump
 from ecdsa import SigningKey, SECP256k1
 import hashlib
 

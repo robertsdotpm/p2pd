@@ -2,14 +2,13 @@ import pickle
 import asyncio
 from aionetiface import *
 from ....protocol.signaling.signal_msgs import PunchMsg, DoneMsg
-from .punch_defs import *
-from .utility.punch_utils import *
-from .punch_client import *
-from .port_allocators.nat_predict_alloc import *
-from .punch_process import *
-from ..traversal_plugin import TraversalPlugin
-
-
+from ...libs.punch.punch_defs import *
+from ...libs.punch.utility.punch_utils import *
+from ...libs.punch.punch_client import *
+from ...libs.punch.port_allocators.nat_predict_alloc import *
+from ...libs.punch.punch_process import *
+from ...libs.nat_predict import *
+from ...traversal_plugin import TraversalPlugin
 
 def find_unpicklable(obj, path="obj", seen=None):
     if seen is None:
@@ -185,6 +184,8 @@ class PunchPlugin(TraversalPlugin):
         self.punch_clients[self.pipe_id] = puncher
 
         # 6. Initialize NAT Prediction Allocator
+        # Note: this just wraps nat_predict.py.
+        # There's an aweful lot of bloat just to use code thats already written.
         self.nat_alloc = NATPredictAlloc(stuns)
         self.nat_alloc.set_nat_info(
             self.src_info["nat"], self.dest_info["nat"]
