@@ -32,7 +32,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Connectivity Clients
     await load_p2p_stun_clients(node, out, cout)
-    router = Router(kp, get_time=sys_clock.time)
+    router = Router(kp, get_time=node.sys_clock.time)
 
     # Start Servers
     start_maintenance_tasks(node)
@@ -224,7 +224,7 @@ def build_node_address(node, out):
     assert(node.node_id is not None)
 
     node.addr_bytes = make_node_addr(
-        node.kp.pub_key_hex,
+        node.kp.public_key_hex,
         node.machine_id,
         node.ifs,
         port=node.listen_port,
