@@ -12,7 +12,7 @@ from .node_utils import *
 from .nickname import *
 from ..traversal.traversal_address import *
 from ..traversal.plugins.punch.main import PunchPluginFactory 
-from ..protocol.signaling.signal_msgs import SIG_PROTO
+from ..protocol.traversal.proto_msg import SIG_PROTO
 
 # ==========================================
 # Orchestrates the startup sequence for a P2P node.

@@ -38,7 +38,7 @@ from collections import OrderedDict
 from aionetiface import *
 from .traversal_utils import *
 from .traversal_plugin import TraversalPlugin
-from ..protocol.signaling.signal_msgs import GetAddr, ConMsg
+from ..protocol.traversal.proto_msg import GetAddr, ConMsg
 
 class TraversalManager():
     def __init__(self, stop_reader, pipes={}, nics=[]):

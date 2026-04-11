@@ -1,6 +1,6 @@
 from aionetiface import *
 from ...traversal_plugin import TraversalPlugin
-from ....protocol.signaling.signal_msgs import ReturnAddr
+from ....protocol.traversal.proto_msg import ReturnAddr
 
 class ReturnAddrPlugin(TraversalPlugin):
     async def run(self, reply=None):

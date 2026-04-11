@@ -1,6 +1,6 @@
 from aionetiface import *
 from ...traversal_plugin import TraversalPlugin
-from ....protocol.signaling.signal_msgs import GetAddr
+from ....protocol.traversal.proto_msg import GetAddr
 
 class GetAddrPlugin(TraversalPlugin):
     async def run(self, reply=None):
