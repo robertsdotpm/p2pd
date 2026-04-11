@@ -267,9 +267,11 @@ def setup_signal_router(node, router):
     #node.signal_router.set_traversal_manager(node.traversal)
 
     # Tell the traversal plugin manager how to send signal messages.
+    """
     node.traversal.set_signal_msg_sender(
         node.signal_router.signal_msg_sender
     )
+    """
 
 def setup_traversal_plugins(node):
     node.traversal.install_plugin("punch", {
