@@ -24,15 +24,15 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Identity & Security
     await load_machine_identity(node)
-    load_cryptography_and_auth(node)
-
-    # Connectivity Clients
-    await load_p2p_stun_clients(node, out, cout)
-    sig_pipes = await load_p2p_signal_pipes(node, out, cout)
+    kp = load_cryptography_and_auth(node)
 
     # Time & Synchronization
     await initialize_system_clock(node, sys_clock, out, cout)
     await initialize_punch_coordination(node, out, cout)
+
+    # Connectivity Clients
+    await load_p2p_stun_clients(node, out, cout)
+    router = Router(kp, get_time=sys_clock.time)
 
     # Start Servers
     start_maintenance_tasks(node)
@@ -40,11 +40,11 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     
     # Finalize Connectivity
     await finalize_port_forwarding(node, upnp_task, out, cout)
-    build_node_address(node, sig_pipes, out)
+    build_node_address(node, out)
 
     # High-Level Services
     await setup_nickname_service(node)
-    setup_signal_router(node, sig_pipes)
+    setup_signal_router(node, router)
     setup_traversal_plugins(node)
 
     return node
@@ -132,6 +132,10 @@ def load_cryptography_and_auth(node):
         }
     }
 
+    node.kp = Signing(node.sk)
+    return node.kp
+
+
 # ==========================================
 # Phase: Connectivity Clients
 # ==========================================
@@ -155,41 +159,6 @@ async def load_p2p_stun_clients(node, out, cout):
             cout(buf)
     
     print(node.stun_clients)
-
-async def load_p2p_signal_pipes(node, out, cout):
-    sig_pipes = []
-    if node.conf["sig_pipe_no"]:
-        if out: cout("\tLoading MQTT clients...")
-
-        nic_afs = get_nic_for_af(node.ifs)
-        # TODO -- limit to one for testing
-        if IP6 in nic_afs:
-            del nic_afs[IP6] 
-
-        for af in nic_afs:
-            nic = nic_afs[af]
-            if not nic:
-                continue
-            print(af)
-            sig_pipes += await load_signal_pipes(
-                af, 
-                nic, 
-                node.node_id, 
-                1 or node.conf["sig_pipe_no"] # TODO -- limit to 1 for testing
-            )
-
-        print(sig_pipes)
-
-        if out:
-            # Note: This logic assumes node.signal_pipes might be populated elsewhere 
-            # or relies on the loop logic in the original. 
-            buf = "\t\tmqtt = ("
-            for index in list(node.signal_pipes):
-                buf += fstr("{0},", (index,))
-            buf += ")"
-            cout(buf)
-            
-    return sig_pipes
 
 # ==========================================
 # Phase: Time & Synchronization
@@ -251,17 +220,13 @@ async def finalize_port_forwarding(node, upnp_task, out, cout):
         else:
             if out: cout("\t\tUPnP failed: reverse connect won't work.")
 
-def build_node_address(node, sig_pipes, out):
+def build_node_address(node, out):
     assert(node.node_id is not None)
-    
-    sig_dests = [[af_to_v(s.af), s.host, s.port] for s in sig_pipes]
-    print(sig_dests)
 
     node.addr_bytes = make_node_addr(
-        node.node_id,
+        node.kp.pub_key_hex,
         node.machine_id,
         node.ifs,
-        sig_dests,
         port=node.listen_port,
     )
 
@@ -295,21 +260,10 @@ async def setup_nickname_service(node):
             node.nickname(node.node_id)
         )
 
-def setup_signal_router(node, sig_pipes):
-    node.signal_router = SignalRouter(
-        node.ifs,
-        node.sys_clock.time,
-        node.node_id,
-        node.addr_bytes,
-        node.sk,
-        SIG_PROTO
-    )
-
-    # Sets up the signaling router to use MQTT clients.
-    node.signal_router.set_signal_pipes(sig_pipes)
-
+def setup_signal_router(node, router):
     # Allow signaling router to pass messages to interested plugins.
-    node.signal_router.set_traversal_manager(node.traversal)
+    router.traversal = node.traversal
+    #node.signal_router.set_traversal_manager(node.traversal)
 
     # Tell the traversal plugin manager how to send signal messages.
     node.traversal.set_signal_msg_sender(
