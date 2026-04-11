@@ -38,10 +38,11 @@ from collections import OrderedDict
 from aionetiface import *
 from .traversal_utils import *
 from .traversal_plugin import TraversalPlugin
-from ..protocol.traversal.proto_msg import GetAddr, ConMsg
+from ..protocol.traversal.proto_msg import GetAddr, ConMsg, ProtoMsg
 
 class TraversalManager():
     def __init__(self, stop_reader, pipes={}, nics=[]):
+        self.router = None # Used for sig pipes.
         self.stop_reader = stop_reader
         self.plugin_loaders = OrderedDict()
         self.plugins = {} # by pipe id
@@ -135,6 +136,8 @@ class TraversalManager():
         # Set function for plugin to send replies.
         print(self.signal_msg_sender)
         plugin.set_signal_msg_sender(self.signal_msg_sender)
+
+
         return plugin
     
     def get_plugin(self, msg):
@@ -224,6 +227,89 @@ class TraversalManager():
         if hasattr(plugin, "pipe_id"):
             del self.plugins[plugin.pipe_id]
             del self.pipes[plugin.pipe_id]
+
+    async def signal_msg_sender(self, msg, plugin):
+        msg.meta = ProtoMsg.Meta.from_dict({
+            "ttl": int(self.f_time()) + 30,
+            "pipe_id": plugin.pipe_id,
+            "af": plugin.af,
+            "src_buf": plugin.src_map["bytes"],
+            "src_index": plugin.src_info["if_index"],
+            "route_type": plugin.route_type,
+            "same_machine": plugin.same_machine,
+            "plugin_name": msg.meta.plugin_name,
+        })
+
+        msg.routing = ProtoMsg.Routing.from_dict({
+            "af": plugin.af,
+            "dest_buf": plugin.dest_map["bytes"],
+            "dest_index": plugin.dest_info["if_index"],
+        })
+
+        # Our key for an encrypted reply.
+        msg.cipher.vk = self.vk
+        print(self.node_id, "> SEND ", msg.routing.dest["node_id"], " ", msg.to_dict())
+
+        # Convert to bytes.
+        buf = sig_msg_to_buf(msg)
+        #self.record_seen_msg(buf)
+
+        # Set sig pipe.
+        sig_pipe = await self.router.pipe(
+            msg.dest["pub_key_hex"], 
+            self.handle_router_msg, 
+            use_cache=True
+        )
+
+        # Send signaling message using MQTT.
+        await sig_pipe.send(buf)
+
+    # Receive a signal message and pass it to a plugin.
+    def handle_router_msg(self, msg, src_pk_hex, pipe_id_hex, client):
+        print("in signal router msg_cb")
+        buf = to_b(msg)
+        #self.discard_seen_msg(buf)
+
+        msg = try_unpack_msg(buf, self.sk, self.proto_def)
+        if to_s(msg.routing.dest["node_id"]) != self.node_id:
+            print("invalid ndoe id")
+            raise Exception("Message not meant for us.")
+        
+        # Check TTL.
+        if int(self.router.get_time()) >= msg.meta.ttl:
+            raise Exception("Discard old msg.")
+            return
+        
+        print(self.node_id, "> RECV ", msg.meta.src["node_id"], " ", msg.to_dict())
+
+        # Raise exception if this is old.
+
+        # Updating routing dest with current addr.
+        msg.set_cur_addr(self.addr_bytes)
+
+        print("msg meta same machine is now = ", msg.meta.same_machine)
+        
+        # Pass this message on to existing plugin.
+        # If one doesn't exist it will be created.
+        try:
+            plugin = self.get_plugin(msg)
+        except Exception:
+            print("get plugin failed")
+            what_exception()
+            log_exception()
+            return
+
+        print("plugin selected = ", plugin)
+
+        #TODO: make this pop off older items when it fills.
+        self.tasks.append(
+            asyncio.create_task(
+                async_wrap_errors(
+                    self.run_plugin(plugin, reply=msg)
+                    #plugin.run(reply=msg) 
+                )
+            )
+        )
 
 if __name__ == "__main__":
 

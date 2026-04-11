@@ -263,6 +263,7 @@ async def setup_nickname_service(node):
 def setup_signal_router(node, router):
     # Allow signaling router to pass messages to interested plugins.
     router.traversal = node.traversal
+    node.traversal.router = router
     #node.signal_router.set_traversal_manager(node.traversal)
 
     # Tell the traversal plugin manager how to send signal messages.

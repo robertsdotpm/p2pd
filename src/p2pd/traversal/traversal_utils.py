@@ -343,3 +343,46 @@ def get_if_infos_order(af, route_type, src_map, dest_map):
         pair_order = overlap + unique
 
     return pair_order
+
+def try_unpack_msg(buf, sk, sig_proto_map):
+    buf = h_to_b(buf)
+
+    # Try to decrypt message if its encrypted.
+    is_enc = buf[0]
+    if is_enc:
+        # Ensure a SK is set for decryption.
+        if not sk:
+            raise Exception("No sk set for decryption.")
+
+        # Will raise if it can't decrypt.
+        buf = decrypt(
+            sk,
+            buf[1:]
+        )
+        log(fstr("Recv decrypted {0}", (buf,)))
+    
+    # Otherwise buffer is not encrypted -- use as is.
+    if not is_enc:
+        buf = buf[1:]
+
+    # Unpack message into fields.
+    msg_info = sig_proto_map[buf[0]]
+    msg_class = msg_info[0]
+    msg = msg_class.unpack(buf[1:])
+    return msg
+
+def sig_msg_to_buf(msg):
+    # Else loaded from a MSN.
+    dest_vk = msg.routing.dest["vk"]
+    if dest_vk:
+        assert(isinstance(dest_vk, bytes))
+        buf = b"\1" + encrypt(
+            dest_vk,
+            msg.pack(),
+        )
+    else:
+        buf = b"\0" + msg.pack()
+
+    # UTF-8 messes up binary data in MQTT.
+    buf = to_h(buf)
+    return to_b(buf)
