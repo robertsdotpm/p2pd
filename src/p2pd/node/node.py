@@ -49,11 +49,18 @@ class Node(Daemon):
 
         # Listen on arbitrary IPs (may be WAN, LAN, or link-local.
         if self.listen_ips:
-            
             by_nic = sort_ips_by_nic(self.listen_ips, self.ifs)
+            found = set()
             for nic in self.ifs:
                 if by_nic[nic.id]:
+                    found.update(by_nic[nic.id])
                     nic.rp = route_pool_from_ips(by_nic[nic.id], nic)
+
+            missing = [ip for ip in self.listen_ips if ip not in found]
+            if missing:
+                raise Exception(
+                    "listen IPs not found on any interface: " + ", ".join(missing)
+                )
 
         # Handlers for the node protocol.
         self.msg_cbs = []

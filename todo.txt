@@ -140,3 +140,5 @@ the router code might not be ideal as the slowest or down server makes them all
 fail
 
 inconsistent load time with load stun clients -- can that be sped up later?
+
+when passing --ip you need a check to see if its in the interface
