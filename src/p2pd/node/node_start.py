@@ -33,7 +33,13 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Connectivity Clients
     await load_p2p_stun_clients(node, out, cout)
-    router = Router(kp, get_time=node.sys_clock.time, nic=Interface("default"))
+    traversal = node.traversal
+    router = Router(kp, 
+        msg_handler=traversal.handle_router_msg,
+        get_time=node.sys_clock.time, 
+        nic=Interface("default")
+    )
+
 
     # Start Servers
     start_maintenance_tasks(node)
@@ -269,8 +275,8 @@ async def setup_signal_router(node, router, out, cout):
     # Subscribe to our own MQTT topic so we can receive incoming signals.
     if out: cout("\tLoading MQTT router...")
     try:
-        ret = await asyncio.wait_for(router.start(), timeout=8)
-        if out: cout("\t\t", ret)
+        clients = await asyncio.wait_for(router.start(), timeout=8)
+        if out: cout("\t\t", clients)
     except asyncio.TimeoutError:
         raise Exception("Router MQTT start timed out - signaling may be degraded")
 

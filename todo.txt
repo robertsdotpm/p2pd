@@ -142,3 +142,6 @@ fail
 inconsistent load time with load stun clients -- can that be sped up later?
 
 when passing --ip you need a check to see if its in the interface
+
+should preload pipe for router dest in node.connect so it doesnt block 
+plugins and cause timeouts loading it for the first time in the plugin run call

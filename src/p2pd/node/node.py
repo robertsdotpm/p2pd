@@ -176,9 +176,10 @@ class Node(Daemon):
             dest_vk = pkt.vkc
 
             try:
+                # TODO: what should timeout val be
                 updated_addr_bytes = await asyncio.wait_for(
                     get_updated_addr_from_mqtt(self, addr_bytes),
-                    timeout=3
+                    timeout=10
                 )
                 if updated_addr_bytes:
                     addr_bytes = updated_addr_bytes

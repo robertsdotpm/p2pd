@@ -63,7 +63,7 @@ class TraversalManager():
         assert("class" in conf)
         conf = {
             "class": conf["class"],
-            "timeout": conf.get("timeout", 4),
+            "timeout": conf.get("timeout", 10),
             "cleanup": conf.get("cleanup", None),
             "set_bind": conf.get("set_bind", False),
             "max_pairs": conf.get("max_pairs", 6),
@@ -225,56 +225,56 @@ class TraversalManager():
             del self.pipes[plugin.pipe_id]
 
     async def signal_msg_sender(self, msg, plugin, relay_no=2):
-        msg.meta = ProtoMsg.Meta.from_dict({
-            "ttl": int(self.router.get_time()) + 30,
-            "pipe_id": plugin.pipe_id,
-            "af": plugin.af,
-            "src_buf": plugin.src_map["bytes"],
-            "src_index": plugin.src_info["if_index"],
-            "route_type": plugin.route_type,
-            "same_machine": plugin.same_machine,
-            "plugin_name": msg.meta.plugin_name,
-        })
+        try:
+            msg.meta = ProtoMsg.Meta.from_dict({
+                "ttl": int(self.router.get_time()) + 30,
+                "pipe_id": plugin.pipe_id,
+                "af": plugin.af,
+                "src_buf": plugin.src_map["bytes"],
+                "src_index": plugin.src_info["if_index"],
+                "route_type": plugin.route_type,
+                "same_machine": plugin.same_machine,
+                "plugin_name": msg.meta.plugin_name,
+            })
 
-        msg.routing = ProtoMsg.Routing.from_dict({
-            "af": plugin.af,
-            "dest_buf": plugin.dest_map["bytes"],
-            "dest_index": plugin.dest_info["if_index"],
-        })
+            msg.routing = ProtoMsg.Routing.from_dict({
+                "af": plugin.af,
+                "dest_buf": plugin.dest_map["bytes"],
+                "dest_index": plugin.dest_info["if_index"],
+            })
 
-        # Attach our compressed verifying key so the receiver can decrypt.
-        msg.cipher.vk = self.node.vk.to_string("compressed")
+            # Attach our compressed verifying key so the receiver can decrypt.
+            msg.cipher.vk = self.node.vk.to_string("compressed")
 
-        # Convert to bytes.
-        buf = sig_msg_to_buf(msg)
+            # Convert to bytes.
+            buf = to_s(sig_msg_to_buf(msg))
+            print("send ", msg.to_dict(), plugin.dest_map["pub_key_hex"])
 
-        # Route to destination via MQTT.
-        sig_pipe = await self.router.pipe(
-            plugin.dest_map["pub_key_hex"],
-            self.handle_router_msg,
-            use_cache=True
-        )
+            # Route to destination via MQTT.
+            sig_pipe = await self.router.pipe(
+                plugin.dest_map["pub_key_hex"],
+                use_cache=True
+            )
 
-        # Send signaling message using MQTT.
-        await sig_pipe.send(buf)
+            # Send signaling message using MQTT.
+            await sig_pipe.send(buf)
+        except Exception:
+            log_exception()
 
     # Receive a signal message and pass it to a plugin.
     # Called by the MQTT client as: handler(msg, src_pk, queue_id, client)
-    def handle_router_msg(self, msg, src_pk_hex, pipe_id_hex, client):
+    async def handle_router_msg(self, msg, src_pk_hex, pipe_id_hex, client):
+        print("recv root: ", msg)
         try:
             buf = to_b(msg)
             msg = try_unpack_msg(buf, self.node.sk, SIG_PROTO)
-
-            # Verify this message is addressed to us.
-            dest_node_id = hashlib.sha256(
-                h_to_b(msg.routing.dest["pub_key_hex"])
-            ).hexdigest()[:25]
-            if dest_node_id != self.node.node_id:
-                raise Exception("Message not meant for us.")
+            print("recv: ", msg.to_dict())
 
             # Check TTL.
+            """
             if int(self.router.get_time()) >= msg.meta.ttl:
                 raise Exception("Discarding expired msg.")
+            """
 
             # Update routing destination with our current address.
             msg.set_cur_addr(self.node.addr_bytes)
@@ -282,6 +282,8 @@ class TraversalManager():
             # Dispatch to the matching (or new) plugin.
             plugin = self.get_plugin(msg)
         except Exception:
+            print("handle router exp")
+            what_exception()
             log_exception()
             return
 
