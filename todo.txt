@@ -100,7 +100,43 @@ with the nat tests. sometimes concurrency makes things more brittle.
 
 interface.start is flaky. is it due to servers banning you for repeat messages in
 a short period?
+  - threshold would solve that
+
   
 using get_servers math func in get_infra causes the flakyness.
 so is the failure in that func? in a bunch of servers? and wouldnt the threshold
 stuff solve transient server failures?
+
+get_stun_clients had no input validation on addresses and it hid errors.
+its possible that bubbled up an exception to the discover wan code.
+
+
+looks like it forced the nickname module to use fixed afs which is a bug
+
+def get_infra(af, proto, name, no=1, attempt=0, chunk_size=4, sample=False):
+	af_str = ".IPv4" if af == IP4 else ".IPv6"
+	proto_str = ".UDP" if proto == UDP else ".TCP"
+	name = name + af_str + proto_str
+	parent = reduce(operator.getitem, name.split("."), INFRA)
+  
+	if sample:
+		return get_servers(parent, no, attempt)
+	else:
+		parent = parent[:]
+		random.shuffle(parent)
+		return parent
+
+    need to determine true cause and what the best approach is for server selection
+
+< 10 use same set
+else select above 
+
+sort by above % quality
+set = [:limit]
+shuffle that
+
+
+the router code might not be ideal as the slowest or down server makes them all
+fail
+
+inconsistent load time with load stun clients -- can that be sped up later?

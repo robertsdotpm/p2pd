@@ -148,7 +148,7 @@ async def choose_connection_methods(con_method):
         # If pressing enter then use the default list of methods in order.
         con_method = con_method or (await ainput("Enter for default (d): "))
         if not len(con_method):
-            return "direct"
+            return "direct_connect"
 
         # Go back to the menu.
         con_method = con_method.lower().strip()

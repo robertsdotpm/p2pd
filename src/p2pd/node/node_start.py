@@ -25,6 +25,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     # Identity & Security
     await load_machine_identity(node)
     kp = load_cryptography_and_auth(node)
+    print("pub key hex = ", kp.public_key_hex)
 
     # Time & Synchronization
     await initialize_system_clock(node, sys_clock, out, cout)
@@ -67,7 +68,6 @@ async def load_network_interfaces(node):
     node.ifs = sorted(node.ifs, key=lambda x: x.name)
 
     print(node.ifs)
-    exit(0)
     if not len(node.ifs):
         raise Exception("p2p node could not load ifs.")
 
@@ -269,7 +269,7 @@ async def setup_signal_router(node, router, out, cout):
     # Subscribe to our own MQTT topic so we can receive incoming signals.
     if out: cout("\tLoading MQTT router...")
     try:
-        ret = await asyncio.wait_for(router.start(), timeout=5)
+        ret = await asyncio.wait_for(router.start(), timeout=8)
         if out: cout("\t\t", ret)
     except asyncio.TimeoutError:
         raise Exception("Router MQTT start timed out - signaling may be degraded")
