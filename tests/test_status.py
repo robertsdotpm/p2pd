@@ -205,7 +205,7 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         # Pub key crap -- used for signing PNP messages.
         # Pub key will be used as a static name for testing too.
         install_path = get_aionetiface_install_root()
-        sk = load_signing_key(NODE_PORT, install_path)
+        sk = load_signing_key([], [], NODE_PORT, install_path)
 
         # Try all IPs and AFs.
         name = sk.verifying_key.to_string("compressed")
@@ -261,8 +261,7 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         # Pub key will be used as a static name for testing too.
         install_path = get_aionetiface_install_root()
         listen_port = NODE_PORT
-        sk = load_signing_key(listen_port, install_path)
-        print(sk)
+        sk = load_signing_key([], [], listen_port, install_path)
 
         # Load nickname client.
         nick = await Nickname(
@@ -308,7 +307,7 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         # Pub key will be used as a static name for testing too.
         install_path = get_aionetiface_install_root()
         listen_port = NODE_PORT
-        sk = load_signing_key(listen_port, install_path)
+        sk = load_signing_key([], [], listen_port, install_path)
 
         dest_sk = ecdsa.SigningKey.generate(curve=SECP256k1)
         dest_vk = dest_sk.verifying_key.to_string("compressed")

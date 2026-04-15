@@ -34,21 +34,24 @@ todo: set this up after the pipe is done:
     tunnel.node.msg_cb
 """
 
+import hashlib
 from collections import OrderedDict
 from aionetiface import *
 from .traversal_utils import *
 from .traversal_plugin import TraversalPlugin
-from ..protocol.traversal.proto_msg import GetAddr, ConMsg, ProtoMsg
+from ..protocol.traversal.proto_msg import GetAddr, ConMsg, ProtoMsg, SIG_PROTO
 
 class TraversalManager():
-    def __init__(self, stop_reader, pipes={}, nics=[]):
-        self.router = None # Used for sig pipes.
+    def __init__(self, stop_reader, pipes=None, nics=None):
+        self.router = None  # Used for sig pipes.
+        self.node = None    # Set by setup_signal_router after node startup.
         self.stop_reader = stop_reader
         self.plugin_loaders = OrderedDict()
-        self.plugins = {} # by pipe id
-        self.pipes = pipes
-        self.nics = nics
+        self.plugins = {}   # by pipe id
+        self.pipes = pipes if pipes is not None else {}
+        self.nics = nics if nics is not None else []
         self.done_callback = None
+        self.tasks = []     # Long-lived background tasks spawned by signal handling.
 
     def install_plugin_done_callback(self, done_callback):
         self.done_callback = done_callback
@@ -87,7 +90,6 @@ class TraversalManager():
             # Sets self.interface based on if_index for dest.
             reply.routing.load_if_extra(self.nics)
 
-        print("in run plugin")
         await async_wrap_errors(
             plugin.run(reply),
             timeout=plugin.timeout
@@ -106,8 +108,6 @@ class TraversalManager():
 
         plugin.stop_reader = self.stop_reader
         self.plugins[plugin.pipe_id] = plugin
-        print(plugin_loader)
-        print(plugin)
 
         # Install done callback handler.
         if self.done_callback:
@@ -119,8 +119,8 @@ class TraversalManager():
         # Load routing details in plugin.
         nic = self.nics[src_info["if_index"]]
         plugin.set_routing(
-            af, 
-            src_info, 
+            af,
+            src_info,
             dest_info,
             nic
         )
@@ -133,10 +133,8 @@ class TraversalManager():
             plugin_loader["timeout"]
         )
 
-        # Set function for plugin to send replies.
-        print(self.signal_msg_sender)
+        # Set function for plugin to send signaling replies.
         plugin.set_signal_msg_sender(self.signal_msg_sender)
-
 
         return plugin
     
@@ -202,7 +200,6 @@ class TraversalManager():
         )
 
         # Try every interface info pair for the plugins.
-        print(plugin_name)
         for if_infos in if_infos_order:
             src_info, dest_info = if_infos
             plugin = self.plugin_router(
@@ -218,7 +215,6 @@ class TraversalManager():
             plugin.set_addrs(src_map, dest_map)
 
             # Run plugin function -- timeout based on plugin meta.
-            print("running plugin ", plugin)
             await self.run_plugin(plugin)
             return plugin
                 
@@ -228,9 +224,9 @@ class TraversalManager():
             del self.plugins[plugin.pipe_id]
             del self.pipes[plugin.pipe_id]
 
-    async def signal_msg_sender(self, msg, plugin):
+    async def signal_msg_sender(self, msg, plugin, relay_no=2):
         msg.meta = ProtoMsg.Meta.from_dict({
-            "ttl": int(self.f_time()) + 30,
+            "ttl": int(self.router.get_time()) + 30,
             "pipe_id": plugin.pipe_id,
             "af": plugin.af,
             "src_buf": plugin.src_map["bytes"],
@@ -246,18 +242,16 @@ class TraversalManager():
             "dest_index": plugin.dest_info["if_index"],
         })
 
-        # Our key for an encrypted reply.
-        msg.cipher.vk = self.vk
-        print(self.node_id, "> SEND ", msg.routing.dest["node_id"], " ", msg.to_dict())
+        # Attach our compressed verifying key so the receiver can decrypt.
+        msg.cipher.vk = self.node.vk.to_string("compressed")
 
         # Convert to bytes.
         buf = sig_msg_to_buf(msg)
-        #self.record_seen_msg(buf)
 
-        # Set sig pipe.
+        # Route to destination via MQTT.
         sig_pipe = await self.router.pipe(
-            msg.dest["pub_key_hex"], 
-            self.handle_router_msg, 
+            plugin.dest_map["pub_key_hex"],
+            self.handle_router_msg,
             use_cache=True
         )
 
@@ -265,51 +259,42 @@ class TraversalManager():
         await sig_pipe.send(buf)
 
     # Receive a signal message and pass it to a plugin.
+    # Called by the MQTT client as: handler(msg, src_pk, queue_id, client)
     def handle_router_msg(self, msg, src_pk_hex, pipe_id_hex, client):
-        print("in signal router msg_cb")
-        buf = to_b(msg)
-        #self.discard_seen_msg(buf)
-
-        msg = try_unpack_msg(buf, self.sk, self.proto_def)
-        if to_s(msg.routing.dest["node_id"]) != self.node_id:
-            print("invalid ndoe id")
-            raise Exception("Message not meant for us.")
-        
-        # Check TTL.
-        if int(self.router.get_time()) >= msg.meta.ttl:
-            raise Exception("Discard old msg.")
-            return
-        
-        print(self.node_id, "> RECV ", msg.meta.src["node_id"], " ", msg.to_dict())
-
-        # Raise exception if this is old.
-
-        # Updating routing dest with current addr.
-        msg.set_cur_addr(self.addr_bytes)
-
-        print("msg meta same machine is now = ", msg.meta.same_machine)
-        
-        # Pass this message on to existing plugin.
-        # If one doesn't exist it will be created.
         try:
+            buf = to_b(msg)
+            msg = try_unpack_msg(buf, self.node.sk, SIG_PROTO)
+
+            # Verify this message is addressed to us.
+            dest_node_id = hashlib.sha256(
+                h_to_b(msg.routing.dest["pub_key_hex"])
+            ).hexdigest()[:25]
+            if dest_node_id != self.node.node_id:
+                raise Exception("Message not meant for us.")
+
+            # Check TTL.
+            if int(self.router.get_time()) >= msg.meta.ttl:
+                raise Exception("Discarding expired msg.")
+
+            # Update routing destination with our current address.
+            msg.set_cur_addr(self.node.addr_bytes)
+
+            # Dispatch to the matching (or new) plugin.
             plugin = self.get_plugin(msg)
         except Exception:
-            print("get plugin failed")
-            what_exception()
             log_exception()
             return
 
-        print("plugin selected = ", plugin)
-
-        #TODO: make this pop off older items when it fills.
-        self.tasks.append(
-            asyncio.create_task(
-                async_wrap_errors(
-                    self.run_plugin(plugin, reply=msg)
-                    #plugin.run(reply=msg) 
-                )
+        # Schedule the plugin run as a background task.
+        # Keep a reference so the task isn't garbage-collected mid-run.
+        task = asyncio.create_task(
+            async_wrap_errors(
+                self.run_plugin(plugin, reply=msg)
             )
         )
+        self.tasks.append(task)
+        # Prune completed tasks to avoid unbounded growth.
+        self.tasks = [t for t in self.tasks if not t.done()]
 
 if __name__ == "__main__":
 

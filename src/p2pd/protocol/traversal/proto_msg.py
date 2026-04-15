@@ -204,8 +204,6 @@ class ProtoMsg():
         # Set same machine flag.
         sid = self.meta.src["machine_id"]
         did = self.routing.dest["machine_id"]
-        print("src machine id = ", sid)
-        print("dest machine id = ", did)
         if sid == did:
             self.meta.same_machine = True
 

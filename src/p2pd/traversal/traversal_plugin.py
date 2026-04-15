@@ -73,4 +73,4 @@ class TraversalPlugin():
         return await self._signal_msg_sender(msg, self, relay_no)
 
     async def run(self, reply=None):
-        print("run parent.")
+        log("TraversalPlugin.run() called on base class - subclass should override this.")

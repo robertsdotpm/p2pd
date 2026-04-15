@@ -46,8 +46,6 @@ class Node(Daemon):
         self.ifs = ifs
 
         # If listen IPs are set then route pool is restricted to just those IPs.
-        print("ip = ", ip)
-        print("listen ips = ", self.listen_ips)
 
         # Listen on arbitrary IPs (may be WAN, LAN, or link-local.
         if self.listen_ips:
@@ -78,6 +76,7 @@ class Node(Daemon):
         self.punch_clients = {}
         self.punch_proc = {}
         self.active_punchers = 0
+        self.max_punchers = 0
 
         # Set on start.
         self.addr_bytes = None
@@ -101,7 +100,6 @@ class Node(Daemon):
                 result = future.result()
                 pipe_like = (Pipe, PipeClient, TCPClientProtocol, PipeEvents)
                 if isinstance(result, pipe_like):
-                    print("add msg cb ", result, self.msg_cb)
                     result.add_msg_cb(self.msg_cb)
             except Exception:
                 log_exception()
@@ -145,8 +143,8 @@ class Node(Daemon):
             if isinstance(r, KeyboardInterrupt):
                 log("reraising key interrupt")
                 raise r
-            else:
-                log(r)
+            elif isinstance(r, Exception):
+                log("msg_cb coro raised: " + repr(r))
 
     async def start(self, sys_clock=None, out=False, cout=print):
         await node_start(self, sys_clock=sys_clock, out=out, cout=cout)
@@ -169,19 +167,15 @@ class Node(Daemon):
             pkt = await self.nick_client.get(pnp_addr)
             addr_bytes = pkt.value
             dest_vk = pkt.vkc
-            print("Dest addr res from namebump = ", pkt.value)
-            print(dest_vk)
 
             try:
                 updated_addr_bytes = await asyncio.wait_for(
                     get_updated_addr_from_mqtt(self, addr_bytes),
                     timeout=3
                 )
-                print("Got updated addr bytes from mqtt = ", updated_addr_bytes)
                 if updated_addr_bytes:
                     addr_bytes = updated_addr_bytes
             except asyncio.TimeoutError:
-                print("Unable to get updated addr bytes from mqtt")
                 log("Timeout MQTT get updated bytes " + str(pnp_addr))
         else:
             addr_bytes = pnp_addr
@@ -290,7 +284,7 @@ class Node(Daemon):
         if pipe_id not in self.pipes:
             self.pipes[pipe_id] = asyncio.Future()
 
-        return pipe_id
+        return self.pipes[pipe_id]
 
     def pipe_ready(self, pipe_id, pipe):
         if pipe_id not in self.pipes:

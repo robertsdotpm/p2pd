@@ -42,13 +42,11 @@ def load_signing_key(nics, listen_ips, listen_port, install_path):
         )
     )
 
-    # Read secret key as binary if it exists.
+    # Read existing key, or generate and persist a new one.
     if os.path.exists(sk_path):
         with open(sk_path, mode='r') as fp:
             sk_hex = fp.read()
-
-    # Write a new key if the path doesn't exist.
-    if not os.path.exists(sk_path):
+    else:
         sk = SigningKey.generate(curve=SECP256k1)
         sk_buf = sk.to_string()
         sk_hex = to_h(sk_buf)
@@ -127,15 +125,12 @@ async def close_idle_pipes(node):
         # Sleep until the next pipe is due, capped at 5 seconds
         await asyncio.sleep(min(next_sleep, 5))
 
-async def load_stun_clients(node, limit=USE_MAP_NO):
-    if hasattr(node, "stun_clients"):
-        return
-
-    node.stun_clients = {IP4: {}, IP6: {}}
+async def load_stun_clients(ifs, limit=USE_MAP_NO):
+    stun_clients = {IP4: {}, IP6: {}}
     tasks = []
 
-    for if_index in range(len(node.ifs)):
-        interface = node.ifs[if_index]
+    for if_index in range(len(ifs)):
+        interface = ifs[if_index]
         for af in interface.supported():
             async def job(af=af, if_index=if_index, interface=interface):
                 clients = await get_n_stun_clients(
@@ -152,7 +147,9 @@ async def load_stun_clients(node, limit=USE_MAP_NO):
 
     results = await asyncio.gather(*tasks, return_exceptions=False)
     for af, if_index, clients in results:
-        node.stun_clients[af][if_index] = clients
+        stun_clients[af][if_index] = clients
+
+    return stun_clients
 
 def worker_init():
     """
@@ -184,14 +181,6 @@ async def get_pp_executors(workers=None):
         log_exception()
     
     return workers, pp_executor
-    loop = asyncio.get_event_loop()
-    tasks = []
-    for i in range(0, workers):
-        tasks.append(loop.run_in_executor(
-            pp_executor, init_process_pool
-        ))
-    await asyncio.gather(*tasks)
-    return pp_executor
 
 async def setup_punch_coordination(node, sys_clock):
     node.max_punchers, node.pp_executor = await get_pp_executors()

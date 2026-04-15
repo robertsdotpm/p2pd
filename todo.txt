@@ -87,3 +87,20 @@ add the deterministic mappings
     -- and show freshness of servers in demo
 
   make the final changes and then focus the next few weeks on stability and making the software work without crashing
+
+
+
+if you have:
+  task:
+    load ifs ...
+    nat tests ...
+
+then the integrity of the if addressing is then bound to whatever happens
+with the nat tests. sometimes concurrency makes things more brittle.
+
+interface.start is flaky. is it due to servers banning you for repeat messages in
+a short period?
+  
+using get_servers math func in get_infra causes the flakyness.
+so is the failure in that func? in a bunch of servers? and wouldnt the threshold
+stuff solve transient server failures?

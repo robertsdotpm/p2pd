@@ -32,7 +32,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Connectivity Clients
     await load_p2p_stun_clients(node, out, cout)
-    router = Router(kp, get_time=node.sys_clock.time)
+    router = Router(kp, get_time=node.sys_clock.time, nic=Interface("default"))
 
     # Start Servers
     start_maintenance_tasks(node)
@@ -44,7 +44,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # High-Level Services
     await setup_nickname_service(node)
-    setup_signal_router(node, router)
+    await setup_signal_router(node, router, out, cout)
     setup_traversal_plugins(node)
 
     return node
@@ -54,7 +54,6 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 # ==========================================
 async def load_network_interfaces(node):
     if not len(node.ifs):
-        print("\tLoading networking interfaces again...")
         try:
             if_names = await list_interfaces()
             node.ifs = await load_interfaces(if_names, Interface)
@@ -67,6 +66,8 @@ async def load_network_interfaces(node):
     # Ensure deterministic order
     node.ifs = sorted(node.ifs, key=lambda x: x.name)
 
+    print(node.ifs)
+    exit(0)
     if not len(node.ifs):
         raise Exception("p2p node could not load ifs.")
 
@@ -103,7 +104,7 @@ async def load_machine_identity(node):
 
     if node.machine_id in (None, ""):
         raise Exception("Could not load machine id.")
-    
+
     # The listen port is set deterministically to avoid conflicts
     # with port forwarding with multiple nodes in the LAN.
     if node.listen_port is None:
@@ -111,8 +112,6 @@ async def load_machine_identity(node):
             dhash(node.machine_id),
             [10000, 60000]
         )
-    
-    print(node.ifs)
 
 def load_cryptography_and_auth(node):
     install_path = node.conf["install_path"] or get_aionetiface_install_root()
@@ -122,7 +121,6 @@ def load_cryptography_and_auth(node):
     node.node_id = hashlib.sha256(
         node.vk.to_string("compressed")
     ).hexdigest()[:25]
-    print(node.node_id)
 
     # Table of authenticated users
     node.auth = {
@@ -143,8 +141,8 @@ async def load_p2p_stun_clients(node, out, cout):
     if node.conf.get("enable_punching", True):
         if out: cout("\tLoading STUN clients...")
         # Returns TCP STUN clients using PUNCH_CONF.
-        await load_stun_clients(node)
-        
+        node.stun_clients = await load_stun_clients(node.ifs)
+
         if out:
             buf = ""
             for if_index in range(0, len(node.ifs)):
@@ -153,12 +151,10 @@ async def load_p2p_stun_clients(node, out, cout):
                 for af in nic.supported():
                     af_txt = "V4" if af is IP4 else "V6"
                     buf += fstr("({0}={1})", (
-                        af_txt, 
+                        af_txt,
                         str(len(node.stun_clients[af][if_index])),
                     ))
             cout(buf)
-    
-    print(node.stun_clients)
 
 # ==========================================
 # Phase: Time & Synchronization
@@ -221,7 +217,8 @@ async def finalize_port_forwarding(node, upnp_task, out, cout):
             if out: cout("\t\tUPnP failed: reverse connect won't work.")
 
 def build_node_address(node, out):
-    assert(node.node_id is not None)
+    if node.node_id is None:
+        raise RuntimeError("node_id was not set before building node address.")
 
     node.addr_bytes = make_node_addr(
         node.kp.public_key_hex,
@@ -254,34 +251,39 @@ async def setup_nickname_service(node):
         node.ifs,
         node.sys_clock,
     )
-    
+
     if node.conf.get("enable_nickname", True):
-        asyncio.create_task(
+        # Keep a reference so the task is not garbage-collected mid-run.
+        task = asyncio.create_task(
             node.nickname(node.node_id)
         )
+        node.tasks.append(task)
 
-def setup_signal_router(node, router):
-    # Allow signaling router to pass messages to interested plugins.
+async def setup_signal_router(node, router, out, cout):
+    # Give the traversal manager a reference to the node so that
+    # signal_msg_sender and handle_router_msg can access node state.
+    node.traversal.node = node
     router.traversal = node.traversal
     node.traversal.router = router
-    #node.signal_router.set_traversal_manager(node.traversal)
 
-    # Tell the traversal plugin manager how to send signal messages.
-    """
-    node.traversal.set_signal_msg_sender(
-        node.signal_router.signal_msg_sender
-    )
-    """
+    # Subscribe to our own MQTT topic so we can receive incoming signals.
+    if out: cout("\tLoading MQTT router...")
+    try:
+        ret = await asyncio.wait_for(router.start(), timeout=5)
+        if out: cout("\t\t", ret)
+    except asyncio.TimeoutError:
+        raise Exception("Router MQTT start timed out - signaling may be degraded")
 
 def setup_traversal_plugins(node):
-    node.traversal.install_plugin("punch", {
-        "class": PunchPluginFactory(
-            node.stun_clients,
-            node.punch_clients,
-            node.sys_clock,
-            node.pp_executor,
-        ),
-        "timeout": 40
-    })
-    
-    print(node.traversal.plugin_loaders)
+    if node.conf.get("enable_punching", True):
+        node.traversal.install_plugin("punch", {
+            "class": PunchPluginFactory(
+                node.stun_clients,
+                node.punch_clients,
+                node.sys_clock,
+                node.pp_executor,
+            ),
+            "timeout": 40
+        })
+
+    log("traversal plugin_loaders: " + str(node.traversal.plugin_loaders))

@@ -8,83 +8,45 @@ an MQTT signaling message asks that node for its most
 recent address bytes.
 """
 async def get_updated_addr_bytes(node, dest_addr):
-    addr_bytes = None
-    if pnp_name_has_tld(dest_addr):
-        msg = fstr("Translating '{0}'", (dest_addr,))
-        log_p2p(msg, node.node_id[:8])
-        name = dest_addr
-        pkt = await node.nick_client.fetch(dest_addr)
-        #print("nick pkt vkc = ", pkt.vkc)
-        assert(pkt.vkc)
-        addr_bytes = pkt.value
-        assert(pkt.vkc)
-        #print("got addr bytes:", dest_addr)
+    """
+    Resolve a nickname to address bytes, then ask the peer for its current
+    address via the get_addr plugin (MQTT signaling).
 
-        msg = fstr("Resolved '{0}' = '{1}'", (name, dest_addr,))
-        log_p2p(msg, node.node_id[:8])
+    NOTE: This function is superseded by get_updated_addr_from_mqtt which
+    uses the plugin system. Kept for reference.
+    """
+    if not pnp_name_has_tld(dest_addr):
+        raise Exception("dest addr is not a pnp name")
 
-        # Parse address bytes to a dict.
-        addr = parse_node_addr(addr_bytes)
-        #print(addr)
+    log_p2p(fstr("Translating '{0}'", (dest_addr,)), node.node_id[:8])
 
-        # Authorize this node for replies.
-        assert(isinstance(pkt.vkc, bytes))
-        node.auth[addr["node_id"]] = {
-            "vk": pkt.vkc,
-            "sk": None,
-        }
+    pkt = await node.nick_client.get(dest_addr)
+    if pkt is None or pkt.value is None:
+        raise Exception(fstr("Nickname lookup failed for '{0}'", (dest_addr,)))
 
-        #print("auth table:", node.auth)
+    if not pkt.vkc or not isinstance(pkt.vkc, bytes):
+        raise Exception(fstr("Missing vkc in nickname response for '{0}'", (dest_addr,)))
 
-        # Reply must match this ID with this sender key.
-        pipe_id = to_s(rand_plain(10))
-        node.addr_futures[pipe_id] = asyncio.Future()
+    addr_bytes = pkt.value
+    log_p2p(fstr("Resolved '{0}' = '{1}'", (dest_addr, addr_bytes,)), node.node_id[:8])
 
-        # Request most recent address from peer using MQTT.
-        msg = GetAddr({
-            "meta": {
-                "ttl": int(node.sys_clock.time()) + 5,
-                "pipe_id": pipe_id,
-                "src_buf": node.addr_bytes,
-            },
-            "routing": {
-                "dest_buf": addr_bytes,
-            },
-        })
-
-        # Our key for an encrypted reply.
-        msg.cipher.vk = to_h(node.vk.to_string("compressed"))
-
-        # Their key as loaded from PNS.
-        assert(pkt.vkc)
-        node.sig_msg_queue.put_nowait([msg, pkt.vkc, 0])
-
-        # Wait for an updated address.
-        reply = None
-        try:
-            # Get a return addr reply.
-            reply = await asyncio.wait_for(
-                node.addr_futures[pipe_id],
-                5
-            )
-
-            # Use the src addr directly.
-            #print("Got updated addr.", reply.meta.src_buf)
-            addr_bytes = reply.meta.src_buf
-        except asyncio.TimeoutError:
-            #print("addr requ timed out")
-            return addr_bytes
-
-    else:
-        raise Exception("dest addr not a pnp name")
+    # Use the plugin system to request the peer's most recent address.
+    try:
+        updated_bytes = await get_updated_addr_from_mqtt(node, addr_bytes)
+        if updated_bytes:
+            return updated_bytes
+    except Exception:
+        log_exception()
 
     return addr_bytes
 
 async def get_updated_addr_from_mqtt(node, dest_bytes):
-    af = None # Not relevant for this method
-    route_type = None # Not relevant but as long as it's not NIC_BIND.
+    af = None        # AF selection is handled inside connect().
+    route_type = None
     plugin = await node.connect(af, route_type, dest_bytes, "get_addr")
-    print("get_updated_addr_from_mqtt plug = ", plugin)
-    updated_bytes = await plugin.result # TODO: timeout.
-    print("updated bytes ", updated_bytes)
+    try:
+        updated_bytes = await asyncio.wait_for(plugin.result, timeout=10)
+    except asyncio.TimeoutError:
+        log("get_updated_addr_from_mqtt timed out waiting for reply")
+        return None
     return updated_bytes

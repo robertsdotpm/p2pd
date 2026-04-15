@@ -103,11 +103,11 @@ class Nickname():
                 client.kp = namebump.Keypair(self.sk)
 
                 async def job(af=af, index=index, client=client):
-                    await client.start()
                     pipe = None
                     try:
+                        await client.start()
                         pipe = await asyncio.wait_for(
-                            client.get_dest_pipe(), 
+                            client.get_dest_pipe(),
                             timeout=timeout
                         )
                         if pipe is None:
@@ -137,7 +137,8 @@ class Nickname():
         return self
 
     async def put(self, name, value, behavior=namebump.DO_BUMP, timeout=NAMING_TIMEOUT):
-        assert(self.started)
+        if not self.started:
+            raise RuntimeError("Nickname client not started. Call start() first.")
         name = pnp_strip_tlds(name)
 
         # Single coro for storing at one server.
@@ -155,7 +156,7 @@ class Nickname():
 
         # Schedule store tasks at all PNP servers.
         tasks = []
-        for offset in range(0, len(self.clients)):
+        for offset in range(0, len(self.clients[IP4])):
             tasks.append(
                 async_wrap_errors(
                     worker(offset),
@@ -174,7 +175,8 @@ class Nickname():
         return fstr("{0}{1}", (name, tld,))
 
     async def get(self, name, timeout=NAMING_TIMEOUT):
-        assert(self.started)
+        if not self.started:
+            raise RuntimeError("Nickname client not started. Call start() first.")
 
         async def worker(offset, name):
             for af in VALID_AFS:
@@ -204,18 +206,23 @@ class Nickname():
                 )
             )
 
-        # Return first success.
+        # Return first success. Outer timeout is a safety net in case
+        # async_wrap_errors doesn't catch a hanging task.
         t = timeout + 1
         first_in = asyncio.as_completed(tasks, timeout=t)
-        for task in first_in:
-            ret = await task
-            if ret.value is not None:
-                return ret
-            
+        try:
+            for task in first_in:
+                ret = await task
+                if ret is not None and ret.value is not None:
+                    return ret
+        except asyncio.TimeoutError:
+            pass
+
         raise FullNameFailure(fstr("Could not fetch {0}", (name,)))
         
     async def delete(self, name, timeout=NAMING_TIMEOUT):
-        assert(self.started)
+        if not self.started:
+            raise RuntimeError("Nickname client not started. Call start() first.")
         name = pnp_strip_tlds(name)
 
         async def worker(offset):
@@ -230,7 +237,7 @@ class Nickname():
                     log_exception()
 
         tasks = []
-        for offset in range(0, len(self.clients)):
+        for offset in range(0, len(self.clients[IP4])):
             tasks.append(
                 async_wrap_errors(
                     worker(offset),

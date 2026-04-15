@@ -37,20 +37,15 @@ async def shutdown_executor_with_timeout(executor, timeout=3):
 # Shutdown the node server and do cleanup.
 async def node_stop(node):
     # Send stop signal (any amount of data.)
-    print("Send to stop writer.")
     node.stop_writer.send(b"Meow")
-    print("end send stop writer")
 
     # Stop error logging thread.
     log(None)
 
     # Close all pipes stored in plugins.
-    print("close pipe plugins")
     for pipe_id in node.traversal.plugins:
-        print(pipe_id)
         plugin = node.traversal.plugins[pipe_id]
         result = plugin.result
-        print(plugin, result)
         if isinstance(result, asyncio.Future):
             if result.cancelled():
                 continue
@@ -62,8 +57,6 @@ async def node_stop(node):
                         await close_with_timeout(pipe)
                     except Exception:
                         pass
-
-    print("end close pipe plugins")
 
     # Close other pipes.
     pipe_lists = [
@@ -110,32 +103,26 @@ async def node_stop(node):
         Attempts a clean shutdown, but forces termination after 'timeout' seconds.
         """
         # 1. Trigger the standard shutdown
-        print("before pp shutdown")
         if sys.version_info >= (3, 9):
             node.pp_executor.shutdown(wait=False, cancel_futures=True)
         else:
             node.pp_executor.shutdown(wait=False)
-        print("after pp shut down.")
 
         # 2. Poll for active children until timeout
-        print("before poll active children ")
         end = asyncio.get_running_loop().time() + 3
         while multiprocessing.active_children():
             if asyncio.get_running_loop().time() >= end:
                 break
             await asyncio.sleep(0.5)
-        print("after poll active children")
 
         # Timeout reached: forceful shutdown.
         for child in multiprocessing.active_children():
             # This sends SIGTERM on Linux and TerminateProcess on Windows
             child.terminate()
-            
+
         # Final check to ensure they are cleaned up
-        print("final child check cleanup")
         for child in multiprocessing.active_children():
             child.join(timeout=0.5)
-        print("after final child cleanup")
 
         #await shutdown_executor_with_timeout(node.pp_executor)
         log("shutdown for pp executor done.")

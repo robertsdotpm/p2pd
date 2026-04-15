@@ -11,7 +11,7 @@ if __name__ != '__main__':
     from .protocol.echo.echo_server import *
     from .node.node import Node, NODE_CONF, NODE_PORT
     from .node.node_defs import stop_rw
-    from .node.node_utils import get_pp_executors, load_signing_key
+    from .node.node_utils import get_pp_executors, load_signing_key, load_stun_clients
     from .node.nickname import *
 
 
