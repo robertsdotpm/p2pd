@@ -88,6 +88,8 @@ class Node(Daemon):
         # Set on start.
         self.addr_bytes = None
         self.addr_futures = {}
+
+        self.router = None
         self.traversal = TraversalManager(self.stop_reader, self.pipes, self.ifs)
         self.traversal.install_plugin("direct_connect", {
             "class": DirectConnect
@@ -174,9 +176,26 @@ class Node(Daemon):
             pkt = await self.nick_client.get(pnp_addr)
             addr_bytes = pkt.value
             dest_vk = pkt.vkc
+            dest_map = parse_node_addr(addr_bytes)
+
+            """
+            Pre-load router to have clients connected for the dest public key.
+            Otherwise, this happens inside the plugins which causes the plugins
+            to appear like they've timed out for being too slow.
+
+            When they receive a new pub key msg for the first time they also
+            need to cache those server connections. So you're waiting for them too
+            on startup. Could have an arg to preload from a pub key.
+            """
+            sig_pipe = await self.router.pipe(
+                dest_map["pub_key_hex"],
+                use_cache=True
+            )
+            print("Loaded mqtt clients for dest = ", sig_pipe)
 
             try:
                 # TODO: what should timeout val be
+                
                 updated_addr_bytes = await asyncio.wait_for(
                     get_updated_addr_from_mqtt(self, addr_bytes),
                     timeout=10
@@ -187,6 +206,10 @@ class Node(Daemon):
                 log("Timeout MQTT get updated bytes " + str(pnp_addr))
         else:
             addr_bytes = pnp_addr
+            sig_pipe = await self.router.pipe(
+                dest_map["pub_key_hex"],
+                use_cache=True
+            )
 
         # If af is None select an AF supported by both.
         src_map = self.p2p_addr
@@ -206,6 +229,7 @@ class Node(Daemon):
         plugin = await self.traversal.start(
             src_map=src_map,
             dest_map=dest_map,
+            sig_pipe=sig_pipe,
             plugin_name=plugin_name,
             af=af,
             route_type=route_type,

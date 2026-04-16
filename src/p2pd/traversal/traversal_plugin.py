@@ -6,6 +6,7 @@ class TraversalPlugin():
         self.result = asyncio.Future()
         self.pipe_id = to_s(rand_plain(15))
         self.has_reply = asyncio.Event()
+        self.sig_pipe = None
 
     def set_addrs(self, src_map, dest_map):
         self.src_map = src_map

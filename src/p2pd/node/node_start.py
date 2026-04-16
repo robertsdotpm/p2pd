@@ -268,6 +268,7 @@ async def setup_nickname_service(node):
 async def setup_signal_router(node, router, out, cout):
     # Give the traversal manager a reference to the node so that
     # signal_msg_sender and handle_router_msg can access node state.
+    node.router = router
     node.traversal.node = node
     router.traversal = node.traversal
     node.traversal.router = router

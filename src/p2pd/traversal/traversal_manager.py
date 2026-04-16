@@ -180,7 +180,7 @@ class TraversalManager():
 
         return plugin
 
-    async def start(self, src_map, dest_map, plugin_name, af=IP4, route_type=NIC_BIND):
+    async def start(self, src_map, dest_map, sig_pipe, plugin_name, af=IP4, route_type=NIC_BIND):
         # Need AF supported by both.
         if not src_map[af] or not dest_map[af]:
             raise Exception("AF not supported between hosts.")
@@ -213,6 +213,9 @@ class TraversalManager():
 
             # Load overall addr info into the plugin.
             plugin.set_addrs(src_map, dest_map)
+
+            # Used to communicate on MQTT.
+            plugin.sig_pipe = sig_pipe
 
             # Run plugin function -- timeout based on plugin meta.
             await self.run_plugin(plugin)
@@ -250,14 +253,8 @@ class TraversalManager():
             buf = to_s(sig_msg_to_buf(msg))
             print("send ", msg.to_dict(), plugin.dest_map["pub_key_hex"])
 
-            # Route to destination via MQTT.
-            sig_pipe = await self.router.pipe(
-                plugin.dest_map["pub_key_hex"],
-                use_cache=True
-            )
-
             # Send signaling message using MQTT.
-            await sig_pipe.send(buf)
+            await plugin.sig_pipe.send(buf)
         except Exception:
             log_exception()
 
@@ -286,6 +283,20 @@ class TraversalManager():
             what_exception()
             log_exception()
             return
+        
+        # Route to destination via MQTT.
+        if plugin.sig_pipe is None:
+            plugin.sig_pipe = await self.router.pipe(
+                plugin.dest_map["pub_key_hex"],
+                use_cache=True
+            )
+
+        # Run plugin here -- don't do the background thing for now.
+        await async_wrap_errors(
+            self.run_plugin(plugin, reply=msg)
+        )
+
+        return
 
         # Schedule the plugin run as a background task.
         # Keep a reference so the task isn't garbage-collected mid-run.
