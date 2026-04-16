@@ -141,6 +141,10 @@ class TestNickname(unittest.IsolatedAsyncioTestCase):
         except Exception:
             self.skipTest("Nickname servers unreachable — skipping network tests")
 
+    async def asyncTearDown(self):
+        if self.nick is not None:
+            await self.nick.close()
+
     async def test_start_marks_started(self):
         self.assertTrue(self.nick.started)
 
@@ -301,6 +305,8 @@ class TestMQTT(unittest.IsolatedAsyncioTestCase):
             clients = await asyncio.wait_for(router.start(), timeout=20)
         except Exception as e:
             self.skipTest(f"Router.start() raised: {e}")
+        finally:
+            await router.close()
 
         # clients is a list of connected MQTTClient objects.
         self.assertIsNotNone(clients,
@@ -322,13 +328,15 @@ class TestMQTT(unittest.IsolatedAsyncioTestCase):
         try:
             clients = await asyncio.wait_for(router.start(), timeout=20)
         except Exception as e:
+            await router.close()
             self.skipTest(f"Router.start() raised: {e}")
         if not clients:
+            await router.close()
             self.skipTest("No MQTT brokers reachable")
 
-        # Getting a pipe to ourselves exercises the subscribe path.
-        vk_hex = kp.public_key_hex
         try:
+            # Getting a pipe to ourselves exercises the subscribe path.
+            vk_hex = kp.public_key_hex
             pipe = await asyncio.wait_for(
                 router.pipe(vk_hex, lambda *a: None, use_cache=False),
                 timeout=15
@@ -336,6 +344,8 @@ class TestMQTT(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(pipe)
         except Exception as e:
             self.skipTest(f"Router.pipe() raised: {e}")
+        finally:
+            await router.close()
 
 
 # ---------------------------------------------------------------------------

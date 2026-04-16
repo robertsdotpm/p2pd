@@ -59,47 +59,34 @@ class TestTurn(unittest.IsolatedAsyncioTestCase):
         turn_clients = []
         relay_tup = None
         for interface in ifs:
-            # Get turn client.
-            client = await get_turn_client(
-                af,
-                interface,
-                turn_offset
-            )
-
-            # Save to list of clients.
+            client = await get_turn_client(af, interface, turn_offset)
             turn_clients.append(client)
 
-        # Each turn client white lists the others external IP.
-        # Thereby allowing msgs from that interface through.
-        for if_index in range(0, len(ifs)):
-            # Accept the other interfaces external IP.
-            src_turn = turn_clients[if_index]
-            dest_turn = turn_clients[(if_index + 1) % 2]
-            peer_tup = await dest_turn.client_tup_future
-            relay_tup = await dest_turn.relay_tup_future
-            await src_turn.accept_peer(peer_tup, relay_tup)
+        try:
+            # Each turn client white lists the others external IP.
+            for if_index in range(0, len(ifs)):
+                src_turn = turn_clients[if_index]
+                dest_turn = turn_clients[(if_index + 1) % 2]
+                peer_tup = await dest_turn.client_tup_future
+                relay_tup = await dest_turn.relay_tup_future
+                await src_turn.accept_peer(peer_tup, relay_tup)
 
-        # Test message receipt for both clients.
-        msg = b"hello, world!"
-        for if_index in range(0, len(ifs)):
-            # Perspective is this if to that turn client.
-            # The turn client is on another interface.
-            interface = ifs[if_index]
-            turn_client = turn_clients[(if_index + 1) % 2]
+            # Test message receipt for both clients.
+            msg = b"hello, world!"
+            for if_index in range(0, len(ifs)):
+                interface = ifs[if_index]
+                turn_client = turn_clients[(if_index + 1) % 2]
 
-            # Send data to the relay endpoint.
-            for i in range(0, 3):
-                await turn_client.send(msg)
+                for i in range(0, 3):
+                    await turn_client.send(msg)
 
-            # Recv data back.
-            peer_tup = await turn_client.client_tup_future
-            sub = tup_to_sub(peer_tup)
-            out = await turn_clients[if_index].recv(SUB_ALL)
-            assert(msg in out)
-
-        # Cleanup
-        for turn_client in turn_clients:
-            await turn_client.close()
+                peer_tup = await turn_client.client_tup_future
+                sub = tup_to_sub(peer_tup)
+                out = await turn_clients[if_index].recv(SUB_ALL)
+                assert(msg in out)
+        finally:
+            for turn_client in turn_clients:
+                await turn_client.close()
 
 if __name__ == '__main__':
     main()

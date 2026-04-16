@@ -11,17 +11,14 @@ async def example():
     
     # Open a connection to the echo server.
     pipe = await pipe_open(TCP, echo_dest, route)
-    
-    # Send data down the pipe.
-    msg = b"do echo test"
-    await pipe.send(msg + b"\r\n", echo_dest)
-    
-    # Receive data back.
-    data = await pipe.recv(SUB_ALL, 4)
-    assert(msg in data)
-    
-    # Close the sockets.
-    await pipe.close()
+    async with pipe:
+        # Send data down the pipe.
+        msg = b"do echo test"
+        await pipe.send(msg + b"\r\n", echo_dest)
+
+        # Receive data back.
+        data = await pipe.recv(SUB_ALL, 4)
+        assert(msg in data)
 
 # Utility function to run an async function.
 if __name__ == '__main__':

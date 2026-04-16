@@ -16,17 +16,14 @@ async def example():
     
     # Now open a TCP connection to that the destination.
     pipe = await pipe_open(TCP, dest, route)
-    
-    # Send it a malformed HTTP request.
-    buf = b"Test\r\n\r\n"
-    await pipe.send(buf)
-    
-    # Wait for any message response.
-    out = await pipe.recv(timeout=3)
-    print(out)
-    
-    # Cleanup.
-    await pipe.close()
+    async with pipe:
+        # Send it a malformed HTTP request.
+        buf = b"Test\r\n\r\n"
+        await pipe.send(buf)
+
+        # Wait for any message response.
+        out = await pipe.recv(timeout=3)
+        print(out)
 
 if __name__ == '__main__':
     async_test(example)

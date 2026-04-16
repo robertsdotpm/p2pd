@@ -11,34 +11,30 @@ async def example():
     a_nic = await Interface("enp0s25")
     b_nic = await Interface("wlx00c0cab5760d")
 
-    # Start TURN clients.
-    a_client = await TURNClient(IP4, dest, a_nic, auth, realm=None)
-    b_client = await TURNClient(IP4, dest, b_nic, auth, realm=None)
+    # Start TURN clients; both are closed automatically on exit.
+    async with TURNClient(IP4, dest, a_nic, auth) as a_client, \
+               TURNClient(IP4, dest, b_nic, auth) as b_client:
 
-    # In practice you will have to exchange these tups via your protocol.
-    # I use MQTT for doing that. See diagram steps (1)(3).
-    a_addr, a_relay = await a_client.get_tups()
-    b_addr, b_relay = await b_client.get_tups()
+        # In practice you will have to exchange these tups via your protocol.
+        # I use MQTT for doing that. See diagram steps (1)(3).
+        a_addr, a_relay = await a_client.get_tups()
+        b_addr, b_relay = await b_client.get_tups()
 
-    # White list peers for sending to relay address.
-    # See diagram steps (2)(4).
-    await a_client.accept_peer(b_addr, b_relay)
-    await b_client.accept_peer(a_addr, a_relay)
+        # White list peers for sending to relay address.
+        # See diagram steps (2)(4).
+        await a_client.accept_peer(b_addr, b_relay)
+        await b_client.accept_peer(a_addr, a_relay)
 
-    # Send a message to Bob at their relay address.
-    # See middle of TURN relay diagram.
-    buf = b"hello bob"
-    for _ in range(0, 3):
-        await a_client.send(buf)
-    
-    # Get msg from Alice from the TURN server.
-    # See middle of TURN relay diagram.
-    msg = await b_client.recv()
-    assert(msg == buf)
+        # Send a message to Bob at their relay address.
+        # See middle of TURN relay diagram.
+        buf = b"hello bob"
+        for _ in range(0, 3):
+            await a_client.send(buf)
 
-    # Tell server to close resources for our client.
-    await a_client.close()
-    await b_client.close()
+        # Get msg from Alice from the TURN server.
+        # See middle of TURN relay diagram.
+        msg = await b_client.recv()
+        assert(msg == buf)
 
 
 

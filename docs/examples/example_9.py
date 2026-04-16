@@ -2,16 +2,11 @@
 from p2pd import *
 
 async def example():
-    serv = Daemon()
     nic = await Interface()
     af = nic.supported()[0]
     route = await nic.route(af).bind()
-    await serv.add_listener(
-        TCP,
-        route,
-    )
-    
-    await serv.close()
+    async with Daemon() as serv:
+        await serv.add_listener(TCP, route)
 
 if __name__ == '__main__':
     async_test(example)

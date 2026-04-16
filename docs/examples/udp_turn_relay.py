@@ -1,6 +1,7 @@
 from p2pd import *
 
 async def example():
-    node = await P2PNode()
-    pipe = await node.connect("example.peer", strategies=[P2P_RELAY])
-    await node.close()
+    async with P2PNode() as node:
+        pipe = await node.connect("example.peer", strategies=[P2P_RELAY])
+        async with pipe:
+            pass  # use pipe here

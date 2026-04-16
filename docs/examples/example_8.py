@@ -9,16 +9,9 @@ class EchoServer(Daemon):
 
 async def example():
     i = await Interface()
-    
-    # Daemon instance.
     route = await i.route().bind(port=10126)
-    echod = EchoServer()
-    await echod.add_listener(
-        TCP,
-        route,
-    )
-    
-    await echod.close()
+    async with EchoServer() as echod:
+        await echod.add_listener(TCP, route)
 
 if __name__ == '__main__':
     async_test(example)

@@ -29,14 +29,9 @@ class CustomServer(RESTD):
 
 async def example():
     nic = await Interface()
-    server = CustomServer()
-    await server.listen_loopback(TCP, 60322, nic)
-    
-    """
-    Feel free to add a while: sleep
-    then test it with CURL or something...
-    """
-    await server.close()
+    async with CustomServer() as server:
+        await server.listen_loopback(TCP, 60322, nic)
+        # Feel free to add a while: sleep then test it with CURL or something...
 
 if __name__ == '__main__':
     async_test(example)

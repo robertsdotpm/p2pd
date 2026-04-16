@@ -11,5 +11,5 @@ node_conf = dict_child({
 async def example():
     if_names = await list_interfaces()
     ifs = await load_interfaces(if_names)
-    node = await P2PNode(ifs=ifs, port=1337, conf=node_conf)
-    await node.close()
+    async with P2PNode(ifs=ifs, port=1337, conf=node_conf) as node:
+        pass  # node is running; add your code here

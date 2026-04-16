@@ -44,16 +44,11 @@ async def example():
     nic = await Interface()
     
     # Server object inherits from a standard Daemon.
-    server = NetInfoServer()
-    
     # Defines addresses and protocols to listen on.
-    # Feel free to switch this up.
-    await server.listen_all(TCP, 20000, nic)
-    await server.listen_all(UDP, 20000, nic)
-    
-    # Do a while sleep loop ...
-    # Instead we'll just close.
-    await server.close()
+    async with NetInfoServer() as server:
+        await server.listen_all(TCP, 20000, nic)
+        await server.listen_all(UDP, 20000, nic)
+        # Do a while sleep loop ...
 
 if __name__ == '__main__':
     async_test(example)
