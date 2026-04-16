@@ -35,6 +35,7 @@ todo: set this up after the pipe is done:
 """
 
 import hashlib
+import asyncio
 from collections import OrderedDict
 from aionetiface import *
 from .traversal_utils import *
@@ -257,6 +258,15 @@ class TraversalManager():
             await plugin.sig_pipe.send(buf)
         except Exception:
             log_exception()
+
+    async def close(self):
+        """Cancel all background signal-handler tasks spawned by handle_router_msg."""
+        live = [t for t in self.tasks if not t.done()]
+        for t in live:
+            t.cancel()
+        if live:
+            await asyncio.gather(*live, return_exceptions=True)
+        self.tasks.clear()
 
     # Receive a signal message and pass it to a plugin.
     # Called by the MQTT client as: handler(msg, src_pk, queue_id, client)

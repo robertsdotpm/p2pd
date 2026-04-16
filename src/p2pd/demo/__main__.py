@@ -152,12 +152,22 @@ async def main():
     # Catch process exit signals (not supported on win32.)
     nodes = []
     if sys.platform != "win32":
-        # Caught properly by async_run and wrapped catch.
         def set_shut_down():
-            sock_has_data(stop_rw[1]).send(b"Shut down.")
-            nodes[0].pp_executor.shutdown(wait=False)
-            nodes[0].pp_executor = None
+            # Signal the stop socket so the main loop exits.
+            try:
+                stop_rw[1].send(b"Shut down.")
+            except Exception:
+                pass
 
+            # Shut down the process-pool executor if the node is up yet.
+            if nodes:
+                pp = getattr(nodes[0], "pp_executor", None)
+                if pp is not None:
+                    try:
+                        pp.shutdown(wait=False)
+                    except Exception:
+                        pass
+                    nodes[0].pp_executor = None
 
         # Install SIGTERM handler.
         loop = asyncio.get_event_loop()
@@ -225,7 +235,7 @@ if __name__ == "__main__":
         print("keyboard interrupt")
         log("keyboard interrupt clause reached.")
         print("ended")
-    finally:
-        # Force exit to prevent Windows from hanging on dead threads
-        
-        sys.exit(0)
+
+    # Force exit to prevent Windows from hanging on dead threads.
+    # Placed outside finally so cleanup in async_run() can finish first.
+    sys.exit(0)

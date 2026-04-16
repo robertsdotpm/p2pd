@@ -106,20 +106,17 @@ class PunchPlugin(TraversalPlugin):
             print("Error:", error)
         """
 
-        # TODO: check whether self.result is per-plugin-instance or shared at
-        # the factory level. If it's shared, concurrent runs for the same
-        # pipe_id could both reach set_result() here, causing an
-        # "asyncio.InvalidStateError: Result is already set" on the second
-        # call. Should guard with `if not self.result.done()` at minimum, or
-        # ensure result is always scoped per-instance.
         pipe = await start_punching_process(
-            nic, 
+            nic,
             puncher,
             self.stop_reader,
-            self.proc_pool
+            self.proc_pool,
         )
 
-        self.result.set_result(pipe)
+        # Guard against a second concurrent call resolving the same future,
+        # which would raise asyncio.InvalidStateError.
+        if not self.result.done():
+            self.result.set_result(pipe)
 
     async def setup_puncher_client(self, reply):
         """

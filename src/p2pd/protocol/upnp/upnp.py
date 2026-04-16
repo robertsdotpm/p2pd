@@ -319,20 +319,22 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
     )
 
     tasks = [brute_force_task, multicast_task]
-    for done in asyncio.as_completed(tasks):
-        result = await done
-        if result:
-            # Cancel the other task
-            for t in tasks:
-                try:
-                    t.cancel()
-                except Exception:
-                    pass
+    winner = 0
+    try:
+        for done in asyncio.as_completed(tasks):
+            result = await done
+            if result:
+                winner = 1
+                break
+    finally:
+        # Always cancel remaining tasks and drain their CancelledError so we
+        # don't get "Task was destroyed but it is pending!" warnings.
+        for t in tasks:
+            if not t.done():
+                t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
-            return 1
-
-    # If neither returned 1
-    return 0
+    return winner
 
 if __name__ == "__main__":
     async def upnp_main():

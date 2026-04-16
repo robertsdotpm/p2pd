@@ -171,7 +171,7 @@ class TURNClient(PipeEvents):
                 process_replies(self)
             )
         )
-        #self.tasks.append(self.processing_loop_task)
+        self.tasks.append(self.processing_loop_task)
         
         # Add any message handlers.
         if self.msg_cb is not None:
@@ -235,15 +235,24 @@ class TURNClient(PipeEvents):
     async def reconnect(self, n=0):
         await self.close()
 
-        # Overwrite current state.
+        # Snapshot state before __init__ wipes it.
+        af       = self.af
+        dest     = self.dest
+        nic      = self.nic
+        auth     = (to_s(self.turn_user), to_s(self.turn_pw))
+        realm    = to_s(self.realm) if self.realm is not None else None
+        msg_cb   = self.msg_cb
+        conf     = self.conf
+
+        # Re-initialise with the correct positional/keyword signature.
         self.__init__(
-            route=self.route,
-            turn_addr=self.dest,
-            turn_user=self.turn_user,
-            turn_pw=self.turn_pw,
-            turn_realm=self.realm,
-            msg_cb=self.msg_cb,
-            conf=self.conf
+            af=af,
+            dest=dest,
+            nic=nic,
+            auth=auth,
+            realm=realm,
+            msg_cb=msg_cb,
+            conf=conf,
         )
 
         # Try start it again.

@@ -1,6 +1,7 @@
 import asyncio
 import sys
 import multiprocessing
+from contextlib import suppress
 from aionetiface import *
 from ..errors import AlreadyClosedError
 
@@ -34,10 +35,22 @@ async def shutdown_executor_with_timeout(executor, timeout=3):
         # Still blocking after timeout
         log("Warning: executor shutdown timed out")
 
+async def _cancel_tasks(tasks):
+    """Cancel a list of asyncio tasks and wait for them to finish."""
+    live = [t for t in tasks if not t.done()]
+    for t in live:
+        t.cancel()
+    if live:
+        await asyncio.gather(*live, return_exceptions=True)
+
+
 # Shutdown the node server and do cleanup.
 async def node_stop(node):
     # Send stop signal (any amount of data.)
-    node.stop_writer.send(b"Meow")
+    try:
+        node.stop_writer.send(b"Meow")
+    except Exception:
+        pass
 
     # Stop error logging thread.
     log(None)
@@ -87,8 +100,32 @@ async def node_stop(node):
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
 
+    # Cancel the idle-pipe-closer background task.
+    closer = getattr(node, "idle_pipe_closer", None)
+    if closer is not None:
+        await _cancel_tasks([closer])
+        node.idle_pipe_closer = None
+
+    # Cancel any other long-running node tasks (nickname refresh, etc.)
+    if getattr(node, "tasks", None):
+        await _cancel_tasks(node.tasks)
+        node.tasks.clear()
+
+    # Close the traversal manager's background signal-handler tasks.
+    traversal = getattr(node, "traversal", None)
+    if traversal is not None and hasattr(traversal, "close"):
+        await traversal.close()
+
     # Stop node server.
     await super(node.__class__, node).close()
+
+    # Close the stop-signal socket pair.
+    for sock in (getattr(node, "stop_reader", None), getattr(node, "stop_writer", None)):
+        if sock is not None:
+            with suppress(Exception):
+                sock.close()
+    node.stop_reader = None
+    node.stop_writer = None
 
     # Try close the multiprocess manager.
     if node.pp_executor:

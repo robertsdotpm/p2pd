@@ -138,3 +138,27 @@ if __name__ == '__main__':
             continue
         else:
             break
+
+    # ---- Clean shutdown ----
+    # Cancel every pending task so sockets / transports are closed properly
+    # and Python doesn't emit "Task was destroyed but it is pending!" or
+    # "unclosed socket" ResourceWarnings.
+    try:
+        pending = asyncio.all_tasks(loop)
+    except AttributeError:
+        # Python 3.6
+        pending = asyncio.Task.all_tasks(loop)
+
+    for task in pending:
+        task.cancel()
+
+    if pending:
+        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+
+    try:
+        if hasattr(loop, "shutdown_asyncgens"):
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        if hasattr(loop, "shutdown_default_executor"):
+            loop.run_until_complete(loop.shutdown_default_executor())
+    finally:
+        loop.close()
