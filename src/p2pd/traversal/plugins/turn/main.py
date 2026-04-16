@@ -24,8 +24,16 @@ async def udp_turn_relay(self, af, pipe_id, src_info, dest_info, iface, addr_typ
             self.node.msg_cb
         )
 
-        # Save client reference.
-        self.node.turn_clients[pipe_id] = client
+        # Re-check after the await: a concurrent udp_turn_relay call for the
+        # same pipe_id may have raced through get_first_working_turn_client
+        # and already stored a client.  Reuse that one and discard the
+        # duplicate we just created to avoid leaking the connection.
+        existing = self.node.turn_clients.get(pipe_id)
+        if existing is not None:
+            await client.close()
+            client = existing
+        else:
+            self.node.turn_clients[pipe_id] = client
 
     # Extract any received payload attributes.
     if reply is not None:
@@ -82,9 +90,12 @@ async def udp_turn_relay(self, af, pipe_id, src_info, dest_info, iface, addr_typ
         log_exception()
 
 async def turn_cleanup(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
-    if pipe_id not in self.node.turn_clients:
+    # Use pop to atomically remove the client before any await.  If we read
+    # the client and then deleted after close(), a concurrent udp_turn_relay
+    # could write a fresh client in the window between close() and del,
+    # leaving that new client immediately deleted and its connection leaked.
+    turn_client = self.node.turn_clients.pop(pipe_id, None)
+    if turn_client is None:
         return
 
-    turn_client = self.node.turn_clients[pipe_id]
     await turn_client.close()
-    del self.node.turn_clients[pipe_id]

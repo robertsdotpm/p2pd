@@ -62,9 +62,18 @@ class PunchPlugin(TraversalPlugin):
             if puncher is None:
                 print("alert puncher is none")
                 return # Abort if no STUN configuration is available
-            
-            # Setup predictions and start process waiter.
-            puncher = await self.configure_puncher_process(puncher, stuns)
+
+            # Re-check after the await: a concurrent run() for the same
+            # pipe_id may have raced through setup_puncher_client and already
+            # stored a puncher.  Reusing that one avoids a second punching
+            # process and a state mismatch where punch_proc holds a reference
+            # to a different PunchClient than punch_clients.
+            existing = self.punch_clients.get(self.pipe_id)
+            if existing is not None:
+                puncher = existing
+            else:
+                # Setup predictions and start process waiter.
+                puncher = await self.configure_puncher_process(puncher, stuns)
             punch_time = puncher.punch_time
 
         # --- Advance the State Machine ---
@@ -97,6 +106,12 @@ class PunchPlugin(TraversalPlugin):
             print("Error:", error)
         """
 
+        # TODO: check whether self.result is per-plugin-instance or shared at
+        # the factory level. If it's shared, concurrent runs for the same
+        # pipe_id could both reach set_result() here, causing an
+        # "asyncio.InvalidStateError: Result is already set" on the second
+        # call. Should guard with `if not self.result.done()` at minimum, or
+        # ensure result is always scoped per-instance.
         pipe = await start_punching_process(
             nic, 
             puncher,

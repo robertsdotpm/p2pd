@@ -86,8 +86,15 @@ class ACKUDP():
                     ack = None
 
         # Keep dicts from taking up too much memory.
+        # Avoid replacing self.seq entirely: in-flight workers hold `seq` keys
+        # and call `self.seq[seq].wait()` after resuming from an await. A blind
+        # `self.seq = {}` would make that lookup raise KeyError, and would also
+        # cause handle_ack to miss ACKs for every pending send (checked against
+        # the new empty dict), silently timing out all of them.
         if len(self.seq) > UDP_MAX_DICT_LEN:
-            self.seq = {}
+            done_keys = [k for k, e in self.seq.items() if e.is_set()]
+            for k in done_keys:
+                del self.seq[k]
 
         """
         The TURN client implements a custom is_ackable that wraps an ACK
@@ -157,6 +164,10 @@ class ACKUDP():
                 try:
                     # Will return instantly on receiving a related ACK.
                     # Otherwise it suspends for other code to execute.
+                    # Guard: if the entry was pruned while we were suspended
+                    # at the send() await above, bail out rather than KeyError.
+                    if seq not in self.seq:
+                        break
                     await asyncio.wait_for(
                         self.seq[seq].wait(),
                         3
