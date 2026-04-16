@@ -159,6 +159,12 @@ async def main():
             except Exception:
                 pass
 
+            # Unblock any ainput() call waiting in an executor thread.
+            try:
+                os.write(ainput_interrupt_w, b'\x01')
+            except OSError:
+                pass
+
             # Shut down the process-pool executor if the node is up yet.
             if nodes:
                 pp = getattr(nodes[0], "pp_executor", None)

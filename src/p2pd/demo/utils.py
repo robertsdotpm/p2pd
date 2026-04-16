@@ -1,10 +1,42 @@
 import asyncio
+import os
+import select
+import sys
 from ..do_imports import *
 from .cmd_arg_defs import *
 
+# Pipe used to unblock ainput() when the program shuts down.
+# Writing any byte to ainput_interrupt_w causes all pending ainput() calls to return "".
+ainput_interrupt_r, ainput_interrupt_w = os.pipe()
+
 async def ainput(prompt):
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, input, prompt)
+
+    def _blocking_input():
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+        try:
+            r, _, _ = select.select([sys.stdin.fileno(), ainput_interrupt_r], [], [])
+        except Exception:
+            return ""
+        if sys.stdin.fileno() not in r:
+            return ""  # Interrupted by shutdown signal
+        try:
+            line = sys.stdin.readline()
+            return line.rstrip('\n') if line else ""
+        except Exception:
+            return ""
+
+    fut = loop.run_in_executor(None, _blocking_input)
+    try:
+        return await fut
+    except asyncio.CancelledError:
+        # Unblock the _blocking_input thread so the executor shuts down cleanly.
+        try:
+            os.write(ainput_interrupt_w, b'\x01')
+        except OSError:
+            pass
+        raise
 
 def cout(*fargs):
     if args.cmd:

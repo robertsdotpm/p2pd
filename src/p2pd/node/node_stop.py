@@ -1,4 +1,6 @@
 import asyncio
+import os
+import signal
 import sys
 import multiprocessing
 from contextlib import suppress
@@ -79,7 +81,7 @@ async def node_stop(node):
     ]
 
     # For all active pipes, attempt to close them.
-    # Skip if already closed if not resolved to a pipe.
+    # Skip if already closed or not resolved to a pipe.
     tasks = []
     for pipe_list in pipe_lists:
         for pipe in pipe_list.values():
@@ -87,12 +89,11 @@ async def node_stop(node):
                 continue
 
             if isinstance(pipe, asyncio.Future):
-                if pipe.cancelled():
+                if pipe.cancelled() or not pipe.done():
                     continue
-
-                if pipe.done():
+                try:
                     pipe = pipe.result()
-                else:
+                except Exception:
                     continue
 
             tasks.append(close_with_timeout(pipe))
@@ -116,8 +117,11 @@ async def node_stop(node):
     if traversal is not None and hasattr(traversal, "close"):
         await traversal.close()
 
-    # Stop node server.
-    await super(node.__class__, node).close()
+    # Stop node server (Daemon.close closes all listener pipes).
+    # Using Daemon.close(node) directly rather than super(node.__class__, node).close()
+    # because the super() pattern breaks if Node is ever subclassed: super(SubClass, node)
+    # would resolve to Node, calling node_stop() again and looping infinitely.
+    await Daemon.close(node)
 
     # Close the stop-signal socket pair.
     for sock in (getattr(node, "stop_reader", None), getattr(node, "stop_writer", None)):
@@ -130,38 +134,69 @@ async def node_stop(node):
     # Try close the multiprocess manager.
     if node.pp_executor:
         """
-        Process pool executor is not that great at shut down.
-        At least prevent it from hanging forever by using a thread
-        with a 3 second upper bound on shutdown blocking.
+        ProcessPoolExecutor does not shut down cleanly on its own.
+        Strategy: ask it to stop, poll for its specific worker processes
+        to exit (up to 3 s), then force-terminate any stragglers.
+        On Unix we escalate SIGTERM → SIGKILL so signal-ignoring workers
+        cannot hang the shutdown.  On Windows terminate() already calls
+        TerminateProcess() which is a hard kill.
         """
         log("trying to shut down pp executor waiting.")
 
-        """
-        Attempts a clean shutdown, but forces termination after 'timeout' seconds.
-        """
-        # 1. Trigger the standard shutdown
+        # Snapshot the executor's own worker PIDs *before* calling shutdown()
+        # so we only touch those processes and not unrelated children.
+        # _processes is a CPython implementation detail (dict pid→Process);
+        # fall back to affecting all active children if it is missing.
+        executor_pids = set()
+        try:
+            executor_pids = set(node.pp_executor._processes.keys())
+        except AttributeError:
+            pass
+
+        # 1. Trigger the standard shutdown (non-blocking).
         if sys.version_info >= (3, 9):
             node.pp_executor.shutdown(wait=False, cancel_futures=True)
         else:
             node.pp_executor.shutdown(wait=False)
 
-        # 2. Poll for active children until timeout
-        end = asyncio.get_running_loop().time() + 3
-        while multiprocessing.active_children():
-            if asyncio.get_running_loop().time() >= end:
+        # Clear immediately so a second call to node_stop() cannot re-enter.
+        node.pp_executor = None
+
+        # 2. Poll until the executor's workers exit or the 3-second deadline passes.
+        loop = asyncio.get_running_loop()
+        end = loop.time() + 3
+        while True:
+            active = multiprocessing.active_children()
+            if executor_pids:
+                remaining = {c for c in active if c.pid in executor_pids}
+            else:
+                remaining = set(active)
+            if not remaining or loop.time() >= end:
                 break
             await asyncio.sleep(0.5)
 
-        # Timeout reached: forceful shutdown.
-        for child in multiprocessing.active_children():
-            # This sends SIGTERM on Linux and TerminateProcess on Windows
+        # 3. Force-terminate only this executor's workers that are still alive.
+        active = multiprocessing.active_children()
+        targets = [c for c in active if not executor_pids or c.pid in executor_pids]
+        for child in targets:
+            # SIGTERM on Linux/macOS; TerminateProcess() on Windows.
             child.terminate()
 
-        # Final check to ensure they are cleaned up
-        for child in multiprocessing.active_children():
+        # 4. On Unix, escalate to SIGKILL for processes that ignore SIGTERM.
+        if sys.platform != "win32" and targets:
+            await asyncio.sleep(0.2)
+            active_pids = {c.pid for c in multiprocessing.active_children()}
+            for child in targets:
+                if child.pid in active_pids:
+                    try:
+                        os.kill(child.pid, signal.SIGKILL)
+                    except (ProcessLookupError, PermissionError):
+                        pass  # Already exited or cannot kill.
+
+        # 5. Final reap.
+        for child in targets:
             child.join(timeout=0.5)
 
-        #await shutdown_executor_with_timeout(node.pp_executor)
         log("shutdown for pp executor done.")
 
     log("stop node () ending")
