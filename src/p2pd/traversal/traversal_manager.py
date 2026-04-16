@@ -291,12 +291,14 @@ class TraversalManager():
                 use_cache=True
             )
 
+        """
         # Run plugin here -- don't do the background thing for now.
         await async_wrap_errors(
             self.run_plugin(plugin, reply=msg)
         )
 
         return
+        """
 
         # Schedule the plugin run as a background task.
         # Keep a reference so the task isn't garbage-collected mid-run.

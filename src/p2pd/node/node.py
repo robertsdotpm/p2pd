@@ -176,7 +176,9 @@ class Node(Daemon):
             pkt = await self.nick_client.get(pnp_addr)
             addr_bytes = pkt.value
             dest_vk = pkt.vkc
+            print("pnp got addr = ", addr_bytes)
             dest_map = parse_node_addr(addr_bytes)
+            print("parse dest map =", dest_map)
 
             """
             Pre-load router to have clients connected for the dest public key.
@@ -202,10 +204,12 @@ class Node(Daemon):
                 )
                 if updated_addr_bytes:
                     addr_bytes = updated_addr_bytes
+                    print("got updated addr ", addr_bytes)
             except asyncio.TimeoutError:
                 log("Timeout MQTT get updated bytes " + str(pnp_addr))
         else:
             addr_bytes = pnp_addr
+            dest_map = parse_node_addr(addr_bytes)
             sig_pipe = await self.router.pipe(
                 dest_map["pub_key_hex"],
                 use_cache=True
