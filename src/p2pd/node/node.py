@@ -158,10 +158,18 @@ class Node(Daemon):
     async def start(self, sys_clock=None, out=False, cout=print):
         await node_start(self, sys_clock=sys_clock, out=out, cout=cout)
         return self
-    
+
     async def close(self):
         await node_stop(self)
-    
+
+    async def __aenter__(self):
+        await self.start()
+        return self
+
+    async def __aexit__(self, *_):
+        await self.close()
+        return False
+
     def __await__(self):
         return self.start().__await__()
     

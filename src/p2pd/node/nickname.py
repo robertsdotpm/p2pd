@@ -247,6 +247,26 @@ class Nickname():
 
         await asyncio.gather(*tasks)
 
+    async def close(self):
+        for af in self.clients:
+            for index in list(self.clients[af]):
+                client = self.clients[af][index]
+                if client is not None and hasattr(client, "close"):
+                    try:
+                        await client.close()
+                    except Exception:
+                        pass
+                self.clients[af][index] = None
+        self.started = False
+
+    async def __aenter__(self):
+        await self.start()
+        return self
+
+    async def __aexit__(self, *_):
+        await self.close()
+        return False
+
     def __await__(self):
         return self.start().__await__()
 

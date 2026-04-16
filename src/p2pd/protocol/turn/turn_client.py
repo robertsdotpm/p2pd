@@ -229,6 +229,14 @@ class TURNClient(PipeEvents):
         relay_tup = await self.relay_tup_future
         return client_tup, relay_tup
 
+    async def __aenter__(self):
+        await self.start()
+        return self
+
+    async def __aexit__(self, *_):
+        await self.close()
+        return False
+
     def __await__(self):
         return self.start().__await__()
 
