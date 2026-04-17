@@ -60,7 +60,7 @@ class PunchPlugin(TraversalPlugin):
             # Case 2: Start a new NAT traversal exchange
             puncher, stuns = await self.setup_puncher_client(reply)
             if puncher is None:
-                print("alert puncher is none")
+                log("PunchPlugin: no STUN clients available; aborting punch.")
                 return # Abort if no STUN configuration is available
 
             # Re-check after the await: a concurrent run() for the same
@@ -95,7 +95,6 @@ class PunchPlugin(TraversalPlugin):
         # Wait for recv to send updated mappings if any.
         # Sender also has to wait to stay in sync.
         await asyncio.sleep(2)
-        print("delay start punching proc.")
 
         """
         bad = find_unpicklable(puncher)
@@ -116,6 +115,7 @@ class PunchPlugin(TraversalPlugin):
         # Guard against a second concurrent call resolving the same future,
         # which would raise asyncio.InvalidStateError.
         if not self.result.done():
+            #self.result.add_msg_cb(self.node.msg_cb)
             self.result.set_result(pipe)
 
     async def setup_puncher_client(self, reply):
@@ -155,9 +155,9 @@ class PunchPlugin(TraversalPlugin):
         print("src ip = ", src_ip)
         print("decider ip = ", decider_ip)
         puncher = PunchClient(
-            dest_ip, 
-            src_ip, 
-            decider_ip, 
+            dest_ip,
+            src_ip,
+            decider_ip,
             self.nic.id,
             max_sleep=PUNCH_MAX_SLEEP,
             same_machine=self.same_machine,

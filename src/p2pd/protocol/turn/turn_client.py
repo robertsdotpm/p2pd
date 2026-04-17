@@ -84,11 +84,6 @@ class TURNClient(PipeEvents):
         self.msgs = {}
         self.tasks = []
 
-        # Event loop reference.
-        loop = asyncio.get_event_loop()
-        if self.conf["loop"] is not None:
-            loop = self.conf["loop"]()
-
         # Futures to return from start.
         self.turn_client_stopped = asyncio.Event()
         self.client_tup_future = asyncio.futures.Future()

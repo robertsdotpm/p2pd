@@ -64,7 +64,7 @@ async def setup_node():
     display_ifs_loaded(ifs)
 
     # Main node class with chosen ifs and conf.
-    print(stop_rw)
+    #print(stop_rw)
     node = Node(
         ifs=ifs, 
         ip=args.ip, 
@@ -77,7 +77,7 @@ async def setup_node():
     cout("Starting node on %d..." % (node.listen_port,))
     node.add_msg_cb(add_echo_support)
     await node.start(out=True, cout=cout)
-    print(node.pp_executor)
+    #print(node.pp_executor)
 
     # Show the nodes address and listen port.
     cout()
@@ -210,14 +210,14 @@ async def main():
             await run_node_loop(nodes, ifs, nick)
     except asyncio.TimeoutError:
         log("Command run time met.")
-        what_exception()
+        #what_exception()
     except asyncio.CancelledError:
         log("Main task cancelled!")
         log_exception()
-        what_exception()
+        #what_exception()
     finally:
         log("stop nodes clause reached.")
-        what_exception()
+        #what_exception()
 
         # Stop all nodes
         if nodes:
@@ -238,9 +238,9 @@ if __name__ == "__main__":
         async_run(main())
         log("main task done.")
     except KeyboardInterrupt:
-        print("keyboard interrupt")
+        #print("keyboard interrupt")
         log("keyboard interrupt clause reached.")
-        print("ended")
+        #print("ended")
 
     # Force exit to prevent Windows from hanging on dead threads.
     # Placed outside finally so cleanup in async_run() can finish first.

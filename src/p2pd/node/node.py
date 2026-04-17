@@ -109,10 +109,12 @@ class Node(Daemon):
         })
 
         def on_done(future):
+            print("in on done callback ", future.result())
             try:
                 result = future.result()
                 pipe_like = (Pipe, PipeClient, TCPClientProtocol, PipeEvents)
                 if isinstance(result, pipe_like):
+                    print("add msg cb handler ", result.sock)
                     result.add_msg_cb(self.msg_cb)
             except Exception:
                 log_exception()

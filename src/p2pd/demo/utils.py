@@ -48,7 +48,7 @@ def cout(*fargs):
             print(*fargs, flush=True)
 
 async def add_echo_support(msg, client_tup, pipe):
-
+    print("in add echo sup ", msg)
     if b"ECHO" == msg[:4]:
         cout()
         cout("\tGot echo proto msg: " + to_s(msg) + fstr(" from {0}", (client_tup,)))

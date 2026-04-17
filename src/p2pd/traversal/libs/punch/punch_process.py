@@ -21,8 +21,6 @@ from ....node.node_defs import *
 from .engines.tcp_selector_simple.engine import *
 from aionetiface.net.selector_proxy import selector_proxy
 
-
-
 """
 Punching is done in its own process.
 The process returns an open socket and Python
@@ -88,14 +86,12 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
         # Store the future so the caller can inspect / cancel it if needed.
         punching_future = loop.run_in_executor(proc_pool, punching_process_entry, *args)
 
-        print("after run in exec")
-
         # Wait for the reverse-connect client on the listen server.
         client_pipe = await asyncio.wait_for(
             listen_pipe.accept(),
             timeout=40
         )
-        print("after listen client pipe")
+        print("after run in exec")
         print("listen client pipe sock = ", client_pipe.sock)
         print("return pipe = ", client_pipe)
         return client_pipe
@@ -110,8 +106,15 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
         return None
     finally:
         # Always close the listen pipe to release the bound port / fd.
+        """
+        Closing the listen server does appear to ruin it. Its probably because
+        it also has code clauses for closing accepted clients.
+        """
         if listen_pipe is not None:
-            await async_wrap_errors(listen_pipe.close())
+            await async_wrap_errors(
+                listen_pipe.close(keep_clients=True)
+            )
+
 
 async def workspace():
     return

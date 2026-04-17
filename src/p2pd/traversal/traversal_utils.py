@@ -284,6 +284,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                 # Technique-specific N to avoid lengthy delays.
                 ret = await async_wrap_errors(
                     try_addr_infos(
+                        af,
                         strat,
                         addr_type,
                         src_info,

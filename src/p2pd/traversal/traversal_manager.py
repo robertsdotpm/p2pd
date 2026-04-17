@@ -193,9 +193,11 @@ class TraversalManager():
                 
     async def close_plugin(self, plugin, reply=None):
         # Delete unused futures on failure.
+        # Use pop() so a double-close or a pipe that was never registered
+        # does not raise KeyError and abort the cleanup.
         if hasattr(plugin, "pipe_id"):
-            del self.plugins[plugin.pipe_id]
-            del self.pipes[plugin.pipe_id]
+            self.plugins.pop(plugin.pipe_id, None)
+            self.pipes.pop(plugin.pipe_id, None)
 
     async def signal_msg_sender(self, msg, plugin, relay_no=2):
         try:

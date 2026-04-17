@@ -191,7 +191,13 @@ class ProtoMsg():
     
     @classmethod
     def unpack(cls, buf):
-        d = json.loads(to_s(buf))
+        try:
+            d = json.loads(to_s(buf))
+        except (ValueError, UnicodeDecodeError) as e:
+            raise ValueError(
+                fstr("SigMsg.unpack: malformed payload ({0}): {1!r}",
+                     (e, buf[:80]))
+            ) from e
 
         # Sig checks if set.
         # check node id portion matches pub portion.

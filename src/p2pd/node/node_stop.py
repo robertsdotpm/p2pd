@@ -66,7 +66,11 @@ async def node_stop(node):
                 continue
 
             if result.done():
-                pipe = result.result()
+                try:
+                    pipe = result.result()
+                except Exception:
+                    # Plugin future completed with an exception; nothing to close.
+                    continue
                 if hasattr(pipe, "close"):
                     try:
                         await close_with_timeout(pipe)
