@@ -2,11 +2,11 @@
 Local TURN server for testing (RFC 5766, UDP only).
 
 Implements the minimal subset of TURN that TURNClient exercises:
-  1. Allocate (unsigned)   → 401 Unauthorized + Realm + Nonce
-  2. Allocate (signed)     → 200 Success + XorRelayedAddress + XorMappedAddress + Lifetime
-  3. CreatePermission      → 200 Success  (permission recorded for logging only)
-  4. Refresh               → 200 Success + Lifetime
-  5. Data relay            → data arriving on a relay UDP socket is wrapped in a
+  1. Allocate (unsigned)   -> 401 Unauthorized + Realm + Nonce
+  2. Allocate (signed)     -> 200 Success + XorRelayedAddress + XorMappedAddress + Lifetime
+  3. CreatePermission      -> 200 Success  (permission recorded for logging only)
+  4. Refresh               -> 200 Success + Lifetime
+  5. Data relay            -> data arriving on a relay UDP socket is wrapped in a
                              DataIndication and sent to the allocation owner
 
 Auth is deliberately simplified: we require Username/Realm/Nonce attributes in
@@ -21,7 +21,7 @@ Usage:
 """
 
 import asyncio
-import secrets
+import os
 import copy
 from struct import pack
 from hashlib import md5
@@ -44,12 +44,12 @@ TURN_RELAY_BASE = 34000          # Relay sockets start here
 # Helpers
 # ──────────────────────────────────────────────────────────────
 
-def _error_attr(code: int, msg: bytes = b"") -> bytes:
+def error_attr(code, msg=b""):
     """Encode an ErrorCode attribute payload (RFC 5766 §14.8)."""
     return pack("!HBB", 0, code // 100, code % 100) + msg
 
 
-def _encode_xor_addr(ip, port, af, txid, magic_cookie, attr_code) -> bytes:
+def encode_xor_addr(ip, port, af, txid, magic_cookie, attr_code):
     """Encode an XOR-mapped/relayed/peer address attribute."""
     addr = STUNAddrTup(
         ip=ip,
@@ -70,9 +70,9 @@ def make_fake_nic(real_nic, af, target_ipr):
 
     Parameters
     ----------
-    real_nic   : Interface  –  the real NIC whose route metadata we copy
+    real_nic   : Interface  --  the real NIC whose route metadata we copy
     af         : AddressFamily
-    target_ipr : IPRange    –  specific NIC IP to bind to
+    target_ipr : IPRange    --  specific NIC IP to bind to
     """
     class FakeNIC:
         __name__ = "FakeNIC"
@@ -84,7 +84,7 @@ def make_fake_nic(real_nic, af, target_ipr):
         def route(self, req_af=None):
             r = copy.deepcopy(real_nic.route(af))
             # Replace nic_ips with just the target IP so bind_closure will
-            # call self.interface.route(af).nic() → target_ipr for binding.
+            # call self.interface.route(af).nic() -> target_ipr for binding.
             r.nic_ips  = [target_ipr]
             r.resolved = False
             # Keep r.interface pointing to this FakeNIC so that:
@@ -102,12 +102,9 @@ def make_fake_nic(real_nic, af, target_ipr):
     return _instance
 
 
-def make_local_turn_server_entry(
-    port: int = TURN_TEST_PORT,
-    af=None,
-) -> dict:
+def make_local_turn_server_entry(port=TURN_TEST_PORT, af=None):
     """
-    Build a TURN_SERVERS–compatible dict pointing at the local test server.
+    Build a TURN_SERVERS-compatible dict pointing at the local test server.
 
     The 'host' key is set to the actual IP so get_turn_client() can resolve
     it (the production entries use host=None which is a known limitation).
@@ -116,7 +113,7 @@ def make_local_turn_server_entry(
     ip6 = "::1"
     supported = [IP4, IP6] if af is None else [af]
     return {
-        "host": ip6 if (af == IP6) else ip4,  # used by get_turn_client as the dest IP
+        "host": ip6 if (af == IP6) else ip4,
         "port": port,
         IP4: ip4 if IP4 in supported else None,
         IP6: ip6 if IP6 in supported else None,
@@ -137,26 +134,25 @@ class TURNServer:
 
     Parameters
     ----------
-    interface   : Interface   –  aionetiface NIC (for route objects)
-    port        : int         –  control UDP port (default 33478)
+    interface   : Interface   --  aionetiface NIC (for route objects)
+    port        : int         --  control UDP port (default 33478)
     realm       : bytes
-    user        : bytes       –  accepted username (auth is not HMAC-verified)
-    pw          : bytes       –  password (stored but unused; for reference)
-    relay_base  : int         –  first port number used for relay sockets
-    bind_ip     : str | None  –  override the IP the server binds to;
-                                 None → loopback per AF (127.0.0.1 / ::1)
+    user        : bytes       --  accepted username (auth is not HMAC-verified)
+    pw          : bytes       --  password (stored but unused; for reference)
+    relay_base  : int         --  first port number used for relay sockets
+    bind_ip     : str or None --  override the IP the server binds to;
+                                  None -> loopback per AF (127.0.0.1 / ::1)
     """
 
     def __init__(
         self,
         interface,
-        *,
-        port: int       = TURN_TEST_PORT,
-        realm: bytes    = TURN_TEST_REALM,
-        user: bytes     = TURN_TEST_USER,
-        pw: bytes       = TURN_TEST_PASS,
-        relay_base: int = TURN_RELAY_BASE,
-        bind_ip: str    = None,
+        port=TURN_TEST_PORT,
+        realm=TURN_TEST_REALM,
+        user=TURN_TEST_USER,
+        pw=TURN_TEST_PASS,
+        relay_base=TURN_RELAY_BASE,
+        bind_ip=None,
     ):
         self.interface  = interface
         self.port       = port
@@ -166,30 +162,30 @@ class TURNServer:
         self.bind_ip    = bind_ip
         self.relay_base = relay_base
 
-        # client_tup (tuple) → allocation dict
-        self.allocations: dict = {}
-        # relay_port (int)   → allocation dict
-        self.relay_map: dict  = {}
-        # client_tup (tuple) → nonce bytes
-        self.nonces: dict     = {}
+        # client_tup (tuple) -> allocation dict
+        self.allocations = {}
+        # relay_port (int)   -> allocation dict
+        self.relay_map   = {}
+        # client_tup (tuple) -> nonce bytes
+        self.nonces      = {}
 
-        # af → control Pipe
-        self.control_pipes: dict = {}
+        # af -> control Pipe
+        self.control_pipes = {}
 
         self._next_relay_port = relay_base
 
     # ── lifecycle ──────────────────────────────────────────────
 
-    async def start(self) -> "TURNServer":
+    async def start(self):
         """Bind one control socket per supported address family."""
         for af in self.interface.supported():
             try:
-                await self._start_af(af)
+                await self.start_af(af)
             except Exception:
                 log_exception()
         return self
 
-    async def __aenter__(self) -> "TURNServer":
+    async def __aenter__(self):
         return await self.start()
 
     async def __aexit__(self, *_):
@@ -215,17 +211,17 @@ class TURNServer:
 
     # ── per-AF setup ───────────────────────────────────────────
 
-    def _loopback(self, af) -> str:
+    def loopback(self, af):
         return self.bind_ip or ("::1" if af == IP6 else "127.0.0.1")
 
-    async def _start_af(self, af):
-        lo = self._loopback(af)
+    async def start_af(self, af):
+        lo = self.loopback(af)
         route = self.interface.route(af)
         await route.bind(ips=lo, port=self.port)
 
         async def cb(data, client_tup, pipe):
             await async_wrap_errors(
-                self._on_control(af, data, client_tup, pipe)
+                self.on_control(af, data, client_tup, pipe)
             )
 
         pipe = await Pipe(UDP, None, route).connect(cb)
@@ -234,7 +230,7 @@ class TURNServer:
 
     # ── relay socket allocation ────────────────────────────────
 
-    async def _open_relay(self, af, owner_tup, owner_pipe) -> tuple:
+    async def open_relay(self, af, owner_tup, owner_pipe):
         """
         Open a new UDP relay socket.
 
@@ -242,7 +238,7 @@ class TURNServer:
         The relay's msg_cb wraps received data in a DataIndication and
         forwards it to the allocation owner.
         """
-        lo = self._loopback(af)
+        lo = self.loopback(af)
         relay_port = self._next_relay_port
         self._next_relay_port += 1
 
@@ -250,13 +246,13 @@ class TURNServer:
         await route.bind(ips=lo, port=relay_port)
 
         # Mutable reference so the closure can see the alloc after creation.
-        holder: dict = {}
+        holder = {}
 
         async def relay_cb(data, source_tup, _relay_pipe):
             alloc = holder.get("a")
             if alloc is not None:
                 await async_wrap_errors(
-                    self._forward(af, data, source_tup, alloc)
+                    self.forward(af, data, source_tup, alloc)
                 )
 
         relay_pipe = await Pipe(UDP, None, route).connect(relay_cb)
@@ -275,13 +271,13 @@ class TURNServer:
         self.relay_map[relay_port]         = alloc
         return relay_tup
 
-    # ── relay data → DataIndication ────────────────────────────
+    # ── relay data -> DataIndication ───────────────────────────
 
-    async def _forward(self, af, data, source_tup, alloc):
+    async def forward(self, af, data, source_tup, alloc):
         """
         Wrap raw relay data in a DataIndication and send it to the owner.
 
-        The XorPeerAddress is set to *source_tup* — the address of whoever
+        The XorPeerAddress is set to *source_tup* -- the address of whoever
         sent data to the relay port (e.g. the other client's control socket).
         This matches what TURNClient.process_replies() expects.
         """
@@ -291,7 +287,7 @@ class TURNServer:
             mode=RFC5389,
         )
 
-        peer_buf = _encode_xor_addr(
+        peer_buf = encode_xor_addr(
             source_tup[0], source_tup[1], af,
             msg.txn_id, msg.magic_cookie,
             STUNAttrs.XorPeerAddress,
@@ -306,16 +302,16 @@ class TURNServer:
     # ── control message dispatch ───────────────────────────────
 
     @staticmethod
-    def _method(msg) -> bytes:
+    def get_msg_method(msg):
         return b_and(bytes(msg.msg_type), b"\x00\x0f")
 
-    def _reply(self, request, method_bytes, msg_code) -> STUNMsg:
+    def make_reply(self, request, method_bytes, msg_code):
         """Create a reply with the request's TXID."""
         r = STUNMsg(msg_type=method_bytes, msg_code=msg_code, mode=RFC5389)
         r.txn_id = bytes(request.txn_id)
         return r
 
-    def _has_credentials(self, msg) -> bool:
+    def has_credentials(self, msg):
         """Return True if msg contains Username + Realm + Nonce attrs."""
         flags = {"u": False, "r": False, "n": False}
         saved = msg.attr_cursor
@@ -334,7 +330,7 @@ class TURNServer:
         msg.attr_cursor = saved
         return all(flags.values())
 
-    async def _on_control(self, af, data, client_tup, pipe):
+    async def on_control(self, af, data, client_tup, pipe):
         try:
             msg, _ = STUNMsg.unpack(memoryview(data), mode=RFC5389)
         except Exception:
@@ -342,42 +338,42 @@ class TURNServer:
         if msg is None:
             return
 
-        method = self._method(msg)
+        method = self.get_msg_method(msg)
 
         if method == STUNMsgTypes.Allocate:
-            await self._allocate(af, msg, method, client_tup, pipe)
+            await self.handle_allocate(af, msg, method, client_tup, pipe)
         elif method == STUNMsgTypes.CreatePermission:
-            await self._create_permission(af, msg, method, client_tup, pipe)
+            await self.handle_create_permission(af, msg, method, client_tup, pipe)
         elif method == STUNMsgTypes.Refresh:
-            await self._refresh(af, msg, method, client_tup, pipe)
+            await self.handle_refresh(af, msg, method, client_tup, pipe)
 
     # ── Allocate ───────────────────────────────────────────────
 
-    async def _allocate(self, af, msg, method, client_tup, pipe):
-        # First request (no credentials) → challenge.
-        if not self._has_credentials(msg):
-            nonce = secrets.token_bytes(16)
+    async def handle_allocate(self, af, msg, method, client_tup, pipe):
+        # First request (no credentials) -> challenge.
+        if not self.has_credentials(msg):
+            nonce = os.urandom(16)
             self.nonces[tuple(client_tup)] = nonce
 
-            reply = self._reply(msg, method, STUNMsgCodes.ErrorResp)
+            reply = self.make_reply(msg, method, STUNMsgCodes.ErrorResp)
             reply.write_attr(STUNAttrs.ErrorCode,
-                             _error_attr(401, b"Unauthorized"))
+                             error_attr(401, b"Unauthorized"))
             reply.write_attr(STUNAttrs.Realm, self.realm)
             reply.write_attr(STUNAttrs.Nonce, nonce)
             await pipe.send(reply.pack(), client_tup)
             return
 
-        # Subsequent request (has credentials) → allocate relay.
+        # Subsequent request (has credentials) -> allocate relay.
         alloc = self.allocations.get(tuple(client_tup))
         if alloc is None:
-            relay_tup = await self._open_relay(af, client_tup, pipe)
+            relay_tup = await self.open_relay(af, client_tup, pipe)
         else:
             relay_tup = alloc["relay_tup"]
 
-        reply = self._reply(msg, method, STUNMsgCodes.SuccessResp)
+        reply = self.make_reply(msg, method, STUNMsgCodes.SuccessResp)
 
         # XorRelayedAddress
-        relay_buf = _encode_xor_addr(
+        relay_buf = encode_xor_addr(
             relay_tup[0], relay_tup[1], af,
             reply.txn_id, reply.magic_cookie,
             STUNAttrs.XorRelayedAddress,
@@ -385,7 +381,7 @@ class TURNServer:
         reply.write_attr(STUNAttrs.XorRelayedAddress, relay_buf)
 
         # XorMappedAddress  (client's source IP:port as seen here)
-        mapped_buf = _encode_xor_addr(
+        mapped_buf = encode_xor_addr(
             client_tup[0], client_tup[1], af,
             reply.txn_id, reply.magic_cookie,
             STUNAttrs.XorMappedAddress,
@@ -399,7 +395,7 @@ class TURNServer:
 
     # ── CreatePermission ───────────────────────────────────────
 
-    async def _create_permission(self, af, msg, method, client_tup, pipe):
+    async def handle_create_permission(self, af, msg, method, client_tup, pipe):
         alloc = self.allocations.get(tuple(client_tup))
         if alloc is not None:
             # Record permitted peer IPs.
@@ -417,12 +413,12 @@ class TURNServer:
                     peer.decode(code, data)
                     alloc["permissions"].add(peer.tup[0])
 
-        reply = self._reply(msg, method, STUNMsgCodes.SuccessResp)
+        reply = self.make_reply(msg, method, STUNMsgCodes.SuccessResp)
         await pipe.send(reply.pack(), client_tup)
 
     # ── Refresh ────────────────────────────────────────────────
 
-    async def _refresh(self, af, msg, method, client_tup, pipe):
-        reply = self._reply(msg, method, STUNMsgCodes.SuccessResp)
+    async def handle_refresh(self, af, msg, method, client_tup, pipe):
+        reply = self.make_reply(msg, method, STUNMsgCodes.SuccessResp)
         reply.write_attr(STUNAttrs.Lifetime, pack("!I", TURN_REFRESH_EXPIRY))
         await pipe.send(reply.pack(), client_tup)
