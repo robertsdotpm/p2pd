@@ -1,101 +1,109 @@
+import asyncio
 from aionetiface import *
+from ...traversal_plugin import TraversalPlugin
 from ....protocol.traversal.proto_msg import TURNMsg
 from .turn_utils import get_first_working_turn_client
 
-async def udp_turn_relay(self, af, pipe_id, src_info, dest_info, iface, addr_type, same_machine, reply=None):
-    if addr_type == NIC_BIND:
-        return None
-    
-    # Load TURN client for this PIPE ID.
-    if pipe_id in self.node.turn_clients:
-        client = self.node.turn_clients[pipe_id]
-    else:
-        # Use these TURN servers.
-        offsets = list(range(0, len(TURN_SERVERS)))
-        random.shuffle(offsets)
+
+class TURNPlugin(TraversalPlugin):
+    async def run(self, reply=None):
+        if self.route_type == NIC_BIND:
+            return
+
+        # Get or create TURN client for this pipe.
+        if self.pipe_id in self.turn_clients:
+            client = self.turn_clients[self.pipe_id]
+        else:
+            # On a reply, prefer the server the remote side already picked.
+            offsets = list(range(0, len(TURN_SERVERS)))
+            random.shuffle(offsets)
+            if reply is not None:
+                offsets = [reply.payload.serv_id]
+
+            client = await get_first_working_turn_client(
+                self.af,
+                offsets,
+                self.nic,
+                self.msg_cb,
+            )
+
+            # Guard against a concurrent run() that raced through the above
+            # and already stored a client — reuse that one, discard ours.
+            existing = self.turn_clients.get(self.pipe_id)
+            if existing is not None:
+                await client.close()
+                client = existing
+            else:
+                self.turn_clients[self.pipe_id] = client
+
+        # Process a reply carrying the remote peer's TURN relay info.
         if reply is not None:
-            offsets = [reply.payload.serv_id]
+            dest_peer = reply.payload.peer_tup
+            dest_relay = reply.payload.relay_tup
+            already_accepted = await client.accept_peer(dest_peer, dest_relay)
 
-        # Use first server from offsets that works.
-        client = await get_first_working_turn_client(
-            af,
-            offsets,
-            iface,
-            self.node.msg_cb
-        )
+            # Unblock any local waiter for this pipe.
+            self._resolve_pipe(client)
 
-        # Re-check after the await: a concurrent udp_turn_relay call for the
-        # same pipe_id may have raced through get_first_working_turn_client
-        # and already stored a client.  Reuse that one and discard the
-        # duplicate we just created to avoid leaking the connection.
-        existing = self.node.turn_clients.get(pipe_id)
-        if existing is not None:
-            await client.close()
-            client = existing
-        else:
-            self.node.turn_clients[pipe_id] = client
+            if already_accepted:
+                # Both sides have already whitelisted each other; we're done.
+                if not self.result.done():
+                    self.result.set_result(client)
+                return
 
-    # Extract any received payload attributes.
-    if reply is not None:
-        dest_peer = reply.payload.peer_tup
-        dest_relay = reply.payload.relay_tup
-        already_accepted = await client.accept_peer(
-            dest_peer,
-            dest_relay,
-        )
-
-        # Indicate client ready to waiters.
-        self.node.pipe_ready(pipe_id, client)
-
-        # Protocol end.
-        if already_accepted:
-            return PipeEvents(None)
-        else:
-            # Log white listing action.
+            # Log the whitelist action before sending our own relay info back.
             our_relay = await client.relay_tup_future
-            m = fstr("Whitelist {0} -> {1} to", (dest_peer, our_relay,))
-            m += fstr(" '{0}'", (iface.name,))
-            log_p2p(m, self.node.node_id[:8])
+            log_p2p(
+                fstr("Whitelist {0} -> {1} to '{2}'", (dest_peer, our_relay, self.nic.name)),
+                self.node_id[:8],
+            )
 
-    # Return a new TURN request.
-    msg = TURNMsg({
-        "meta": {
-            "ttl": int(self.node.sys_clock.time()) + 30,
-            "pipe_id": pipe_id,
-            "af": af,
-            "src_buf": self.src_bytes,
-            "src_index": src_info["if_index"],
-            "addr_types": [addr_type],
-        },
-        "routing": {
-            "af": af,
-            "dest_buf": self.dest_bytes,
-            "dest_index": dest_info["if_index"],
-        },
-        "payload": {
-            "peer_tup": await client.client_tup_future,
-            "relay_tup": await client.relay_tup_future,
-            "serv_id": client.serv_offset,
-        },
-    })
+        # Register the pipe future *before* sending so the reply handler can
+        # resolve it even if the reply arrives before we reach the await below.
+        if self.pipe_id not in self.pipes:
+            self.pipes[self.pipe_id] = asyncio.Future()
 
-    #dest_node_id = self.dest["node_id"]
-    #dest_pkc = self.node.auth[dest_node_id]["vk"]
-    #self.node.sig_msg_queue.put_nowait([msg, dest_pkc , 1])
+        # Build and send our TURN signaling message.
+        msg = TURNMsg({
+            "payload": {
+                "peer_tup": await client.client_tup_future,
+                "relay_tup": await client.relay_tup_future,
+                "serv_id": client.serv_offset,
+            },
+        })
+        msg.meta.plugin_name = "turn"
+        await self.signal_msg_sender(msg)
 
-    try:
-        self.route_msg(msg, reply=reply, m=3)
-        return await self.node.pipes[pipe_id]
-    except Exception:
-        log_exception()
+        # Wait for the remote side to whitelist us (resolved via _resolve_pipe
+        # in a future run() call that carries the peer's reply).
+        pipe = await self.pipes[self.pipe_id]
+        if not self.result.done():
+            self.result.set_result(pipe)
 
-async def turn_cleanup(self, af, pipe_id, src_info, dest_info, iface, addr_type, reply=None):
-    # Use pop to atomically remove the client before any await.  If we read
-    # the client and then deleted after close(), a concurrent udp_turn_relay
-    # could write a fresh client in the window between close() and del,
-    # leaving that new client immediately deleted and its connection leaked.
-    turn_client = self.node.turn_clients.pop(pipe_id, None)
+    def _resolve_pipe(self, client):
+        """Resolve the shared pipe future so any concurrent waiter is unblocked."""
+        future = self.pipes.get(self.pipe_id)
+        if future is not None and not future.done():
+            future.set_result(client)
+
+
+class TURNPluginFactory:
+    def __init__(self, turn_clients, msg_cb=None, node_id=""):
+        self.turn_clients = turn_clients
+        self.msg_cb = msg_cb
+        self.node_id = node_id
+
+    def build_plugin(self):
+        plugin = TURNPlugin()
+        plugin.turn_clients = self.turn_clients
+        plugin.msg_cb = self.msg_cb
+        plugin.node_id = self.node_id
+        return plugin
+
+
+async def turn_cleanup(plugin):
+    """Remove and close the TURN client associated with a plugin."""
+    turn_client = plugin.turn_clients.pop(plugin.pipe_id, None)
     if turn_client is None:
         return
-
     await turn_client.close()

@@ -5,6 +5,12 @@ from hashlib import md5
 from aionetiface import *
 from .turn_defs import *
 
+# IS_DEBUG is referenced below but not exported by aionetiface.
+try:
+    IS_DEBUG  # noqa: F821 — may be injected by test/demo harness
+except NameError:
+    IS_DEBUG = False
+
 
 # Parse a TURN message.
 # Use bitwise OPs to get valid method and status codes.

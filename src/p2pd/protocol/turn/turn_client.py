@@ -145,9 +145,12 @@ class TURNClient(PipeEvents):
         self.super_init(
             transport=self.turn_pipe.transport,
             sock=self.turn_pipe.sock,
-            route=self.route, 
+            route=self.route,
             conf=self.conf
         )
+        # super_init calls PipeEvents.__init__ which resets proto to None;
+        # restore it so PipeClient.send() takes the UDP sendto() path.
+        self.proto = UDP
 
         # Start processing UDP replies.
         self.processing_loop_task = asyncio.create_task(
@@ -269,6 +272,12 @@ class TURNClient(PipeEvents):
         # Attempt to use the first peer_tup.
         if dest_tup is None:
             dest_tup = self.get_first_peer_tup()
+
+        # Normalize IPv6 addresses (compressed → expanded) so that lookups
+        # into self.peers — which stores keys via accept_peer/norm_client_tup —
+        # succeed regardless of the form the caller passes in.
+        if dest_tup is not None:
+            dest_tup = norm_client_tup(dest_tup)
 
         # Detect invalid self-send.
         if self.relay_tup_future.done():

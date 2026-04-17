@@ -11,7 +11,8 @@ from sidewire import *
 from .node_utils import *
 from .nickname import *
 from ..traversal.traversal_address import *
-from ..traversal.plugins.punch.main import PunchPluginFactory 
+from ..traversal.plugins.punch.main import PunchPluginFactory
+from ..traversal.plugins.turn.main import TURNPluginFactory
 from ..protocol.traversal.proto_msg import SIG_PROTO
 
 # ==========================================
@@ -290,5 +291,14 @@ def setup_traversal_plugins(node):
             ),
             "timeout": 40
         })
+
+    node.traversal.install_plugin("turn", {
+        "class": TURNPluginFactory(
+            node.turn_clients,
+            node.msg_cb,
+            node.node_id,
+        ),
+        "timeout": 20
+    })
 
     log("traversal plugin_loaders: " + str(node.traversal.plugin_loaders))
