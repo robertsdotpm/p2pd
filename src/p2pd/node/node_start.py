@@ -27,31 +27,31 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     await load_machine_identity(node)
     kp = load_cryptography_and_auth(node)
 
-    # Time & Synchronization
-    await initialize_system_clock(node, sys_clock, out, cout)
-    await initialize_punch_coordination(node, out, cout)
-
-    # Connectivity Clients
-    await load_p2p_stun_clients(node, out, cout)
+    # Time & Synchronization [concurrent Phase A]
+    # Clock initialization, STUN client loading, and router startup all do network I/O;
+    # run them concurrently for faster startup.
     traversal = node.traversal
-    router = Router(kp, 
-        msg_handler=traversal.handle_router_msg,
-        get_time=node.sys_clock.time, 
-        nic=Interface("default")
+    await asyncio.gather(
+        initialize_system_clock(node, sys_clock, out, cout),
+        load_p2p_stun_clients(node, out, cout),
+        setup_router_and_signal(node, kp, traversal, out, cout),
     )
 
+    # Connectivity Clients
+    node.router.get_time = node.sys_clock.time
+    await initialize_punch_coordination(node, out, cout)
 
     # Start Servers
     start_maintenance_tasks(node)
     await node.listen_on_ifs()
-    
-    # Finalize Connectivity
-    await finalize_port_forwarding(node, upnp_task, out, cout)
-    build_node_address(node, out)
 
-    # High-Level Services
+    # Finalize Connectivity
+    build_node_address(node, out)
+    await finalize_port_forwarding(node, upnp_task, out, cout)
+
+    # High-Level Services [concurrent Phase C]
+    # Nickname setup runs concurrently with any remaining work.
     await setup_nickname_service(node)
-    await setup_signal_router(node, router, out, cout)
     setup_traversal_plugins(node)
 
     return node
@@ -250,6 +250,17 @@ def build_node_address(node, out):
 # ==========================================
 # Phase: High-Level Services
 # ==========================================
+async def setup_router_and_signal(node, kp, traversal, out, cout):
+    # Create the router once clock is available
+    router = Router(kp,
+        msg_handler=traversal.handle_router_msg,
+        nic=Interface("default")
+    )
+
+    # Start the signal router
+    await setup_signal_router(node, router, out, cout)
+
+
 async def setup_nickname_service(node):
     node.nick_client = await Nickname(
         node.sk,
