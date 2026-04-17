@@ -1,27 +1,20 @@
 
 """
-This code is based on the original implementation of TURN as a TCP proxy for SOCKs requests which is hosted here: https://github.com/trichimtrich/turnproxy
+TURN client using UDP (RFC 5766).
 
-My observation is that TURNs connect method for TCP assumes that the destination is reachable. In a P2P context this is useless because peers need to use TURN as a way for two hosts to contact each other when all other methods fail. If a host can be contacted directly then there is no reason to use a TURN server. Hence TURNs TCP model is useless (no -- it's not setup for TCP hole punching either.)
+TURN's TCP connect mode assumes the destination is reachable, which makes
+it useless for P2P — if a peer were reachable directly, there would be no
+reason to use TURN in the first place. UDP is used instead: any outbound
+UDP packet automatically opens a hole in the local NAT, making the client
+reachable via the relay address.
 
-Instead, I focus on using UDP as a last resort (UDP has packet loss and no ordering which is really frigging annoying for writing software.) UDP has the advantage of automatically openning a hole in a users NAT / router when sending an outbound UDP packet. This means that clients who connect to a TURN server will be reachable, unlike the TCP connect method.
+Key differences from a standard TURN library:
+  - UDP only (no TCP relay mode)
+  - Multi-interface and IPv6 support
+  - Multiple simultaneous client sessions
+  - Full Pipe object compatibility
 
-The changes I've implemented:
-- UDP instead of TCP
-- Support multiple network interfaces
-- IPv6 support
-- Multiple client sessions simultaneously
-- Full compatibility with the Pipe object
-
-Note to self:
-Don't try use TURNs TCP connection mode again. Even using an edge-case where you can get TURN to connect to its own relay addresses (in Coturn) doesn't work because Coturn limits active connections to 1 per IP. Therefore it would only support a one-way channel to one peer. Very much useless. I have found no way around TURNs limitations for TCP and think it was poorly designed. TURN is the worst protocol I have ever implemented so this does not surprise me.
-
-https://datatracker.ietf.org/doc/html/draft-ietf-behave-turn-tcp-07
-
-TODO: Future feature = implement shared secrets 
-https://datatracker.ietf.org/doc/html/draft-rosenberg-midcom-turn-08#page-9
-
-matrix.org seems to use them over static credentials
+TODO: implement shared-secret authentication (currently uses static credentials)
 """
 
 import asyncio
@@ -58,10 +51,6 @@ class TURNClient(PipeEvents):
         self.realm = realm
         if realm is not None:
             self.realm = to_b(realm)
-        """
-        if turn_realm is None:
-            self.realm = turn_addr.host
-        """
         self.key = None
         self.nonce = None
 
@@ -193,8 +182,8 @@ class TURNClient(PipeEvents):
         client_tup = await self.client_tup_future
         log(fstr("Turn client tup success"))
 
-        # White list ourselves.
-        #await self.accept_peer(client_tup, relay_tup)
+        # TODO: white-list ourselves if self-send support is ever needed.
+        # await self.accept_peer(client_tup, relay_tup)
 
         # Refresh allocations.
         async def refresher():
@@ -303,13 +292,11 @@ class TURNClient(PipeEvents):
                 found_relay = True
                 break
         if not found_relay:
-            error = fstr("""
-            In TURN.send() the dest_tup does not 
-            correspond to any accepted peers 
-            this mind indicate an invalid send addr 
-            bad addr was {0} 
-            """, (dest_tup,))
-            log(error)
+            log(fstr(
+                "TURN.send(): dest_tup {0} does not match any accepted peer relay — "
+                "possibly an invalid send address.",
+                (dest_tup,)
+            ))
 
         assert(type(dest_tup) == tuple)
 
@@ -317,19 +304,13 @@ class TURNClient(PipeEvents):
         # If dest IP doesn't match this TURN server IP
         # it means maybe the wrong relay IP is used.
         if dest_tup[0] != self.dest[0]:
-            error = fstr("""
-            The destination IP for TURN.send 
-            is different to the IP address of the current 
-            server {0} != {1}
-            this could indicate that an incorrect 
-            address is being used for the send call 
-            (like a peer address) or it may mean 
-            different relay servers are being mixed 
-            (in which case disregard this error.
-            """, (dest_tup[0], self.dest[0],))
-            log(error)
+            log(fstr(
+                "TURN.send(): dest IP {0} differs from server IP {1} — "
+                "possibly a peer address or mixed relay servers.",
+                (dest_tup[0], self.dest[0],)
+            ))
 
-        # Make sure the channel is setup before continuing.
+        # Queue the send as a background task so the caller doesn't block.
         task = asyncio.create_task(
             async_wrap_errors(
                 self.stream.ack_send(
@@ -405,16 +386,12 @@ class TURNClient(PipeEvents):
 
         # Basic validation for logging.
         if peer_relay_tup[0] != self.dest[0]:
-            error = fstr("""
-            TURN accept peer has a relay tup different 
-            to the IP of the current server 
-            {0} != {1}
-            this may indicate an error or mean different 
-            TURN servers are being mixed.
-            """, (peer_relay_tup[0], self.dest[0],))
-            log(error)
+            log(fstr(
+                "TURN accept_peer: relay IP {0} != server IP {1} — "
+                "possible error or mixed TURN servers.",
+                (peer_relay_tup[0], self.dest[0],)
+            ))
 
-        #peer_tup = (peer_tup[0], 0)
         peer_tup = tuple(peer_tup)
         peer_relay_tup = tuple(peer_relay_tup)
         already_accepted = peer_tup in self.peers

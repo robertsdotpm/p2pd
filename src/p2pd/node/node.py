@@ -20,6 +20,10 @@ from ..traversal.plugins.return_addr.main import ReturnAddrPlugin
 from ..traversal.plugins.reverse_connect.main import ReverseConnectPlugin
 from ..vendor.machine_id import *
 
+# Alias kept so that older callers (e.g. traversal_manager, namebump tests)
+# that import get_p2pd_install_root from this module continue to work.
+get_p2pd_install_root = get_aionetiface_install_root
+
 # Main class for the P2P node server.
 class Node(Daemon):
     def __init__(self, ifs=[], ip=[], port=NODE_PORT, stop_rw=None, conf=NODE_CONF):

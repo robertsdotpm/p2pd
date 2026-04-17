@@ -77,7 +77,6 @@ async def get_high_port_mapping(stun_client):
                 pipe=route
             )
 
-            #socket.setsockopt(s, socket.SO_REUSEPORT)
             return NATMapping(
                 [ret[0], 0, ret[1]],
                 ret[2]
@@ -167,13 +166,9 @@ def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, preloaded_ma
     assert(bind_port)
     assert(remote_port)
 
-    """
-    Normally the code tries to use the same port as
-    the recipient to simplify the code and make things
-    more resilient. But if you're trying to punch yourself
-    using the same local port will be impossible. Choose
-    a non-conflicting port.
-    """
+    # Normally the code tries to use the same port as the recipient to simplify
+    # coordination. But when punching yourself, the same local port is already
+    # in use, so we must choose a non-conflicting port instead.
     if mode == TCP_PUNCH_SELF:
         remote = field_wrap(
             remote_port + step, 
@@ -227,24 +222,11 @@ def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, preloaded_ma
             bind_port
         ])
     
-    """
-    The routers NATs allocate mappings from a known range as
-    determined by doing an inital large number of STUN tests.
-    This means that when near the end of a range an
-    'independent' or 'dependent' type NAT will wrap around
-    back to the start of the range.
-
-    The problem with this is if the ranges provided to the
-    function aren't precise then when the ports 'wrap around'
-    they will land on ports before the provided range.
-    This means that the predicted port will be wrong and
-    the hole punching will fail.
-
-    The ranges need to be precise should they not be
-    from 1 - MAX_PORT and use these type of deltas.
-    Increasing the test_no and rounding to powers of 2
-    may help to increase accuracy of the ranges.
-    """
+    # Independent and dependent NATs allocate mappings from a known range
+    # (measured via a large number of STUN tests) and wrap around when they
+    # reach the end. Imprecise ranges cause wrong wrap-around predictions and
+    # failed hole punching. Ranges must be exact for these delta types;
+    # increasing test_no and rounding to powers of two improves accuracy.
 
     # Poor concurrency support.
     if our_nat["delta"]["type"] == INDEPENDENT_DELTA:
@@ -259,7 +241,6 @@ def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, preloaded_ma
         # Return port predictions.
         # These allocations apply even if strict port NAT.
         # But we tell other side to use a specific mapping for coordination.
-        last_mapped = [next_local, next_remote]
         return NATMapping([
             next_local,
             our_reply,
@@ -277,7 +258,6 @@ def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, preloaded_ma
         # Return port predictions.
         # These allocations apply even if strict port NAT.
         # But we tell other side to use a specific mapping for coordination.
-        last_mapped = [next_local, next_remote]
         return NATMapping([
             next_local, 
             our_reply,
@@ -298,14 +278,10 @@ def get_single_mapping(mode, rmap, last_mapped, use_range, our_nat, preloaded_ma
             preloaded_mapping.remote
         ])
     
-    """
-    The hardest NATs to support are 'symmetric' type NATs that only
-    allow mappings to be used per [src ip, src port, dest ip, dest port].
-    The only way to support symmetric NATs is if they also have
-    a non-random delta. If this point is reached then they are likely
-    are heavily restricted NAT with a random delta.
-    """
-
+    # Symmetric NATs only allow mappings per (src_ip, src_port, dest_ip,
+    # dest_port). The only way to support them is if they also have a
+    # non-random delta. Reaching this point means a random-delta symmetric
+    # NAT — unpredictable and unsupported.
     raise Exception("Can't predict this NAT type.")
 
 async def nat_prediction(mode, src_nat, dest_nat, stuns, recv_mappings=None, test_no=2):
@@ -414,7 +390,4 @@ def update_for_reply_ports(mode, src_nat, dest_nat, preloaded_mappings, send_map
         send_mappings[i].remote = recv_mappings[i].reply
 
     return send_mappings
-
-
-
 

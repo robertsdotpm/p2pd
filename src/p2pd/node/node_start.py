@@ -25,7 +25,6 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     # Identity & Security
     await load_machine_identity(node)
     kp = load_cryptography_and_auth(node)
-    print("pub key hex = ", kp.public_key_hex)
 
     # Time & Synchronization
     await initialize_system_clock(node, sys_clock, out, cout)
@@ -73,7 +72,6 @@ async def load_network_interfaces(node):
     # Ensure deterministic order
     node.ifs = sorted(node.ifs, key=lambda x: x.name)
 
-    print(node.ifs)
     if not len(node.ifs):
         raise Exception("p2p node could not load ifs.")
 

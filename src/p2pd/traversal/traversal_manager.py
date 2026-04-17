@@ -1,37 +1,14 @@
 """
-I think there should be a factory for building Plugins and
-each plugin should have a class that has its addressing details
-filled in and elegantly encapsulated.
+Orchestrates the traversal plugin lifecycle for P2P connections.
 
-existing tunnel code handles setting up futures
-reply structuries
-routing replies
-cleanup code
-logging
+Each connection attempt is handled by a TraversalPlugin instance. The manager
+routes incoming MQTT signaling messages to the correct plugin (creating a new
+one if needed), runs plugins with a timeout, and tracks background tasks.
 
-it should just focus on addressing / function running for now
-
-for_addr_infos
-    being called when a reply comes and it manually specifies a strat
-    this is very messy maybe dont have reply a param in this code at all?
-
-just start integration with the most basic plugin first then
-work through them
-
-resume plugin run func 
-on sig msg recv:
-    if pipe_id in manager.plugins:
-        plugin = manager.plugins[pipe_id]
-        plugin.run(reply=reply)
-
-        # Try select if info based on their chosen offset.
-        if reply:
-            src_info = src_map[af][reply.routing.dest_index]
-            dest_info = dest_map[af][reply.meta.src_index]
-            if_infos_order = [[src_info, dest_info]]
-
-todo: set this up after the pipe is done:
-    tunnel.node.msg_cb
+Plugins are installed by name with a class and optional config. When a
+connection is started, the manager instantiates the right plugin, loads
+routing and context, and either runs it directly or dispatches a reply to a
+running instance.
 """
 
 import hashlib
@@ -72,11 +49,8 @@ class TraversalManager():
 
         self.plugin_loaders[name] = conf
 
-    """
-    plugins directly return pipes, they can await for future results
-    if it depends on a reply by awaiting the pipe future where
-    the pipe gets set somewhere else
-    """
+    # Plugins return pipes directly or await a pipe future that is resolved
+    # elsewhere when a reply arrives over the signaling channel.
     async def run_plugin(self, plugin, reply=None):
         # Don't run if result is set.
         if plugin.result.done():
@@ -146,12 +120,7 @@ class TraversalManager():
         if msg.meta.pipe_id in self.plugins: # and not msg.meta.same_machine
             plugin = self.plugins.get(msg.meta.pipe_id, None)
         else:
-            # Map getaddr message to returnaddr plugin handler.
-            """
-            if isinstance(msg, GetAddr):
-                msg.meta.plugin_name = "return_addr"
-            """
-
+            # TODO: map GetAddr messages to the return_addr plugin handler.
             if isinstance(msg, ConMsg):
                 msg.meta.plugin_name = "direct_connect"
 
@@ -250,11 +219,9 @@ class TraversalManager():
             # Attach our compressed verifying key so the receiver can decrypt.
             msg.cipher.vk = self.node.vk.to_string("compressed")
 
-            # Convert to bytes.
+            # Convert to bytes and send via MQTT.
             buf = to_s(sig_msg_to_buf(msg))
-            print("send ", msg.to_dict(), plugin.dest_map["pub_key_hex"])
-
-            # Send signaling message using MQTT.
+            await plugin.sig_pipe.send(buf)
             await plugin.sig_pipe.send(buf)
         except Exception:
             log_exception()
@@ -271,17 +238,13 @@ class TraversalManager():
     # Receive a signal message and pass it to a plugin.
     # Called by the MQTT client as: handler(msg, src_pk, queue_id, client)
     async def handle_router_msg(self, msg, src_pk_hex, pipe_id_hex, client):
-        print("recv root: ", msg)
         try:
             buf = to_b(msg)
             msg = try_unpack_msg(buf, self.node.sk, SIG_PROTO)
-            print("recv: ", msg.to_dict())
 
-            # Check TTL.
-            """
-            if int(self.router.get_time()) >= msg.meta.ttl:
-                raise Exception("Discarding expired msg.")
-            """
+            # TODO: re-enable TTL check once clock skew handling is solid.
+            # if int(self.router.get_time()) >= msg.meta.ttl:
+            #     raise Exception("Discarding expired msg.")
 
             # Update routing destination with our current address.
             msg.set_cur_addr(self.node.addr_bytes)
@@ -289,7 +252,6 @@ class TraversalManager():
             # Dispatch to the matching (or new) plugin.
             plugin = self.get_plugin(msg)
         except Exception:
-            print("handle router exp")
             what_exception()
             log_exception()
             return
@@ -300,15 +262,6 @@ class TraversalManager():
                 plugin.dest_map["pub_key_hex"],
                 use_cache=True
             )
-
-        """
-        # Run plugin here -- don't do the background thing for now.
-        await async_wrap_errors(
-            self.run_plugin(plugin, reply=msg)
-        )
-
-        return
-        """
 
         # Schedule the plugin run as a background task.
         # Keep a reference so the task isn't garbage-collected mid-run.

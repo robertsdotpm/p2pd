@@ -29,7 +29,6 @@ def con_info(self, con_name, con):
     return {
         "error": 0,
         "name": con_name,
-        #"strategy": con.strat,
         "fd": con.sock.fileno(),
         "laddr": laddr,
         "raddr": raddr,
@@ -175,7 +174,6 @@ class P2PDServer(RESTD):
             con.add_end_cb(build_do_cleanup())
 
             # Return the results.
-            #con.strat = TXT["p2p_strat"][strat]
             self.cons[con_name] = con
             return con_info(self, con_name, con)
 
@@ -403,7 +401,7 @@ async def start_p2pd_server(port=REST_API_PORT, ifs=[], enable_upnp=False):
     }, NODE_CONF)
 
     # Load netifaces.
-    netifaces = await p2pd_setup_netifaces()
+    netifaces = await aionetiface_setup_netifaces()
 
     # Load interfaces.
     if not len(ifs):
