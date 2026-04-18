@@ -243,6 +243,39 @@ class Node(Daemon):
         if not af:
             raise Exception("No supported shared AF.")
 
+        # Sanity check: running multiple node instances with the same IP on
+        # the same interface is not supported.  The check is keyed on if_index
+        # so that two nodes can legitimately share an IP on *different*
+        # interfaces (e.g. both have fe80::2 but on separate NICs).
+        # Integer comparison of IPRange avoids any uncertainty in __eq__.
+        # Skip for internal utility calls (get_addr) which are not real connections.
+        if plugin_name == "get_addr":
+            pass
+        elif route_type == NIC_BIND:
+            for if_idx, dest_info in dest_map[af].items():
+                src_info = src_map[af].get(if_idx)
+                if src_info is None:
+                    continue
+                if int(dest_info["nic"]) == int(src_info["nic"]):
+                    raise Exception(
+                        "Local route selected but dest if_index %d shares "
+                        "NIC IP %s with this node for AF %s — "
+                        "punch will fail." % (if_idx, dest_info["nic"].ip, af)
+                    )
+        elif route_type in (EXT_BIND, None):
+            for if_idx, dest_info in dest_map[af].items():
+                src_info = src_map[af].get(if_idx)
+                if src_info is None:
+                    continue
+                if int(dest_info["ext"]) == int(src_info["ext"]):
+                    raise Exception(
+                        "External route selected but dest if_index %d shares "
+                        "external IP %s with this node for AF %s — "
+                        "cannot connect to yourself via WAN addresses." % (
+                            if_idx, dest_info["ext"].ip, af
+                        )
+                    )
+
         # Start the traversal plugin method.
         plugin = await self.traversal.start(
             src_map=src_map,

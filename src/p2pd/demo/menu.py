@@ -33,18 +33,18 @@ async def connect_option(node, con_opts):
     # Capture the plugin in the outer scope so we can cancel its punch task
     # if the attempt times out or fails, preventing stale subprocesses from
     # holding ports and poisoning the next attempt.
-    plugin_holder = [None]
-
-    async def get_pipe():
+    # node.connect() runs outside async_wrap_errors so that validation
+    # errors (e.g. same-IP sanity checks) surface immediately to the user
+    # rather than being swallowed.  Only the actual network work (plugin.result)
+    # is wrapped so that connection timeouts and failures are handled gracefully.
+    try:
         plugin = await node.connect(af, route_type, dest_addr, plugin_name)
-        plugin_holder[0] = plugin
-        pipe = await plugin.result
-        return pipe
+    except Exception as e:
+        cout("Connection error: " + str(e))
+        return "menu"
 
-    pipe = await async_wrap_errors(
-        get_pipe(),
-        timeout=40
-    )
+    plugin_holder = [plugin]
+    pipe = await async_wrap_errors(plugin.result, timeout=40)
 
     # Unconditional cleanup: cancels any still-running punch task and removes
     # the plugin from the traversal manager's registry.  On success the punch
