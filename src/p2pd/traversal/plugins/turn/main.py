@@ -86,6 +86,37 @@ class TURNPlugin(TraversalPlugin):
         if future is not None and not future.done():
             future.set_result(client)
 
+    async def close(self):
+        """Clean up after a TURN connection attempt.
+
+        On failure (timeout, cancellation, error) the TURNClient is closed
+        immediately to free the UDP socket, the relay allocation, and all
+        background tasks.  On success the TURNClient *is* the pipe returned
+        to the caller — the caller owns it and will close it — so we leave
+        it open and let node_stop handle final shutdown via node.turn_clients.
+
+        Safe to call multiple times: the dict pop is a no-op on a missing key
+        and all futures are checked with .done() before acting.
+        """
+        # Determine whether the connection completed successfully.
+        connection_succeeded = False
+        try:
+            self.result.result()   # raises if pending, cancelled, or exception
+            connection_succeeded = True
+        except Exception:
+            pass
+
+        if not connection_succeeded:
+            # Failed attempt: reclaim resources immediately so the next
+            # attempt starts with a clean slate.
+            turn_client = self.turn_clients.pop(self.pipe_id, None)
+            if turn_client is not None:
+                await turn_client.close()
+
+        # Cancel the result future if nobody resolved it (e.g. outer timeout).
+        if not self.result.done():
+            self.result.cancel()
+
 
 class TURNPluginFactory:
     def __init__(self, turn_clients, msg_cb=None, node_id=""):
@@ -99,11 +130,3 @@ class TURNPluginFactory:
         plugin.msg_cb = self.msg_cb
         plugin.node_id = self.node_id
         return plugin
-
-
-async def turn_cleanup(plugin):
-    """Remove and close the TURN client associated with a plugin."""
-    turn_client = plugin.turn_clients.pop(plugin.pipe_id, None)
-    if turn_client is None:
-        return
-    await turn_client.close()

@@ -88,6 +88,17 @@ class TraversalManager():
         if self.done_callback:
             plugin.result.add_done_callback(self.done_callback)
 
+        # When the plugin's result resolves (punch succeeded, direct-connect
+        # returned, etc.) schedule a cleanup so stale entries in self.plugins
+        # and plugin-internal state (punch tasks) don't accumulate across
+        # multiple attempts in the same session.
+        def _schedule_plugin_cleanup(future, _plugin=plugin):
+            try:
+                asyncio.get_event_loop().create_task(self.close_plugin(_plugin))
+            except RuntimeError:
+                pass  # Event loop closed during shutdown.
+        plugin.result.add_done_callback(_schedule_plugin_cleanup)
+
         # Allows plugins to await on pipes from other places.
         plugin.set_pipes(self.pipes)
 
@@ -199,6 +210,17 @@ class TraversalManager():
             self.plugins.pop(plugin.pipe_id, None)
             self.pipes.pop(plugin.pipe_id, None)
 
+        # Delegate to plugin-specific cleanup (e.g. PunchPlugin cancels its
+        # background punch task and clears shared punch_clients/punch_proc).
+        close_fn = getattr(plugin, "close", None)
+        if callable(close_fn):
+            try:
+                result = close_fn()
+                if asyncio.iscoroutine(result):
+                    await result
+            except Exception:
+                log_exception()
+
     async def signal_msg_sender(self, msg, plugin, relay_no=2):
         try:
             msg.meta = ProtoMsg.Meta.from_dict({
@@ -229,7 +251,20 @@ class TraversalManager():
             log_exception()
 
     async def close(self):
-        """Cancel all background signal-handler tasks spawned by handle_router_msg."""
+        """Cancel all background tasks and clean up all registered plugins.
+
+        Iterates a snapshot of self.plugins so that close_plugin() can safely
+        mutate the dict (via pop) while we iterate.
+        """
+        # Close each plugin: cancels background punch tasks, clears shared
+        # state, and cancels any unresolved result futures.
+        for plugin in list(self.plugins.values()):
+            try:
+                await self.close_plugin(plugin)
+            except Exception:
+                log_exception()
+
+        # Cancel background signal-handler tasks spawned by handle_router_msg.
         live = [t for t in self.tasks if not t.done()]
         for t in live:
             t.cancel()

@@ -97,29 +97,53 @@ class PunchPlugin(TraversalPlugin):
         # The delay is kept short when using FAST_PUNCH_PARAMS because the
         # rendezvous window is small and synchronised via sleep_until().
         coordinator_delay = puncher.params.get("coordinator_delay", 2.0)
-        await asyncio.sleep(coordinator_delay)
+        try:
+            await asyncio.sleep(coordinator_delay)
 
+            """
+            bad = find_unpicklable(puncher)
+            if bad:
+                path, value, error = bad
+                print("Unpicklable at:", path)
+                print("Type:", type(value))
+                print("Error:", error)
+            """
+
+            pipe = await start_punching_process(
+                nic,
+                puncher,
+                self.stop_reader,
+                self.proc_pool,
+            )
+
+            # Guard against a second concurrent call resolving the same future,
+            # which would raise asyncio.InvalidStateError.
+            if not self.result.done():
+                #self.result.add_msg_cb(self.node.msg_cb)
+                self.result.set_result(pipe)
+        finally:
+            # Always remove shared state so subsequent attempts start clean.
+            # This runs on normal completion, cancellation, and exceptions.
+            self.punch_proc.pop(self.pipe_id, None)
+            self.punch_clients.pop(self.pipe_id, None)
+
+    async def close(self):
+        """Cancel any in-flight punch task and remove this plugin's shared state.
+
+        Safe to call multiple times: pop() is a no-op when the key is absent
+        and task/future guards check done() before acting.
         """
-        bad = find_unpicklable(puncher)
-        if bad:
-            path, value, error = bad
-            print("Unpicklable at:", path)
-            print("Type:", type(value))
-            print("Error:", error)
-        """
-
-        pipe = await start_punching_process(
-            nic,
-            puncher,
-            self.stop_reader,
-            self.proc_pool,
-        )
-
-        # Guard against a second concurrent call resolving the same future,
-        # which would raise asyncio.InvalidStateError.
+        task = self.punch_proc.pop(self.pipe_id, None)
+        self.punch_clients.pop(self.pipe_id, None)
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+        # Cancel the result future if nobody resolved it (e.g. outer timeout).
         if not self.result.done():
-            #self.result.add_msg_cb(self.node.msg_cb)
-            self.result.set_result(pipe)
+            self.result.cancel()
 
     async def setup_puncher_client(self, reply):
         """

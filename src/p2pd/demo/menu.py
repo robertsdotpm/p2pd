@@ -30,15 +30,28 @@ async def connect_option(node, con_opts):
     cout("Connection in progress... Please wait...")
 
     # Attempt to make the tunnel connection to the remote host.
+    # Capture the plugin in the outer scope so we can cancel its punch task
+    # if the attempt times out or fails, preventing stale subprocesses from
+    # holding ports and poisoning the next attempt.
+    plugin_holder = [None]
+
     async def get_pipe():
         plugin = await node.connect(af, route_type, dest_addr, plugin_name)
+        plugin_holder[0] = plugin
         pipe = await plugin.result
         return pipe
-    
+
     pipe = await async_wrap_errors(
         get_pipe(),
         timeout=40
     )
+
+    # Unconditional cleanup: cancels any still-running punch task and removes
+    # the plugin from the traversal manager's registry.  On success the punch
+    # task is already done so this is a fast no-op; on failure it terminates
+    # the background subprocess and frees the ports for the next attempt.
+    if plugin_holder[0] is not None:
+        await node.traversal.close_plugin(plugin_holder[0])
 
     try:
         if pipe is None:
