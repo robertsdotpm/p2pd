@@ -50,12 +50,13 @@ from .punch_defs import *
 from .port_allocators.boundary_alloc import *
 from .engines.tcp_selector_simple.engine import *
 from .utility.punch_utils import *
+from .utility.boundary_lib import DEFAULT_PUNCH_PARAMS
 
 
 # TODO: Could even use ARP to find the other node in a LAN
 # running the same tool so the dest IP doesn't have to be specified.
 class PunchClient:
-    def __init__(self, dest_ip, src_ip=None, our_ip=None, nic_id=None, max_sleep=10, same_machine=False):
+    def __init__(self, dest_ip, src_ip=None, our_ip=None, nic_id=None, max_sleep=10, same_machine=False, params=None):
         # Fallback to IP4
         self.af = socket.AF_INET
         if ":" in dest_ip:
@@ -75,7 +76,7 @@ class PunchClient:
             # if its found of course.
             if self.af == IP6 and "%" in src_ip:
                 self.nic_id = src_ip.split("%")[1]
-        
+
         # Listen bind / dest connect matrixes.
         self.port_allocs = [] # [ src bind, dest port ]
 
@@ -86,7 +87,19 @@ class PunchClient:
         # Default to inaccurate system clock.
         self.timestamp = int(time.time())
         self.start_time = time.monotonic()
-        self.max_sleep = max_sleep
+
+        # Build the effective params dict.
+        # If params is provided it takes priority; otherwise build from
+        # DEFAULT_PUNCH_PARAMS with the legacy max_sleep kwarg applied so
+        # that existing callers (tests, CLI) that pass max_sleep= directly
+        # continue to work without change.
+        if params is not None:
+            self.params = params
+        else:
+            self.params = dict(DEFAULT_PUNCH_PARAMS)
+            self.params["max_sleep"] = max_sleep
+
+        self.max_sleep = self.params["max_sleep"]
 
         # Sanity check -- don't punch to self.
         if our_ip and 0: # TODO: disabled
@@ -148,7 +161,7 @@ class PunchClient:
             time.sleep(sleep_time)
 
     def add_port_allocator(self, f_port_alloc, n=16):
-        port_allocs, reserved = f_port_alloc(self.timestamp, n=n)
+        port_allocs, reserved = f_port_alloc(self.timestamp, n=n, params=self.params)
         for port_alloc in port_allocs:
             is_unique = True
             for stored_port_alloc in self.port_allocs:
@@ -170,7 +183,8 @@ class PunchClient:
             dest_ip=self.dest_ip,
             f_sleep_until=self.sleep_until,
             our_ip=self.our_ip,
-            same_machine=self.same_machine
+            same_machine=self.same_machine,
+            params=self.params,
         )
 
 if __name__ == "__main__":

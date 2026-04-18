@@ -61,9 +61,15 @@ def listen_on_tcp_sockets(bound_infos):
 
     return listen_infos
 
-def connect_on_tcp_sockets(same_machine, bound_infos, dest_ip):
+def connect_on_tcp_sockets(same_machine, bound_infos, dest_ip, spray_duration=5.0):
+    """
+    Spray SYN packets at the destination for `spray_duration` seconds.
+
+    spray_duration: how long to keep spraying (seconds).  The CLI default is
+    5.0 s; FAST_PUNCH_PARAMS uses 2.0 s for LAN/protocol usage.
+    """
     start = time.monotonic()
-    end = start + 5
+    end = start + spray_duration
     while time.monotonic() < end:
         for p, s in bound_infos:
             try:
@@ -85,11 +91,11 @@ def connect_on_tcp_sockets(same_machine, bound_infos, dest_ip):
 def sleep_until(punch_time, f_timer, max_sleep=10):
     now = f_timer()
     sleep_time = max(0, punch_time - now)
-    
+
     # Cap sleep time to avoid large blocks if the host clock is far behind
     if sleep_time > max_sleep:
         sleep_time = max_sleep
-        
+
     if sleep_time > 0:
         time.sleep(sleep_time)
 

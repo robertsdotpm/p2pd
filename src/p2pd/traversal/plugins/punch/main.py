@@ -4,6 +4,7 @@ from aionetiface import *
 from ....protocol.traversal.proto_msg import PunchMsg, DoneMsg
 from ...libs.punch.punch_defs import *
 from ...libs.punch.utility.punch_utils import *
+from ...libs.punch.utility.boundary_lib import FAST_PUNCH_PARAMS
 from ...libs.punch.punch_client import *
 from ...libs.punch.port_allocators.nat_predict_alloc import *
 from ...libs.punch.punch_process import *
@@ -92,9 +93,11 @@ class PunchPlugin(TraversalPlugin):
 
     # ... (other methods, including delayed_start_punching_proc) ...
     async def delayed_start_punching_proc(self, nic, puncher):
-        # Wait for recv to send updated mappings if any.
-        # Sender also has to wait to stay in sync.
-        await asyncio.sleep(2)
+        # Wait for the peer to receive our message and set up its own process.
+        # The delay is kept short when using FAST_PUNCH_PARAMS because the
+        # rendezvous window is small and synchronised via sleep_until().
+        coordinator_delay = puncher.params.get("coordinator_delay", 2.0)
+        await asyncio.sleep(coordinator_delay)
 
         """
         bad = find_unpicklable(puncher)
@@ -151,6 +154,11 @@ class PunchPlugin(TraversalPlugin):
         print("punch dest ip = ", dest_ip)
 
         # 3. Create and Configure PunchClient
+        # FAST_PUNCH_PARAMS is used for network-protocol punching: the punch_time
+        # is communicated between peers via PunchMsg so we do not need the large
+        # WINDOW / MAX_CLOCK_ERROR values used by the CLI standalone mode.  The
+        # tight window (6 s) and short coordinator_delay (0.5 s) cut total punch
+        # latency roughly in half compared to the conservative CLI defaults.
         print("nic id = ", self.nic.id)
         print("src ip = ", src_ip)
         print("decider ip = ", decider_ip)
@@ -159,8 +167,8 @@ class PunchPlugin(TraversalPlugin):
             src_ip,
             decider_ip,
             self.nic.id,
-            max_sleep=PUNCH_MAX_SLEEP,
             same_machine=self.same_machine,
+            params=FAST_PUNCH_PARAMS,
         )
 
         # 4. Set Coordinated Time References
@@ -176,12 +184,22 @@ class PunchPlugin(TraversalPlugin):
         """
 
         # Calculate a future timestamp to use as the punch time.
-        _, punch_time = compute_rendezvous(timestamp)
-    
+        # Use the timing constants from the puncher's params so that the
+        # rendezvous window matches the params preset (e.g. FAST_PUNCH_PARAMS).
+        p = puncher.params
+        _, punch_time = compute_rendezvous(
+            timestamp,
+            window=p["window"],
+            min_run_window=p["min_run_window"],
+            max_error=p["max_clock_error"],
+        )
+
         # Set punch time.
         puncher.set_punch_time(punch_time)
 
         # Deterministic predictions based on boundary math.
+        # PunchClient.add_port_allocator forwards self.params to the allocator
+        # so it uses the same window / error constants for bucket derivation.
         puncher.add_port_allocator(boundary_port_alloc)
             
         # Return the new puncher and the STUN clients

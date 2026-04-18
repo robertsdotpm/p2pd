@@ -11,7 +11,7 @@ NTP_TIMEOUT = 1.0
 
 # --------------------------
 # --- Time Rendezvous Constants ---
-# WINDOW must be > 2 * MAX_CLOCK_ERROR (2 * 20 = 40) to guarantee both hosts 
+# WINDOW must be > 2 * MAX_CLOCK_ERROR (2 * 20 = 40) to guarantee both hosts
 # select the same time bucket/boundary despite the clock offset.
 WINDOW = 42
 MAX_CLOCK_ERROR = 20 # The known max clock difference (1-20s)
@@ -24,6 +24,52 @@ RETRY_INTERVAL = 0.05
 MAX_SLEEP = 10
 LARGE_PRIME = 2654435761
 # --------------------------
+
+# --------------------------
+# --- Punch Parameter Presets ---
+#
+# DEFAULT_PUNCH_PARAMS: Robust conservative values for CLI / standalone usage.
+#   - Large WINDOW (42 s) and MAX_CLOCK_ERROR (20 s) tolerate poor NTP sync.
+#   - Rendezvous wait: 10–52 seconds worst-case.
+#
+# FAST_PUNCH_PARAMS: Tight values for network-protocol usage where punch_time
+#   is communicated between peers so both sides use the exact same value.
+#   Constraint: window > 2 * max_clock_error  →  6 > 2*2 = 4  ✓
+#   - Rendezvous wait: 2–8 seconds.
+#   - max_sleep (8 s) is deliberately above the 8 s worst-case remaining wait
+#     so sleep_until() does NOT fire early — both sides synchronise exactly.
+# --------------------------
+
+DEFAULT_PUNCH_PARAMS = {
+    # Time rendezvous
+    "window": WINDOW,               # 42 s
+    "max_clock_error": MAX_CLOCK_ERROR,  # 20 s
+    "min_run_window": MIN_RUN_WINDOW,    # 10 s
+    # Engine timing
+    "connect_timeout": CONNECT_TIMEOUT,  # 5.0 s spray window
+    "monitor_timeout": CONNECT_TIMEOUT,  # 5.0 s monitor window
+    "retry_interval": RETRY_INTERVAL,    # 0.05 s selector poll interval
+    # PunchClient / plugin timing
+    "max_sleep": MAX_SLEEP,              # 10 s cap for sleep_until
+    "coordinator_delay": 2.0,            # s delay before spawning punch process
+}
+
+FAST_PUNCH_PARAMS = {
+    # Time rendezvous — much tighter window for protocol-coordinated punching.
+    # punch_time is communicated via PunchMsg so independent NTP alignment is
+    # not required; we just need window > 2 * max_clock_error for bucket safety.
+    "window": 6,             # 6 s  (> 2 * 2 s max_clock_error)
+    "max_clock_error": 2,    # 2 s  (NTP is typically < 0.5 s; 2 s is conservative)
+    "min_run_window": 2,     # 2 s  (enough for protocol exchange + process startup)
+    # Engine timing — shorter for LAN / in-protocol usage
+    "connect_timeout": 2.0,  # 2.0 s spray window
+    "monitor_timeout": 2.0,  # 2.0 s monitor window
+    "retry_interval": 0.05,  # 0.05 s selector poll interval (unchanged)
+    # PunchClient / plugin timing
+    "max_sleep": 8,           # 8 s cap — above worst-case (window + min_run_window)
+                              # so sleep_until reaches the actual rendezvous time.
+    "coordinator_delay": 0.5, # 0.5 s delay (reduced from 2 s)
+}
 
 def now_from_network(network_timer, network_time):
     """Returns the current Unix timestamp aligned to the NTP reference."""

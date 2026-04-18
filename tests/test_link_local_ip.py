@@ -80,6 +80,14 @@ def _v4_route_pool():
     return RoutePool([route])
 
 
+def _v4_local_only_route_pool():
+    """IPv4 route pool with no global route — only a private LAN IP.
+    Simulates a NIC where STUN failed (no internet access).
+    The private IP is stored in RoutePool.link_locals as a local fallback."""
+    priv_ipr = IPR(LAN_V4)
+    return RoutePool(routes=[], link_locals=[priv_ipr])
+
+
 def _nic_link_local_only():
     """
     NIC with link-local IPv6 only — no global IPv6 routes.
@@ -242,6 +250,61 @@ class TestMakeNodeAddrLinkLocal(unittest.TestCase):
         nic_ip = parsed[IP6][0]["nic"]
         self.assertEqual(str(nic_ip), LINK_LOCAL,
                          "NIC IPv6 field should contain the link-local")
+
+
+# ---------------------------------------------------------------------------
+# 4. IPv4 local-only fallback (no global WAN resolved)
+# ---------------------------------------------------------------------------
+class TestMakeNodeAddrLocalIPv4Fallback(unittest.TestCase):
+    """When a NIC has a private IPv4 but no global route was resolved (e.g.
+    STUN failed because there is no internet access), make_node_addr must
+    still include the private IP so LAN peers can reach the node."""
+
+    def _nic_local_v4_only(self):
+        """NIC where IPv4 STUN failed — private IP stored in link_locals."""
+        return _build_interface(
+            _v4_local_only_route_pool(),
+            RoutePool()  # no IPv6
+        )
+
+    def _addr_for(self, nic):
+        return make_node_addr(PUB_KEY, MACHINE_ID, [nic], port=PORT)
+
+    def test_local_ipv4_encoded_when_no_global_route(self):
+        """Regression: private IPv4 must appear in the address even when
+        no WAN route was resolved (link_locals fallback path)."""
+        nic = self._nic_local_v4_only()
+        addr = self._addr_for(nic)
+        parsed = parse_node_addr(addr)
+
+        self.assertIsNotNone(parsed)
+        self.assertGreater(len(parsed[IP4]), 0,
+                           "Expected IPv4 entry for local-only NIC in node address")
+        ext_ip = parsed[IP4][0]["ext"]
+        nic_ip = parsed[IP4][0]["nic"]
+        self.assertEqual(str(ext_ip), LAN_V4,
+                         f"ext IPv4 should be the LAN IP {LAN_V4!r}, got {str(ext_ip)!r}")
+        self.assertEqual(str(nic_ip), LAN_V4,
+                         f"nic IPv4 should be the LAN IP {LAN_V4!r}, got {str(nic_ip)!r}")
+
+    def test_sort_ips_by_nic_finds_local_ipv4(self):
+        """sort_ips_by_nic must locate a private IPv4 stored in link_locals
+        (same fix as for IPv6 link-locals)."""
+        nic = self._nic_local_v4_only()
+        result = sort_ips_by_nic([LAN_V4], [nic])
+        self.assertIn(LAN_V4, result["mock0"],
+                      "private IPv4 not found on NIC with no global route")
+
+    def test_global_route_takes_precedence_over_link_locals(self):
+        """When a global IPv4 route exists the link_locals fallback must not
+        interfere — the global route should be used as normal."""
+        nic = _build_interface(_v4_route_pool(), RoutePool())
+        addr = self._addr_for(nic)
+        parsed = parse_node_addr(addr)
+
+        ext_ip = parsed[IP4][0]["ext"]
+        self.assertEqual(str(ext_ip), WAN_V4,
+                         "global WAN IP should be used when a route exists")
 
 
 if __name__ == "__main__":
