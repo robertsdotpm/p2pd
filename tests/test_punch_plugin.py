@@ -40,6 +40,7 @@ Requirements
 """
 
 import asyncio
+import copy
 import socket
 import sys
 import time
@@ -48,10 +49,12 @@ from concurrent.futures import ProcessPoolExecutor
 from unittest.mock import patch
 
 from aionetiface import (
-    Interface, IP4,
+    Interface, IP4, IP6,
     NIC_BIND,
     SysClock,
     async_wrap_errors,
+    bind_closure,
+    binder_async,
 )
 
 # NAT type / delta constants come from aionetiface via the star import
@@ -555,6 +558,308 @@ class TestPunchPluginBidirectional(AsyncTestCase):
                 print("  {} pipe socket info error: {}".format(label, e))
 
         print("\n  ✓ Bidirectional PunchPlugin integration test passed.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# IPv6 link-local fake NIC helper
+# ─────────────────────────────────────────────────────────────────────────────
+
+def make_fake_nic_v6(real_nic, target_ll_ipr):
+    """
+    Fake NIC for IPv6 link-local punch tests.
+
+    Extends make_fake_nic by also overriding route.link_locals so that
+    setup_puncher_client's ``src_ip = str(route.link_locals[0])`` returns
+    *target_ll_ipr* instead of the NIC's actual primary link-local address.
+
+    For global (non-fe80) destinations setup_puncher_client falls back to
+    route.nic(), which is driven by nic_ips.  Both are overridden here so
+    the fake NIC works for either code path.
+    """
+    class FakeNICv6:
+        __name__ = "FakeNICv6"
+
+        def __init__(self):
+            self.name = real_nic.name
+            self.id   = getattr(real_nic, "id", 0)
+
+        def route(self, req_af=None):
+            r = copy.deepcopy(real_nic.route(IP6))
+            r.nic_ips    = [target_ll_ipr]
+            r.link_locals = [target_ll_ipr]
+            r.resolved   = False
+            r.interface  = _instance
+            r.bind       = bind_closure(r, binder_async)
+            return r
+
+        def supported(self):
+            return [IP6]
+
+    _instance = FakeNICv6()
+    return _instance
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# IPv6 link-local punch plugin test
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
+    """
+    Bidirectional PunchPlugin integration test using IPv6 link-local (fe80) addresses.
+
+    Exercises the same three-message handshake as TestPunchPluginBidirectional
+    but specifically targets the fe80 code path in setup_puncher_client:
+
+        if "fe80" == dest_ip[:4]:
+            src_ip = str(route.link_locals[0])   # <-- this branch
+
+    This verifies that:
+      1. scope IDs (%ens34) flow correctly through ip_norm / patch_connect_ip
+      2. the fake NIC's link_locals override is picked up by setup_puncher_client
+      3. the complete signaling exchange and port-allocation symmetry hold for IPv6
+
+    Skipped when the active NIC has fewer than two link-local IPv6 addresses.
+    """
+
+    async def asyncSetUp(self):
+        self.nic = await Interface()
+
+        if IP6 not in self.nic.supported():
+            self.skipTest("IPv6 not available on this machine")
+
+        r6 = self.nic.route(IP6)
+        link_locals = r6.link_locals
+
+        if len(link_locals) < 2:
+            self.skipTest(
+                "Need ≥ 2 link-local IPv6 addresses for bidirectional link-local "
+                "punch test (found: {})".format([str(ip) for ip in link_locals])
+            )
+
+        self.ll_a = link_locals[0]   # IPRange
+        self.ll_b = link_locals[1]   # IPRange
+        self.nic_id = self.nic.id
+
+        self.sys_clock = SysClock(None, int(time.time()))
+        self.proc_pool = ProcessPoolExecutor(max_workers=2)
+        self.stop_r, self.stop_w = socket.socketpair()
+        self.stop_r.setblocking(False)
+        self._plugins = []
+
+    async def asyncTearDown(self):
+        for plugin in self._plugins:
+            if not plugin.result.done():
+                plugin.result.cancel()
+            for task in list(plugin.punch_proc.values()):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(
+                *[t for t in plugin.punch_proc.values()],
+                return_exceptions=True,
+            )
+
+        self.proc_pool.shutdown(wait=False)
+
+        for s in (self.stop_r, self.stop_w):
+            try:
+                s.close()
+            except Exception:
+                pass
+
+    # ── helpers ──────────────────────────────────────────────────────────────
+
+    def _make_addr_info_v6(self, ip_ipr, if_index=0):
+        """
+        Build src_info / dest_info for an IPv6 link-local address.
+
+        The "nic" field carries the scoped address (fe80::...%ens34) so that
+        select_dest_ipr returns the scoped string as dest_info["ip"].
+        setup_puncher_client then feeds this to PunchClient.__init__ which
+        calls ip_norm (strips %) and patch_connect_ip (re-adds %) before use.
+        """
+        ip_bare  = str(ip_ipr.ip)                      # "fe80::xxx"  (no scope)
+        ip_scoped = "{}%{}".format(ip_bare, self.nic_id)  # "fe80::xxx%ens34"
+        return {
+            "if_index": if_index,
+            "netiface_index": 0,
+            "ext": ip_bare,
+            "nic": ip_scoped,
+            "nat": nat_info(RESTRICT_PORT_NAT, delta_info(EQUAL_DELTA, 0)),
+            "port": 3000,
+        }
+
+    def _build_plugin_v6(self, src_ll_ipr, dest_ll_ipr, nic=None):
+        """
+        Instantiate a PunchPlugin configured for IPv6 link-local addresses.
+        """
+        effective_nic = nic or self.nic
+
+        fake_stun = FakeStunClient(effective_nic, IP6)
+        stun_table = {IP6: {0: [fake_stun]}}
+
+        factory = PunchPluginFactory(
+            stun_clients=stun_table,
+            punch_clients={},
+            sys_clock=self.sys_clock,
+            proc_pool=self.proc_pool,
+        )
+        plugin = factory.build_plugin()
+        plugin.stop_reader = self.stop_r
+
+        src_info  = self._make_addr_info_v6(src_ll_ipr)
+        dest_info = self._make_addr_info_v6(dest_ll_ipr)
+
+        plugin.set_routing(IP6, src_info, dest_info, effective_nic)
+        plugin.set_context(
+            route_type=NIC_BIND,
+            same_machine=True,
+            set_bind=True,
+            timeout=60,
+        )
+
+        self._plugins.append(plugin)
+        return plugin
+
+    # ── main test ─────────────────────────────────────────────────────────────
+
+    async def test_full_plugin_sequence_ipv6_link_local(self):
+        """
+        Three-message punch-plugin handshake over IPv6 link-local addresses.
+
+        Plugin A uses the real NIC's first link-local (ll_a); a fake NIC
+        wrapper overrides link_locals to return ll_b for plugin B so that
+        setup_puncher_client → route.link_locals[0] picks the right address
+        on each side.
+        """
+        ip_a_str = str(self.ll_a.ip)
+        ip_b_str = str(self.ll_b.ip)
+        print("\n\nIPv6 Link-Local PunchPlugin test: {}%{} ↔ {}%{}".format(
+            ip_a_str, self.nic_id, ip_b_str, self.nic_id))
+
+        # Plugin A – real NIC, link_locals[0] = ll_a (natural).
+        # Plugin B – fake NIC that overrides link_locals to return ll_b.
+        nic_b = make_fake_nic_v6(self.nic, self.ll_b)
+
+        plugin_a = self._build_plugin_v6(src_ll_ipr=self.ll_a, dest_ll_ipr=self.ll_b)
+        plugin_b = self._build_plugin_v6(src_ll_ipr=self.ll_b, dest_ll_ipr=self.ll_a, nic=nic_b)
+
+        plugin_b.set_pipes({}, plugin_a.pipe_id)
+
+        msgs_for_b: asyncio.Queue = asyncio.Queue()
+        msgs_for_a: asyncio.Queue = asyncio.Queue()
+
+        async def sender_a(msg, plugin=None, relay_no=2):
+            await msgs_for_b.put(msg)
+
+        async def sender_b(msg, plugin=None, relay_no=2):
+            await msgs_for_a.put(msg)
+
+        plugin_a.set_signal_msg_sender(sender_a)
+        plugin_b.set_signal_msg_sender(sender_b)
+
+        with patch(
+            "p2pd.traversal.libs.nat_predict.preload_mappings",
+            side_effect=_fake_preload_mappings,
+        ):
+            # Step 1 – A initiates
+            print("  [Step 1] A.run(None) …")
+            await async_wrap_errors(plugin_a.run(reply=None))
+
+            msg_a = await asyncio.wait_for(msgs_for_b.get(), timeout=10)
+            self.assertIsNotNone(msg_a)
+            self.assertIsInstance(msg_a, PunchMsg)
+            self.assertTrue(len(msg_a.payload.mappings) > 0)
+            print("  [Step 1] ✓  A produced PunchMsg ({} mapping(s))".format(
+                len(msg_a.payload.mappings)))
+
+            # Step 2 – B responds
+            print("  [Step 2] B.run(reply=A_msg) …")
+            await async_wrap_errors(plugin_b.run(reply=msg_a))
+
+            msg_b = await asyncio.wait_for(msgs_for_a.get(), timeout=10)
+            self.assertIsNotNone(msg_b)
+            self.assertIsInstance(msg_b, PunchMsg)
+            self.assertTrue(len(msg_b.payload.mappings) > 0)
+            print("  [Step 2] ✓  B produced PunchMsg ({} mapping(s))".format(
+                len(msg_b.payload.mappings)))
+
+            # Step 3 – A finalises
+            print("  [Step 3] A.run(reply=B_msg) …")
+            await async_wrap_errors(plugin_a.run(reply=msg_b))
+            self.assertTrue(msgs_for_b.empty(), "No fourth message expected")
+            print("  [Step 3] ✓  A finalised – no further message sent")
+
+        # ── port-allocation symmetry ──────────────────────────────────────────
+        puncher_a = plugin_a.punch_clients.get(plugin_a.pipe_id)
+        puncher_b = plugin_b.punch_clients.get(plugin_a.pipe_id)
+
+        self.assertIsNotNone(puncher_a)
+        self.assertIsNotNone(puncher_b)
+
+        ports_a = {alloc.dest_port for alloc in puncher_a.port_allocs}
+        ports_b = {alloc.dest_port for alloc in puncher_b.port_allocs}
+        shared_ports = ports_a & ports_b
+        self.assertTrue(
+            len(shared_ports) > 0,
+            "A and B must share ≥ 1 agreed port (A={}, B={})".format(ports_a, ports_b),
+        )
+        print("  Agreed port(s): {}".format(shared_ports))
+
+        self.assertEqual(
+            puncher_a.punch_time, puncher_b.punch_time,
+            "Both sides must agree on punch_time",
+        )
+
+        # ── verify fe80 scope IDs were applied correctly ──────────────────────
+        # PunchClient.__init__ calls ip_norm (strips %) then patch_connect_ip
+        # (re-adds %nic_id).  After that, puncher.dest_ip must be "ip%nic_id".
+        expected_dest_a = "{}%{}".format(ip_b_str, self.nic_id)
+        expected_dest_b = "{}%{}".format(ip_a_str, self.nic_id)
+        self.assertEqual(
+            puncher_a.dest_ip, expected_dest_a,
+            "Plugin A: dest_ip must carry scope ID (got {!r})".format(puncher_a.dest_ip),
+        )
+        self.assertEqual(
+            puncher_b.dest_ip, expected_dest_b,
+            "Plugin B: dest_ip must carry scope ID (got {!r})".format(puncher_b.dest_ip),
+        )
+        print("  A dest_ip: {}  (scope correct)".format(puncher_a.dest_ip))
+        print("  B dest_ip: {}  (scope correct)".format(puncher_b.dest_ip))
+
+        # ── wait for punch results ────────────────────────────────────────────
+        print("  Waiting for punch result Futures (≤ 30 s) …")
+        try:
+            result_a, result_b = await asyncio.wait_for(
+                asyncio.gather(
+                    asyncio.shield(plugin_a.result),
+                    asyncio.shield(plugin_b.result),
+                ),
+                timeout=30,
+            )
+        except asyncio.TimeoutError:
+            self.fail(
+                "Punch result Futures did not resolve within 30 s. "
+                "Agreed ports: {}".format(shared_ports)
+            )
+
+        print("\n  Result A: {}".format(result_a))
+        print("  Result B: {}".format(result_b))
+
+        self.assertIsNotNone(result_a, "Plugin A punch must succeed")
+        self.assertIsNotNone(result_b, "Plugin B punch must succeed")
+
+        for label, result in [("A", result_a), ("B", result_b)]:
+            if result is None:
+                continue
+            try:
+                sock = result.sock
+                local = sock.getsockname()
+                peer  = sock.getpeername()
+                print("  {} pipe: local={} → peer={}".format(label, local, peer))
+            except Exception as e:
+                print("  {} pipe socket info error: {}".format(label, e))
+
+        print("\n  ✓ IPv6 link-local PunchPlugin integration test passed.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
