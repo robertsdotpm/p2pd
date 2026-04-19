@@ -154,5 +154,6 @@ tasks are only processed after input finishes -- how to do this with async?
 - add encryption
 - add signing check in msg protocol
 - refactor code (plugin manager, punch, etc)
-- prompt for lon addr if pnp fails
-- menu bug -- invalid con choice should reprompt
+- how does the new connect thing actually handle multiple nics?
+  im not sure it does in the same way that the old algorithm used select
+  route stuff
