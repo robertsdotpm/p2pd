@@ -286,15 +286,6 @@ class TraversalManager():
         # Prune completed tasks to avoid unbounded growth.
         self.tasks = [t for t in self.tasks if not t.done()]
 
-    # Cleanup timed out plugins.
-    async def cleanup_loop(self):
-        while True:
-            await asyncio.sleep(5)
-            now = asyncio.get_event_loop().time()
-            for plugin in list(self.plugins.values()):
-                if now >= plugin.expires_at:
-                    await close_plugin(plugin, self.plugins, self.inbound_pipes)
-
     async def close(self):
         await cancel_task(self.cleanup_task)
         for plugin in list(self.plugins.values()):
@@ -305,6 +296,15 @@ class TraversalManager():
 
         await cancel_tasks(self.tasks)
         self.tasks.clear()
+
+    # Cleanup timed out plugins.
+    async def cleanup_loop(self):
+        while True:
+            await asyncio.sleep(5)
+            now = asyncio.get_event_loop().time()
+            for plugin in list(self.plugins.values()):
+                if now >= plugin.expires_at:
+                    await close_plugin(plugin, self.plugins, self.inbound_pipes)
 
     def install_plugin_done_callback(self, done_callback):
         self.done_callback = done_callback

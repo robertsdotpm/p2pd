@@ -71,7 +71,7 @@ from aionetiface import (
     EXT_BIND,
     to_s, rand_plain,
     async_wrap_errors, log_exception,
-    bind_closure, binder_async,
+    bind_closure, binder_async, binder_sync,
 )
 
 from p2pd.traversal.libs.punch.punch_client import PunchClient
@@ -142,6 +142,7 @@ else:
 # Punch testing helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class SimpleTCPServer:
     """
     A simple TCP server that listens on a specific IP and port.
@@ -165,7 +166,12 @@ class SimpleTCPServer:
         except Exception:
             pass
 
-        self.sock.bind((self.ip, self.port))
+        if self.af == socket.AF_INET6:
+            bare_ip, _, nic_name = self.ip.partition("%")
+            bind_tup = binder_sync(IP6, bare_ip, self.port, nic_name or None)
+        else:
+            bind_tup = (self.ip, self.port)
+        self.sock.bind(bind_tup)
         self.sock.listen(5)
         self.listening = True
 
@@ -1214,11 +1220,11 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
         except Exception:
             pass
 
-        client.bind((self.ip_b_with_scope, 0))
+        client.bind(binder_sync(IP6, self.ip_b, 0, self.nic_name))
         client.setblocking(0)
 
         try:
-            client.connect((self.ip_a, server_port))
+            client.connect(binder_sync(IP6, self.ip_a, server_port, self.nic_name))
         except BlockingIOError:
             pass
 
@@ -1230,7 +1236,9 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
 
         self.assertIsNotNone(conn,
             "IPv6 Server on {}:{} should accept connection from {}".format(self.ip_a, server_port, self.ip_b))
-        self.assertEqual(addr[0], self.ip_b,
+        self.assertEqual(
+            socket.inet_pton(socket.AF_INET6, addr[0]),
+            socket.inet_pton(socket.AF_INET6, self.ip_b),
             "Server should see connection from IPv6 IP B")
 
         client.close()
@@ -1368,7 +1376,7 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
             listen_sock_a.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         except Exception:
             pass
-        listen_sock_a.bind((self.ip_a_with_scope, 0))
+        listen_sock_a.bind(binder_sync(IP6, self.ip_a, 0, self.nic_name))
         listen_sock_a.listen(5)
         listen_port_a = listen_sock_a.getsockname()[1]
 
@@ -1378,7 +1386,7 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
             listen_sock_b.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         except Exception:
             pass
-        listen_sock_b.bind((self.ip_b_with_scope, 0))
+        listen_sock_b.bind(binder_sync(IP6, self.ip_b, 0, self.nic_name))
         listen_sock_b.listen(5)
         listen_port_b = listen_sock_b.getsockname()[1]
 

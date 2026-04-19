@@ -253,12 +253,12 @@ class PunchPlugin(TraversalPlugin):
         return msg
 
 class PunchPluginFactory():
-    def __init__(self, stun_clients, sys_clock=None):
+    def __init__(self, stun_clients, sys_clock=None, punch_clients=None, proc_pool=None):
         self.stun_clients = stun_clients
         self.sys_clock = sys_clock or SysClock(None, 0.1)
-        self.proc_pool = None
+        self.proc_pool = proc_pool
         self.max_workers = 0
-        self.punch_clients = {}
+        self.punch_clients = punch_clients if punch_clients is not None else {}
         self.punch_proc = {}
 
     @classmethod

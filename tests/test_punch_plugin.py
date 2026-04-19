@@ -370,7 +370,7 @@ class TestPunchPluginBidirectional(AsyncTestCase):
         # B must share A's pipe_id so the three-message state machine pairs
         # them up correctly.  In the real system this is done by
         # TraversalManager.get_plugin() when the first message arrives at B.
-        plugin_b.set_pipes({}, plugin_a.pipe_id)
+        plugin_b.set_inbound_pipes({}, plugin_id=plugin_a.plugin_id)
 
         # ── in-process message router ─────────────────────────────────────
         # Each plugin's send_signal_msg writes into a queue; the test loop
@@ -414,7 +414,7 @@ class TestPunchPluginBidirectional(AsyncTestCase):
 
             # Sanity: A's punch process task has been scheduled.
             self.assertIn(
-                plugin_a.pipe_id, plugin_a.punch_proc,
+                plugin_a.plugin_id, plugin_a.punch_proc,
                 "Plugin A's delayed punch task should be scheduled after step 1",
             )
 
@@ -436,7 +436,7 @@ class TestPunchPluginBidirectional(AsyncTestCase):
 
             # Sanity: B's punch process task has been scheduled.
             self.assertIn(
-                plugin_a.pipe_id, plugin_b.punch_proc,
+                plugin_a.plugin_id, plugin_b.punch_proc,
                 "Plugin B's delayed punch task should be scheduled after step 2",
             )
 
@@ -462,8 +462,8 @@ class TestPunchPluginBidirectional(AsyncTestCase):
         #   B: PortAlloc(src=P, dest=P)  →  bind IP_B:P, connect IP_A:P
         #
         # This is the symmetric simultaneous-open required for TCP hole-punch.
-        puncher_a = plugin_a.punch_clients.get(plugin_a.pipe_id)
-        puncher_b = plugin_b.punch_clients.get(plugin_a.pipe_id)  # shared pipe_id
+        puncher_a = plugin_a.punch_clients.get(plugin_a.plugin_id)
+        puncher_b = plugin_b.punch_clients.get(plugin_a.plugin_id)  # shared pipe_id
 
         self.assertIsNotNone(puncher_a, "Plugin A must have a stored PunchClient")
         self.assertIsNotNone(puncher_b, "Plugin B must have a stored PunchClient")
@@ -743,7 +743,7 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
         plugin_a = self._build_plugin_v6(src_ll_ipr=self.ll_a, dest_ll_ipr=self.ll_b)
         plugin_b = self._build_plugin_v6(src_ll_ipr=self.ll_b, dest_ll_ipr=self.ll_a, nic=nic_b)
 
-        plugin_b.set_pipes({}, plugin_a.pipe_id)
+        plugin_b.set_inbound_pipes({}, plugin_id=plugin_a.plugin_id)
 
         msgs_for_b: asyncio.Queue = asyncio.Queue()
         msgs_for_a: asyncio.Queue = asyncio.Queue()
@@ -790,8 +790,8 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
             print("  [Step 3] ✓  A finalised – no further message sent")
 
         # ── port-allocation symmetry ──────────────────────────────────────────
-        puncher_a = plugin_a.punch_clients.get(plugin_a.pipe_id)
-        puncher_b = plugin_b.punch_clients.get(plugin_a.pipe_id)
+        puncher_a = plugin_a.punch_clients.get(plugin_a.plugin_id)
+        puncher_b = plugin_b.punch_clients.get(plugin_a.plugin_id)
 
         self.assertIsNotNone(puncher_a)
         self.assertIsNotNone(puncher_b)

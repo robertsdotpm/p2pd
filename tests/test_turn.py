@@ -521,7 +521,7 @@ class TestTURNPluginIPv6(AsyncTestCase):
         p.same_machine = False
         p.set_bind     = False
         p.timeout      = 15
-        p.set_pipes(shared_pipes, pipe_id=pipe_id)
+        p.set_inbound_pipes(shared_pipes, plugin_id=pipe_id)
         return p
 
     async def test_get_turn_client_ipv6_with_local_server(self):
@@ -568,7 +568,7 @@ class TestTURNPluginIPv6(AsyncTestCase):
         self.assertIsNotNone(msg_a.payload.peer_tup)
         self.assertIsNotNone(msg_a.payload.relay_tup)
 
-        plugin_b = self.make_plugin(shared_pipes, pipe_id=plugin_a.pipe_id)
+        plugin_b = self.make_plugin(shared_pipes, pipe_id=plugin_a.plugin_id)
 
         sig_b_sent  = asyncio.Event()
         msgs_from_b = []
@@ -597,8 +597,8 @@ class TestTURNPluginIPv6(AsyncTestCase):
         self.assertTrue(plugin_a.result.done(), "plugin_a.result should be set")
         self.assertTrue(plugin_b.result.done(), "plugin_b.result should be set")
 
-        client_a = plugin_a.turn_clients[plugin_a.pipe_id]
-        client_b = plugin_b.turn_clients[plugin_b.pipe_id]
+        client_a = plugin_a.turn_clients[plugin_a.plugin_id]
+        client_b = plugin_b.turn_clients[plugin_b.plugin_id]
         self.clients_to_close += [client_a, client_b]
 
         tup_a = await client_a.client_tup_future
@@ -672,7 +672,7 @@ class TestTURNPlugin(AsyncTestCase):
         p.same_machine = False
         p.set_bind     = False
         p.timeout      = 15
-        p.set_pipes(shared_pipes, pipe_id=pipe_id)
+        p.set_inbound_pipes(shared_pipes, plugin_id=pipe_id)
         return p
 
     async def test_get_turn_client_with_local_server(self):
@@ -736,7 +736,7 @@ class TestTURNPlugin(AsyncTestCase):
         self.assertIsNotNone(msg_a.payload.relay_tup)
 
         # -- plug B --
-        plugin_b = self.make_plugin(shared_pipes, pipe_id=plugin_a.pipe_id)
+        plugin_b = self.make_plugin(shared_pipes, pipe_id=plugin_a.plugin_id)
 
         sig_b_sent  = asyncio.Event()
         msgs_from_b = []
@@ -773,8 +773,8 @@ class TestTURNPlugin(AsyncTestCase):
 
         # -- relay smoke test via the established clients --
         # Retrieve the TURNClient objects for a quick relay check.
-        client_a = plugin_a.turn_clients[plugin_a.pipe_id]
-        client_b = plugin_b.turn_clients[plugin_b.pipe_id]
+        client_a = plugin_a.turn_clients[plugin_a.plugin_id]
+        client_b = plugin_b.turn_clients[plugin_b.plugin_id]
         self.clients_to_close += [client_a, client_b]
 
         tup_a = await client_a.client_tup_future
