@@ -155,3 +155,5 @@ tasks are only processed after input finishes -- how to do this with async?
 - add encryption
 - add signing check in msg protocol
 - refactor code
+- prompt for lon addr if pnp fails
+- menu bug -- invalid con choice should reprompt

@@ -48,18 +48,6 @@ def punching_process_entry(puncher, listening_tup, stop_reader):
     except Exception:
         log_exception()
 
-def accept_reverse_connect_from_punching_proc(listen_sock):
-    with listen_sock:
-        listen_sock.setblocking(1)
-        listen_sock.listen(1)
-        
-        # Accept the connection
-        client_socket, _ = listen_sock.accept()
-        
-        # The listening socket closes automatically 
-        # when we exit this block
-        return client_socket
-
 async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
     loop = asyncio.get_event_loop()
     listen_pipe = None
@@ -89,7 +77,7 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
         # Wait for the reverse-connect client on the listen server.
         client_pipe = await asyncio.wait_for(
             listen_pipe.accept(),
-            timeout=40
+            timeout=20
         )
         print("after run in exec")
         print("listen client pipe sock = ", client_pipe.sock)

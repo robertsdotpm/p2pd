@@ -16,45 +16,6 @@ from ...libs.nat_predict import *
 from ...traversal_plugin import TraversalPlugin
 from ....node.node_utils import get_pp_executors
 
-def find_unpicklable(obj, path="obj", seen=None):
-    if seen is None:
-        seen = set()
-
-    # avoid infinite recursion
-    obj_id = id(obj)
-    if obj_id in seen:
-        return None
-    seen.add(obj_id)
-
-    # try direct pickle
-    try:
-        pickle.dumps(obj)
-        return None  # picklable
-    except Exception as e:
-        fail = (path, obj, e)
-
-    # explore container contents
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            r = find_unpicklable(v, f"{path}[{k!r}]", seen)
-            if r:
-                return r
-
-    if isinstance(obj, (list, tuple, set, frozenset)):
-        for i, v in enumerate(obj):
-            r = find_unpicklable(v, f"{path}[{i}]", seen)
-            if r:
-                return r
-
-    # inspect normal objects
-    if hasattr(obj, "__dict__"):
-        for k, v in vars(obj).items():
-            r = find_unpicklable(v, f"{path}.{k}", seen)
-            if r:
-                return r
-
-    return fail
-
 class PunchPlugin(TraversalPlugin):
     async def run(self, reply=None):
         punch_time = 0.0
