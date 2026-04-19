@@ -43,8 +43,8 @@ class TraversalManager():
 
         # Set after node_start runs.
         self.done_callback = None
-        self.kp = None        # Set after cryptography is loaded.
-        self.addr_bytes = None  # Set after node address is built.
+        self.kp = None
+        self.addr_bytes = None
         self.cleanup_task = None
 
     def install_plugin(self, name, conf):
@@ -197,6 +197,7 @@ class TraversalManager():
         if msg.meta.plugin_name not in self.plugin_loaders:
             raise Exception("Plugin not installed.")
 
+        # Creates a new plugin to handle a new incoming message from router.
         plugin = self.create_plugin(
             msg.meta.af,
             msg.meta.route_type,
@@ -244,26 +245,25 @@ class TraversalManager():
     # Receive a signal message from the router and pass it to a plugin.
     # Called by the MQTT client as: handler(msg, src_pk, queue_id, client)
     async def recv_signal_msg(self, msg, src_pk_hex, pipe_id_hex, client):
-        try:
-            buf = to_b(msg)
-            msg = try_unpack_msg(buf, self.kp.private_key, SIG_PROTO)
-            print("recv ", msg.to_dict())
+        msg = try_unpack_msg(to_b(msg), self.kp.private_key, SIG_PROTO)
+        print("recv ", msg.to_dict())
 
-            # TODO: re-enable TTL check once clock skew handling is solid.
-            # if int(self.router.get_time()) >= msg.meta.ttl:
-            #     raise Exception("Discarding expired msg.")
+        # Message has expired.
+        if int(self.router.get_time()) >= msg.meta.ttl:
+            raise Exception("Discarding expired msg.")
 
-            # Update routing destination with our current address.
-            msg.set_cur_addr(self.addr_bytes)
+        # Update routing destination with our current address.
+        msg.set_cur_addr(self.addr_bytes)
 
-            if msg.meta.pipe_id in self.plugins:
-                plugin = self.plugins[msg.meta.pipe_id]
-            else:
-                plugin = self.create_inbound_plugin(msg)
-        except Exception:
-            what_exception()
-            log_exception()
-            return
+        # If plugin exists check sender is authorized to reach plugin.
+        if msg.meta.pipe_id in self.plugins:
+            plugin = self.plugins[msg.meta.pipe_id]
+            if src_pk_hex != plugin.dest_map["pub_key_hex"]:
+                raise Exception("src_pk_hex mismatch for existing plugin.")
+        
+        # Plugin doesn't exist so create it.
+        if msg.meta.pipe_id not in self.plugins:
+            plugin = self.create_inbound_plugin(msg)
         
         # Route to destination via MQTT.
         if plugin.sig_pipe is None:
@@ -279,10 +279,14 @@ class TraversalManager():
                 self.run_plugin(plugin, reply=msg)
             )
         )
+        
+        # Record task ref to avoid garbage collection.
         self.tasks.append(task)
+
         # Prune completed tasks to avoid unbounded growth.
         self.tasks = [t for t in self.tasks if not t.done()]
 
+    # Cleanup timed out plugins.
     async def cleanup_loop(self):
         while True:
             await asyncio.sleep(5)
