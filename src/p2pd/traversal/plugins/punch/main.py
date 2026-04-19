@@ -14,6 +14,7 @@ from ...libs.punch.port_allocators.nat_predict_alloc import *
 from ...libs.punch.punch_process import *
 from ...libs.nat_predict import *
 from ...traversal_plugin import TraversalPlugin
+from ....node.node_utils import get_pp_executors
 
 def find_unpicklable(obj, path="obj", seen=None):
     if seen is None:
@@ -308,6 +309,7 @@ class PunchPluginFactory():
     async def create(cls, stun_clients, sys_clock):
         factory = cls(stun_clients, sys_clock)
         factory.max_workers, factory.proc_pool = await get_pp_executors()
+        factory.active_punchers = 0
         return factory
 
     def build_plugin(self):
@@ -365,13 +367,6 @@ class PunchPluginFactory():
 
         log("shutdown for pp executor done.")
         
-# TODO
-async def tcp_punch_cleanup(tunnel, ):
-    tunnel.node.active_punchers = max(
-        0,
-        tunnel.node.active_punchers - 1
-    )
-
 if __name__ == "__main__":
     async def build_punch_proto(af):
         nic = await Interface()

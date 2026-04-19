@@ -12,6 +12,7 @@ from .node_start import *
 from .node_stop import *
 from .node_protocol import node_protocol
 from .node_connect import apply_listen_ips, install_default_plugins, connect as node_connect
+from .node_resources import NodeResources
 from ..traversal.traversal_address import *
 from ..traversal.traversal_manager import TraversalManager
 from ..vendor.machine_id import *
@@ -41,24 +42,17 @@ class Node(Daemon):
         self.ifs = ifs
 
         # If listen IPs are set then route pool is restricted to just those IPs.
-
         if self.listen_ips:
             apply_listen_ips(self)
 
         # Handlers for the node protocol.
         self.msg_cbs = []
-
         self.inbound_pipes = {}   # by pipe_id
-        self.signal_pipes = {}    # by MQTT_SERVERS index
-        self.closeables = []      # factories that own resources and implement async close()
-        self.tasks = []
+        self.resources = NodeResources()
 
         # Watch for idle connections.
         self.last_recv_table = {} # [pipe] -> time
         self.last_recv_queue = [] # FIFO pipe ref
-
-        self.active_punchers = 0
-        self.max_punchers = 0
 
         # Set on start.
         self.addr_bytes = None

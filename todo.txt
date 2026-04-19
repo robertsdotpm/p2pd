@@ -148,3 +148,10 @@ plugins and cause timeouts loading it for the first time in the plugin run call
 
 duplicate messages are occuring through router
 tasks are only processed after input finishes -- how to do this with async?
+
+
+- if no con set returned on punch then it hangs forever
+- remove plugin id
+- add encryption
+- add signing check in msg protocol
+- refactor code

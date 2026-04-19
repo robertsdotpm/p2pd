@@ -101,7 +101,6 @@ async def setup_punch_coordination(node, sys_clock=None):
     if sys_clock is None:
         sys_clock = await SysClock(node.ifs[0]).start()
 
-    node.max_punchers, node.pp_executor = await get_pp_executors()
     node.sys_clock = sys_clock
 
 

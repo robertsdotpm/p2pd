@@ -33,14 +33,6 @@ async def shutdown_executor_with_timeout(executor, timeout=3):
         # Still blocking after timeout
         log("Warning: executor shutdown timed out")
 
-async def _cancel_tasks(tasks):
-    """Cancel a list of asyncio tasks and wait for them to finish."""
-    live = [t for t in tasks if not t.done()]
-    for t in live:
-        t.cancel()
-    if live:
-        await asyncio.gather(*live, return_exceptions=True)
-
 
 # Shutdown the node server and do cleanup.
 async def node_stop(node):
@@ -73,39 +65,8 @@ async def node_stop(node):
                     except Exception:
                         pass
 
-    # Close signal pipes (MQTT connections).
-    tasks = []
-    for pipe in node.signal_pipes.values():
-        if pipe is None:
-            continue
-        if isinstance(pipe, asyncio.Future):
-            if pipe.cancelled() or not pipe.done():
-                continue
-            try:
-                pipe = pipe.result()
-            except Exception:
-                continue
-        tasks.append(close_with_timeout(pipe))
-    if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Close factories that own resources (TURN clients, punch executor, etc.).
-    for closeable in getattr(node, "closeables", []):
-        try:
-            await closeable.close()
-        except Exception:
-            log_exception()
-
-    # Cancel the idle-pipe-closer background task.
-    closer = getattr(node, "idle_pipe_closer", None)
-    if closer is not None:
-        await _cancel_tasks([closer])
-        node.idle_pipe_closer = None
-
-    # Cancel any other long-running node tasks (nickname refresh, etc.)
-    if getattr(node, "tasks", None):
-        await _cancel_tasks(node.tasks)
-        node.tasks.clear()
+    if getattr(node, "resources", None):
+        await node.resources.close()
 
     # Close the traversal manager's background signal-handler tasks.
     traversal = getattr(node, "traversal", None)

@@ -93,14 +93,14 @@ async def close_idle_pipes(node):
     for the idle count down based on urgency (remaining
     processes) in reference to a min and max idle interval.
     """
-    if node.max_punchers <= 0:
+    punch = getattr(node.resources, "punch_factory", None)
+    if punch is None or punch.max_workers <= 0:
         return
 
     floor_check = 300
     ceil_check = 7200
     while not sock_has_data(node.stop_reader):
-        # Recalculate abs_placement dynamically
-        alloc_pcent = node.active_punchers / node.max_punchers
+        alloc_pcent = punch.active_punchers / punch.max_workers
         num_space = ceil_check - floor_check
         abs_placement = ceil_check - (num_space * alloc_pcent)
 
@@ -285,7 +285,3 @@ async def forward(node, port):
     ]
     return forward_success, reachable
 
-async def setup_punch_coordination(node, sys_clock):
-    node.max_punchers, node.pp_executor = await get_pp_executors()
-    #node.max_punchers, node.pp_executor = 10, None
-    node.sys_clock = sys_clock

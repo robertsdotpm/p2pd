@@ -184,9 +184,7 @@ async def initialize_punch_coordination(node, out, cout):
 # ==========================================
 def start_maintenance_tasks(node):
     # Simple loop to close idle tasks.
-    node.idle_pipe_closer = create_task(
-        close_idle_pipes(node)
-    )
+    node.resources.set_idle_closer(create_task(close_idle_pipes(node)))
 
 # Note: node.listen_on_ifs() is called directly in main sequence
 
@@ -262,7 +260,7 @@ async def setup_nickname_service(node):
         task = asyncio.create_task(
             node.nickname(node.node_id)
         )
-        node.tasks.append(task)
+        node.resources.add_task(task)
 
 async def setup_signal_router(node, router, out, cout):
     # Give the traversal manager a reference to the node so that
@@ -283,12 +281,12 @@ async def setup_signal_router(node, router, out, cout):
 async def setup_traversal_plugins(node):
     if node.conf.get("enable_punching", True):
         punch_factory = await PunchPluginFactory.create(node.stun_clients, node.sys_clock)
-        node.max_punchers = punch_factory.max_workers
-        node.closeables.append(punch_factory)
+        node.resources.punch_factory = punch_factory
+        node.resources.register(punch_factory)
         node.traversal.install_plugin("punch", {"class": punch_factory, "timeout": 40})
 
     turn_factory = TURNPluginFactory(node.msg_cb, node.node_id)
-    node.closeables.append(turn_factory)
+    node.resources.register(turn_factory)
     node.traversal.install_plugin("turn", {"class": turn_factory, "timeout": 20})
 
     log("traversal plugin_loaders: " + str(node.traversal.plugin_loaders))
