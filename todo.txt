@@ -164,4 +164,8 @@ tasks are only processed after input finishes -- how to do this with async?
         if_infos order
 
     simple design to start with but this might need to be rethought
-- check code still using old servers.py in aionetiface and make it use infra
+- get tests working again (broken due to deleting server list consts)
+- do we want to disconnect from mqtt for additional cons made
+after our minimum for our own client when a plugin is done?
+otherwise they will just build up.
+  - how to avoid closing other plugins cons
