@@ -6,11 +6,17 @@ from .turn_utils import get_first_working_turn_client
 
 
 class TURNPlugin(TraversalPlugin):
+    def __init__(self):
+        super().__init__()
+        # Resolved by a second run() call on this same instance when the peer's
+        # reply arrives, unblocking the first run() call that is awaiting it.
+        self.ready = asyncio.Future()
+
     async def run(self, reply=None):
         if self.route_type == NIC_BIND:
             return
 
-        # Get or create TURN client for this pipe.
+        # Get or create TURN client for this plugin.
         if self.plugin_id in self.turn_clients:
             client = self.turn_clients[self.plugin_id]
         else:
@@ -42,26 +48,19 @@ class TURNPlugin(TraversalPlugin):
             dest_relay = reply.payload.relay_tup
             already_accepted = await client.accept_peer(dest_peer, dest_relay)
 
-            # Unblock any local waiter for this pipe.
-            self._resolve_pipe(client)
+            if not self.ready.done():
+                self.ready.set_result(client)
 
             if already_accepted:
-                # Both sides have already whitelisted each other; we're done.
                 if not self.result.done():
                     self.result.set_result(client)
                 return
 
-            # Log the whitelist action before sending our own relay info back.
             our_relay = await client.relay_tup_future
             log_p2p(
                 fstr("Whitelist {0} -> {1} to '{2}'", (dest_peer, our_relay, self.nic.name)),
                 self.node_id[:8],
             )
-
-        # Register the pipe future *before* sending so the reply handler can
-        # resolve it even if the reply arrives before we reach the await below.
-        if self.plugin_id not in self.pipes:
-            self.pipes[self.plugin_id] = asyncio.Future()
 
         # Build and send our TURN signaling message.
         msg = TURNMsg({
@@ -74,17 +73,10 @@ class TURNPlugin(TraversalPlugin):
         msg.meta.plugin_name = "turn"
         await self.signal_msg_sender(msg)
 
-        # Wait for the remote side to whitelist us (resolved via _resolve_pipe
-        # in a future run() call that carries the peer's reply).
-        pipe = await self.pipes[self.plugin_id]
+        # Wait for the remote side to whitelist us.
+        pipe = await self.ready
         if not self.result.done():
             self.result.set_result(pipe)
-
-    def _resolve_pipe(self, client):
-        """Resolve the shared pipe future so any concurrent waiter is unblocked."""
-        future = self.pipes.get(self.plugin_id)
-        if future is not None and not future.done():
-            future.set_result(client)
 
     async def close(self):
         """Clean up after a TURN connection attempt.
@@ -98,7 +90,6 @@ class TURNPlugin(TraversalPlugin):
         Safe to call multiple times: the dict pop is a no-op on a missing key
         and all futures are checked with .done() before acting.
         """
-        # Determine whether the connection completed successfully.
         connection_succeeded = False
         try:
             self.result.result()   # raises if pending, cancelled, or exception
@@ -107,13 +98,12 @@ class TURNPlugin(TraversalPlugin):
             pass
 
         if not connection_succeeded:
-            # Failed attempt: reclaim resources immediately so the next
-            # attempt starts with a clean slate.
             turn_client = self.turn_clients.pop(self.plugin_id, None)
             if turn_client is not None:
                 await turn_client.close()
 
-        # Cancel the result future if nobody resolved it (e.g. outer timeout).
+        if not self.ready.done():
+            self.ready.cancel()
         if not self.result.done():
             self.result.cancel()
 

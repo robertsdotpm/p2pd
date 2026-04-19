@@ -70,7 +70,7 @@ class Node(Daemon):
         self.msg_cbs = []
 
         # Main pipe connections.
-        self.pipes = {} # by pipe_id
+        self.inbound_pipes = {} # by pipe_id
         self.turn_clients = {} # by pipe_id
         self.signal_pipes = {} # by MQTT_SERVERS index
 
@@ -94,7 +94,7 @@ class Node(Daemon):
         self.addr_futures = {}
 
         self.router = None
-        self.traversal = TraversalManager(self.stop_reader, self.pipes, self.ifs)
+        self.traversal = TraversalManager(self.stop_reader, self.inbound_pipes, self.ifs)
         self.traversal.install_plugin("direct_connect", {
             "class": DirectConnect
         })  
@@ -364,18 +364,18 @@ class Node(Daemon):
                 )
 
     def pipe_future(self, pipe_id):
-        if pipe_id not in self.pipes:
-            self.pipes[pipe_id] = asyncio.Future()
+        if pipe_id not in self.inbound_pipes:
+            self.inbound_pipes[pipe_id] = asyncio.Future()
 
-        return self.pipes[pipe_id]
+        return self.inbound_pipes[pipe_id]
 
     def pipe_ready(self, pipe_id, pipe):
-        if pipe_id not in self.pipes:
+        if pipe_id not in self.inbound_pipes:
             log(fstr("pipe ready for non existing pipe {0}!", (pipe_id,)))
             return
         
-        if not self.pipes[pipe_id].done():
-            self.pipes[pipe_id].set_result(pipe)
+        if not self.inbound_pipes[pipe_id].done():
+            self.inbound_pipes[pipe_id].set_result(pipe)
         
         return pipe
 

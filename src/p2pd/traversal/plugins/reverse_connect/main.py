@@ -11,12 +11,12 @@ class ReverseConnectPlugin(TraversalPlugin):
         msg.meta.plugin_name = "direct_connect"
 
         # Register future to receive back inbound con.
-        self.pipes[self.plugin_id] = asyncio.Future()
+        self.inbound_pipes[self.plugin_id] = asyncio.Future()
 
         # Send reverse request.
         await self.signal_msg_sender(msg)
 
         # Await con.
-        con = await self.pipes[self.plugin_id]
+        con = await self.inbound_pipes[self.plugin_id]
         print("await con = ", con)
         self.result.set_result(con)

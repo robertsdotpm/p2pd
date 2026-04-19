@@ -26,7 +26,7 @@ class TraversalManager():
         self.stop_reader = stop_reader
         self.plugin_loaders = OrderedDict()
         self.plugins = {}   # by plugin_id
-        self.pipes = pipes if pipes is not None else {}
+        self.inbound_pipes = pipes if pipes is not None else {}  # ref to node.inbound_pipes
         self.nics = nics if nics is not None else []
         self.done_callback = None
         self.tasks = []     # Long-lived background tasks spawned by signal handling.
@@ -100,7 +100,7 @@ class TraversalManager():
         plugin.result.add_done_callback(_schedule_plugin_cleanup)
 
         # Allows plugins to await on pipes from other places.
-        plugin.set_pipes(self.pipes)
+        plugin.set_inbound_pipes(self.inbound_pipes)
 
         # Load routing details in plugin.
         nic = self.nics[src_info["if_index"]]
@@ -157,7 +157,7 @@ class TraversalManager():
             plugin.set_addrs(msg.routing.dest, msg.meta.src)
 
             # Reuse the same plugin_id from the incoming message.
-            plugin.set_pipes(self.pipes, msg.meta.pipe_id)
+            plugin.set_inbound_pipes(self.inbound_pipes, msg.meta.pipe_id)
 
         return plugin
 
@@ -208,7 +208,7 @@ class TraversalManager():
         # does not raise KeyError and abort the cleanup.
         if hasattr(plugin, "plugin_id"):
             self.plugins.pop(plugin.plugin_id, None)
-            self.pipes.pop(plugin.plugin_id, None)
+            self.inbound_pipes.pop(plugin.plugin_id, None)
 
         # Delegate to plugin-specific cleanup (e.g. PunchPlugin cancels its
         # background punch task and clears shared punch_clients/punch_proc).
