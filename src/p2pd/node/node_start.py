@@ -115,7 +115,7 @@ async def load_machine_identity(node):
         )
 
 def load_cryptography_and_auth(node):
-    install_path = node.conf["install_path"] or get_aionetiface_install_root()
+    install_path = resolve_install_path(node.conf)
     node.sk = load_signing_key(node.ifs, node.listen_ips, node.listen_port, install_path)
     node.vk = node.sk.verifying_key
 
@@ -232,7 +232,7 @@ def build_node_address(node, out):
 
     # Save a dict version of the address fields.
     try:
-        node.p2p_addr = parse_node_addr(node.addr_bytes)
+        node.addr_map = parse_node_addr(node.addr_bytes)
     except asyncio.CancelledError:
         raise
     except Exception:

@@ -9,7 +9,12 @@ from aionetiface import *
 from ..traversal.libs.punch.punch_defs import PUNCH_CONF
 from ..vendor.machine_id import hashed_machine_id
 
-def make_stop_pair():
+def resolve_install_path(conf):
+    return conf["install_path"] or get_aionetiface_install_root()
+
+def make_stop_pair(existing=None):
+    if existing:
+        return existing
     stop_rw = socket.socketpair()
     stop_rw[0].setblocking(False)
     stop_rw[1].setblocking(True)

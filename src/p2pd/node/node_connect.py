@@ -29,7 +29,7 @@ def install_default_plugins(node):
     node.traversal.install_plugin("get_addr",       {"class": GetAddrPlugin})
     node.traversal.install_plugin("return_addr",    {"class": ReturnAddrPlugin})
     node.traversal.install_plugin("reverse_connect",{"class": ReverseConnectPlugin})
-    node.traversal.install_plugin_done_callback(node.on_traversal_done)
+    node.traversal.install_plugin_done_callback(node.on_plugin_done)
 
 
 async def connect(node, af, route_type, pnp_addr, plugin_name=None):
@@ -56,7 +56,7 @@ async def connect(node, af, route_type, pnp_addr, plugin_name=None):
         dest_map = parse_node_addr(addr_bytes)
         sig_pipe = await node.router.pipe(dest_map["pub_key_hex"], use_cache=True)
 
-    src_map = node.p2p_addr
+    src_map = node.addr_map
     dest_map = parse_node_addr(addr_bytes)
     if dest_vk:
         dest_map["vk"] = dest_vk

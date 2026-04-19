@@ -349,7 +349,7 @@ if __name__ == "__main__":
         # Start the node and install echo protocol handler.
         await node.start(out=True)
 
-        addr = node.p2p_addr
+        addr = node.addr_map
         await node.close()
         return addr
 
