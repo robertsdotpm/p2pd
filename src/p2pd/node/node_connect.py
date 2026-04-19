@@ -32,32 +32,34 @@ def install_default_plugins(node):
     node.traversal.install_plugin_done_callback(node.on_plugin_done)
 
 
+async def resolve_pnp_addr(node, pnp_addr):
+    """Resolve a PNP nickname to (addr_bytes, dest_vk), fetching the most recent address from MQTT.
+    Returns (pnp_addr, None) unchanged if pnp_addr is not a TLD name."""
+    if not pnp_name_has_tld(pnp_addr):
+        return pnp_addr, None
+
+    pkt = await node.nick_client.get(pnp_addr)
+    addr_bytes = pkt.value
+    dest_vk = pkt.vkc
+    try:
+        updated_addr_bytes = await asyncio.wait_for(
+            get_updated_addr_from_mqtt(node, addr_bytes),
+            timeout=10
+        )
+        if updated_addr_bytes:
+            addr_bytes = updated_addr_bytes
+    except asyncio.TimeoutError:
+        log("Timeout MQTT get updated bytes " + str(pnp_addr))
+
+    return addr_bytes, dest_vk
+
+
 async def connect(node, af, route_type, pnp_addr, plugin_name=None):
-    dest_vk = None
-    if pnp_name_has_tld(pnp_addr):
-        pkt = await node.nick_client.get(pnp_addr)
-        addr_bytes = pkt.value
-        dest_vk = pkt.vkc
-        dest_map = parse_node_addr(addr_bytes)
-
-        sig_pipe = await node.router.pipe(dest_map["pub_key_hex"], use_cache=True)
-
-        try:
-            updated_addr_bytes = await asyncio.wait_for(
-                get_updated_addr_from_mqtt(node, addr_bytes),
-                timeout=10
-            )
-            if updated_addr_bytes:
-                addr_bytes = updated_addr_bytes
-        except asyncio.TimeoutError:
-            log("Timeout MQTT get updated bytes " + str(pnp_addr))
-    else:
-        addr_bytes = pnp_addr
-        dest_map = parse_node_addr(addr_bytes)
-        sig_pipe = await node.router.pipe(dest_map["pub_key_hex"], use_cache=True)
+    addr_bytes, dest_vk = await resolve_pnp_addr(node, pnp_addr)
+    dest_map = parse_node_addr(addr_bytes)
+    sig_pipe = await node.router.pipe(dest_map["pub_key_hex"], use_cache=True)
 
     src_map = node.addr_map
-    dest_map = parse_node_addr(addr_bytes)
     if dest_vk:
         dest_map["vk"] = dest_vk
 

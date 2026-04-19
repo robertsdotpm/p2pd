@@ -151,21 +151,41 @@ def display_ifs_loaded(ifs):
         buf += "\n"
     cout(buf)
 
-async def get_dest_addr(last_addr):
+async def get_dest_addr(node, last_addr):
     """
     Dest addr may have already been set from previous invocations of the program.
     It's designed to be interactive so you don't have to keep pasting the
     same address for a dest if you're trying to test a remote machine.
+
+    If the entered value is a TLD nickname, resolution via MQTT is attempted
+    immediately.  On failure the user is prompted to paste a full serialized
+    address instead.
     """
     extra_txt = ""
     if last_addr:
         extra_txt = fstr("(enter for {0})", (last_addr["addr"],))
 
     dest_addr = await ainput(fstr("Enter nodes nickname or address {0}: ", (extra_txt,)))
+    if dest_addr.lower().strip() == "menu":
+        return "menu"
     if dest_addr == "":
         dest_addr = last_addr["addr"]
     else:
         last_addr["addr"] = dest_addr
+
+    if pnp_name_has_tld(dest_addr):
+        cout(fstr("Resolving {0}...", (dest_addr,)))
+        try:
+            addr_bytes, _ = await resolve_pnp_addr(node, dest_addr)
+            return addr_bytes
+        except Exception as e:
+            cout(fstr("Nickname lookup failed ({0}).", (e,)))
+            cout("Please paste the full serialized node address instead.")
+            fallback = await ainput("Address: ")
+            if fallback.lower().strip() == "menu":
+                return "menu"
+            last_addr["addr"] = fallback
+            return fallback
 
     return dest_addr
 
@@ -189,6 +209,7 @@ async def choose_connection_methods(con_method):
             return "menu"
         
         if con_method not in method_txt:
+            con_method = None
             continue
 
         return method_txt[con_method]
@@ -216,6 +237,7 @@ async def choose_pathways(pathway):
                 return EXT_BIND
             if c == 'l':
                 return NIC_BIND
+        pathway = None
 
 async def choose_address_families(addr_type):
     """
@@ -240,6 +262,7 @@ async def choose_address_families(addr_type):
                 return IP4
             if c == '6':
                 return IP6
+        addr_type = None
 
 async def echo_client(pipe, echo_data):
     """

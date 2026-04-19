@@ -150,10 +150,9 @@ duplicate messages are occuring through router
 tasks are only processed after input finishes -- how to do this with async?
 
 
-- if no con set returned on punch then it hangs forever
-- remove plugin id
+
 - add encryption
 - add signing check in msg protocol
-- refactor code
+- refactor code (plugin manager, punch, etc)
 - prompt for lon addr if pnp fails
 - menu bug -- invalid con choice should reprompt

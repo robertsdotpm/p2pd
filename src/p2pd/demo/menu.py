@@ -16,7 +16,7 @@ async def connect_option(node, con_opts):
     if type(last_addr) == str:
         dest_addr = last_addr
     else:
-        dest_addr = await get_dest_addr(last_addr)
+        dest_addr = await get_dest_addr(node, last_addr)
 
     # Get connect cmd segments manually if not set.
     plugin_name = await choose_connection_methods(con_method)
