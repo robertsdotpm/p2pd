@@ -10,9 +10,6 @@ if args.disable_upnp:
 if args.pnp:
     patch_server_af_dict(args.pnp, PNP_SERVERS)
 
-if args.turn:
-    patch_server_list(args.turn, TURN_SERVERS)
-
 if args.mqtt:
     patch_server_list(args.mqtt, MQTT_SERVERS)
 

@@ -2,7 +2,7 @@ import asyncio
 from aionetiface import *
 from ...traversal_plugin import TraversalPlugin
 from ....protocol.traversal.proto_msg import TURNMsg
-from .turn_utils import get_first_working_turn_client
+from .turn_utils import get_first_working_turn_client, rendezvous_rank
 
 
 class TURNPlugin(TraversalPlugin):
@@ -20,15 +20,13 @@ class TURNPlugin(TraversalPlugin):
         if self.plugin_id in self.turn_clients:
             client = self.turn_clients[self.plugin_id]
         else:
-            # On a reply, prefer the server the remote side already picked.
-            offsets = list(range(0, len(TURN_SERVERS)))
-            random.shuffle(offsets)
-            if reply is not None:
-                offsets = [reply.payload.serv_id]
-
+            # Both sides derive the same server ranking from the shared plugin_id
+            # via rendezvous hashing — no serv_id exchange needed.
+            groups = get_infra(self.af, UDP, "TURN", no=100)
+            servers = rendezvous_rank(self.plugin_id, [g[0] for g in groups])
             client = await get_first_working_turn_client(
                 self.af,
-                offsets,
+                servers,
                 self.nic,
                 self.msg_cb,
             )
@@ -67,7 +65,6 @@ class TURNPlugin(TraversalPlugin):
             "payload": {
                 "peer_tup": await client.client_tup_future,
                 "relay_tup": await client.relay_tup_future,
-                "serv_id": client.serv_offset,
             },
         })
         msg.meta.plugin_name = "turn"

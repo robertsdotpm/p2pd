@@ -288,24 +288,21 @@ class PunchMsg(ProtoMsg):
 
 class TURNMsg(ProtoMsg):
     class Payload():
-        def __init__(self, peer_tup, relay_tup, serv_id):
+        def __init__(self, peer_tup, relay_tup):
             self.peer_tup = peer_tup
             self.relay_tup = relay_tup
-            self.serv_id = serv_id
 
         def to_dict(self):
             return {
                 "peer_tup": self.peer_tup,
                 "relay_tup": self.relay_tup,
-                "serv_id": self.serv_id,
             }
-        
+
         @staticmethod
         def from_dict(d):
             return TURNMsg.Payload(
                 d["peer_tup"],
                 d["relay_tup"],
-                d["serv_id"],
             )
         
     def __init__(self, data, enum=SIG_TURN):

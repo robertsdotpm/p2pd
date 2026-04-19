@@ -1,62 +1,47 @@
 from aionetiface import *
 from ....protocol.turn.turn_client import TURNClient
 
-async def get_turn_client(af, serv_id, interface, dest_peer=None, dest_relay=None, msg_cb=None):
-    # TODO: index by id and not offset.
-    turn_server = TURN_SERVERS[serv_id]
-    if turn_server[af] is None:
-        raise Exception("Turn server does not support this AF.")
 
-    # The TURN address.
-    turn_addr = (
-        turn_server["host"],
-        turn_server["port"],
-    )
+def rendezvous_rank(key, servers):
+    """Rank TURN server dicts by rendezvous hash of key + server identity.
 
-    # Make a TURN client instance to whitelist them.
+    Both peers independently produce the same ranking from the shared
+    plugin_id, so no serv_id needs to be exchanged in the signaling payload.
+    Returns a new list of server dicts sorted best-first.
+    """
+    key_b = to_b(key)
+    def score(s):
+        return rendezvous_score(key_b, to_b(s["ip"]), str(s["port"]).encode())
+    return sorted(servers, key=score, reverse=True)
+
+
+async def get_turn_client(af, server, interface, dest_peer=None, dest_relay=None, msg_cb=None):
     turn_client = TURNClient(
         af=af,
-        dest=turn_addr,
+        dest=(server["ip"], server["port"]),
         nic=interface,
-        auth=(turn_server["user"], turn_server["pass"]),
-        realm=turn_server["realm"],
+        auth=(server["user"], server["password"]),
+        realm=None,
         msg_cb=msg_cb,
     )
 
-    # Start the TURN client.
-    # Raise timeout if it takes too long.
-    await asyncio.wait_for(
-        turn_client.start(),
-        10
-    )
-    
-    # Wait for our details.
+    await asyncio.wait_for(turn_client.start(), 10)
+
     peer_tup  = await turn_client.client_tup_future
     relay_tup = await turn_client.relay_tup_future
 
-    # Whitelist a peer if desired.
     if None not in [dest_peer, dest_relay]:
-        await asyncio.wait_for(
-            turn_client.accept_peer(
-                dest_peer,
-                dest_relay
-            ),
-            6
-        )
+        await asyncio.wait_for(turn_client.accept_peer(dest_peer, dest_relay), 6)
 
     return peer_tup, relay_tup, turn_client
 
-async def get_first_working_turn_client(af, offsets, nic, msg_cb):
-    for offset in offsets:
-        try: 
-            peer_tup, relay_tup, turn_client = await get_turn_client(
-                af,
-                offset,
-                nic,
-                msg_cb=msg_cb,
-            )
 
-            turn_client.serv_offset = offset
+async def get_first_working_turn_client(af, servers, nic, msg_cb):
+    for server in servers:
+        try:
+            peer_tup, relay_tup, turn_client = await get_turn_client(
+                af, server, nic, msg_cb=msg_cb,
+            )
             return turn_client
         except Exception:
             log_exception()
