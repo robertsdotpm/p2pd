@@ -1,5 +1,4 @@
 import json
-from ecdsa import VerifyingKey
 from aionetiface import *
 from sidewire import *
 from .proto_defs import *
@@ -26,21 +25,6 @@ class ProtoMsg():
         
         return af, addr
     
-    class Cipher():
-        def __init__(self, vk):
-            self.vk = vk
-
-        def to_dict(self):
-            return {
-                "vk": to_h(self.vk)
-            }
-        
-        @staticmethod
-        def from_dict(d):
-            vk = d.get("vk", "")
-            vk = h_to_b(vk)
-            return ProtoMsg.Cipher(vk)
-
     # Information about the message sender.
     class Meta():
         def __init__(self, ttl=0, pipe_id=b"", af=IP4, src_buf=b"", src_index=0, route_type=EXT_BIND, same_machine=False, plugin_name=None):
@@ -165,10 +149,6 @@ class ProtoMsg():
             data.get("payload", {})
         )
 
-        self.cipher = self.Cipher.from_dict(
-            data.get("cipher", {})
-        )
-
         self.enum = enum
 
     def to_dict(self):
@@ -176,7 +156,6 @@ class ProtoMsg():
             "meta": self.meta.to_dict(),
             "routing": self.routing.to_dict(),
             "payload": self.payload.to_dict(),
-            "cipher": self.cipher.to_dict(),
         }
 
         return d

@@ -81,12 +81,7 @@ class TraversalManager():
             timeout=plugin.timeout
         )
 
-        # Call done callback if set and cleanup.
         if plugin.result.done():
-            if self.done_callback:
-                self.done_callback(plugin.result)
-
-            # Cleanup the plugin.
             await close_plugin(plugin, self.plugins, self.inbound_pipes)
 
     def create_plugin(self, af, route_type, src_info, dest_info, same_machine, plugin_name):
@@ -131,6 +126,12 @@ class TraversalManager():
 
         # Set function for plugin to send signaling replies.
         plugin.set_send_signal_msg(self.send_signal_msg)
+
+        # Wire done_callback via add_done_callback so it fires whenever the
+        # result resolves — even from a background task (e.g. punch process)
+        # that outlives the initial run_plugin call.
+        if self.done_callback:
+            plugin.result.add_done_callback(self.done_callback)
 
         # Schedule cleanup loop if needed.
         if not self.cleanup_task or self.cleanup_task.done():
@@ -233,10 +234,8 @@ class TraversalManager():
                 "dest_index": plugin.dest_info["if_index"],
             })
 
-            msg.cipher.vk = self.kp.compact_public_key
-
             # Convert to bytes and send via MQTT.
-            buf = to_s(sig_msg_to_buf(msg))
+            buf = to_s(sig_msg_to_buf(msg, h_to_b(plugin.dest_map["pub_key_hex"])))
             print("sending ", msg.to_dict())
             await plugin.sig_pipe.send(buf)
         except Exception:

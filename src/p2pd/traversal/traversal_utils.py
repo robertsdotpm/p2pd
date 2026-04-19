@@ -373,15 +373,9 @@ def try_unpack_msg(buf, sk, sig_proto_map):
     msg = msg_class.unpack(buf[1:])
     return msg
 
-def sig_msg_to_buf(msg):
-    # Else loaded from a MSN.
-    dest_vk = msg.routing.dest["vk"]
-    if dest_vk:
-        assert(isinstance(dest_vk, bytes))
-        buf = b"\1" + encrypt(
-            dest_vk,
-            msg.pack(),
-        )
+def sig_msg_to_buf(msg, dest_pk):
+    if dest_pk:
+        buf = b"\1" + encrypt(dest_pk, msg.pack())
     else:
         buf = b"\0" + msg.pack()
 

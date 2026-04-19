@@ -1,5 +1,6 @@
 import asyncio
 from ..do_imports import *
+from ..traversal.traversal_utils import close_plugin
 from .defs import *
 from .utils import *
 
@@ -51,7 +52,7 @@ async def connect_option(node, con_opts):
     # task is already done so this is a fast no-op; on failure it terminates
     # the background subprocess and frees the ports for the next attempt.
     if plugin_holder[0] is not None:
-        await node.traversal.close_plugin(plugin_holder[0])
+        await close_plugin(plugin_holder[0], node.traversal.plugins, node.traversal.inbound_pipes)
 
     try:
         if pipe is None:
