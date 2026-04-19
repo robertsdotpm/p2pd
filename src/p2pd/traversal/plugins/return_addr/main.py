@@ -9,7 +9,7 @@ class ReturnAddrPlugin(TraversalPlugin):
 
         # Send this message to the dest_addr for this plugin instance.
         try:
-            await self.signal_msg_sender(msg)
+            await self.send_signal_msg(msg)
         except Exception:
             log_exception()
 

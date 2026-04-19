@@ -2,14 +2,6 @@ import asyncio
 from aionetiface import *
 
 
-async def cancel_tasks(tasks):
-    live = [t for t in tasks if not t.done()]
-    for t in live:
-        t.cancel()
-    if live:
-        await asyncio.gather(*live, return_exceptions=True)
-
-
 class NodeResources:
     """Owns all background tasks and closeable factories for a node.
 

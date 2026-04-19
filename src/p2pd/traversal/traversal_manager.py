@@ -32,12 +32,7 @@ class TraversalManager():
         self.nics = nics if nics else []
         self.done_callback = None
         self.tasks = []     # Long-lived background tasks spawned by signal handling.
-
-    def install_plugin_done_callback(self, done_callback):
-        self.done_callback = done_callback
-    
-    def set_signal_msg_sender(self, signal_msg_sender):
-        self.signal_msg_sender = signal_msg_sender
+        self._cleanup_task = None
 
     def install_plugin(self, name, conf):
         assert("class" in conf)
@@ -72,6 +67,11 @@ class TraversalManager():
             timeout=plugin.timeout
         )
 
+        if plugin.result.done():
+            if self.done_callback:
+                self.done_callback(plugin.result)
+            await close_plugin(plugin, self.plugins, self.inbound_pipes)
+
     def plugin_router(self, af, route_type, src_info, dest_info, same_machine, plugin_name):
         # Meta data for this specific plugin.
         plugin_loader = self.plugin_loaders[plugin_name]
@@ -85,21 +85,6 @@ class TraversalManager():
 
         plugin.stop_reader = self.stop_reader
         self.plugins[plugin.plugin_id] = plugin
-
-        # Install done callback handler.
-        if self.done_callback:
-            plugin.result.add_done_callback(self.done_callback)
-
-        # When the plugin's result resolves (punch succeeded, direct-connect
-        # returned, etc.) schedule a cleanup so stale entries in self.plugins
-        # and plugin-internal state (punch tasks) don't accumulate across
-        # multiple attempts in the same session.
-        def _schedule_plugin_cleanup(future, _plugin=plugin):
-            try:
-                asyncio.get_event_loop().create_task(self.close_plugin(_plugin))
-            except RuntimeError:
-                pass  # Event loop closed during shutdown.
-        plugin.result.add_done_callback(_schedule_plugin_cleanup)
 
         # Allows plugins to await on pipes from other places.
         plugin.set_inbound_pipes(self.inbound_pipes)
@@ -121,8 +106,13 @@ class TraversalManager():
             plugin_loader["timeout"]
         )
 
+        plugin.expires_at = asyncio.get_event_loop().time() + plugin.timeout
+
         # Set function for plugin to send signaling replies.
-        plugin.set_signal_msg_sender(self.signal_msg_sender)
+        plugin.set_send_signal_msg(self.send_signal_msg)
+
+        if not self._cleanup_task or self._cleanup_task.done():
+            self._cleanup_task = asyncio.create_task(self._cleanup_loop())
 
         return plugin
     
@@ -204,26 +194,7 @@ class TraversalManager():
             await self.run_plugin(plugin)
             return plugin
                 
-    async def close_plugin(self, plugin, reply=None):
-        # Delete unused futures on failure.
-        # Use pop() so a double-close or a pipe that was never registered
-        # does not raise KeyError and abort the cleanup.
-        if hasattr(plugin, "plugin_id"):
-            self.plugins.pop(plugin.plugin_id, None)
-            self.inbound_pipes.pop(plugin.plugin_id, None)
-
-        # Delegate to plugin-specific cleanup (e.g. PunchPlugin cancels its
-        # background punch task and clears shared punch_clients/punch_proc).
-        close_fn = getattr(plugin, "close", None)
-        if callable(close_fn):
-            try:
-                result = close_fn()
-                if asyncio.iscoroutine(result):
-                    await result
-            except Exception:
-                log_exception()
-
-    async def signal_msg_sender(self, msg, plugin, relay_no=2):
+    async def send_signal_msg(self, msg, plugin, relay_no=2):
         try:
             msg.meta = ProtoMsg.Meta.from_dict({
                 "ttl": int(self.router.get_time()) + 30,
@@ -252,31 +223,28 @@ class TraversalManager():
         except Exception:
             log_exception()
 
-    async def close(self):
-        """Cancel all background tasks and clean up all registered plugins.
+    async def _cleanup_loop(self):
+        while True:
+            await asyncio.sleep(5)
+            now = asyncio.get_event_loop().time()
+            for plugin in list(self.plugins.values()):
+                if now >= plugin.expires_at:
+                    await close_plugin(plugin, self.plugins, self.inbound_pipes)
 
-        Iterates a snapshot of self.plugins so that close_plugin() can safely
-        mutate the dict (via pop) while we iterate.
-        """
-        # Close each plugin: cancels background punch tasks, clears shared
-        # state, and cancels any unresolved result futures.
+    async def close(self):
+        await cancel_task(self._cleanup_task)
         for plugin in list(self.plugins.values()):
             try:
-                await self.close_plugin(plugin)
+                await close_plugin(plugin, self.plugins, self.inbound_pipes)
             except Exception:
                 log_exception()
 
-        # Cancel background signal-handler tasks spawned by handle_router_msg.
-        live = [t for t in self.tasks if not t.done()]
-        for t in live:
-            t.cancel()
-        if live:
-            await asyncio.gather(*live, return_exceptions=True)
+        await cancel_tasks(self.tasks)
         self.tasks.clear()
 
     # Receive a signal message and pass it to a plugin.
     # Called by the MQTT client as: handler(msg, src_pk, queue_id, client)
-    async def handle_router_msg(self, msg, src_pk_hex, pipe_id_hex, client):
+    async def recv_signal_msg(self, msg, src_pk_hex, pipe_id_hex, client):
         try:
             buf = to_b(msg)
             msg = try_unpack_msg(buf, self.sk, SIG_PROTO)
@@ -314,91 +282,8 @@ class TraversalManager():
         # Prune completed tasks to avoid unbounded growth.
         self.tasks = [t for t in self.tasks if not t.done()]
 
-if __name__ == "__main__":
-
-    async def setup_node_quick():
-        from p2pd.nic.select_interface import list_interfaces
-        from p2pd.nic.interface_utils import load_interfaces
-        from p2pd.node.node import get_p2pd_install_root, NET_CONF, Node
-
-        # Load interfaces on machine.
-        if_names = await list_interfaces()
-        ifs = await load_interfaces(
-            if_names,
-            Interface,
-            min_agree=1,
-            max_agree=2 ,
-            timeout=4
-        )
-
-        node_conf = dict_child({
-            "init_clock_skew": False,
-            "reuse_addr": False,
-            "enable_upnp": False,
-            "sig_pipe_no": 0,
-            "enable_punching": False,
-            "enable_nickname": True,
-            "enable_stun_clients": False,
-            "install_path": get_p2pd_install_root()
-        }, NET_CONF)
-
-
-        # Main node class with chosen ifs and conf.
-        node = Node(ifs=ifs, conf=node_conf)
-
-        # Start the node and install echo protocol handler.
-        await node.start(out=True)
-
-        addr = node.addr_map
-        await node.close()
-        return addr
-
-
-    ADDR_MAP = {IP4: {0: {'netiface_index': 1, 'if_index': 0, 'ext': "45.118.0.1", 'nic': "10.0.1.251", 'nat': {'type': 5, 'delta': {'type': 6, 'value': 0}, 'range': [1, 65535], 'is_open': False, 'can_predict': True, 'is_hard': True, 'is_concurrent': True}, 'port': 3000}}, IP6: {}, 'node_id': '7f9ca6a685ecb37d77057fd02', 'signal': (), 'machine_id': '7a64285df710807300863496142f032a5b2365ce6a4a11f9b400fc1e6b4326e5', 'bytes': b'None-[1,0,45.118.0.1,10.0.1.251,3000,5,6,0]-0-7f9ca6a685ecb37d77057fd02-7a64285df710807300863496142f032a5b2365ce6a4a11f9b400fc1e6b4326e5'}
-
-    class PluginDirect(TraversalPlugin):
-        pass
-
-    class PluginPunch(TraversalPlugin):
-        pass
-
-
-    async def tunnel_workspace():
-        manager = TraversalManager(nics=[None])
-        manager.install_plugin("direct", {
-            "class": PluginDirect,
-            "timeout": 2,
-            "cleanup": None,
-            "set_bind": 1,
-            "max_pairs": 6,
-        })
-
-        manager.install_plugin("punch", {
-            "class": PluginPunch,
-            "timeout": 2,
-            "cleanup": None,
-            "set_bind": 1,
-            "max_pairs": 6,
-        })
-
-        print(manager.plugins)
-        #addr = await setup_node_quick()
-        #print(addr)
-
-
-        await manager.start(ADDR_MAP, ADDR_MAP)
-
-        #await tunnel_factory()
-
-        return
-        nic = await Interface()
-        src_info = dest_info = {
-            "af": IP4,
-            "if_index": 0,
-        }
-        p = Plugin(src_info, dest_info, nic)
-        print(p)
-
-    async_run(tunnel_workspace())
-
-
+    def install_plugin_done_callback(self, done_callback):
+        self.done_callback = done_callback
+    
+    def set_send_signal_msg(self, send_signal_msg):
+        self.send_signal_msg = send_signal_msg

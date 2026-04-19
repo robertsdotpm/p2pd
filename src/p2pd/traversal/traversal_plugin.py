@@ -67,11 +67,11 @@ class TraversalPlugin():
         self.plugin_id = plugin_id or self.plugin_id
         self.inbound_pipes = pipes
 
-    def set_signal_msg_sender(self, signal_msg_sender):
-        self._signal_msg_sender = signal_msg_sender
+    def set_send_signal_msg(self, send_signal_msg):
+        self._send_signal_msg = send_signal_msg
 
-    async def signal_msg_sender(self, msg, relay_no=2):
-        return await self._signal_msg_sender(msg, self, relay_no)
+    async def send_signal_msg(self, msg, relay_no=2):
+        return await self._send_signal_msg(msg, self, relay_no)
 
     def register_inbound(self):
         # Register before sending any signal to avoid a race where the inbound

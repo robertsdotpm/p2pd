@@ -557,7 +557,7 @@ class TestTURNPluginIPv6(AsyncTestCase):
             msgs_from_a.append(msg)
             sig_a_sent.set()
 
-        plugin_a.set_signal_msg_sender(sender_a)
+        plugin_a.set_send_signal_msg(sender_a)
 
         task_a = asyncio.ensure_future(
             async_wrap_errors(plugin_a.run())
@@ -577,7 +577,7 @@ class TestTURNPluginIPv6(AsyncTestCase):
             msgs_from_b.append(msg)
             sig_b_sent.set()
 
-        plugin_b.set_signal_msg_sender(sender_b)
+        plugin_b.set_send_signal_msg(sender_b)
 
         task_b = asyncio.ensure_future(
             async_wrap_errors(plugin_b.run(reply=msg_a))
@@ -722,7 +722,7 @@ class TestTURNPlugin(AsyncTestCase):
             msgs_from_a.append(msg)
             sig_a_sent.set()
 
-        plugin_a.set_signal_msg_sender(sender_a)
+        plugin_a.set_send_signal_msg(sender_a)
 
         # Launch A in background; it will block on pipe future after sending.
         task_a = asyncio.ensure_future(
@@ -745,7 +745,7 @@ class TestTURNPlugin(AsyncTestCase):
             msgs_from_b.append(msg)
             sig_b_sent.set()
 
-        plugin_b.set_signal_msg_sender(sender_b)
+        plugin_b.set_send_signal_msg(sender_b)
 
         # Run B as responder; it accepts A's peer info and resolves the pipe.
         task_b = asyncio.ensure_future(

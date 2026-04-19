@@ -8,6 +8,6 @@ class ReverseConnectPlugin(TraversalPlugin):
         msg = ConMsg()
         msg.meta.plugin_name = "direct_connect"
         self.register_inbound()
-        await self.signal_msg_sender(msg)
+        await self.send_signal_msg(msg)
         con = await self.wait_for_inbound()
         self.result.set_result(con)

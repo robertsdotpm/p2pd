@@ -71,7 +71,7 @@ class TURNPlugin(TraversalPlugin):
             },
         })
         msg.meta.plugin_name = "turn"
-        await self.signal_msg_sender(msg)
+        await self.send_signal_msg(msg)
 
         # Wait for the remote side to whitelist us.
         pipe = await self.ready

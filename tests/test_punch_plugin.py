@@ -373,7 +373,7 @@ class TestPunchPluginBidirectional(AsyncTestCase):
         plugin_b.set_pipes({}, plugin_a.pipe_id)
 
         # ── in-process message router ─────────────────────────────────────
-        # Each plugin's signal_msg_sender writes into a queue; the test loop
+        # Each plugin's send_signal_msg writes into a queue; the test loop
         # reads from the queues and delivers messages to the other plugin.
         msgs_for_b: asyncio.Queue = asyncio.Queue()
         msgs_for_a: asyncio.Queue = asyncio.Queue()
@@ -386,8 +386,8 @@ class TestPunchPluginBidirectional(AsyncTestCase):
             """B sends → captured for delivery to A."""
             await msgs_for_a.put(msg)
 
-        plugin_a.set_signal_msg_sender(sender_a)
-        plugin_b.set_signal_msg_sender(sender_b)
+        plugin_a.set_send_signal_msg(sender_a)
+        plugin_b.set_send_signal_msg(sender_b)
 
         # ── three-message handshake ───────────────────────────────────────
         # preload_mappings is patched to avoid real STUN connections while
@@ -754,8 +754,8 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
         async def sender_b(msg, plugin=None, relay_no=2):
             await msgs_for_a.put(msg)
 
-        plugin_a.set_signal_msg_sender(sender_a)
-        plugin_b.set_signal_msg_sender(sender_b)
+        plugin_a.set_send_signal_msg(sender_a)
+        plugin_b.set_send_signal_msg(sender_b)
 
         with patch(
             "p2pd.traversal.libs.nat_predict.preload_mappings",

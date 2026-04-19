@@ -175,7 +175,7 @@ async def setup_router_and_signal(node, kp, out, cout):
     router = Router(kp, nic=Interface("default"))
     node.traversal = TraversalManager(router, node.stop_reader, node.inbound_pipes, node.ifs)
     install_default_plugins(node)
-    router.add_msg_handler(node.traversal.handle_router_msg)
+    router.add_msg_handler(node.traversal.recv_signal_msg)
 
     # Wire crypto state — available since load_cryptography_and_auth ran before the gather.
     node.traversal.vk = node.vk

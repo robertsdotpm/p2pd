@@ -154,6 +154,13 @@ tasks are only processed after input finishes -- how to do this with async?
 - add encryption
 - add signing check in msg protocol
 - refactor code (plugin manager, punch, etc)
+  - duplicate code like cancel tasks declared over and over
+  - cleanup code might be generalisable
 - how does the new connect thing actually handle multiple nics?
   im not sure it does in the same way that the old algorithm used select
   route stuff
+    start
+      get if infos order
+        if_infos order
+
+    simple design to start with but this might need to be rethought

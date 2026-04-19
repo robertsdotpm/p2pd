@@ -327,12 +327,7 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
                 winner = 1
                 break
     finally:
-        # Always cancel remaining tasks and drain their CancelledError so we
-        # don't get "Task was destroyed but it is pending!" warnings.
-        for t in tasks:
-            if not t.done():
-                t.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await cancel_tasks(tasks)
 
     return winner
 

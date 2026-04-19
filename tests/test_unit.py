@@ -336,11 +336,11 @@ class TestTraversalPlugin(unittest.IsolatedAsyncioTestCase):
         p.set_pipes(pipes)
         self.assertEqual(p.pipe_id, original)
 
-    async def test_set_signal_msg_sender_stored(self):
+    async def test_set_send_signal_msg_stored(self):
         p = TraversalPlugin()
         sentinel = object()
-        p.set_signal_msg_sender(sentinel)
-        self.assertIs(p._signal_msg_sender, sentinel)
+        p.set_send_signal_msg(sentinel)
+        self.assertIs(p._send_signal_msg, sentinel)
 
 
 # ===========================================================================

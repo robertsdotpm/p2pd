@@ -1,3 +1,4 @@
+import asyncio
 from aionetiface import *
 from sidewire import *
 
@@ -387,3 +388,17 @@ def sig_msg_to_buf(msg):
     # UTF-8 messes up binary data in MQTT.
     buf = to_h(buf)
     return to_b(buf)
+
+async def close_plugin(plugin, plugins, inbound_pipes):
+    if hasattr(plugin, "plugin_id"):
+        plugins.pop(plugin.plugin_id, None)
+        inbound_pipes.pop(plugin.plugin_id, None)
+
+    close_fn = getattr(plugin, "close", None)
+    if callable(close_fn):
+        try:
+            result = close_fn()
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception:
+            log_exception()

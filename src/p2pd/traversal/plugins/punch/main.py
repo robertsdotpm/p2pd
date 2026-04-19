@@ -55,7 +55,7 @@ class PunchPlugin(TraversalPlugin):
             return
 
         # Send the control message.
-        await self.signal_msg_sender(outgoing_msg)
+        await self.send_signal_msg(outgoing_msg)
 
     # ... (other methods, including delayed_start_punching_proc) ...
     async def delayed_start_punching_proc(self, nic, puncher):
@@ -101,12 +101,7 @@ class PunchPlugin(TraversalPlugin):
         """
         task = self.punch_proc.pop(self.plugin_id, None)
         self.punch_clients.pop(self.plugin_id, None)
-        if task is not None and not task.done():
-            task.cancel()
-            try:
-                await task
-            except (asyncio.CancelledError, Exception):
-                pass
+        await cancel_task(task)
         # Cancel the result future if nobody resolved it (e.g. outer timeout).
         if not self.result.done():
             self.result.cancel()

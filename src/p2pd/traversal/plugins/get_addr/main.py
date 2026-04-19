@@ -14,4 +14,4 @@ class GetAddrPlugin(TraversalPlugin):
         msg.meta.plugin_name = "return_addr"
 
         # Send this message to the dest_addr for this plugin instance.
-        await self.signal_msg_sender(msg)
+        await self.send_signal_msg(msg)
