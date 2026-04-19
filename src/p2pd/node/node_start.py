@@ -50,8 +50,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     build_node_address(node, out)
     await finalize_port_forwarding(node, upnp_task, out, cout)
 
-    # High-Level Services [concurrent Phase C]
-    # Nickname setup runs concurrently with any remaining work.
+    # High-Level Services
     await setup_nickname_service(node)
     await setup_traversal_plugins(node)
 
@@ -84,7 +83,7 @@ def start_background_port_forwarding(node):
         if nic.nat["type"] != OPEN_INTERNET:
             all_open_internet = False
             break
-    
+
     # If UPnP is enabled and we are behind NAT, start the task
     if node.conf["enable_upnp"] and not all_open_internet:
         reachability = {IP4: {}, IP6: {}}
@@ -135,10 +134,24 @@ def load_cryptography_and_auth(node):
     node.kp = Signing(node.sk)
     return node.kp
 
+# ==========================================
+# Phase: Time & Synchronization (concurrent)
+# ==========================================
+async def initialize_system_clock(node, sys_clock, out, cout):
+    if sys_clock is None:
+        if node.conf["init_clock_skew"]:
+            sys_clock = SysClock(
+                interface=node.ifs[0]
+            )
+            await sys_clock.start()
+        else:
+            sys_clock = SysClock(node.ifs[0], ntp=time.time())
+            node.sys_clock = sys_clock
 
-# ==========================================
-# Phase: Connectivity Clients
-# ==========================================
+    # Store reference if passed in or created
+    if not hasattr(node, 'sys_clock') or node.sys_clock is None:
+        node.sys_clock = sys_clock
+
 async def load_p2p_stun_clients(node, out, cout):
     if node.conf.get("enable_punching", True):
         if out: cout("\tLoading STUN clients...")
@@ -158,24 +171,32 @@ async def load_p2p_stun_clients(node, out, cout):
                     ))
             cout(buf)
 
-# ==========================================
-# Phase: Time & Synchronization
-# ==========================================
-async def initialize_system_clock(node, sys_clock, out, cout):
-    if sys_clock is None:
-        if node.conf["init_clock_skew"]:
-            sys_clock = SysClock(
-                interface=node.ifs[0]
-            )
-            await sys_clock.start()
-        else:
-            sys_clock = SysClock(node.ifs[0], ntp=time.time())
-            node.sys_clock = sys_clock
-    
-    # Store reference if passed in or created
-    if not hasattr(node, 'sys_clock') or node.sys_clock is None:
-        node.sys_clock = sys_clock
+async def setup_router_and_signal(node, kp, out, cout):
+    router = Router(kp, nic=Interface("default"))
+    node.traversal = TraversalManager(router, node.stop_reader, node.inbound_pipes, node.ifs)
+    install_default_plugins(node)
+    router.add_msg_handler(node.traversal.handle_router_msg)
 
+    # Wire crypto state — available since load_cryptography_and_auth ran before the gather.
+    node.traversal.vk = node.vk
+    node.traversal.sk = node.sk
+
+    await setup_signal_router(node, router, out, cout)
+
+async def setup_signal_router(node, router, out, cout):
+    node.router = router
+
+    # Subscribe to our own MQTT topic so we can receive incoming signals.
+    if out: cout("\tLoading MQTT router...")
+    try:
+        clients = await asyncio.wait_for(router.start(), timeout=8)
+        if out: cout("\t\t", clients)
+    except asyncio.TimeoutError:
+        raise Exception("Router MQTT start timed out - signaling may be degraded")
+
+# ==========================================
+# Phase: Connectivity Clients
+# ==========================================
 async def initialize_punch_coordination(node, out, cout):
     if out: cout("\tLoading NTP clock skew...")
     if node.conf["init_clock_skew"]:
@@ -189,28 +210,9 @@ def start_maintenance_tasks(node):
     # Simple loop to close idle tasks.
     node.resources.set_idle_closer(create_task(close_idle_pipes(node)))
 
-# Note: node.listen_on_ifs() is called directly in main sequence
-
 # ==========================================
 # Phase: Finalize Connectivity
 # ==========================================
-async def finalize_port_forwarding(node, upnp_task, out, cout):
-    if upnp_task:
-        if out: cout("\tStarting UPnP forwarding...")
-
-        upnp_ret = await upnp_task
-        if upnp_ret:
-            forward_success, reachable = upnp_ret
-        else:
-            forward_success = reachable = None
-
-        # Output AFs and NICs where UPnP succeeded on.
-        if forward_success or reachable:
-            if out: cout("\t\tUPnP forwarded = ", forward_success)
-            if out: cout("\t\tUPnP reachable = ", reachable)
-        else:
-            if out: cout("\t\tUPnP failed: reverse connect won't work.")
-
 def build_node_address(node, out):
     if node.node_id is None:
         raise RuntimeError("node_id was not set before building node address.")
@@ -237,27 +239,26 @@ def build_node_address(node, out):
         log_exception()
         raise Exception("Can't parse nodes p2p addr.")
 
+async def finalize_port_forwarding(node, upnp_task, out, cout):
+    if upnp_task:
+        if out: cout("\tStarting UPnP forwarding...")
+
+        upnp_ret = await upnp_task
+        if upnp_ret:
+            forward_success, reachable = upnp_ret
+        else:
+            forward_success = reachable = None
+
+        # Output AFs and NICs where UPnP succeeded on.
+        if forward_success or reachable:
+            if out: cout("\t\tUPnP forwarded = ", forward_success)
+            if out: cout("\t\tUPnP reachable = ", reachable)
+        else:
+            if out: cout("\t\tUPnP failed: reverse connect won't work.")
 
 # ==========================================
 # Phase: High-Level Services
 # ==========================================
-async def setup_router_and_signal(node, kp, out, cout):
-    # Create traversal manager first so its handler can be passed to Router.
-    # Router captures msg_handler at construction time (not start time).
-    node.traversal = TraversalManager(node.stop_reader, node.inbound_pipes, node.ifs)
-    install_default_plugins(node)
-
-    router = Router(kp, msg_handler=node.traversal.handle_router_msg, nic=Interface("default"))
-    node.traversal.router = router
-    router.traversal = node.traversal
-
-    # Wire crypto state — available since load_cryptography_and_auth ran before the gather.
-    node.traversal.vk = node.vk
-    node.traversal.sk = node.sk
-
-    await setup_signal_router(node, router, out, cout)
-
-
 async def setup_nickname_service(node):
     node.nick_client = await Nickname(
         node.sk,
@@ -271,17 +272,6 @@ async def setup_nickname_service(node):
             node.nickname(node.node_id)
         )
         node.resources.add_task(task)
-
-async def setup_signal_router(node, router, out, cout):
-    node.router = router
-
-    # Subscribe to our own MQTT topic so we can receive incoming signals.
-    if out: cout("\tLoading MQTT router...")
-    try:
-        clients = await asyncio.wait_for(router.start(), timeout=8)
-        if out: cout("\t\t", clients)
-    except asyncio.TimeoutError:
-        raise Exception("Router MQTT start timed out - signaling may be degraded")
 
 async def setup_traversal_plugins(node):
     if node.conf.get("enable_punching", True):

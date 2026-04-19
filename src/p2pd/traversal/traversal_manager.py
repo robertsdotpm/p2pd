@@ -20,8 +20,8 @@ from .traversal_plugin import TraversalPlugin
 from ..protocol.traversal.proto_msg import GetAddr, ConMsg, ProtoMsg, SIG_PROTO
 
 class TraversalManager():
-    def __init__(self, stop_reader, inbound_pipes=None, nics=None):
-        self.router = None  # Set after Router is constructed with this manager's handler.
+    def __init__(self, router, stop_reader, inbound_pipes=None, nics=None):
+        self.router = router
         self.stop_reader = stop_reader
         self.vk = None        # Set after cryptography is loaded.
         self.sk = None        # Set after cryptography is loaded.
