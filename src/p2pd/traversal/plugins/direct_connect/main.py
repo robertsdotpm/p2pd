@@ -43,5 +43,5 @@ class DirectConnect(TraversalPlugin):
         if pipe.sock is None:
             return
 
-        await pipe.send(CON_ID_MSG + to_b(fstr(" {0}\n", (self.pipe_id,))))
+        await pipe.send(CON_ID_MSG + to_b(fstr(" {0}\n", (self.plugin_id,))))
         self.result.set_result(pipe)

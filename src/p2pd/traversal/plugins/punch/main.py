@@ -53,7 +53,7 @@ def find_unpicklable(obj, path="obj", seen=None):
 class PunchPlugin(TraversalPlugin):
     async def run(self, reply=None):
         punch_time = 0.0
-        puncher = self.punch_clients.get(self.pipe_id)
+        puncher = self.punch_clients.get(self.plugin_id)
         if puncher:
             # Case 1: Continue existing NAT traversal exchange
             punch_time = puncher.punch_time
@@ -65,11 +65,11 @@ class PunchPlugin(TraversalPlugin):
                 return # Abort if no STUN configuration is available
 
             # Re-check after the await: a concurrent run() for the same
-            # pipe_id may have raced through setup_puncher_client and already
+            # plugin_id may have raced through setup_puncher_client and already
             # stored a puncher.  Reusing that one avoids a second punching
             # process and a state mismatch where punch_proc holds a reference
             # to a different PunchClient than punch_clients.
-            existing = self.punch_clients.get(self.pipe_id)
+            existing = self.punch_clients.get(self.plugin_id)
             if existing is not None:
                 puncher = existing
             else:
@@ -124,8 +124,8 @@ class PunchPlugin(TraversalPlugin):
         finally:
             # Always remove shared state so subsequent attempts start clean.
             # This runs on normal completion, cancellation, and exceptions.
-            self.punch_proc.pop(self.pipe_id, None)
-            self.punch_clients.pop(self.pipe_id, None)
+            self.punch_proc.pop(self.plugin_id, None)
+            self.punch_clients.pop(self.plugin_id, None)
 
     async def close(self):
         """Cancel any in-flight punch task and remove this plugin's shared state.
@@ -133,8 +133,8 @@ class PunchPlugin(TraversalPlugin):
         Safe to call multiple times: pop() is a no-op when the key is absent
         and task/future guards check done() before acting.
         """
-        task = self.punch_proc.pop(self.pipe_id, None)
-        self.punch_clients.pop(self.pipe_id, None)
+        task = self.punch_proc.pop(self.plugin_id, None)
+        self.punch_clients.pop(self.plugin_id, None)
         if task is not None and not task.done():
             task.cancel()
             try:
@@ -235,7 +235,7 @@ class PunchPlugin(TraversalPlugin):
         and schedules the delayed asynchronous punching process.
         """
         # 5. Save Puncher Reference
-        self.punch_clients[self.pipe_id] = puncher
+        self.punch_clients[self.plugin_id] = puncher
 
         # 6. Initialize NAT Prediction Allocator
         # Note: this just wraps nat_predict.py.
@@ -249,8 +249,8 @@ class PunchPlugin(TraversalPlugin):
         )
         
         # 7. Schedule the Punching Process (with delay)
-        if self.pipe_id not in self.punch_proc:
-            self.punch_proc[self.pipe_id] = asyncio.create_task(
+        if self.plugin_id not in self.punch_proc:
+            self.punch_proc[self.plugin_id] = asyncio.create_task(
                 async_wrap_errors(
                     self.delayed_start_punching_proc(self.nic, puncher)
                 )
@@ -297,7 +297,7 @@ class PunchPluginFactory():
         self.sys_clock = sys_clock or SysClock(None, 0.1)
         self.proc_pool = proc_pool
         self.punch_clients = punch_clients
-        self.punch_proc = {} # pipe_id: delayed start punching proc task
+        self.punch_proc = {} # plugin_id: delayed start punching proc task
         self.active_punchers = 0
         return 
 

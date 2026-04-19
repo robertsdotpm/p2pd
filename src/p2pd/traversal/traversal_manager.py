@@ -25,7 +25,7 @@ class TraversalManager():
         self.node = None    # Set by setup_signal_router after node startup.
         self.stop_reader = stop_reader
         self.plugin_loaders = OrderedDict()
-        self.plugins = {}   # by pipe id
+        self.plugins = {}   # by plugin_id
         self.pipes = pipes if pipes is not None else {}
         self.nics = nics if nics is not None else []
         self.done_callback = None
@@ -82,7 +82,7 @@ class TraversalManager():
             plugin = plugin_class()
 
         plugin.stop_reader = self.stop_reader
-        self.plugins[plugin.pipe_id] = plugin
+        self.plugins[plugin.plugin_id] = plugin
 
         # Install done callback handler.
         if self.done_callback:
@@ -129,7 +129,7 @@ class TraversalManager():
         Edge-case where you're connecting to yourself.
         """
         if msg.meta.pipe_id in self.plugins: # and not msg.meta.same_machine
-            plugin = self.plugins.get(msg.meta.pipe_id, None)
+            plugin = self.plugins.get(msg.meta.pipe_id)
         else:
             # TODO: map GetAddr messages to the return_addr plugin handler.
             if isinstance(msg, ConMsg):
@@ -156,7 +156,7 @@ class TraversalManager():
             # Swap source and dest around.
             plugin.set_addrs(msg.routing.dest, msg.meta.src)
 
-            # Reuse the same pipe_id.
+            # Reuse the same plugin_id from the incoming message.
             plugin.set_pipes(self.pipes, msg.meta.pipe_id)
 
         return plugin
@@ -206,9 +206,9 @@ class TraversalManager():
         # Delete unused futures on failure.
         # Use pop() so a double-close or a pipe that was never registered
         # does not raise KeyError and abort the cleanup.
-        if hasattr(plugin, "pipe_id"):
-            self.plugins.pop(plugin.pipe_id, None)
-            self.pipes.pop(plugin.pipe_id, None)
+        if hasattr(plugin, "plugin_id"):
+            self.plugins.pop(plugin.plugin_id, None)
+            self.pipes.pop(plugin.plugin_id, None)
 
         # Delegate to plugin-specific cleanup (e.g. PunchPlugin cancels its
         # background punch task and clears shared punch_clients/punch_proc).
@@ -225,7 +225,7 @@ class TraversalManager():
         try:
             msg.meta = ProtoMsg.Meta.from_dict({
                 "ttl": int(self.router.get_time()) + 30,
-                "pipe_id": plugin.pipe_id,
+                "pipe_id": plugin.plugin_id,
                 "af": plugin.af,
                 "src_buf": plugin.src_map["bytes"],
                 "src_index": plugin.src_info["if_index"],

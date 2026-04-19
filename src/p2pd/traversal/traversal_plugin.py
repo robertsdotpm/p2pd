@@ -4,7 +4,7 @@ from .traversal_utils import *
 class TraversalPlugin():
     def __init__(self):
         self.result = asyncio.Future()
-        self.pipe_id = to_s(rand_plain(15))
+        self.plugin_id = to_s(rand_plain(15))
         self.has_reply = asyncio.Event()
         self.sig_pipe = None
 
@@ -63,8 +63,8 @@ class TraversalPlugin():
         if self.dest_info["ip"] == "None":
             raise Exception("Cannot select valid dest IP")
 
-    def set_pipes(self, pipes, pipe_id=None):
-        self.pipe_id = pipe_id or self.pipe_id
+    def set_pipes(self, pipes, plugin_id=None):
+        self.plugin_id = plugin_id or self.plugin_id
         self.pipes = pipes
 
     def set_signal_msg_sender(self, signal_msg_sender):
