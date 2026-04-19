@@ -22,6 +22,8 @@ class NodeResources:
         self.tasks = []
         self.idle_pipe_closer = None
         self.punch_factory = None
+        self.last_recv_table = {}  # pipe.sock -> time
+        self.last_recv_queue = []  # FIFO pipe refs for idle tracking
 
     def register(self, closeable):
         self.closeables.append(closeable)

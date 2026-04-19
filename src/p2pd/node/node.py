@@ -11,10 +11,9 @@ from .nickname import *
 from .node_start import *
 from .node_stop import *
 from .node_protocol import node_protocol
-from .node_connect import apply_listen_ips, install_default_plugins, connect as node_connect
+from .node_connect import apply_listen_ips, connect as node_connect
 from .node_resources import NodeResources
 from ..traversal.traversal_address import *
-from ..traversal.traversal_manager import TraversalManager
 from ..vendor.machine_id import *
 
 # Alias kept so that older callers (e.g. traversal_manager, namebump tests)
@@ -25,41 +24,33 @@ get_p2pd_install_root = get_aionetiface_install_root
 class Node(Daemon):
     def __init__(self, ifs=[], ip=[], port=NODE_PORT, stop_rw=None, conf=NODE_CONF):
         super().__init__()
-        conf = dict_child(conf, NET_CONF)
-        self.__name__ = "P2PNode"
-        self.install_path = conf["install_path"] or get_aionetiface_install_root()
+        self.__name__ = "Node"
+        self.conf = dict_child(conf, NET_CONF)
+        self.install_path = self.conf["install_path"] or get_aionetiface_install_root()
 
+        # network identity.
+        self.ifs = ifs
+        self.listen_ips = norm_listen_ips(ip)
+        self.listen_port = port
+        if self.listen_ips:
+            apply_listen_ips(self)
+
+        # Stop signal socket pair for cross-process shutdown.
         if not stop_rw:
             stop_rw = make_stop_pair()
         self.stop_reader, self.stop_writer = stop_rw
 
-        self.reachability = {IP4: {}, IP6: {}}
-        
-        # Main variables for the class.
-        self.conf = conf
-        self.listen_ips = norm_listen_ips(ip)
-        self.listen_port = port
-        self.ifs = ifs
-
-        # If listen IPs are set then route pool is restricted to just those IPs.
-        if self.listen_ips:
-            apply_listen_ips(self)
-
-        # Handlers for the node protocol.
+        # Protocol state.
         self.msg_cbs = []
-        self.inbound_pipes = {}   # by pipe_id
+        self.inbound_pipes = {}
+
+        # Resource manager — owns tasks, factories, idle tracking.
         self.resources = NodeResources()
 
-        # Watch for idle connections.
-        self.last_recv_table = {} # [pipe] -> time
-        self.last_recv_queue = [] # FIFO pipe ref
-
-        # Set on start.
-        self.addr_bytes = None
-
+        # Set on start() — not available until node is running.
+        self.traversal = None
         self.router = None
-        self.traversal = TraversalManager(self.stop_reader, self.inbound_pipes, self.ifs)
-        install_default_plugins(self)
+        self.addr_bytes = None
 
     def on_traversal_done(self, future):
         try:
@@ -85,8 +76,8 @@ class Node(Daemon):
         """
 
         # Recv a message for a pipe being monitored for idleness.
-        if pipe in self.last_recv_queue:
-            self.last_recv_table[pipe.sock] = time.time()
+        if pipe in self.resources.last_recv_queue:
+            self.resources.last_recv_table[pipe.sock] = time.time()
 
         # Run msg_cbs across messages.
         msgs = msg.split(b"\n")
@@ -147,11 +138,6 @@ class Node(Daemon):
         msg = fstr("Setting nickname '{0}' = '{1}'", (name, value,))
         #log_p2p(msg, self.node_id[:8])
         return name
-
-    def log(self, t, m):
-        node_id = self.node_id[:8]
-        msg = fstr("{0}: <{1}> {2}", (t, node_id, m,))
-        log(msg)
 
     # Return supported AFs based on all NICs for the node.
     def supported(self):

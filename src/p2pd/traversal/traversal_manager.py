@@ -20,14 +20,16 @@ from .traversal_plugin import TraversalPlugin
 from ..protocol.traversal.proto_msg import GetAddr, ConMsg, ProtoMsg, SIG_PROTO
 
 class TraversalManager():
-    def __init__(self, stop_reader, pipes=None, nics=None):
-        self.router = None  # Used for sig pipes.
-        self.node = None    # Set by setup_signal_router after node startup.
+    def __init__(self, stop_reader, inbound_pipes=None, nics=None):
+        self.router = None  # Set after Router is constructed with this manager's handler.
         self.stop_reader = stop_reader
+        self.vk = None        # Set after cryptography is loaded.
+        self.sk = None        # Set after cryptography is loaded.
+        self.addr_bytes = None  # Set after node address is built.
         self.plugin_loaders = OrderedDict()
         self.plugins = {}   # by plugin_id
-        self.inbound_pipes = pipes if pipes is not None else {}  # ref to node.inbound_pipes
-        self.nics = nics if nics is not None else []
+        self.inbound_pipes = inbound_pipes if inbound_pipes else {}
+        self.nics = nics if nics else []
         self.done_callback = None
         self.tasks = []     # Long-lived background tasks spawned by signal handling.
 
@@ -241,11 +243,11 @@ class TraversalManager():
             })
 
             # Attach our compressed verifying key so the receiver can decrypt.
-            msg.cipher.vk = self.node.vk.to_string("compressed")
+            msg.cipher.vk = self.vk.to_string("compressed")
 
             # Convert to bytes and send via MQTT.
             buf = to_s(sig_msg_to_buf(msg))
-            await plugin.sig_pipe.send(buf)
+            print("sending ", msg.to_dict())
             await plugin.sig_pipe.send(buf)
         except Exception:
             log_exception()
@@ -277,14 +279,15 @@ class TraversalManager():
     async def handle_router_msg(self, msg, src_pk_hex, pipe_id_hex, client):
         try:
             buf = to_b(msg)
-            msg = try_unpack_msg(buf, self.node.sk, SIG_PROTO)
+            msg = try_unpack_msg(buf, self.sk, SIG_PROTO)
+            print("recv ", msg.to_dict())
 
             # TODO: re-enable TTL check once clock skew handling is solid.
             # if int(self.router.get_time()) >= msg.meta.ttl:
             #     raise Exception("Discarding expired msg.")
 
             # Update routing destination with our current address.
-            msg.set_cur_addr(self.node.addr_bytes)
+            msg.set_cur_addr(self.addr_bytes)
 
             # Dispatch to the matching (or new) plugin.
             plugin = self.get_plugin(msg)

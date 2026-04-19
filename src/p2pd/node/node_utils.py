@@ -109,13 +109,13 @@ async def close_idle_pipes(node):
         next_sleep = 5  # default max sleep
 
         # Sort recv queue oldest → newest
-        node.last_recv_queue.sort(
-            key=lambda pipe: node.last_recv_table.get(pipe.sock, 0)
+        node.resources.last_recv_queue.sort(
+            key=lambda pipe: node.resources.last_recv_table.get(pipe.sock, 0)
         )
 
         # Loop over the queue
-        for pipe in node.last_recv_queue:
-            last_recv = node.last_recv_table.get(pipe.sock)
+        for pipe in node.resources.last_recv_queue:
+            last_recv = node.resources.last_recv_table.get(pipe.sock)
             if last_recv is None:
                 continue
 
@@ -131,8 +131,8 @@ async def close_idle_pipes(node):
 
         # Close idle pipes
         for pipe in close_list:
-            node.last_recv_queue.remove(pipe)
-            node.last_recv_table.pop(pipe.sock, None)
+            node.resources.last_recv_queue.remove(pipe)
+            node.resources.last_recv_table.pop(pipe.sock, None)
             try:
                 await asyncio.wait_for(pipe.close(), timeout=2)
             except asyncio.TimeoutError:
@@ -226,7 +226,7 @@ async def listen_on_ifs(node):
             route = await nic.route(IP6).bind(port=node.listen_port)
             await async_wrap_errors(node.add_listener(TCP, route))
 
-async def remote_reachability_cb(node, _msg, client_tup, pipe):
+async def remote_reachability_cb(reachability, _msg, client_tup, pipe):
     try:
         p2pd_ips = (
             IPR("2607:5300:60:80b0::1", af=IP6),
@@ -237,20 +237,20 @@ async def remote_reachability_cb(node, _msg, client_tup, pipe):
             return
         nic = pipe.route.interface
         af = pipe.route.af
-        if nic.id in node.reachability[af]:
-            future = node.reachability[af][nic.id]
+        if nic.id in reachability[af]:
+            future = reachability[af][nic.id]
             if not future.done():
                 future.set_result(True)
     except Exception:
         log("unknown exception in reachability cb")
         log_exception()
 
-async def forward(node, port):
+async def forward(node, port, reachability):
     tasks = []
     for nic in node.ifs:
         for af in nic.supported():
             async def do_forward(af=af, nic=nic):
-                node.reachability[af][nic.id] = asyncio.Future()
+                reachability[af][nic.id] = asyncio.Future()
                 route = await nic.route(af).bind()
                 ret = await route.forward(port=port)
                 if ret:
@@ -280,8 +280,8 @@ async def forward(node, port):
     reachable = [
         (af, nic_id)
         for af in (IP4, IP6)
-        for nic_id in node.reachability[af]
-        if node.reachability[af][nic_id].done()
+        for nic_id in reachability[af]
+        if reachability[af][nic_id].done()
     ]
     return forward_success, reachable
 

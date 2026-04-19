@@ -11,9 +11,11 @@ from sidewire import *
 from .node_utils import *
 from .nickname import *
 from ..traversal.traversal_address import *
+from ..traversal.traversal_manager import TraversalManager
 from ..traversal.plugins.punch.main import PunchPluginFactory
 from ..traversal.plugins.turn.main import TURNPluginFactory
 from ..protocol.traversal.proto_msg import SIG_PROTO
+from .node_connect import apply_listen_ips, install_default_plugins
 
 # ==========================================
 # Orchestrates the startup sequence for a P2P node.
@@ -30,11 +32,10 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     # Time & Synchronization [concurrent Phase A]
     # Clock initialization, STUN client loading, and router startup all do network I/O;
     # run them concurrently for faster startup.
-    traversal = node.traversal
     await asyncio.gather(
         initialize_system_clock(node, sys_clock, out, cout),
         load_p2p_stun_clients(node, out, cout),
-        setup_router_and_signal(node, kp, traversal, out, cout),
+        setup_router_and_signal(node, kp, out, cout),
     )
 
     # Connectivity Clients
@@ -86,12 +87,14 @@ def start_background_port_forwarding(node):
     
     # If UPnP is enabled and we are behind NAT, start the task
     if node.conf["enable_upnp"] and not all_open_internet:
-        async def _reachability_cb(msg, client_tup, pipe):
-            await remote_reachability_cb(node, msg, client_tup, pipe)
-        node.add_msg_cb(_reachability_cb)
+        reachability = {IP4: {}, IP6: {}}
+
+        async def reachability_cb(msg, client_tup, pipe):
+            await remote_reachability_cb(reachability, msg, client_tup, pipe)
+        node.add_msg_cb(reachability_cb)
 
         return asyncio.create_task(
-            async_wrap_errors(forward(node, node.listen_port), timeout=10)
+            async_wrap_errors(forward(node, node.listen_port, reachability), timeout=10)
         )
     return None
 
@@ -218,6 +221,7 @@ def build_node_address(node, out):
         node.ifs,
         port=node.listen_port,
     )
+    node.traversal.addr_bytes = node.addr_bytes
 
     # Log address.
     msg = fstr("Starting node = '{0}'", (node.addr_bytes,))
@@ -237,14 +241,20 @@ def build_node_address(node, out):
 # ==========================================
 # Phase: High-Level Services
 # ==========================================
-async def setup_router_and_signal(node, kp, traversal, out, cout):
-    # Create the router once clock is available
-    router = Router(kp,
-        msg_handler=traversal.handle_router_msg,
-        nic=Interface("default")
-    )
+async def setup_router_and_signal(node, kp, out, cout):
+    # Create traversal manager first so its handler can be passed to Router.
+    # Router captures msg_handler at construction time (not start time).
+    node.traversal = TraversalManager(node.stop_reader, node.inbound_pipes, node.ifs)
+    install_default_plugins(node)
 
-    # Start the signal router
+    router = Router(kp, msg_handler=node.traversal.handle_router_msg, nic=Interface("default"))
+    node.traversal.router = router
+    router.traversal = node.traversal
+
+    # Wire crypto state — available since load_cryptography_and_auth ran before the gather.
+    node.traversal.vk = node.vk
+    node.traversal.sk = node.sk
+
     await setup_signal_router(node, router, out, cout)
 
 
@@ -263,12 +273,7 @@ async def setup_nickname_service(node):
         node.resources.add_task(task)
 
 async def setup_signal_router(node, router, out, cout):
-    # Give the traversal manager a reference to the node so that
-    # signal_msg_sender and handle_router_msg can access node state.
     node.router = router
-    node.traversal.node = node
-    router.traversal = node.traversal
-    node.traversal.router = router
 
     # Subscribe to our own MQTT topic so we can receive incoming signals.
     if out: cout("\tLoading MQTT router...")
