@@ -103,7 +103,7 @@ async def connect(node, af, route_type, pnp_addr, plugin_name=None):
                     )
                 )
 
-    return await node.traversal.start(
+    return await node.traversal.attempt_plugin(
         src_map=src_map,
         dest_map=dest_map,
         sig_pipe=sig_pipe,
