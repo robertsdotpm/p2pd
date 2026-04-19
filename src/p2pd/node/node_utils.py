@@ -7,6 +7,25 @@ from ecdsa import SigningKey, SECP256k1
 import pathlib
 from aionetiface import *
 from ..traversal.libs.punch.punch_defs import PUNCH_CONF
+from ..vendor.machine_id import hashed_machine_id
+
+def make_stop_pair():
+    stop_rw = socket.socketpair()
+    stop_rw[0].setblocking(False)
+    stop_rw[1].setblocking(True)
+    return stop_rw
+
+def pipe_future(inbound_pipes, pipe_id):
+    if pipe_id not in inbound_pipes:
+        inbound_pipes[pipe_id] = asyncio.Future()
+    return inbound_pipes[pipe_id]
+
+def pipe_ready(inbound_pipes, pipe_id, pipe):
+    if pipe_id not in inbound_pipes:
+        pipe_future(inbound_pipes, pipe_id)
+    if not inbound_pipes[pipe_id].done():
+        inbound_pipes[pipe_id].set_result(pipe)
+    return pipe
 
 def norm_listen_ips(listen_ips):
     # Skip if empty.
@@ -181,6 +200,90 @@ async def get_pp_executors(workers=None):
         log_exception()
     
     return workers, pp_executor
+
+async def load_machine_id(app_id, netifaces):
+    try:
+        return hashed_machine_id(app_id)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        return await fallback_machine_id(netifaces, app_id)
+
+async def listen_on_ifs(node):
+    for nic in node.ifs:
+        if node.listen_ips:
+            listen_iprs = [IPR(ip) for ip in node.listen_ips]
+            for nic_ipr in nic:
+                if nic_ipr not in listen_iprs:
+                    continue
+                route = await nic_ipr.route.bind(port=node.listen_port)
+                await async_wrap_errors(node.add_listener(TCP, route))
+            continue
+
+        await async_wrap_errors(node.listen_local(TCP, node.listen_port, nic))
+
+        if IP6 in nic.supported():
+            route = await nic.route(IP6).bind(port=node.listen_port)
+            await async_wrap_errors(node.add_listener(TCP, route))
+
+async def remote_reachability_cb(node, _msg, client_tup, pipe):
+    try:
+        p2pd_ips = (
+            IPR("2607:5300:60:80b0::1", af=IP6),
+            IPR("158.69.27.176", af=IP4),
+        )
+        client_ip = IPR(client_tup[0], af=pipe.route.af)
+        if client_ip not in p2pd_ips:
+            return
+        nic = pipe.route.interface
+        af = pipe.route.af
+        if nic.id in node.reachability[af]:
+            future = node.reachability[af][nic.id]
+            if not future.done():
+                future.set_result(True)
+    except Exception:
+        log("unknown exception in reachability cb")
+        log_exception()
+
+async def forward(node, port):
+    tasks = []
+    for nic in node.ifs:
+        for af in nic.supported():
+            async def do_forward(af=af, nic=nic):
+                node.reachability[af][nic.id] = asyncio.Future()
+                route = await nic.route(af).bind()
+                ret = await route.forward(port=port)
+                if ret:
+                    return [af, nic.id]
+            tasks.append(do_forward())
+
+    forward_success = strip_none(await asyncio.gather(*tasks, return_exceptions=True))
+
+    test_addr = {IP4: "158.69.27.176", IP6: "2607:5300:60:80b0::1"}
+
+    async def reachability_test(af, nic):
+        route = nic.route(af)
+        curl = WebCurl((test_addr[af], 80), route, do_close=0)
+        try:
+            await curl.vars({"action": "hello", "proto": "tcp", "port": str(port)}).get("/p2pd/net_debug.php")
+        except asyncio.TimeoutError:
+            return None
+
+    await asyncio.gather(*[
+        reachability_test(af, nic)
+        for nic in node.ifs
+        for af in nic.supported()
+    ], return_exceptions=True)
+
+    await asyncio.sleep(2)
+
+    reachable = [
+        (af, nic_id)
+        for af in (IP4, IP6)
+        for nic_id in node.reachability[af]
+        if node.reachability[af][nic_id].done()
+    ]
+    return forward_success, reachable
 
 async def setup_punch_coordination(node, sys_clock):
     node.max_punchers, node.pp_executor = await get_pp_executors()

@@ -19,21 +19,11 @@ async def node_protocol(self, msg, client_tup, pipe):
     parts = msg.split(b" ")
     cmd = parts[0]
 
-    # This connection was in regards to a request.
     if cmd == CON_ID_MSG:
-        # Invalid format.
         if len(parts) != 2:
             log("ID: Invalid parts len.")
             return 1
-
-        # If no ones expecting this connection its a reverse connect.
-        pipe_id = to_s(parts[1])
-        if pipe_id not in self.inbound_pipes:
-            self.pipe_future(pipe_id)
-
-        # Tell waiter about this pipe.
-        if pipe_id in self.inbound_pipes:
-            log(fstr("pipe = '{0}' not in pipe events. saving.", (pipe_id,)))
-            self.pipe_ready(pipe_id, pipe)
+        
+        self.pipe_ready(to_s(parts[1]), pipe)
 
 

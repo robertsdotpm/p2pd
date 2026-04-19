@@ -85,7 +85,7 @@ class TURNPlugin(TraversalPlugin):
         immediately to free the UDP socket, the relay allocation, and all
         background tasks.  On success the TURNClient *is* the pipe returned
         to the caller — the caller owns it and will close it — so we leave
-        it open and let node_stop handle final shutdown via node.turn_clients.
+        it open and let TURNPluginFactory.close() handle final shutdown.
 
         Safe to call multiple times: the dict pop is a no-op on a missing key
         and all futures are checked with .done() before acting.
@@ -109,8 +109,8 @@ class TURNPlugin(TraversalPlugin):
 
 
 class TURNPluginFactory:
-    def __init__(self, turn_clients, msg_cb=None, node_id=""):
-        self.turn_clients = turn_clients
+    def __init__(self, msg_cb=None, node_id=""):
+        self.turn_clients = {}
         self.msg_cb = msg_cb
         self.node_id = node_id
 
@@ -120,3 +120,11 @@ class TURNPluginFactory:
         plugin.msg_cb = self.msg_cb
         plugin.node_id = self.node_id
         return plugin
+
+    async def close(self):
+        for client in list(self.turn_clients.values()):
+            try:
+                await client.close()
+            except Exception:
+                pass
+        self.turn_clients.clear()

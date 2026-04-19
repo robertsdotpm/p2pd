@@ -4,7 +4,6 @@ Reusing address can hide socket errors and
 make servers appear broken when they're not.
 """
 import asyncio
-import multiprocessing
 from aionetiface import *
 from .node_defs import *
 from .node_utils import *
@@ -12,12 +11,9 @@ from .nickname import *
 from .node_start import *
 from .node_stop import *
 from .node_protocol import node_protocol
+from .node_connect import apply_listen_ips, install_default_plugins, connect as node_connect
 from ..traversal.traversal_address import *
 from ..traversal.traversal_manager import TraversalManager
-from ..traversal.plugins.direct_connect.main import DirectConnect
-from ..traversal.plugins.get_addr.main import GetAddrPlugin
-from ..traversal.plugins.return_addr.main import ReturnAddrPlugin
-from ..traversal.plugins.reverse_connect.main import ReverseConnectPlugin
 from ..vendor.machine_id import *
 
 # Alias kept so that older callers (e.g. traversal_manager, namebump tests)
@@ -32,14 +28,9 @@ class Node(Daemon):
         self.__name__ = "P2PNode"
         self.install_path = conf["install_path"] or get_aionetiface_install_root()
 
-        # Using simple sockets for cross-process signals.
         if not stop_rw:
-            stop_rw = socket.socketpair()
-            stop_rw[0].setblocking(False)
-            stop_rw[1].setblocking(True)
-
-        if stop_rw:
-            self.stop_reader, self.stop_writer = stop_rw
+            stop_rw = make_stop_pair()
+        self.stop_reader, self.stop_writer = stop_rw
 
         self.reachability = {IP4: {}, IP6: {}}
         
@@ -51,75 +42,39 @@ class Node(Daemon):
 
         # If listen IPs are set then route pool is restricted to just those IPs.
 
-        # Listen on arbitrary IPs (may be WAN, LAN, or link-local.
         if self.listen_ips:
-            by_nic = sort_ips_by_nic(self.listen_ips, self.ifs)
-            found = set()
-            for nic in self.ifs:
-                if by_nic[nic.id]:
-                    found.update(by_nic[nic.id])
-                    nic.rp = route_pool_from_ips(by_nic[nic.id], nic)
-
-            missing = [ip for ip in self.listen_ips if ip not in found]
-            if missing:
-                raise Exception(
-                    "listen IPs not found on any interface: " + ", ".join(missing)
-                )
+            apply_listen_ips(self)
 
         # Handlers for the node protocol.
         self.msg_cbs = []
 
-        # Main pipe connections.
-        self.inbound_pipes = {} # by pipe_id
-        self.turn_clients = {} # by pipe_id
-        self.signal_pipes = {} # by MQTT_SERVERS index
-
-        # Pending TCP punch queue.
-        self.pp_executor = None
-
-        # Fixed reference for long-running tasks.
+        self.inbound_pipes = {}   # by pipe_id
+        self.signal_pipes = {}    # by MQTT_SERVERS index
+        self.closeables = []      # factories that own resources and implement async close()
         self.tasks = []
 
         # Watch for idle connections.
         self.last_recv_table = {} # [pipe] -> time
         self.last_recv_queue = [] # FIFO pipe ref
 
-        self.punch_clients = {}
-        self.punch_proc = {}
         self.active_punchers = 0
         self.max_punchers = 0
 
         # Set on start.
         self.addr_bytes = None
-        self.addr_futures = {}
 
         self.router = None
         self.traversal = TraversalManager(self.stop_reader, self.inbound_pipes, self.ifs)
-        self.traversal.install_plugin("direct_connect", {
-            "class": DirectConnect
-        })  
-        self.traversal.install_plugin("get_addr", {
-            "class": GetAddrPlugin
-        })
-        self.traversal.install_plugin("return_addr", {
-            "class": ReturnAddrPlugin
-        })
-        self.traversal.install_plugin("reverse_connect", {
-            "class": ReverseConnectPlugin
-        })
+        install_default_plugins(self)
 
-        def on_done(future):
-            try:
-                result = future.result()
-                print("in on done callback ", result)
-                pipe_like = (Pipe, PipeClient, TCPClientProtocol, PipeEvents)
-                if isinstance(result, pipe_like):
-                    print("add msg cb handler ", result.sock)
-                    result.add_msg_cb(self.msg_cb)
-            except Exception:
-                log_exception()
-
-        self.traversal.install_plugin_done_callback(on_done)
+    def on_traversal_done(self, future):
+        try:
+            result = future.result()
+            pipe_like = (Pipe, PipeClient, TCPClientProtocol, PipeEvents)
+            if isinstance(result, pipe_like):
+                result.add_msg_cb(self.msg_cb)
+        except Exception:
+            log_exception()
 
     def add_msg_cb(self, msg_cb):
         self.msg_cbs.append(msg_cb)
@@ -179,114 +134,8 @@ class Node(Daemon):
     def __await__(self):
         return self.start().__await__()
     
-    # Connect to a remote P2P node using a number of techniques.
     async def connect(self, af, route_type, pnp_addr, plugin_name=None):
-        # TODO: vk lookup map for node ids -- still relevant?
-        # todo make vk pass on properly for updated addr msg
-
-        # Get most recent address bytes if given a nickname.
-        dest_vk = None
-        if pnp_name_has_tld(pnp_addr):
-            pkt = await self.nick_client.get(pnp_addr)
-            addr_bytes = pkt.value
-            dest_vk = pkt.vkc
-            print("pnp got addr = ", addr_bytes)
-            dest_map = parse_node_addr(addr_bytes)
-            print("parse dest map =", dest_map)
-
-            """
-            Pre-load router to have clients connected for the dest public key.
-            Otherwise, this happens inside the plugins which causes the plugins
-            to appear like they've timed out for being too slow.
-
-            When they receive a new pub key msg for the first time they also
-            need to cache those server connections. So you're waiting for them too
-            on startup. Could have an arg to preload from a pub key.
-            """
-            sig_pipe = await self.router.pipe(
-                dest_map["pub_key_hex"],
-                use_cache=True
-            )
-            print("Loaded mqtt clients for dest = ", sig_pipe)
-
-            try:
-                # TODO: what should timeout val be
-                
-                updated_addr_bytes = await asyncio.wait_for(
-                    get_updated_addr_from_mqtt(self, addr_bytes),
-                    timeout=10
-                )
-                if updated_addr_bytes:
-                    addr_bytes = updated_addr_bytes
-                    print("got updated addr ", addr_bytes)
-            except asyncio.TimeoutError:
-                log("Timeout MQTT get updated bytes " + str(pnp_addr))
-        else:
-            addr_bytes = pnp_addr
-            dest_map = parse_node_addr(addr_bytes)
-            sig_pipe = await self.router.pipe(
-                dest_map["pub_key_hex"],
-                use_cache=True
-            )
-
-        # If af is None select an AF supported by both.
-        src_map = self.p2p_addr
-        dest_map = parse_node_addr(addr_bytes)
-        if dest_vk: dest_map["vk"] = dest_vk
-        if not af:
-            for try_af in (IP4, IP6,):
-                if len(src_map[try_af]) and len(dest_map[try_af]):
-                    af = try_af
-                    break
-        
-        # No shared AF found.
-        if not af:
-            raise Exception("No supported shared AF.")
-
-        # Sanity check: running multiple node instances with the same IP on
-        # the same interface is not supported.  The check is keyed on if_index
-        # so that two nodes can legitimately share an IP on *different*
-        # interfaces (e.g. both have fe80::2 but on separate NICs).
-        # Integer comparison of IPRange avoids any uncertainty in __eq__.
-        # Skip for internal utility calls (get_addr) which are not real connections.
-        if plugin_name == "get_addr":
-            pass
-        elif route_type == NIC_BIND:
-            for if_idx, dest_info in dest_map[af].items():
-                src_info = src_map[af].get(if_idx)
-                if src_info is None:
-                    continue
-                if int(dest_info["nic"]) == int(src_info["nic"]):
-                    raise Exception(
-                        "Local route selected but dest if_index %d shares "
-                        "NIC IP %s with this node for AF %s — "
-                        "punch will fail." % (if_idx, dest_info["nic"].ip, af)
-                    )
-        elif route_type in (EXT_BIND, None):
-            for if_idx, dest_info in dest_map[af].items():
-                src_info = src_map[af].get(if_idx)
-                if src_info is None:
-                    continue
-                if int(dest_info["ext"]) == int(src_info["ext"]):
-                    raise Exception(
-                        "External route selected but dest if_index %d shares "
-                        "external IP %s with this node for AF %s — "
-                        "cannot connect to yourself via WAN addresses." % (
-                            if_idx, dest_info["ext"].ip, af
-                        )
-                    )
-
-        # Start the traversal plugin method.
-        plugin = await self.traversal.start(
-            src_map=src_map,
-            dest_map=dest_map,
-            sig_pipe=sig_pipe,
-            plugin_name=plugin_name,
-            af=af,
-            route_type=route_type,
-        )
-
-        return plugin
+        return await node_connect(self, af, route_type, pnp_addr, plugin_name)
 
     # Get our node server's address.
     def address(self):
@@ -320,166 +169,9 @@ class Node(Daemon):
         # Make IP4 earliest in the list.
         return sorted(tuple(afs))
 
-    async def listen_on_ifs(self):
-        # Multi-iface connection facilitation.
-        for nic in self.ifs:
-            """
-            Given a list of IP strings to listen on listen on all IPs
-            that match a given interface.
-            """
-            if self.listen_ips:
-                listen_iprs = [IPR(ip) for ip in self.listen_ips]
-                for nic_ipr in nic:
-                    if nic_ipr not in listen_iprs:
-                        continue
-
-                    route = await nic_ipr.route.bind(
-                        port=self.listen_port
-                    )
-
-                    await async_wrap_errors(
-                        self.add_listener(TCP, route)
-                    )
-
-                # Don't process the following the listen statements.
-                continue
-                        
-            # Listen on first route for AFs.
-            out = await async_wrap_errors(
-                self.listen_local(
-                    TCP,
-                    self.listen_port,
-                    nic
-                )
-            )
-
-            # Add global address listener.
-            if IP6 in nic.supported():
-                route = await nic.route(IP6).bind(
-                    port=self.listen_port
-                )
-
-                out = await async_wrap_errors(
-                    self.add_listener(TCP, route)
-                )
-
     def pipe_future(self, pipe_id):
-        if pipe_id not in self.inbound_pipes:
-            self.inbound_pipes[pipe_id] = asyncio.Future()
-
-        return self.inbound_pipes[pipe_id]
+        return pipe_future(self.inbound_pipes, pipe_id)
 
     def pipe_ready(self, pipe_id, pipe):
-        if pipe_id not in self.inbound_pipes:
-            log(fstr("pipe ready for non existing pipe {0}!", (pipe_id,)))
-            return
-        
-        if not self.inbound_pipes[pipe_id].done():
-            self.inbound_pipes[pipe_id].set_result(pipe)
-        
-        return pipe
+        return pipe_ready(self.inbound_pipes, pipe_id, pipe)
 
-    async def load_machine_id(self, app_id, netifaces):
-        # Set machine id.
-        try:
-            return hashed_machine_id(app_id)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            return await fallback_machine_id(
-                netifaces,
-                app_id
-            )
-
-    async def remote_reachability_cb(self, msg, client_tup, pipe):
-        try:
-            # P2PD.net server IPs
-            p2pd_ips = (
-                IPR("2607:5300:60:80b0::1", af=IP6), 
-                IPR("158.69.27.176", af=IP4),
-            )
-
-            # Check for eply from p2pd.net for port reachability.
-            client_ip = IPR(client_tup[0], af=pipe.route.af)
-            if client_ip not in p2pd_ips:
-                return
-
-            # Set reply future for interface and AF.
-            nic = pipe.route.interface
-            af = pipe.route.af
-            if nic.id in self.reachability[af]:
-                future = self.reachability[af][nic.id]
-                if not future.done():
-                    future.set_result(True)
-        except Exception:
-            log("unknown exception in reachability cb")
-            log_exception()
-
-    # Accomplishes port forwarding and pin hole rules.
-    async def forward(self, port):
-        # Run all forwarding tasks concurrently.
-        tasks = []
-        for nic in self.ifs:
-            for af in nic.supported():
-                # Add forwarding task.
-                async def do_forward(af, nic):
-                    # Future where replies will be returned.
-                    self.reachability[af][nic.id] = asyncio.Future()
-                    route = await nic.route(af).bind()
-                    ret = await route.forward(port=port)
-                    if ret:
-                        return [af, nic.id]
-
-                tasks.append(do_forward(af, nic))
-
-        # Do all the forwarding tasks concurrently.
-        forward_success = await asyncio.gather(*tasks, return_exceptions=True)
-        forward_success = strip_none(forward_success)
-        #print(forward_success)
-
-        # Give enough time for forwarding to be done.
-        test_addr = {
-            IP4: "158.69.27.176",
-            IP6: "2607:5300:60:80b0::1",
-        }
-
-        # Now trigger forwarding tests from p2pd.net.
-        # My HTTP client sucks so this prob won't even work.
-        async def reachability_test(af, nic, port, test_addr):
-            # Setup the HTTP client.
-            route = nic.route(af)
-            dest = (test_addr[af], 80)
-            curl = WebCurl(dest, route, do_close=0)
-
-            # Trigger the server to test the service reachability.
-            # Get uses conf=NET_CONF = 2 sec recv and con TCP timeout.
-            try:
-                await curl.vars({
-                    "action": "hello",
-                    "proto": "tcp",
-                    "port": str(port)
-                }).get("/p2pd/net_debug.php")
-            except asyncio.TimeoutError:
-                return None
-
-        # Build reachability tests after forwarding.
-        tasks = []
-        for nic in self.ifs:
-            for af in nic.supported():
-                task = reachability_test(af, nic, port, test_addr)
-                tasks.append(task)
-
-        # Run reachability tests.
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Give enough time for the server response to arrive.
-        await asyncio.sleep(2)
-
-        # Return reachability results
-        reachable = []
-        for af in (IP4, IP6):
-            for nic_id in self.reachability[af]:
-                if self.reachability[af][nic_id].done():
-                    reachable.append((af, nic_id))
-
-        return forward_success, reachable

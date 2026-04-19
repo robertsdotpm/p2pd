@@ -43,7 +43,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 
     # Start Servers
     start_maintenance_tasks(node)
-    await node.listen_on_ifs()
+    await listen_on_ifs(node)
 
     # Finalize Connectivity
     build_node_address(node, out)
@@ -52,7 +52,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
     # High-Level Services [concurrent Phase C]
     # Nickname setup runs concurrently with any remaining work.
     await setup_nickname_service(node)
-    setup_traversal_plugins(node)
+    await setup_traversal_plugins(node)
 
     return node
 
@@ -86,15 +86,12 @@ def start_background_port_forwarding(node):
     
     # If UPnP is enabled and we are behind NAT, start the task
     if node.conf["enable_upnp"] and not all_open_internet:
-        # Handler detects packets from test server to confirm if UPnP worked
-        node.add_msg_cb(node.remote_reachability_cb)
+        async def _reachability_cb(msg, client_tup, pipe):
+            await remote_reachability_cb(node, msg, client_tup, pipe)
+        node.add_msg_cb(_reachability_cb)
 
-        # Return the task so we can await it later
         return asyncio.create_task(
-            async_wrap_errors(
-                node.forward(node.listen_port),
-                timeout=10
-            )
+            async_wrap_errors(forward(node, node.listen_port), timeout=10)
         )
     return None
 
@@ -102,10 +99,7 @@ def start_background_port_forwarding(node):
 # Phase: Identity & Security
 # ==========================================
 async def load_machine_identity(node):
-    node.machine_id = await node.load_machine_id(
-        "p2pd",
-        node.ifs[0].netifaces
-    )
+    node.machine_id = await load_machine_id("p2pd", node.ifs[0].netifaces)
 
     if node.machine_id in (None, ""):
         raise Exception("Could not load machine id.")
@@ -181,11 +175,6 @@ async def initialize_system_clock(node, sys_clock, out, cout):
 
 async def initialize_punch_coordination(node, out, cout):
     if out: cout("\tLoading NTP clock skew...")
-    
-    # Multiprocess support for TCP punching and NTP sync.
-    if node.conf["enable_punching"]:
-        await setup_punch_coordination(node, node.sys_clock)
-
     if node.conf["init_clock_skew"]:
         ntp = str(node.sys_clock.ntp)
         if out: cout(fstr("\t\tClock ntp = {0}", (ntp,)))
@@ -291,25 +280,15 @@ async def setup_signal_router(node, router, out, cout):
     except asyncio.TimeoutError:
         raise Exception("Router MQTT start timed out - signaling may be degraded")
 
-def setup_traversal_plugins(node):
+async def setup_traversal_plugins(node):
     if node.conf.get("enable_punching", True):
-        node.traversal.install_plugin("punch", {
-            "class": PunchPluginFactory(
-                node.stun_clients,
-                node.punch_clients,
-                node.sys_clock,
-                node.pp_executor,
-            ),
-            "timeout": 40
-        })
+        punch_factory = await PunchPluginFactory.create(node.stun_clients, node.sys_clock)
+        node.max_punchers = punch_factory.max_workers
+        node.closeables.append(punch_factory)
+        node.traversal.install_plugin("punch", {"class": punch_factory, "timeout": 40})
 
-    node.traversal.install_plugin("turn", {
-        "class": TURNPluginFactory(
-            node.turn_clients,
-            node.msg_cb,
-            node.node_id,
-        ),
-        "timeout": 20
-    })
+    turn_factory = TURNPluginFactory(node.msg_cb, node.node_id)
+    node.closeables.append(turn_factory)
+    node.traversal.install_plugin("turn", {"class": turn_factory, "timeout": 20})
 
     log("traversal plugin_loaders: " + str(node.traversal.plugin_loaders))

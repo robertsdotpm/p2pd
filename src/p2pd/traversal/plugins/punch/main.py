@@ -1,5 +1,9 @@
+import os
+import sys
 import pickle
 import asyncio
+import multiprocessing
+import signal as signal_mod
 from aionetiface import *
 from ....protocol.traversal.proto_msg import PunchMsg, DoneMsg
 from ...libs.punch.punch_defs import *
@@ -292,25 +296,74 @@ class PunchPlugin(TraversalPlugin):
         return msg
 
 class PunchPluginFactory():
-    def __init__(self, stun_clients, punch_clients, sys_clock=None, proc_pool=None):
-        self.stun_clients = stun_clients # af if index
+    def __init__(self, stun_clients, sys_clock=None):
+        self.stun_clients = stun_clients
         self.sys_clock = sys_clock or SysClock(None, 0.1)
-        self.proc_pool = proc_pool
-        self.punch_clients = punch_clients
-        self.punch_proc = {} # plugin_id: delayed start punching proc task
-        self.active_punchers = 0
-        return 
+        self.proc_pool = None
+        self.max_workers = 0
+        self.punch_clients = {}
+        self.punch_proc = {}
+
+    @classmethod
+    async def create(cls, stun_clients, sys_clock):
+        factory = cls(stun_clients, sys_clock)
+        factory.max_workers, factory.proc_pool = await get_pp_executors()
+        return factory
 
     def build_plugin(self):
         plugin = PunchPlugin()
-        plugin.stun_clients = self.stun_clients # af if index
+        plugin.stun_clients = self.stun_clients
         plugin.sys_clock = self.sys_clock
         plugin.proc_pool = self.proc_pool
         plugin.punch_clients = self.punch_clients
         plugin.punch_proc = self.punch_proc
-
-        #plugin.active_punchers = self.active_punchers
         return plugin
+
+    async def close(self):
+        if not self.proc_pool:
+            return
+        log("trying to shut down pp executor waiting.")
+
+        executor_pids = set()
+        try:
+            executor_pids = set(self.proc_pool._processes.keys())
+        except AttributeError:
+            pass
+
+        if sys.version_info >= (3, 9):
+            self.proc_pool.shutdown(wait=False, cancel_futures=True)
+        else:
+            self.proc_pool.shutdown(wait=False)
+        self.proc_pool = None
+
+        loop = asyncio.get_running_loop()
+        end = loop.time() + 3
+        while True:
+            active = multiprocessing.active_children()
+            remaining = {c for c in active if c.pid in executor_pids} if executor_pids else set(active)
+            if not remaining or loop.time() >= end:
+                break
+            await asyncio.sleep(0.5)
+
+        active = multiprocessing.active_children()
+        targets = [c for c in active if not executor_pids or c.pid in executor_pids]
+        for child in targets:
+            child.terminate()
+
+        if sys.platform != "win32" and targets:
+            await asyncio.sleep(0.2)
+            active_pids = {c.pid for c in multiprocessing.active_children()}
+            for child in targets:
+                if child.pid in active_pids:
+                    try:
+                        os.kill(child.pid, signal_mod.SIGKILL)
+                    except (ProcessLookupError, PermissionError):
+                        pass
+
+        for child in targets:
+            child.join(timeout=0.5)
+
+        log("shutdown for pp executor done.")
         
 # TODO
 async def tcp_punch_cleanup(tunnel, ):
@@ -340,7 +393,6 @@ if __name__ == "__main__":
         _, proc_pool = await get_pp_executors()
         punch_proto = PunchPluginFactory(
             stun_client_table,
-            {}, 
             proc_pool=proc_pool
         ).build_plugin()
         

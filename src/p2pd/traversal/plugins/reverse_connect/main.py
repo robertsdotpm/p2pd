@@ -5,18 +5,9 @@ from ....protocol.traversal.proto_msg import ConMsg
 
 class ReverseConnectPlugin(TraversalPlugin):
     async def run(self, reply=None):
-        print("inside reverse connect plugin")
-        print("using pipe id = ", self.plugin_id)
         msg = ConMsg()
         msg.meta.plugin_name = "direct_connect"
-
-        # Register future to receive back inbound con.
-        self.inbound_pipes[self.plugin_id] = asyncio.Future()
-
-        # Send reverse request.
+        self.register_inbound()
         await self.signal_msg_sender(msg)
-
-        # Await con.
-        con = await self.inbound_pipes[self.plugin_id]
-        print("await con = ", con)
+        con = await self.wait_for_inbound()
         self.result.set_result(con)

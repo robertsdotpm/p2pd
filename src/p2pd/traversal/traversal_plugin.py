@@ -73,5 +73,17 @@ class TraversalPlugin():
     async def signal_msg_sender(self, msg, relay_no=2):
         return await self._signal_msg_sender(msg, self, relay_no)
 
+    def register_inbound(self):
+        # Register before sending any signal to avoid a race where the inbound
+        # connection arrives before the future exists.
+        self.inbound_pipes[self.plugin_id] = asyncio.Future()
+
+    async def wait_for_inbound(self):
+        try:
+            return await self.inbound_pipes[self.plugin_id]
+        except Exception:
+            self.inbound_pipes.pop(self.plugin_id, None)
+            raise
+
     async def run(self, reply=None):
         log("TraversalPlugin.run() called on base class - subclass should override this.")
