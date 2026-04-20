@@ -126,8 +126,6 @@ class PunchClient:
             self.nic_id
         )
 
-        print(self.dest_ip)
-
     def set_src_ip(self, src_ip):
         self.src_ip = src_ip
 
@@ -154,8 +152,6 @@ class PunchClient:
         if sleep_time > self.max_sleep:
             sleep_time = self.max_sleep
 
-        print("sleep until = ", sleep_time)
-            
         # No sleep needed if far behind.
         if sleep_time > 0:
             time.sleep(sleep_time)
@@ -174,7 +170,6 @@ class PunchClient:
 
     # Return a socket (punched hole) on success.
     def run_engine(self, f_engine):
-        print("in run engine runner")
         return f_engine(
             af=self.af,
             nic_id=self.nic_id,

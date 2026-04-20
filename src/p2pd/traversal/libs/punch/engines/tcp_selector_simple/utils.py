@@ -38,7 +38,6 @@ def bind_tcp_sockets(af, nic_id, port_allocs, src_ip=None):
         s = socket.socket(af, socket.SOCK_STREAM)
         sock_opt_voodoo(s)
         bind_tup = binder_sync(af, ip_strip_if(bind_ip), p.src_port, nic_id)
-        print(bind_tup)
         try:
             s.bind(bind_tup)
             bound_socks.append((p, s))

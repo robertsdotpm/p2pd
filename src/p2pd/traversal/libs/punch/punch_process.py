@@ -4,15 +4,18 @@ But the approach is --not-- reliable for every OS. The best design
 so far is just having a reverse connecting back to a listen server
 in the main process (like so):
 
-            punch proc         |      main proc
-punched sock <--> reverse con <-->  listen socket
+            punch proc             |      main proc
+---------------------------------------------------------
+remote client <---- punched sock   |  reverse server accept():     
+                    reverse sock ---->  punch proc connection
+                                   |
+        sock forwarding agent      |
+    --------------------------     |
+punched sock <---> reverse sock    |
+                                   |
+punched sock <---> reverse sock <-----> punch proc connection
 """
 
-import multiprocessing as mp
-import socket
-import signal
-from multiprocessing.reduction import send_handle, recv_handle
-import os
 import asyncio
 from aionetiface import *
 from .utility.punch_utils import *
@@ -21,17 +24,8 @@ from ....node.node_defs import *
 from .engines.tcp_selector_simple.engine import *
 from aionetiface.net.selector_proxy import selector_proxy
 
-"""
-Punching is done in its own process.
-The process returns an open socket and Python
-warns that the socket wasn't closed properly.
-This is the intention and not a bug!
-This code disables that warning.
-"""
-def punching_process_entry(puncher, listening_tup, stop_reader):
+def punching_process(puncher, reverse_server_dest, stop_reader):
     try:
-        print("punching proc entry")
-
         # New punched TCP sock to destination.
         punched_sock = puncher.run_engine(tcp_selector_punch_engine)
         if not punched_sock:
@@ -40,7 +34,7 @@ def punching_process_entry(puncher, listening_tup, stop_reader):
 
         # Make reverse connect to listen server in main process.
         # Handles passing messages between the punch sock <--> reverse con.
-        selector_proxy(punched_sock, listening_tup, stop_reader)
+        selector_proxy(punched_sock, reverse_server_dest, stop_reader)
     except KeyboardInterrupt:
         # On Windows, sometimes the signal still gets through.
         # Catching it here ensures the worker dies silently.
@@ -49,58 +43,48 @@ def punching_process_entry(puncher, listening_tup, stop_reader):
         log_exception()
 
 async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
-    loop = asyncio.get_event_loop()
-    listen_pipe = None
-    punching_future = None
-
+    reverse_server = None
     try:
-        print("start punching proc entry")
+        # Create a listen server for receiving a connection
+        # back from the punching process.
+        reverse_route = nic.route(puncher.af)
+        reverse_route = await reverse_route.bind(ips=puncher.src_ip)
+        reverse_server = await Pipe(TCP, None, reverse_route).connect()
 
-        listen_route = nic.route(puncher.af)
-        listen_route = await listen_route.bind(ips=puncher.src_ip)
-        listen_pipe = await Pipe(TCP, None, listen_route).connect()
-
-        # Start the punching in a new process.
+        # Get the address of the reverse connect server.
         # Applies rules to make different kinds of IPs work.
         reverse_ip = patch_connect_ip(puncher.af, puncher.src_ip, puncher.nic_id)
-        listening_tup = (reverse_ip, listen_pipe.sock.getsockname()[1])
-        args = (puncher, listening_tup, stop_reader)
-        print("listening tup", listening_tup)
-        print("listen reverse sock = ", listen_pipe.sock)
-        print("punch proc args = ", args)
-        print("proc pool = ", proc_pool)
-        print("before run in exec")
+        reverse_port = reverse_server.sock.getsockname()[1]
+        reverse_server_dest = (reverse_ip, reverse_port)
 
+        # Start the punching in a new process.
         # Store the future so the caller can inspect / cancel it if needed.
-        punching_future = loop.run_in_executor(proc_pool, punching_process_entry, *args)
+        loop = asyncio.get_event_loop()
+        args = (puncher, reverse_server_dest, stop_reader)
+        loop.run_in_executor(
+            proc_pool,
+            punching_process,
+            *args
+        )
 
-        # Wait for the reverse-connect client on the listen server.
-        client_pipe = await asyncio.wait_for(
-            listen_pipe.accept(),
+        # The punch process makes a new connection to the
+        # reverse connect server which we accept to connect the processes.
+        punch_process_connection = await asyncio.wait_for(
+            reverse_server.accept(),
             timeout=20
         )
-        print("after run in exec")
-        print("listen client pipe sock = ", client_pipe.sock)
-        print("return pipe = ", client_pipe)
-        return client_pipe
 
+        return punch_process_connection
     except (asyncio.TimeoutError, asyncio.CancelledError) as e:
         log("start_punching_process timed out or cancelled: " + repr(e))
-        return None
     except Exception as e:
         log_exception()
-        what_exception()
-        print("error in start_punching_process:", e)
-        return None
     finally:
         # Always close the listen pipe to release the bound port / fd.
-        """
-        Closing the listen server does appear to ruin it. Its probably because
-        it also has code clauses for closing accepted clients.
-        """
-        if listen_pipe is not None:
+        # Keep clients makes sure not to close the accepted clients.
+        if reverse_server is not None:
             await async_wrap_errors(
-                listen_pipe.close(keep_clients=True)
+                reverse_server.close(keep_clients=True)
             )
 
 

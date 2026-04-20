@@ -46,14 +46,12 @@ def timestamp_from_ntp(server=NTP_SERVER, port=NTP_PORT, retries=MAX_NTP_RETRIES
                 return int(unix_time)
 
         except socket.timeout:
-            print(f"NTP request timed out. Retrying ({attempt + 1}/{retries})...")
             time.sleep(0.1)
         except Exception as e:
             # Handle other socket errors or unpacking issues
-            print(f"NTP error on attempt {attempt + 1}: {e}")
             time.sleep(0.1)
 
-    raise RuntimeError(f"Failed to get reliable network time from {server} after {retries} attempts.")
+    raise RuntimeError("Failed to get reliable network time")
 
 """
 The function bellow is used to adjust sleep parameters
@@ -186,18 +184,13 @@ def wait_for_first_with_data(sockets, timeout=5.0):
 
 # In a LAN = lan ip, or for WAN targets = wan IPs.
 def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
-
-
     # No open sockets.
     if not sock_list: 
         return None
 
     # Master side closes all others immediately
     our_ip = our_ip or sock_list[0].getsockname()[0]
-    print(our_ip, " ", their_ip)
-
     if our_ip > their_ip:
-        print("master")
         winner = sock_list.pop()
         winner.send(b"$")
         for loser in sock_list:
@@ -209,9 +202,6 @@ def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
             loser.close()
     else:
         # Non-master side waits for the first completed connection
-        print("slave")
         winner = wait_for_first_with_data(sock_list)
         
-
-    print("winning sock = ", winner)
     return winner

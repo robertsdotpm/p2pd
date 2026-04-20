@@ -169,3 +169,5 @@ tasks are only processed after input finishes -- how to do this with async?
 after our minimum for our own client when a plugin is done?
 otherwise they will just build up.
   - how to avoid closing other plugins cons
+- sometimes the interface fails to load completely. this needs to be investigated and fixed. even if rare. 
+- errors dont really propogate from plugins

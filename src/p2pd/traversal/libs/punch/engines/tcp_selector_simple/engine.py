@@ -93,7 +93,6 @@ def tcp_selector_punch_engine(af, nic_id, port_allocs, src_ip, dest_ip, f_sleep_
             Controls the spray and monitor window durations.  Defaults to the
             module-level CONNECT_TIMEOUT / RETRY_INTERVAL constants when None.
     """
-    print("in engine")
 
     # Resolve timing values from params (or fall back to module-level constants).
     if params is not None:
@@ -110,8 +109,6 @@ def tcp_selector_punch_engine(af, nic_id, port_allocs, src_ip, dest_ip, f_sleep_
     # Wait for synchronized punch time frame
     f_sleep_until()
 
-    print("dest ip = ", dest_ip)
-
     # Initiate simultaneous open
     connect_on_tcp_sockets(same_machine, pre_connect_infos, dest_ip,
                            spray_duration=spray_duration)
@@ -121,10 +118,7 @@ def tcp_selector_punch_engine(af, nic_id, port_allocs, src_ip, dest_ip, f_sleep_
                                       monitor_duration=monitor_duration,
                                       retry_interval=retry_interval)
 
-    print("successful = ", successful)
-
     sock_list = list(successful)
-    print("sock list = ", sock_list)
 
     # Application-level validation should still be done after this
     sock = choose_winning_tcp_sock(dest_ip, sock_list, our_ip)
