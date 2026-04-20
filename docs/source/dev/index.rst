@@ -77,21 +77,23 @@ and register its name then connect to its name on another machine.**
         P2P_RELAY = udp TURN relay
     ]
 
-Building the docs 
+Building the docs
 --------------------
 
-These docs use restructured text and need some dependencies to build.
+These docs use reStructuredText and require Sphinx and a few extensions to build.
 
-.. parsed-literal:: 
-    python3 -m pip install sphinx
-    python3 -m pip install myst-parser
-    python3 -m pip install sphinx_rtd_theme
-    python3 -m pip install readthedocs-sphinx-search
+.. parsed-literal::
+    python3 -m pip install sphinx myst-parser sphinx_rtd_theme readthedocs-sphinx-search
 
-The docs can be built with this command:
+Build the HTML output with:
 
-.. parsed-literal:: 
+.. parsed-literal::
     cd docs
-    python3 -m sphinx.cmd.build source html
+    make html
 
-Then you can open html/index.html.
+If ``sphinx-build`` is not on your PATH (e.g. installed via pip into ``~/.local``), pass it explicitly:
+
+.. parsed-literal::
+    SPHINXBUILD=~/.local/bin/sphinx-build make html
+
+The output is written to ``docs/build/html/``. Open ``docs/build/html/index.html`` in a browser to view the docs.

@@ -1,11 +1,10 @@
 STUN client for address lookups
 =================================
 
-STUN is a protocol that can be used to lookup a computers IP address. It
-provides information on external port mappings and some servers also support
-being able to send replies back from different IP addresses. These servers
-are very important [for peer-to-peer networking] because they allow for
-the determination of any NATs used by a home router.
+.. NOTE::
+    The STUN client is provided by `aionetiface <https://pypi.org/project/aionetiface/>`_, a dependency that is installed automatically with p2pd. It is accessible via ``from p2pd import *``.
+
+STUN is a protocol that can be used to look up a computer's external IP address. It provides information on external port mappings and some servers also support sending replies from different IP addresses. These servers are important for peer-to-peer networking because they allow the determination of what type of NAT a home router uses.
 
 There are many public STUN servers that can be used for basic functionality.
 P2PD uses STUN to determine WAN IPs, NAT details, and port mappings.

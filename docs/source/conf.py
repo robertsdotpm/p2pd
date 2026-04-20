@@ -6,8 +6,8 @@ project = 'P2PD'
 copyright = '2024'
 author = 'Matthew Roberts'
 
-release = '0.1'
-version = '3.0.0'
+release = '4.0.1'
+version = '4.0.1'
 
 # -- General configuration
 

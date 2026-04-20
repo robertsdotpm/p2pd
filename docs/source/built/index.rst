@@ -1,8 +1,7 @@
 Feature showcase
 ==================
 
-In the time since I've been working on P2PD many different components have
-been implemented. Here is a brief show-case of the more interesting ones.
+P2PD ships with a number of built-in tools and utilities beyond the core P2P node. This section covers the most useful ones.
 
 .. toctree::
     demo

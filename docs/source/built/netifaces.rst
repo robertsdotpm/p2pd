@@ -1,16 +1,14 @@
-More portable netifaces
-=========================
+Portable netifaces
+===================
 
-In Python the PyPI module 'netifaces' is a popular project for retrieving information on network cards. However, on Windows it has a few problems:
+In Python the PyPI module `netifaces <https://pypi.org/project/netifaces/>`_ is a popular package for retrieving information on network interface cards. However, on Windows it has a few problems:
 
 1. It requires the .NET Framework.
-2. It does not use proper names for interfaces (GUIDs are used on Windows.)
+2. It does not use proper names for interfaces (GUIDs are used instead of friendly names on Windows.)
 
-Additionally, pieces of information are incorrect or missing. Such as the interface number (needed on Windows), MAC address, and some subnet mask fields.
+Additionally, some information is incorrect or missing, including the interface index number (needed on Windows), MAC address, and some subnet mask fields.
 
-I've provided a wrapper around the original module to address these problems. It has the same interface as netifaces so it can be used as a drop-in replacement (it does make command-line calls and hence needs to be ran inside an event loop.)
+P2PD depends on `aionetiface <https://pypi.org/project/aionetiface/>`_ which provides a fixed wrapper around the original netifaces module. It has the same API as netifaces so it can be used as a drop-in replacement (it uses command-line calls internally and must be run inside an async event loop.)
 
 .. literalinclude:: ../../examples/portable_netifaces.py
     :language: python3
-
-More information on netifaces here: https://pypi.org/project/netifaces/

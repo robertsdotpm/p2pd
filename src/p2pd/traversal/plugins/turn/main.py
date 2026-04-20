@@ -8,31 +8,29 @@ from .turn_utils import get_first_working_turn_client, rendezvous_rank
 class TURNPlugin(TraversalPlugin):
     def __init__(self):
         super().__init__()
+
         # Resolved by a second run() call on this same instance when the peer's
         # reply arrives, unblocking the first run() call that is awaiting it.
         self.ready = asyncio.Future()
 
     async def run(self, reply=None):
+        # TURN relay requires a public relay server; skip for direct NIC binds.
         if self.route_type == NIC_BIND:
             return
 
-        # Get or create TURN client for this plugin.
-        if self.plugin_id in self.turn_clients:
-            client = self.turn_clients[self.plugin_id]
-        else:
-            # Both sides derive the same server ranking from the shared plugin_id
-            # via rendezvous hashing — no serv_id exchange needed.
+        # --- Allocate a TURN relay for this session ---
+        # Both peers independently derive the same server ranking from the shared
+        # plugin_id via rendezvous hashing, so no server-id exchange is needed.
+        client = self.turn_clients.get(self.plugin_id)
+        if client is None:
             groups = get_infra(self.af, UDP, "TURN", no=100)
             servers = rendezvous_rank(self.plugin_id, [g[0] for g in groups])
             client = await get_first_working_turn_client(
-                self.af,
-                servers,
-                self.nic,
-                self.msg_cb,
+                self.af, servers, self.nic, self.msg_cb,
             )
 
-            # Guard against a concurrent run() that raced through the above
-            # and already stored a client — reuse that one, discard ours.
+            # A concurrent run() may have raced through the await above and
+            # already stored a client — reuse it and discard ours.
             existing = self.turn_clients.get(self.plugin_id)
             if existing is not None:
                 await client.close()
@@ -40,15 +38,20 @@ class TURNPlugin(TraversalPlugin):
             else:
                 self.turn_clients[self.plugin_id] = client
 
-        # Process a reply carrying the remote peer's TURN relay info.
+        # --- Accept the peer's relay (reply path only) ---
+        # When the peer's TURNMsg arrives, whitelist their relay address so
+        # the TURN server will forward their traffic to us.
         if reply is not None:
             dest_peer = reply.payload.peer_tup
             dest_relay = reply.payload.relay_tup
             already_accepted = await client.accept_peer(dest_peer, dest_relay)
 
+            # Unblock any initiating run() that is waiting for the peer's info.
             if not self.ready.done():
                 self.ready.set_result(client)
 
+            # If both sides have already whitelisted each other, the relay
+            # channel is fully established — nothing more to send.
             if already_accepted:
                 if not self.result.done():
                     self.result.set_result(client)
@@ -60,7 +63,7 @@ class TURNPlugin(TraversalPlugin):
                 self.node_id[:8],
             )
 
-        # Build and send our TURN signaling message.
+        # --- Advertise our relay address to the peer ---
         msg = TURNMsg({
             "payload": {
                 "peer_tup": await client.client_tup_future,
@@ -70,7 +73,8 @@ class TURNPlugin(TraversalPlugin):
         msg.meta.plugin_name = "turn"
         await self.send_signal_msg(msg)
 
-        # Wait for the remote side to whitelist us.
+        # --- Wait for the peer to whitelist our relay ---
+        # self.ready is resolved by a second run() call when the peer's reply arrives.
         pipe = await self.ready
         if not self.result.done():
             self.result.set_result(pipe)
@@ -89,7 +93,8 @@ class TURNPlugin(TraversalPlugin):
         """
         connection_succeeded = False
         try:
-            self.result.result()   # raises if pending, cancelled, or exception
+            # raises if pending, cancelled, or exception
+            self.result.result()
             connection_succeeded = True
         except Exception:
             pass
@@ -101,9 +106,6 @@ class TURNPlugin(TraversalPlugin):
 
         if not self.ready.done():
             self.ready.cancel()
-        if not self.result.done():
-            self.result.cancel()
-
 
 class TURNPluginFactory:
     def __init__(self, msg_cb=None, node_id=""):
@@ -124,4 +126,5 @@ class TURNPluginFactory:
                 await client.close()
             except Exception:
                 pass
+
         self.turn_clients.clear()

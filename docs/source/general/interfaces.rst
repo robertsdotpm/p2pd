@@ -1,6 +1,9 @@
 Interfaces
 ===========================
 
+.. NOTE::
+    Interface detection is provided by `aionetiface <https://pypi.org/project/aionetiface/>`_, a dependency that is installed automatically with p2pd. All interface classes and functions shown here are accessible via ``from p2pd import *``.
+
 All network programming in P2PD starts with the network interface card. Usually
 your computer will have a 'default' interface that traffic is sent
 down based on various routing methods. Let's start by loading this default

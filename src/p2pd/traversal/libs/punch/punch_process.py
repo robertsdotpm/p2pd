@@ -104,11 +104,3 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
             )
 
 
-async def workspace():
-    return
-    _, proc_pool = await get_pp_executors()
-    future = await start_punching_process(args=(), proc_pool=proc_pool)
-    print(future)
-
-if __name__ == "__main__":
-    async_run(workspace())
