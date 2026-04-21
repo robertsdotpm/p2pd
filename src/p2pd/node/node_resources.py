@@ -38,5 +38,5 @@ class NodeResources:
         for closeable in self.closeables:
             try:
                 await closeable.close()
-            except Exception:
+            except (OSError, asyncio.TimeoutError):
                 log_exception()

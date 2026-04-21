@@ -43,6 +43,6 @@ async def get_first_working_turn_client(af, servers, nic, msg_cb):
                 af, server, nic, msg_cb=msg_cb,
             )
             return turn_client
-        except Exception:
+        except (OSError, ConnectionError, asyncio.TimeoutError):
             log_exception()
             continue

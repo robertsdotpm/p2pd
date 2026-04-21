@@ -1,5 +1,6 @@
 import asyncio
 import io
+import struct
 from struct import unpack
 from hashlib import md5
 from aionetiface import *
@@ -20,7 +21,7 @@ def turn_parse_msg(buf):
         turn_method = b_and(turn_msg.msg_type, b"\x00\x0f")
         turn_status = b_and(turn_msg.msg_type, b"\x01\x10")
         return turn_msg, turn_method, turn_status
-    except Exception:
+    except (ValueError, struct.error):
         return None, None, None
 
 """
@@ -260,7 +261,7 @@ async def process_replies(self):
         # Mostly details for relaying and authentication.
         try:
             error_code, error_msg = await process_attributes(self.turn_pipe.route.af, self, turn_msg)
-        except Exception:
+        except (OSError, ValueError):
             log_exception()
             continue
 

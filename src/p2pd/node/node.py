@@ -81,7 +81,7 @@ class Node(Daemon):
             pipe_like = (Pipe, PipeClient, TCPClientProtocol, PipeEvents)
             if isinstance(result, pipe_like):
                 result.add_msg_cb(self.msg_cb)
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             log_exception()
 
     def pipe_future(self, pipe_id):

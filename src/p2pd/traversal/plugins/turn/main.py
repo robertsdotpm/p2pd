@@ -96,7 +96,7 @@ class TURNPlugin(TraversalPlugin):
             # raises if pending, cancelled, or exception
             self.result.result()
             connection_succeeded = True
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             pass
 
         if not connection_succeeded:
@@ -124,7 +124,7 @@ class TURNPluginFactory:
         for client in list(self.turn_clients.values()):
             try:
                 await client.close()
-            except Exception:
+            except (OSError, asyncio.TimeoutError):
                 pass
 
         self.turn_clients.clear()

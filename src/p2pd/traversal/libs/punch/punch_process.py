@@ -39,7 +39,7 @@ def punching_process(puncher, reverse_server_dest, stop_reader):
         # On Windows, sometimes the signal still gets through.
         # Catching it here ensures the worker dies silently.
         pass
-    except Exception:
+    except (OSError, ConnectionError):
         log_exception()
 
 async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
@@ -77,7 +77,7 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
         return punch_process_connection
     except (asyncio.TimeoutError, asyncio.CancelledError) as e:
         log("start_punching_process timed out or cancelled: " + repr(e))
-    except Exception as e:
+    except (OSError, ConnectionError) as e:
         log_exception()
     finally:
         # Always close the listen pipe to release the bound port / fd.

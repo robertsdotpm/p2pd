@@ -192,10 +192,10 @@ class TURNClient(PipeEvents):
                         count=5,
                         timeout=5
                     )
-                except Exception:
+                except (OSError, ConnectionError, asyncio.TimeoutError):
                     try:
                         await self.reconnect(n=1)
-                    except Exception:
+                    except (OSError, ConnectionError, asyncio.TimeoutError):
                         log_exception()
                         continue
 

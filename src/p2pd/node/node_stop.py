@@ -9,7 +9,7 @@ async def close_helper(p):
         await p.close()
     except AlreadyClosedError:
         pass
-    except Exception as e:
+    except (OSError, asyncio.TimeoutError):
         log_exception()
         log("Error closing " + str(p))
 
@@ -44,7 +44,7 @@ async def node_stop(node):
             if result.done():
                 try:
                     pipe = result.result()
-                except Exception:
+                except (Exception, asyncio.CancelledError):
                     # Plugin future completed with an exception; nothing to close.
                     continue
                 if hasattr(pipe, "close"):

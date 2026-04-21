@@ -239,7 +239,7 @@ class TraversalManager():
             # Convert to bytes and send via MQTT.
             buf = to_s(sig_msg_to_buf(msg, h_to_b(plugin.dest_map["pub_key_hex"])))
             await plugin.sig_pipe.send(buf)
-        except Exception:
+        except (OSError, ConnectionError, asyncio.TimeoutError):
             log_exception()
 
     # Receive a signal message from the router and pass it to a plugin.
@@ -290,7 +290,7 @@ class TraversalManager():
         for plugin in list(self.plugins.values()):
             try:
                 await close_plugin(plugin, self.plugins, self.inbound_pipes)
-            except Exception:
+            except (OSError, asyncio.TimeoutError):
                 log_exception()
 
         await cancel_tasks(self.tasks)

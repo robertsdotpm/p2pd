@@ -112,7 +112,7 @@ class Nickname():
                         )
                         if pipe is None:
                             return (af, index, None)
-                    except Exception:
+                    except (OSError, ConnectionError, asyncio.TimeoutError):
                         log_exception()
                         return (af, index, None)
                     finally:
@@ -151,7 +151,7 @@ class Nickname():
                     if ret is None: continue
                     if ret.value is not None:
                         return offset
-                except Exception:
+                except (OSError, ConnectionError, asyncio.TimeoutError):
                     log_exception()
 
         # Schedule store tasks at all PNP servers.
@@ -188,7 +188,7 @@ class Nickname():
                         return ret
                 except asyncio.CancelledError:
                     raise
-                except Exception:
+                except (OSError, ConnectionError, asyncio.TimeoutError):
                     log_exception()
 
         # Convert TLD to client offset list.
@@ -233,7 +233,7 @@ class Nickname():
                     ret = await client.delete(name, client.kp)
                     if ret is not None:
                         return ret
-                except Exception:
+                except (OSError, ConnectionError, asyncio.TimeoutError):
                     log_exception()
 
         tasks = []

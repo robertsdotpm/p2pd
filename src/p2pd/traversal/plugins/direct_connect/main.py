@@ -28,7 +28,7 @@ class DirectConnect(TraversalPlugin):
         # Connect to destination.
         try:
             pipe = await Pipe(TCP, dest, route).connect()
-        except Exception:
+        except (OSError, ConnectionError, asyncio.TimeoutError):
             log_exception()
             pipe = None
 

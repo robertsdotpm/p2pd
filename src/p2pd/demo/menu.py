@@ -40,7 +40,7 @@ async def connect_option(node, con_opts):
     # is wrapped so that connection timeouts and failures are handled gracefully.
     try:
         plugin = await node.connect(af, route_type, dest_addr, plugin_name)
-    except Exception as e:
+    except (OSError, ConnectionError, asyncio.TimeoutError) as e:
         cout("Connection error: " + str(e))
         return "menu"
 
@@ -87,7 +87,7 @@ async def nickname_option(node):
     try:
         ret = await node.nickname(choice)
         cout(fstr("Nickname registered = {0}", (str(ret),)))
-    except Exception:
+    except (OSError, ConnectionError, asyncio.TimeoutError):
         cout("Nickname taken.")
     
     return "menu"
@@ -98,7 +98,7 @@ async def stop_nodes_option(nodes):
     for n in nodes:
         try:
             await n.close()
-        except Exception:
+        except (OSError, asyncio.TimeoutError):
             log("exception in stop nodes")
             log_exception()
 

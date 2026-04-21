@@ -245,7 +245,7 @@ async def discover_upnp_devices(af, nic):
             reply = ParseHTTPResponse(out)
             await pipe.close()
             return [reply]
-        except Exception:
+        except (OSError, ValueError):
             log_exception()
             continue
 
@@ -283,7 +283,7 @@ async def port_forward_from_multicast(af, interface, ext_port, src_tup, desc, pr
         #print("multi forward ", forward_success)
 
         return forward_success
-    except Exception:
+    except (OSError, ConnectionError, asyncio.TimeoutError, ValueError):
         what_exception()
         log_exception()
         return False

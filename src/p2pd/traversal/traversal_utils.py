@@ -229,7 +229,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             # Delete unused futures on failure.
             if pipe_id in pp.node.inbound_pipes:
                 del pp.node.inbound_pipes[pipe_id]
-        except Exception:
+        except (OSError, ConnectionError, asyncio.TimeoutError):
             log_exception()
 
     # Use an AF supported by both.
@@ -384,5 +384,5 @@ async def close_plugin(plugin, plugins, inbound_pipes):
             result = close_fn()
             if asyncio.iscoroutine(result):
                 await result
-        except Exception:
+        except (OSError, asyncio.TimeoutError):
             log_exception()

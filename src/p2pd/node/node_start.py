@@ -66,7 +66,7 @@ async def load_network_interfaces(node):
             node.ifs = await load_interfaces(if_names, Interface)
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except (OSError, asyncio.TimeoutError):
             log_exception()
             node.ifs = []
 

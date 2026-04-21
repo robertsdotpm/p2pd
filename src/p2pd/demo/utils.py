@@ -179,7 +179,7 @@ async def get_dest_addr(node, last_addr):
             addr_bytes, _, source = await resolve_pnp_addr(node, dest_addr)
             cout(fstr("Resolved via {0}: {1}", (source, addr_bytes,)))
             return addr_bytes
-        except Exception as e:
+        except (OSError, ConnectionError, asyncio.TimeoutError, ValueError) as e:
             cout(fstr("Nickname lookup failed ({0}).", (e,)))
             cout("Please paste the full serialized node address instead.")
             fallback = await ainput("Address: ")

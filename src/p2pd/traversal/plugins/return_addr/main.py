@@ -10,7 +10,7 @@ class ReturnAddrPlugin(TraversalPlugin):
         # Send this message to the dest_addr for this plugin instance.
         try:
             await self.send_signal_msg(msg)
-        except Exception:
+        except (OSError, ConnectionError, asyncio.TimeoutError):
             log_exception()
 
         self.result.set_result("Done")

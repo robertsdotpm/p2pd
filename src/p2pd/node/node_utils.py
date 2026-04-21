@@ -142,7 +142,7 @@ async def close_idle_pipes(node):
                 await asyncio.wait_for(pipe.close(), timeout=2)
             except asyncio.TimeoutError:
                 log("close idle pipe close timeout")
-            except Exception:
+            except (OSError, ConnectionError):
                 log_exception()
                 log("unknown exception for close pipe in close_idle_pipes.")
 
@@ -183,7 +183,7 @@ def worker_init():
     try:
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    except Exception:
+    except (OSError, AttributeError):
         # Fallback for edge cases or embedded environments
         pass
 
@@ -195,7 +195,7 @@ async def get_pp_executors(workers=None):
         pp_executor = ProcessPoolExecutor(max_workers=workers, initializer=worker_init)
     except asyncio.CancelledError:
         raise
-    except Exception:
+    except (OSError, RuntimeError):
         """
         Not all platform have a working implementation of sem_open / semaphores.
         Android is one such platform. It does support multiprocessing but
@@ -211,7 +211,7 @@ async def load_machine_id(app_id, netifaces):
         return hashed_machine_id(app_id)
     except asyncio.CancelledError:
         raise
-    except Exception:
+    except (OSError, ValueError):
         return await fallback_machine_id(netifaces, app_id)
 
 async def listen_on_ifs(node):
@@ -246,7 +246,7 @@ async def remote_reachability_cb(reachability, _msg, client_tup, pipe):
             future = reachability[af][nic.id]
             if not future.done():
                 future.set_result(True)
-    except Exception:
+    except (OSError, ValueError, KeyError, AttributeError):
         log("unknown exception in reachability cb")
         log_exception()
 

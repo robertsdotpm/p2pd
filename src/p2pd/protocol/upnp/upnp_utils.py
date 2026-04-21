@@ -159,7 +159,7 @@ async def get_upnp_forwarding_services(route, dest, path):
         log("upnp got:" + str(dest))
         if len(services):
             return (dest, services)
-    except Exception:
+    except (OSError, ValueError, KeyError):
         log(fstr("Failed to get root xml {0} {1}", (dest, path,)))
         log_exception()
     

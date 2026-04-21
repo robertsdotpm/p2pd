@@ -47,7 +47,7 @@ def timestamp_from_ntp(server=NTP_SERVER, port=NTP_PORT, retries=MAX_NTP_RETRIES
 
         except socket.timeout:
             time.sleep(0.1)
-        except Exception as e:
+        except (OSError, struct.error):
             # Handle other socket errors or unpacking issues
             time.sleep(0.1)
 
@@ -177,7 +177,7 @@ def wait_for_first_with_data(sockets, timeout=5.0):
                     # let caller handle it if needed
                 except BlockingIOError:
                     continue  # not actually ready
-                except Exception:
+                except OSError:
                     continue  # ignore closed/reset sockets
     finally:
         sel.close()
@@ -196,7 +196,7 @@ def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
         for loser in sock_list:
             try:
                 loser.shutdown(socket.SHUT_RDWR)
-            except Exception:
+            except OSError:
                 pass
 
             loser.close()
