@@ -251,8 +251,8 @@ class PunchMsg(ProtoMsg):
             raise Exception("bad punch mode.")
         
         # Remote address checks.
-        cidr = af_to_cidr(af)
-        ipr = IPRange(dest_s, cidr=cidr)
+        host_limit = af_bitlen(af)
+        ipr = IPRange(dest_s, host_limit=host_limit)
         if punch_mode == TCP_PUNCH_REMOTE:
             # Private address indicate for remote punching?
             if ipr.is_private:

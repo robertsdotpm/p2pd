@@ -253,7 +253,7 @@ class TestSTUN(unittest.IsolatedAsyncioTestCase):
         ip = await self._get_wan_ip(IP4)
         if ip is None:
             self.skipTest("No STUN server reachable via IPv4")
-        ipr = IPRange(ip, cidr=32)
+        ipr = IPRange(ip, host_limit=32)
         self.assertTrue(ipr.is_public,
             f"STUN should return a public IP, got: {ip}")
 
@@ -278,7 +278,7 @@ class TestSTUN(unittest.IsolatedAsyncioTestCase):
         except Exception:
             self.skipTest("STUN TCP unreachable")
         if ip:
-            ipr = IPRange(ip, cidr=32)
+            ipr = IPRange(ip, host_limit=32)
             self.assertTrue(ipr.is_public,
                 f"STUN TCP should return a public IP, got: {ip}")
 
