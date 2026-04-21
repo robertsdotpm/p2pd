@@ -5,15 +5,11 @@ from ...traversal_plugin import TraversalPlugin
 
 class DirectConnect(TraversalPlugin):
     async def run(self, reply=None):
-        print("in direct connect plugin")
-
         # Connect to this address.
         dest = (
             str(self.dest_info["ip"]),
             self.dest_info["port"],
         )
-
-        print("direct connect dest = ", dest)
 
         # (1) Get first interface for AF.
         # (2) Build a 'route' from it with it's main NIC IP.
@@ -33,7 +29,6 @@ class DirectConnect(TraversalPlugin):
         try:
             pipe = await Pipe(TCP, dest, route).connect()
         except Exception:
-            print("direct connect pipe open failed")
             log_exception()
             pipe = None
 

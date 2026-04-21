@@ -298,7 +298,7 @@ class TestTraversalManagerInit(unittest.TestCase):
 
     def test_install_plugin_missing_class_raises(self):
         tm = TraversalManager(None, None)
-        with self.assertRaises((AssertionError, KeyError)):
+        with self.assertRaises((ValueError, AssertionError, KeyError)):
             tm.install_plugin("bad", {})
 
 

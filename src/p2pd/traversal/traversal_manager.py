@@ -48,7 +48,8 @@ class TraversalManager():
         self.cleanup_task = None
 
     def install_plugin(self, name, conf):
-        assert("class" in conf)
+        if "class" not in conf:
+            raise ValueError("plugin conf must include a 'class' key")
         conf = {
             "class": conf["class"],
             "timeout": conf.get("timeout", 10),
@@ -237,7 +238,6 @@ class TraversalManager():
 
             # Convert to bytes and send via MQTT.
             buf = to_s(sig_msg_to_buf(msg, h_to_b(plugin.dest_map["pub_key_hex"])))
-            print("sending ", msg.to_dict())
             await plugin.sig_pipe.send(buf)
         except Exception:
             log_exception()
@@ -246,7 +246,6 @@ class TraversalManager():
     # Called by the MQTT client as: handler(msg, src_pk, queue_id, client)
     async def recv_signal_msg(self, msg, src_pk_hex, pipe_id_hex, client):
         msg = try_unpack_msg(to_b(msg), self.kp.private_key, SIG_PROTO)
-        print("recv ", msg.to_dict())
 
         # Message has expired.
         if int(self.router.get_time()) >= msg.meta.ttl:

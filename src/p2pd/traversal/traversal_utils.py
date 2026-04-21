@@ -71,14 +71,8 @@ def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=T
             they're bridged.) Keep this edge-case here.
             """
             if not has_set_bind:
-                # Choose the same NIC IP for both sides.
-                # That chooses the same interface.
-                if different_ifs_on_host and 0: ## Bug here.
-                    return sorted([
-                        dest_info["nic"],
-                        src_info["nic"]
-                    ])[0]
-                
+                pass
+
             # Only if LAN or same machine.
             if not (same_pc or same_lan):
                 continue
@@ -146,25 +140,21 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             addressing and relationships between the
             two machines (deep networking specific.)
             """
-            dest_info["ip"] = str(
-                select_dest_ipr(
-                    af,
-                    pp.same_machine,
-                    src_info,
-                    dest_info,
-                    [use_addr_type],
-
-                    # can you make this case
-                    # run for all
-                    # try it
-                    has_set_bind,
-                )
+            dest_ip = select_dest_ipr(
+                af,
+                pp.same_machine,
+                src_info,
+                dest_info,
+                [use_addr_type],
+                has_set_bind,
             )
 
             # Need a destination address.
             # Possibly a different address type will work.
-            if dest_info["ip"] == "None":
+            if dest_ip is None:
                 return
+
+            dest_info["ip"] = str(dest_ip)
             
             # Detailed logging details.
             path_txt = f_path_txt(addr_type)

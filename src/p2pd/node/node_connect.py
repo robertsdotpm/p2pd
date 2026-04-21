@@ -42,6 +42,8 @@ async def resolve_pnp_addr(node, pnp_addr):
         return pnp_addr, None, None
 
     pkt = await node.nick_client.get(pnp_addr)
+    if pkt is None or pkt.value is None:
+        raise Exception(fstr("Nickname '{0}' not found", (pnp_addr,)))
     addr_bytes = pkt.value
     dest_vk = pkt.vkc
     source = "nickname"
