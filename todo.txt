@@ -174,3 +174,4 @@ otherwise they will just build up.
 - if node server cant listen on an ip in node does it crash?
 - put not overwriting same name
    - 1 second update is that bad? lets add a comment somewhere
+    - going to have to edit schema on remote and local 
