@@ -308,17 +308,17 @@ class TURNMsg(ProtoMsg):
     def __init__(self, data, enum=SIG_TURN):
         super().__init__(data, enum)
 
-class ConMsg(ProtoMsg):        
-    def __init__(self, data={}, enum=SIG_CON):
-        super().__init__(data, enum)
+class ConMsg(ProtoMsg):
+    def __init__(self, data=None, enum=SIG_CON):
+        super().__init__(data or {}, enum)
 
-class GetAddr(ProtoMsg):        
-    def __init__(self, data={}, enum=SIG_GET_ADDR):
-        super().__init__(data, enum)
+class GetAddr(ProtoMsg):
+    def __init__(self, data=None, enum=SIG_GET_ADDR):
+        super().__init__(data or {}, enum)
 
-class ReturnAddr(ProtoMsg):        
-    def __init__(self, data={}, enum=SIG_RETURN_ADDR):
-        super().__init__(data, enum)
+class ReturnAddr(ProtoMsg):
+    def __init__(self, data=None, enum=SIG_RETURN_ADDR):
+        super().__init__(data or {}, enum)
 
 SIG_PROTO = {
     SIG_CON: [ConMsg, P2P_DIRECT, 5],

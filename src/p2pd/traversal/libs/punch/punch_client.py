@@ -101,16 +101,6 @@ class PunchClient:
 
         self.max_sleep = self.params["max_sleep"]
 
-        # Sanity check -- don't punch to self.
-        if our_ip and 0: # TODO: disabled
-            if IPR(dest_ip, af=self.af) == IPR(our_ip, af=self.af):
-                """
-                No longer want to maintain bizzare and useless features.
-                There's no reason to do this, not even for testing.
-                Testing can be done from VMs or virtual interfaces.
-                """
-                raise Exception("Punching to self is not supported.")
-            
         # Normalise all ips.
         # This strips all cidrs, $ stuff etc.
         self.dest_ip = ip_norm(self.dest_ip)

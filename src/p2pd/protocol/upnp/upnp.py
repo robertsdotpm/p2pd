@@ -70,7 +70,7 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
             pipe = await Pipe(TCP, dest, route, conf=UPNP_CONF).connect()
             await pipe.close()
             return dest
-        except Exception:
+        except (OSError, ConnectionError, asyncio.TimeoutError):
             return None
 
     # Try to load forwarding services at path and use them.
@@ -214,7 +214,7 @@ async def discover_upnp_devices(af, nic):
     dest = (UPNP_IP[af], UPNP_PORT)
     try:
         pipe = await Pipe(UDP, dest, route, sock=sock, conf=sock_conf).connect()
-    except Exception:
+    except (OSError, ConnectionError):
         log_exception()
         pipe = None
 
@@ -357,7 +357,7 @@ if __name__ == "__main__":
         
         print(src_ip)
         task = await port_forward(af, nic, 60001, (src_ip, 8000), "test")
-        while 1:
+        while True:
             await asyncio.sleep(1)
 
 

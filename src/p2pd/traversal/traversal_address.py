@@ -35,7 +35,7 @@ async def get_updated_addr_bytes(node, dest_addr):
         updated_bytes = await get_updated_addr_from_mqtt(node, addr_bytes)
         if updated_bytes:
             return updated_bytes
-    except Exception:
+    except (OSError, ConnectionError, asyncio.TimeoutError):
         log_exception()
 
     return addr_bytes

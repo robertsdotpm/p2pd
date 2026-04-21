@@ -254,7 +254,7 @@ class Nickname():
                 if client is not None and hasattr(client, "close"):
                     try:
                         await client.close()
-                    except Exception:
+                    except (OSError, asyncio.TimeoutError):
                         pass
                 self.clients[af][index] = None
         self.started = False

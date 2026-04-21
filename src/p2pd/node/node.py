@@ -22,15 +22,15 @@ get_p2pd_install_root = get_aionetiface_install_root
 
 # Main class for the P2P node server.
 class Node(Daemon):
-    def __init__(self, ifs=[], ip=[], port=NODE_PORT, stop_rw=None, conf=NODE_CONF):
+    def __init__(self, ifs=None, ip=None, port=NODE_PORT, stop_rw=None, conf=NODE_CONF):
         super().__init__()
         self.conf = dict_child(conf, NET_CONF)
         self.install_path = resolve_install_path(self.conf)
         self.stop_reader, self.stop_writer = make_stop_pair(stop_rw)
 
         # network identity.
-        self.ifs = ifs
-        self.listen_ips = norm_listen_ips(ip)
+        self.ifs = ifs if ifs is not None else []
+        self.listen_ips = norm_listen_ips(ip if ip is not None else [])
         self.listen_port = port
         if self.listen_ips:
             apply_listen_ips(self)

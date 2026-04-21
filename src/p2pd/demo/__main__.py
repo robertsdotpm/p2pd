@@ -156,7 +156,7 @@ async def main():
             # Signal the stop socket so the main loop exits.
             try:
                 stop_rw[1].send(b"Shut down.")
-            except Exception:
+            except OSError:
                 pass
 
             # Unblock any ainput() call waiting in an executor thread.
@@ -171,7 +171,7 @@ async def main():
                 if pp is not None:
                     try:
                         pp.shutdown(wait=False)
-                    except Exception:
+                    except RuntimeError:
                         pass
                     nodes[0].pp_executor = None
 

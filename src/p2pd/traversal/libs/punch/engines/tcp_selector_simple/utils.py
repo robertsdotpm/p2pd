@@ -15,8 +15,8 @@ def sock_opt_voodoo(s):
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-    except Exception:
-        pass # SO_REUSEPORT is not available on all systems
+    except OSError:
+        pass  # SO_REUSEPORT is not available on all systems
 
     """
     try:

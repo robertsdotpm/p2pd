@@ -178,7 +178,7 @@ async def process_replies(self):
         # Async wait for up to N seconds for new messages.
         try:
             out = await self.turn_pipe.recv(timeout=1)
-        except Exception:
+        except (asyncio.TimeoutError, OSError):
             await asyncio.sleep(1)
             continue
 

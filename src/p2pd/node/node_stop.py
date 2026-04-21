@@ -27,7 +27,7 @@ async def node_stop(node):
     # Send stop signal (any amount of data.)
     try:
         node.stop_writer.send(b"Meow")
-    except Exception:
+    except OSError:
         pass
 
     # Stop error logging thread.
@@ -50,7 +50,7 @@ async def node_stop(node):
                 if hasattr(pipe, "close"):
                     try:
                         await close_with_timeout(pipe)
-                    except Exception:
+                    except (OSError, asyncio.TimeoutError):
                         pass
 
     if getattr(node, "resources", None):

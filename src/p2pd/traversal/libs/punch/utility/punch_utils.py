@@ -130,14 +130,14 @@ def wait_for_one_remaining(sockets, timeout=5.0):
                     remaining.discard(s)
                     try:
                         sel.unregister(s)
-                    except Exception:
+                    except OSError:
                         pass
-            except Exception:
+            except OSError:
                 # Any error (connection reset, etc) counts as "gone"
                 remaining.discard(s)
                 try:
                     sel.unregister(s)
-                except Exception:
+                except OSError:
                     pass
 
     sel.close()

@@ -11,7 +11,7 @@ here = path.abspath(path.dirname(__file__))
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
-install_reqs = ["aionetiface", "namebump", "sidewire"]
+install_reqs = ["aionetiface", "namebump", "sidewire", "ecdsa"]
 setup(
     version='4.0.1',
     name='p2pd',

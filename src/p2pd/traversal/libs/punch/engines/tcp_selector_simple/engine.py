@@ -67,7 +67,7 @@ def socket_event_monitor(sel, monitor_duration=CONNECT_TIMEOUT, retry_interval=R
                         sock.getpeername()
                         successful.add(sock)
                         sel.modify(sock, selectors.EVENT_READ)
-                except Exception:
+                except OSError:
                     pass
 
             # READ means either data or simultaneous-open completion traffic
@@ -80,7 +80,7 @@ def socket_event_monitor(sel, monitor_duration=CONNECT_TIMEOUT, retry_interval=R
                 except BlockingIOError:
                     # No payload yet, but socket alive
                     successful.add(sock)
-                except Exception:
+                except OSError:
                     pass
 
     return successful

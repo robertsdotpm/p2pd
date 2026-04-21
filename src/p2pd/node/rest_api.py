@@ -1,3 +1,4 @@
+import ast
 import asyncio
 import multiprocessing
 from aionetiface import *
@@ -63,10 +64,10 @@ def get_sub_params(v):
         # Matches ('ip', port)
         p = r"^[\(\[] *['\"]{1}[0-9.:%]+['\"]"
         p += r"{1}| *[,] *[0-9]+ *[\)\]]$"
-        if re.match(p, addr) == None:
+        if re.match(p, addr) is None:
             addr = "invalid addr tuple"
         else:
-            addr = eval(addr)
+            addr = ast.literal_eval(addr)
     
         sub[1] = addr
 
@@ -80,10 +81,10 @@ def load_sub_or_default(v, subs):
     return SUB_ALL
 
 class P2PDServer(RESTD):
-    def __init__(self, interfaces=[], node=None):
+    def __init__(self, interfaces=None, node=None):
         super().__init__()
         self.__name__ = "P2PDServer"
-        self.interfaces = interfaces
+        self.interfaces = interfaces if interfaces is not None else []
         self.node = node
         self.cons = {}
         self.subs = {}
@@ -388,7 +389,7 @@ class P2PDServer(RESTD):
         }
     
 # pragma: no cover
-async def start_p2pd_server(port=REST_API_PORT, ifs=[], enable_upnp=False):
+async def start_p2pd_server(port=REST_API_PORT, ifs=None, enable_upnp=False):
     print("Loading interfaces...")
     print("If you've just connected a new NIC ")
     print("there can be a slight delay until it's online.")
@@ -404,6 +405,8 @@ async def start_p2pd_server(port=REST_API_PORT, ifs=[], enable_upnp=False):
     netifaces = await aionetiface_setup_netifaces()
 
     # Load interfaces.
+    if ifs is None:
+        ifs = []
     if not len(ifs):
         # Load a list of interface names.
         if_names = await list_interfaces(netifaces=netifaces)
@@ -430,7 +433,7 @@ async def start_p2pd_server(port=REST_API_PORT, ifs=[], enable_upnp=False):
 async def p2pd_workspace():
     node = await start_p2pd_server()
     print(fstr("http://localhost:{0}/", (REST_API_PORT,)))
-    while 1:
+    while True:
         await asyncio.sleep(1)
 
 if __name__ == "__main__":

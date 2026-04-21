@@ -74,7 +74,6 @@ class TURNClient(PipeEvents):
 
         # Event set when protocol completed and chan messages can be sent.
         self.processing_loop_task = None
-        #self.allocate_refresher_task = None
 
         # The protocol client uses a state machine.
         # Each state has a set duration for it to be completed in.
@@ -130,7 +129,7 @@ class TURNClient(PipeEvents):
         try:
             self.turn_pipe = await Pipe(UDP, self.dest, self.route).connect()
             log(fstr("> Turn socket = {0}", (self.turn_pipe.sock,)))
-        except Exception:
+        except (OSError, ConnectionError):
             log_exception()
             self.turn_pipe = None
 
@@ -185,7 +184,7 @@ class TURNClient(PipeEvents):
 
         # Refresh allocations.
         async def refresher():
-            while 1:
+            while True:
                 await asyncio.sleep(TURN_REFRESH_EXPIRY - 60)
                 try:
                     await async_retry(
@@ -607,7 +606,7 @@ if __name__ == '__main__': # pragma: no cover
         """
 
 
-        while 1:
+        while True:
             await asyncio.sleep(1)
 
 

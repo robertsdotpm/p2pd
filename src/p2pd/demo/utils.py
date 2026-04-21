@@ -17,14 +17,14 @@ async def ainput(prompt):
         sys.stdout.flush()
         try:
             r, _, _ = select.select([sys.stdin.fileno(), ainput_interrupt_r], [], [])
-        except Exception:
+        except (OSError, IOError):
             return ""
         if sys.stdin.fileno() not in r:
             return ""  # Interrupted by shutdown signal
         try:
             line = sys.stdin.readline()
             return line.rstrip('\n') if line else ""
-        except Exception:
+        except (OSError, IOError):
             return ""
 
     fut = loop.run_in_executor(None, _blocking_input)

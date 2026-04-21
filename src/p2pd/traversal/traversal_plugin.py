@@ -18,14 +18,6 @@ class TraversalPlugin():
         self.dest_info = dest_info
         self.nic = nic
 
-        # Ensure our selected NIC is what the
-        # remote peer wanted to use for the technique.
-        """
-        if reply is not None:
-            if reply.routing.dest_index != src_info["if_index"]:
-                raise Exception("Invalid NIC loaded for plugin.")
-        """
-            
     def set_context(self, route_type, same_machine, set_bind, timeout):
         self.route_type = route_type
         self.same_machine = same_machine
