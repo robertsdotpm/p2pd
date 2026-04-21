@@ -36,7 +36,7 @@ class TraversalManager():
 
         # Inbound connections from the node server.
         # Futures by con id -> pipe.
-        self.inbound_pipes = inbound_pipes if inbound_pipes else {}
+        self.inbound_pipes = inbound_pipes if inbound_pipes is not None else {}
 
         # Long-lived background tasks spawned by signal handling.
         self.tasks = [] 

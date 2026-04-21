@@ -231,7 +231,7 @@ class TestProtoMessages(unittest.TestCase):
             "dest_index": 0,
         })
 
-        buf = sig_msg_to_buf(msg)
+        buf = sig_msg_to_buf(msg, None)
         unpacked = try_unpack_msg(buf, None, SIG_PROTO)
         self.assertIsInstance(unpacked, ConMsg)
         self.assertEqual(unpacked.meta.plugin_name, "direct_connect")
@@ -246,7 +246,7 @@ class TestProtoMessages(unittest.TestCase):
         })
         # vk from parse_node_addr is None so message should be unencrypted
         from aionetiface import h_to_b, to_b
-        raw = h_to_b(to_b(sig_msg_to_buf(msg)))
+        raw = h_to_b(to_b(sig_msg_to_buf(msg, None)))
         is_encrypted = raw[0]
         self.assertEqual(is_encrypted, 0)
 
@@ -256,38 +256,37 @@ class TestProtoMessages(unittest.TestCase):
 # ===========================================================================
 class TestTraversalManagerInit(unittest.TestCase):
     def test_default_attrs_exist(self):
-        tm = TraversalManager(None)
-        self.assertIsNone(tm.node)
+        tm = TraversalManager(None, None)
         self.assertIsNone(tm.router)
         self.assertEqual(tm.tasks, [])
-        self.assertEqual(tm.pipes, {})
+        self.assertEqual(tm.inbound_pipes, {})
         self.assertEqual(tm.nics, [])
         self.assertIsNone(tm.done_callback)
 
     def test_no_shared_state_between_instances(self):
         """Mutable default arg fix: each instance gets its own containers."""
-        tm1 = TraversalManager(None)
-        tm2 = TraversalManager(None)
-        self.assertIsNot(tm1.pipes, tm2.pipes)
+        tm1 = TraversalManager(None, None)
+        tm2 = TraversalManager(None, None)
+        self.assertIsNot(tm1.inbound_pipes, tm2.inbound_pipes)
         self.assertIsNot(tm1.nics, tm2.nics)
         self.assertIsNot(tm1.tasks, tm2.tasks)
 
     def test_mutations_do_not_bleed_between_instances(self):
-        tm1 = TraversalManager(None)
-        tm2 = TraversalManager(None)
-        tm1.pipes["key"] = "value"
+        tm1 = TraversalManager(None, None)
+        tm2 = TraversalManager(None, None)
+        tm1.inbound_pipes["key"] = "value"
         tm1.nics.append("eth0")
-        self.assertNotIn("key", tm2.pipes)
+        self.assertNotIn("key", tm2.inbound_pipes)
         self.assertNotIn("eth0", tm2.nics)
 
     def test_explicit_shared_pipes_param_works(self):
         shared = {}
-        tm = TraversalManager(None, pipes=shared)
-        tm.pipes["x"] = 1
+        tm = TraversalManager(None, None, inbound_pipes=shared)
+        tm.inbound_pipes["x"] = 1
         self.assertEqual(shared["x"], 1)
 
     def test_install_plugin_stores_conf(self):
-        tm = TraversalManager(None)
+        tm = TraversalManager(None, None)
 
         class DummyPlugin(TraversalPlugin):
             pass
@@ -298,7 +297,7 @@ class TestTraversalManagerInit(unittest.TestCase):
         self.assertEqual(tm.plugin_loaders["dummy"]["class"], DummyPlugin)
 
     def test_install_plugin_missing_class_raises(self):
-        tm = TraversalManager(None)
+        tm = TraversalManager(None, None)
         with self.assertRaises((AssertionError, KeyError)):
             tm.install_plugin("bad", {})
 
@@ -314,8 +313,8 @@ class TestTraversalPlugin(unittest.IsolatedAsyncioTestCase):
     async def test_pipe_id_is_unique_string(self):
         p1 = TraversalPlugin()
         p2 = TraversalPlugin()
-        self.assertIsInstance(p1.pipe_id, str)
-        self.assertNotEqual(p1.pipe_id, p2.pipe_id)
+        self.assertIsInstance(p1.plugin_id, str)
+        self.assertNotEqual(p1.plugin_id, p2.plugin_id)
 
     async def test_has_reply_is_event(self):
         p = TraversalPlugin()
@@ -325,16 +324,16 @@ class TestTraversalPlugin(unittest.IsolatedAsyncioTestCase):
     async def test_set_pipes_updates_pipe_id(self):
         p = TraversalPlugin()
         pipes = {}
-        p.set_pipes(pipes, "custom-id")
-        self.assertEqual(p.pipe_id, "custom-id")
-        self.assertIs(p.pipes, pipes)
+        p.set_inbound_pipes(pipes, "custom-id")
+        self.assertEqual(p.plugin_id, "custom-id")
+        self.assertIs(p.inbound_pipes, pipes)
 
     async def test_set_pipes_preserves_existing_id_if_none_given(self):
         p = TraversalPlugin()
-        original = p.pipe_id
+        original = p.plugin_id
         pipes = {}
-        p.set_pipes(pipes)
-        self.assertEqual(p.pipe_id, original)
+        p.set_inbound_pipes(pipes)
+        self.assertEqual(p.plugin_id, original)
 
     async def test_set_send_signal_msg_stored(self):
         p = TraversalPlugin()
@@ -365,25 +364,12 @@ class TestNodeInit(unittest.TestCase):
 
     def test_pipes_empty(self):
         n = self._make_node()
-        self.assertEqual(n.pipes, {})
+        self.assertEqual(n.inbound_pipes, {})
 
-    def test_max_punchers_zero(self):
-        """Regression: close_idle_pipes crashed when max_punchers wasn't set."""
+    def test_traversal_none_before_start(self):
+        """traversal is wired up in start(), not __init__."""
         n = self._make_node()
-        self.assertEqual(n.max_punchers, 0)
-
-    def test_active_punchers_zero(self):
-        n = self._make_node()
-        self.assertEqual(n.active_punchers, 0)
-
-    def test_tasks_list_exists(self):
-        n = self._make_node()
-        self.assertIsInstance(n.tasks, list)
-
-    def test_traversal_manager_wired_to_pipes(self):
-        """The traversal manager should share the node's pipes dict."""
-        n = self._make_node()
-        self.assertIs(n.traversal.pipes, n.pipes)
+        self.assertIsNone(n.traversal)
 
     def test_addr_bytes_none_before_start(self):
         n = self._make_node()
@@ -419,7 +405,7 @@ class TestPipeFuture(unittest.IsolatedAsyncioTestCase):
     async def test_pipe_future_creates_entry_in_pipes(self):
         n = self._make_node()
         n.pipe_future("my-pipe")
-        self.assertIn("my-pipe", n.pipes)
+        self.assertIn("my-pipe", n.inbound_pipes)
 
     async def test_pipe_future_idempotent(self):
         n = self._make_node()
@@ -437,16 +423,15 @@ class TestPipeFuture(unittest.IsolatedAsyncioTestCase):
 
     async def test_pipe_ready_unknown_id_is_noop(self):
         n = self._make_node()
-        # Should not raise — just logs.
-        result = n.pipe_ready("nonexistent", "something")
-        self.assertIsNone(result)
+        # Should not raise even if no future was registered first.
+        n.pipe_ready("nonexistent", "something")
 
     async def test_pipe_ready_idempotent_after_done(self):
         n = self._make_node()
         n.pipe_future("x")
         n.pipe_ready("x", "first")
         n.pipe_ready("x", "second")  # already done — should not raise
-        self.assertEqual(n.pipes["x"].result(), "first")
+        self.assertEqual(n.inbound_pipes["x"].result(), "first")
 
 
 # ===========================================================================

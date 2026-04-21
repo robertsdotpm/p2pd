@@ -32,6 +32,7 @@ import asyncio
 import copy
 import sys
 import unittest
+from unittest.mock import patch
 
 import aionetiface
 from aionetiface import (
@@ -493,15 +494,16 @@ class TestTURNPluginIPv6(AsyncTestCase):
         await self.server.start()
 
         self.local_entry = make_local_turn_server_entry(af=IP6)
-        aionetiface.TURN_SERVERS.insert(0, self.local_entry)
+        self._get_infra_patcher = patch(
+            "p2pd.traversal.plugins.turn.main.get_infra",
+            return_value=[[self.local_entry]],
+        )
+        self._get_infra_patcher.start()
 
         self.clients_to_close = []
 
     async def asyncTearDown(self):
-        try:
-            aionetiface.TURN_SERVERS.remove(self.local_entry)
-        except ValueError:
-            pass
+        self._get_infra_patcher.stop()
 
         for c in self.clients_to_close:
             await async_wrap_errors(c.close())
@@ -526,10 +528,10 @@ class TestTURNPluginIPv6(AsyncTestCase):
 
     async def test_get_turn_client_ipv6_with_local_server(self):
         """
-        get_turn_client() succeeds when TURN_SERVERS[0] is our local IPv6 server.
+        get_turn_client() succeeds when pointing at our local IPv6 server.
         """
         peer_tup, relay_tup, client = await asyncio.wait_for(
-            get_turn_client(IP6, 0, self.nic),
+            get_turn_client(IP6, self.local_entry, self.nic),
             timeout=15,
         )
         self.clients_to_close.append(client)
@@ -639,18 +641,17 @@ class TestTURNPlugin(AsyncTestCase):
         self.server = TURNServer(self.nic)
         await self.server.start()
 
-        # Patch TURN_SERVERS so get_first_working_turn_client finds our server.
         self.local_entry = make_local_turn_server_entry(af=IP4)
-        aionetiface.TURN_SERVERS.insert(0, self.local_entry)
+        self._get_infra_patcher = patch(
+            "p2pd.traversal.plugins.turn.main.get_infra",
+            return_value=[[self.local_entry]],
+        )
+        self._get_infra_patcher.start()
 
         self.clients_to_close = []
 
     async def asyncTearDown(self):
-        # Remove our patched entry.
-        try:
-            aionetiface.TURN_SERVERS.remove(self.local_entry)
-        except ValueError:
-            pass
+        self._get_infra_patcher.stop()
 
         for c in self.clients_to_close:
             await async_wrap_errors(c.close())
@@ -677,12 +678,12 @@ class TestTURNPlugin(AsyncTestCase):
 
     async def test_get_turn_client_with_local_server(self):
         """
-        get_turn_client() succeeds when TURN_SERVERS[0] is our local server.
+        get_turn_client() succeeds when pointing at our local server.
         Verifies the allocation and mapped-address basics independently of
         the plugin machinery.
         """
         peer_tup, relay_tup, client = await asyncio.wait_for(
-            get_turn_client(IP4, 0, self.nic),
+            get_turn_client(IP4, self.local_entry, self.nic),
             timeout=15,
         )
         self.clients_to_close.append(client)
@@ -797,7 +798,6 @@ class TestTURNPlugin(AsyncTestCase):
             "payload": {
                 "peer_tup":  list(peer_tup),
                 "relay_tup": list(relay_tup),
-                "serv_id":   0,
             }
         })
         msg.meta.plugin_name = "turn"
@@ -807,7 +807,6 @@ class TestTURNPlugin(AsyncTestCase):
 
         self.assertEqual(tuple(unpacked.payload.peer_tup),  peer_tup)
         self.assertEqual(tuple(unpacked.payload.relay_tup), relay_tup)
-        self.assertEqual(unpacked.payload.serv_id, 0)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

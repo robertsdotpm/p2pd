@@ -59,8 +59,8 @@ for the punching algorithm. Sleep time is reduced
 based on how close the destination is.
 """
 def get_punch_mode(af, dest_ip, same_machine):
-    host_limit = af_bitlen(af)
-    dest_ipr = IPRange(dest_ip, host_limit=host_limit)
+    host_limit = 0
+    dest_ipr = IPRange(dest_ip, bitlen=host_limit)
 
     # Calculate punch mode
     if dest_ipr.is_public:

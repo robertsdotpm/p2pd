@@ -230,10 +230,10 @@ class TestSTUNClientTCPIPv4(AsyncTestCase):
         self.assertGreater(port, 0)
 
     async def test_tcp_binding_request_rfc3489_mode(self):
-        server = STUNServer(self.nic, mode=RFC3489)
+        server = STUNServer(self.nic, mode=RFC3489, port=STUN_TEST_PORT + 1)
         await server.start()
         try:
-            client = make_stun_client(self.nic, IP4, mode=RFC3489, proto=TCP)
+            client = make_stun_client(self.nic, IP4, mode=RFC3489, proto=TCP, port=STUN_TEST_PORT + 1)
             reply = await asyncio.wait_for(
                 client.get_stun_reply(),
                 timeout=10
@@ -277,10 +277,10 @@ class TestSTUNClientTCPIPv6(AsyncTestCase):
         self.assertGreater(port, 0)
 
     async def test_tcp_ipv6_binding_request_rfc3489_mode(self):
-        server = STUNServer(self.nic, mode=RFC3489)
+        server = STUNServer(self.nic, mode=RFC3489, port=STUN_TEST_PORT + 1)
         await server.start()
         try:
-            client = make_stun_client(self.nic, IP6, mode=RFC3489, proto=TCP)
+            client = make_stun_client(self.nic, IP6, mode=RFC3489, proto=TCP, port=STUN_TEST_PORT + 1)
             reply = await asyncio.wait_for(
                 client.get_stun_reply(),
                 timeout=10

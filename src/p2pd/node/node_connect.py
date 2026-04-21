@@ -33,14 +33,18 @@ def install_default_plugins(node):
 
 
 async def resolve_pnp_addr(node, pnp_addr):
-    """Resolve a PNP nickname to (addr_bytes, dest_vk), fetching the most recent address from MQTT.
-    Returns (pnp_addr, None) unchanged if pnp_addr is not a TLD name."""
+    """Resolve a PNP nickname to (addr_bytes, dest_vk, source).
+
+    source is "mqtt" if the address was refreshed via the MQTT router,
+    or "nickname" if only the namebump record was available.
+    Returns (pnp_addr, None, None) unchanged if pnp_addr is not a TLD name."""
     if not pnp_name_has_tld(pnp_addr):
-        return pnp_addr, None
+        return pnp_addr, None, None
 
     pkt = await node.nick_client.get(pnp_addr)
     addr_bytes = pkt.value
     dest_vk = pkt.vkc
+    source = "nickname"
     try:
         updated_addr_bytes = await asyncio.wait_for(
             get_updated_addr_from_mqtt(node, addr_bytes),
@@ -48,14 +52,15 @@ async def resolve_pnp_addr(node, pnp_addr):
         )
         if updated_addr_bytes:
             addr_bytes = updated_addr_bytes
+            source = "mqtt"
     except asyncio.TimeoutError:
         log("Timeout MQTT get updated bytes " + str(pnp_addr))
 
-    return addr_bytes, dest_vk
+    return addr_bytes, dest_vk, source
 
 
 async def connect(node, af, route_type, pnp_addr, plugin_name=None):
-    addr_bytes, dest_vk = await resolve_pnp_addr(node, pnp_addr)
+    addr_bytes, dest_vk, _ = await resolve_pnp_addr(node, pnp_addr)
     dest_map = parse_node_addr(addr_bytes)
     sig_pipe = await node.router.pipe(dest_map["pub_key_hex"], use_cache=True)
 

@@ -151,9 +151,8 @@ tasks are only processed after input finishes -- how to do this with async?
 
 
 
-- sometimes the interface fails to load completely. this needs to be investigated and fixed. even if rare. 
-- delete old unused tests
 - update docs
+- delete old unused tests
 - move to new repos
 - push to pypi
 - basic testing on different oses
@@ -165,12 +164,13 @@ tasks are only processed after input finishes -- how to do this with async?
         if_infos order
 
     simple design to start with but this might need to be rethought
-- get tests working again (broken due to deleting server list consts)
 - do we want to disconnect from mqtt for additional cons made
 after our minimum for our own client when a plugin is done?
 otherwise they will just build up.
   - how to avoid closing other plugins cons
 - errors dont really propogate from plugins
-
 - does same machine get set?
   - maybe if same macine use time.time in sys.clock
+- if node server cant listen on an ip in node does it crash?
+- put not overwriting same name
+   - 1 second update is that bad? lets add a comment somewhere

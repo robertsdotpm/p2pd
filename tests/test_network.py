@@ -31,7 +31,6 @@ from aionetiface import (
     STUNClient,
     TCP, UDP,
     PNP_SERVERS,
-    MQTT_SERVERS,
     get_aionetiface_install_root,
     rand_plain,
     to_s, to_h, h_to_b,
@@ -101,12 +100,12 @@ class TestSysClock(unittest.IsolatedAsyncioTestCase):
         self.assertAlmostEqual(after - before, 100, delta=1,
             msg="advance(100) should shift clock by ~100 s")
 
-    async def test_time_raises_without_start(self):
-        """SysClock.time() must raise if NTP was never loaded."""
+    async def test_time_falls_back_to_system_clock_without_start(self):
+        """SysClock.time() falls back to system clock when NTP not loaded."""
         nic = await _default_nic()
-        clock = SysClock(nic, ntp=0)  # ntp=0 means not yet synced
-        with self.assertRaises(Exception):
-            clock.time()
+        clock = SysClock(nic, ntp=0)
+        t = clock.time()
+        self.assertGreater(t, 0)
 
     async def test_get_ntp_returns_nonzero(self):
         """Low-level get_ntp() should return a positive unix timestamp."""
@@ -215,8 +214,11 @@ class TestNickname(unittest.IsolatedAsyncioTestCase):
         fqn = await asyncio.wait_for(
             self.nick.put(self.name, val1), timeout=30
         )
+        # Server uses integer-second timestamps for anti-replay; wait to get a
+        # distinct timestamp so the UPDATE is accepted.
+        await asyncio.sleep(1.1)
         await asyncio.wait_for(
-            self.nick.put(self.name, val2), timeout=30
+            self.nick.put(self.name, val2, behavior=namebump.DONT_BUMP), timeout=30
         )
         result = await asyncio.wait_for(self.nick.get(fqn), timeout=30)
         self.assertEqual(to_s(result.value), val2)
@@ -253,7 +255,7 @@ class TestSTUN(unittest.IsolatedAsyncioTestCase):
         ip = await self._get_wan_ip(IP4)
         if ip is None:
             self.skipTest("No STUN server reachable via IPv4")
-        ipr = IPRange(ip, host_limit=32)
+        ipr = IPRange(ip, bitlen=32)
         self.assertTrue(ipr.is_public,
             f"STUN should return a public IP, got: {ip}")
 
@@ -278,7 +280,7 @@ class TestSTUN(unittest.IsolatedAsyncioTestCase):
         except Exception:
             self.skipTest("STUN TCP unreachable")
         if ip:
-            ipr = IPRange(ip, host_limit=32)
+            ipr = IPRange(ip, bitlen=32)
             self.assertTrue(ipr.is_public,
                 f"STUN TCP should return a public IP, got: {ip}")
 
@@ -400,9 +402,10 @@ class TestNodeStart(unittest.IsolatedAsyncioTestCase):
             self.skipTest(f"Node startup failed: {e}")
 
         try:
-            self.assertIsNotNone(node.traversal.node,
-                "traversal.node should point back to the Node instance")
-            self.assertIs(node.traversal.node, node)
+            self.assertIsNotNone(node.traversal,
+                "traversal should be set after node start")
+            self.assertIs(node.traversal.inbound_pipes, node.inbound_pipes,
+                "traversal.inbound_pipes should share the node's inbound_pipes dict")
         finally:
             await asyncio.wait_for(node.close(), timeout=10)
 

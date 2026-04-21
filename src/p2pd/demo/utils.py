@@ -176,7 +176,8 @@ async def get_dest_addr(node, last_addr):
     if pnp_name_has_tld(dest_addr):
         cout(fstr("Resolving {0}...", (dest_addr,)))
         try:
-            addr_bytes, _ = await resolve_pnp_addr(node, dest_addr)
+            addr_bytes, _, source = await resolve_pnp_addr(node, dest_addr)
+            cout(fstr("Resolved via {0}: {1}", (source, addr_bytes,)))
             return addr_bytes
         except Exception as e:
             cout(fstr("Nickname lookup failed ({0}).", (e,)))

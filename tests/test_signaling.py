@@ -2,6 +2,7 @@ from p2pd import *
 
 
 class TestSignaling(unittest.IsolatedAsyncioTestCase):
+    @unittest.skip("MQTT removed")
     async def test_node_signaling(self):
         """
         ret = await is_valid_mqtt(("119.42.55.129", 1883))

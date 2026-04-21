@@ -29,6 +29,13 @@ can be used to pull records from your name. So it's important you give
 out the full name. Ready to learn more?
 
 .. toctree::
+   :caption: NAT Traversal Guide
+
+   guide/index
+
+.. toctree::
+   :caption: Reference
+
    p2p/index
    general/index
    articles/index

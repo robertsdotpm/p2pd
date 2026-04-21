@@ -104,23 +104,17 @@ def make_fake_nic(real_nic, af, target_ipr):
 
 def make_local_turn_server_entry(port=TURN_TEST_PORT, af=None):
     """
-    Build a TURN_SERVERS-compatible dict pointing at the local test server.
-
-    The 'host' key is set to the actual IP so get_turn_client() can resolve
-    it (the production entries use host=None which is a known limitation).
+    Build a get_infra-compatible dict pointing at the local test server.
+    Keys match what get_turn_client() expects: ip, port, user, password.
     """
     ip4 = "127.0.0.1"
     ip6 = "::1"
-    supported = [IP4, IP6] if af is None else [af]
+    ip = ip6 if (af == IP6) else ip4
     return {
-        "host": ip6 if (af == IP6) else ip4,
-        "port": port,
-        IP4: ip4 if IP4 in supported else None,
-        IP6: ip6 if IP6 in supported else None,
-        "afs": supported,
-        "user":  to_s(TURN_TEST_USER),
-        "pass":  to_s(TURN_TEST_PASS),
-        "realm": to_s(TURN_TEST_REALM),
+        "ip":       ip,
+        "port":     port,
+        "user":     to_s(TURN_TEST_USER),
+        "password": to_s(TURN_TEST_PASS),
     }
 
 

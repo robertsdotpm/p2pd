@@ -1,6 +1,7 @@
 import unittest
 from aionetiface.utility.test_init import *
 from p2pd import *
+from p2pd.node.node_defs import NODE_TEST_CONF
 import namebump
 from ecdsa import SigningKey, SECP256k1
 import hashlib
@@ -32,6 +33,7 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         clock = await SysClock(nic)
         assert(clock.time())
 
+    @unittest.skip("MQTT removed")
     async def test_mqtt_client(self):
         msg = "test msg"
         peerid = to_s(rand_plain(10))

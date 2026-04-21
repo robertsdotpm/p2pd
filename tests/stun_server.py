@@ -22,6 +22,7 @@ import copy
 from struct import pack
 
 from aionetiface import *
+from aionetiface.net.net_defs import NET_CONF
 from aionetiface.protocol.stun.stun_defs import (
     STUNMsg, STUNMsgTypes, STUNMsgCodes, STUNAttrs, STUNAddrTup,
     RFC3489, RFC5389, STUN_MAGIC_COOKIE
@@ -57,7 +58,9 @@ class STUNServer:
                 route = self.interface.route(af)
                 await route.bind(ips=lo, port=self.port)
                 await self.start_af_udp(af, route)
-                await self.start_af_tcp(af, route)
+                route2 = self.interface.route(af)
+                await route2.bind(ips=lo, port=self.port)
+                await self.start_af_tcp(af, route2)
             except Exception:
                 log_exception()
         return self
@@ -99,7 +102,8 @@ class STUNServer:
                 self.on_binding_request(af, data, client_tup, pipe)
             )
 
-        pipe = await Pipe(TCP, None, route).connect(cb)
+        reuse_conf = {**NET_CONF, "reuse_addr": True}
+        pipe = await Pipe(TCP, None, route, conf=reuse_conf).connect(cb)
         self.control_pipes[(af, TCP)] = pipe
         log(fstr("STUNServer: AF={0} TCP listening on {1}:{2}", (af, lo, self.port)))
 
