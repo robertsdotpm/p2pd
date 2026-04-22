@@ -1,3 +1,4 @@
+"""Outbound connection logic for a p2pd node."""
 import asyncio
 from aionetiface import *
 from .node_utils import *

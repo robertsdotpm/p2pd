@@ -1,3 +1,4 @@
+"""Traversal signalling protocol message serialisation."""
 import json
 from aionetiface import *
 from sidewire import *

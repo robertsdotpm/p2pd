@@ -1,3 +1,4 @@
+"""Constants and helper functions for the TURN protocol."""
 from aionetiface import *
 
 # Config variables -------------------------------------
@@ -15,7 +16,7 @@ TURN_MAGIC_COOKIE = b"\x21\x12\xa4\x42"
 TURN_MAGIC_XOR = b"\x00\x00\x21\x12\x21\x12\xa4\x42"
 TURN_CHANNEL = b"\x40\x02\x00\x00"
 TURN_PROTOCOL_TCP = b"\x06\x00\x00\x00"
-TURN_RPOTOCOL_UDP = b"\x11\x00\x00\x00"
+TURN_PROTOCOL_UDP = b"\x11\x00\x00\x00"
 TURN_CHAN_RANGE = [16384, 32766]
 
 # Protocol state machine.

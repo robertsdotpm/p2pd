@@ -1,3 +1,4 @@
+"""Interactive menu system for the p2pd demo."""
 import asyncio
 from ..do_imports import *
 from ..traversal.traversal_utils import close_plugin

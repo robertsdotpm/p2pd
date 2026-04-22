@@ -1,3 +1,4 @@
+"""Low-level helpers for the punch engine."""
 import time
 import socket
 import struct

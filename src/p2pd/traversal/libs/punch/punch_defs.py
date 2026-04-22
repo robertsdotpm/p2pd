@@ -1,3 +1,4 @@
+"""Constants and data structures for the punch engine."""
 from aionetiface import *
 
 # Punch modes.

@@ -1,3 +1,4 @@
+"""Re-exports the full p2pd public API as a single namespace."""
 import os
 
 

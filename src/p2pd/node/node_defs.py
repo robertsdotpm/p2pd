@@ -1,3 +1,4 @@
+"""Constants, data-structures, and defaults for a p2pd node."""
 import socket
 
 NODE_PORT = 10001

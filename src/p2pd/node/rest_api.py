@@ -1,3 +1,4 @@
+"""Embedded REST API server exposed by a p2pd node."""
 import ast
 import asyncio
 from aionetiface import *

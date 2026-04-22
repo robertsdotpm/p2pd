@@ -1,3 +1,4 @@
+"""Helper utilities for the p2pd demo application."""
 import asyncio
 import os
 import select

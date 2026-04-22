@@ -1,3 +1,4 @@
+"""Graceful shutdown logic for a p2pd node."""
 import asyncio
 from contextlib import suppress
 from aionetiface import *

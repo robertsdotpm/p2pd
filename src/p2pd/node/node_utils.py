@@ -1,3 +1,4 @@
+"""Miscellaneous helpers for node startup and operation."""
 import asyncio
 import hashlib
 import os
@@ -12,11 +13,13 @@ from ..vendor.machine_id import hashed_machine_id
 
 def resolve_install_path(conf):
     # type: (Dict[str, Any]) -> str
+    """Return the configured install path, falling back to the library root."""
     return conf["install_path"] or get_aionetiface_install_root()
 
 
 def make_stop_pair(existing=None):
     # type: (Optional[Any]) -> Tuple[Any, Any]
+    """Create a non-blocking/blocking socket pair used to signal shutdown, or return existing."""
     if existing:
         return existing
     stop_rw = socket.socketpair()
@@ -27,6 +30,7 @@ def make_stop_pair(existing=None):
 
 def pipe_future(inbound_pipes, pipe_id):
     # type: (Dict[str, Any], str) -> Any
+    """Return the Future for pipe_id, creating it if it does not yet exist."""
     if pipe_id not in inbound_pipes:
         inbound_pipes[pipe_id] = asyncio.Future()
     return inbound_pipes[pipe_id]
@@ -34,6 +38,7 @@ def pipe_future(inbound_pipes, pipe_id):
 
 def pipe_ready(inbound_pipes, pipe_id, pipe):
     # type: (Dict[str, Any], str, Any) -> Any
+    """Resolve the Future for pipe_id with the given pipe object."""
     if pipe_id not in inbound_pipes:
         pipe_future(inbound_pipes, pipe_id)
     if not inbound_pipes[pipe_id].done():
@@ -43,6 +48,7 @@ def pipe_ready(inbound_pipes, pipe_id, pipe):
 
 def norm_listen_ips(listen_ips):
     # type: (List[str]) -> List[str]
+    """Deduplicate and sort a list of listen IPs, normalising each address."""
     # Skip if empty.
     if not listen_ips:
         return listen_ips

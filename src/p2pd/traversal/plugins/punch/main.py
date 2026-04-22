@@ -1,3 +1,4 @@
+"""Traversal plugin for TCP/UDP hole punching."""
 import asyncio
 from aionetiface import *
 from ....protocol.traversal.proto_msg import PunchMsg

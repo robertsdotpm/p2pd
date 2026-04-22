@@ -1,3 +1,4 @@
+"""Helper functions for UPnP IGD port-mapping."""
 from aionetiface import *
 from aionetiface.vendor import xmltodict
 

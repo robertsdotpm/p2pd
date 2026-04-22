@@ -1,3 +1,4 @@
+"""Utilities for the simple TCP selector punch engine."""
 import socket
 import time
 from ...punch_defs import *

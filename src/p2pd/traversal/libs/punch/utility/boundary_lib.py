@@ -1,3 +1,4 @@
+"""Sliding-window boundary analysis for port prediction."""
 import time
 import random
 

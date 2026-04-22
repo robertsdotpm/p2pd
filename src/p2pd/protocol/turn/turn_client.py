@@ -464,7 +464,7 @@ class TURNClient(PipeEvents):
     async def allocate_msg(self):
         # type: () -> Any
         reply = STUNMsg(msg_type=STUNMsgTypes.Allocate, mode=RFC5389)
-        reply.write_attr(STUNAttrs.RequestedTransport, TURN_RPOTOCOL_UDP)
+        reply.write_attr(STUNAttrs.RequestedTransport, TURN_PROTOCOL_UDP)
 
         self.txid = reply.txn_id
         return reply
@@ -517,7 +517,7 @@ class TURNClient(PipeEvents):
         """
         reply.write_attr(
             TurnAttribute.RequestedTransport,
-            TURN_RPOTOCOL_UDP
+            TURN_PROTOCOL_UDP
         )
         """
 

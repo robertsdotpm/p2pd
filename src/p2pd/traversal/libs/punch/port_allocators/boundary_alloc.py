@@ -1,3 +1,4 @@
+"""Boundary-based port allocator for NAT prediction."""
 import os
 from ..utility.boundary_lib import *
 from ..punch_defs import *

@@ -1,3 +1,4 @@
+"""Traversal plugin that relays connections through a TURN server."""
 import asyncio
 from aionetiface import *
 from ...traversal_plugin import TraversalPlugin

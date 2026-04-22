@@ -1,3 +1,4 @@
+"""Traversal plugin for direct (non-NATed) connections."""
 import asyncio
 from aionetiface import *
 from ....node.node_defs import *

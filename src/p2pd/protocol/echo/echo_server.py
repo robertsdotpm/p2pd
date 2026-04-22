@@ -1,3 +1,4 @@
+"""Simple echo server used for connectivity testing."""
 from aionetiface import *
 
 

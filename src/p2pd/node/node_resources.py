@@ -1,3 +1,4 @@
+"""Resource lifecycle management for a p2pd node."""
 import asyncio
 from aionetiface import *
 

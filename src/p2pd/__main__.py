@@ -1,3 +1,4 @@
+"""Command-line entry point and interactive REPL for p2pd."""
 import ast
 import asyncio
 import code

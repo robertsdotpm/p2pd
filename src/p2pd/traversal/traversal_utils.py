@@ -1,27 +1,21 @@
+"""Utility functions shared across traversal strategies."""
 import asyncio
 from aionetiface import *
 from sidewire import *
 
 def f_path_txt(x):
+    """Return 'local' for NIC_BIND paths, 'external' otherwise."""
     return "local" if x == NIC_BIND else "external"
-
-"""
-If nodes are behind the same router they will have
-the same external address. Using this address for
-connections will fail because it will be the same
-address as ourself. The solution here is to replace
-that external address with a private, NIC address.
-For this reason the P2P address format includes
-a private address section that corresponds to
-the address passed to bind() for the nodes listen().
-
-also addr compares arent the best idea since ifaces can have
-multiple addresses. think on this more.
-"""
 
 
 def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=True):
     # type: (Any, bool, Dict[str, Any], Dict[str, Any], List[Any], bool) -> Optional[Any]
+    """Select the best destination IPRange for a traversal attempt.
+
+    Nodes behind the same router share an external address; in that case the
+    private NIC address is used instead so the connection does not loop back
+    through the router.
+    """
     # Shorten these for expressions.
     src_nid = src_info["netiface_index"]
     dest_nid = dest_info["netiface_index"]

@@ -1,3 +1,4 @@
+"""NAT port-prediction algorithms used by hole-punching."""
 from aionetiface import *
 
 MAX_PREDICT_NO = 100

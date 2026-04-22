@@ -1,3 +1,4 @@
+"""Traversal plugin for signalling a public return address."""
 from aionetiface import *
 from ...traversal_plugin import TraversalPlugin
 from ....protocol.traversal.proto_msg import ReturnAddr

@@ -1,3 +1,4 @@
+"""CLI argument processing for the p2pd demo."""
 from ..do_imports import *
 from .defs import *
 from .cmd_arg_defs import *

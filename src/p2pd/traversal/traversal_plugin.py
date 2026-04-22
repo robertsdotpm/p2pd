@@ -1,3 +1,4 @@
+"""Base class and lifecycle helpers for traversal plugins."""
 import asyncio
 from .traversal_utils import *
 

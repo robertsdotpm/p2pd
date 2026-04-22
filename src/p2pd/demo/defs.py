@@ -1,3 +1,4 @@
+"""Constants and shared state for the p2pd demo."""
 from aionetiface import *
 from ..do_imports import *
 

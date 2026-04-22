@@ -1,3 +1,4 @@
+"""Address resolution helpers used during NAT traversal."""
 from aionetiface import *
 from ..node.nickname import *
 

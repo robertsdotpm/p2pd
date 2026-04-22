@@ -1,3 +1,4 @@
+"""TURN message parsing and state-machine processing."""
 import asyncio
 import io
 import struct

@@ -1,3 +1,4 @@
+"""Custom exception types for the p2pd library."""
 # Defines all custon exceptions.
 
 # There's no gateway defined for that address family.

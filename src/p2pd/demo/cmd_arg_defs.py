@@ -1,3 +1,4 @@
+"""CLI argument definitions for the p2pd demo."""
 import argparse
 from ..do_imports import *
 from .defs import *

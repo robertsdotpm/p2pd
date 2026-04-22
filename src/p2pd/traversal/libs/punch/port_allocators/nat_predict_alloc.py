@@ -1,3 +1,4 @@
+"""NAT-prediction-based port allocator."""
 import asyncio
 import copy
 from aionetiface import *

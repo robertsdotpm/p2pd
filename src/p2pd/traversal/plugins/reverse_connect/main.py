@@ -1,3 +1,4 @@
+"""Traversal plugin that inverts the connection direction."""
 from aionetiface import *
 from ...traversal_plugin import TraversalPlugin
 from ....protocol.traversal.proto_msg import ConMsg
