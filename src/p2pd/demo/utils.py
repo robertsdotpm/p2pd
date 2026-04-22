@@ -1,9 +1,11 @@
 """Helper utilities for the p2pd demo application."""
+from typing import Any, Dict, List, Optional
 import asyncio
 import os
 import select
 import sys
 from ..do_imports import *
+from . import stop_rw
 from .cmd_arg_defs import *
 
 # Pipe used to unblock ainput() when the program shuts down.
@@ -12,13 +14,11 @@ from .cmd_arg_defs import *
 ainput_interrupt_r, ainput_interrupt_w = os.pipe()
 
 
-async def ainput(prompt):
-    # type: (str) -> str
+async def ainput(prompt: str) -> str:
     """Read a line of input from stdin asynchronously, unblocking on shutdown signals."""
     loop = asyncio.get_event_loop()
 
-    def _blocking_input():
-        # type: () -> str
+    def blocking_input() -> str:
         """Block in a thread waiting for stdin input or a shutdown interrupt."""
         sys.stdout.write(prompt)
         sys.stdout.flush()
@@ -34,11 +34,11 @@ async def ainput(prompt):
         except (OSError, IOError):
             return ""
 
-    fut = loop.run_in_executor(None, _blocking_input)
+    fut = loop.run_in_executor(None, blocking_input)
     try:
         return await fut
     except asyncio.CancelledError:
-        # Unblock the _blocking_input thread so the executor shuts down
+        # Unblock the blocking_input thread so the executor shuts down
         # cleanly.
         try:
             os.write(ainput_interrupt_w, b"\x01")
@@ -47,8 +47,7 @@ async def ainput(prompt):
         raise
 
 
-def cout(*fargs):
-    # type: (*Any) -> None
+def cout(*fargs) -> None:
     """Print output to stdout unless running in non-interactive command mode."""
     if args.cmd:
         return
@@ -58,8 +57,7 @@ def cout(*fargs):
         print(*fargs, flush=True)
 
 
-async def add_echo_support(msg, client_tup, pipe):
-    # type: (bytes, Any, Any) -> None
+async def add_echo_support(msg: bytes, client_tup: Any, pipe: Any) -> None:
     """Handle incoming ECHO protocol messages by stripping the prefix and sending back the payload."""
     print("in add echo sup ", msg)
     if b"ECHO" == msg[:4]:
@@ -83,15 +81,13 @@ async def add_echo_support(msg, client_tup, pipe):
             return
 
 
-def patch_log_p2p(m, node_id=""):
-    # type: (Any, str) -> None
+def patch_log_p2p(m: Any, node_id: str = "") -> None:
     """Format and print a P2P log line prefixed with the node ID via cout."""
     out = fstr("p2p: <{0}> ", (node_id,)) + to_s(m)
     cout(out)
 
 
-def get_req_serv_parts(parts):
-    # type: (List[str]) -> Any
+def get_req_serv_parts(parts: List[str]) -> Any:
     """Parse a comma-separated server spec into (offset, af, ip, port) tuple."""
     ip = parts[2]
     offset = int(parts[0])
@@ -105,8 +101,7 @@ def get_req_serv_parts(parts):
     return offset, af, ip, port
 
 
-def patch_server_af_dict(arg_list, serv_dict):
-    # type: (List[str], Dict[Any, Any]) -> None
+def patch_server_af_dict(arg_list: List[str], serv_dict: Dict[Any, Any]) -> None:
     """Override host/ip/port entries in an AF-keyed server dict using CLI arg strings."""
     # offset, af, ip, port
     serv_infos = arg_list
@@ -120,8 +115,7 @@ def patch_server_af_dict(arg_list, serv_dict):
             serv_dict["afs"] = []
 
 
-def patch_server_list(arg_list, server_list):
-    # type: (List[str], List[Dict[str, Any]]) -> None
+def patch_server_list(arg_list: List[str], server_list: List[Dict[str, Any]]) -> None:
     """Patch entries in a flat server list with addresses and credentials from CLI arg strings."""
     # offset, af, ip, port, (optional) user, (optional) password
     serv_infos = arg_list
@@ -152,8 +146,7 @@ def patch_server_list(arg_list, server_list):
         server_list[offset] = entry
 
 
-def filter_nics_by_mac(mac_list, ifs):
-    # type: (List[str], List[Any]) -> List[Any]
+def filter_nics_by_mac(mac_list: List[str], ifs: List[Any]) -> List[Any]:
     """Return only the NICs whose MAC address appears in mac_list."""
     mac_list = [mac_norm(mac) for mac in mac_list]
     new_ifs = []
@@ -164,8 +157,7 @@ def filter_nics_by_mac(mac_list, ifs):
     return new_ifs
 
 
-def display_ifs_loaded(ifs):
-    # type: (List[Any]) -> None
+def display_ifs_loaded(ifs: List[Any]) -> None:
     """Print a summary of each loaded interface including AF support and NAT type."""
     buf = ""
     for nic in ifs:
@@ -182,8 +174,7 @@ def display_ifs_loaded(ifs):
     cout(buf)
 
 
-async def get_dest_addr(node, last_addr):
-    # type: (Any, Any) -> Any
+async def get_dest_addr(node: Any, last_addr: Any) -> Any:
     """
     Dest addr may have already been set from previous invocations of the
     program.
@@ -239,8 +230,7 @@ async def get_dest_addr(node, last_addr):
     return dest_addr
 
 
-async def choose_connection_methods(con_method):
-    # type: (Optional[str]) -> str
+async def choose_connection_methods(con_method: Optional[str]) -> str:
     """
     Select a connection method segment.
     """
@@ -266,8 +256,7 @@ async def choose_connection_methods(con_method):
         return method_txt[con_method]
 
 
-async def choose_pathways(pathway):
-    # type: (Optional[str]) -> Any
+async def choose_pathways(pathway: Optional[str]) -> Any:
     """
     Choose the routing pathway to try (this controls IP selection!)
     This is why having accurate interface info is so important.
@@ -293,8 +282,7 @@ async def choose_pathways(pathway):
         pathway = None
 
 
-async def choose_address_families(addr_type):
-    # type: (Optional[str]) -> Any
+async def choose_address_families(addr_type: Optional[str]) -> Any:
     """
     Allows the code to specifically use one or more address families.
     Applicable / useful for dual-stack environments.
@@ -320,8 +308,7 @@ async def choose_address_families(addr_type):
         addr_type = None
 
 
-async def echo_client(pipe, echo_data):
-    # type: (Any, Optional[bytes]) -> str
+async def echo_client(pipe: Any, echo_data: Optional[bytes]) -> str:
     """
     Tunnel is open -- interactive echo client can be used.
     """

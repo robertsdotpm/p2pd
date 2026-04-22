@@ -2,14 +2,14 @@
 import asyncio
 from ..do_imports import *
 from ..traversal.traversal_utils import close_plugin
+from . import stop_rw
 from .defs import *
 from .utils import *
 
 
 # Open a tunnel to a remote destination.
 # Accepts a PNP address or a full node address.
-async def connect_option(node, con_opts):
-    # type: (Any, Tuple[Any, Optional[bytes], Optional[Any]]) -> str
+async def connect_option(node: Any, con_opts: Tuple[Any, Optional[bytes], Optional[Any]]) -> str:
     """Open a P2P tunnel to a remote address and run an interactive echo session."""
     # Some variables set by command line flags or other parts.
     last_addr, echo_data, cmd_opts = con_opts
@@ -87,8 +87,7 @@ async def connect_option(node, con_opts):
     return "menu"
 
 
-async def accept_option(nick):
-    # type: (Optional[str]) -> str
+async def accept_option(nick: Optional[str]) -> str:
     """Wait in an accept loop, printing the node's PNP nickname, until a stop signal arrives."""
     print("\tListen on PNP: ", nick, flush=True)
     while not sock_has_data(stop_rw[0]):
@@ -97,8 +96,7 @@ async def accept_option(nick):
     return "menu"
 
 
-async def nickname_option(node):
-    # type: (Any) -> str
+async def nickname_option(node: Any) -> str:
     """Prompt for a nickname string and register it on the PNP network."""
     choice = await ainput("Enter nickname: ")
     try:
@@ -110,8 +108,7 @@ async def nickname_option(node):
     return "menu"
 
 
-async def stop_nodes_option(nodes):
-    # type: (List[Any]) -> str
+async def stop_nodes_option(nodes: List[Any]) -> str:
     """Gracefully shut down all provided nodes."""
     cout("")
     cout("Stopping nodes...")
@@ -125,12 +122,13 @@ async def stop_nodes_option(nodes):
     return ""
 
 
-async def run_menu_program(nick, ifs, nodes, con_opts=None, menu_option=None):
-    # type: (
-    #     Optional[str], List[Any], List[Any],
-    #     Optional[Tuple[Any, Optional[bytes], Optional[Any]]],
-    #     Optional[str],
-    # ) -> str
+async def run_menu_program(
+    nick,
+    ifs,
+    nodes,
+    con_opts=None,
+    menu_option=None,
+):
     """Display the interactive menu and dispatch to the chosen option handler."""
     # Select menu program.
     menu_option = menu_option or (await ainput("Select menu option: "))

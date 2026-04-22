@@ -16,6 +16,8 @@ import asyncio
 import sys
 import unittest
 
+import pytest
+
 from aionetiface import (
     Interface,
     STUNClient,
@@ -83,6 +85,7 @@ def make_stun_client(nic, af, port=STUN_TEST_PORT, mode=RFC5389, proto=UDP):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.network
 class TestSTUNClientIPv4(AsyncTestCase):
     async def asyncSetUp(self):
         self.nic = await Interface()
@@ -142,6 +145,7 @@ class TestSTUNClientIPv4(AsyncTestCase):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.network
 class TestSTUNClientIPv6(AsyncTestCase):
     async def asyncSetUp(self):
         self.nic = await Interface()
@@ -199,6 +203,7 @@ class TestSTUNClientIPv6(AsyncTestCase):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.network
 class TestSTUNClientTCPIPv4(AsyncTestCase):
     async def asyncSetUp(self):
         self.nic = await Interface()
@@ -243,6 +248,7 @@ class TestSTUNClientTCPIPv4(AsyncTestCase):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.network
 class TestSTUNClientTCPIPv6(AsyncTestCase):
     async def asyncSetUp(self):
         self.nic = await Interface()

@@ -4,14 +4,14 @@ lists need to be updated. Use short, unique IDs or
 index by host name even if its longer.
 """
 
+from typing import Any, Tuple
 import asyncio
 import time
 from aionetiface import *
 from .node_defs import CON_ID_MSG
 
 
-async def node_protocol(node, msg, client_tup, pipe):
-    # type: (Any, bytes, Tuple[str, int], Any) -> None
+async def node_protocol(node: Any, msg: bytes, client_tup: Tuple[str, int], pipe: Any) -> None:
     """Dispatch each newline-delimited message from the pipe to handle_msg and all registered callbacks."""
     # Track idle pipe recv time.
     if pipe in node.resources.last_recv_queue:
@@ -33,8 +33,7 @@ async def node_protocol(node, msg, client_tup, pipe):
             log("msg_cb coro raised: " + repr(r))
 
 
-async def handle_msg(node, msg, client_tup, pipe):
-    # type: (Any, bytes, Tuple[str, int], Any) -> None
+async def handle_msg(node: Any, msg: bytes, client_tup: Tuple[str, int], pipe: Any) -> None:
     """Parse a single node protocol message and act on recognised commands such as CON_ID_MSG."""
     log(
         fstr(

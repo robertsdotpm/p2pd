@@ -1,4 +1,5 @@
 """Traversal plugin that relays connections through a TURN server."""
+from typing import Any, Optional
 import asyncio
 from aionetiface import *
 from ...traversal_plugin import TraversalPlugin
@@ -9,8 +10,7 @@ from .turn_utils import get_first_working_turn_client, rendezvous_rank
 class TURNPlugin(TraversalPlugin):
     """Traversal plugin that establishes a P2P connection via a TURN relay server."""
 
-    def __init__(self):
-        # type: () -> None
+    def __init__(self) -> None:
         super().__init__()
 
         # Resolved by a second run() call on this same instance when the peer's
@@ -20,8 +20,7 @@ class TURNPlugin(TraversalPlugin):
         self.msg_cb = None
         self.node_id = ""
 
-    async def run(self, reply=None):
-        # type: (Optional[Any]) -> None
+    async def run(self, reply: Optional[Any] = None) -> None:
         """Allocate a TURN relay, exchange addresses with the peer, and establish the channel."""
         # TURN relay requires a public relay server; skip for direct NIC binds.
         if self.route_type == NIC_BIND:
@@ -96,8 +95,7 @@ class TURNPlugin(TraversalPlugin):
         if not self.result.done():
             self.result.set_result(pipe)
 
-    async def close(self):
-        # type: () -> None
+    async def close(self) -> None:
         """Clean up after a TURN connection attempt.
 
         On failure (timeout, cancellation, error) the TURNClient is closed
@@ -129,14 +127,12 @@ class TURNPlugin(TraversalPlugin):
 class TURNPluginFactory:
     """Creates and configures TURNPlugin instances sharing TURN client sessions."""
 
-    def __init__(self, msg_cb=None, node_id=""):
-        # type: (Optional[Any], str) -> None
+    def __init__(self, msg_cb: Optional[Any] = None, node_id: str = "") -> None:
         self.turn_clients = {}
         self.msg_cb = msg_cb
         self.node_id = node_id
 
-    def build_plugin(self):
-        # type: () -> TURNPlugin
+    def build_plugin(self) -> TURNPlugin:
         """Create a new TURNPlugin instance wired to this factory's shared client pool."""
         plugin = TURNPlugin()
         plugin.turn_clients = self.turn_clients
@@ -144,8 +140,7 @@ class TURNPluginFactory:
         plugin.node_id = self.node_id
         return plugin
 
-    async def close(self):
-        # type: () -> None
+    async def close(self) -> None:
         """Close all shared TURN clients and clear the pool."""
         for client in list(self.turn_clients.values()):
             try:

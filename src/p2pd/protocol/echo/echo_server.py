@@ -1,16 +1,15 @@
 """Simple echo server used for connectivity testing."""
+from typing import Any
 from aionetiface import *
 
 
 class EchoServer(Daemon):
     """Simple echo server daemon that reflects all received messages back to senders."""
 
-    def __init__(self):
-        # type: () -> None
+    def __init__(self) -> None:
         super().__init__()
 
-    async def msg_cb(self, msg, client_tup, pipe):
-        # type: (bytes, Any, Any) -> None
+    async def msg_cb(self, msg: bytes, client_tup: Any, pipe: Any) -> None:
         """Echo msg back to client_tup on the same pipe."""
         await async_wrap_errors(pipe.send(msg, client_tup))
 

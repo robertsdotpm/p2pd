@@ -1,4 +1,5 @@
 """Utility functions shared across traversal strategies."""
+from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 from aionetiface import *
 from sidewire import *
@@ -8,8 +9,7 @@ def f_path_txt(x):
     return "local" if x == NIC_BIND else "external"
 
 
-def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=True):
-    # type: (Any, bool, Dict[str, Any], Dict[str, Any], List[Any], bool) -> Optional[Any]
+def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info: Dict[str, Any], addr_types: List[Any], has_set_bind: bool = True) -> Optional[Any]:
     """Select the best destination IPRange for a traversal attempt.
 
     Nodes behind the same router share an external address; in that case the
@@ -77,8 +77,7 @@ def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=T
     return None
 
 
-def sort_pairs_by_overlap(src_infos, dest_infos):
-    # type: (List[Dict[str, Any]], List[Dict[str, Any]]) -> Tuple[List[Any], List[Any]]
+def sort_pairs_by_overlap(src_infos: List[Dict[str, Any]], dest_infos: List[Dict[str, Any]]) -> Tuple[List[Any], List[Any]]:
     """Partition (src_info, dest_info) pairs into overlapping and non-overlapping external IPs."""
     overlap = []
     unique = []
@@ -94,9 +93,16 @@ def sort_pairs_by_overlap(src_infos, dest_infos):
 
 
 async def for_addr_infos(
-    strat, func, timeout, cleanup, has_set_bind, max_pairs, reply, pp, conf
-):
-    # type: (str, Any, int, Optional[Any], bool, int, Optional[Any], Any, Dict[str, Any]) -> Tuple[Optional[Any], Optional[Any]]
+strat: str,
+    func: Any,
+    timeout: int,
+    cleanup: Optional[Any],
+    has_set_bind: bool,
+    max_pairs: int,
+    reply: Optional[Any],
+    pp: Any,
+    conf: Dict[str, Any],
+) -> Tuple[Optional[Any], Optional[Any]]:
     """
     Given info on a local interface, a remote interface,
     and a chosen connectivity technique, attempt to create
@@ -104,8 +110,7 @@ async def for_addr_infos(
     addressing is suitably local or remote.
     """
 
-    async def try_addr_infos(af, strat, addr_type, src_info, dest_info):
-        # type: (Any, str, Any, Dict[str, Any], Dict[str, Any]) -> Optional[Any]
+    async def try_addr_infos(af: Any, strat: str, addr_type: Any, src_info: Dict[str, Any], dest_info: Dict[str, Any]) -> Optional[Any]:
         """Attempt one connectivity strategy for a specific src/dest interface pair."""
         # Local addressing and/or remote.
         try:
@@ -305,8 +310,7 @@ async def for_addr_infos(
 # TODO: make this work with everything.
 
 
-def get_if_infos_order(af, route_type, src_map, dest_map):
-    # type: (Any, Any, Dict[Any, Any], Dict[Any, Any]) -> List[Any]
+def get_if_infos_order(af: Any, route_type: Any, src_map: Dict[Any, Any], dest_map: Dict[Any, Any]) -> List[Any]:
     """
     Given a list of interface details
     for an address family indexed by interface
@@ -336,8 +340,7 @@ def get_if_infos_order(af, route_type, src_map, dest_map):
     return pair_order
 
 
-def try_unpack_msg(buf, sk, sig_proto_map):
-    # type: (Any, Any, Dict[Any, Any]) -> Any
+def try_unpack_msg(buf: Any, sk: Any, sig_proto_map: Dict[Any, Any]) -> Any:
     """Decrypt (if needed) and deserialise an incoming signal buffer into a protocol message."""
     buf = h_to_b(buf)
 
@@ -363,8 +366,7 @@ def try_unpack_msg(buf, sk, sig_proto_map):
     return msg
 
 
-def sig_msg_to_buf(msg, dest_pk):
-    # type: (Any, Optional[Any]) -> bytes
+def sig_msg_to_buf(msg: Any, dest_pk: Optional[Any]) -> bytes:
     """Serialise a signal message, optionally encrypting it with the destination's public key."""
     if dest_pk:
         buf = b"\1" + encrypt(dest_pk, msg.pack())
@@ -376,8 +378,7 @@ def sig_msg_to_buf(msg, dest_pk):
     return to_b(buf)
 
 
-async def close_plugin(plugin, plugins, inbound_pipes):
-    # type: (Any, Dict[str, Any], Dict[str, Any]) -> None
+async def close_plugin(plugin: Any, plugins: Dict[str, Any], inbound_pipes: Dict[str, Any]) -> None:
     """Remove a plugin from the registries and call its close method if present."""
     if hasattr(plugin, "plugin_id"):
         plugins.pop(plugin.plugin_id, None)

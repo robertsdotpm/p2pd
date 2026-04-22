@@ -1,4 +1,5 @@
 """Constants and data structures for the punch engine."""
+from typing import Any
 from aionetiface import *
 
 # Punch modes.
@@ -37,12 +38,10 @@ PUNCH_CONF = dict_child(
 class PortAlloc:
     """Holds a source/destination port pair for a single TCP hole-punch attempt."""
 
-    def __init__(self, src_port, dest_port):
-        # type: (int, int) -> None
+    def __init__(self, src_port: int, dest_port: int) -> None:
         self.src_port = src_port
         self.dest_port = dest_port
 
-    def __iter__(self):
-        # type: () -> Any
+    def __iter__(self) -> Any:
         yield self.src_port
         yield self.dest_port

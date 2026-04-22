@@ -1,10 +1,10 @@
 """Helpers for the TURN traversal plugin."""
+from typing import Any, Dict, List, Optional, Tuple
 from aionetiface import *
 from ....protocol.turn.turn_client import TURNClient
 
 
-def rendezvous_rank(key, servers):
-    # type: (Any, List[Dict[str, Any]]) -> List[Dict[str, Any]]
+def rendezvous_rank(key: Any, servers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Rank TURN server dicts by rendezvous hash of key + server identity.
 
     Both peers independently produce the same ranking from the shared
@@ -13,8 +13,7 @@ def rendezvous_rank(key, servers):
     """
     key_b = to_b(key)
 
-    def score(s):
-        # type: (Dict[str, Any]) -> Any
+    def score(s: Dict[str, Any]) -> Any:
         """Compute a rendezvous hash score for server s against the shared key."""
         return rendezvous_score(key_b, to_b(s["ip"]), str(s["port"]).encode())
 
@@ -22,9 +21,13 @@ def rendezvous_rank(key, servers):
 
 
 async def get_turn_client(
-    af, server, interface, dest_peer=None, dest_relay=None, msg_cb=None
-):
-    # type: (Any, Dict[str, Any], Any, Optional[Any], Optional[Any], Optional[Any]) -> Tuple[Any, Any, TURNClient]
+af: Any,
+    server: Dict[str, Any],
+    interface: Any,
+    dest_peer: Optional[Any] = None,
+    dest_relay: Optional[Any] = None,
+    msg_cb: Optional[Any] = None,
+) -> Tuple[Any, Any, TURNClient]:
     """Connect to a TURN server, allocate a relay, and optionally whitelist a peer."""
     turn_client = TURNClient(
         af=af,
@@ -46,8 +49,7 @@ async def get_turn_client(
     return peer_tup, relay_tup, turn_client
 
 
-async def get_first_working_turn_client(af, servers, nic, msg_cb):
-    # type: (Any, List[Dict[str, Any]], Any, Any) -> Optional[TURNClient]
+async def get_first_working_turn_client(af: Any, servers: List[Dict[str, Any]], nic: Any, msg_cb: Any) -> Optional[TURNClient]:
     """Try each TURN server in ranked order and return the first one that connects."""
     for server in servers:
         try:

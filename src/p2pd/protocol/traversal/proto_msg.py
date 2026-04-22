@@ -1,5 +1,6 @@
 """Traversal signalling protocol message serialisation."""
 import json
+from typing import Any, Dict, List, Optional, Tuple
 from aionetiface import *
 from sidewire import *
 from .proto_defs import *
@@ -13,8 +14,7 @@ class ProtoMsg:
     """Base class for all P2P traversal protocol messages."""
 
     @staticmethod
-    def load_addr(af, addr_buf, if_index):
-        # type: (Any, Any, int) -> Tuple[Any, Dict[str, Any]]
+    def load_addr(af: Any, addr_buf: Any, if_index: int) -> Tuple[Any, Dict[str, Any]]:
         """Parse addr_buf into (af, addr_dict), validating that if_index is present."""
         # Validate src address.
         addr = parse_node_addr(addr_buf)
@@ -35,16 +35,15 @@ class ProtoMsg:
 
         def __init__(
             self,
-            ttl=0,
-            pipe_id=b"",
-            af=IP4,
-            src_buf=b"",
-            src_index=0,
-            route_type=EXT_BIND,
-            same_machine=False,
-            plugin_name=None,
-        ):
-            # type: (int, Any, Any, Any, int, Any, bool, Optional[str]) -> None
+            ttl: int = 0,
+            pipe_id: Any = b"",
+            af: Any = IP4,
+            src_buf: Any = b"",
+            src_index: int = 0,
+            route_type: Any = EXT_BIND,
+            same_machine: bool = False,
+            plugin_name: Optional[str] = None,
+        ) -> None:
             # Load meta data about message.
             self.ttl = to_n(ttl)
             self.pipe_id = to_s(pipe_id)
@@ -57,8 +56,7 @@ class ProtoMsg:
             if src_buf:
                 self.load_src_addr()
 
-        def load_src_addr(self):
-            # type: () -> None
+        def load_src_addr(self) -> None:
             """Parse src_buf and populate af, src, and src_info on this Meta instance."""
             # Parse src_buf to addr.
             self.af, self.src = ProtoMsg.load_addr(
@@ -71,8 +69,7 @@ class ProtoMsg:
             info = self.src[self.af]
             self.src_info = info[self.src_index]
 
-        def to_dict(self):
-            # type: () -> Dict[str, Any]
+        def to_dict(self) -> Dict[str, Any]:
             """Serialise this Meta to a plain dict suitable for JSON encoding."""
             return {
                 "ttl": self.ttl,
@@ -86,8 +83,7 @@ class ProtoMsg:
             }
 
         @staticmethod
-        def from_dict(d):
-            # type: (Dict[str, Any]) -> ProtoMsg.Meta
+        def from_dict(d: Dict[str, Any]) -> "ProtoMsg.Meta":
             """Construct a Meta instance from a plain dict, using safe defaults for missing keys."""
             return ProtoMsg.Meta(
                 d.get("ttl", 0),
@@ -104,8 +100,7 @@ class ProtoMsg:
     class Routing:
         """Encapsulates destination routing information for a protocol message."""
 
-        def __init__(self, af=IP4, dest_buf=b"", dest_index=0):
-            # type: (Any, Any, int) -> None
+        def __init__(self, af: Any = IP4, dest_buf: Any = b"", dest_index: int = 0) -> None:
             self.dest_buf = to_s(dest_buf)
             self.dest_index = to_n(dest_index)
             self.af = af
@@ -113,8 +108,7 @@ class ProtoMsg:
                 self.set_cur_dest(dest_buf)
                 self.cur_dest_buf = None  # set later.
 
-        def load_if_extra(self, nics):
-            # type: (List[Any]) -> None
+        def load_if_extra(self, nics: List[Any]) -> None:
             """Resolve the dest_index to the matching NIC object from the provided list."""
             if_index = self.dest_index
             self.interface = nics[if_index]
@@ -125,8 +119,7 @@ class ProtoMsg:
         current address of the node that receives this.
         """
 
-        def set_cur_dest(self, cur_dest_buf):
-            # type: (Any) -> None
+        def set_cur_dest(self, cur_dest_buf: Any) -> None:
             """Update the destination address from a fresh address buffer and reparse routing info."""
             self.cur_dest_buf = to_s(cur_dest_buf)
             self.af, self.dest = ProtoMsg.load_addr(
@@ -139,8 +132,7 @@ class ProtoMsg:
             info = self.dest[self.af]
             self.dest_info = info[self.dest_index]
 
-        def to_dict(self):
-            # type: () -> Dict[str, Any]
+        def to_dict(self) -> Dict[str, Any]:
             """Serialise this Routing to a plain dict suitable for JSON encoding."""
             return {
                 "af": int(self.af),
@@ -149,8 +141,7 @@ class ProtoMsg:
             }
 
         @staticmethod
-        def from_dict(d):
-            # type: (Dict[str, Any]) -> ProtoMsg.Routing
+        def from_dict(d: Dict[str, Any]) -> "ProtoMsg.Routing":
             """Construct a Routing instance from a plain dict, using safe defaults for missing keys."""
             return ProtoMsg.Routing(
                 d.get("af", IP4),
@@ -162,23 +153,19 @@ class ProtoMsg:
     class Payload:
         """Abstract payload container for protocol message data."""
 
-        def __init__(self):
-            # type: () -> None
+        def __init__(self) -> None:
             pass
 
-        def to_dict(self):
-            # type: () -> Dict[str, Any]
+        def to_dict(self) -> Dict[str, Any]:
             """Return an empty dict; subclasses override to include their fields."""
             return {}
 
         @staticmethod
-        def from_dict(d):
-            # type: (Dict[str, Any]) -> ProtoMsg.Payload
+        def from_dict(d: Dict[str, Any]) -> "ProtoMsg.Payload":
             """Construct an empty Payload; subclasses override to deserialise their fields."""
             return ProtoMsg.Payload()
 
-    def __init__(self, data, enum):
-        # type: (Dict[str, Any], int) -> None
+    def __init__(self, data: Dict[str, Any], enum: int) -> None:
         self.meta = ProtoMsg.Meta.from_dict(data.get("meta", {}))
 
         self.routing = ProtoMsg.Routing.from_dict(data.get("routing", {}))
@@ -187,8 +174,7 @@ class ProtoMsg:
 
         self.enum = enum
 
-    def to_dict(self):
-        # type: () -> Dict[str, Any]
+    def to_dict(self) -> Dict[str, Any]:
         """Serialise the full message (meta, routing, payload) to a JSON-compatible dict."""
         d = {
             "meta": self.meta.to_dict(),
@@ -198,14 +184,12 @@ class ProtoMsg:
 
         return d
 
-    def pack(self, sk=None):
-        # type: (Optional[Any]) -> bytes
+    def pack(self, sk: Optional[Any] = None) -> bytes:
         """Serialise this message to bytes with the enum prefix followed by JSON payload."""
         return bytes([self.enum]) + to_b(json.dumps(self.to_dict()))
 
     @classmethod
-    def unpack(cls, buf):
-        # type: (Any) -> ProtoMsg
+    def unpack(cls, buf: Any) -> "ProtoMsg":
         """Deserialise bytes (without the leading enum byte) into a ProtoMsg instance."""
         try:
             d = json.loads(to_s(buf))
@@ -219,8 +203,7 @@ class ProtoMsg:
         # check sig matches serialized obj.
         return cls(d)
 
-    def set_cur_addr(self, cur_addr_buf):
-        # type: (Any) -> None
+    def set_cur_addr(self, cur_addr_buf: Any) -> None:
         """Update routing with the current address buffer and set the same-machine flag."""
         self.routing.set_cur_dest(cur_addr_buf)
 
@@ -234,16 +217,14 @@ class ProtoMsg:
 class DoneMsg(ProtoMsg):
     """Signals that traversal is complete and no further messages are needed."""
 
-    def __init__(self, data=None, enum=SIG_DONE):
-        # type: (Optional[Dict[str, Any]], int) -> None
+    def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_DONE) -> None:
         super().__init__({}, SIG_DONE)
 
 
 class RetryMsg(ProtoMsg):
     """Requests the peer to retry the traversal exchange."""
 
-    def __init__(self, data=None, enum=SIG_RETRY):
-        # type: (Optional[Dict[str, Any]], int) -> None
+    def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_RETRY) -> None:
         super().__init__({}, SIG_RETRY)
 
 
@@ -254,14 +235,12 @@ class PunchMsg(ProtoMsg):
     class Payload:
         """Contains punch mode, NTP timestamp, and port mappings for the punch exchange."""
 
-        def __init__(self, punch_mode, ntp, mappings):
-            # type: (int, Any, List[Any]) -> None
+        def __init__(self, punch_mode: int, ntp: Any, mappings: List[Any]) -> None:
             self.ntp = ntp
             self.mappings = mappings
             self.punch_mode = int(punch_mode)
 
-        def to_dict(self):
-            # type: () -> Dict[str, Any]
+        def to_dict(self) -> Dict[str, Any]:
             """Serialise the payload to a JSON-compatible dict."""
             return {
                 "punch_mode": self.punch_mode,
@@ -270,8 +249,7 @@ class PunchMsg(ProtoMsg):
             }
 
         @staticmethod
-        def from_dict(d):
-            # type: (Dict[str, Any]) -> PunchMsg.Payload
+        def from_dict(d: Dict[str, Any]) -> "PunchMsg.Payload":
             """Deserialise a dict into a PunchMsg.Payload."""
             return PunchMsg.Payload(
                 d.get("punch_mode", TCP_PUNCH_REMOTE),
@@ -284,8 +262,7 @@ class PunchMsg(ProtoMsg):
     # computer using the same interfaces. But these
     # checks are left in if they're needed.
 
-    def validate_dest(self, af, punch_mode, dest_s):
-        # type: (Any, int, str) -> None
+    def validate_dest(self, af: Any, punch_mode: int, dest_s: str) -> None:
         """Validate that af, punch_mode, and dest_s are mutually consistent with this message's routing."""
         # Do we support this af?
         interface = self.routing.interface
@@ -342,8 +319,7 @@ class PunchMsg(ProtoMsg):
                     )
                 )
 
-    def __init__(self, data, enum=SIG_TCP_PUNCH):
-        # type: (Dict[str, Any], int) -> None
+    def __init__(self, data: Dict[str, Any], enum: int = SIG_TCP_PUNCH) -> None:
         super().__init__(data, enum)
 
 
@@ -353,13 +329,11 @@ class TURNMsg(ProtoMsg):
     class Payload:
         """Contains peer and relay address tuples for a TURN session."""
 
-        def __init__(self, peer_tup, relay_tup):
-            # type: (Any, Any) -> None
+        def __init__(self, peer_tup: Any, relay_tup: Any) -> None:
             self.peer_tup = peer_tup
             self.relay_tup = relay_tup
 
-        def to_dict(self):
-            # type: () -> Dict[str, Any]
+        def to_dict(self) -> Dict[str, Any]:
             """Serialise the payload to a JSON-compatible dict."""
             return {
                 "peer_tup": self.peer_tup,
@@ -367,40 +341,35 @@ class TURNMsg(ProtoMsg):
             }
 
         @staticmethod
-        def from_dict(d):
-            # type: (Dict[str, Any]) -> TURNMsg.Payload
+        def from_dict(d: Dict[str, Any]) -> "TURNMsg.Payload":
             """Deserialise a dict into a TURNMsg.Payload."""
             return TURNMsg.Payload(
                 d["peer_tup"],
                 d["relay_tup"],
             )
 
-    def __init__(self, data, enum=SIG_TURN):
-        # type: (Dict[str, Any], int) -> None
+    def __init__(self, data: Dict[str, Any], enum: int = SIG_TURN) -> None:
         super().__init__(data, enum)
 
 
 class ConMsg(ProtoMsg):
     """Initiates a direct connection attempt between two peers."""
 
-    def __init__(self, data=None, enum=SIG_CON):
-        # type: (Optional[Dict[str, Any]], int) -> None
+    def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_CON) -> None:
         super().__init__(data or {}, enum)
 
 
 class GetAddr(ProtoMsg):
     """Requests the current address of the peer node."""
 
-    def __init__(self, data=None, enum=SIG_GET_ADDR):
-        # type: (Optional[Dict[str, Any]], int) -> None
+    def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_GET_ADDR) -> None:
         super().__init__(data or {}, enum)
 
 
 class ReturnAddr(ProtoMsg):
     """Returns the sender's address in response to a GetAddr request."""
 
-    def __init__(self, data=None, enum=SIG_RETURN_ADDR):
-        # type: (Optional[Dict[str, Any]], int) -> None
+    def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_RETURN_ADDR) -> None:
         super().__init__(data or {}, enum)
 
 

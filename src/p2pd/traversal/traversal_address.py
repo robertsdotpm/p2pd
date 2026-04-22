@@ -1,4 +1,5 @@
 """Address resolution helpers used during NAT traversal."""
+from typing import Any, Optional
 from aionetiface import *
 from ..node.nickname import *
 
@@ -8,9 +9,7 @@ from ..node.nickname import *
 # recent address bytes.
 
 
-async def get_updated_addr_bytes(node, dest_addr):
-    # type: (Any, Any) -> Any
-    # type: (Any, Any) -> Any
+async def get_updated_addr_bytes(node: Any, dest_addr: Any) -> Any:
     """
     Resolve a nickname to address bytes, then ask the peer for its current
     address via the get_addr plugin (MQTT signaling).
@@ -55,9 +54,7 @@ async def get_updated_addr_bytes(node, dest_addr):
     return addr_bytes
 
 
-async def get_updated_addr_from_mqtt(node, dest_bytes):
-    # type: (Any, Any) -> Optional[Any]
-    # type: (Any, Any) -> Optional[Any]
+async def get_updated_addr_from_mqtt(node: Any, dest_bytes: Any) -> Optional[Any]:
     """Ask the peer for its freshest address bytes via the get_addr plugin over MQTT."""
     af = None  # AF selection is handled inside connect().
     route_type = None

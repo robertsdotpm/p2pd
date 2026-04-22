@@ -14,6 +14,7 @@
 - Edge case: multiple punches may cause STUN connections from same local endpoint
 """
 
+from typing import Any, Dict, List, Optional, Tuple
 import selectors
 import socket
 import time
@@ -26,8 +27,7 @@ CONNECT_TIMEOUT = 5.0
 RETRY_INTERVAL = 0.05
 
 
-def setup_engine(af, port_allocs, src_ip, nic_id):
-    # type: (Any, List[Any], Optional[str], Optional[str]) -> Tuple[List[Any], Any]
+def setup_engine(af: Any, port_allocs: List[Any], src_ip: Optional[str], nic_id: Optional[str]) -> Tuple[List[Any], Any]:
     """Bind all sockets for the given port allocations and register them with a selector."""
     # TCP hole punching uses ONE socket per port.
     # No listen sockets. Each socket will perform active open only.
@@ -44,11 +44,10 @@ def setup_engine(af, port_allocs, src_ip, nic_id):
 
 
 def socket_event_monitor(
-    sel,
-    monitor_duration=CONNECT_TIMEOUT,
-    retry_interval=RETRY_INTERVAL,
-):
-    # type: (Any, float, float) -> Any
+sel: Any,
+    monitor_duration: float = CONNECT_TIMEOUT,
+    retry_interval: float = RETRY_INTERVAL,
+) -> Any:
     """
     Poll the selector for `monitor_duration` seconds and collect successfully
     connected sockets.
@@ -96,17 +95,16 @@ def socket_event_monitor(
 
 
 def tcp_selector_punch_engine(
-    af,
-    nic_id,
-    port_allocs,
-    src_ip,
-    dest_ip,
-    f_sleep_until,
-    our_ip,
-    same_machine,
-    params=None,
-):
-    # type: (Any, Optional[str], List[Any], Optional[str], str, Any, Optional[str], bool, Optional[Dict[str, Any]]) -> Optional[Any]
+af: Any,
+    nic_id: Optional[str],
+    port_allocs: List[Any],
+    src_ip: Optional[str],
+    dest_ip: str,
+    f_sleep_until: Any,
+    our_ip: Optional[str],
+    same_machine: bool,
+    params: Optional[Dict[str, Any]] = None,
+) -> Optional[Any]:
     """
     TCP hole-punch engine.
 

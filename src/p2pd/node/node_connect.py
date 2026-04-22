@@ -1,4 +1,5 @@
 """Outbound connection logic for a p2pd node."""
+from typing import Any, Optional, Tuple
 import asyncio
 from aionetiface import *
 from .node_utils import *
@@ -9,8 +10,7 @@ from ..traversal.plugins.return_addr.main import ReturnAddrPlugin
 from ..traversal.plugins.reverse_connect.main import ReverseConnectPlugin
 
 
-def apply_listen_ips(node):
-    # type: (Any) -> None
+def apply_listen_ips(node: Any) -> None:
     """Restrict each NIC's route pool to the explicitly requested listen IPs."""
     by_nic = sort_ips_by_nic(node.listen_ips, node.ifs)
     found = set()
@@ -24,8 +24,7 @@ def apply_listen_ips(node):
         raise ValueError("listen IPs not found on any interface: " + ", ".join(missing))
 
 
-def install_default_plugins(node):
-    # type: (Any) -> None
+def install_default_plugins(node: Any) -> None:
     """Register the built-in traversal plugins (direct, get_addr, return_addr, reverse_connect) on the node."""
     node.traversal.install_plugin("direct_connect", {"class": DirectConnect})
     node.traversal.install_plugin("get_addr", {"class": GetAddrPlugin})
@@ -34,8 +33,7 @@ def install_default_plugins(node):
     node.traversal.install_plugin_done_callback(node.on_plugin_done)
 
 
-async def resolve_pnp_addr(node, pnp_addr):
-    # type: (Any, Any) -> Tuple[Any, Optional[Any], Optional[str]]
+async def resolve_pnp_addr(node: Any, pnp_addr: Any) -> Tuple[Any, Optional[Any], Optional[str]]:
     """Resolve a PNP nickname to (addr_bytes, dest_vk, source).
 
     source is "mqtt" if the address was refreshed via the MQTT router,
@@ -63,8 +61,7 @@ async def resolve_pnp_addr(node, pnp_addr):
     return addr_bytes, dest_vk, source
 
 
-async def connect(node, af, route_type, pnp_addr, plugin_name=None):
-    # type: (Any, Any, Any, Any, Optional[str]) -> Any
+async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_name: Optional[str] = None) -> Any:
     """Resolve the destination address and run the traversal plugin to establish a P2P connection."""
     addr_bytes, dest_vk, _ = await resolve_pnp_addr(node, pnp_addr)
     dest_map = parse_node_addr(addr_bytes)

@@ -20,6 +20,8 @@ import hashlib
 import time
 import unittest
 
+import pytest
+
 import namebump
 from ecdsa import SigningKey, SECP256k1
 
@@ -69,6 +71,7 @@ def _make_sk():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.network
 class TestSysClock(unittest.IsolatedAsyncioTestCase):
     """SysClock.start() must sync to NTP; .time() must return a plausible ts."""
 
@@ -136,6 +139,7 @@ class TestSysClock(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.network
 class TestNickname(unittest.IsolatedAsyncioTestCase):
     """Full put / get / delete lifecycle against real PNP servers."""
 
@@ -237,6 +241,7 @@ class TestNickname(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.network
 class TestSTUN(unittest.IsolatedAsyncioTestCase):
     """STUN clients should return a public IP address."""
 
@@ -294,6 +299,7 @@ class TestSTUN(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.network
 class TestMQTT(unittest.IsolatedAsyncioTestCase):
     """MQTT signaling infrastructure should accept connections."""
 
@@ -361,6 +367,7 @@ class TestMQTT(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.network
 class TestNodeStart(unittest.IsolatedAsyncioTestCase):
     """Node should start, produce a valid addr_bytes, and close cleanly."""
 

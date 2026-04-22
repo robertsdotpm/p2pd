@@ -1,11 +1,11 @@
 """Boundary-based port allocator for NAT prediction."""
+from typing import Any, Dict, List, Optional, Tuple
 import os
 from ..utility.boundary_lib import *
 from ..punch_defs import *
 
 
-def boundary_port_alloc(timestamp, n=NUM_PORTS, params=None):
-    # type: (int, int, Optional[Dict[str, Any]]) -> Tuple[List[Any], int]
+def boundary_port_alloc(timestamp: int, n: int = NUM_PORTS, params: Optional[Dict[str, Any]] = None) -> Tuple[List[Any], int]:
     """
     Deterministic port allocation seeded by the NTP-aligned time bucket.
 

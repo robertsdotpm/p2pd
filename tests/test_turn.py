@@ -34,6 +34,8 @@ import sys
 import unittest
 from unittest.mock import patch
 
+import pytest
+
 import aionetiface
 from aionetiface import (
     Interface,
@@ -165,6 +167,7 @@ async def start_client_ip6(nic, dest_ip="::1", port=TURN_TEST_PORT, timeout=12):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.network
 class TestTURNLoopback(AsyncTestCase):
     """
     Two TURNClients on loopback exchange a message through the local server.
@@ -282,6 +285,7 @@ class TestTURNLoopback(AsyncTestCase):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.network
 class TestTURNNicIPs(AsyncTestCase):
     """
     Client A is bound to NIC IP[0], Client B to NIC IP[1].
@@ -377,6 +381,7 @@ class TestTURNNicIPs(AsyncTestCase):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.network
 class TestTURNLoopbackIPv6(AsyncTestCase):
     """
     Two TURNClients on IPv6 loopback (::1) exchange a message through the
@@ -489,6 +494,7 @@ class TestTURNLoopbackIPv6(AsyncTestCase):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.network
 class TestTURNPluginIPv6(AsyncTestCase):
     """
     Exercises TURNPlugin end-to-end using the local test server over IPv6.
@@ -627,6 +633,7 @@ class TestTURNPluginIPv6(AsyncTestCase):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.network
 class TestTURNPlugin(AsyncTestCase):
     """
     Exercises TURNPlugin end-to-end with a local test server.
@@ -823,6 +830,7 @@ class TestTURNPlugin(AsyncTestCase):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.network
 class TestTURNMultiClientMesh(AsyncTestCase):
     """
     NIGHTMARE DIFFICULTY: Multiple TURN clients form a relay mesh.

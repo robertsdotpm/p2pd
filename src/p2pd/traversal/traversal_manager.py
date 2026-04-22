@@ -13,7 +13,9 @@ running instance.
 
 import asyncio
 from collections import OrderedDict
+from typing import Any, Callable, Dict, List, Optional
 from aionetiface import IP4, NIC_BIND, get_running_loop
+from .traversal_plugin import TraversalPlugin
 from .traversal_utils import (
     async_wrap_errors,
     cancel_task,
@@ -33,8 +35,13 @@ from ..protocol.traversal.proto_msg import ConMsg, ProtoMsg, SIG_PROTO
 class TraversalManager:
     """Orchestrates traversal plugin lifecycle and routes signaling messages to plugins."""
 
-    def __init__(self, router, stop_reader, inbound_pipes=None, nics=None):
-        # type: (Any, Any, Optional[Dict[str, Any]], Optional[List[Any]]) -> None
+    def __init__(
+        self,
+        router: Any,
+        stop_reader: Any,
+        inbound_pipes: Optional[Dict[str, Any]] = None,
+        nics: Optional[List[Any]] = None,
+    ) -> None:
         # by plugin_id
         self.plugins = {}
         self.plugin_loaders = OrderedDict()
@@ -61,8 +68,7 @@ class TraversalManager:
         self.addr_bytes = None
         self.cleanup_task = None
 
-    def install_plugin(self, name, conf):
-        # type: (str, Dict[str, Any]) -> None
+    def install_plugin(self, name: str, conf: Dict[str, Any]) -> None:
         """Register a traversal plugin class under name with the given configuration."""
         if "class" not in conf:
             raise ValueError("plugin conf must include a 'class' key")
@@ -78,8 +84,7 @@ class TraversalManager:
 
     # Plugins return pipes directly or await a pipe future that is resolved
     # elsewhere when a reply arrives over the signaling channel.
-    async def run_plugin(self, plugin, reply=None):
-        # type: (TraversalPlugin, Optional[Any]) -> None
+    async def run_plugin(self, plugin: TraversalPlugin, reply: Optional[Any] = None) -> None:
         """Run a single traversal plugin, optionally providing a reply message."""
         # Don't run if result is set.
         if plugin.result.done():
@@ -106,9 +111,14 @@ class TraversalManager:
             await close_plugin(plugin, self.plugins, self.inbound_pipes)
 
     def create_plugin(
-        self, af, route_type, src_info, dest_info, same_machine, plugin_name
-    ):
-        # type: (Any, Any, Dict[str, Any], Dict[str, Any], bool, str) -> TraversalPlugin
+        self,
+        af: Any,
+        route_type: Any,
+        src_info: Dict[str, Any],
+        dest_info: Dict[str, Any],
+        same_machine: bool,
+        plugin_name: str,
+    ) -> TraversalPlugin:
         """Instantiate and configure a traversal plugin for the given src/dest pair."""
         # Meta data for this specific plugin.
         plugin_loader = self.plugin_loaders[plugin_name]
@@ -161,9 +171,14 @@ class TraversalManager:
 
     # Use a plugin to try get a pipe to a destination node,
     async def attempt_plugin(
-        self, src_map, dest_map, sig_pipe, plugin_name, af=IP4, route_type=NIC_BIND
-    ):
-        # type: (Dict[str, Any], Dict[str, Any], Any, str, Any, Any) -> Optional[TraversalPlugin]
+        self,
+        src_map: Dict[str, Any],
+        dest_map: Dict[str, Any],
+        sig_pipe: Any,
+        plugin_name: str,
+        af: Any = IP4,
+        route_type: Any = NIC_BIND,
+    ) -> Optional[TraversalPlugin]:
         """Select interface pairs and run the named traversal plugin to reach the destination."""
         # Need AF supported by both.
         if not src_map[af] or not dest_map[af]:
@@ -202,8 +217,7 @@ class TraversalManager:
     # parameters from an incoming signal message, swapping src and dest so that
     # "their dest" becomes our src and "their src" becomes our dest. It also
     # reuses the pipe_id from the message so both sides share the same session.
-    def create_inbound_plugin(self, msg):
-        # type: (Any) -> TraversalPlugin
+    def create_inbound_plugin(self, msg: Any) -> TraversalPlugin:
         """Create a traversal plugin for an inbound connection request, inverting src/dest."""
         # TODO: map GetAddr messages to the return_addr plugin handler.
         if isinstance(msg, ConMsg):
@@ -226,8 +240,7 @@ class TraversalManager:
         return plugin
 
     # Use signal router to send a message to the destination.
-    async def send_signal_msg(self, msg, plugin, relay_no=2):
-        # type: (Any, TraversalPlugin, int) -> None
+    async def send_signal_msg(self, msg: Any, plugin: TraversalPlugin, relay_no: int = 2) -> None:
         """Encrypt and deliver a signalling message to the peer via the MQTT router."""
         try:
             # Specify the plugin to use in the destination.
@@ -263,8 +276,7 @@ class TraversalManager:
 
     # Receive a signal message from the router and pass it to a plugin.
     # Called by the MQTT client as: handler(msg, src_pk, queue_id, client)
-    async def recv_signal_msg(self, msg, src_pk_hex, pipe_id_hex, client):
-        # type: (Any, str, str, Any) -> None
+    async def recv_signal_msg(self, msg: Any, src_pk_hex: str, pipe_id_hex: str, client: Any) -> None:
         """Decrypt an incoming signal message and dispatch it to the matching or new plugin."""
         msg = try_unpack_msg(to_b(msg), self.kp.private_key, SIG_PROTO)
 
@@ -303,8 +315,7 @@ class TraversalManager:
         # Prune completed tasks to avoid unbounded growth.
         self.tasks = [t for t in self.tasks if not t.done()]
 
-    async def close(self):
-        # type: () -> None
+    async def close(self) -> None:
         """Cancel all pending plugins and background tasks, releasing their resources."""
         await cancel_task(self.cleanup_task)
         for plugin in list(self.plugins.values()):
@@ -317,8 +328,7 @@ class TraversalManager:
         self.tasks.clear()
 
     # Cleanup timed out plugins.
-    async def cleanup_loop(self):
-        # type: () -> None
+    async def cleanup_loop(self) -> None:
         """Periodically scan for expired plugins and close them to free resources."""
         while True:
             await asyncio.sleep(5)
@@ -327,12 +337,10 @@ class TraversalManager:
                 if now >= plugin.expires_at:
                     await close_plugin(plugin, self.plugins, self.inbound_pipes)
 
-    def install_plugin_done_callback(self, done_callback):
-        # type: (Callable) -> None
+    def install_plugin_done_callback(self, done_callback: Callable) -> None:
         """Register a callback to be invoked when any plugin finishes."""
         self.done_callback = done_callback
 
-    def set_send_signal_msg(self, send_signal_msg):
-        # type: (Callable) -> None
+    def set_send_signal_msg(self, send_signal_msg: Callable) -> None:
         """Register the function used to send signalling messages to peers."""
         self.send_signal_msg = send_signal_msg

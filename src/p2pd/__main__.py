@@ -1,4 +1,5 @@
 """Command-line entry point and interactive REPL for p2pd."""
+from typing import Any
 import ast
 import asyncio
 import code
@@ -10,7 +11,7 @@ import types
 import warnings
 import multiprocessing
 import platform
-from asyncio import futures
+
 
 
 vmaj, vmin, _ = platform.python_version_tuple()
@@ -25,26 +26,25 @@ from aionetiface import *  # noqa: E402
 class AsyncIOInteractiveConsole(code.InteractiveConsole):
     """Interactive Python console that supports top-level await via asyncio."""
 
-    def __init__(self, locals, loop):
-        # type: (Any, Any) -> None
+    def __init__(self, locals: Any, loop: Any) -> None:
         super().__init__(locals)
         self.compile.compiler.flags |= ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
 
         self.loop = loop
+        # Tracks the running REPL task (if any) and whether the user hit
+        # Ctrl-C while it was executing. Kept as instance state rather than
+        # globals so the console's lifetime bounds them.
+        self.repl_future = None
+        self.repl_future_interrupted = False
 
-    def runcode(self, code):
-        # type: (Any) -> None
+    def runcode(self, code: Any) -> None:
         """Execute a code object in the asyncio event loop, supporting top-level await."""
         future = concurrent.futures.Future()
 
-        def callback():
-            # type: () -> None
+        def callback() -> None:
             """Schedule the coroutine from the compiled code on the asyncio loop."""
-            global repl_future
-            global repl_future_interrupted
-
-            repl_future = None
-            repl_future_interrupted = False
+            self.repl_future = None
+            self.repl_future_interrupted = False
 
             func = types.FunctionType(code, self.locals)
             try:
@@ -52,7 +52,7 @@ class AsyncIOInteractiveConsole(code.InteractiveConsole):
             except SystemExit:
                 raise
             except KeyboardInterrupt as ex:
-                repl_future_interrupted = True
+                self.repl_future_interrupted = True
                 future.set_exception(ex)
                 return
             except BaseException as ex:
@@ -64,19 +64,29 @@ class AsyncIOInteractiveConsole(code.InteractiveConsole):
                 return
 
             try:
-                repl_future = self.loop.create_task(coro)
-                futures._chain_future(repl_future, future)
+                self.repl_future = self.loop.create_task(coro)
+
+                def propagate(task: Any) -> None:
+                    """Mirror the task's outcome onto the console's futures-Future result."""
+                    if task.cancelled():
+                        future.cancel()
+                    elif task.exception() is not None:
+                        future.set_exception(task.exception())
+                    else:
+                        future.set_result(task.result())
+
+                self.repl_future.add_done_callback(propagate)
             except BaseException as exc:
                 future.set_exception(exc)
 
-        loop.call_soon_threadsafe(callback)
+        self.loop.call_soon_threadsafe(callback)
 
         try:
             return future.result()
         except SystemExit:
             raise
         except BaseException:
-            if repl_future_interrupted:
+            if self.repl_future_interrupted:
                 self.write("\nKeyboardInterrupt\n")
             else:
                 self.showtraceback()
@@ -85,8 +95,7 @@ class AsyncIOInteractiveConsole(code.InteractiveConsole):
 class REPLThread(threading.Thread):
     """Background thread that drives the asyncio REPL console interaction."""
 
-    def run(self):
-        # type: () -> None
+    def run(self) -> None:
         """Drive the interactive REPL console until the user exits."""
         try:
             loop_policy = str(asyncio.get_event_loop_policy())
@@ -146,9 +155,6 @@ if __name__ == "__main__":
 
     console = AsyncIOInteractiveConsole(repl_locals, loop)
 
-    repl_future = None
-    repl_future_interrupted = False
-
     try:
         import readline  # NoQA
     except ImportError:
@@ -162,9 +168,9 @@ if __name__ == "__main__":
         try:
             loop.run_forever()
         except KeyboardInterrupt:
-            if repl_future and not repl_future.done():
-                repl_future.cancel()
-                repl_future_interrupted = True
+            if console.repl_future and not console.repl_future.done():
+                console.repl_future.cancel()
+                console.repl_future_interrupted = True
             continue
         else:
             break

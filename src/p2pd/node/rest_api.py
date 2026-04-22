@@ -1,5 +1,5 @@
 """Embedded REST API server exposed by a p2pd node."""
-import ast
+from typing import Any, Dict, List, Optional
 import asyncio
 from aionetiface import *
 from .node import *
@@ -8,44 +8,7 @@ from .node_utils import *
 REST_API_PORT = 12333
 
 
-def con_info(self, con_name, con):
-    # type: (Any, str, Any) -> Dict[str, Any]
-    """Return a dict of connection metadata, tolerating closed/unconnected sockets."""
-    # A socket might not be connected.
-    try:
-        raddr = con.sock.getpeername()
-    except OSError:
-        raddr = "not connected"
-
-    # A socket might be closed.
-    try:
-        laddr = con.sock.getsockname()
-    except OSError:
-        laddr = "sock closed"
-
-    # A route might end up malformed.
-    try:
-        con_route = con.route.to_dict()
-    except (OSError, AttributeError):
-        log_exception()
-        con_route = "couldn't load"
-
-    return {
-        "error": 0,
-        "name": con_name,
-        "fd": con.sock.fileno(),
-        "laddr": laddr,
-        "raddr": raddr,
-        "route": con_route,
-        "if": {
-            "name": con.route.interface.name,
-            "offset": self.interfaces.index(con.route.interface),
-        },
-    }
-
-
-def get_opt_param(v, name):
-    # type: (Dict[str, Any], str) -> Optional[Any]
+def get_opt_param(v: Dict[str, Any], name: str) -> Optional[Any]:
     """Return the positional value following name in the parsed request, or None."""
     for index in range(0, len(v["pos"])):
         found_name = v["pos"][index]
@@ -58,31 +21,69 @@ def get_opt_param(v, name):
         return v["pos"][index + 1]
 
 
-def get_sub_params(v):
-    # type: (Dict[str, Any]) -> List[Any]
+def parse_addr_param(addr: str) -> Any:
+    """Parse an address parameter of the form "ip,port" (optionally wrapped in brackets/quotes).
+
+    Returns a (ip, port) tuple on success, or the string "invalid addr tuple" on failure.
+    """
+    if not isinstance(addr, str):
+        return "invalid addr tuple"
+
+    # Strip surrounding whitespace and any wrapping parens/brackets.
+    stripped = addr.strip()
+    if stripped.startswith("(") or stripped.startswith("["):
+        stripped = stripped[1:]
+    if stripped.endswith(")") or stripped.endswith("]"):
+        stripped = stripped[:-1]
+
+    parts = stripped.split(",")
+    if len(parts) != 2:
+        return "invalid addr tuple"
+
+    ip = parts[0].strip().strip("'").strip('"').strip()
+    port_str = parts[1].strip().strip("'").strip('"').strip()
+
+    # IP must only contain legal address characters.
+    allowed = set("0123456789abcdefABCDEF.:%")
+    if not ip or any(ch not in allowed for ch in ip):
+        return "invalid addr tuple"
+
+    try:
+        port = int(port_str)
+    except ValueError:
+        return "invalid addr tuple"
+
+    if port < 0 or port > 65535:
+        return "invalid addr tuple"
+
+    return (ip, port)
+
+
+def get_sub_params(v: Dict[str, Any]) -> List[Any]:
     """Build a subscription filter from request params, applying msg pattern and addr overrides."""
     # Messages are put into buckets.
     sub = SUB_ALL[:]
     if "msg_p" in v["name"]:
         sub[0] = to_b(v["name"]["msg_p"])
 
+    # Prefer split ip/port params. Fall back to legacy addr_p "ip,port" form.
+    ip = get_opt_param(v, "ip")
+    port = get_opt_param(v, "port")
+    if ip is not None and port is not None:
+        try:
+            sub[1] = (str(ip).strip(), int(port))
+        except (TypeError, ValueError):
+            sub[1] = "invalid addr tuple"
+        return sub
+
     addr = get_opt_param(v, "addr_p")
     if addr is not None:
-        # Matches ('ip', port)
-        p = r"^[\(\[] *['\"]{1}[0-9.:%]+['\"]"
-        p += r"{1}| *[,] *[0-9]+ *[\)\]]$"
-        if re.match(p, addr) is None:
-            addr = "invalid addr tuple"
-        else:
-            addr = ast.literal_eval(addr)
-
-        sub[1] = addr
+        sub[1] = parse_addr_param(addr)
 
     return sub
 
 
-def load_sub_or_default(v, subs):
-    # type: (Dict[str, Any], Dict[str, Any]) -> Any
+def load_sub_or_default(v: Dict[str, Any], subs: Dict[str, Any]) -> Any:
     """Return the named subscription filter from subs, falling back to SUB_ALL."""
     sub_name = get_opt_param(v, "name")
     if sub_name in subs:
@@ -94,18 +95,49 @@ def load_sub_or_default(v, subs):
 class P2PDServer(RESTD):
     """HTTP REST server exposing P2PD node functionality over a local loopback interface."""
 
-    def __init__(self, interfaces=None, node=None):
-        # type: (Optional[List[Any]], Optional[Any]) -> None
+    def __init__(self, interfaces: Optional[List[Any]] = None, node: Optional[Any] = None) -> None:
         super().__init__()
-        self.__name__ = "P2PDServer"
         self.interfaces = interfaces if interfaces is not None else []
         self.node = node
         self.cons = {}
         self.subs = {}
 
+    def con_info(self, con_name: Any, con: Any) -> Dict[str, Any]:
+        """Return a dict of connection metadata, tolerating closed/unconnected sockets."""
+        # A socket might not be connected.
+        try:
+            raddr = con.sock.getpeername()
+        except OSError:
+            raddr = "not connected"
+
+        # A socket might be closed.
+        try:
+            laddr = con.sock.getsockname()
+        except OSError:
+            laddr = "sock closed"
+
+        # A route might end up malformed.
+        try:
+            con_route = con.route.to_dict()
+        except (OSError, AttributeError):
+            log_exception()
+            con_route = "couldn't load"
+
+        return {
+            "error": 0,
+            "name": con_name,
+            "fd": con.sock.fileno(),
+            "laddr": laddr,
+            "raddr": raddr,
+            "route": con_route,
+            "if": {
+                "name": con.route.interface.name,
+                "offset": self.interfaces.index(con.route.interface),
+            },
+        }
+
     @RESTD.GET(["version"])
-    async def get_version(self, v, pipe):
-        # type: (Any, Any) -> Dict[str, Any]
+    async def get_version(self, v: Any, pipe: Any) -> Dict[str, Any]:
         """Return the P2PD version and author information."""
         return {
             "title": "P2PD",
@@ -115,8 +147,7 @@ class P2PDServer(RESTD):
         }
 
     @RESTD.GET(["ifs"])
-    async def get_interfaces(self, v, pipe):
-        # type: (Any, Any) -> Dict[str, Any]
+    async def get_interfaces(self, v: Any, pipe: Any) -> Dict[str, Any]:
         """Return a JSON-serialised list of all loaded network interfaces."""
         try:
             return {"ifs": if_list_to_dict(self.interfaces), "error": 0}
@@ -125,16 +156,14 @@ class P2PDServer(RESTD):
             return {"error": 4, "msg": "unable to convert ifs to dict."}
 
     @RESTD.GET(["addr"])
-    async def get_peer_addr(self, v, pipe):
-        # type: (Any, Any) -> Dict[str, Any]
+    async def get_peer_addr(self, v: Any, pipe: Any) -> Dict[str, Any]:
         """Return the serialised P2P address bytes of this node."""
         if self.node.addr_bytes is None:
             return {"error": 5, "msg": "p2pd node addr bytes is none."}
         return {"addr": to_s(self.node.addr_bytes), "error": 0}
 
     @RESTD.GET(["open"])
-    async def open_p2p_pipe(self, v, pipe):
-        # type: (Any, Any) -> Optional[Dict[str, Any]]
+    async def open_p2p_pipe(self, v: Any, pipe: Any) -> Optional[Dict[str, Any]]:
         """Initiate a P2P connection to dest_addr and store it under the given con_name."""
         con_name = v["name"]["open"]
         dest_addr = v["pos"][0]
@@ -167,11 +196,9 @@ class P2PDServer(RESTD):
             con.subscribe(SUB_ALL)
 
             # Remove con from table.
-            def build_do_cleanup():
-                # type: () -> Any
+            def build_do_cleanup() -> Any:
                 """Return a closure that removes con_name from the connections table."""
-                def do_cleanup(msg, client_tup, pipe):
-                    # type: (Any, Any, Any) -> None
+                def do_cleanup(msg: Any, client_tup: Any, pipe: Any) -> None:
                     """Remove the connection from the table when the pipe ends."""
                     del self.cons[con_name]
 
@@ -182,15 +209,14 @@ class P2PDServer(RESTD):
 
             # Return the results.
             self.cons[con_name] = con
-            return con_info(self, con_name, con)
+            return self.con_info(con_name, con)
 
         # Failed to connect.
         if con is None:
             return {"msg": fstr("Con {0} failed connect.", (con_name,)), "error": 3}
 
     @RESTD.GET(["info"])
-    async def get_con_info(self, v, pipe):
-        # type: (Any, Any) -> Dict[str, Any]
+    async def get_con_info(self, v: Any, pipe: Any) -> Dict[str, Any]:
         """Return socket and route metadata for the named open connection."""
         con_name = v["name"]["con"]
         if con_name not in self.cons:
@@ -198,11 +224,10 @@ class P2PDServer(RESTD):
 
         # Check con exists.
         con = self.cons[con_name]
-        return con_info(self, con_name, con)
+        return self.con_info(con_name, con)
 
     @RESTD.GET(["send"])
-    async def pipe_send_text(self, v, pipe):
-        # type: (Any, Any) -> Dict[str, Any]
+    async def pipe_send_text(self, v: Any, pipe: Any) -> Dict[str, Any]:
         """URL-decode the message parameter and send it as text over the named connection."""
         con_name = v["name"]["send"]
         en_msg = urldecode(v["pos"][0])
@@ -221,8 +246,7 @@ class P2PDServer(RESTD):
         return {"con_name": con_name, "sent": len(en_msg), "error": 0}
 
     @RESTD.GET(["recv"])
-    async def pipe_recv_text(self, v, pipe):
-        # type: (Any, Any) -> Dict[str, Any]
+    async def pipe_recv_text(self, v: Any, pipe: Any) -> Dict[str, Any]:
         """Wait for and return a text message from the named connection's receive buffer."""
         con_name = v["name"]["recv"]
 
@@ -245,8 +269,7 @@ class P2PDServer(RESTD):
             return {"msg": "recv timeout", "error": 5}
 
     @RESTD.GET(["close"])
-    async def pipe_close(self, v, pipe):
-        # type: (Any, Any) -> Dict[str, Any]
+    async def pipe_close(self, v: Any, pipe: Any) -> Dict[str, Any]:
         """Close the named P2P connection and remove it from the connection table."""
         con_name = v["name"]["close"]
 
@@ -258,8 +281,7 @@ class P2PDServer(RESTD):
         return {"closed": con_name, "error": 0}
 
     @RESTD.POST(["binary"])
-    async def pipe_send_binary(self, v, pipe):
-        # type: (Any, Any) -> Dict[str, Any]
+    async def pipe_send_binary(self, v: Any, pipe: Any) -> Dict[str, Any]:
         """Send the raw POST body as binary data over the named P2P connection."""
         con_name = v["name"]["binary"]
 
@@ -275,8 +297,7 @@ class P2PDServer(RESTD):
         return {"con_name": con_name, "sent": len(v["body"]), "error": 0}
 
     @RESTD.GET(["binary"])
-    async def pipe_get_binary(self, v, pipe):
-        # type: (Any, Any) -> Any
+    async def pipe_get_binary(self, v: Any, pipe: Any) -> Any:
         """Read raw binary data from the named connection's receive buffer and return it directly."""
         con_name = v["name"]["binary"]
 
@@ -296,8 +317,7 @@ class P2PDServer(RESTD):
         return out[1]
 
     @RESTD.GET(["tunnel"])
-    async def http_tunnel_trick(self, v, pipe):
-        # type: (Any, Any) -> None
+    async def http_tunnel_trick(self, v: Any, pipe: Any) -> None:
         """Upgrade this HTTP connection to a transparent bidirectional tunnel to the named P2P pipe."""
         con_name = v["name"]["pipe"]
 
@@ -320,8 +340,7 @@ class P2PDServer(RESTD):
         return None
 
     @RESTD.GET(["sub"], ["name"], ["msg_p"])
-    async def pipe_do_sub(self, v, pipe):
-        # type: (Any, Any) -> Dict[str, Any]
+    async def pipe_do_sub(self, v: Any, pipe: Any) -> Dict[str, Any]:
         """Create a named message subscription filter on the specified P2P connection."""
         # Get variable names.
         con_name = v["name"]["sub"]
@@ -353,8 +372,7 @@ class P2PDServer(RESTD):
         }
 
     @RESTD.DELETE(["sub"], ["name"])
-    async def pipe_do_unsub(self, v, pipe):
-        # type: (Any, Any) -> Dict[str, Any]
+    async def pipe_do_unsub(self, v: Any, pipe: Any) -> Dict[str, Any]:
         """Remove a named subscription filter from the specified P2P connection."""
         con_name = v["name"]["sub"]
         sub_name = v["name"]["name"]
@@ -372,8 +390,7 @@ class P2PDServer(RESTD):
 
 
 # pragma: no cover
-async def start_p2pd_server(port=REST_API_PORT, ifs=None, enable_upnp=False):
-    # type: (int, Optional[List[Any]], bool) -> Any
+async def start_p2pd_server(port: int = REST_API_PORT, ifs: Optional[List[Any]] = None, enable_upnp: bool = False) -> Any:
     """Start a P2PD node and bind the REST API server to the loopback interface on port."""
     print("Loading interfaces...")
     print("If you've just connected a new NIC ")
@@ -414,8 +431,7 @@ async def start_p2pd_server(port=REST_API_PORT, ifs=None, enable_upnp=False):
     return p2p_server
 
 
-async def p2pd_workspace():
-    # type: () -> None
+async def p2pd_workspace() -> None:
     """Launch the P2PD REST server and block indefinitely for manual testing."""
     await start_p2pd_server()
     print(fstr("http://localhost:{0}/", (REST_API_PORT,)))

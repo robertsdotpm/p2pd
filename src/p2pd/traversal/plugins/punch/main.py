@@ -1,4 +1,5 @@
 """Traversal plugin for TCP/UDP hole punching."""
+from typing import Any, Dict, Optional, Tuple
 import asyncio
 from aionetiface import *
 from ....protocol.traversal.proto_msg import PunchMsg
@@ -16,8 +17,7 @@ from ....node.node_utils import get_pp_executors
 class PunchPlugin(TraversalPlugin):
     """Traversal plugin implementing TCP hole-punching via coordinated port prediction."""
 
-    async def run(self, reply=None):
-        # type: (Optional[Any]) -> None
+    async def run(self, reply: Optional[Any] = None) -> None:
         """Coordinate the hole-punch exchange and launch the background punching process."""
         # --- Get or create the PunchClient for this session ---
         puncher = self.punch_clients.get(self.plugin_id)
@@ -49,8 +49,7 @@ class PunchPlugin(TraversalPlugin):
         # --- Send our port predictions to the peer ---
         await self.send_signal_msg(outgoing_msg)
 
-    async def setup_puncher_client(self, reply):
-        # type: (Optional[Any]) -> Tuple[Optional[Any], Optional[Any]]
+    async def setup_puncher_client(self, reply: Optional[Any]) -> Tuple[Optional[Any], Optional[Any]]:
         """
         Determines the source/destination addresses and the decider IP,
         creates a new PunchClient, and sets the coordinated time references.
@@ -119,8 +118,7 @@ class PunchPlugin(TraversalPlugin):
         # Return the new puncher and the STUN clients
         return puncher, stuns
 
-    async def configure_puncher_process(self, puncher, stuns):
-        # type: (Any, Any) -> Any
+    async def configure_puncher_process(self, puncher: Any, stuns: Any) -> Any:
         """
         Initializes the NAT Prediction Allocator, saves the PunchClient,
         and schedules the delayed asynchronous punching process.
@@ -143,8 +141,7 @@ class PunchPlugin(TraversalPlugin):
 
         return puncher
 
-    async def advance_punching_protocol(self, puncher, reply, punch_time):
-        # type: (Any, Optional[Any], int) -> Optional[Any]
+    async def advance_punching_protocol(self, puncher: Any, reply: Optional[Any], punch_time: int) -> Optional[Any]:
         """Compute the next round of port predictions and return an outgoing PunchMsg, or None when done."""
         # Convert raw mappings from the peer into internal objects.
         recv_mappings = None
@@ -176,8 +173,7 @@ class PunchPlugin(TraversalPlugin):
         return msg
 
     # ... (other methods, including delayed_start_punching_proc) ...
-    async def delayed_start_punching_proc(self, nic, puncher):
-        # type: (Any, Any) -> None
+    async def delayed_start_punching_proc(self, nic: Any, puncher: Any) -> None:
         """Wait a short coordinator delay then launch the punching process and resolve the result."""
         # Wait for the peer to receive our message and set up its own process.
         # The delay is kept short when using FAST_PUNCH_PARAMS because the
@@ -202,8 +198,7 @@ class PunchPlugin(TraversalPlugin):
             self.punch_proc.pop(self.plugin_id, None)
             self.punch_clients.pop(self.plugin_id, None)
 
-    async def close(self):
-        # type: () -> None
+    async def close(self) -> None:
         """Cancel any in-flight punch task and remove this plugin's shared state.
 
         Safe to call multiple times: pop() is a no-op when the key is absent
@@ -222,9 +217,12 @@ class PunchPluginFactory:
     """Creates and configures PunchPlugin instances sharing STUN clients and process pools."""
 
     def __init__(
-        self, stun_clients, sys_clock=None, punch_clients=None, proc_pool=None
-    ):
-        # type: (Any, Optional[Any], Optional[Dict[str, Any]], Optional[Any]) -> None
+self,
+        stun_clients: Any,
+        sys_clock: Optional[Any] = None,
+        punch_clients: Optional[Dict[str, Any]] = None,
+        proc_pool: Optional[Any] = None,
+    ) -> None:
         self.stun_clients = stun_clients
         self.sys_clock = sys_clock or SysClock(None, 0.1)
         self.proc_pool = proc_pool
@@ -233,16 +231,14 @@ class PunchPluginFactory:
         self.punch_proc = {}
 
     @classmethod
-    async def create(cls, stun_clients, sys_clock):
-        # type: (Any, Any) -> PunchPluginFactory
+    async def create(cls, stun_clients: Any, sys_clock: Any) -> "PunchPluginFactory":
         """Async factory that allocates a process pool executor and returns a ready factory."""
         factory = cls(stun_clients, sys_clock)
         factory.max_workers, factory.proc_pool = await get_pp_executors()
         factory.active_punchers = 0
         return factory
 
-    def build_plugin(self):
-        # type: () -> PunchPlugin
+    def build_plugin(self) -> PunchPlugin:
         """Create a new PunchPlugin wired to this factory's shared STUN clients and state."""
         plugin = PunchPlugin()
         plugin.stun_clients = self.stun_clients
@@ -252,8 +248,7 @@ class PunchPluginFactory:
         plugin.punch_proc = self.punch_proc
         return plugin
 
-    async def close(self):
-        # type: () -> None
+    async def close(self) -> None:
         """Shut down the process pool executor used for running punch workers."""
         if not self.proc_pool:
             return

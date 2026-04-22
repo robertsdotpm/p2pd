@@ -1,4 +1,5 @@
 """Traversal plugin for direct (non-NATed) connections."""
+from typing import Any, Optional
 import asyncio
 from aionetiface import *
 from ....node.node_defs import *
@@ -8,8 +9,7 @@ from ...traversal_plugin import TraversalPlugin
 class DirectConnect(TraversalPlugin):
     """Traversal plugin that attempts a straightforward TCP connection to the peer."""
 
-    async def run(self, reply=None):
-        # type: (Optional[Any]) -> None
+    async def run(self, reply: Optional[Any] = None) -> None:
         """Open a direct TCP connection to the peer and store the resulting pipe."""
         # Connect to this address.
         dest = (

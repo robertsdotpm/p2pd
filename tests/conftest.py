@@ -14,7 +14,7 @@ if not hasattr(unittest, "IsolatedAsyncioTestCase"):
                 return loop.run_until_complete(coro)
             finally:
                 try:
-                    pending = asyncio.Task.all_tasks(loop)
+                    pending = asyncio.all_tasks(loop)
                     for t in pending:
                         t.cancel()
                     if pending:

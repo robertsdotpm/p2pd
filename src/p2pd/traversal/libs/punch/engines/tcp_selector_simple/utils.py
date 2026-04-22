@@ -1,4 +1,5 @@
 """Utilities for the simple TCP selector punch engine."""
+from typing import Any, List, Optional, Tuple
 import socket
 import time
 from ...punch_defs import *
@@ -11,8 +12,7 @@ different operating systems.
 """
 
 
-def sock_opt_voodoo(s):
-    # type: (Any) -> None
+def sock_opt_voodoo(s: Any) -> None:
     """Apply non-blocking mode and SO_REUSEADDR/SO_REUSEPORT socket options for hole punching."""
     s.setblocking(False)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -29,8 +29,7 @@ def sock_opt_voodoo(s):
     """
 
 
-def bind_tcp_sockets(af, nic_id, port_allocs, src_ip=None):
-    # type: (Any, Optional[str], List[Any], Optional[str]) -> List[Tuple[Any, Any]]
+def bind_tcp_sockets(af: Any, nic_id: Optional[str], port_allocs: List[Any], src_ip: Optional[str] = None) -> List[Tuple[Any, Any]]:
     """Create and bind one TCP socket per port allocation, returning successful (alloc, socket) pairs."""
     # Listen address.
     if src_ip:
@@ -55,8 +54,7 @@ def bind_tcp_sockets(af, nic_id, port_allocs, src_ip=None):
     return bound_socks
 
 
-def listen_on_tcp_sockets(bound_infos):
-    # type: (List[Tuple[Any, Any]]) -> List[Tuple[Any, Any]]
+def listen_on_tcp_sockets(bound_infos: List[Tuple[Any, Any]]) -> List[Tuple[Any, Any]]:
     """Call listen() on each bound socket, returning those that succeed."""
     listen_infos = []
     for bound_info in bound_infos:
@@ -70,8 +68,7 @@ def listen_on_tcp_sockets(bound_infos):
     return listen_infos
 
 
-def connect_on_tcp_sockets(same_machine, bound_infos, dest_ip, spray_duration=5.0):
-    # type: (bool, List[Tuple[Any, Any]], str, float) -> None
+def connect_on_tcp_sockets(same_machine: bool, bound_infos: List[Tuple[Any, Any]], dest_ip: str, spray_duration: float = 5.0) -> None:
     """
     Spray SYN packets at the destination for `spray_duration` seconds.
 
@@ -99,8 +96,7 @@ def connect_on_tcp_sockets(same_machine, bound_infos, dest_ip, spray_duration=5.
             time.sleep(0.01)  # 10ms is typical sweet spot
 
 
-def sleep_until(punch_time, f_timer, max_sleep=10):
-    # type: (float, Any, int) -> None
+def sleep_until(punch_time: float, f_timer: Any, max_sleep: int = 10) -> None:
     """Block until punch_time (from f_timer()), sleeping at most max_sleep seconds."""
     now = f_timer()
     sleep_time = max(0, punch_time - now)

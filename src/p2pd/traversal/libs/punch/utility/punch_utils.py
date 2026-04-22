@@ -1,4 +1,5 @@
 """Low-level helpers for the punch engine."""
+from typing import Any, List, Optional
 import time
 import socket
 import struct
@@ -16,9 +17,11 @@ NTP_TIMEOUT = 1.0
 
 
 def timestamp_from_ntp(
-    server=NTP_SERVER, port=NTP_PORT, retries=MAX_NTP_RETRIES, timeout=NTP_TIMEOUT
-):
-    # type: (str, int, int, float) -> int
+server: str = NTP_SERVER,
+    port: int = NTP_PORT,
+    retries: int = MAX_NTP_RETRIES,
+    timeout: float = NTP_TIMEOUT,
+) -> int:
     """
     Fetches the Unix timestamp from an NTP server using UDP sockets,
     with built-in retry logic for reliability.
@@ -65,8 +68,7 @@ based on how close the destination is.
 """
 
 
-def get_punch_mode(af, dest_ip, same_machine):
-    # type: (Any, str, bool) -> int
+def get_punch_mode(af: Any, dest_ip: str, same_machine: bool) -> int:
     """Return the punch mode constant (remote, LAN, or self) for the given destination IP."""
     host_limit = 0
     dest_ipr = IPRange(dest_ip, bitlen=host_limit)
@@ -81,8 +83,7 @@ def get_punch_mode(af, dest_ip, same_machine):
             return TCP_PUNCH_LAN
 
 
-def punching_sanity_check(mode, our_wan, dest_addr, send_mappings, recv_mappings):
-    # type: (int, Any, str, List[Any], List[Any]) -> None
+def punching_sanity_check(mode: int, our_wan: Any, dest_addr: str, send_mappings: List[Any], recv_mappings: List[Any]) -> None:
     """Log warnings when port or address conflicts are detected in the punch configuration."""
     if mode == TCP_PUNCH_SELF:
         for sm in send_mappings:
@@ -106,8 +107,7 @@ def punching_sanity_check(mode, our_wan, dest_addr, send_mappings, recv_mappings
 
 
 # Not really the best approach but process communication is a pain.
-async def punch_close_msg(msg, client_tup, pipe):
-    # type: (bytes, Any, Any) -> None
+async def punch_close_msg(msg: bytes, client_tup: Any, pipe: Any) -> None:
     """Close the pipe after a short delay when a punch-end message is received."""
     if msg in PUNCH_END:
         # Allow time to send message down pipes.
@@ -115,8 +115,7 @@ async def punch_close_msg(msg, client_tup, pipe):
         await pipe.close()
 
 
-async def setup_punch_coordination(node, sys_clock=None):
-    # type: (Any, Optional[Any]) -> None
+async def setup_punch_coordination(node: Any, sys_clock: Optional[Any] = None) -> None:
     """Initialise and attach the NTP-synchronised SysClock to the node for punch timing."""
     if sys_clock is None:
         sys_clock = await SysClock(node.ifs[0]).start()
@@ -124,8 +123,7 @@ async def setup_punch_coordination(node, sys_clock=None):
     node.sys_clock = sys_clock
 
 
-def wait_for_one_remaining(sockets, timeout=5.0):
-    # type: (List[Any], float) -> Optional[Any]
+def wait_for_one_remaining(sockets: List[Any], timeout: float = 5.0) -> Optional[Any]:
     """
     Waits up to 5 seconds for all but one socket to close.
     Does NOT close the sockets locally.
@@ -169,8 +167,7 @@ def wait_for_one_remaining(sockets, timeout=5.0):
     return list(remaining)[0] if remaining else None
 
 
-def wait_for_first_with_data(sockets, timeout=5.0):
-    # type: (List[Any], float) -> Optional[Any]
+def wait_for_first_with_data(sockets: List[Any], timeout: float = 5.0) -> Optional[Any]:
     """
     Wait until one of the sockets has data, then read and return it.
     Returns (socket, data) or (None, None) if timed out.
@@ -209,8 +206,7 @@ def wait_for_first_with_data(sockets, timeout=5.0):
 
 
 # In a LAN = lan ip, or for WAN targets = wan IPs.
-def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
-    # type: (str, List[Any], Optional[str]) -> Optional[Any]
+def choose_winning_tcp_sock(their_ip: str, sock_list: List[Any], our_ip: Optional[str] = None) -> Optional[Any]:
     """Select one winning socket from a punched connection set, closing the rest."""
     # No open sockets.
     if not sock_list:

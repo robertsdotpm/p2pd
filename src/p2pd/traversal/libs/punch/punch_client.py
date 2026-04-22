@@ -41,6 +41,7 @@ Design:
         - FD limit on windows is 64
 """
 
+from typing import Any, Dict, Optional
 import sys
 import argparse
 import socket
@@ -58,16 +59,15 @@ class PunchClient:
     """Coordinates TCP hole-punching between two peers including port allocation and timing."""
 
     def __init__(
-        self,
-        dest_ip,
-        src_ip=None,
-        our_ip=None,
-        nic_id=None,
-        max_sleep=10,
-        same_machine=False,
-        params=None,
-    ):
-        # type: (str, Optional[str], Optional[str], Optional[str], int, bool, Optional[Dict[str, Any]]) -> None
+self,
+        dest_ip: str,
+        src_ip: Optional[str] = None,
+        our_ip: Optional[str] = None,
+        nic_id: Optional[str] = None,
+        max_sleep: int = 10,
+        same_machine: bool = False,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> None:
         # Fallback to IP4
         self.af = socket.AF_INET
         if ":" in dest_ip:
@@ -123,26 +123,22 @@ class PunchClient:
         # Patch dest IP based on special bind rules.
         self.dest_ip = patch_connect_ip(self.af, self.dest_ip, self.nic_id)
 
-    def set_src_ip(self, src_ip):
-        # type: (str) -> None
+    def set_src_ip(self, src_ip: str) -> None:
         """Override the source IP address used when binding punch sockets."""
         self.src_ip = src_ip
 
     # Timestamp is a unix timestamp.
-    def set_timestamp(self, timestamp):
-        # type: (int) -> None
+    def set_timestamp(self, timestamp: int) -> None:
         """Record the NTP-synchronised Unix timestamp as the clock reference for this punch."""
         self.timestamp = timestamp
         self.start_time = time.monotonic()
 
     # Punch time is a future unix timestamp to start punching.
-    def set_punch_time(self, punch_time):
-        # type: (int) -> None
+    def set_punch_time(self, punch_time: int) -> None:
         """Set the future Unix timestamp at which both peers will simultaneously send SYNs."""
         self.punch_time = punch_time
 
-    def sleep_until(self):
-        # type: () -> None
+    def sleep_until(self) -> None:
         """Block the calling thread until the punch time is reached, capped by max_sleep."""
         # Time elapsed in seconds since first starting.
         elapsed = time.monotonic() - self.start_time
@@ -161,8 +157,7 @@ class PunchClient:
         if sleep_time > 0:
             time.sleep(sleep_time)
 
-    def add_port_allocator(self, f_port_alloc, n=16):
-        # type: (Any, int) -> None
+    def add_port_allocator(self, f_port_alloc: Any, n: int = 16) -> None:
         """Run a port-allocation function and append unique PortAlloc entries to the list."""
         port_allocs, reserved = f_port_alloc(self.timestamp, n=n, params=self.params)
         for port_alloc in port_allocs:
@@ -176,8 +171,7 @@ class PunchClient:
                 self.port_allocs.append(port_alloc)
 
     # Return a socket (punched hole) on success.
-    def run_engine(self, f_engine):
-        # type: (Any) -> Optional[Any]
+    def run_engine(self, f_engine: Any) -> Optional[Any]:
         """Execute the given punch engine function with this client's configuration and return the result socket."""
         return f_engine(
             af=self.af,
