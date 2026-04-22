@@ -14,3 +14,4 @@ if __name__ != "__main__":
     from .node.node_utils import get_pp_executors, load_signing_key, load_stun_clients  # noqa: F401  # pylint: disable=unused-import
     from .node.nickname import *  # noqa: F401, F403  # pylint: disable=wildcard-import,unused-wildcard-import
     from .node.node_connect import resolve_pnp_addr  # noqa: F401  # pylint: disable=unused-import
+    from .node.auto_connect import auto_connect  # noqa: F401  # pylint: disable=unused-import

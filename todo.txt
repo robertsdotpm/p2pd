@@ -178,3 +178,4 @@ otherwise they will just build up.
 
 - we need some kind of auto-connect without plugin selection for use with the
 examples. we can maybe add this again back into the demo as a discrete step.
+- need to add tests for upnp and make sure its part of the demo / overall system.

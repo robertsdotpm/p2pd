@@ -47,6 +47,7 @@ method_txt = {
     "r": "reverse_connect",
     "p": "punch",
     "t": "relay",
+    "a": "auto_connect",
 }
 
 PROGRAM_BANNER = """Universal reachability demo

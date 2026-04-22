@@ -54,11 +54,11 @@ def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info:
     for addr_type in addr_types:
         # Prefer using remote addresses.
         if addr_type == EXT_BIND:
-            # Will have only one listed external address.
-            if same_if_on_host:
-                continue
-
-            # Behind same router -- this won't work.
+            # Skip when both nodes share the same external address (same NAT /
+            # same machine with the same global IP) — the connection would loop
+            # back through the router or fail.  When ext IPs differ (e.g. two
+            # nodes on the same machine with different global IPv6 addresses),
+            # EXT_BIND is valid and we try it.
             if src_info["ext"] == dest_info["ext"]:
                 continue
 

@@ -5,6 +5,7 @@ from aionetiface import (
     async_wrap_errors, fstr, log, log_exception, sock_has_data,
 )
 from ..traversal.traversal_utils import close_plugin
+from ..node.auto_connect import auto_connect
 from . import stop_rw
 from .utils import (
     ainput, choose_address_families, choose_connection_methods,
@@ -30,13 +31,34 @@ async def connect_option(node: Any, con_opts: Tuple[Any, Optional[bytes], Option
 
     # Get connect cmd segments manually if not set.
     plugin_name = await choose_connection_methods(con_method)
+    if plugin_name == "menu":
+        return "menu"
+
+    # auto_connect skips the AF/pathway prompts entirely.
+    if plugin_name == "auto_connect":
+        cout()
+        cout("Auto-connecting... Please wait...")
+        try:
+            pipe, plugin = await auto_connect(node, dest_addr, timeout=60)
+        except (OSError, ConnectionError, asyncio.TimeoutError) as e:
+            cout("Auto-connect error: " + str(e))
+            return "menu"
+
+        if pipe is None:
+            cout("Auto-connect failed: all strategies exhausted.")
+            return "menu"
+
+        cout("plugin result = " + str(pipe))
+        cout(pipe.sock)
+        pipe.subscribe(SUB_ALL)
+        try:
+            return await echo_client(pipe, echo_data)
+        finally:
+            await pipe.close()
+
     route_type = await choose_pathways(pathway)
     af = await choose_address_families(addr_type)
-    if "menu" in (
-        plugin_name,
-        route_type,
-        af,
-    ):
+    if "menu" in (route_type, af):
         return "menu"
 
     # Data structure to control a tunnel to the remote host.

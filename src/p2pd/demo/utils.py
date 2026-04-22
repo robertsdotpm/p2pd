@@ -241,7 +241,7 @@ async def choose_connection_methods(con_method: Optional[str]) -> str:
     """
     cout()
     cout("Connection methods (in order):")
-    cout("TCP: (d)irect, (r)everse, (p)unch; UDP: (t)urn.")
+    cout("TCP: (d)irect, (r)everse, (p)unch; UDP: (t)urn; (a)uto.")
     cout("Type menu to return.")
     while True:
         # If pressing enter then use the default list of methods in order.
