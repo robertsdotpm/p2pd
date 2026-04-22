@@ -3,7 +3,7 @@ from typing import Any, Optional
 import asyncio
 from aionetiface import log_exception
 from ...traversal_plugin import TraversalPlugin
-from ....protocol.traversal.proto_msg import ReturnAddr
+from ....protocol.proto_msg import ReturnAddr
 
 
 class ReturnAddrPlugin(TraversalPlugin):

@@ -48,11 +48,10 @@ import argparse
 import socket
 import asyncio
 from aionetiface import IP6, ip_norm, patch_connect_ip
-from .punch_defs import *
-from .port_allocators.boundary_alloc import *
-from .engines.tcp_selector_simple.engine import *
-from .utility.punch_utils import *
-from .utility.boundary_lib import DEFAULT_PUNCH_PARAMS
+from .boundary_alloc import boundary_port_alloc
+from .tcp_punch_engine import tcp_selector_punch_engine
+from .punch_utils import timestamp_from_ntp
+from .boundary_lib import DEFAULT_PUNCH_PARAMS, compute_rendezvous
 
 
 # TODO: Could even use ARP to find the other node in a LAN

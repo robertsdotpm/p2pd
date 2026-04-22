@@ -11,7 +11,10 @@ from aionetiface import (
     rm_done_tasks, async_retry, STATUS_RETRY, STATUS_SUCCESS,
     stun_proc_attrs, norm_client_tup,
 )
-from .turn_defs import *
+from .turn_defs import (
+    TURN_TRY_ALLOCATE,
+    TURN_ERROR_STOPPED,
+)
 
 # IS_DEBUG is referenced below but not exported by aionetiface.
 try:

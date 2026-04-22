@@ -29,7 +29,7 @@ from .traversal_utils import (
     to_s,
     try_unpack_msg,
 )
-from ..protocol.traversal.proto_msg import ConMsg, ProtoMsg, SIG_PROTO
+from ..protocol.proto_msg import ConMsg, ProtoMsg, SIG_PROTO
 
 
 class TraversalManager:

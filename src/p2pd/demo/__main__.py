@@ -18,16 +18,26 @@ python3 -m p2pd.demo --disable_upnp 1 --nic ens34
 
 from typing import Any, List, Optional, Tuple
 import asyncio
+import time
 import signal
 import os
-from ..do_imports import *
+from aionetiface import (
+    Interface,
+    StartNodeNicknameFailed, TunnelFailed,
+    async_run, async_wrap_errors, find_intersect, fstr,
+    list_interfaces, load_interfaces, log, log_exception,
+    sock_has_data, sys, to_b, to_s,
+)
+from ..node.nickname import FullNameFailure
+from ..node.node import Node
 from . import stop_rw
-from .defs import *
-from .cmd_arg_defs import *
-from .utils import *
-from .cmd_arg_proc import *
-from .menu import *
-from ..node.node_defs import *
+from .defs import MENU_BANNER, PROGRAM_BANNER, demo_node_conf
+from .cmd_arg_defs import args
+from .utils import (
+    add_echo_support, ainput_interrupt_w, cout,
+    display_ifs_loaded, filter_nics_by_mac,
+)
+from .menu import run_menu_program, stop_nodes_option
 
 # Load interfaces, start node, and return node info.
 

@@ -13,7 +13,7 @@ from aionetiface import (
     strip_none, async_wrap_errors, SigningKey,
 )
 import namebump
-from ..errors import *
+from ..errors import StartNodeNicknameFailed
 
 PNP_INDEX_TO_TLD = {
     frozenset([0]): ".p2p",

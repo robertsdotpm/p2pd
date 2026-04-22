@@ -64,9 +64,19 @@ import time
 from aionetiface import (
     Pipe, TCP, UDP, async_wrap_errors, strip_none, fstr, log, log_exception,
     socket_factory, ParseHTTPResponse, IP4, IP6, cancel_tasks,
-    what_exception, dict_child, async_test,
+    what_exception, dict_child, async_test, NET_CONF,
 )
-from .upnp_utils import *
+from .upnp_utils import (
+    UPNP_CONF,
+    UPNP_PATHS,
+    UPNP_IP,
+    UPNP_PORT,
+    build_upnp_discover_buf,
+    get_upnp_forwarding_services,
+    get_upnp_forwarding_services_for_replies,
+    sort_upnp_replies_by_unique_location,
+    use_upnp_forwarding_services,
+)
 
 
 async def brute_force_port_forward(

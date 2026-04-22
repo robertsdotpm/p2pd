@@ -5,8 +5,7 @@ from aionetiface import (
     sort_ips_by_nic, route_pool_from_ips, fstr, log, parse_node_addr,
     IP4, IP6, NIC_BIND, EXT_BIND,
 )
-from .node_utils import *
-from ..traversal.traversal_address import *
+from ..traversal.traversal_address import get_updated_addr_from_mqtt, pnp_name_has_tld
 from ..traversal.plugins.direct_connect.main import DirectConnect
 from ..traversal.plugins.get_addr.main import GetAddrPlugin
 from ..traversal.plugins.return_addr.main import ReturnAddrPlugin

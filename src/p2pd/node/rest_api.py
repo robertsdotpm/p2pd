@@ -9,7 +9,7 @@ from aionetiface import (
 )
 from .node import Node
 from .node_defs import NODE_PORT, NODE_CONF
-from ..protocol.traversal.proto_defs import P2P_STRATEGIES
+from ..protocol.proto_defs import P2P_STRATEGIES
 
 REST_API_PORT = 12333
 

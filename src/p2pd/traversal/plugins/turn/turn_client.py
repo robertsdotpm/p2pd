@@ -25,8 +25,20 @@ from aionetiface import (
     af_from_ip_s, STUNMsg, STUNAttrs, STUNAddrTup, STUNMsgTypes, RFC5389,
     norm_client_tup, tup_to_sub, async_test, resolv_dest,
 )
-from .turn_process import *
-from .turn_defs import *
+from .turn_process import (
+    process_replies,
+    is_auth_ready,
+    turn_proc_attrs,
+    process_attributes,
+    turn_parse_msg,
+    turn_get_data_attr,
+)
+from .turn_defs import (
+    TURN_REFRESH_EXPIRY,
+    TURN_NOT_STARTED,
+    TURN_ERROR_STOPPED,
+    TURN_PROTOCOL_UDP,
+)
 
 
 # Main class for handling TURN sessions with a server.

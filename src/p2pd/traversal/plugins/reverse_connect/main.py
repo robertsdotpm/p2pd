@@ -1,7 +1,7 @@
 """Traversal plugin that inverts the connection direction."""
 from typing import Any, Optional
 from ...traversal_plugin import TraversalPlugin
-from ....protocol.traversal.proto_msg import ConMsg
+from ....protocol.proto_msg import ConMsg
 
 
 class ReverseConnectPlugin(TraversalPlugin):

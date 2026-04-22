@@ -9,7 +9,7 @@ from aionetiface import (
     async_wrap_errors, decrypt, encrypt,
     cancel_task, cancel_tasks,
 )
-from ..protocol.traversal.proto_msg import ProtoMsg
+from ..protocol.proto_msg import ProtoMsg
 
 __all__ = ["cancel_task", "cancel_tasks"]
 

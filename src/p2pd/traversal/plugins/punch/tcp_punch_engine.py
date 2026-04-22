@@ -18,8 +18,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import selectors
 import socket
 import time
-from .utils import *
-from ...utility.punch_utils import *
+from .tcp_punch_utils import bind_tcp_sockets, connect_on_tcp_sockets
+from .punch_utils import choose_winning_tcp_sock
 
 # Module-level fallback defaults (used when params is None).
 # The per-call values from params dicts take precedence.

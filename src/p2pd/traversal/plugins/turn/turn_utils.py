@@ -2,7 +2,7 @@
 from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 from aionetiface import to_b, rendezvous_score, log_exception
-from ....protocol.turn.turn_client import TURNClient
+from .turn_client import TURNClient
 
 
 def rendezvous_rank(key: Any, servers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

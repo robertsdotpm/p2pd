@@ -27,7 +27,7 @@ from struct import pack
 from hashlib import md5
 
 from aionetiface import *
-from p2pd.protocol.turn.turn_defs import TURN_REFRESH_EXPIRY
+from p2pd.traversal.plugins.turn.turn_defs import TURN_REFRESH_EXPIRY
 
 
 # ──────────────────────────────────────────────────────────────

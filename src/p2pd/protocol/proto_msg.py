@@ -5,7 +5,18 @@ from aionetiface import (
     to_s, to_b, to_n, i_to_af, fstr, parse_node_addr, log, IP4, EXT_BIND,
     af_from_ip_s, IPRange,
 )
-from .proto_defs import *
+from .proto_defs import (
+    SIG_CON,
+    SIG_TCP_PUNCH,
+    SIG_TURN,
+    SIG_GET_ADDR,
+    SIG_RETURN_ADDR,
+    SIG_DONE,
+    SIG_RETRY,
+    P2P_DIRECT,
+    P2P_PUNCH,
+    P2P_RELAY,
+)
 
 TCP_PUNCH_LAN = 1
 TCP_PUNCH_REMOTE = 2

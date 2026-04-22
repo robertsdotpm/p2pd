@@ -2,14 +2,13 @@
 from typing import Any, Dict, Optional, Tuple
 import asyncio
 from aionetiface import log, NIC_BIND, SysClock, async_wrap_errors, cancel_task, shutdown_proc_pool
-from ....protocol.traversal.proto_msg import PunchMsg
-from ...libs.punch.punch_defs import *
-from ...libs.punch.utility.punch_utils import *
-from ...libs.punch.utility.boundary_lib import FAST_PUNCH_PARAMS
-from ...libs.punch.punch_client import *
-from ...libs.punch.port_allocators.nat_predict_alloc import *
-from ...libs.punch.punch_process import *
-from ...libs.nat_predict import *
+from ....protocol.proto_msg import PunchMsg
+from .boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
+from .punch_client import PunchClient
+from .boundary_alloc import boundary_port_alloc
+from .nat_predict_alloc import NATPredictAlloc
+from .punch_process import start_punching_process
+from .nat_predict import NATMapping
 from ...traversal_plugin import TraversalPlugin
 from ....node.node_utils import get_pp_executors
 

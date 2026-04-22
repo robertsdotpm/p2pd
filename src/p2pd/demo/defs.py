@@ -6,7 +6,6 @@ from aionetiface import (
     NA_DELTA, EQUAL_DELTA, PRESERV_DELTA, INDEPENDENT_DELTA,
     DEPENDENT_DELTA, RANDOM_DELTA,
 )
-from ..do_imports import *
 
 IS_DEBUG = 2
 

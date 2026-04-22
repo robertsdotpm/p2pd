@@ -1,8 +1,8 @@
 """Boundary-based port allocator for NAT prediction."""
 from typing import Any, Dict, List, Optional, Tuple
 import os
-from ..utility.boundary_lib import *
-from ..punch_defs import *
+from .boundary_lib import compute_rendezvous, stable_boundary, stable_ports, NUM_PORTS, DEFAULT_PUNCH_PARAMS
+from .punch_defs import PortAlloc
 
 
 def boundary_port_alloc(timestamp: int, n: int = NUM_PORTS, params: Optional[Dict[str, Any]] = None) -> Tuple[List[Any], int]:

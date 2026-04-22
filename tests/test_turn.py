@@ -52,10 +52,10 @@ from aionetiface import (
     binder_async,
 )
 
-from p2pd.protocol.turn.turn_client import TURNClient
+from p2pd.traversal.plugins.turn.turn_client import TURNClient
 from p2pd.traversal.plugins.turn.main import TURNPlugin
 from p2pd.traversal.plugins.turn.turn_utils import get_turn_client
-from p2pd.protocol.traversal.proto_msg import TURNMsg
+from p2pd.protocol.proto_msg import TURNMsg
 
 from tests.turn_server import (
     TURNServer,

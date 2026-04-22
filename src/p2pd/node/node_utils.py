@@ -16,7 +16,7 @@ from aionetiface import (
     h_to_b, WebCurl, get_default_iface, USE_MAP_NO,
 )
 from aionetiface.nic.netifaces.netiface_extra import get_mac_address
-from ..traversal.libs.punch.punch_defs import PUNCH_CONF
+from ..traversal.plugins.punch.punch_defs import PUNCH_CONF
 from ..vendor.machine_id import hashed_machine_id
 
 

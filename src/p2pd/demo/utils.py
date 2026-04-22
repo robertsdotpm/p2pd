@@ -1,12 +1,17 @@
 """Helper utilities for the p2pd demo application."""
-from typing import Any, Dict, List, Optional
 import asyncio
 import os
 import select
 import sys
-from ..do_imports import *
+from aionetiface import (
+    Any, Dict, EXT_BIND, IP4, IP6, List, NIC_BIND, Optional,
+    fstr, log, mac_norm, sock_has_data, to_b, to_s,
+)
+from ..node.nickname import pnp_name_has_tld
+from ..node.node_connect import resolve_pnp_addr
 from . import stop_rw
-from .cmd_arg_defs import *
+from .cmd_arg_defs import args
+from .defs import delta_txt, method_txt, nat_txt
 
 # Pipe used to unblock ainput() when the program shuts down.
 # Writing any byte to ainput_interrupt_w causes all pending ainput() calls

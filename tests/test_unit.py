@@ -31,7 +31,7 @@ from p2pd.node.nickname import (
 from p2pd.traversal.traversal_manager import TraversalManager
 from p2pd.traversal.traversal_plugin import TraversalPlugin
 from p2pd.traversal.traversal_utils import select_dest_ipr, sort_pairs_by_overlap
-from p2pd.protocol.traversal.proto_msg import (
+from p2pd.protocol.proto_msg import (
     ConMsg,
     GetAddr,
     ReturnAddr,

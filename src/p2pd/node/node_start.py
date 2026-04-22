@@ -15,9 +15,17 @@ from aionetiface import (
     field_wrap, dhash, create_task, Signing,
 )
 from sidewire import Router
-from .node_utils import *
-from .nickname import *
-from ..traversal.traversal_address import *
+from .node_utils import (
+    load_machine_id,
+    resolve_install_path,
+    load_signing_key,
+    load_stun_clients,
+    close_idle_pipes,
+    listen_on_ifs,
+    forward,
+    remote_reachability_cb,
+)
+from .nickname import Nickname
 from ..traversal.traversal_manager import TraversalManager
 from ..traversal.plugins.punch.main import PunchPluginFactory
 from ..traversal.plugins.turn.main import TURNPluginFactory

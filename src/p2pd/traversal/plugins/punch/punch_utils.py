@@ -6,7 +6,7 @@ import struct
 import selectors
 import asyncio
 from aionetiface import IPRange, fstr, log, SysClock
-from ..punch_defs import *
+from .punch_defs import PUNCH_END, TCP_PUNCH_REMOTE, TCP_PUNCH_SELF, TCP_PUNCH_LAN
 
 # --- NTP Constants ---
 NTP_SERVER = "pool.ntp.org"

@@ -3,9 +3,26 @@ from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 import copy
 from aionetiface import Interface, get_n_stun_clients, UDP
-from p2pd.traversal.libs.nat_predict import *
-from ..utility.punch_utils import *
-from ..punch_defs import *
+from .nat_predict import (
+    NATMapping,
+    nat_prediction,
+    self_punch_patch,
+    update_for_reply_ports,
+    nat_info,
+    RESTRICT_PORT_NAT,
+    delta_info,
+    EQUAL_DELTA,
+)
+from .punch_utils import get_punch_mode
+from .punch_defs import (
+    PortAlloc,
+    INITIATED_PREDICTIONS,
+    RECEIVED_PREDICTIONS,
+    UPDATED_PREDICTIONS,
+    INITIATOR,
+    RECIPIENT,
+    PUNCH_CONF,
+)
 
 
 def nat_mapping_to_port_alloc(nat_mappings: List[Any]) -> List[Any]:

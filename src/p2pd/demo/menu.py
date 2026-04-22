@@ -1,10 +1,15 @@
 """Interactive menu system for the p2pd demo."""
 import asyncio
-from ..do_imports import *
+from aionetiface import (
+    Any, List, Optional, SUB_ALL, Tuple,
+    async_wrap_errors, fstr, log, log_exception, sock_has_data,
+)
 from ..traversal.traversal_utils import close_plugin
 from . import stop_rw
-from .defs import *
-from .utils import *
+from .utils import (
+    ainput, choose_address_families, choose_connection_methods,
+    choose_pathways, cout, echo_client, get_dest_addr,
+)
 
 
 # Open a tunnel to a remote destination.

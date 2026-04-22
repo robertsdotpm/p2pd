@@ -1,7 +1,6 @@
 """CLI argument definitions for the p2pd demo."""
 import argparse
-from ..do_imports import *
-from .defs import *
+from ..node.node_defs import NODE_PORT
 
 # parser.add_argument("--stun_server", type=str, required=False,
 #     help="Specify using a specific STUN server")

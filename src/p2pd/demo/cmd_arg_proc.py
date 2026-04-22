@@ -1,8 +1,8 @@
 """CLI argument processing for the p2pd demo."""
-from ..do_imports import *
-from .defs import *
-from .cmd_arg_defs import *
-from .utils import *
+from aionetiface import PNP_SERVERS
+from .defs import demo_node_conf
+from .cmd_arg_defs import args
+from .utils import patch_server_af_dict, patch_server_list
 
 if args.disable_upnp:
     demo_node_conf["enable_upnp"] = False

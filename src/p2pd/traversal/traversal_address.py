@@ -2,7 +2,7 @@
 from typing import Any, Optional
 import asyncio
 from aionetiface import fstr, log, log_exception, log_p2p
-from ..node.nickname import *
+from ..node.nickname import pnp_name_has_tld
 
 # A node's PNS address gets resolved to address bytes.
 # Then because the node may have moved or changed,
