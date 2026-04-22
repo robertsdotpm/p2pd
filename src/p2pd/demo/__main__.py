@@ -213,10 +213,8 @@ async def main():
     except asyncio.TimeoutError:
         log("Command run time met.")
         # what_exception()
-    except asyncio.CancelledError:
-        log("Main task cancelled!")
-        log_exception()
-        # what_exception()
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        pass
     finally:
         log("stop nodes clause reached.")
         # what_exception()
@@ -237,11 +235,8 @@ async def main():
 if __name__ == "__main__":
     try:
         async_run(main())
-        log("main task done.")
-    except KeyboardInterrupt:
-        # print("keyboard interrupt")
-        log("keyboard interrupt clause reached.")
-        # print("ended")
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        pass
 
     # Force exit to prevent Windows from hanging on dead threads.
     # Placed outside finally so cleanup in async_run() can finish first.

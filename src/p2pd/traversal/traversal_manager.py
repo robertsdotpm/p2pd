@@ -13,7 +13,7 @@ running instance.
 
 import asyncio
 from collections import OrderedDict
-from aionetiface import IP4, NIC_BIND
+from aionetiface import IP4, NIC_BIND, get_running_loop
 from .traversal_utils import (
     async_wrap_errors,
     cancel_task,
