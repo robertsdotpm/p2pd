@@ -16,6 +16,9 @@ class TURNPlugin(TraversalPlugin):
         # Resolved by a second run() call on this same instance when the peer's
         # reply arrives, unblocking the first run() call that is awaiting it.
         self.ready = asyncio.Future()
+        self.turn_clients = None
+        self.msg_cb = None
+        self.node_id = ""
 
     async def run(self, reply=None):
         # type: (Optional[Any]) -> None

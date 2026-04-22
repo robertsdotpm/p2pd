@@ -20,11 +20,9 @@ def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=T
     src_nid = src_info["netiface_index"]
     dest_nid = dest_info["netiface_index"]
 
-    """
-    Very simplified -- another external address could
-    be routable for the same LAN. There must
-    be a better way to do this.
-    """
+    # Very simplified -- another external address could
+    # be routable for the same LAN. There must
+    # be a better way to do this.
     if af == IP4:
         # Compares external v4 default route.
         same_lan = src_info["ext"] == dest_info["ext"]
@@ -59,14 +57,12 @@ def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=T
 
         # Prefer using local addresses.
         if addr_type == NIC_BIND:
-            """
-            When reaching a server its bound to a specific
-            interface and you choose that NIC to reach it.
-            But TCP punching has no defined server. However,
-            if they're not on the same NIC, on the same host,
-            different NICs can't interact (maybe unless
-            they're bridged.) Keep this edge-case here.
-            """
+            # When reaching a server it's bound to a specific
+            # interface and you choose that NIC to reach it.
+            # But TCP punching has no defined server. However,
+            # if they're not on the same NIC, on the same host,
+            # different NICs can't interact (maybe unless
+            # they're bridged.) Keep this edge-case here.
             if not has_set_bind:
                 pass
 
@@ -141,12 +137,10 @@ async def for_addr_infos(
                 use_addr_type = addr_type
                 do_fail = False
 
-            """
-            Determine the best destination IP to use
-            for the connectivity technique based on
-            addressing and relationships between the
-            two machines (deep networking specific.)
-            """
+            # Determine the best destination IP to use
+            # for the connectivity technique based on
+            # addressing and relationships between the
+            # two machines (deep networking specific.)
             dest_ip = select_dest_ipr(
                 af,
                 pp.same_machine,
@@ -183,11 +177,9 @@ async def for_addr_infos(
             )
             log_p2p(msg, pp.node.node_id[:8])
 
-            """
-            With all the correct interfaces and IPs
-            chosen -- call the function that will run
-            the technique to achieve connectivity.
-            """
+            # With all the correct interfaces and IPs
+            # chosen -- call the function that will run
+            # the technique to achieve connectivity.
             result = await async_wrap_errors(
                 func(
                     pp,
@@ -235,10 +227,8 @@ async def for_addr_infos(
             if result is not None:
                 return result
 
-            """
-            Some functions require cleanup on failure.
-            Ensure that the state overtime remains clean.
-            """
+            # Some functions require cleanup on failure.
+            # Ensure that the state overtime remains clean.
             if cleanup is not None:
                 await cleanup(
                     af,
@@ -288,7 +278,7 @@ async def for_addr_infos(
             if addr_type == NIC_BIND:
                 pair_order = overlap + unique
 
-            if not len(pair_order):
+            if not pair_order:
                 log("pair order list is empty!")
 
             for src_info, dest_info in pair_order:
@@ -325,27 +315,21 @@ def get_if_infos_order(af, route_type, src_map, dest_map):
     src_infos = list(src_map[af].values())
     dest_infos = list(dest_map[af].values())
 
-    """
-    Given two lists of interface details, break them into
-    two lists of (src_info, dest_info) pairs. The first
-    contains pairs for which both interface details have the
-    same ext (external address). The other is non-overlapping,
-    where both have different addresses.
-    """
+    # Given two lists of interface details, break them into
+    # two lists of (src_info, dest_info) pairs. The first
+    # contains pairs for which both interface details have the
+    # same ext (external address). The other is non-overlapping,
+    # where both have different addresses.
     overlap, unique = sort_pairs_by_overlap(src_infos, dest_infos)
 
-    """
-    If the route type is external than using the same external
-    address for overlapping pairs is likely not to lead to
-    a connection since both are behind the same router.
-    """
+    # If the route type is external then using the same external
+    # address for overlapping pairs is likely not to lead to
+    # a connection since both are behind the same router.
     if route_type in (EXT_BIND, None):
         pair_order = unique + overlap
 
-    """
-    For local addresses you want to do the opposite.
-    So you're on the same LAN or NIC if on the same machine.
-    """
+    # For local addresses you want to do the opposite.
+    # So you're on the same LAN or NIC if on the same machine.
     if route_type == NIC_BIND:
         pair_order = overlap + unique
 

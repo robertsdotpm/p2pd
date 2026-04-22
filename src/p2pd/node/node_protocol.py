@@ -29,7 +29,7 @@ async def node_protocol(node, msg, client_tup, pipe):
         if isinstance(r, KeyboardInterrupt):
             log("reraising key interrupt")
             raise r
-        elif isinstance(r, Exception):
+        if isinstance(r, Exception):
             log("msg_cb coro raised: " + repr(r))
 
 

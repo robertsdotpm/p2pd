@@ -100,6 +100,9 @@ def make_fake_nic(real_nic, af, target_ipr):
         def supported(self):
             return [af]
 
+        def is_default(self, req_af=None, gws=None):
+            return False
+
     _instance = FakeNIC()
     return _instance
 

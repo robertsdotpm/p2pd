@@ -6,12 +6,10 @@ from aionetiface import *
 
 UDP_MAX_DICT_LEN = 1000
 
-"""
-Extended functionality to allow the UDP stream class
-to provide 'reliable' packet delivery. It uses message
-IDs for each message and acknowledgements. It doesn't
-guarantee ordered delivery. Inherited by udp_stream.
-"""
+# Extended functionality to allow the UDP stream class
+# to provide 'reliable' packet delivery. It uses message
+# IDs for each message and acknowledgements. It doesn't
+# guarantee ordered delivery. Inherited by udp_stream.
 
 
 class ACKUDP:
@@ -52,14 +50,12 @@ class ACKUDP:
 
         return [seq, ack, data[9:]]
 
-    """
-    Clients that receive a message that can be 'acked' now
-    send back the ack every time they receive a message even
-    if they have already acked. This makes more sense as we
-    don't know if the receiver has actually gotten the ack
-    yet. Keep code to skip acking if a peer sent a message.
-    This prevents getting into loops for the sender.
-    """
+    # Clients that receive a message that can be 'acked' now
+    # send back the ack every time they receive a message even
+    # if they have already acked. This makes more sense as we
+    # don't know if the receiver has actually gotten the ack
+    # yet. Keep code to skip acking if a peer sent a message.
+    # This prevents getting into loops for the sender.
 
     def handle_ack(self, data, f_is_ack, f_is_ackable, f_send):
         # type: (bytes, Optional[Any], Optional[Any], Any) -> Tuple[int, Optional[bytes]]
@@ -107,10 +103,8 @@ class ACKUDP:
             for k in done_keys:
                 del self.seq[k]
 
-        """
-        The TURN client implements a custom is_ackable that wraps an ACK
-        in a channel message which allows the server to deliver the message.
-        """
+        # The TURN client implements a custom is_ackable that wraps an ACK
+        # in a channel message which allows the server to deliver the message.
         if ack is not None:
             task = asyncio.create_task(async_wrap_errors(f_send(ack)))
 
@@ -119,13 +113,11 @@ class ACKUDP:
 
         return 1, payload
 
-    """
-    A function that retransmits a UDP packet up to 'tries' time or
-    'sock_timeout' duration. If a special acknowledgement is received
-    before an error condition - the function returns successfully with
-    a value of 0 (no errors.) The code uses events to wait on ACKs
-    so there are no inefficient busy-loop checks.
-    """
+    # A function that retransmits a UDP packet up to 'tries' time or
+    # 'sock_timeout' duration. If a special acknowledgement is received
+    # before an error condition - the function returns successfully with
+    # a value of 0 (no errors.) The code uses events to wait on ACKs
+    # so there are no inefficient busy-loop checks.
 
     async def ack_send(self, data, dest_tup, seq=None, sock_timeout=0, tries=3):
         # type: (bytes, Any, Optional[int], int, int) -> Tuple[Any, asyncio.Event]
@@ -135,11 +127,9 @@ class ACKUDP:
         if seq is None:
             seq = random.randrange(1, (2 ** (8 * 8)))
 
-        """
-        Mark all messages we send in the same data structure clients
-        use to indicate whether they have acknowledged a message.
-        This prevents the sender from getting into loops.
-        """
+        # Mark all messages we send in the same data structure clients
+        # use to indicate whether they have acknowledged a message.
+        # This prevents the sender from getting into loops.
         event = asyncio.Event()
         self.seq[seq] = event
 
@@ -222,16 +212,11 @@ class BaseACKProto(asyncio.Protocol):
         # Seen messages are per client IP.
         buf = to_b(client_tup[0]) + data
 
-        """
-        I use Pythons insecure hash function.
-        A cryptographically secure hash func
-        would absolutely destroy the event
-        loops performance! E.g. 100 ms+ per hash,
-        per message received = yikes.
-        """
+        # Python's insecure hash is intentional here: a cryptographically
+        # secure hash would be 100 ms+ per message and destroy event loop
+        # performance.
         msg_id = hash(buf)
         if msg_id in self.msg_ids:
             return 0
-        else:
-            self.msg_ids[msg_id] = 1
-            return 1
+        self.msg_ids[msg_id] = 1
+        return 1

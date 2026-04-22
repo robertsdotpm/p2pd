@@ -28,14 +28,12 @@ def turn_parse_msg(buf):
         return None, None, None
 
 
-"""
-Messages sent to a relay address get returned by the TURN
-server to the client as a message with a:
-A) DATA attribute (the message)
-B) Peer Address attribute (the sender)
-
-Return this information to the caller.
-"""
+# Messages sent to a relay address get returned by the TURN
+# server to the client as a message with a:
+# A) DATA attribute (the message)
+# B) Peer Address attribute (the sender)
+#
+# Return this information to the caller.
 
 
 def turn_get_data_attr(msg, af, client):
@@ -90,10 +88,7 @@ def is_auth_ready(self):
     key_con = self.key is not None
     realm_con = self.realm is not None
     nonce_con = self.nonce is not None
-    if key_con and realm_con and nonce_con:
-        return True
-    else:
-        return False
+    return bool(key_con and realm_con and nonce_con)
 
 
 def turn_proc_attrs(af, attr_code, attr_data, msg, self):
@@ -123,10 +118,10 @@ def turn_proc_attrs(af, attr_code, attr_data, msg, self):
             if self.relay_tup[0] != self.dest[0]:
                 error = fstr(
                     """
-                Our XOR relay tup IP was decoded as 
-                {0} which is different 
-                from the address of the TURN server 
-                {1} which may 
+                Our XOR relay tup IP was decoded as
+                {0} which is different
+                from the address of the TURN server
+                {1} which may
                 indicate a XOR decoding error.
                 """,
                     (
@@ -143,19 +138,19 @@ def turn_proc_attrs(af, attr_code, attr_data, msg, self):
             self.key = md5(
                 self.turn_user + b":" + self.realm + b":" + self.turn_pw
             ).digest()
-            log("> Turn setting key = %s" % (to_s(to_h(self.key))))
+            log(fstr("> Turn setting key = {0}", (to_s(to_h(self.key)),)))
 
     # Nonce is used for reply protection.
     # As our client uses a state-machine the impact of this is minimal.
     elif attr_code == STUNAttrs.Nonce:
         self.nonce = attr_data
         if IS_DEBUG:
-            log("> Turn setting nonce = %s" % (to_s(to_h(self.nonce.tobytes()))))
+            log(fstr("> Turn setting nonce = {0}", (to_s(to_h(self.nonce.tobytes())),)))
 
     elif attr_code == STUNAttrs.Lifetime:
         (self.lifetime,) = unpack("!I", attr_data)
         if IS_DEBUG:
-            log("> Turn setting lifetime = %d" % (self.lifetime))
+            log(fstr("> Turn setting lifetime = {0}", (self.lifetime,)))
 
     # Return any error codes.
     elif attr_code == STUNAttrs.ErrorCode:
@@ -179,7 +174,7 @@ async def process_attributes(af, self, msg):
         turn_proc_attrs(af, attr_code, attr_data, msg, self)
         stun_proc_attrs(af, attr_code, attr_data, msg)
         if hasattr(msg, "rtup"):
-            if not len(self.mapped):
+            if not self.mapped:
                 self.mapped = msg.rtup
                 self.client_tup_future.set_result(self.mapped)
 
@@ -222,11 +217,9 @@ async def process_replies(self):
         if turn_msg is None:
             continue
 
-        """
-        Some TURN messages may have data attributes.
-        These indicate a peer who sent data to our relay address.
-        Attempt to look for these attributes and process them if found.
-        """
+        # Some TURN messages may have data attributes.
+        # These indicate a peer who sent data to our relay address.
+        # Attempt to look for these attributes and process them if found.
         msg_data, peer_tup = turn_get_data_attr(turn_msg, self.turn_pipe.route.af, self)
 
         if msg_data is not None and peer_tup is not None:
@@ -235,8 +228,8 @@ async def process_replies(self):
             if peer_tup not in self.peers:
                 error = fstr(
                     """
-                Got a TURN data message from an 
-                unknown peer = {0} which 
+                Got a TURN data message from an
+                unknown peer = {0} which
                 may indicate a decoding error.
                 """,
                     (peer_tup,),
@@ -255,12 +248,10 @@ async def process_replies(self):
                 lambda buf: self.stream.send(buf, peer_relay_tup),
             )
 
-            """
-            A simple ACK-based protocol is transparently applied to the
-            relay messages behind the scenes to add reliability.
-            If the header can't be found then the original message
-            will be unknown so we skip it.
-            """
+            # A simple ACK-based protocol is transparently applied to the
+            # relay messages behind the scenes to add reliability.
+            # If the header can't be found then the original message
+            # will be unknown so we skip it.
             if payload is None:
                 log(fstr("Payload from turn was None but msg data = {0}", (msg_data,)))
                 if not self.blank_rudp_headers:
@@ -269,21 +260,17 @@ async def process_replies(self):
                     self.handle_data(msg_data, peer_tup)
                     continue
 
-            """
-            The senders message has been stripped of the ACK header.
-            It is then routed to this object (pipe-like object)
-            where it will be handled and/or queued. The sender's
-            relay address is listed as the sender to make it
-            easy to route replies transparently.
-            """
+            # The sender's message has been stripped of the ACK header.
+            # It is then routed to this object (pipe-like object)
+            # where it will be handled and/or queued. The sender's
+            # relay address is listed as the sender to make it
+            # easy to route replies transparently.
             self.handle_data(payload, peer_tup)
             continue
 
-        """
-        When a TURN message is sent it has a unique TXID.
-        Replies in response to these messages use the same TXID.
-        Unknown TXIDs for messages are discarded.
-        """
+        # When a TURN message is sent it has a unique TXID.
+        # Replies in response to these messages use the same TXID.
+        # Unknown TXIDs for messages are discarded.
         txid = turn_msg.txn_id
         if txid not in self.msgs:
             log("Got turn message with unknown TXID.")

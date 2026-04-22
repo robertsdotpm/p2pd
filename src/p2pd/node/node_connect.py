@@ -96,9 +96,9 @@ async def connect(node, af, route_type, pnp_addr, plugin_name=None):
                 continue
             if int(dest_info["nic"]) == int(src_info["nic"]):
                 raise ValueError(
-                    "Local route selected but dest if_index %d shares "
-                    "NIC IP %s with this node for AF %s — "
-                    "punch will fail." % (if_idx, dest_info["nic"].ip, af)
+                    "Local route selected but dest if_index {} shares "
+                    "NIC IP {} with this node for AF {} — "
+                    "punch will fail.".format(if_idx, dest_info["nic"].ip, af)
                 )
     elif route_type in (EXT_BIND, None):
         for if_idx, dest_info in dest_map[af].items():
@@ -107,10 +107,11 @@ async def connect(node, af, route_type, pnp_addr, plugin_name=None):
                 continue
             if int(dest_info["ext"]) == int(src_info["ext"]):
                 raise ValueError(
-                    "External route selected but dest if_index %d shares "
-                    "external IP %s with this node for AF %s — "
-                    "cannot connect to yourself via WAN addresses."
-                    % (if_idx, dest_info["ext"].ip, af)
+                    "External route selected but dest if_index {} shares "
+                    "external IP {} with this node for AF {} — "
+                    "cannot connect to yourself via WAN addresses.".format(
+                        if_idx, dest_info["ext"].ip, af
+                    )
                 )
 
     return await node.traversal.attempt_plugin(

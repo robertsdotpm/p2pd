@@ -262,6 +262,7 @@ class PunchMsg(ProtoMsg):
 
         def to_dict(self):
             # type: () -> Dict[str, Any]
+            """Serialise the payload to a JSON-compatible dict."""
             return {
                 "punch_mode": self.punch_mode,
                 "ntp": self.ntp,
@@ -271,21 +272,21 @@ class PunchMsg(ProtoMsg):
         @staticmethod
         def from_dict(d):
             # type: (Dict[str, Any]) -> PunchMsg.Payload
+            """Deserialise a dict into a PunchMsg.Payload."""
             return PunchMsg.Payload(
                 d.get("punch_mode", TCP_PUNCH_REMOTE),
                 d.get("ntp", 0),
                 d["mappings"],
             )
 
-    """
-    Note: having the dest the same as an if in our ifs is not
-    necessarily an error if two nodes are on the same
-    computer using the same interfaces. But these
-    checks are left in if they're needed.
-    """
+    # Note: having the dest the same as an if in our ifs is not
+    # necessarily an error if two nodes are on the same
+    # computer using the same interfaces. But these
+    # checks are left in if they're needed.
 
     def validate_dest(self, af, punch_mode, dest_s):
         # type: (Any, int, str) -> None
+        """Validate that af, punch_mode, and dest_s are mutually consistent with this message's routing."""
         # Do we support this af?
         interface = self.routing.interface
         if af not in interface.supported():
@@ -312,11 +313,9 @@ class PunchMsg(ProtoMsg):
             if ipr.is_private:
                 raise ValueError(fstr("{0} is priv in punch remote", (dest_s,)))
 
-            """
             # Punching our own external address?
-            if dest_s == ext:
-                raise ValueError(f"{dest_s} == ext in punch remote")
-            """
+            # if dest_s == ext:
+            #     raise ValueError(fstr("{0} == ext in punch remote", (dest_s,)))
 
         # Private address sanity checks.
         if punch_mode in [TCP_PUNCH_SELF, TCP_PUNCH_LAN]:
@@ -324,12 +323,10 @@ class PunchMsg(ProtoMsg):
             if ipr.is_public:
                 raise ValueError(fstr("{0} is pub for punch $priv", (dest_s,)))
 
-        """
         # Should be another computer's IP.
-        if punch_mode == TCP_PUNCH_LAN:
-            if dest_s == nic:
-                raise ValueError(f"{dest_s} is ourself for lan punch")
-        """
+        # if punch_mode == TCP_PUNCH_LAN:
+        #     if dest_s == nic:
+        #         raise ValueError(fstr("{0} is ourself for lan punch", (dest_s,)))
 
         # Should be ourself.
         if punch_mode == TCP_PUNCH_SELF:
@@ -363,6 +360,7 @@ class TURNMsg(ProtoMsg):
 
         def to_dict(self):
             # type: () -> Dict[str, Any]
+            """Serialise the payload to a JSON-compatible dict."""
             return {
                 "peer_tup": self.peer_tup,
                 "relay_tup": self.relay_tup,
@@ -371,6 +369,7 @@ class TURNMsg(ProtoMsg):
         @staticmethod
         def from_dict(d):
             # type: (Dict[str, Any]) -> TURNMsg.Payload
+            """Deserialise a dict into a TURNMsg.Payload."""
             return TURNMsg.Payload(
                 d["peer_tup"],
                 d["relay_tup"],

@@ -59,7 +59,7 @@ class PunchPlugin(TraversalPlugin):
         stuns = self.stun_clients[self.af][if_index]
 
         # Skip if no STUN clients loaded.
-        if not len(stuns):
+        if not stuns:
             return None, None
 
         # Determine IP addresses via routing.

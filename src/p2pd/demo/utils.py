@@ -52,11 +52,10 @@ def cout(*fargs):
     """Print output to stdout unless running in non-interactive command mode."""
     if args.cmd:
         return
+    if not fargs:
+        print(flush=True)
     else:
-        if not len(fargs):
-            print(flush=True)
-        else:
-            print(*fargs, flush=True)
+        print(*fargs, flush=True)
 
 
 async def add_echo_support(msg, client_tup, pipe):
@@ -252,7 +251,7 @@ async def choose_connection_methods(con_method):
     while True:
         # If pressing enter then use the default list of methods in order.
         con_method = con_method or (await ainput("Enter for default (d): "))
-        if not len(con_method):
+        if not con_method:
             return "direct_connect"
 
         # Go back to the menu.
@@ -279,7 +278,7 @@ async def choose_pathways(pathway):
     cout("Type menu to return.")
     while not sock_has_data(stop_rw[0]):
         pathway = pathway or (await ainput("Enter for default (e): "))
-        if not len(pathway):
+        if not pathway:
             return EXT_BIND
 
         if pathway.lower().strip() == "menu":
@@ -306,7 +305,7 @@ async def choose_address_families(addr_type):
     cout("Type menu to return.")
     while not sock_has_data(stop_rw[0]):
         addr_type = addr_type or (await ainput("Enter for default (4): "))
-        if not len(addr_type):
+        if not addr_type:
             return IP4
 
         if addr_type.lower().strip() == "menu":

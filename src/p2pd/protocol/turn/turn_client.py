@@ -28,9 +28,11 @@ class TURNClient(PipeEvents):
     """UDP-based TURN client managing relay allocation and peer data forwarding."""
 
     def __init__(
-        self, af, dest, nic, auth=("", ""), realm=None, msg_cb=None, conf=NET_CONF
+        self, af, dest, nic, auth=("", ""), realm=None, msg_cb=None, conf=None
     ):
-        # type: (Any, Tuple[str, int], Any, Tuple[str, str], Optional[str], Optional[Any], Any) -> None
+        # type: (Any, Tuple[str, int], Any, Tuple[str, str], Optional[str], Optional[Any], Optional[Any]) -> None
+        if conf is None:
+            conf = NET_CONF
         # Can received relay messages have a blank header?
         self.blank_rudp_headers = False
 
@@ -104,8 +106,7 @@ class TURNClient(PipeEvents):
         """Return the relay address tuple for peer_tup, or None if the peer is not registered."""
         if peer_tup in self.peers:
             return self.peers[peer_tup]
-        else:
-            return None
+        return None
 
     def toggle_blank_rudp_headers(self, val):
         # type: (bool) -> None
@@ -113,8 +114,10 @@ class TURNClient(PipeEvents):
         self.blank_rudp_headers = val
 
     # Make this whole clas look like a 'pipe' object.
-    def super_init(self, transport, sock, route, conf=NET_CONF):
-        # type: (Any, Any, Any, Any) -> None
+    def super_init(self, transport, sock, route, conf=None):
+        # type: (Any, Any, Any, Optional[Any]) -> None
+        if conf is None:
+            conf = NET_CONF
         """Initialise the PipeEvents base and wire the UDP transport so this object acts as a pipe."""
         super().__init__(sock=sock, route=route, conf=conf)
         self.connection_made(transport)
@@ -266,7 +269,7 @@ class TURNClient(PipeEvents):
     def set_state(self, state):
         # type: (int) -> None
         """Transition the TURN client state machine to the given state."""
-        log("> Turn moving state from %s to %s." % (self.state, state))
+        log(fstr("> Turn moving state from {0} to {1}.", (self.state, state)))
         self.state = state
 
     def new_node_event(self, node_id):
@@ -344,9 +347,11 @@ class TURNClient(PipeEvents):
         )
         self.tasks.append(task)
 
-    async def recv(self, sub=SUB_ALL, timeout=2):
-        # type: (Any, int) -> Optional[Any]
+    async def recv(self, sub=None, timeout=2):
+        # type: (Optional[Any], int) -> Optional[Any]
         """Receive a message from an accepted peer, defaulting to the first peer's subscription."""
+        if sub is None:
+            sub = SUB_ALL
         # Build a sub from the first accepted peer.
         if sub == SUB_ALL:
             sub = None
@@ -517,12 +522,12 @@ class TURNClient(PipeEvents):
         # Some validation on address encoding.
         attr_data.tup = None
         attr_data.decode(attr_code, attr_data.encode(attr_code))
-        if attr_data.tup != src_tup:
+        if norm_client_tup(attr_data.tup) != norm_client_tup(src_tup):
             error = fstr(
                 """
-            The decode of the white listed 
-            peer addr in TURN did not match the src tup 
-            this might indicate an encoding error 
+            The decode of the white listed
+            peer addr in TURN did not match the src tup
+            this might indicate an encoding error
             {0} != {1}""",
                 (
                     src_tup,
@@ -541,12 +546,7 @@ class TURNClient(PipeEvents):
         reply = STUNMsg(msg_type=STUNMsgTypes.Refresh, mode=RFC5389)
         reply.write_attr(STUNAttrs.Lifetime, pack("!I", TURN_REFRESH_EXPIRY))
 
-        """
-        reply.write_attr(
-            TurnAttribute.RequestedTransport,
-            TURN_PROTOCOL_UDP
-        )
-        """
+        # reply.write_attr(TurnAttribute.RequestedTransport, TURN_PROTOCOL_UDP)
 
         # Return reply message.
         # reply.txn_id = self.txid
@@ -592,40 +592,32 @@ class TURNClient(PipeEvents):
 
 
 if __name__ == "__main__":  # pragma: no cover
-    """
-    // If left out, will use openrelay public TURN servers from metered.ca
-    see if these servers work?
-    turnIceServers: { ... },
-    """
+    # // If left out, will use openrelay public TURN servers from metered.ca
+    # see if these servers work?
+    # turnIceServers: { ... },
 
     async def test_turn():
-        """
-        buf = b"ur\x00\t\xd6o'\x04\x9ezp*\x01"
-        m = TurnMessage.unpack(buf)[0]
-        print(m)
-        print(m.eof())
-        while not m.eof():
-            attr_code, _, attr_data = m.read_attr()
-            attr_name = TurnAttribute.get(attr_code)
-
-            print(attr_code)
-            print(attr_name)
-
-        return
-        """
+        # buf = b"ur\x00\t\xd6o'\x04\x9ezp*\x01"
+        # m = TurnMessage.unpack(buf)[0]
+        # print(m)
+        # print(m.eof())
+        # while not m.eof():
+        #     attr_code, _, attr_data = m.read_attr()
+        #     attr_name = TurnAttribute.get(attr_code)
+        #     print(attr_code)
+        #     print(attr_name)
+        # return
         interface = await Interface("enp1s0f0").start()
         turn_user = b""
         turn_pw = b""
         turn_addr = ("", 3478)
 
-        """
-        A faulty network interface will cause hosts with multiple
-        interfaces to report non-deterministic results with defaults.
-        Thus, its better to manually select an interface for testing
-        than to silently fail and wonder what is going wrong.
-        This interface uses a preserving type nat so it bypasses the
-        issue with coturn reply ports.
-        """
+        # A faulty network interface will cause hosts with multiple
+        # interfaces to report non-deterministic results with defaults.
+        # Thus, its better to manually select an interface for testing
+        # than to silently fail and wonder what is going wrong.
+        # This interface uses a preserving type nat so it bypasses the
+        # issue with coturn reply ports.
         client1 = TURNClient(
             turn_addr=turn_addr,
             turn_user=turn_user,
@@ -637,15 +629,10 @@ if __name__ == "__main__":  # pragma: no cover
         await client_tup_future
         await relay_tup_future
 
-        """
-        reply = TurnMessage(msg_type=TurnMessageMethod.Send, msg_code=TurnMessageCode.Indication)
-        reply.write_attr(
-            TurnAttribute.Data,
-            b"send indication test msg."
-        )
-        turn_write_peer_addr(reply, client_tup)
-        await client1.send_turn_msg(reply, do_sign=True)
-        """
+        # reply = TurnMessage(msg_type=TurnMessageMethod.Send, msg_code=TurnMessageCode.Indication)
+        # reply.write_attr(TurnAttribute.Data, b"send indication test msg.")
+        # turn_write_peer_addr(reply, client_tup)
+        # await client1.send_turn_msg(reply, do_sign=True)
 
         while True:
             await asyncio.sleep(1)

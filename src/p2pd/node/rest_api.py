@@ -130,8 +130,7 @@ class P2PDServer(RESTD):
         """Return the serialised P2P address bytes of this node."""
         if self.node.addr_bytes is None:
             return {"error": 5, "msg": "p2pd node addr bytes is none."}
-        else:
-            return {"addr": to_s(self.node.addr_bytes), "error": 0}
+        return {"addr": to_s(self.node.addr_bytes), "error": 0}
 
     @RESTD.GET(["open"])
     async def open_p2p_pipe(self, v, pipe):
@@ -391,15 +390,15 @@ async def start_p2pd_server(port=REST_API_PORT, ifs=None, enable_upnp=False):
     # Load interfaces.
     if ifs is None:
         ifs = []
-    if not len(ifs):
+    if not ifs:
         # Load a list of interface names.
         if_names = await list_interfaces(netifaces=netifaces)
-        if not len(if_names):
+        if not if_names:
             raise RuntimeError("p2pd rest could not find if names")
 
         # Load those interfaces with NAT details.
         ifs = await load_interfaces(if_names, Interface)
-        if not len(ifs):
+        if not ifs:
             raise RuntimeError("p2pd rest no ifs loaded.")
 
     # Start P2PD node.

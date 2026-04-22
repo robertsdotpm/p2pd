@@ -25,8 +25,10 @@ get_p2pd_install_root = get_aionetiface_install_root
 class Node(Daemon):
     """Core P2P node server managing connections, traversal, and signaling."""
 
-    def __init__(self, ifs=None, ip=None, port=NODE_PORT, stop_rw=None, conf=NODE_CONF):
-        # type: (Optional[List[Any]], Optional[Any], int, Optional[Any], Any) -> None
+    def __init__(self, ifs=None, ip=None, port=NODE_PORT, stop_rw=None, conf=None):
+        # type: (Optional[List[Any]], Optional[Any], int, Optional[Any], Optional[Any]) -> None
+        if conf is None:
+            conf = NODE_CONF
         super().__init__()
         self.conf = dict_child(conf, NET_CONF)
         self.install_path = resolve_install_path(self.conf)

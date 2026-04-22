@@ -51,7 +51,7 @@ async def get_first_working_turn_client(af, servers, nic, msg_cb):
     """Try each TURN server in ranked order and return the first one that connects."""
     for server in servers:
         try:
-            peer_tup, relay_tup, turn_client = await get_turn_client(
+            _, _, turn_client = await get_turn_client(
                 af,
                 server,
                 nic,

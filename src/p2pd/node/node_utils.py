@@ -82,13 +82,13 @@ def load_signing_key(nics, listen_ips, listen_port, install_path):
 
     # Read existing key, or generate and persist a new one.
     if os.path.exists(sk_path):
-        with open(sk_path, mode="r") as fp:
+        with open(sk_path, mode="r", encoding="utf-8") as fp:
             sk_hex = fp.read()
     else:
         sk = SigningKey.generate(curve=SECP256k1)
         sk_buf = sk.to_string()
         sk_hex = to_h(sk_buf)
-        with open(sk_path, "w") as file:
+        with open(sk_path, "w", encoding="utf-8") as file:
             file.write(sk_hex)
 
     # Convert secret key to a singing key.
@@ -235,15 +235,13 @@ async def get_pp_executors(workers=None):
             pp_executor = ProcessPoolExecutor(max_workers=workers, initializer=worker_init)
         else:
             pp_executor = ProcessPoolExecutor(max_workers=workers)
-    except asyncio.CancelledError:
+    except asyncio.CancelledError:  # pylint: disable=try-except-raise
         raise
     except (OSError, RuntimeError):
-        """
-        Not all platform have a working implementation of sem_open / semaphores.
-        Android is one such platform. It does support multiprocessing but
-        this semaphore feature is missing and will throw an error here.
-        In this case -- log the error and revert to using a single event loop.
-        """
+        # Not all platforms have a working implementation of sem_open / semaphores.
+        # Android is one such platform. It does support multiprocessing but
+        # this semaphore feature is missing and will throw an error here.
+        # In this case -- log the error and revert to using a single event loop.
         log_exception()
 
     return workers, pp_executor
@@ -254,7 +252,7 @@ async def load_machine_id(app_id, netifaces):
     """Return a hashed machine ID for app_id, falling back to a network-derived value on failure."""
     try:
         return hashed_machine_id(app_id)
-    except asyncio.CancelledError:
+    except asyncio.CancelledError:  # pylint: disable=try-except-raise
         raise
     except (OSError, ValueError):
         return await fallback_machine_id(netifaces, app_id)

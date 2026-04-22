@@ -27,7 +27,7 @@ from .cmd_arg_proc import *
 from .menu import *
 from ..node.node_defs import *
 
-"""Load interfaces, start node, and return node info."""
+# Load interfaces, start node, and return node info.
 
 
 async def setup_node():
@@ -52,10 +52,8 @@ async def setup_node():
         if_names, Interface, min_agree=1, max_agree=2, timeout=4
     )
 
-    """
-    If the NICs flag has been set then filter the interface list
-    to match only the MAC addresses indicated.
-    """
+    # If the NICs flag has been set then filter the interface list
+    # to match only the MAC addresses indicated.
     if args.nic:
         ifs = filter_nics_by_mac(args.nic, ifs)
 
@@ -72,7 +70,7 @@ async def setup_node():
     )
 
     # Start the node and install echo protocol handler.
-    cout("Starting node on %d..." % (node.listen_port,))
+    cout(fstr("Starting node on {0}...", (node.listen_port,)))
     node.add_msg_cb(add_echo_support)
     await node.start(out=True, cout=cout)
     # print(node.pp_executor)
@@ -98,7 +96,7 @@ async def setup_node():
     return nodes, ifs, nick
 
 
-"""Run the main menu loop for node interaction."""
+# Run the main menu loop for node interaction.
 
 
 async def run_node_loop(nodes, ifs, nick):
@@ -146,10 +144,8 @@ async def run_node_loop(nodes, ifs, nick):
             cout("Tunnel connection failed!")
 
 
-"""
-Run the main program which accepts input and shows menu options.
-Also waits for close events and handles cleanup.
-"""
+# Run the main program which accepts input and shows menu options.
+# Also waits for close events and handles cleanup.
 
 
 async def main():

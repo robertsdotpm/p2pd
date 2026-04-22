@@ -2,12 +2,10 @@
 from aionetiface import *
 from ..node.nickname import *
 
-"""
-A nodes PNS address gets resolved to address bytes.
-Then because the node may have moved or changed,
-an MQTT signaling message asks that node for its most
-recent address bytes.
-"""
+# A node's PNS address gets resolved to address bytes.
+# Then because the node may have moved or changed,
+# an MQTT signaling message asks that node for its most
+# recent address bytes.
 
 
 async def get_updated_addr_bytes(node, dest_addr):

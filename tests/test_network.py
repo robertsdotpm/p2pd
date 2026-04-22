@@ -300,7 +300,7 @@ class TestMQTT(unittest.IsolatedAsyncioTestCase):
     async def test_router_connects_to_at_least_one_broker(self):
         """Router.start() must find at least one reachable MQTT broker."""
         from sidewire import Router
-        from sidewire import Signing
+        from aionetiface import Signing
 
         nic = await _default_nic()
         clock = await asyncio.wait_for(SysClock(nic), timeout=30)
@@ -326,7 +326,7 @@ class TestMQTT(unittest.IsolatedAsyncioTestCase):
     async def test_router_subscribe_and_publish(self):
         """After start(), Router can subscribe and receive a published message."""
         from sidewire import Router
-        from sidewire import Signing
+        from aionetiface import Signing
 
         nic = await _default_nic()
         clock = await asyncio.wait_for(SysClock(nic), timeout=30)

@@ -74,11 +74,9 @@ async def connect_option(node, con_opts):
 
         cout("plugin result = ", pipe)
         cout(pipe.sock)
-        """
-        Message queuing isn't enabled by default when callbacks
-        are setup for pipe methods so this says to queue
-        all messages received so they can be awaited.
-        """
+        # Message queuing isn't enabled by default when callbacks
+        # are setup for pipe methods so this says to queue
+        # all messages received so they can be awaited.
         pipe.subscribe(SUB_ALL)
         return await echo_client(pipe, echo_data)
     finally:

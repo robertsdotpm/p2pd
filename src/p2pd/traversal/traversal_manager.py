@@ -97,7 +97,7 @@ class TraversalManager:
         # Each plugin has a run method.
         try:
             await asyncio.wait_for(plugin.run(reply), timeout=plugin.timeout)
-        except asyncio.CancelledError:
+        except asyncio.CancelledError:  # pylint: disable=try-except-raise
             raise
         except (asyncio.TimeoutError, OSError, ConnectionError):
             log_exception()

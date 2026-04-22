@@ -66,11 +66,11 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 async def load_network_interfaces(node):
     # type: (Any) -> None
     """Discover and sort all available network interfaces, raising RuntimeError if none are found."""
-    if not len(node.ifs):
+    if not node.ifs:
         try:
             if_names = await list_interfaces()
             node.ifs = await load_interfaces(if_names, Interface)
-        except asyncio.CancelledError:
+        except asyncio.CancelledError:  # pylint: disable=try-except-raise
             raise
         except (OSError, asyncio.TimeoutError):
             log_exception()
@@ -79,7 +79,7 @@ async def load_network_interfaces(node):
     # Ensure deterministic order
     node.ifs = sorted(node.ifs, key=lambda x: x.name)
 
-    if not len(node.ifs):
+    if not node.ifs:
         raise RuntimeError("p2p node could not load ifs.")
 
 
@@ -222,8 +222,8 @@ async def setup_signal_router(node, router, out, cout):
         clients = await asyncio.wait_for(router.start(), timeout=8)
         if out:
             cout("\t\t", clients)
-    except asyncio.TimeoutError:
-        raise RuntimeError("Router MQTT start timed out - signaling may be degraded")
+    except asyncio.TimeoutError as exc:
+        raise RuntimeError("Router MQTT start timed out - signaling may be degraded") from exc
 
 
 # ==========================================
@@ -275,11 +275,11 @@ def build_node_address(node, out):
     # Save a dict version of the address fields.
     try:
         node.addr_map = parse_node_addr(node.addr_bytes)
-    except asyncio.CancelledError:
+    except asyncio.CancelledError:  # pylint: disable=try-except-raise
         raise
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as exc:
         log_exception()
-        raise RuntimeError("Can't parse nodes p2p addr.")
+        raise RuntimeError("Can't parse nodes p2p addr.") from exc
 
 
 async def finalize_port_forwarding(node, upnp_task, out, cout):

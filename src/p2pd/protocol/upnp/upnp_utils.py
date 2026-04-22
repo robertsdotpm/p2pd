@@ -86,7 +86,7 @@ async def get_upnp_route(af, nic, hostname=None):
         route = nic.route(af)
         if "fe80" == hostname[:4]:
             # Link local src.
-            if len(route.link_locals):
+            if route.link_locals:
                 ip = str(route.link_locals[0])
             else:
                 ip = route.ext()
@@ -95,14 +95,11 @@ async def get_upnp_route(af, nic, hostname=None):
             ip = route.ext()
 
         return await route.bind(ips=ip)
-    else:
-        return await nic.route(af).bind()
+    return await nic.route(af).bind()
 
 
-"""
-Creates a packet to send to the multicast address
-for discovering UPNP devices.
-"""
+# Creates a packet to send to the multicast address
+# for discovering UPNP devices.
 
 
 def build_upnp_discover_buf(af):
@@ -132,10 +129,8 @@ def build_upnp_discover_buf(af):
     return to_b(buf)
 
 
-"""
-Given a dictionary from xmltodict find a specific type
-of service URL for a UPNP device.
-"""
+# Given a dictionary from xmltodict find a specific type
+# of service URL for a UPNP device.
 
 
 def find_upnp_service_by_type(d, service_type):
@@ -177,7 +172,7 @@ async def get_upnp_forwarding_services(route, dest, path):
         # Convert to a list of services.
         services = find_upnp_service_by_type(d, service_types[route.af])
         log("upnp got:" + str(dest))
-        if len(services):
+        if services:
             return (dest, services)
     except (OSError, ValueError, KeyError):
         log(

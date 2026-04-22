@@ -12,6 +12,18 @@ class TraversalPlugin:
         self.plugin_id = to_s(rand_plain(15))
         self.has_reply = asyncio.Event()
         self.sig_pipe = None
+        self.src_map = None
+        self.dest_map = None
+        self.af = None
+        self.src_info = None
+        self.dest_info = None
+        self.nic = None
+        self.route_type = None
+        self.same_machine = None
+        self.set_bind = None
+        self.timeout = None
+        self.inbound_pipes = None
+        self._send_signal_msg = None
 
     def set_addrs(self, src_map, dest_map):
         # type: (Dict[str, Any], Dict[str, Any]) -> None
@@ -40,12 +52,10 @@ class TraversalPlugin:
             self.dest_info["ip"] = ""
             return
 
-        """
-        Determine the best destination IP to use
-        for the connectivity technique based on
-        addressing and relationships between the
-        two machines (deep networking specific.)
-        """
+        # Determine the best destination IP to use
+        # for the connectivity technique based on
+        # addressing and relationships between the
+        # two machines (deep networking specific.)
         selected = select_dest_ipr(
             self.af,
             same_machine,

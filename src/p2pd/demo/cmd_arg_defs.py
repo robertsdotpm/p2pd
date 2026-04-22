@@ -3,12 +3,10 @@ import argparse
 from ..do_imports import *
 from .defs import *
 
-"""
-parser.add_argument("--stun_server", type=str, required=False,
-    help="Specify using a specific STUN server")
-parser.add_argument("--ntp_server", type=str, required=False,
-    help="Specify using a specific STUN server")
-"""
+# parser.add_argument("--stun_server", type=str, required=False,
+#     help="Specify using a specific STUN server")
+# parser.add_argument("--ntp_server", type=str, required=False,
+#     help="Specify using a specific STUN server")
 
 parser = argparse.ArgumentParser(description="P2P args")
 parser.add_argument(

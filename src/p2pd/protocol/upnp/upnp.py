@@ -122,7 +122,7 @@ async def brute_force_port_forward(
         gws = []
 
     # Add all gateways netiface knows about.
-    if len(gws):
+    if gws:
         for gw in gws:
             hosts.append(gw[0])
 
@@ -135,7 +135,7 @@ async def brute_force_port_forward(
         hosts = [add_host]
 
     # Nothing to do.
-    if not len(hosts):
+    if not hosts:
         return []
 
     # Ports to try.
@@ -297,11 +297,9 @@ async def port_forward_from_multicast(
         return False
 
 
-"""
-Two algorithms are run concurrently to try do UPnP based on the AF.
-Which ever succeeds first causes the other task to be cancelled and
-the function returns as soon as possible.
-"""
+# Two algorithms are run concurrently to try do UPnP based on the AF.
+# Whichever succeeds first causes the other task to be cancelled and
+# the function returns as soon as possible.
 
 
 async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
@@ -346,14 +344,11 @@ if __name__ == "__main__":
         route = nic.route(af)
         print(route.ext())
 
-        """
-        r = await nic.route(IP4).bind()
-        dest = ("192.168.0.1", 1900)
-        p = await pipe_open(route=r, proto=TCP, dest=dest, conf=NET_CONF)
-        print(p)
-
-        return
-        """
+        # r = await nic.route(IP4).bind()
+        # dest = ("192.168.0.1", 1900)
+        # p = await pipe_open(route=r, proto=TCP, dest=dest, conf=NET_CONF)
+        # print(p)
+        # return
 
         if af == IP4:
             src_ip = route.nic()
@@ -369,23 +364,10 @@ if __name__ == "__main__":
 
     async_test(upnp_main)
 
-"""
-ip6:
-    if it uses link local for announce use that for bind otherwise ext
-
-
-multicast replies:
-http://192.168.21.1:56688/rootDesc.xml
-http://192.168.21.1:1990/WFADevice.xml
-http://192.168.21.5:80/description.xml
-
-
-b'<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">\n<s:Body>\n<s:Fault>\n<faultcode>s:Client</faultcode>\n<faultstring>UPnPError</faultstring>\n<detail>\n<UPnPError xmlns="urn:schemas-upnp-org:control-1-0">\n<errorCode>718</errorCode>\n<errorDescription>ConflictInMappingEntry</errorDescription>\n</UPnPError>\n</detail>\n</s:Fault>\n</s:Body>\n</s:Envelope>\n'
-
-
-
-b'<?xml version="1.0"?>\r\n<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">\n<s:Body>\n<u:AddPortMappingResponse xmlns:u="urn:schemas-upnp-org:service:WANIPConnection:1"/></s:Body>\n</
-s:Envelope>\r\n'
-
-b'<?xml version="1.0"?>\r\n<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:AddPortMappingResponse xmlns:u="urn:schemas-upnp-org:service:WANIPConnection:1"></u:AddPortMappingResponse></s:Body></s:Envelope>\r\n'
-"""
+# ip6:
+#     if it uses link local for announce use that for bind otherwise ext
+#
+# multicast replies:
+# http://192.168.21.1:56688/rootDesc.xml
+# http://192.168.21.1:1990/WFADevice.xml
+# http://192.168.21.5:80/description.xml

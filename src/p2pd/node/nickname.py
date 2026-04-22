@@ -72,13 +72,9 @@ NAMING_TIMEOUT = 10
 class PartialNameSuccess(Exception):
     """Raised when a nickname was registered on some but not all PNP servers."""
 
-    pass
-
 
 class FullNameFailure(Exception):
     """Raised when a nickname registration failed on all PNP servers."""
-
-    pass
 
 
 class Nickname:
@@ -198,7 +194,7 @@ class Nickname:
         # Attempt storage at all PNP servers.
         results = await asyncio.gather(*tasks)
         offsets = strip_none(results)
-        if not len(offsets):
+        if not offsets:
             raise FullNameFailure("All name servers failed.")
 
         # Translate success offsets into specific TLD.
@@ -228,7 +224,7 @@ class Nickname:
                     ret = await client.get(name)
                     if ret is not None:
                         return ret
-                except asyncio.CancelledError:
+                except asyncio.CancelledError:  # pylint: disable=try-except-raise
                     raise
                 except (OSError, ConnectionError, asyncio.TimeoutError):
                     log_exception()
@@ -341,23 +337,19 @@ async def workspace():
     await asyncio.sleep(2)
 
 
-"""
-push:
-    - try to store on all of them
-    - store success offsets
-    - convert success offsets to tld
-    - return name + tld on success
-
-fetch:
-    - name + tld
-    - convert to list of offsets
-    - use first in to get the fastest success result
-
-delete:
-    - name + tld
-    - convert to list of offsets
-    - concurrently delete them
-    - no follow up
-
-
-"""
+# push:
+#     - try to store on all of them
+#     - store success offsets
+#     - convert success offsets to tld
+#     - return name + tld on success
+#
+# fetch:
+#     - name + tld
+#     - convert to list of offsets
+#     - use first in to get the fastest success result
+#
+# delete:
+#     - name + tld
+#     - convert to list of offsets
+#     - concurrently delete them
+#     - no follow up
