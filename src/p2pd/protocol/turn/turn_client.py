@@ -1,4 +1,3 @@
-
 """
 TURN client using UDP (RFC 5766).
 
@@ -23,18 +22,15 @@ from aionetiface import *
 from .turn_process import *
 from .turn_defs import *
 
+
 # Main class for handling TURN sessions with a server.
 class TURNClient(PipeEvents):
+    """UDP-based TURN client managing relay allocation and peer data forwarding."""
+
     def __init__(
-        self,
-        af,
-        dest,
-        nic,
-        auth=("", ""),
-        realm=None,
-        msg_cb=None,
-        conf=NET_CONF
+        self, af, dest, nic, auth=("", ""), realm=None, msg_cb=None, conf=NET_CONF
     ):
+        # type: (Any, Tuple[str, int], Any, Tuple[str, str], Optional[str], Optional[Any], Any) -> None
         # Can received relay messages have a blank header?
         self.blank_rudp_headers = False
 
@@ -89,35 +85,40 @@ class TURNClient(PipeEvents):
         self.relay_tup_future = asyncio.futures.Future()
         self.auth_event = asyncio.Event()
         self.relay_event = asyncio.Event()
-        self.node_events = {} # by node_id
+        self.node_events = {}  # by node_id
 
     def get_turn_server(self, af=None):
+        # type: (Optional[Any]) -> Dict[str, Any]
         return {
             "host": self.dest[0],
             "port": self.dest[1],
             "afs": [af],
             "user": self.turn_user,
             "pass": self.turn_pw,
-            "realm": self.realm
+            "realm": self.realm,
         }
-    
+
     def get_relay_tup(self, peer_tup):
+        # type: (Any) -> Optional[Any]
         if peer_tup in self.peers:
             return self.peers[peer_tup]
         else:
             return None
 
     def toggle_blank_rudp_headers(self, val):
+        # type: (bool) -> None
         self.blank_rudp_headers = val
 
     # Make this whole clas look like a 'pipe' object.
-    def super_init(self,  transport, sock, route, conf=NET_CONF):
+    def super_init(self, transport, sock, route, conf=NET_CONF):
+        # type: (Any, Any, Any, Any) -> None
         super().__init__(sock=sock, route=route, conf=conf)
         self.connection_made(transport)
         self.stream.set_handle(transport, client_tup=None)
 
     # Start the TURN client.
     async def start(self, n=0):
+        # type: (int) -> TURNClient
         # Set and validate peer address.
         log("> Turn starting client.")
         if self.turn_user is None and self.turn_pw is None:
@@ -135,7 +136,9 @@ class TURNClient(PipeEvents):
 
         # If con was unncessessful raise exception.
         if self.turn_pipe is None:
-            raise Exception("Unable to connect to TURN host. This may mean the server is no longer working. Normally TURN is not a public service.")
+            raise ConnectionError(
+                "Unable to connect to TURN host. This may mean the server is no longer working. Normally TURN is not a public service."
+            )
 
         # Subscribe to all messages.
         self.turn_pipe.subscribe(SUB_ALL)
@@ -145,7 +148,7 @@ class TURNClient(PipeEvents):
             transport=self.turn_pipe.transport,
             sock=self.turn_pipe.sock,
             route=self.route,
-            conf=self.conf
+            conf=self.conf,
         )
         # super_init calls PipeEvents.__init__ which resets proto to None;
         # restore it so PipeClient.send() takes the UDP sendto() path.
@@ -153,12 +156,10 @@ class TURNClient(PipeEvents):
 
         # Start processing UDP replies.
         self.processing_loop_task = asyncio.create_task(
-            async_wrap_errors(
-                process_replies(self)
-            )
+            async_wrap_errors(process_replies(self))
         )
         self.tasks.append(self.processing_loop_task)
-        
+
         # Add any message handlers.
         if self.msg_cb is not None:
             self.add_msg_cb(self.msg_cb)
@@ -168,15 +169,15 @@ class TURNClient(PipeEvents):
         log(fstr("Turn expect unauth success"))
 
         # Wait for client to be ready.
-        await self.auth_event.wait() # Authentication success.
+        await self.auth_event.wait()  # Authentication success.
         log(fstr("Turn auth success"))
-        await self.relay_event.wait() # Our relay address available.
+        await self.relay_event.wait()  # Our relay address available.
         log(fstr("Turn relay event success"))
 
         # Return our relay tup.
-        relay_tup = await self.relay_tup_future
+        await self.relay_tup_future
         log(fstr("Turn tup future success"))
-        client_tup = await self.client_tup_future
+        await self.client_tup_future
         log(fstr("Turn client tup success"))
 
         # TODO: white-list ourselves if self-send support is ever needed.
@@ -188,9 +189,7 @@ class TURNClient(PipeEvents):
                 await asyncio.sleep(TURN_REFRESH_EXPIRY - 60)
                 try:
                     await async_retry(
-                        lambda: self.refresh_allocation(),
-                        count=5,
-                        timeout=5
+                        lambda: self.refresh_allocation(), count=5, timeout=5
                     )
                 except (OSError, ConnectionError, asyncio.TimeoutError):
                     try:
@@ -202,41 +201,44 @@ class TURNClient(PipeEvents):
         # First run of this function.
         if not n:
             self.allocate_refresher_task = asyncio.create_task(
-                async_wrap_errors(
-                    refresher()
-                )
+                async_wrap_errors(refresher())
             )
             self.tasks.append(self.allocate_refresher_task)
 
         return self
 
     async def get_tups(self):
+        # type: () -> Tuple[Any, Any]
         client_tup = await self.client_tup_future
         relay_tup = await self.relay_tup_future
         return client_tup, relay_tup
 
     async def __aenter__(self):
+        # type: () -> TURNClient
         await self.start()
         return self
 
     async def __aexit__(self, *_):
+        # type: (*Any) -> bool
         await self.close()
         return False
 
     def __await__(self):
+        # type: () -> Any
         return self.start().__await__()
 
     async def reconnect(self, n=0):
+        # type: (int) -> None
         await self.close()
 
         # Snapshot state before __init__ wipes it.
-        af       = self.af
-        dest     = self.dest
-        nic      = self.nic
-        auth     = (to_s(self.turn_user), to_s(self.turn_pw))
-        realm    = to_s(self.realm) if self.realm is not None else None
-        msg_cb   = self.msg_cb
-        conf     = self.conf
+        af = self.af
+        dest = self.dest
+        nic = self.nic
+        auth = (to_s(self.turn_user), to_s(self.turn_pw))
+        realm = to_s(self.realm) if self.realm is not None else None
+        msg_cb = self.msg_cb
+        conf = self.conf
 
         # Re-initialise with the correct positional/keyword signature.
         self.__init__(
@@ -254,13 +256,16 @@ class TURNClient(PipeEvents):
 
     # Changes the protocol state machine.
     def set_state(self, state):
+        # type: (int) -> None
         log("> Turn moving state from %s to %s." % (self.state, state))
         self.state = state
 
     def new_node_event(self, node_id):
+        # type: (Any) -> None
         self.node_events[to_s(node_id)] = asyncio.Event()
 
     def get_first_peer_tup(self):
+        # type: () -> Optional[Any]
         for peer_tup in self.peers:
             return self.peers[peer_tup]
 
@@ -268,6 +273,7 @@ class TURNClient(PipeEvents):
 
     # Overwrite the BaseProto send method and require ACKs.
     async def send(self, data, dest_tup=None):
+        # type: (bytes, Optional[Tuple[str, int]]) -> None
         # Attempt to use the first peer_tup.
         if dest_tup is None:
             dest_tup = self.get_first_peer_tup()
@@ -282,8 +288,8 @@ class TURNClient(PipeEvents):
         if self.relay_tup_future.done():
             relay_tup = await self.relay_tup_future
             if dest_tup == relay_tup:
-                raise Exception("Coturn doesn't support self-send.")
-            
+                raise ValueError("Coturn doesn't support self-send.")
+
         # Use a peers relay to reach them instead.
         if dest_tup in self.peers:
             dest_tup = tuple(self.peers[dest_tup])
@@ -295,51 +301,55 @@ class TURNClient(PipeEvents):
                 found_relay = True
                 break
         if not found_relay:
-            log(fstr(
-                "TURN.send(): dest_tup {0} does not match any accepted peer relay — "
-                "possibly an invalid send address.",
-                (dest_tup,)
-            ))
+            log(
+                fstr(
+                    "TURN.send(): dest_tup {0} does not match any accepted peer relay — "
+                    "possibly an invalid send address.",
+                    (dest_tup,),
+                )
+            )
 
-        assert(type(dest_tup) == tuple)
+        assert isinstance(dest_tup, tuple)
 
         # Sanity checking on the dest IP.
         # If dest IP doesn't match this TURN server IP
         # it means maybe the wrong relay IP is used.
         if dest_tup[0] != self.dest[0]:
-            log(fstr(
-                "TURN.send(): dest IP {0} differs from server IP {1} — "
-                "possibly a peer address or mixed relay servers.",
-                (dest_tup[0], self.dest[0],)
-            ))
+            log(
+                fstr(
+                    "TURN.send(): dest IP {0} differs from server IP {1} — "
+                    "possibly a peer address or mixed relay servers.",
+                    (
+                        dest_tup[0],
+                        self.dest[0],
+                    ),
+                )
+            )
 
         # Queue the send as a background task so the caller doesn't block.
         task = asyncio.create_task(
-            async_wrap_errors(
-                self.stream.ack_send(
-                    data,
-                    dest_tup
-                )
-            )
+            async_wrap_errors(self.stream.ack_send(data, dest_tup))
         )
         self.tasks.append(task)
 
     async def recv(self, sub=SUB_ALL, timeout=2):
+        # type: (Any, int) -> Optional[Any]
         # Build a sub from the first accepted peer.
         if sub == SUB_ALL:
             sub = None
-            
+
         if sub is None:
             for peer_tup in self.peers:
                 sub = (b"", peer_tup)
                 break
 
-        assert(sub is not None)
+        assert sub is not None
         return await super().recv(sub, timeout)
 
     # Handles writing TURN messages to self.udp_stream.
     # Will write credential and HMAC if a message needs 'signing.'
-    async def send_turn_msg(self, msg: STUNMsg, do_sign=False):
+    async def send_turn_msg(self, msg, do_sign=False):
+        # type: (Any, bool) -> None
         buf, _ = STUNMsg.unpack(msg.pack(), mode=RFC5389)
         if self.requires_auth:
             if do_sign and self.key:
@@ -352,20 +362,20 @@ class TURNClient(PipeEvents):
     # Record TURN protocol messages by TXID.
     # Events are triggered on receipt.
     def record_msg(self, msg):
+        # type: (Any) -> Tuple[Any, Any, Any]
         f = asyncio.Future()
-        self.msgs[msg.txn_id] = {
-            "status": f,
-            "timestamp": timestamp(),
-            "msg": msg
-        }
+        self.msgs[msg.txn_id] = {"status": f, "timestamp": timestamp(), "msg": msg}
 
         def new_future():
+            # type: () -> asyncio.Future
             a_future = asyncio.Future()
             self.msgs[msg.txn_id]["status"] = a_future
             return a_future
 
         def closure():
+            # type: () -> Any
             async def retransmit():
+                # type: () -> None
                 await self.send_turn_msg(msg, do_sign=True)
 
             return retransmit
@@ -375,6 +385,7 @@ class TURNClient(PipeEvents):
     # Create and send an allocation request.
     # Results in a new relay address being allocated for the client.
     async def allocate_relay(self, sign):
+        # type: (bool) -> Tuple[Any, Any, Any]
         msg = await self.allocate_msg()
         f, retransmit, new_future = self.record_msg(msg)
         await self.send_turn_msg(msg, do_sign=sign)
@@ -384,21 +395,29 @@ class TURNClient(PipeEvents):
     # Retry up to 3 times if no response to the packet.
     # Allows a peer to send messages to our relay address.
     async def accept_peer(self, peer_tup, peer_relay_tup):
+        # type: (Any, Any) -> bool
         # Fixed 'compressed' IPv6 addresses.
         peer_tup = norm_client_tup(peer_tup)
 
         # Basic validation for logging.
         if peer_relay_tup[0] != self.dest[0]:
-            log(fstr(
-                "TURN accept_peer: relay IP {0} != server IP {1} — "
-                "possible error or mixed TURN servers.",
-                (peer_relay_tup[0], self.dest[0],)
-            ))
+            log(
+                fstr(
+                    "TURN accept_peer: relay IP {0} != server IP {1} — "
+                    "possible error or mixed TURN servers.",
+                    (
+                        peer_relay_tup[0],
+                        self.dest[0],
+                    ),
+                )
+            )
 
         peer_tup = tuple(peer_tup)
         peer_relay_tup = tuple(peer_relay_tup)
         already_accepted = peer_tup in self.peers
+
         async def handler(peer_tup, peer_relay_tup):
+            # type: (Any, Any) -> Tuple[Any, Any, Any]
             # Generate message to send.
             msg = await self.white_list_msg(peer_tup)
             self.peers[peer_tup] = peer_relay_tup
@@ -408,7 +427,9 @@ class TURNClient(PipeEvents):
             return f, retransmit, new_future
 
         # Refresh permissions.
-        f = lambda: handler(peer_tup, peer_relay_tup)
+        def f():
+            return handler(peer_tup, peer_relay_tup)
+
         async def refresher():
             while self.state != TURN_ERROR_STOPPED:
                 await asyncio.sleep(TURN_REFRESH_EXPIRY - 60)
@@ -425,11 +446,7 @@ class TURNClient(PipeEvents):
             await async_retry(f, count=5, timeout=5)
 
             # Start the loop to refresh the permission.
-            task = asyncio.create_task(
-                async_wrap_errors(
-                    refresher()
-                )
-            )
+            task = asyncio.create_task(async_wrap_errors(refresher()))
             self.tasks.append(task)
 
         return already_accepted
@@ -437,34 +454,28 @@ class TURNClient(PipeEvents):
     # Relay addresses are only valid for a certain 'life time.'
     # This creates and sends a message to refresh the lifetime.
     async def refresh_allocation(self):
+        # type: () -> Tuple[Any, Any, Any]
         log("> Turn refreshing allocate lifetime.")
         msg = await self.refresh_msg()
         f, retransmit, new_future = self.record_msg(msg)
         return f, retransmit, new_future
-        
+
     # Main step 1 -- allocate a relay address msg.
     async def allocate_msg(self):
-        reply = STUNMsg(
-            msg_type=STUNMsgTypes.Allocate,
-            mode=RFC5389
-        )
-        reply.write_attr(
-            STUNAttrs.RequestedTransport,
-            TURN_RPOTOCOL_UDP
-        )
+        # type: () -> Any
+        reply = STUNMsg(msg_type=STUNMsgTypes.Allocate, mode=RFC5389)
+        reply.write_attr(STUNAttrs.RequestedTransport, TURN_RPOTOCOL_UDP)
 
         self.txid = reply.txn_id
         return reply
-        
+
     # Main step 2 -- white list a peer to use our relay address msg.
     # Apparently the port number is irrelevant.
     # Permissions are made per IP.
-    async def white_list_msg(self, src_tup):        
+    async def white_list_msg(self, src_tup):
+        # type: (Any) -> Any
         # Try write the peer address.
-        reply = STUNMsg(
-            msg_type=STUNMsgTypes.CreatePermission,
-            mode=RFC5389
-        )
+        reply = STUNMsg(msg_type=STUNMsgTypes.CreatePermission, mode=RFC5389)
 
         af = af_from_ip_s(src_tup[0])
         attr_code = STUNAttrs.XorPeerAddress
@@ -481,26 +492,27 @@ class TURNClient(PipeEvents):
         attr_data.tup = None
         attr_data.decode(attr_code, attr_data.encode(attr_code))
         if attr_data.tup != src_tup:
-            error = fstr("""
+            error = fstr(
+                """
             The decode of the white listed 
             peer addr in TURN did not match the src tup 
             this might indicate an encoding error 
-            {0} != {1}""", (src_tup, attr_data.tup,))
+            {0} != {1}""",
+                (
+                    src_tup,
+                    attr_data.tup,
+                ),
+            )
             log(error)
 
         return reply
 
     # Step 3 - refresh allocation to avoid lifetime timeouts.
     async def refresh_msg(self):
+        # type: () -> Any
         # 32 bit unsigned int
-        reply = STUNMsg(
-            msg_type=STUNMsgTypes.Refresh,
-            mode=RFC5389
-        )
-        reply.write_attr(
-            STUNAttrs.Lifetime,
-            pack("!I", TURN_REFRESH_EXPIRY)
-        )
+        reply = STUNMsg(msg_type=STUNMsgTypes.Refresh, mode=RFC5389)
+        reply.write_attr(STUNAttrs.Lifetime, pack("!I", TURN_REFRESH_EXPIRY))
 
         """
         reply.write_attr(
@@ -510,11 +522,12 @@ class TURNClient(PipeEvents):
         """
 
         # Return reply message.
-        #reply.txn_id = self.txid
+        # reply.txn_id = self.txid
         return reply
 
     # Close the client socket and move state to done.
     async def do_cleanup(self):
+        # type: () -> None
         if self.turn_pipe is not None:
             await self.turn_pipe.close()
 
@@ -533,6 +546,7 @@ class TURNClient(PipeEvents):
         self.relay_event.set()
 
     async def close(self):
+        # type: () -> None
         # Already closed.
         if self.turn_client_stopped.is_set():
             return
@@ -547,12 +561,14 @@ class TURNClient(PipeEvents):
         # Wait for permission refresher tasks or cancel them.
         await gather_or_cancel(self.tasks, 2)
 
-if __name__ == '__main__': # pragma: no cover
+
+if __name__ == "__main__":  # pragma: no cover
     """
     // If left out, will use openrelay public TURN servers from metered.ca
     see if these servers work?
     turnIceServers: { ... },
     """
+
     async def test_turn():
         """
         buf = b"ur\x00\t\xd6o'\x04\x9ezp*\x01"
@@ -569,12 +585,9 @@ if __name__ == '__main__': # pragma: no cover
         return
         """
         interface = await Interface("enp1s0f0").start()
-        af = AF_INET
-        turn_user=b""
-        turn_pw=b""
-        route = interface.route(af)
+        turn_user = b""
+        turn_pw = b""
         turn_addr = ("", 3478)
-
 
         """
         A faulty network interface will cause hosts with multiple
@@ -588,12 +601,12 @@ if __name__ == '__main__': # pragma: no cover
             turn_addr=turn_addr,
             turn_user=turn_user,
             turn_pw=turn_pw,
-            interface=interface
+            interface=interface,
         )
 
         client_tup_future, relay_tup_future, in_chan_event = await client1.start()
-        client_tup = await client_tup_future
-        relay_tup = await relay_tup_future
+        await client_tup_future
+        await relay_tup_future
 
         """
         reply = TurnMessage(msg_type=TurnMessageMethod.Send, msg_code=TurnMessageCode.Indication)
@@ -605,11 +618,7 @@ if __name__ == '__main__': # pragma: no cover
         await client1.send_turn_msg(reply, do_sign=True)
         """
 
-
         while True:
             await asyncio.sleep(1)
 
-
     async_test(test_turn)
-
-

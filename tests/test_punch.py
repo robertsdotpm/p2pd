@@ -66,22 +66,35 @@ import selectors
 
 import aionetiface
 from aionetiface import (
-    Interface, Pipe, TCP, UDP,
-    IP4, IP6,
+    Interface,
+    Pipe,
+    TCP,
+    UDP,
+    IP4,
+    IP6,
     EXT_BIND,
-    to_s, rand_plain,
-    async_wrap_errors, log_exception,
-    bind_closure, binder_async, binder_sync,
+    to_s,
+    rand_plain,
+    async_wrap_errors,
+    log_exception,
+    bind_closure,
+    binder_async,
+    binder_sync,
 )
 
 from p2pd.traversal.libs.punch.punch_client import PunchClient
 from p2pd.traversal.libs.punch.punch_defs import PortAlloc
 from p2pd.traversal.libs.punch.utility.boundary_lib import (
-    compute_rendezvous, stable_ports, stable_boundary, quantized_bucket
+    compute_rendezvous,
+    stable_ports,
+    stable_boundary,
+    quantized_bucket,
 )
 from p2pd.traversal.libs.punch.utility.punch_utils import timestamp_from_ntp
 from p2pd.traversal.libs.punch.port_allocators.boundary_alloc import boundary_port_alloc
-from p2pd.traversal.libs.punch.engines.tcp_selector_simple.engine import tcp_selector_punch_engine
+from p2pd.traversal.libs.punch.engines.tcp_selector_simple.engine import (
+    tcp_selector_punch_engine,
+)
 
 from tests.turn_server import (
     make_fake_nic,
@@ -95,6 +108,7 @@ from tests.turn_server import (
 if sys.version_info >= (3, 8):
     AsyncTestCase = unittest.IsolatedAsyncioTestCase
 else:
+
     class AsyncTestCase(unittest.TestCase):
         """
         Minimal asyncio-compatible TestCase for Python 3.5+.
@@ -132,8 +146,10 @@ else:
                 except AttributeError:
                     # _loop not set yet (e.g. during test collection).
                     return val
+
                 def sync_wrapper(coro_fn=val, ev_loop=loop):
                     ev_loop.run_until_complete(coro_fn())
+
                 return sync_wrapper
             return val
 
@@ -149,13 +165,14 @@ class SimpleTCPServer:
     Used to test if punch can successfully connect.
     Supports both IPv4 and IPv6.
     """
+
     def __init__(self, ip, port):
         self.ip = ip
         self.port = port
         self.sock = None
         self.connections = []
         # Determine address family based on IP
-        self.af = socket.AF_INET6 if ':' in ip else socket.AF_INET
+        self.af = socket.AF_INET6 if ":" in ip else socket.AF_INET
 
     async def start(self):
         """Start the server and listen for connections."""
@@ -216,6 +233,7 @@ def run_punch_engine(puncher, engine):
     except Exception as e:
         print("Punch engine error: {}".format(e))
         import traceback
+
         traceback.print_exc()
         return None
 
@@ -226,7 +244,9 @@ async def punch_to_server(src_ip, dest_ip, dest_port, num_ports=16, base_port=30
 
     Returns the socket if successful, None otherwise.
     """
-    from p2pd.traversal.libs.punch.engines.tcp_selector_simple.engine import tcp_selector_punch_engine
+    from p2pd.traversal.libs.punch.engines.tcp_selector_simple.engine import (
+        tcp_selector_punch_engine,
+    )
 
     # Create a PunchClient configured for this punch attempt
     puncher = PunchClient(
@@ -252,8 +272,10 @@ async def punch_to_server(src_ip, dest_ip, dest_port, num_ports=16, base_port=30
     # Run the punch engine in executor to avoid blocking
     loop = asyncio.get_event_loop()
     punched_sock = await asyncio.wait_for(
-        loop.run_in_executor(None, run_punch_engine, puncher, tcp_selector_punch_engine),
-        timeout=15
+        loop.run_in_executor(
+            None, run_punch_engine, puncher, tcp_selector_punch_engine
+        ),
+        timeout=15,
     )
 
     return punched_sock
@@ -262,6 +284,7 @@ async def punch_to_server(src_ip, dest_ip, dest_port, num_ports=16, base_port=30
 # ──────────────────────────────────────────────────────────────────────────────
 # Test 1 -- Loopback punch (same 127.0.0.1, different ports)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TestPunchLoopback(AsyncTestCase):
     """
@@ -333,7 +356,9 @@ class TestPunchLoopback(AsyncTestCase):
             pass  # Expected for non-blocking socket
 
         # Wait for server to accept
-        conn, addr = await asyncio.wait_for(self.server.accept_one(timeout=5), timeout=6)
+        conn, addr = await asyncio.wait_for(
+            self.server.accept_one(timeout=5), timeout=6
+        )
 
         self.assertIsNotNone(conn, "Server should accept the connection")
         self.assertEqual(addr[0], "127.0.0.1")
@@ -377,8 +402,11 @@ class TestPunchLoopback(AsyncTestCase):
         ports_b = [alloc.src_port for alloc in puncher_b.port_allocs]
 
         intersection = set(ports_a) & set(ports_b)
-        self.assertEqual(len(intersection), 0,
-                        "Two punch clients should have non-overlapping source ports")
+        self.assertEqual(
+            len(intersection),
+            0,
+            "Two punch clients should have non-overlapping source ports",
+        )
 
     async def test_punch_time_calculation(self):
         """
@@ -400,17 +428,19 @@ class TestPunchLoopback(AsyncTestCase):
         # Compute rendezvous should return future time
         bucket, rendezvous_time = compute_rendezvous(base_timestamp)
 
-        self.assertGreater(rendezvous_time, base_timestamp,
-                          "Rendezvous time should be in the future")
-        self.assertIsInstance(bucket, int,
-                             "Bucket should be an integer")
-        self.assertIsInstance(rendezvous_time, (int, float),
-                             "Rendezvous time should be numeric")
+        self.assertGreater(
+            rendezvous_time, base_timestamp, "Rendezvous time should be in the future"
+        )
+        self.assertIsInstance(bucket, int, "Bucket should be an integer")
+        self.assertIsInstance(
+            rendezvous_time, (int, float), "Rendezvous time should be numeric"
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Test 2 -- Punch with multiple NIC IPs
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TestPunchNicIPs(AsyncTestCase):
     """
@@ -437,8 +467,8 @@ class TestPunchNicIPs(AsyncTestCase):
 
         self.ipr_a = r4.nic_ips[0]
         self.ipr_b = r4.nic_ips[1]
-        self.ip_a  = str(self.ipr_a.ip)
-        self.ip_b  = str(self.ipr_b.ip)
+        self.ip_a = str(self.ipr_a.ip)
+        self.ip_b = str(self.ipr_b.ip)
 
         print("\nTest using NIC IPs: {} and {}".format(self.ip_a, self.ip_b))
 
@@ -453,12 +483,13 @@ class TestPunchNicIPs(AsyncTestCase):
         Verify that the test has access to two distinct NIC IPs.
         This is a sanity check before more complex tests.
         """
-        self.assertNotEqual(self.ip_a, self.ip_b,
-                           "Test IPs should be distinct")
-        self.assertTrue(self.ip_a.replace('.', '').isdigit(),
-                       "IP A should be a valid IPv4 address")
-        self.assertTrue(self.ip_b.replace('.', '').isdigit(),
-                       "IP B should be a valid IPv4 address")
+        self.assertNotEqual(self.ip_a, self.ip_b, "Test IPs should be distinct")
+        self.assertTrue(
+            self.ip_a.replace(".", "").isdigit(), "IP A should be a valid IPv4 address"
+        )
+        self.assertTrue(
+            self.ip_b.replace(".", "").isdigit(), "IP B should be a valid IPv4 address"
+        )
 
     async def test_punch_client_from_ip_a_to_ip_b(self):
         """
@@ -473,10 +504,8 @@ class TestPunchNicIPs(AsyncTestCase):
             same_machine=True,
         )
 
-        self.assertEqual(puncher.dest_ip, self.ip_b,
-                        "Puncher should target IP B")
-        self.assertEqual(puncher.src_ip, self.ip_a,
-                        "Puncher should be bound to IP A")
+        self.assertEqual(puncher.dest_ip, self.ip_b, "Puncher should target IP B")
+        self.assertEqual(puncher.src_ip, self.ip_a, "Puncher should be bound to IP A")
 
     async def test_punch_client_from_ip_b_to_ip_a(self):
         """
@@ -491,10 +520,8 @@ class TestPunchNicIPs(AsyncTestCase):
             same_machine=True,
         )
 
-        self.assertEqual(puncher.dest_ip, self.ip_a,
-                        "Puncher should target IP A")
-        self.assertEqual(puncher.src_ip, self.ip_b,
-                        "Puncher should be bound to IP B")
+        self.assertEqual(puncher.dest_ip, self.ip_a, "Puncher should target IP A")
+        self.assertEqual(puncher.src_ip, self.ip_b, "Puncher should be bound to IP B")
 
     async def test_server_on_ip_a_reachable_from_ip_b(self):
         """
@@ -523,14 +550,16 @@ class TestPunchNicIPs(AsyncTestCase):
 
         # Server should accept the connection
         conn, addr = await asyncio.wait_for(
-            self.server.accept_one(timeout=5),
-            timeout=6
+            self.server.accept_one(timeout=5), timeout=6
         )
 
-        self.assertIsNotNone(conn,
-            "Server on {}:{} should accept connection from {}".format(self.ip_a, server_port, self.ip_b))
-        self.assertEqual(addr[0], self.ip_b,
-            "Server should see connection from IP B")
+        self.assertIsNotNone(
+            conn,
+            "Server on {}:{} should accept connection from {}".format(
+                self.ip_a, server_port, self.ip_b
+            ),
+        )
+        self.assertEqual(addr[0], self.ip_b, "Server should see connection from IP B")
 
         client.close()
         if conn:
@@ -570,13 +599,13 @@ class TestPunchNicIPs(AsyncTestCase):
         # Verify A targets B on the right port
         self.assertTrue(
             any(alloc.dest_port == b_dest_port for alloc in puncher_a.port_allocs),
-            "Puncher A should target B's destination port"
+            "Puncher A should target B's destination port",
         )
 
         # Verify B targets A on the right port
         self.assertTrue(
             any(alloc.dest_port == a_dest_port for alloc in puncher_b.port_allocs),
-            "Puncher B should target A's destination port"
+            "Puncher B should target A's destination port",
         )
 
     async def test_bidirectional_punch_setup(self):
@@ -635,8 +664,16 @@ class TestPunchNicIPs(AsyncTestCase):
         self.assertEqual(len(a_src_ports & b_src_ports), 0)
 
         print("\nBidirectional punch setup validated:")
-        print("  A ({}) -> B ({}:{}) with {} ports".format(self.ip_a, self.ip_b, b_dest_port, len(puncher_a.port_allocs)))
-        print("  B ({}) -> A ({}:{}) with {} ports".format(self.ip_b, self.ip_a, a_dest_port, len(puncher_b.port_allocs)))
+        print(
+            "  A ({}) -> B ({}:{}) with {} ports".format(
+                self.ip_a, self.ip_b, b_dest_port, len(puncher_a.port_allocs)
+            )
+        )
+        print(
+            "  B ({}) -> A ({}:{}) with {} ports".format(
+                self.ip_b, self.ip_a, a_dest_port, len(puncher_b.port_allocs)
+            )
+        )
 
     async def test_bidirectional_ntp_synchronized_punch(self):
         """
@@ -697,26 +734,40 @@ class TestPunchNicIPs(AsyncTestCase):
         puncher_b.add_port_allocator(boundary_port_alloc)
 
         # Validation 1: Both punchers have the same bucket (time synchronized)
-        self.assertEqual(bucket_a, bucket_b,
-            "Both punchers should calculate the same time bucket from NTP time")
+        self.assertEqual(
+            bucket_a,
+            bucket_b,
+            "Both punchers should calculate the same time bucket from NTP time",
+        )
 
         # Validation 2: Both punchers have future punch times
-        self.assertGreater(punch_time_a, ntp_timestamp,
-            "Puncher A punch_time should be in the future")
-        self.assertGreater(punch_time_b, ntp_timestamp,
-            "Puncher B punch_time should be in the future")
+        self.assertGreater(
+            punch_time_a, ntp_timestamp, "Puncher A punch_time should be in the future"
+        )
+        self.assertGreater(
+            punch_time_b, ntp_timestamp, "Puncher B punch_time should be in the future"
+        )
 
         # Validation 3: Both punchers should have punch times in the same window
         # (allowing for minor system clock differences)
         time_diff = abs(punch_time_a - punch_time_b)
-        self.assertLess(time_diff, 2,
-            "Punch times should be very close (diff: {}s)".format(time_diff))
+        self.assertLess(
+            time_diff,
+            2,
+            "Punch times should be very close (diff: {}s)".format(time_diff),
+        )
 
         # Validation 4: Both punchers have port allocations
-        self.assertGreater(len(puncher_a.port_allocs), 0,
-            "Puncher A should have port allocations after add_port_allocator")
-        self.assertGreater(len(puncher_b.port_allocs), 0,
-            "Puncher B should have port allocations after add_port_allocator")
+        self.assertGreater(
+            len(puncher_a.port_allocs),
+            0,
+            "Puncher A should have port allocations after add_port_allocator",
+        )
+        self.assertGreater(
+            len(puncher_b.port_allocs),
+            0,
+            "Puncher B should have port allocations after add_port_allocator",
+        )
 
         # Validation 5: Port allocations target the correct destinations
         for alloc_a in puncher_a.port_allocs:
@@ -737,8 +788,16 @@ class TestPunchNicIPs(AsyncTestCase):
         print("  Bucket: {}".format(bucket_a))
         print("  Punch time A: {}".format(punch_time_a))
         print("  Punch time B: {}".format(punch_time_b))
-        print("  A ({}) -> B ({}) with {} ports".format(self.ip_a, self.ip_b, len(puncher_a.port_allocs)))
-        print("  B ({}) -> A ({}) with {} ports".format(self.ip_b, self.ip_a, len(puncher_b.port_allocs)))
+        print(
+            "  A ({}) -> B ({}) with {} ports".format(
+                self.ip_a, self.ip_b, len(puncher_a.port_allocs)
+            )
+        )
+        print(
+            "  B ({}) -> A ({}) with {} ports".format(
+                self.ip_b, self.ip_a, len(puncher_b.port_allocs)
+            )
+        )
         print("  Ready to run tcp_selector_punch_engine on each puncher")
 
     async def test_actual_bidirectional_punch_with_sockets(self):
@@ -818,8 +877,12 @@ class TestPunchNicIPs(AsyncTestCase):
             puncher_b.add_port_allocator(boundary_port_alloc)
 
             print("\nPunch configurations:")
-            print("  Puncher A: {} -> {}:{}".format(self.ip_a, self.ip_b, listen_port_b))
-            print("  Puncher B: {} -> {}:{}".format(self.ip_b, self.ip_a, listen_port_a))
+            print(
+                "  Puncher A: {} -> {}:{}".format(self.ip_a, self.ip_b, listen_port_b)
+            )
+            print(
+                "  Puncher B: {} -> {}:{}".format(self.ip_b, self.ip_a, listen_port_a)
+            )
             print("  Punch time: {} (bucket {})".format(punch_time_a, bucket_a))
 
             # Set the listening port as the destination port for each puncher
@@ -851,8 +914,7 @@ class TestPunchNicIPs(AsyncTestCase):
             # Wait for both to complete with timeout
             try:
                 sock_a, sock_b = await asyncio.wait_for(
-                    asyncio.gather(punch_a_task, punch_b_task),
-                    timeout=20
+                    asyncio.gather(punch_a_task, punch_b_task), timeout=20
                 )
             except asyncio.TimeoutError:
                 print("Punch engines timed out (expected in some NAT scenarios)")
@@ -905,6 +967,7 @@ class TestPunchNicIPs(AsyncTestCase):
 # Test 3 -- IPv6 Loopback punch (same ::1, different ports)
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TestPunchIPv6Loopback(AsyncTestCase):
     """
     Test TCP hole punching on IPv6 loopback (::1).
@@ -936,8 +999,8 @@ class TestPunchIPv6Loopback(AsyncTestCase):
         )
 
         # IPv6 addresses may be normalized to full form; just verify they're loopback
-        self.assertIn('1', puncher.dest_ip, "dest_ip should contain loopback indicator")
-        self.assertIn('1', puncher.src_ip, "src_ip should contain loopback indicator")
+        self.assertIn("1", puncher.dest_ip, "dest_ip should contain loopback indicator")
+        self.assertIn("1", puncher.src_ip, "src_ip should contain loopback indicator")
         self.assertEqual(puncher.af, socket.AF_INET6)
         self.assertEqual(puncher.same_machine, True)
 
@@ -991,8 +1054,11 @@ class TestPunchIPv6Loopback(AsyncTestCase):
         ports_b = [alloc.src_port for alloc in puncher_b.port_allocs]
 
         intersection = set(ports_a) & set(ports_b)
-        self.assertEqual(len(intersection), 0,
-                        "IPv6 punch clients should have non-overlapping source ports")
+        self.assertEqual(
+            len(intersection),
+            0,
+            "IPv6 punch clients should have non-overlapping source ports",
+        )
 
     async def test_ipv6_punch_time_calculation(self):
         """Test NTP time rendezvous calculation for IPv6."""
@@ -1009,10 +1075,12 @@ class TestPunchIPv6Loopback(AsyncTestCase):
 
         bucket, rendezvous_time = compute_rendezvous(base_timestamp)
 
-        self.assertGreater(rendezvous_time, base_timestamp,
-                          "IPv6 rendezvous time should be in the future")
-        self.assertIsInstance(bucket, int,
-                             "Bucket should be an integer")
+        self.assertGreater(
+            rendezvous_time,
+            base_timestamp,
+            "IPv6 rendezvous time should be in the future",
+        )
+        self.assertIsInstance(bucket, int, "Bucket should be an integer")
 
     async def test_ipv6_link_local_with_scope_id(self):
         """Test IPv6 link-local address with scope ID extraction."""
@@ -1028,10 +1096,10 @@ class TestPunchIPv6Loopback(AsyncTestCase):
         )
 
         # Verify the NIC ID was extracted from the scope ID
-        self.assertEqual(puncher.nic_id, "eth0",
-                        "NIC ID should be extracted from % notation")
-        self.assertEqual(puncher.af, socket.AF_INET6,
-                        "Should be IPv6 address family")
+        self.assertEqual(
+            puncher.nic_id, "eth0", "NIC ID should be extracted from % notation"
+        )
+        self.assertEqual(puncher.af, socket.AF_INET6, "Should be IPv6 address family")
 
     async def test_ipv6_link_local_address_detection(self):
         """Test detection of IPv6 link-local addresses."""
@@ -1051,8 +1119,11 @@ class TestPunchIPv6Loopback(AsyncTestCase):
                 same_machine=True,
             )
             # All should be detected as IPv6
-            self.assertEqual(puncher.af, socket.AF_INET6,
-                            "Link-local {} should be IPv6".format(link_local))
+            self.assertEqual(
+                puncher.af,
+                socket.AF_INET6,
+                "Link-local {} should be IPv6".format(link_local),
+            )
 
     async def test_ipv6_link_local_vs_global(self):
         """Test that link-local and global IPv6 addresses are both supported."""
@@ -1090,6 +1161,7 @@ class TestPunchIPv6Loopback(AsyncTestCase):
 # Test 4 -- IPv6 punch with multiple NIC IPs
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TestPunchIPv6NicIPs(AsyncTestCase):
     """
     Test TCP hole punching across different IPv6 NIC IPs.
@@ -1109,7 +1181,7 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
         r6 = self.nic.route(IP6)
 
         # Try to use link-local addresses first (most common case)
-        link_locals = getattr(r6, 'link_locals', [])
+        link_locals = getattr(r6, "link_locals", [])
 
         if len(link_locals) >= 2:
             # Use two different link-local addresses
@@ -1133,8 +1205,8 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
                 )
             )
 
-        self.ip_a  = str(self.ipr_a.ip)
-        self.ip_b  = str(self.ipr_b.ip)
+        self.ip_a = str(self.ipr_a.ip)
+        self.ip_b = str(self.ipr_b.ip)
         self.nic_name = self.nic.name
 
         # For link-local addresses, we need to add the scope ID when binding
@@ -1149,9 +1221,17 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
         else:
             self.ip_b_with_scope = self.ip_b
 
-        print("\nIPv6 Test using {} IPs: {} and {}".format(addr_type, self.ip_a, self.ip_b))
+        print(
+            "\nIPv6 Test using {} IPs: {} and {}".format(
+                addr_type, self.ip_a, self.ip_b
+            )
+        )
         if self.ip_a != self.ip_a_with_scope or self.ip_b != self.ip_b_with_scope:
-            print("  With scope: {} and {}".format(self.ip_a_with_scope, self.ip_b_with_scope))
+            print(
+                "  With scope: {} and {}".format(
+                    self.ip_a_with_scope, self.ip_b_with_scope
+                )
+            )
 
         self.server = None
 
@@ -1161,10 +1241,9 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
 
     async def test_ipv6_nic_ips_are_distinct(self):
         """Verify that two distinct IPv6 NIC IPs are available."""
-        self.assertNotEqual(self.ip_a, self.ip_b,
-                           "IPv6 test IPs should be distinct")
-        self.assertIn(':', self.ip_a, "IP A should be IPv6 (contain ':')")
-        self.assertIn(':', self.ip_b, "IP B should be IPv6 (contain ':')")
+        self.assertNotEqual(self.ip_a, self.ip_b, "IPv6 test IPs should be distinct")
+        self.assertIn(":", self.ip_a, "IP A should be IPv6 (contain ':')")
+        self.assertIn(":", self.ip_b, "IP B should be IPv6 (contain ':')")
 
     async def test_ipv6_punch_client_from_ip_a_to_ip_b(self):
         """Create an IPv6 PunchClient on IP A targeting IP B."""
@@ -1176,12 +1255,11 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
             same_machine=True,
         )
 
-        self.assertEqual(puncher.dest_ip, self.ip_b,
-                        "IPv6 Puncher should target IP B")
-        self.assertEqual(puncher.src_ip, self.ip_a,
-                        "IPv6 Puncher should be bound to IP A")
-        self.assertEqual(puncher.af, socket.AF_INET6,
-                        "Address family should be IPv6")
+        self.assertEqual(puncher.dest_ip, self.ip_b, "IPv6 Puncher should target IP B")
+        self.assertEqual(
+            puncher.src_ip, self.ip_a, "IPv6 Puncher should be bound to IP A"
+        )
+        self.assertEqual(puncher.af, socket.AF_INET6, "Address family should be IPv6")
 
     async def test_ipv6_punch_client_from_ip_b_to_ip_a(self):
         """Create an IPv6 PunchClient on IP B targeting IP A."""
@@ -1195,18 +1273,26 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
         )
 
         # Compare without exact match since addresses might be normalized
-        self.assertIn(self.ip_a.split('%')[0], puncher.dest_ip,
-                        "IPv6 Puncher should target IP A")
-        self.assertIn(self.ip_b.split('%')[0], puncher.src_ip,
-                        "IPv6 Puncher should be bound to IP B")
+        self.assertIn(
+            self.ip_a.split("%")[0], puncher.dest_ip, "IPv6 Puncher should target IP A"
+        )
+        self.assertIn(
+            self.ip_b.split("%")[0],
+            puncher.src_ip,
+            "IPv6 Puncher should be bound to IP B",
+        )
 
     async def test_ipv6_server_reachable_across_ips(self):
         """Test IPv6 connectivity: server on IP A reachable from IP B."""
         # Skip if we have mixed link-local + global addresses
         # (different address families have compatibility issues)
         if self.ip_a_with_scope != self.ip_a or self.ip_b_with_scope != self.ip_b:
-            if (self.ip_a_with_scope != self.ip_a) != (self.ip_b_with_scope != self.ip_b):
-                self.skipTest("Cannot mix link-local and global IPv6 addresses in socket tests")
+            if (self.ip_a_with_scope != self.ip_a) != (
+                self.ip_b_with_scope != self.ip_b
+            ):
+                self.skipTest(
+                    "Cannot mix link-local and global IPv6 addresses in socket tests"
+                )
 
         self.server = SimpleTCPServer(self.ip_a_with_scope, 0)
         await self.server.start()
@@ -1230,16 +1316,20 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
 
         # Server should accept the connection
         conn, addr = await asyncio.wait_for(
-            self.server.accept_one(timeout=5),
-            timeout=6
+            self.server.accept_one(timeout=5), timeout=6
         )
 
-        self.assertIsNotNone(conn,
-            "IPv6 Server on {}:{} should accept connection from {}".format(self.ip_a, server_port, self.ip_b))
+        self.assertIsNotNone(
+            conn,
+            "IPv6 Server on {}:{} should accept connection from {}".format(
+                self.ip_a, server_port, self.ip_b
+            ),
+        )
         self.assertEqual(
             socket.inet_pton(socket.AF_INET6, addr[0]),
             socket.inet_pton(socket.AF_INET6, self.ip_b),
-            "Server should see connection from IPv6 IP B")
+            "Server should see connection from IPv6 IP B",
+        )
 
         client.close()
         if conn:
@@ -1290,8 +1380,16 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
         self.assertEqual(len(a_src_ports & b_src_ports), 0)
 
         print("\nIPv6 Bidirectional punch setup validated:")
-        print("  A ({}) -> B ({}:{}) with {} ports".format(self.ip_a, self.ip_b, b_dest_port, len(puncher_a.port_allocs)))
-        print("  B ({}) -> A ({}:{}) with {} ports".format(self.ip_b, self.ip_a, a_dest_port, len(puncher_b.port_allocs)))
+        print(
+            "  A ({}) -> B ({}:{}) with {} ports".format(
+                self.ip_a, self.ip_b, b_dest_port, len(puncher_a.port_allocs)
+            )
+        )
+        print(
+            "  B ({}) -> A ({}:{}) with {} ports".format(
+                self.ip_b, self.ip_a, a_dest_port, len(puncher_b.port_allocs)
+            )
+        )
 
     async def test_ipv6_bidirectional_ntp_synchronized_punch(self):
         """Test IPv6 bidirectional punching with NTP synchronization."""
@@ -1331,38 +1429,62 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
         puncher_b.add_port_allocator(boundary_port_alloc)
 
         # Validations
-        self.assertEqual(bucket_a, bucket_b,
-            "IPv6 punchers should calculate the same time bucket")
+        self.assertEqual(
+            bucket_a, bucket_b, "IPv6 punchers should calculate the same time bucket"
+        )
 
-        self.assertGreater(punch_time_a, ntp_timestamp,
-            "IPv6 Puncher A punch_time should be in the future")
-        self.assertGreater(punch_time_b, ntp_timestamp,
-            "IPv6 Puncher B punch_time should be in the future")
+        self.assertGreater(
+            punch_time_a,
+            ntp_timestamp,
+            "IPv6 Puncher A punch_time should be in the future",
+        )
+        self.assertGreater(
+            punch_time_b,
+            ntp_timestamp,
+            "IPv6 Puncher B punch_time should be in the future",
+        )
 
         time_diff = abs(punch_time_a - punch_time_b)
-        self.assertLess(time_diff, 2,
-            "IPv6 punch times should be very close (diff: {}s)".format(time_diff))
+        self.assertLess(
+            time_diff,
+            2,
+            "IPv6 punch times should be very close (diff: {}s)".format(time_diff),
+        )
 
-        self.assertGreater(len(puncher_a.port_allocs), 0,
-            "IPv6 Puncher A should have port allocations")
-        self.assertGreater(len(puncher_b.port_allocs), 0,
-            "IPv6 Puncher B should have port allocations")
+        self.assertGreater(
+            len(puncher_a.port_allocs), 0, "IPv6 Puncher A should have port allocations"
+        )
+        self.assertGreater(
+            len(puncher_b.port_allocs), 0, "IPv6 Puncher B should have port allocations"
+        )
 
         print("\nIPv6 Bidirectional NTP-synchronized punch ready:")
         print("  NTP time: {}".format(ntp_timestamp))
         print("  Bucket: {}".format(bucket_a))
         print("  Punch time A: {}".format(punch_time_a))
         print("  Punch time B: {}".format(punch_time_b))
-        print("  A ({}) -> B ({}) with {} ports".format(self.ip_a, self.ip_b, len(puncher_a.port_allocs)))
-        print("  B ({}) -> A ({}) with {} ports".format(self.ip_b, self.ip_a, len(puncher_b.port_allocs)))
+        print(
+            "  A ({}) -> B ({}) with {} ports".format(
+                self.ip_a, self.ip_b, len(puncher_a.port_allocs)
+            )
+        )
+        print(
+            "  B ({}) -> A ({}) with {} ports".format(
+                self.ip_b, self.ip_a, len(puncher_b.port_allocs)
+            )
+        )
 
     async def test_ipv6_actual_bidirectional_punch_with_sockets(self):
         """Test actual bidirectional IPv6 TCP punching with real socket creation."""
         # Skip if we have mixed link-local + global addresses
         # (different address families have compatibility issues)
         if self.ip_a_with_scope != self.ip_a or self.ip_b_with_scope != self.ip_b:
-            if (self.ip_a_with_scope != self.ip_a) != (self.ip_b_with_scope != self.ip_b):
-                self.skipTest("Cannot mix link-local and global IPv6 addresses in socket tests")
+            if (self.ip_a_with_scope != self.ip_a) != (
+                self.ip_b_with_scope != self.ip_b
+            ):
+                self.skipTest(
+                    "Cannot mix link-local and global IPv6 addresses in socket tests"
+                )
 
         try:
             ntp_timestamp = timestamp_from_ntp()
@@ -1421,8 +1543,12 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
             puncher_b.add_port_allocator(boundary_port_alloc)
 
             print("\nIPv6 Punch configurations:")
-            print("  Puncher A: {} -> [{}]:{}".format(self.ip_a, self.ip_b, listen_port_b))
-            print("  Puncher B: {} -> [{}]:{}".format(self.ip_b, self.ip_a, listen_port_a))
+            print(
+                "  Puncher A: {} -> [{}]:{}".format(self.ip_a, self.ip_b, listen_port_b)
+            )
+            print(
+                "  Puncher B: {} -> [{}]:{}".format(self.ip_b, self.ip_a, listen_port_a)
+            )
 
             # Replace port allocations with actual listening ports
             puncher_a.port_allocs.clear()
@@ -1448,8 +1574,7 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
 
             try:
                 sock_a, sock_b = await asyncio.wait_for(
-                    asyncio.gather(punch_a_task, punch_b_task),
-                    timeout=20
+                    asyncio.gather(punch_a_task, punch_b_task), timeout=20
                 )
             except asyncio.TimeoutError:
                 print("IPv6 punch engines timed out (expected in some NAT scenarios)")

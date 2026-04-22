@@ -9,10 +9,14 @@ from aionetiface import *
 from ..traversal.libs.punch.punch_defs import PUNCH_CONF
 from ..vendor.machine_id import hashed_machine_id
 
+
 def resolve_install_path(conf):
+    # type: (Dict[str, Any]) -> str
     return conf["install_path"] or get_aionetiface_install_root()
 
+
 def make_stop_pair(existing=None):
+    # type: (Optional[Any]) -> Tuple[Any, Any]
     if existing:
         return existing
     stop_rw = socket.socketpair()
@@ -20,19 +24,25 @@ def make_stop_pair(existing=None):
     stop_rw[1].setblocking(True)
     return stop_rw
 
+
 def pipe_future(inbound_pipes, pipe_id):
+    # type: (Dict[str, Any], str) -> Any
     if pipe_id not in inbound_pipes:
         inbound_pipes[pipe_id] = asyncio.Future()
     return inbound_pipes[pipe_id]
 
+
 def pipe_ready(inbound_pipes, pipe_id, pipe):
+    # type: (Dict[str, Any], str, Any) -> Any
     if pipe_id not in inbound_pipes:
         pipe_future(inbound_pipes, pipe_id)
     if not inbound_pipes[pipe_id].done():
         inbound_pipes[pipe_id].set_result(pipe)
     return pipe
 
+
 def norm_listen_ips(listen_ips):
+    # type: (List[str]) -> List[str]
     # Skip if empty.
     if not listen_ips:
         return listen_ips
@@ -48,27 +58,23 @@ def norm_listen_ips(listen_ips):
 
     return listen_ips
 
+
 def load_signing_key(nics, listen_ips, listen_port, install_path):
+    # type: (List[Any], List[str], int, str) -> SigningKey
     # Make install dir if needed.
-    pathlib.Path(install_path).mkdir(
-        parents=True,
-        exist_ok=True
-    )
+    pathlib.Path(install_path).mkdir(parents=True, exist_ok=True)
 
     # Store cryptographic random bytes here for ECDSA ident.
     listen_str = ",".join(listen_ips) + ":" + str(listen_port)
     nic_str = ";".join([n.name for n in nics])
-    listen_hash = hash160(nic_str + ">" + listen_str) # hex
+    listen_hash = hash160(nic_str + ">" + listen_str)  # hex
     sk_path = os.path.realpath(
-        os.path.join(
-            install_path,
-            fstr("PRIV_KEY_DONT_SHARE_{0}.hex", (listen_hash,))
-        )
+        os.path.join(install_path, fstr("PRIV_KEY_DONT_SHARE_{0}.hex", (listen_hash,)))
     )
 
     # Read existing key, or generate and persist a new one.
     if os.path.exists(sk_path):
-        with open(sk_path, mode='r') as fp:
+        with open(sk_path, mode="r") as fp:
             sk_hex = fp.read()
     else:
         sk = SigningKey.generate(curve=SECP256k1)
@@ -81,15 +87,27 @@ def load_signing_key(nics, listen_ips, listen_port, install_path):
     sk_buf = h_to_b(sk_hex)
     sk = SigningKey.from_string(sk_buf, curve=SECP256k1)
     return sk
-    
+
+
 async def fallback_machine_id(netifaces, app_id="p2pd"):
+    # type: (Any, str) -> str
     host = socket.gethostname()
     if_name = get_default_iface(netifaces)
     mac = await get_mac_address(if_name, netifaces)
-    buf = fstr("{0} {1} {2} {3}", (app_id, host, if_name, mac,))
+    buf = fstr(
+        "{0} {1} {2} {3}",
+        (
+            app_id,
+            host,
+            if_name,
+            mac,
+        ),
+    )
     return to_s(hashlib.sha256(to_b(buf)).hexdigest())
 
+
 async def close_idle_pipes(node):
+    # type: (Any) -> None
     """
     As the number of free processes in the process pool
     decreases and the pool approaches full the need to
@@ -149,14 +167,18 @@ async def close_idle_pipes(node):
         # Sleep until the next pipe is due, capped at 5 seconds
         await asyncio.sleep(min(next_sleep, 5))
 
+
 async def load_stun_clients(ifs, limit=USE_MAP_NO):
+    # type: (List[Any], int) -> Dict[Any, Dict[int, List[Any]]]
     stun_clients = {IP4: {}, IP6: {}}
     tasks = []
 
     for if_index in range(len(ifs)):
         interface = ifs[if_index]
         for af in interface.supported():
+
             async def job(af=af, if_index=if_index, interface=interface):
+                # type: (Any, int, Any) -> Tuple[Any, int, List[Any]]
                 clients = await get_n_stun_clients(
                     af=af,
                     n=limit,
@@ -175,7 +197,9 @@ async def load_stun_clients(ifs, limit=USE_MAP_NO):
 
     return stun_clients
 
+
 def worker_init():
+    # type: () -> None
     """
     This runs when each worker process starts.
     We tell the worker to ignore SIGINT.
@@ -187,10 +211,12 @@ def worker_init():
         # Fallback for edge cases or embedded environments
         pass
 
+
 async def get_pp_executors(workers=None):
+    # type: (Optional[int]) -> Tuple[int, Optional[Any]]
     workers = workers or min(32, os.cpu_count() + 4)
     pp_executor = None
-    #return 0, None
+    # return 0, None
     try:
         pp_executor = ProcessPoolExecutor(max_workers=workers, initializer=worker_init)
     except asyncio.CancelledError:
@@ -203,10 +229,12 @@ async def get_pp_executors(workers=None):
         In this case -- log the error and revert to using a single event loop.
         """
         log_exception()
-    
+
     return workers, pp_executor
 
+
 async def load_machine_id(app_id, netifaces):
+    # type: (str, Any) -> str
     try:
         return hashed_machine_id(app_id)
     except asyncio.CancelledError:
@@ -214,7 +242,9 @@ async def load_machine_id(app_id, netifaces):
     except (OSError, ValueError):
         return await fallback_machine_id(netifaces, app_id)
 
+
 async def listen_on_ifs(node):
+    # type: (Any) -> None
     for nic in node.ifs:
         if node.listen_ips:
             listen_iprs = [IPR(ip) for ip in node.listen_ips]
@@ -231,7 +261,9 @@ async def listen_on_ifs(node):
             route = await nic.route(IP6).bind(port=node.listen_port)
             await async_wrap_errors(node.add_listener(TCP, route))
 
+
 async def remote_reachability_cb(reachability, _msg, client_tup, pipe):
+    # type: (Dict[Any, Dict[Any, Any]], Any, Any, Any) -> None
     try:
         p2pd_ips = (
             IPR("2607:5300:60:80b0::1", af=IP6),
@@ -250,16 +282,21 @@ async def remote_reachability_cb(reachability, _msg, client_tup, pipe):
         log("unknown exception in reachability cb")
         log_exception()
 
+
 async def forward(node, port, reachability):
+    # type: (Any, int, Dict[Any, Dict[Any, Any]]) -> Tuple[List[Any], List[Any]]
     tasks = []
     for nic in node.ifs:
         for af in nic.supported():
+
             async def do_forward(af=af, nic=nic):
+                # type: (Any, Any) -> Optional[List[Any]]
                 reachability[af][nic.id] = asyncio.Future()
                 route = await nic.route(af).bind()
                 ret = await route.forward(port=port)
                 if ret:
                     return [af, nic.id]
+
             tasks.append(do_forward())
 
     forward_success = strip_none(await asyncio.gather(*tasks, return_exceptions=True))
@@ -267,18 +304,20 @@ async def forward(node, port, reachability):
     test_addr = {IP4: "158.69.27.176", IP6: "2607:5300:60:80b0::1"}
 
     async def reachability_test(af, nic):
+        # type: (Any, Any) -> None
         route = nic.route(af)
         curl = WebCurl((test_addr[af], 80), route, do_close=0)
         try:
-            await curl.vars({"action": "hello", "proto": "tcp", "port": str(port)}).get("/p2pd/net_debug.php")
+            await curl.vars({"action": "hello", "proto": "tcp", "port": str(port)}).get(
+                "/p2pd/net_debug.php"
+            )
         except asyncio.TimeoutError:
             return None
 
-    await asyncio.gather(*[
-        reachability_test(af, nic)
-        for nic in node.ifs
-        for af in nic.supported()
-    ], return_exceptions=True)
+    await asyncio.gather(
+        *[reachability_test(af, nic) for nic in node.ifs for af in nic.supported()],
+        return_exceptions=True,
+    )
 
     await asyncio.sleep(2)
 
@@ -289,4 +328,3 @@ async def forward(node, port, reachability):
         if reachability[af][nic_id].done()
     ]
     return forward_success, reachable
-

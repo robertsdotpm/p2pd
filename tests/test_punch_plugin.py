@@ -49,7 +49,9 @@ from concurrent.futures import ProcessPoolExecutor
 from unittest.mock import patch
 
 from aionetiface import (
-    Interface, IP4, IP6,
+    Interface,
+    IP4,
+    IP6,
     NIC_BIND,
     SysClock,
     async_wrap_errors,
@@ -81,6 +83,7 @@ from tests.turn_server import make_fake_nic
 if sys.version_info >= (3, 8):
     AsyncTestCase = unittest.IsolatedAsyncioTestCase
 else:
+
     class AsyncTestCase(unittest.TestCase):
         """Minimal asyncio-compatible TestCase for Python < 3.8."""
 
@@ -124,6 +127,7 @@ else:
 # Fake STUN client
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class FakeStunClient:
     """
     Minimal STUN-client shim required by NATPredictAlloc.
@@ -154,6 +158,7 @@ class FakeStunClient:
 # Fake preload_mappings
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 async def _fake_preload_mappings(no, stuns):
     """
     Drop-in replacement for nat_predict.preload_mappings.
@@ -170,6 +175,7 @@ async def _fake_preload_mappings(no, stuns):
 # ─────────────────────────────────────────────────────────────────────────────
 # Main test class
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestPunchPluginBidirectional(AsyncTestCase):
     """
@@ -284,7 +290,7 @@ class TestPunchPluginBidirectional(AsyncTestCase):
 
         factory = PunchPluginFactory(
             stun_clients=stun_table,
-            punch_clients={},           # per-factory, not shared across sides
+            punch_clients={},  # per-factory, not shared across sides
             sys_clock=self.sys_clock,
             proc_pool=self.proc_pool,
         )
@@ -293,7 +299,7 @@ class TestPunchPluginBidirectional(AsyncTestCase):
         # stop_reader is passed into the punch subprocess for proxy termination.
         plugin.stop_reader = self.stop_r
 
-        src_info  = self._make_addr_info(src_ip)
+        src_info = self._make_addr_info(src_ip)
         dest_info = self._make_addr_info(dest_ip)
 
         # set_routing stores af / src_info / dest_info / nic on the plugin.
@@ -306,7 +312,7 @@ class TestPunchPluginBidirectional(AsyncTestCase):
             route_type=NIC_BIND,
             same_machine=True,
             set_bind=True,
-            timeout=60,         # generous timeout; actual punch takes ~10 s
+            timeout=60,  # generous timeout; actual punch takes ~10 s
         )
 
         self._plugins.append(plugin)
@@ -403,18 +409,23 @@ class TestPunchPluginBidirectional(AsyncTestCase):
             msg_a = await asyncio.wait_for(msgs_for_b.get(), timeout=10)
 
             self.assertIsNotNone(msg_a, "Plugin A must produce an outgoing PunchMsg")
-            self.assertIsInstance(msg_a, PunchMsg,
-                "Outgoing message from A must be a PunchMsg")
+            self.assertIsInstance(
+                msg_a, PunchMsg, "Outgoing message from A must be a PunchMsg"
+            )
             self.assertTrue(
                 len(msg_a.payload.mappings) > 0,
                 "Plugin A's PunchMsg must carry at least one mapping",
             )
-            print("  [Step 1] ✓  A produced PunchMsg with {} mapping(s)".format(
-                len(msg_a.payload.mappings)))
+            print(
+                "  [Step 1] ✓  A produced PunchMsg with {} mapping(s)".format(
+                    len(msg_a.payload.mappings)
+                )
+            )
 
             # Sanity: A's punch process task has been scheduled.
             self.assertIn(
-                plugin_a.plugin_id, plugin_a.punch_proc,
+                plugin_a.plugin_id,
+                plugin_a.punch_proc,
                 "Plugin A's delayed punch task should be scheduled after step 1",
             )
 
@@ -425,18 +436,23 @@ class TestPunchPluginBidirectional(AsyncTestCase):
             msg_b = await asyncio.wait_for(msgs_for_a.get(), timeout=10)
 
             self.assertIsNotNone(msg_b, "Plugin B must produce a reply PunchMsg")
-            self.assertIsInstance(msg_b, PunchMsg,
-                "Outgoing message from B must be a PunchMsg")
+            self.assertIsInstance(
+                msg_b, PunchMsg, "Outgoing message from B must be a PunchMsg"
+            )
             self.assertTrue(
                 len(msg_b.payload.mappings) > 0,
                 "Plugin B's PunchMsg must carry at least one mapping",
             )
-            print("  [Step 2] ✓  B produced PunchMsg with {} mapping(s)".format(
-                len(msg_b.payload.mappings)))
+            print(
+                "  [Step 2] ✓  B produced PunchMsg with {} mapping(s)".format(
+                    len(msg_b.payload.mappings)
+                )
+            )
 
             # Sanity: B's punch process task has been scheduled.
             self.assertIn(
-                plugin_a.plugin_id, plugin_b.punch_proc,
+                plugin_a.plugin_id,
+                plugin_b.punch_proc,
                 "Plugin B's delayed punch task should be scheduled after step 2",
             )
 
@@ -490,7 +506,8 @@ class TestPunchPluginBidirectional(AsyncTestCase):
 
         # Verify punch_time agreement (both used the same sys_clock seed).
         self.assertEqual(
-            puncher_a.punch_time, puncher_b.punch_time,
+            puncher_a.punch_time,
+            puncher_b.punch_time,
             "Both sides must agree on the punch_time (computed from same clock seed)",
         )
         print("  Punch time: {} (both sides agree)".format(puncher_a.punch_time))
@@ -551,9 +568,12 @@ class TestPunchPluginBidirectional(AsyncTestCase):
                 # (peer == src_ip of the plugin that spawned this subprocess)
                 sock = result.sock
                 local = sock.getsockname()
-                peer  = sock.getpeername()
-                print("  {} pipe: local={}:{} → peer={}:{}".format(
-                    label, local[0], local[1], peer[0], peer[1]))
+                peer = sock.getpeername()
+                print(
+                    "  {} pipe: local={}:{} → peer={}:{}".format(
+                        label, local[0], local[1], peer[0], peer[1]
+                    )
+                )
             except Exception as e:
                 print("  {} pipe socket info error: {}".format(label, e))
 
@@ -563,6 +583,7 @@ class TestPunchPluginBidirectional(AsyncTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 # IPv6 link-local fake NIC helper
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def make_fake_nic_v6(real_nic, target_ll_ipr):
     """
@@ -576,20 +597,21 @@ def make_fake_nic_v6(real_nic, target_ll_ipr):
     route.nic(), which is driven by nic_ips.  Both are overridden here so
     the fake NIC works for either code path.
     """
+
     class FakeNICv6:
         __name__ = "FakeNICv6"
 
         def __init__(self):
             self.name = real_nic.name
-            self.id   = getattr(real_nic, "id", 0)
+            self.id = getattr(real_nic, "id", 0)
 
         def route(self, req_af=None):
             r = copy.deepcopy(real_nic.route(IP6))
-            r.nic_ips    = [target_ll_ipr]
+            r.nic_ips = [target_ll_ipr]
             r.link_locals = [target_ll_ipr]
-            r.resolved   = False
-            r.interface  = _instance
-            r.bind       = bind_closure(r, binder_async)
+            r.resolved = False
+            r.interface = _instance
+            r.bind = bind_closure(r, binder_async)
             return r
 
         def supported(self):
@@ -602,6 +624,7 @@ def make_fake_nic_v6(real_nic, target_ll_ipr):
 # ─────────────────────────────────────────────────────────────────────────────
 # IPv6 link-local punch plugin test
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
     """
@@ -636,8 +659,8 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
                 "punch test (found: {})".format([str(ip) for ip in link_locals])
             )
 
-        self.ll_a = link_locals[0]   # IPRange
-        self.ll_b = link_locals[1]   # IPRange
+        self.ll_a = link_locals[0]  # IPRange
+        self.ll_b = link_locals[1]  # IPRange
         self.nic_id = self.nic.id
 
         self.sys_clock = SysClock(None, int(time.time()))
@@ -677,7 +700,7 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
         setup_puncher_client then feeds this to PunchClient.__init__ which
         calls ip_norm (strips %) and patch_connect_ip (re-adds %) before use.
         """
-        ip_bare  = str(ip_ipr.ip)                      # "fe80::xxx"  (no scope)
+        ip_bare = str(ip_ipr.ip)  # "fe80::xxx"  (no scope)
         ip_scoped = "{}%{}".format(ip_bare, self.nic_id)  # "fe80::xxx%ens34"
         return {
             "if_index": if_index,
@@ -706,7 +729,7 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
         plugin = factory.build_plugin()
         plugin.stop_reader = self.stop_r
 
-        src_info  = self._make_addr_info_v6(src_ll_ipr)
+        src_info = self._make_addr_info_v6(src_ll_ipr)
         dest_info = self._make_addr_info_v6(dest_ll_ipr)
 
         plugin.set_routing(IP6, src_info, dest_info, effective_nic)
@@ -733,15 +756,20 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
         """
         ip_a_str = str(self.ll_a.ip)
         ip_b_str = str(self.ll_b.ip)
-        print("\n\nIPv6 Link-Local PunchPlugin test: {}%{} ↔ {}%{}".format(
-            ip_a_str, self.nic_id, ip_b_str, self.nic_id))
+        print(
+            "\n\nIPv6 Link-Local PunchPlugin test: {}%{} ↔ {}%{}".format(
+                ip_a_str, self.nic_id, ip_b_str, self.nic_id
+            )
+        )
 
         # Plugin A – real NIC, link_locals[0] = ll_a (natural).
         # Plugin B – fake NIC that overrides link_locals to return ll_b.
         nic_b = make_fake_nic_v6(self.nic, self.ll_b)
 
         plugin_a = self._build_plugin_v6(src_ll_ipr=self.ll_a, dest_ll_ipr=self.ll_b)
-        plugin_b = self._build_plugin_v6(src_ll_ipr=self.ll_b, dest_ll_ipr=self.ll_a, nic=nic_b)
+        plugin_b = self._build_plugin_v6(
+            src_ll_ipr=self.ll_b, dest_ll_ipr=self.ll_a, nic=nic_b
+        )
 
         plugin_b.set_inbound_pipes({}, plugin_id=plugin_a.plugin_id)
 
@@ -769,8 +797,11 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
             self.assertIsNotNone(msg_a)
             self.assertIsInstance(msg_a, PunchMsg)
             self.assertTrue(len(msg_a.payload.mappings) > 0)
-            print("  [Step 1] ✓  A produced PunchMsg ({} mapping(s))".format(
-                len(msg_a.payload.mappings)))
+            print(
+                "  [Step 1] ✓  A produced PunchMsg ({} mapping(s))".format(
+                    len(msg_a.payload.mappings)
+                )
+            )
 
             # Step 2 – B responds
             print("  [Step 2] B.run(reply=A_msg) …")
@@ -780,8 +811,11 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
             self.assertIsNotNone(msg_b)
             self.assertIsInstance(msg_b, PunchMsg)
             self.assertTrue(len(msg_b.payload.mappings) > 0)
-            print("  [Step 2] ✓  B produced PunchMsg ({} mapping(s))".format(
-                len(msg_b.payload.mappings)))
+            print(
+                "  [Step 2] ✓  B produced PunchMsg ({} mapping(s))".format(
+                    len(msg_b.payload.mappings)
+                )
+            )
 
             # Step 3 – A finalises
             print("  [Step 3] A.run(reply=B_msg) …")
@@ -806,7 +840,8 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
         print("  Agreed port(s): {}".format(shared_ports))
 
         self.assertEqual(
-            puncher_a.punch_time, puncher_b.punch_time,
+            puncher_a.punch_time,
+            puncher_b.punch_time,
             "Both sides must agree on punch_time",
         )
 
@@ -816,12 +851,18 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
         expected_dest_a = "{}%{}".format(ip_b_str, self.nic_id)
         expected_dest_b = "{}%{}".format(ip_a_str, self.nic_id)
         self.assertEqual(
-            puncher_a.dest_ip, expected_dest_a,
-            "Plugin A: dest_ip must carry scope ID (got {!r})".format(puncher_a.dest_ip),
+            puncher_a.dest_ip,
+            expected_dest_a,
+            "Plugin A: dest_ip must carry scope ID (got {!r})".format(
+                puncher_a.dest_ip
+            ),
         )
         self.assertEqual(
-            puncher_b.dest_ip, expected_dest_b,
-            "Plugin B: dest_ip must carry scope ID (got {!r})".format(puncher_b.dest_ip),
+            puncher_b.dest_ip,
+            expected_dest_b,
+            "Plugin B: dest_ip must carry scope ID (got {!r})".format(
+                puncher_b.dest_ip
+            ),
         )
         print("  A dest_ip: {}  (scope correct)".format(puncher_a.dest_ip))
         print("  B dest_ip: {}  (scope correct)".format(puncher_b.dest_ip))
@@ -854,7 +895,7 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
             try:
                 sock = result.sock
                 local = sock.getsockname()
-                peer  = sock.getpeername()
+                peer = sock.getpeername()
                 print("  {} pipe: local={} → peer={}".format(label, local, peer))
             except Exception as e:
                 print("  {} pipe socket info error: {}".format(label, e))

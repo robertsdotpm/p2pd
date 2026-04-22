@@ -1,4 +1,3 @@
-import argparse
 from ..do_imports import *
 from .defs import *
 from .cmd_arg_defs import *
@@ -18,7 +17,7 @@ if args.cmd == "get_nickname":
     demo_node_conf["enable_upnp"] = False
     demo_node_conf["init_clock_skew"] = False
     demo_node_conf["enable_punching"] = False
-    #node_conf["enable_nickname"] = False
+    # node_conf["enable_nickname"] = False
 
 if args.install_path:
     demo_node_conf["install_path"] = args.install_path

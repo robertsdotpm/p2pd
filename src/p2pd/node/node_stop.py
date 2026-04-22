@@ -5,6 +5,7 @@ from ..errors import AlreadyClosedError
 
 
 async def close_helper(p):
+    # type: (Any) -> None
     try:
         await p.close()
     except AlreadyClosedError:
@@ -13,17 +14,18 @@ async def close_helper(p):
         log_exception()
         log("Error closing " + str(p))
 
+
 async def close_with_timeout(p):
+    # type: (Any) -> None
     try:
-        await asyncio.wait_for(
-            close_helper(p), 
-            timeout=2
-        )
+        await asyncio.wait_for(close_helper(p), timeout=2)
     except asyncio.TimeoutError:
         log("Timeout closing " + str(p) + " endpoint t = " + str(p.endpoint_type))
 
+
 # Shutdown the node server and do cleanup.
 async def node_stop(node):
+    # type: (Any) -> None
     # Send stop signal (any amount of data.)
     try:
         node.stop_writer.send(b"Meow")
@@ -44,7 +46,7 @@ async def node_stop(node):
             if result.done():
                 try:
                     pipe = result.result()
-                except (Exception, asyncio.CancelledError):
+                except BaseException:
                     # Plugin future completed with an exception; nothing to close.
                     continue
                 if hasattr(pipe, "close"):
@@ -68,7 +70,10 @@ async def node_stop(node):
     await Daemon.close(node)
 
     # Close the stop-signal socket pair.
-    for sock in (getattr(node, "stop_reader", None), getattr(node, "stop_writer", None)):
+    for sock in (
+        getattr(node, "stop_reader", None),
+        getattr(node, "stop_writer", None),
+    ):
         if sock is not None:
             with suppress(Exception):
                 sock.close()

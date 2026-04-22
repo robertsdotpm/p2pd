@@ -11,6 +11,7 @@ from .node_defs import CON_ID_MSG
 
 
 async def node_protocol(node, msg, client_tup, pipe):
+    # type: (Any, bytes, Tuple[str, int], Any) -> None
     # Track idle pipe recv time.
     if pipe in node.resources.last_recv_queue:
         node.resources.last_recv_table[pipe.sock] = time.time()
@@ -32,7 +33,16 @@ async def node_protocol(node, msg, client_tup, pipe):
 
 
 async def handle_msg(node, msg, client_tup, pipe):
-    log(fstr("> node proto = {0}, {1}", (msg, client_tup,)))
+    # type: (Any, bytes, Tuple[str, int], Any) -> None
+    log(
+        fstr(
+            "> node proto = {0}, {1}",
+            (
+                msg,
+                client_tup,
+            ),
+        )
+    )
 
     if msg == b"long_p2pd_test_string_abcd123":
         await pipe.send(b"p2pd test string\r\n\r\n", client_tup)

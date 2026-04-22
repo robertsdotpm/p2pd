@@ -3,16 +3,19 @@ from ..do_imports import *
 
 IS_DEBUG = 2
 
-demo_node_conf = dict_child({
-    "init_clock_skew": True,
-    "reuse_addr": False,
-    "enable_upnp": True,
-    "sig_pipe_no": 1,
-    "enable_punching": True,
-    "enable_nickname": True,
-    "enable_stun_clients": True,
-    "install_path": get_aionetiface_install_root()
-}, NET_CONF)
+demo_node_conf = dict_child(
+    {
+        "init_clock_skew": True,
+        "reuse_addr": False,
+        "enable_upnp": True,
+        "sig_pipe_no": 1,
+        "enable_punching": True,
+        "enable_nickname": True,
+        "enable_stun_clients": True,
+        "install_path": get_aionetiface_install_root(),
+    },
+    NET_CONF,
+)
 
 nat_txt = {
     OPEN_INTERNET: "open internet",
@@ -21,7 +24,7 @@ nat_txt = {
     RESTRICT_NAT: "restrict",
     RESTRICT_PORT_NAT: "restrict port",
     SYMMETRIC_NAT: "symmetric",
-    BLOCKED_NAT: "blocked"
+    BLOCKED_NAT: "blocked",
 }
 
 delta_txt = {
@@ -30,7 +33,7 @@ delta_txt = {
     PRESERV_DELTA: "preserving",
     INDEPENDENT_DELTA: "independent",
     DEPENDENT_DELTA: "dependent",
-    RANDOM_DELTA: "random"
+    RANDOM_DELTA: "random",
 }
 
 method_txt = {

@@ -2,11 +2,13 @@ import multiprocessing as mp
 import socket
 import os
 
+
 def worker(fd):
     s = socket.socket(fileno=fd)
     s.send(b"GET / HTTP/1.0\r\n\r\n")
     print(s.recv(1024))
     s.close()
+
 
 if __name__ == "__main__":
     # 1. Create the socket in the parent

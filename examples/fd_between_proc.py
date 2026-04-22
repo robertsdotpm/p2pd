@@ -3,6 +3,7 @@ import socket
 from multiprocessing.reduction import send_handle, recv_handle
 import os
 
+
 def worker(conn):
     s = socket.socket()
     s.connect(("example.com", 80))
@@ -12,6 +13,7 @@ def worker(conn):
 
     # close worker copy
     s.close()
+
 
 if __name__ == "__main__":
     parent_conn, child_conn = mp.Pipe()

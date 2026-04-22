@@ -2,7 +2,8 @@ import asyncio
 from aionetiface import *
 from sidewire import *
 
-f_path_txt = lambda x: "local" if x == NIC_BIND else "external"
+def f_path_txt(x):
+    return "local" if x == NIC_BIND else "external"
 
 """
 If nodes are behind the same router they will have
@@ -17,7 +18,10 @@ the address passed to bind() for the nodes listen().
 also addr compares arent the best idea since ifaces can have
 multiple addresses. think on this more.
 """
+
+
 def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=True):
+    # type: (Any, bool, Dict[str, Any], Dict[str, Any], List[Any], bool) -> Optional[Any]
     # Shorten these for expressions.
     src_nid = src_info["netiface_index"]
     dest_nid = dest_info["netiface_index"]
@@ -43,7 +47,6 @@ def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=T
     # Makes long conditions slightly more readable.
     same_if = src_nid == dest_nid
     same_if_on_host = same_pc and same_if
-    different_ifs_on_host = same_pc and not same_if
 
     # There may be multiple compatible addresses per info.
     for addr_type in addr_types:
@@ -59,7 +62,7 @@ def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=T
 
             # Different reachable address.
             return dest_info["ext"]
-        
+
         # Prefer using local addresses.
         if addr_type == NIC_BIND:
             """
@@ -80,10 +83,12 @@ def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=T
             # Otherwise the NIC IP is fine to use.
             return dest_info["nic"]
 
-    # No compatible addresses. 
+    # No compatible addresses.
     return None
 
+
 def sort_pairs_by_overlap(src_infos, dest_infos):
+    # type: (List[Dict[str, Any]], List[Dict[str, Any]]) -> Tuple[List[Any], List[Any]]
     overlap = []
     unique = []
     for src_info in src_infos:
@@ -96,14 +101,20 @@ def sort_pairs_by_overlap(src_infos, dest_infos):
 
     return overlap, unique
 
-async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs, reply, pp, conf):
+
+async def for_addr_infos(
+    strat, func, timeout, cleanup, has_set_bind, max_pairs, reply, pp, conf
+):
+    # type: (str, Any, int, Optional[Any], bool, int, Optional[Any], Any, Dict[str, Any]) -> Tuple[Optional[Any], Optional[Any]]
     """
     Given info on a local interface, a remote interface,
     and a chosen connectivity technique, attempt to create
     a connection. Adapt the technique depending on whether
     addressing is suitably local or remote.
     """
+
     async def try_addr_infos(af, strat, addr_type, src_info, dest_info):
+        # type: (Any, str, Any, Dict[str, Any], Dict[str, Any]) -> Optional[Any]
         # Local addressing and/or remote.
         try:
             # Create a future for pending pipes.
@@ -155,12 +166,25 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                 return
 
             dest_info["ip"] = str(dest_ip)
-            
+
             # Detailed logging details.
             path_txt = f_path_txt(addr_type)
             src_ip = src_info["nic"] if addr_type == NIC_BIND else src_info["ext"]
-            msg = fstr("<{0}> Trying {1} {2} -> ", (strat, path_txt, src_ip,))
-            msg += fstr("{0} on '{1}'", (dest_info['ip'], interface.name,))
+            msg = fstr(
+                "<{0}> Trying {1} {2} -> ",
+                (
+                    strat,
+                    path_txt,
+                    src_ip,
+                ),
+            )
+            msg += fstr(
+                "{0} on '{1}'",
+                (
+                    dest_info["ip"],
+                    interface.name,
+                ),
+            )
             log_p2p(msg, pp.node.node_id[:8])
 
             """
@@ -180,25 +204,29 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                     pp.same_machine,
                     reply,
                 ),
-                timeout
+                timeout,
             )
 
             if isinstance(result, SigMsg):
                 msg = result
-                msg.meta = SigMsg.Meta.from_dict({
-                    "ttl": int(pp.node.sys_clock.time()) + 30,
-                    "pipe_id": pipe_id,
-                    "af": af,
-                    "src_buf": pp.src_bytes,
-                    "src_index": src_info["if_index"],
-                    "addr_types": [addr_type]
-                })
+                msg.meta = SigMsg.Meta.from_dict(
+                    {
+                        "ttl": int(pp.node.sys_clock.time()) + 30,
+                        "pipe_id": pipe_id,
+                        "af": af,
+                        "src_buf": pp.src_bytes,
+                        "src_index": src_info["if_index"],
+                        "addr_types": [addr_type],
+                    }
+                )
 
-                msg.routing = SigMsg.Routing.from_dict({
-                    "af": af,
-                    "dest_buf": pp.dest_bytes,
-                    "dest_index": dest_info["if_index"],
-                })
+                msg.routing = SigMsg.Routing.from_dict(
+                    {
+                        "af": af,
+                        "dest_buf": pp.dest_bytes,
+                        "dest_index": dest_info["if_index"],
+                    }
+                )
 
                 vk = to_h(pp.node.vk.to_string("compressed"))
                 pp.node.sig_msg_queue.put_nowait([msg, vk, 0])
@@ -210,7 +238,7 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
             # Success result from function.
             if result is not None:
                 return result
-            
+
             """
             Some functions require cleanup on failure.
             Ensure that the state overtime remains clean.
@@ -250,13 +278,10 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                 return ret, addr_type
 
             # Get interface offset that supports this af.
-            #for src_info, dest_info in if_info_iter:
+            # for src_info, dest_info in if_info_iter:
             src_infos = list(pp.src[af].values())
             dest_infos = list(pp.dest[af].values())
-            overlap, unique = sort_pairs_by_overlap(
-                src_infos,
-                dest_infos
-            )
+            overlap, unique = sort_pairs_by_overlap(src_infos, dest_infos)
 
             # If external address is the same try unique pairs first.
             if addr_type == EXT_BIND:
@@ -274,31 +299,28 @@ async def for_addr_infos(strat, func, timeout, cleanup, has_set_bind, max_pairs,
                 # Only try up to N pairs per technique.
                 # Technique-specific N to avoid lengthy delays.
                 ret = await async_wrap_errors(
-                    try_addr_infos(
-                        af,
-                        strat,
-                        addr_type,
-                        src_info,
-                        dest_info
-                    )
+                    try_addr_infos(af, strat, addr_type, src_info, dest_info)
                 )
 
                 # Success so return.
                 if ret is not None:
                     return ret, addr_type
-                    
+
                 count += 1
                 if count > max_pairs:
                     return None, None
-                
+
                 # Cleanup here?
-                    
+
     # Failure.
     return None, None
 
+
 # TODO: make this work with everything.
 
+
 def get_if_infos_order(af, route_type, src_map, dest_map):
+    # type: (Any, Any, Dict[Any, Any], Dict[Any, Any]) -> List[Any]
     """
     Given a list of interface details
     for an address family indexed by interface
@@ -314,10 +336,7 @@ def get_if_infos_order(af, route_type, src_map, dest_map):
     same ext (external address). The other is non-overlapping,
     where both have different addresses.
     """
-    overlap, unique = sort_pairs_by_overlap(
-        src_infos,
-        dest_infos
-    )
+    overlap, unique = sort_pairs_by_overlap(src_infos, dest_infos)
 
     """
     If the route type is external than using the same external
@@ -336,7 +355,9 @@ def get_if_infos_order(af, route_type, src_map, dest_map):
 
     return pair_order
 
+
 def try_unpack_msg(buf, sk, sig_proto_map):
+    # type: (Any, Any, Dict[Any, Any]) -> Any
     buf = h_to_b(buf)
 
     # Try to decrypt message if its encrypted.
@@ -344,15 +365,12 @@ def try_unpack_msg(buf, sk, sig_proto_map):
     if is_enc:
         # Ensure a SK is set for decryption.
         if not sk:
-            raise Exception("No sk set for decryption.")
+            raise ValueError("No sk set for decryption.")
 
         # Will raise if it can't decrypt.
-        buf = decrypt(
-            sk,
-            buf[1:]
-        )
+        buf = decrypt(sk, buf[1:])
         log(fstr("Recv decrypted {0}", (buf,)))
-    
+
     # Otherwise buffer is not encrypted -- use as is.
     if not is_enc:
         buf = buf[1:]
@@ -363,7 +381,9 @@ def try_unpack_msg(buf, sk, sig_proto_map):
     msg = msg_class.unpack(buf[1:])
     return msg
 
+
 def sig_msg_to_buf(msg, dest_pk):
+    # type: (Any, Optional[Any]) -> bytes
     if dest_pk:
         buf = b"\1" + encrypt(dest_pk, msg.pack())
     else:
@@ -373,7 +393,9 @@ def sig_msg_to_buf(msg, dest_pk):
     buf = to_h(buf)
     return to_b(buf)
 
+
 async def close_plugin(plugin, plugins, inbound_pipes):
+    # type: (Any, Dict[str, Any], Dict[str, Any]) -> None
     if hasattr(plugin, "plugin_id"):
         plugins.pop(plugin.plugin_id, None)
         inbound_pipes.pop(plugin.plugin_id, None)

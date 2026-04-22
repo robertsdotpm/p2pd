@@ -2,8 +2,12 @@ from aionetiface import *
 from ...traversal_plugin import TraversalPlugin
 from ....protocol.traversal.proto_msg import GetAddr
 
+
 class GetAddrPlugin(TraversalPlugin):
+    """Traversal plugin that requests and returns the peer's current network address."""
+
     async def run(self, reply=None):
+        # type: (Optional[Any]) -> None
         if reply:
             self.result.set_result(reply.meta.src["bytes"])
             return

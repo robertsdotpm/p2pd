@@ -4,8 +4,16 @@ import time
 
 from .protocol import MQTTProtocol
 
+
 class MQTTConnection(object):
-    def __init__(self, transport: asyncio.Transport, protocol: MQTTProtocol, clean_session: bool, keepalive: int, logger=None):
+    def __init__(
+        self,
+        transport: asyncio.Transport,
+        protocol: MQTTProtocol,
+        clean_session: bool,
+        keepalive: int,
+        logger=None,
+    ):
         self._transport = transport
         self._protocol = protocol
         self._protocol.set_connection(self)
@@ -17,15 +25,23 @@ class MQTTConnection(object):
         self._last_data_in = time.monotonic()
         self._last_data_out = time.monotonic()
 
-        self._keep_connection_callback = asyncio.get_event_loop().call_later(self._keepalive / 2, self._keep_connection)
+        self._keep_connection_callback = asyncio.get_event_loop().call_later(
+            self._keepalive / 2, self._keep_connection
+        )
 
         self._logger = logger or logging.getLogger(__name__)
 
     @classmethod
-    async def create_connection(cls, host, port, ssl, clean_session, keepalive, loop=None, logger=None):
+    async def create_connection(
+        cls, host, port, ssl, clean_session, keepalive, loop=None, logger=None
+    ):
         loop = loop or asyncio.get_event_loop()
-        transport, protocol = await loop.create_connection(MQTTProtocol, host, port, ssl=ssl)
-        return MQTTConnection(transport, protocol, clean_session, keepalive, logger=logger)
+        transport, protocol = await loop.create_connection(
+            MQTTProtocol, host, port, ssl=ssl
+        )
+        return MQTTConnection(
+            transport, protocol, clean_session, keepalive, logger=logger
+        )
 
     def _keep_connection(self):
         if self.is_closing() or not self._keepalive:
@@ -33,14 +49,21 @@ class MQTTConnection(object):
 
         time_ = time.monotonic()
         if time_ - self._last_data_in >= 2 * self._keepalive:
-            self._logger.warning("[LOST HEARTBEAT FOR %s SECONDS, GOING TO CLOSE CONNECTION]", 2 * self._keepalive)
+            self._logger.warning(
+                "[LOST HEARTBEAT FOR %s SECONDS, GOING TO CLOSE CONNECTION]",
+                2 * self._keepalive,
+            )
             asyncio.ensure_future(self.close())
             return
 
-        if time_ - self._last_data_out >= 0.8 * self._keepalive or \
-                time_ - self._last_data_in >= 0.8 * self._keepalive:
+        if (
+            time_ - self._last_data_out >= 0.8 * self._keepalive
+            or time_ - self._last_data_in >= 0.8 * self._keepalive
+        ):
             self._send_ping_request()
-        self._keep_connection_callback = asyncio.get_event_loop().call_later(self._keepalive / 2, self._keep_connection)
+        self._keep_connection_callback = asyncio.get_event_loop().call_later(
+            self._keepalive / 2, self._keep_connection
+        )
 
     def put_package(self, pkg):
         self._last_data_in = time.monotonic()
@@ -58,8 +81,15 @@ class MQTTConnection(object):
         self._transport.write(package)
 
     async def auth(self, client_id, username, password, will_message=None, **kwargs):
-        await self._protocol.send_auth_package(client_id, username, password, self._clean_session,
-                                               self._keepalive, will_message=will_message, **kwargs)
+        await self._protocol.send_auth_package(
+            client_id,
+            username,
+            password,
+            self._clean_session,
+            self._keepalive,
+            will_message=will_message,
+            **kwargs,
+        )
 
     def publish(self, message):
         return self._protocol.send_publish(message)
@@ -105,4 +135,6 @@ class MQTTConnection(object):
         self._keepalive = value
         if self._keep_connection_callback:
             self._keep_connection_callback.cancel()
-        self._keep_connection_callback = asyncio.get_event_loop().call_later(self._keepalive / 2, self._keep_connection)
+        self._keep_connection_callback = asyncio.get_event_loop().call_later(
+            self._keepalive / 2, self._keep_connection
+        )

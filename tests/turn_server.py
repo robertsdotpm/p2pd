@@ -33,16 +33,17 @@ from p2pd.protocol.turn.turn_defs import TURN_REFRESH_EXPIRY
 # ──────────────────────────────────────────────────────────────
 # Defaults
 # ──────────────────────────────────────────────────────────────
-TURN_TEST_PORT  = 33478          # High port to avoid conflicts
+TURN_TEST_PORT = 33478  # High port to avoid conflicts
 TURN_TEST_REALM = b"test.local"
-TURN_TEST_USER  = b"testuser"
-TURN_TEST_PASS  = b"testpass"
-TURN_RELAY_BASE = 34000          # Relay sockets start here
+TURN_TEST_USER = b"testuser"
+TURN_TEST_PASS = b"testpass"
+TURN_RELAY_BASE = 34000  # Relay sockets start here
 
 
 # ──────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────
+
 
 def error_attr(code, msg=b""):
     """Encode an ErrorCode attribute payload (RFC 5766 §14.8)."""
@@ -74,18 +75,19 @@ def make_fake_nic(real_nic, af, target_ipr):
     af         : AddressFamily
     target_ipr : IPRange    --  specific NIC IP to bind to
     """
+
     class FakeNIC:
         __name__ = "FakeNIC"
 
         def __init__(self):
             self.name = real_nic.name
-            self.id   = getattr(real_nic, "id", 0)
+            self.id = getattr(real_nic, "id", 0)
 
         def route(self, req_af=None):
             r = copy.deepcopy(real_nic.route(af))
             # Replace nic_ips with just the target IP so bind_closure will
             # call self.interface.route(af).nic() -> target_ipr for binding.
-            r.nic_ips  = [target_ipr]
+            r.nic_ips = [target_ipr]
             r.resolved = False
             # Keep r.interface pointing to this FakeNIC so that:
             #   1. Pipe.__init__ can set self.nic = route.interface (non-None).
@@ -111,9 +113,9 @@ def make_local_turn_server_entry(port=TURN_TEST_PORT, af=None):
     ip6 = "::1"
     ip = ip6 if (af == IP6) else ip4
     return {
-        "ip":       ip,
-        "port":     port,
-        "user":     to_s(TURN_TEST_USER),
+        "ip": ip,
+        "port": port,
+        "user": to_s(TURN_TEST_USER),
         "password": to_s(TURN_TEST_PASS),
     }
 
@@ -121,6 +123,7 @@ def make_local_turn_server_entry(port=TURN_TEST_PORT, af=None):
 # ──────────────────────────────────────────────────────────────
 # TURNServer
 # ──────────────────────────────────────────────────────────────
+
 
 class TURNServer:
     """
@@ -148,20 +151,20 @@ class TURNServer:
         relay_base=TURN_RELAY_BASE,
         bind_ip=None,
     ):
-        self.interface  = interface
-        self.port       = port
-        self.realm      = realm
-        self.user       = user
-        self.pw         = pw
-        self.bind_ip    = bind_ip
+        self.interface = interface
+        self.port = port
+        self.realm = realm
+        self.user = user
+        self.pw = pw
+        self.bind_ip = bind_ip
         self.relay_base = relay_base
 
         # client_tup (tuple) -> allocation dict
         self.allocations = {}
         # relay_port (int)   -> allocation dict
-        self.relay_map   = {}
+        self.relay_map = {}
         # client_tup (tuple) -> nonce bytes
-        self.nonces      = {}
+        self.nonces = {}
 
         # af -> control Pipe
         self.control_pipes = {}
@@ -214,9 +217,7 @@ class TURNServer:
         await route.bind(ips=lo, port=self.port)
 
         async def cb(data, client_tup, pipe):
-            await async_wrap_errors(
-                self.on_control(af, data, client_tup, pipe)
-            )
+            await async_wrap_errors(self.on_control(af, data, client_tup, pipe))
 
         pipe = await Pipe(UDP, None, route).connect(cb)
         self.control_pipes[af] = pipe
@@ -245,24 +246,22 @@ class TURNServer:
         async def relay_cb(data, source_tup, _relay_pipe):
             alloc = holder.get("a")
             if alloc is not None:
-                await async_wrap_errors(
-                    self.forward(af, data, source_tup, alloc)
-                )
+                await async_wrap_errors(self.forward(af, data, source_tup, alloc))
 
         relay_pipe = await Pipe(UDP, None, route).connect(relay_cb)
-        relay_tup  = (lo, relay_port)
+        relay_tup = (lo, relay_port)
 
         alloc = {
-            "relay_tup":  relay_tup,
+            "relay_tup": relay_tup,
             "relay_pipe": relay_pipe,
-            "owner_tup":  tuple(owner_tup),
-            "owner_pipe": owner_pipe,   # control pipe (sends DataIndications)
-            "permissions": set(),       # permitted peer IPs
+            "owner_tup": tuple(owner_tup),
+            "owner_pipe": owner_pipe,  # control pipe (sends DataIndications)
+            "permissions": set(),  # permitted peer IPs
             "af": af,
         }
         holder["a"] = alloc
         self.allocations[tuple(owner_tup)] = alloc
-        self.relay_map[relay_port]         = alloc
+        self.relay_map[relay_port] = alloc
         return relay_tup
 
     # ── relay data -> DataIndication ───────────────────────────
@@ -282,15 +281,18 @@ class TURNServer:
         )
 
         peer_buf = encode_xor_addr(
-            source_tup[0], source_tup[1], af,
-            msg.txn_id, msg.magic_cookie,
+            source_tup[0],
+            source_tup[1],
+            af,
+            msg.txn_id,
+            msg.magic_cookie,
             STUNAttrs.XorPeerAddress,
         )
         msg.write_attr(STUNAttrs.XorPeerAddress, peer_buf)
         msg.write_attr(STUNAttrs.Data, data)
 
         owner_pipe = alloc["owner_pipe"]
-        owner_tup  = alloc["owner_tup"]
+        owner_tup = alloc["owner_tup"]
         await owner_pipe.send(msg.pack(), owner_tup)
 
     # ── control message dispatch ───────────────────────────────
@@ -350,8 +352,7 @@ class TURNServer:
             self.nonces[tuple(client_tup)] = nonce
 
             reply = self.make_reply(msg, method, STUNMsgCodes.ErrorResp)
-            reply.write_attr(STUNAttrs.ErrorCode,
-                             error_attr(401, b"Unauthorized"))
+            reply.write_attr(STUNAttrs.ErrorCode, error_attr(401, b"Unauthorized"))
             reply.write_attr(STUNAttrs.Realm, self.realm)
             reply.write_attr(STUNAttrs.Nonce, nonce)
             await pipe.send(reply.pack(), client_tup)
@@ -368,16 +369,22 @@ class TURNServer:
 
         # XorRelayedAddress
         relay_buf = encode_xor_addr(
-            relay_tup[0], relay_tup[1], af,
-            reply.txn_id, reply.magic_cookie,
+            relay_tup[0],
+            relay_tup[1],
+            af,
+            reply.txn_id,
+            reply.magic_cookie,
             STUNAttrs.XorRelayedAddress,
         )
         reply.write_attr(STUNAttrs.XorRelayedAddress, relay_buf)
 
         # XorMappedAddress  (client's source IP:port as seen here)
         mapped_buf = encode_xor_addr(
-            client_tup[0], client_tup[1], af,
-            reply.txn_id, reply.magic_cookie,
+            client_tup[0],
+            client_tup[1],
+            af,
+            reply.txn_id,
+            reply.magic_cookie,
             STUNAttrs.XorMappedAddress,
         )
         reply.write_attr(STUNAttrs.XorMappedAddress, mapped_buf)

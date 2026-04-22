@@ -17,7 +17,7 @@ class _StreamReaderProtocolCompatibilityMixin:
                 self._closed = asyncio.futures.Future()
             else:
                 self._closed = asyncio.get_event_loop().create_future()
-            
+
         super(_StreamReaderProtocolCompatibilityMixin, self).__init__(*args, **kwargs)
 
     def connection_lost(self, exc):
@@ -33,7 +33,9 @@ class _StreamReaderProtocolCompatibilityMixin:
                 self._closed.set_exception(exc)
 
 
-class BaseMQTTProtocol(_StreamReaderProtocolCompatibilityMixin, asyncio.StreamReaderProtocol):
+class BaseMQTTProtocol(
+    _StreamReaderProtocolCompatibilityMixin, asyncio.StreamReaderProtocol
+):
     def __init__(self, buffer_size=2**16, loop=None):
         if not loop:
             loop = asyncio.get_event_loop()
@@ -62,7 +64,7 @@ class BaseMQTTProtocol(_StreamReaderProtocolCompatibilityMixin, asyncio.StreamRe
     def connection_made(self, transport: asyncio.Transport):
         super(BaseMQTTProtocol, self).connection_made(transport)
 
-        logger.info('[CONNECTION MADE]')
+        logger.info("[CONNECTION MADE]")
         self._transport = transport
 
         self._connected.set()
@@ -75,15 +77,15 @@ class BaseMQTTProtocol(_StreamReaderProtocolCompatibilityMixin, asyncio.StreamRe
         if self._transport and not self._transport._closing:
             self._transport.write(data)
         else:
-            logger.warning('[TRYING WRITE TO CLOSED SOCKET]')
+            logger.warning("[TRYING WRITE TO CLOSED SOCKET]")
 
     def connection_lost(self, exc):
         self._connected.clear()
         super(BaseMQTTProtocol, self).connection_lost(exc)
         if exc:
-            logger.warning('[EXC: CONN LOST]', exc_info=exc)
+            logger.warning("[EXC: CONN LOST]", exc_info=exc)
         else:
-            logger.info('[CONN CLOSE NORMALLY]')
+            logger.info("[CONN CLOSE NORMALLY]")
 
     async def read(self, n=-1):
         bs = await self._stream_reader.read(n=n)
@@ -98,7 +100,7 @@ class BaseMQTTProtocol(_StreamReaderProtocolCompatibilityMixin, asyncio.StreamRe
 
 
 class MQTTProtocol(BaseMQTTProtocol):
-    proto_name = b'MQTT'
+    proto_name = b"MQTT"
     proto_ver = MQTTv50
 
     def __init__(self, *args, **kwargs):
@@ -113,10 +115,26 @@ class MQTTProtocol(BaseMQTTProtocol):
         super().connection_made(transport)
         self._read_loop_future = asyncio.ensure_future(self._read_loop())
 
-    async def send_auth_package(self, client_id, username, password, clean_session, keepalive,
-                                will_message=None, **kwargs):
-        pkg = package.LoginPackageFactor.build_package(client_id, username, password, clean_session,
-                                                       keepalive, self, will_message=will_message, **kwargs)
+    async def send_auth_package(
+        self,
+        client_id,
+        username,
+        password,
+        clean_session,
+        keepalive,
+        will_message=None,
+        **kwargs,
+    ):
+        pkg = package.LoginPackageFactor.build_package(
+            client_id,
+            username,
+            password,
+            clean_session,
+            keepalive,
+            self,
+            will_message=will_message,
+            **kwargs,
+        )
         self.write_data(pkg)
 
     def send_subscribe_packet(self, subscriptions, **kwargs):
@@ -145,15 +163,18 @@ class MQTTProtocol(BaseMQTTProtocol):
         return mid, pkg
 
     def send_disconnect(self, reason_code=0, **properties):
-        pkg = package.DisconnectPacket.build_package(self, reason_code=reason_code, **properties)
+        pkg = package.DisconnectPacket.build_package(
+            self, reason_code=reason_code, **properties
+        )
 
         self.write_data(pkg)
 
         return pkg
 
     def send_command_with_mid(self, cmd, mid, dup, reason_code=0):
-        pkg = package.CommandWithMidPacket.build_package(cmd, mid, dup, reason_code=reason_code,
-                                                         proto_ver=self.proto_ver)
+        pkg = package.CommandWithMidPacket.build_package(
+            cmd, mid, dup, reason_code=reason_code, proto_ver=self.proto_ver
+        )
         self.write_data(pkg)
 
     def _read_packet(self, data):
@@ -208,7 +229,7 @@ class MQTTProtocol(BaseMQTTProtocol):
     async def _read_loop(self):
         await self._connected.wait()
 
-        buf = b''
+        buf = b""
         max_buff_size = 65536  # 64 * 1024
         while self._connected.is_set():
             try:
@@ -218,7 +239,7 @@ class MQTTProtocol(BaseMQTTProtocol):
                     logger.debug("[RECV EMPTY] Connection will be reset automatically.")
                     break
                 buf = buf[parsed_size:]
-            except ConnectionResetError as exc:
+            except ConnectionResetError:
                 # This connection will be closed, because we received the empty data.
                 # So we can safely break the while
                 logger.debug("[RECV EMPTY] Connection will be reset automatically.")
@@ -226,7 +247,7 @@ class MQTTProtocol(BaseMQTTProtocol):
 
     def connection_lost(self, exc):
         super(MQTTProtocol, self).connection_lost(exc)
-        self._connection.put_package((MQTTCommands.DISCONNECT, b''))
+        self._connection.put_package((MQTTCommands.DISCONNECT, b""))
 
         if self._read_loop_future is not None:
             self._read_loop_future.cancel()

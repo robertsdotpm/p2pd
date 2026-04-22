@@ -1,13 +1,14 @@
 import ast
 import asyncio
-import multiprocessing
 from aionetiface import *
 from .node import *
 from .node_utils import *
 
 REST_API_PORT = 12333
 
+
 def con_info(self, con_name, con):
+    # type: (Any, str, Any) -> Dict[str, Any]
     # A socket might not be connected.
     try:
         raddr = con.sock.getpeername()
@@ -36,13 +37,13 @@ def con_info(self, con_name, con):
         "route": con_route,
         "if": {
             "name": con.route.interface.name,
-            "offset": self.interfaces.index(
-                con.route.interface
-            )
-        }
+            "offset": self.interfaces.index(con.route.interface),
+        },
     }
 
+
 def get_opt_param(v, name):
+    # type: (Dict[str, Any], str) -> Optional[Any]
     for index in range(0, len(v["pos"])):
         found_name = v["pos"][index]
         if found_name != name:
@@ -53,12 +54,14 @@ def get_opt_param(v, name):
 
         return v["pos"][index + 1]
 
+
 def get_sub_params(v):
+    # type: (Dict[str, Any]) -> List[Any]
     # Messages are put into buckets.
     sub = SUB_ALL[:]
     if "msg_p" in v["name"]:
         sub[0] = to_b(v["name"]["msg_p"])
-    
+
     addr = get_opt_param(v, "addr_p")
     if addr is not None:
         # Matches ('ip', port)
@@ -68,20 +71,26 @@ def get_sub_params(v):
             addr = "invalid addr tuple"
         else:
             addr = ast.literal_eval(addr)
-    
+
         sub[1] = addr
 
     return sub
 
+
 def load_sub_or_default(v, subs):
+    # type: (Dict[str, Any], Dict[str, Any]) -> Any
     sub_name = get_opt_param(v, "name")
     if sub_name in subs:
         return subs[sub_name]
 
     return SUB_ALL
 
+
 class P2PDServer(RESTD):
+    """HTTP REST server exposing P2PD node functionality over a local loopback interface."""
+
     def __init__(self, interfaces=None, node=None):
+        # type: (Optional[List[Any]], Optional[Any]) -> None
         super().__init__()
         self.__name__ = "P2PDServer"
         self.interfaces = interfaces if interfaces is not None else []
@@ -91,60 +100,46 @@ class P2PDServer(RESTD):
 
     @RESTD.GET(["version"])
     async def get_version(self, v, pipe):
+        # type: (Any, Any) -> Dict[str, Any]
         return {
             "title": "P2PD",
-            "author": "Matthew@Roberts.PM", 
+            "author": "Matthew@Roberts.PM",
             "version": "3.0.0",
-            "error": 0
+            "error": 0,
         }
-    
+
     @RESTD.GET(["ifs"])
     async def get_interfaces(self, v, pipe):
+        # type: (Any, Any) -> Dict[str, Any]
         try:
-            return {
-                "ifs": if_list_to_dict(self.interfaces),
-                "error": 0
-            }
+            return {"ifs": if_list_to_dict(self.interfaces), "error": 0}
         except (ValueError, AttributeError):
             log_exception()
-            return {
-                "error": 4,
-                "msg": "unable to convert ifs to dict."
-            }
-    
+            return {"error": 4, "msg": "unable to convert ifs to dict."}
+
     @RESTD.GET(["addr"])
     async def get_peer_addr(self, v, pipe):
+        # type: (Any, Any) -> Dict[str, Any]
         if self.node.addr_bytes is None:
-            return {
-                "error": 5,
-                "msg": "p2pd node addr bytes is none."
-            }
+            return {"error": 5, "msg": "p2pd node addr bytes is none."}
         else:
-            return {
-                "addr": to_s(self.node.addr_bytes),
-                "error": 0
-            }
-    
+            return {"addr": to_s(self.node.addr_bytes), "error": 0}
+
     @RESTD.GET(["open"])
     async def open_p2p_pipe(self, v, pipe):
+        # type: (Any, Any) -> Optional[Dict[str, Any]]
         con_name = v["name"]["open"]
         dest_addr = v["pos"][0]
 
         # Need a unique name per con.
         if con_name in self.cons:
-            return {
-                "msg": "Con name already exists.",
-                "error": 2
-            }
+            return {"msg": "Con name already exists.", "error": 2}
 
         # Connect to ourself for tests.
         if dest_addr == "self":
             if self.node.addr_bytes is None:
-                return {
-                    "error": 5,
-                    "msg": "p2pd node addr bytes is none."
-                }
-            
+                return {"error": 5, "msg": "p2pd node addr bytes is none."}
+
             dest_addr = self.node.addr_bytes
 
         # Attempt to make the connection.
@@ -152,9 +147,8 @@ class P2PDServer(RESTD):
             async_wrap_errors(
                 self.node.connect(
                     to_b(dest_addr),
-
                     # All connection strats except TURN by default.
-                    P2P_STRATEGIES
+                    P2P_STRATEGIES,
                 )
             )
         )
@@ -166,9 +160,11 @@ class P2PDServer(RESTD):
 
             # Remove con from table.
             def build_do_cleanup():
+                # type: () -> Any
                 def do_cleanup(msg, client_tup, pipe):
+                    # type: (Any, Any, Any) -> None
                     del self.cons[con_name]
-                
+
                 return do_cleanup
 
             # Add cleanup handler.
@@ -180,26 +176,22 @@ class P2PDServer(RESTD):
 
         # Failed to connect.
         if con is None:
-            return {
-                "msg": fstr("Con {0} failed connect.", (con_name,)),
-                "error": 3
-            }
+            return {"msg": fstr("Con {0} failed connect.", (con_name,)), "error": 3}
 
     @RESTD.GET(["info"])
     async def get_con_info(self, v, pipe):
+        # type: (Any, Any) -> Dict[str, Any]
         con_name = v["name"]["con"]
         if con_name not in self.cons:
-            return {
-                "error": 7,
-                "msg": fstr("con {0} does not exist", (con_name,))
-            }
+            return {"error": 7, "msg": fstr("con {0} does not exist", (con_name,))}
 
         # Check con exists.
         con = self.cons[con_name]
         return con_info(self, con_name, con)
-    
+
     @RESTD.GET(["send"])
     async def pipe_send_text(self, v, pipe):
+        # type: (Any, Any) -> Dict[str, Any]
         con_name = v["name"]["send"]
         en_msg = urldecode(v["pos"][0])
 
@@ -207,27 +199,18 @@ class P2PDServer(RESTD):
         con = self.cons[con_name]
 
         # Send data.
-        send_success = await con.send(
-            data=to_b(en_msg),
-            dest_tup=con.stream.dest_tup
-        )
+        send_success = await con.send(data=to_b(en_msg), dest_tup=con.stream.dest_tup)
 
         # Check return value.
         if not send_success:
-            return {
-                "error": 8,
-                "msg": "send txt failed"
-            }
+            return {"error": 8, "msg": "send txt failed"}
 
         # Return success.
-        return {
-            "con_name": con_name,
-            "sent": len(en_msg),
-            "error": 0
-        }
-    
+        return {"con_name": con_name, "sent": len(en_msg), "error": 0}
+
     @RESTD.GET(["recv"])
     async def pipe_recv_text(self, v, pipe):
+        # type: (Any, Any) -> Dict[str, Any]
         con_name = v["name"]["recv"]
 
         # Get something from recv buffer.
@@ -237,25 +220,20 @@ class P2PDServer(RESTD):
         try:
             out = await con.recv(sub, timeout=timeout, full=True)
             if out is None:
-                return {
-                    "msg": fstr("recv buffer {0} empty.", (sub,)),
-                    "error": 6
-                }
+                return {"msg": fstr("recv buffer {0} empty.", (sub,)), "error": 6}
 
             return {
                 "con_name": con_name,
                 "client_tup": out[0],
                 "data": to_s(out[1]),
-                "error": 0
+                "error": 0,
             }
         except asyncio.TimeoutError:
-            return {
-                "msg": "recv timeout",
-                "error": 5
-            }
+            return {"msg": "recv timeout", "error": 5}
 
     @RESTD.GET(["close"])
     async def pipe_close(self, v, pipe):
+        # type: (Any, Any) -> Dict[str, Any]
         con_name = v["name"]["close"]
 
         # Close the con -- fires cleanup handler.
@@ -263,13 +241,11 @@ class P2PDServer(RESTD):
         await con.close()
 
         # Indicate closed.
-        return {
-            "closed": con_name,
-            "error": 0
-        }
-    
+        return {"closed": con_name, "error": 0}
+
     @RESTD.POST(["binary"])
     async def pipe_send_binary(self, v, pipe):
+        # type: (Any, Any) -> Dict[str, Any]
         con_name = v["name"]["binary"]
 
         # Send binary data from octet-stream POST.
@@ -278,20 +254,14 @@ class P2PDServer(RESTD):
         # Last content-len bytes == payload.
         send_success = await con.send(v["body"], con.stream.dest_tup)
         if not send_success:
-            return {
-                "error": 8,
-                "msg": "binary send failed."
-            }
+            return {"error": 8, "msg": "binary send failed."}
 
         # Return status.
-        return {
-            "con_name": con_name,
-            "sent": len(v["body"]),
-            "error": 0
-        }
+        return {"con_name": con_name, "sent": len(v["body"]), "error": 0}
 
     @RESTD.GET(["binary"])
     async def pipe_get_binary(self, v, pipe):
+        # type: (Any, Any) -> Any
         con_name = v["name"]["binary"]
 
         # Send binary data from octet-stream POST.
@@ -304,16 +274,14 @@ class P2PDServer(RESTD):
         timeout = get_opt_param(v, "timeout") or 2
         out = await con.recv(sub, timeout=timeout, full=True)
         if out is None:
-            return {
-                "msg": fstr("recv buffer {0} empty.", (sub,)),
-                "error": 6
-            }
+            return {"msg": fstr("recv buffer {0} empty.", (sub,)), "error": 6}
 
         # Send it if any.
         return out[1]
 
     @RESTD.GET(["tunnel"])
     async def http_tunnel_trick(self, v, pipe):
+        # type: (Any, Any) -> None
         con_name = v["name"]["pipe"]
 
         # Send binary data from octet-stream POST.
@@ -331,19 +299,17 @@ class P2PDServer(RESTD):
         # con  -> pipe
         con.add_pipe(pipe)
 
-        # con <-----> pipe 
+        # con <-----> pipe
         return None
 
     @RESTD.GET(["sub"], ["name"], ["msg_p"])
     async def pipe_do_sub(self, v, pipe):
+        # type: (Any, Any) -> Dict[str, Any]
         # Get variable names.
         con_name = v["name"]["sub"]
         sub_name = v["name"]["name"]
         if sub_name == "all":
-            return {
-                "msg": "reserved sub name",
-                "error": 10
-            }
+            return {"msg": "reserved sub name", "error": 10}
 
         # Make sure sub is new.
         if sub_name in self.subs:
@@ -365,11 +331,12 @@ class P2PDServer(RESTD):
             "con_name": con_name,
             "sub_name": sub_name,
             "sub": fstr("{0}", (sub,)),
-            "error": 0
+            "error": 0,
         }
 
     @RESTD.DELETE(["sub"], ["name"])
     async def pipe_do_unsub(self, v, pipe):
+        # type: (Any, Any) -> Dict[str, Any]
         con_name = v["name"]["sub"]
         sub_name = v["name"]["name"]
         con = self.cons[con_name]
@@ -382,14 +349,12 @@ class P2PDServer(RESTD):
             del self.subs[sub_name]
 
         # Return results.
-        return {
-            "con_name": con_name,
-            "unsub": fstr("{0}", (sub,)),
-            "error": 0
-        }
-    
+        return {"con_name": con_name, "unsub": fstr("{0}", (sub,)), "error": 0}
+
+
 # pragma: no cover
 async def start_p2pd_server(port=REST_API_PORT, ifs=None, enable_upnp=False):
+    # type: (int, Optional[List[Any]], bool) -> Any
     print("Loading interfaces...")
     print("If you've just connected a new NIC ")
     print("there can be a slight delay until it's online.")
@@ -397,9 +362,7 @@ async def start_p2pd_server(port=REST_API_PORT, ifs=None, enable_upnp=False):
         print("Doing node port forwarding and pin hole rules.")
 
     # Passed to setup the p2p node.
-    node_conf = dict_child({
-        "enable_upnp": enable_upnp
-    }, NODE_CONF)
+    node_conf = dict_child({"enable_upnp": enable_upnp}, NODE_CONF)
 
     # Load netifaces.
     netifaces = await aionetiface_setup_netifaces()
@@ -411,12 +374,12 @@ async def start_p2pd_server(port=REST_API_PORT, ifs=None, enable_upnp=False):
         # Load a list of interface names.
         if_names = await list_interfaces(netifaces=netifaces)
         if not len(if_names):
-            raise Exception("p2pd rest could not find if names")
-        
+            raise RuntimeError("p2pd rest could not find if names")
+
         # Load those interfaces with NAT details.
-        ifs =  await load_interfaces(if_names, Interface)
+        ifs = await load_interfaces(if_names, Interface)
         if not len(ifs):
-            raise Exception("p2pd rest no ifs loaded.")
+            raise RuntimeError("p2pd rest no ifs loaded.")
 
     # Start P2PD node.
     node = P2PNode(ifs, port=NODE_PORT + 60 + 1, conf=node_conf)
@@ -430,11 +393,14 @@ async def start_p2pd_server(port=REST_API_PORT, ifs=None, enable_upnp=False):
     # Stop this thread exiting.
     return p2p_server
 
+
 async def p2pd_workspace():
-    node = await start_p2pd_server()
+    # type: () -> None
+    await start_p2pd_server()
     print(fstr("http://localhost:{0}/", (REST_API_PORT,)))
     while True:
         await asyncio.sleep(1)
+
 
 if __name__ == "__main__":
     async_test(p2pd_workspace)

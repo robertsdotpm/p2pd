@@ -1,9 +1,6 @@
 from p2pd import *
 
-servers = [
-
-
-]
+servers = []
 
 u = []
 [u.append(i) for i in servers if i not in u]
@@ -14,8 +11,8 @@ async def main(servers):
     i = await Interface()
     loop = asyncio.get_event_loop()
 
-    #servers = [["jump.chat", 3478]]
-    #servers = [["webrtc.free-solutions.org", 3478], ]
+    # servers = [["jump.chat", 3478]]
+    # servers = [["webrtc.free-solutions.org", 3478], ]
 
     """
     v6 = []
@@ -45,6 +42,7 @@ async def main(servers):
     ufp = open("udp.txt", "a")
     for server in servers:
         print(f"trying {server}")
+
         async def worker():
             # UDP must be used for NAT test.
             s = STUNClient(interface=i)
@@ -66,10 +64,11 @@ async def main(servers):
 
         sfp.write(f"{server},\r\n")
         await worker()
-        #break
+        # break
 
     sfp.close()
     tfp.close()
     ufp.close()
+
 
 async_test(main, args=[servers])

@@ -1,11 +1,6 @@
-import os
-import sys
-import pickle
 import asyncio
-import multiprocessing
-import signal as signal_mod
 from aionetiface import *
-from ....protocol.traversal.proto_msg import PunchMsg, DoneMsg
+from ....protocol.traversal.proto_msg import PunchMsg
 from ...libs.punch.punch_defs import *
 from ...libs.punch.utility.punch_utils import *
 from ...libs.punch.utility.boundary_lib import FAST_PUNCH_PARAMS
@@ -16,8 +11,12 @@ from ...libs.nat_predict import *
 from ...traversal_plugin import TraversalPlugin
 from ....node.node_utils import get_pp_executors
 
+
 class PunchPlugin(TraversalPlugin):
+    """Traversal plugin implementing TCP hole-punching via coordinated port prediction."""
+
     async def run(self, reply=None):
+        # type: (Optional[Any]) -> None
         # --- Get or create the PunchClient for this session ---
         puncher = self.punch_clients.get(self.plugin_id)
         if puncher is None:
@@ -49,8 +48,9 @@ class PunchPlugin(TraversalPlugin):
         await self.send_signal_msg(outgoing_msg)
 
     async def setup_puncher_client(self, reply):
+        # type: (Optional[Any]) -> Tuple[Optional[Any], Optional[Any]]
         """
-        Determines the source/destination addresses and the decider IP, 
+        Determines the source/destination addresses and the decider IP,
         creates a new PunchClient, and sets the coordinated time references.
         """
         if_index = self.src_info["if_index"]
@@ -59,7 +59,7 @@ class PunchPlugin(TraversalPlugin):
         # Skip if no STUN clients loaded.
         if not len(stuns):
             return None, None
-        
+
         # Determine IP addresses via routing.
         route = await self.nic.route(self.af).bind()
         dest_ip = self.dest_info["ip"]
@@ -113,13 +113,14 @@ class PunchPlugin(TraversalPlugin):
         # PunchClient.add_port_allocator forwards self.params to the allocator
         # so it uses the same window / error constants for bucket derivation.
         puncher.add_port_allocator(boundary_port_alloc)
-            
+
         # Return the new puncher and the STUN clients
         return puncher, stuns
-    
+
     async def configure_puncher_process(self, puncher, stuns):
+        # type: (Any, Any) -> Any
         """
-        Initializes the NAT Prediction Allocator, saves the PunchClient, 
+        Initializes the NAT Prediction Allocator, saves the PunchClient,
         and schedules the delayed asynchronous punching process.
         """
         # Register the puncher so subsequent run() calls can find it.
@@ -129,29 +130,24 @@ class PunchPlugin(TraversalPlugin):
         # Note: this just wraps nat_predict.py.
         # There's an aweful lot of bloat just to use code thats already written.
         self.nat_alloc = NATPredictAlloc(stuns)
-        self.nat_alloc.set_nat_info(
-            self.src_info["nat"], self.dest_info["nat"]
-        )
-        self.nat_alloc.set_punch_mode(
-            self.same_machine, self.dest_info["ip"]
-        )
-        
+        self.nat_alloc.set_nat_info(self.src_info["nat"], self.dest_info["nat"])
+        self.nat_alloc.set_punch_mode(self.same_machine, self.dest_info["ip"])
+
         # Schedule the punching process with a short delay.
         if self.plugin_id not in self.punch_proc:
             self.punch_proc[self.plugin_id] = asyncio.create_task(
-                async_wrap_errors(
-                    self.delayed_start_punching_proc(self.nic, puncher)
-                )
+                async_wrap_errors(self.delayed_start_punching_proc(self.nic, puncher))
             )
-            
+
         return puncher
 
     async def advance_punching_protocol(self, puncher, reply, punch_time):
+        # type: (Any, Optional[Any], int) -> Optional[Any]
         # Convert raw mappings from the peer into internal objects.
         recv_mappings = None
         if reply is not None:
             recv_mappings = [NATMapping(m) for m in reply.payload.mappings]
-            assert(recv_mappings)
+            assert recv_mappings
 
         # Compute the next round of port predictions.
         port_alloc, is_end = await self.nat_alloc.port_alloc(recv_mappings)
@@ -162,20 +158,23 @@ class PunchPlugin(TraversalPlugin):
             return None
 
         # Gather our mappings and build the outgoing control message.
-        mappings = [m.toJSON() for m in self.nat_alloc.send_mappings]
-        msg = PunchMsg({
-            "payload": {
-                "punch_mode": self.nat_alloc.punch_mode,
-                "mappings": mappings,
-                "ntp": punch_time,
-            },
-        })
+        mappings = [m.to_json() for m in self.nat_alloc.send_mappings]
+        msg = PunchMsg(
+            {
+                "payload": {
+                    "punch_mode": self.nat_alloc.punch_mode,
+                    "mappings": mappings,
+                    "ntp": punch_time,
+                },
+            }
+        )
 
         msg.meta.plugin_name = "punch"
         return msg
 
     # ... (other methods, including delayed_start_punching_proc) ...
     async def delayed_start_punching_proc(self, nic, puncher):
+        # type: (Any, Any) -> None
         # Wait for the peer to receive our message and set up its own process.
         # The delay is kept short when using FAST_PUNCH_PARAMS because the
         # rendezvous window is small and synchronised via sleep_until().
@@ -198,8 +197,9 @@ class PunchPlugin(TraversalPlugin):
             # This runs on normal completion, cancellation, and exceptions.
             self.punch_proc.pop(self.plugin_id, None)
             self.punch_clients.pop(self.plugin_id, None)
-    
+
     async def close(self):
+        # type: () -> None
         """Cancel any in-flight punch task and remove this plugin's shared state.
 
         Safe to call multiple times: pop() is a no-op when the key is absent
@@ -208,13 +208,19 @@ class PunchPlugin(TraversalPlugin):
         task = self.punch_proc.pop(self.plugin_id, None)
         self.punch_clients.pop(self.plugin_id, None)
         await cancel_task(task)
-        
+
         # Cancel the result future if nobody resolved it (e.g. outer timeout).
         if not self.result.done():
             self.result.cancel()
 
-class PunchPluginFactory():
-    def __init__(self, stun_clients, sys_clock=None, punch_clients=None, proc_pool=None):
+
+class PunchPluginFactory:
+    """Creates and configures PunchPlugin instances sharing STUN clients and process pools."""
+
+    def __init__(
+        self, stun_clients, sys_clock=None, punch_clients=None, proc_pool=None
+    ):
+        # type: (Any, Optional[Any], Optional[Dict[str, Any]], Optional[Any]) -> None
         self.stun_clients = stun_clients
         self.sys_clock = sys_clock or SysClock(None, 0.1)
         self.proc_pool = proc_pool
@@ -224,12 +230,14 @@ class PunchPluginFactory():
 
     @classmethod
     async def create(cls, stun_clients, sys_clock):
+        # type: (Any, Any) -> PunchPluginFactory
         factory = cls(stun_clients, sys_clock)
         factory.max_workers, factory.proc_pool = await get_pp_executors()
         factory.active_punchers = 0
         return factory
 
     def build_plugin(self):
+        # type: () -> PunchPlugin
         plugin = PunchPlugin()
         plugin.stun_clients = self.stun_clients
         plugin.sys_clock = self.sys_clock
@@ -239,8 +247,8 @@ class PunchPluginFactory():
         return plugin
 
     async def close(self):
+        # type: () -> None
         if not self.proc_pool:
             return
         await shutdown_proc_pool(self.proc_pool)
         self.proc_pool = None
-        

@@ -1,4 +1,3 @@
-
 import time
 import socket
 import struct
@@ -9,19 +8,23 @@ from ..punch_defs import *
 # --- NTP Constants ---
 NTP_SERVER = "pool.ntp.org"
 NTP_PORT = 123
-NTP_DELTA = 2208988800 # 70-year offset between NTP epoch (1900) and Unix epoch (1970)
+NTP_DELTA = 2208988800  # 70-year offset between NTP epoch (1900) and Unix epoch (1970)
 NTP_PACKET_SIZE = 48
 MAX_NTP_RETRIES = 5
 NTP_TIMEOUT = 1.0
 
-def timestamp_from_ntp(server=NTP_SERVER, port=NTP_PORT, retries=MAX_NTP_RETRIES, timeout=NTP_TIMEOUT):
+
+def timestamp_from_ntp(
+    server=NTP_SERVER, port=NTP_PORT, retries=MAX_NTP_RETRIES, timeout=NTP_TIMEOUT
+):
+    # type: (str, int, int, float) -> int
     """
-    Fetches the Unix timestamp from an NTP server using UDP sockets, 
+    Fetches the Unix timestamp from an NTP server using UDP sockets,
     with built-in retry logic for reliability.
     """
     # NTP request message: 48 bytes, setting mode=3 (client), version=4
     # The first byte is 0b00100011 (0x23)
-    request_data = b'\x23' + 47 * b'\0' 
+    request_data = b"\x23" + 47 * b"\0"
 
     for attempt in range(retries):
         try:
@@ -31,18 +34,18 @@ def timestamp_from_ntp(server=NTP_SERVER, port=NTP_PORT, retries=MAX_NTP_RETRIES
                 s.sendto(request_data, (server, port))
                 # Receive the response
                 response_data, _ = s.recvfrom(NTP_PACKET_SIZE)
-                
+
                 if len(response_data) < NTP_PACKET_SIZE:
                     raise RuntimeError("NTP response too short")
 
                 # The Transmit Timestamp is the last 8 bytes (offset 40)
                 # It is a 64-bit unsigned fixed-point number (seconds + fraction)
                 # We unpack the first 4 bytes (seconds part)
-                ntp_time_seconds = struct.unpack('!I', response_data[40:44])[0]
-                
+                ntp_time_seconds = struct.unpack("!I", response_data[40:44])[0]
+
                 # Convert from NTP epoch (1900) to Unix epoch (1970)
                 unix_time = ntp_time_seconds - NTP_DELTA
-                
+
                 return int(unix_time)
 
         except socket.timeout:
@@ -53,12 +56,16 @@ def timestamp_from_ntp(server=NTP_SERVER, port=NTP_PORT, retries=MAX_NTP_RETRIES
 
     raise RuntimeError("Failed to get reliable network time")
 
+
 """
 The function bellow is used to adjust sleep parameters
 for the punching algorithm. Sleep time is reduced
 based on how close the destination is.
 """
+
+
 def get_punch_mode(af, dest_ip, same_machine):
+    # type: (Any, str, bool) -> int
     host_limit = 0
     dest_ipr = IPRange(dest_ip, bitlen=host_limit)
 
@@ -71,31 +78,41 @@ def get_punch_mode(af, dest_ip, same_machine):
         else:
             return TCP_PUNCH_LAN
 
+
 def punching_sanity_check(mode, our_wan, dest_addr, send_mappings, recv_mappings):
+    # type: (int, Any, str, List[Any], List[Any]) -> None
     if mode == TCP_PUNCH_SELF:
         for sm in send_mappings:
             for rm in recv_mappings:
                 if sm.local == rm.local:
-                    error = \
-                    fstr("punch self local port conflict ")
-                    fstr("{0} {1}", (sm.local, rm.local,))
+                    error = fstr("punch self local port conflict ")
+                    fstr(
+                        "{0} {1}",
+                        (
+                            sm.local,
+                            rm.local,
+                        ),
+                    )
                     log(error)
 
     if mode == TCP_PUNCH_REMOTE:
         if our_wan == dest_addr:
-            error = \
-            fstr("punch remote but dest is the same ")
+            error = fstr("punch remote but dest is the same ")
             fstr("as our ext {0}", (our_wan,))
             log(error)
-            
+
+
 # Not really the best approach but process communication is a pain.
 async def punch_close_msg(msg, client_tup, pipe):
+    # type: (bytes, Any, Any) -> None
     if msg in PUNCH_END:
         # Allow time to send message down pipes.
         await asyncio.sleep(2)
         await pipe.close()
 
+
 async def setup_punch_coordination(node, sys_clock=None):
+    # type: (Any, Optional[Any]) -> None
     if sys_clock is None:
         sys_clock = await SysClock(node.ifs[0]).start()
 
@@ -103,6 +120,7 @@ async def setup_punch_coordination(node, sys_clock=None):
 
 
 def wait_for_one_remaining(sockets, timeout=5.0):
+    # type: (List[Any], float) -> Optional[Any]
     """
     Waits up to 5 seconds for all but one socket to close.
     Does NOT close the sockets locally.
@@ -145,7 +163,9 @@ def wait_for_one_remaining(sockets, timeout=5.0):
     # Return the winner, or None if everyone died/timed out
     return list(remaining)[0] if remaining else None
 
+
 def wait_for_first_with_data(sockets, timeout=5.0):
+    # type: (List[Any], float) -> Optional[Any]
     """
     Wait until one of the sockets has data, then read and return it.
     Returns (socket, data) or (None, None) if timed out.
@@ -182,10 +202,12 @@ def wait_for_first_with_data(sockets, timeout=5.0):
     finally:
         sel.close()
 
+
 # In a LAN = lan ip, or for WAN targets = wan IPs.
 def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
+    # type: (str, List[Any], Optional[str]) -> Optional[Any]
     # No open sockets.
-    if not sock_list: 
+    if not sock_list:
         return None
 
     # Master side closes all others immediately
@@ -203,5 +225,5 @@ def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
     else:
         # Non-master side waits for the first completed connection
         winner = wait_for_first_with_data(sock_list)
-        
+
     return winner

@@ -21,29 +21,43 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                 addr = await Address(host, 80, nic)
                 tup = addr.select_ip(af).tup
                 if tup in tups:
-                    print(fstr("dns / addr {0} {1} duplicate tup {2}", (af, host, tup,)))
+                    print(
+                        fstr(
+                            "dns / addr {0} {1} duplicate tup {2}",
+                            (
+                                af,
+                                host,
+                                tup,
+                            ),
+                        )
+                    )
                     print(fstr("dns may be broken"))
                     continue
                 else:
-                    print(fstr("dns / addr {0} {1} -> {2} resolve success", (af, host, tup,)))
+                    print(
+                        fstr(
+                            "dns / addr {0} {1} -> {2} resolve success",
+                            (
+                                af,
+                                host,
+                                tup,
+                            ),
+                        )
+                    )
                     tups[tup] = 1
 
     async def test_clock_skew(self):
         nic = await Interface("default")
         clock = await SysClock(nic)
-        assert(clock.time())
+        assert clock.time()
 
     @unittest.skip("MQTT removed")
     async def test_mqtt_client(self):
         msg = "test msg"
         peerid = to_s(rand_plain(10))
-        #nic = await Interface()
-        #print(nic.supported())
-        servs = [{
-            IP4: "158.69.27.176",
-            IP6: "2607:5300:60:80b0::1",
-            "port": 1883
-        }]
+        # nic = await Interface()
+        # print(nic.supported())
+        servs = [{IP4: "158.69.27.176", IP6: "2607:5300:60:80b0::1", "port": 1883}]
 
         nic = Interface("default")
         for af in nic.supported():
@@ -67,10 +81,10 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
 
     async def test_turn_client_multi(self):
         return
-        afs = [IP4] # Only really tested with IP4 unfortunately.
+        afs = [IP4]  # Only really tested with IP4 unfortunately.
         # Need another con with ipv6 for myself.
         hosts = ["turn1.p2pd.net", "turn2.p2pd.net"]
-        
+
         """
         af = IP4
         
@@ -91,8 +105,7 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         print(a_addr, a_relay)
         return
         """
-                    
-                    
+
         for host in hosts:
             for af in afs:
                 # TURN server config.
@@ -123,25 +136,42 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                 buf = b"hello bob"
                 for _ in range(0, 3):
                     await a_client.send(buf)
-                
+
                 # Get msg from Alice from the TURN server.
                 # See middle of TURN relay diagram.
                 msg = await b_client.recv()
                 if msg == buf:
-                    print(fstr("turn {0} {1} works", (af, dest,)))
+                    print(
+                        fstr(
+                            "turn {0} {1} works",
+                            (
+                                af,
+                                dest,
+                            ),
+                        )
+                    )
                 else:
-                    print(fstr("turn {0} {1} failed", (af, dest,)))
+                    print(
+                        fstr(
+                            "turn {0} {1} failed",
+                            (
+                                af,
+                                dest,
+                            ),
+                        )
+                    )
 
                 # Tell server to close resources for our client.
                 await a_client.close()
                 await b_client.close()
 
-
     async def test_turn_client(self):
         return
-        afs = [IP4,] # Only really tested with IP4 unfortunately.
+        afs = [
+            IP4,
+        ]  # Only really tested with IP4 unfortunately.
         # Need another con with ipv6 for myself.
-        hosts = ["203.56.114.226"]                
+        hosts = ["203.56.114.226"]
         for host in hosts:
             for af in afs:
                 # TURN server config.
@@ -165,7 +195,7 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                 if a_addr is None or a_relay is None:
                     print(fstr("turn {0} broken", (host,)))
                     continue
-                
+
                 # Tell server to close resources for our client.
                 await client.close()
                 print(fstr("turn {0} works", (host,)))
@@ -178,26 +208,43 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         nic = await Interface()
         print(nic)
         return
-        #nic = Interface.from_dict(if_info)
+        # nic = Interface.from_dict(if_info)
         host = ("2001:1538:0001:0000:0000:0000:0224:0074", 3478)
         client = STUNClient(IP6, host, nic, proto=UDP)
         addr = await client.get_wan_ip()
         print(addr)
 
-        print( nic.supported() )
+        print(nic.supported())
         return
 
-        
         for af in nic.supported():
             for proto in [UDP, TCP]:
                 for host in hosts:
                     client = STUNClient(af, host, nic, proto=proto)
                     try:
                         out = await client.get_mapping()
-                        print(fstr("stun {0} {1} {2} works", (af, host, proto,)))
-                    except:
+                        print(
+                            fstr(
+                                "stun {0} {1} {2} works",
+                                (
+                                    af,
+                                    host,
+                                    proto,
+                                ),
+                            )
+                        )
+                    except Exception:
                         what_exception()
-                        print(fstr("stun {0} {1} {2} failed", (af, host, proto,)))
+                        print(
+                            fstr(
+                                "stun {0} {1} {2} failed",
+                                (
+                                    af,
+                                    host,
+                                    proto,
+                                ),
+                            )
+                        )
 
     async def test_pnp_client(self):
         hosts = [0]
@@ -241,17 +288,38 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                     f, args = call
                     out = await f(*args)
                     if out is None:
-                        print(fstr("pnp {0} {1} {2} failed", (str(f), af, dest,)))
+                        print(
+                            fstr(
+                                "pnp {0} {1} {2} failed",
+                                (
+                                    str(f),
+                                    af,
+                                    dest,
+                                ),
+                            )
+                        )
                         failed = True
                     else:
-                        print(fstr("pnp {0} {1} {2} {3} ok", (str(f), af, dest, out.value)))
-                
+                        print(
+                            fstr(
+                                "pnp {0} {1} {2} {3} ok", (str(f), af, dest, out.value)
+                            )
+                        )
+
                 if out is not None:
                     if out.value == val:
                         failed = True
 
                 if not failed:
-                    print(fstr("pnp {0} {1} success", (af, dest,)))
+                    print(
+                        fstr(
+                            "pnp {0} {1} success",
+                            (
+                                af,
+                                dest,
+                            ),
+                        )
+                    )
 
     async def test_nickname(self):
         print(PNP_SERVERS)
@@ -277,7 +345,6 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         name = sk.verifying_key.to_string("compressed")
         name = hashlib.sha256(name).hexdigest()[:25]
 
-
         fqn = None
         calls = [
             (nick.put, (name, "1"), 1),
@@ -294,15 +361,31 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                     await f(fqn)
                 else:
                     fqn = await f(*args)
-            except:
+            except Exception:
                 log_exception()
                 if should_succeed:
                     fqn = None
 
             if fqn is None:
-                print(fstr("nick {0} {1} failed", (str(f), name,)))
+                print(
+                    fstr(
+                        "nick {0} {1} failed",
+                        (
+                            str(f),
+                            name,
+                        ),
+                    )
+                )
             else:
-                print(fstr("nick {0} {1} ok", (str(f), fqn,)))
+                print(
+                    fstr(
+                        "nick {0} {1} ok",
+                        (
+                            str(f),
+                            fqn,
+                        ),
+                    )
+                )
 
     async def test_encryption(self):
         # Pub key crap -- used for signing PNP messages.
@@ -328,6 +411,7 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         print(n.addr_bytes)
         print(n.listen_port)
         await n.close()
-        
-if __name__ == '__main__':
+
+
+if __name__ == "__main__":
     main()

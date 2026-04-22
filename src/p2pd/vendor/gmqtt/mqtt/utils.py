@@ -28,7 +28,9 @@ class IdGenerator(object, metaclass=Singleton):
 
         while not done:
             if len(self._used_ids) >= self._max - 1:
-                raise OverflowError("All ids has already used. May be your QoS query is full.")
+                raise OverflowError(
+                    "All ids has already used. May be your QoS query is full."
+                )
 
             self._last_used_id += 1
 
@@ -45,7 +47,7 @@ class IdGenerator(object, metaclass=Singleton):
         return self._last_used_id
 
     def free_id(self, id):
-        logger.debug('FREE MID: %s', id)
+        logger.debug("FREE MID: %s", id)
         if id not in self._used_ids:
             return
 
@@ -64,7 +66,7 @@ def pack_variable_byte_integer(value):
         value, b = divmod(value, 128)
         if value > 0:
             b |= 0x80
-        remaining_bytes.extend(struct.pack('!B', b))
+        remaining_bytes.extend(struct.pack("!B", b))
         if value <= 0:
             break
     return remaining_bytes
@@ -78,25 +80,25 @@ def unpack_variable_byte_integer(bts):
         b = bts[i]
         value += (b & 0x7F) * multiplier
         if multiplier > 2097152:  # 128 * 128 * 128
-            raise ValueError('Malformed Variable Byte Integer')
+            raise ValueError("Malformed Variable Byte Integer")
         multiplier *= 128
         if b & 0x80 == 0:
             break
         i += 1
-    return value, bts[i + 1:]
+    return value, bts[i + 1 :]
 
 
 def unpack_utf8(bytes_array):
-    str_len, = struct.unpack('!H', bytes_array[:2])
-    value = bytes_array[2:2 + str_len].decode('utf-8')
-    left_str = bytes_array[2 + str_len:]
+    (str_len,) = struct.unpack("!H", bytes_array[:2])
+    value = bytes_array[2 : 2 + str_len].decode("utf-8")
+    left_str = bytes_array[2 + str_len :]
     return value, left_str
 
 
 def pack_utf8(data):
     packet = bytearray()
     if isinstance(data, str):
-        data = data.encode('utf-8')
+        data = data.encode("utf-8")
     packet.extend(struct.pack("!H", len(data)))
     packet.extend(data)
     return packet

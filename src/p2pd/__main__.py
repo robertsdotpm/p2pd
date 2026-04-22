@@ -17,22 +17,26 @@ if int(vmin) < 8:
     print("P2PD REPL needs >= Python 3.8")
     exit()
 
-from . import __version__ as p2pdv
-from aionetiface import *
+from . import __version__ as p2pdv  # noqa: E402
+from aionetiface import *  # noqa: E402
+
 
 class AsyncIOInteractiveConsole(code.InteractiveConsole):
+    """Interactive Python console that supports top-level await via asyncio."""
 
     def __init__(self, locals, loop):
+        # type: (Any, Any) -> None
         super().__init__(locals)
         self.compile.compiler.flags |= ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
 
         self.loop = loop
 
-
     def runcode(self, code):
+        # type: (Any) -> None
         future = concurrent.futures.Future()
 
         def callback():
+            # type: () -> None
             global repl_future
             global repl_future_interrupted
 
@@ -76,45 +80,67 @@ class AsyncIOInteractiveConsole(code.InteractiveConsole):
 
 
 class REPLThread(threading.Thread):
+    """Background thread that drives the asyncio REPL console interaction."""
 
     def run(self):
+        # type: () -> None
         try:
             loop_policy = str(asyncio.get_event_loop_policy())
             if "elector" in loop_policy:
-                loop_policy = 'selector'
+                loop_policy = "selector"
 
             spawn_method = multiprocessing.get_start_method()
             vmaj, vmin, _ = platform.python_version_tuple()
             banner = (
-                fstr('P2PD {0} REPL on Python {1}.{2} / {3}', (p2pdv, vmaj, vmin, sys.platform,)),
-                fstr('Loop = {0}, Process = {1}', (loop_policy, spawn_method,)),
-                'Use "await" directly instead of "asyncio.run()".' ,
-                fstr('{0}from p2pd import *', (getattr(sys, "ps1", ">>> "),)),
+                fstr(
+                    "P2PD {0} REPL on Python {1}.{2} / {3}",
+                    (
+                        p2pdv,
+                        vmaj,
+                        vmin,
+                        sys.platform,
+                    ),
+                ),
+                fstr(
+                    "Loop = {0}, Process = {1}",
+                    (
+                        loop_policy,
+                        spawn_method,
+                    ),
+                ),
+                'Use "await" directly instead of "asyncio.run()".',
+                fstr("{0}from p2pd import *", (getattr(sys, "ps1", ">>> "),)),
             )
 
             console.push("from p2pd.do_imports import *")
             console.interact(
-                banner="\n".join(banner),
-                exitmsg='exiting asyncio REPL...')
-            
+                banner="\n".join(banner), exitmsg="exiting asyncio REPL..."
+            )
+
         finally:
             warnings.filterwarnings(
-                'ignore',
-                message=r'^coroutine .* was never awaited$',
-                category=RuntimeWarning)
+                "ignore",
+                message=r"^coroutine .* was never awaited$",
+                category=RuntimeWarning,
+            )
 
             loop.call_soon_threadsafe(loop.stop)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    repl_locals = {'asyncio': asyncio}
-    for key in {'__name__', '__package__',
-                '__loader__', '__spec__',
-                '__builtins__', '__file__'}:
+    repl_locals = {"asyncio": asyncio}
+    for key in {
+        "__name__",
+        "__package__",
+        "__loader__",
+        "__spec__",
+        "__builtins__",
+        "__file__",
+    }:
         repl_locals[key] = locals()[key]
 
     console = AsyncIOInteractiveConsole(repl_locals, loop)
-    
 
     repl_future = None
     repl_future_interrupted = False

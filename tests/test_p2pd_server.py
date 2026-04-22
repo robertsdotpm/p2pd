@@ -1,34 +1,33 @@
 from p2pd import *
 
+
 # NOTE: changed sub so this is currently broken
 class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
     async def test_p2pd_server(self):
-        return # TODO: fix this test
+        return  # TODO: fix this test
 
         # Start the P2PD server.
         af = IP4
         i = await Interface().start()
         nic_ip = i.route(af).nic()
         r = await i.route(af).bind(ips=nic_ip, port=P2PD_PORT)
-        server = await start_p2pd_server(
-            r,
-            ifs=[i], 
-            enable_upnp=False
+        server = await start_p2pd_server(r, ifs=[i], enable_upnp=False)
+
+        conf = dict_child(
+            {
+                # N seconds before a registering recv timeout.
+                "recv_timeout": 100,
+                # Only applies to TCP.
+                "con_timeout": 100,
+            },
+            NET_CONF,
         )
-
-        conf = dict_child({
-            # N seconds before a registering recv timeout.
-            "recv_timeout": 100,
-
-            # Only applies to TCP.
-            "con_timeout": 100,
-        }, NET_CONF)
-
 
         # Make server implement a custom ping protocol extension.
         async def proto_extension(msg, client_tup, pipe):
             if b"PING" in msg:
                 await pipe.send(b"PONG")
+
         server.node.add_msg_cb(proto_extension)
 
         # Server address.
@@ -42,18 +41,15 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
             # Some stat stuff.
             "/version",
             "/ifs",
-
             # Open new con.
             "/p2p/open/" + c + "/self",
             "/p2p/con/" + c,
-
             # Test basic text API stuff.
             "/p2p/sub/" + c + "/msg_p/" + sub,
             "/p2p/send/" + c + "/" + en("ECHO Hello, world!"),
             "/p2p/recv/" + c + "/msg_p/" + sub + "/timeout/2",
-
             # Test connection close works.
-            "/p2p/close/" + c
+            "/p2p/close/" + c,
         ]
 
         # Just load a bunch of URLs and check for errors.
@@ -64,18 +60,14 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
             print(url)
 
             _, resp = await http_req(
-                route=r, dest=dest, path=url,
-                do_close=True,
-                conf=conf
-
+                route=r, dest=dest, path=url, do_close=True, conf=conf
             )
-
 
             out = resp.out()
             j = json.loads(out)
 
             # IE: no error set.
-            assert(j["error"] == 0)
+            assert j["error"] == 0
 
         # Make a new con.
         c2 = "pipe_test"
@@ -89,12 +81,12 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
         msg = b"this is a test"
         await p.send(b"ECHO " + msg)
         got = await p.recv(SUB_ALL, timeout=3)
-        assert(msg in got)
+        assert msg in got
 
         # Test custom protocol extension works.
         await p.send(b"PING")
         out = await p.recv()
-        assert(b"PONG" in out)
+        assert b"PONG" in out
         await p.close()
 
         # TODO: Test binary stuff.
@@ -103,7 +95,7 @@ class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
         await server.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
 
 """

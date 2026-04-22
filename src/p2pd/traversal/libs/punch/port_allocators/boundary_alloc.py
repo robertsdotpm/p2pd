@@ -1,9 +1,10 @@
-import time
 import os
 from ..utility.boundary_lib import *
 from ..punch_defs import *
 
+
 def boundary_port_alloc(timestamp, n=NUM_PORTS, params=None):
+    # type: (int, int, Optional[Dict[str, Any]]) -> Tuple[List[Any], int]
     """
     Deterministic port allocation seeded by the NTP-aligned time bucket.
 

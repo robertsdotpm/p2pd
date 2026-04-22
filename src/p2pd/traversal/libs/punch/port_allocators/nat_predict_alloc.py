@@ -5,24 +5,23 @@ from p2pd.traversal.libs.nat_predict import *
 from ..utility.punch_utils import *
 from ..punch_defs import *
 
+
 def nat_mapping_to_port_alloc(nat_mappings):
+    # type: (List[Any]) -> List[Any]
     out = []
     for m in nat_mappings:
-        out.append(
-            PortAlloc(
-                src_port=m.local,
-                dest_port=m.remote
-            )
-        )
+        out.append(PortAlloc(src_port=m.local, dest_port=m.remote))
 
     return out
 
+
 def nat_predict_states(dest_mappings, state):
+    # type: (Optional[List[Any]], Optional[int]) -> Tuple[int, int]
     # bool of dest_mappings, start state, to state.
     progressions = [
         [False, None, INITIATED_PREDICTIONS],
         [True, None, RECEIVED_PREDICTIONS],
-        [True, INITIATED_PREDICTIONS, UPDATED_PREDICTIONS]
+        [True, INITIATED_PREDICTIONS, UPDATED_PREDICTIONS],
     ]
 
     # What protocol 'side' corresponds to a state.
@@ -42,11 +41,15 @@ def nat_predict_states(dest_mappings, state):
             continue
 
         return (to_state, sides[to_state])
-    
-    raise Exception("Invalid nat predict state progression.")
 
-class NATPredictAlloc():
+    raise RuntimeError("Invalid nat predict state progression.")
+
+
+class NATPredictAlloc:
+    """Allocates port mappings for NAT traversal using STUN-based prediction."""
+
     def __init__(self, stun_clients):
+        # type: (List[Any]) -> None
         self.af = stun_clients[0].af
         self.same_machine = False
         self.stun_clients = stun_clients
@@ -57,11 +60,13 @@ class NATPredictAlloc():
         self.self_mappings = []
 
     def set_nat_info(self, src_nat=None, dest_nat=None):
+        # type: (Optional[Dict[str, Any]], Optional[Dict[str, Any]]) -> None
         nat_default = nat_info(RESTRICT_PORT_NAT, delta_info(EQUAL_DELTA, 0))
         self.src_nat = src_nat or copy.deepcopy(nat_default)
         self.dest_nat = dest_nat or copy.deepcopy(nat_default)
 
     async def port_alloc(self, recv_mappings=None):
+        # type: (Optional[List[Any]]) -> Tuple[List[Any], int]
         # Change protocol state transition.
         self.state, self.side = nat_predict_states(
             recv_mappings,
@@ -70,35 +75,28 @@ class NATPredictAlloc():
 
         # Covers exchanging and receiving mappings.
         # These steps are required for success.
-        fetch_states  = [INITIATED_PREDICTIONS]
+        fetch_states = [INITIATED_PREDICTIONS]
         fetch_states += [RECEIVED_PREDICTIONS]
         if self.state in fetch_states:
-            self.send_mappings, self.preloaded_mappings = \
-                await nat_prediction(
-                    self.punch_mode,
-                    self.src_nat,
-                    self.dest_nat,
-                    self.stun_clients,
-                    recv_mappings=recv_mappings,
-                )
+            self.send_mappings, self.preloaded_mappings = await nat_prediction(
+                self.punch_mode,
+                self.src_nat,
+                self.dest_nat,
+                self.stun_clients,
+                recv_mappings=recv_mappings,
+            )
 
             # Ii receive mapping isn't set use templates.
-            self.recv_mappings = \
-                recv_mappings or copy.deepcopy(
-                    self.send_mappings
-                )
-            
+            self.recv_mappings = recv_mappings or copy.deepcopy(self.send_mappings)
+
             # Patch mappings for self punch.
             # This forces different ports to be used.
             if self.side == INITIATOR:
-                self_punch_patch(
-                    self.punch_mode,
-                    self.recv_mappings
-                )
+                self_punch_patch(self.punch_mode, self.recv_mappings)
 
             # Only things needed for protocol.
             return (nat_mapping_to_port_alloc(self.send_mappings), 0)
-                
+
         # Update the mapping to match needed reply ports.
         # Optional step but improves success chance.
         if self.state == UPDATED_PREDICTIONS:
@@ -117,24 +115,19 @@ class NATPredictAlloc():
                         self.recv_mappings,
                         self.send_mappings,
                     )
-                ), 1
+                ),
+                1,
             )
 
     def set_punch_mode(self, same_machine, dest_ip="192.168.0.100"):
-        self.punch_mode = get_punch_mode(
-            self.af,
-            str(dest_ip),
-            self.same_machine
-        )
+        # type: (bool, str) -> None
+        self.punch_mode = get_punch_mode(self.af, str(dest_ip), self.same_machine)
+
 
 async def workspace():
     nic = await Interface()
     stun_clients = await get_n_stun_clients(
-        af=nic.supported()[0],
-        n=5,
-        proto=UDP,
-        interface=nic,
-        conf=PUNCH_CONF
+        af=nic.supported()[0], n=5, proto=UDP, interface=nic, conf=PUNCH_CONF
     )
 
     # Generate port allocations based on NAT prediction algorithms.
@@ -150,7 +143,8 @@ async def workspace():
     # Obviously this is meaningless and real would come from a client.
     recv_mappings = nat_predict.send_mappings
     updated_alloc = await nat_predict.port_alloc(recv_mappings)
-    print(updated_alloc) 
+    print(updated_alloc)
+
 
 if __name__ == "__main__":
     asyncio.run(workspace())

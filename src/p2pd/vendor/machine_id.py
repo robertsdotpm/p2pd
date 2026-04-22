@@ -22,9 +22,9 @@ Special thanks to Denis Brodbeck for his Go package, machineid (https://github.c
 :license: MIT, see LICENSE for more details.
 """
 
-__version__ = '0.5.1'
-__author__  = 'Zeke Gabrielse'
-__credits__ = 'https://github.com/denisbrodbeck/machineid'
+__version__ = "0.5.1"
+__author__ = "Zeke Gabrielse"
+__credits__ = "https://github.com/denisbrodbeck/machineid"
 
 from platform import uname
 from sys import platform
@@ -32,19 +32,20 @@ import subprocess
 import hashlib
 import hmac
 import re
-import socket
 
 
 def __sanitize__(s):
-    return re.sub(r'[\x00-\x1f\x7f-\x9f\s]', '', s).strip()
+    return re.sub(r"[\x00-\x1f\x7f-\x9f\s]", "", s).strip()
+
 
 def __exec__(cmd):
     try:
-        return subprocess.run(cmd, shell=True, capture_output=True, check=True, encoding='utf-8') \
-                .stdout \
-                .strip()
+        return subprocess.run(
+            cmd, shell=True, capture_output=True, check=True, encoding="utf-8"
+        ).stdout.strip()
     except Exception:
         return None
+
 
 def __read__(path):
     try:
@@ -53,13 +54,16 @@ def __read__(path):
     except Exception:
         return None
 
+
 def __reg__(registry, key):
     try:
         from winregistry import WinRegistry
+
         with WinRegistry() as reg:
             return reg.read_entry(registry, key).value.strip()
     except Exception:
         return None
+
 
 def get_machine_id(winregistry=True):
     """
@@ -68,48 +72,59 @@ def get_machine_id(winregistry=True):
     x = None
 
     # Mac support.
-    if platform == 'darwin':
-        x = __exec__("ioreg -d2 -c IOPlatformExpertDevice | awk -F\\\" '/IOPlatformUUID/{print $(NF-1)}'")
+    if platform == "darwin":
+        x = __exec__(
+            "ioreg -d2 -c IOPlatformExpertDevice | awk -F\\\" '/IOPlatformUUID/{print $(NF-1)}'"
+        )
 
     # Windows.
-    if platform in ('win32', 'cygwin', 'msys'):
+    if platform in ("win32", "cygwin", "msys"):
         if winregistry:
-            x = __reg__(r'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography', 'MachineGuid')
+            x = __reg__(
+                r"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography", "MachineGuid"
+            )
         else:
-            x = __exec__("powershell.exe -ExecutionPolicy bypass -command (Get-CimInstance -Class Win32_ComputerSystemProduct).UUID")
+            x = __exec__(
+                "powershell.exe -ExecutionPolicy bypass -command (Get-CimInstance -Class Win32_ComputerSystemProduct).UUID"
+            )
 
         if not x:
-            x = __exec__('wmic csproduct get uuid').split('\n')[2].strip()
+            x = __exec__("wmic csproduct get uuid").split("\n")[2].strip()
 
     # Linux and possibly Android.
-    if platform.startswith('linux'):
-        x = __read__('/var/lib/dbus/machine-id')
+    if platform.startswith("linux"):
+        x = __read__("/var/lib/dbus/machine-id")
         if not x:
-            x = __read__('/etc/machine-id')
+            x = __read__("/etc/machine-id")
 
         if not x:
-            cgroup = __read__('/proc/self/cgroup')
-            if cgroup and 'docker' in cgroup:
-                x = __exec__('head -1 /proc/self/cgroup | cut -d/ -f3')
+            cgroup = __read__("/proc/self/cgroup")
+            if cgroup and "docker" in cgroup:
+                x = __exec__("head -1 /proc/self/cgroup | cut -d/ -f3")
 
         if not x:
-            mountinfo = __read__('/proc/self/mountinfo')
-            if mountinfo and 'docker' in mountinfo:
-                x = __exec__("grep -oP '(?<=docker/containers/)([a-f0-9]+)(?=/hostname)' /proc/self/mountinfo")
+            mountinfo = __read__("/proc/self/mountinfo")
+            if mountinfo and "docker" in mountinfo:
+                x = __exec__(
+                    "grep -oP '(?<=docker/containers/)([a-f0-9]+)(?=/hostname)' /proc/self/mountinfo"
+                )
 
-        if not x and 'microsoft' in uname().release: # wsl
-            x = __exec__("powershell.exe -ExecutionPolicy bypass -command '(Get-CimInstance -Class Win32_ComputerSystemProduct).UUID'")
+        if not x and "microsoft" in uname().release:  # wsl
+            x = __exec__(
+                "powershell.exe -ExecutionPolicy bypass -command '(Get-CimInstance -Class Win32_ComputerSystemProduct).UUID'"
+            )
 
     # BSD.
-    if platform.startswith(('openbsd', 'freebsd')):
-        x = __read__('/etc/hostid')
+    if platform.startswith(("openbsd", "freebsd")):
+        x = __read__("/etc/hostid")
         if not x:
-            x = __exec__('kenv -q smbios.system.uuid')
+            x = __exec__("kenv -q smbios.system.uuid")
 
     if not x:
-        raise Exception(fstr('failed to obtain id on {0}', (platform,)))
+        raise RuntimeError(fstr("failed to obtain id on {0}", (platform,)))
 
     return __sanitize__(x)
+
 
 def hashed_machine_id(app_id="", **kwargs):
     """

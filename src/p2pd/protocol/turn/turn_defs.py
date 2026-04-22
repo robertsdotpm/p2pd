@@ -1,7 +1,3 @@
-import socket
-from struct import pack
-import hmac
-from hashlib import sha1
 from aionetiface import *
 
 # Config variables -------------------------------------
@@ -10,13 +6,13 @@ TURN_MAX_RETRANSMITS = 5
 TURN_MAIN_REPLY_TIMEOUT = 5
 
 # secs - Turn recommends 1 minute before expiry.
-TURN_REFRESH_EXPIRY = 600 
+TURN_REFRESH_EXPIRY = 600
 TURN_MAX_DICT_LEN = 1000
 TURN_MAX_RECV_PACKETS = 100
 
 #########################################################
-TURN_MAGIC_COOKIE = b"\x21\x12\xA4\x42"
-TURN_MAGIC_XOR = b'\x00\x00\x21\x12\x21\x12\xa4\x42'
+TURN_MAGIC_COOKIE = b"\x21\x12\xa4\x42"
+TURN_MAGIC_XOR = b"\x00\x00\x21\x12\x21\x12\xa4\x42"
 TURN_CHANNEL = b"\x40\x02\x00\x00"
 TURN_PROTOCOL_TCP = b"\x06\x00\x00\x00"
 TURN_RPOTOCOL_UDP = b"\x11\x00\x00\x00"
@@ -34,16 +30,20 @@ TURN_REFRESH_DONE = 7
 TURN_REFRESH_FAIL = 8
 TURN_ERROR_STOPPED = 9
 
+
 def turn_vars_to_server(var_list, af):
+    # type: (List[Any], Any) -> Dict[str, Any]
     return {
         "host": var_list[0],
         "port": var_list[1],
         "user": var_list[2],
         "pass": var_list[3],
-        "realm": var_list[4]
+        "realm": var_list[4],
     }
-    
+
+
 def find_turn_server(turn_server, turn_servers, af=None):
+    # type: (Dict[str, Any], List[Dict[str, Any]], Optional[Any]) -> bool
     for needle in turn_servers:
         # Not the same server host or IP.
         if needle["host"] != turn_server["host"]:

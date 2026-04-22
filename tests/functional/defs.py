@@ -1,1 +1,1 @@
-ID_RSA_PATH = '~/.ssh/id_rsa'
+ID_RSA_PATH = "~/.ssh/id_rsa"

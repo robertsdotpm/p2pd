@@ -10,6 +10,7 @@ class NodeResources:
     """
 
     def __init__(self):
+        # type: () -> None
         self.closeables = []
         self.tasks = []
         self.idle_pipe_closer = None
@@ -18,15 +19,19 @@ class NodeResources:
         self.last_recv_queue = []  # FIFO pipe refs for idle tracking
 
     def register(self, closeable):
+        # type: (Any) -> None
         self.closeables.append(closeable)
 
     def add_task(self, task):
+        # type: (Any) -> None
         self.tasks.append(task)
 
     def set_idle_closer(self, task):
+        # type: (Any) -> None
         self.idle_pipe_closer = task
 
     async def close(self):
+        # type: () -> None
         if self.idle_pipe_closer is not None:
             await cancel_tasks([self.idle_pipe_closer])
             self.idle_pipe_closer = None

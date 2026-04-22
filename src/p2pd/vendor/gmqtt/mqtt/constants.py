@@ -1,8 +1,8 @@
 import enum
 
-import logging
 
 # Message types
+
 
 class MQTTCommands(enum.IntEnum):
     CONNECT = 0x10
@@ -19,6 +19,7 @@ class MQTTCommands(enum.IntEnum):
     PINGREQ = 0xC0
     PINGRESP = 0xD0
     DISCONNECT = 0xE0
+
 
 # CONNACK codes
 CONNACK_ACCEPTED = 0
@@ -121,6 +122,6 @@ class SubAckReasonCode(enum.IntEnum):
 UNLIMITED_RECONNECTS = -1
 
 DEFAULT_CONFIG = {
-    'reconnect_delay': 6,
-    'reconnect_retries': UNLIMITED_RECONNECTS,
+    "reconnect_delay": 6,
+    "reconnect_retries": UNLIMITED_RECONNECTS,
 }

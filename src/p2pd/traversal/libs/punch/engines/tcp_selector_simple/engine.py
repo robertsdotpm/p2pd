@@ -25,7 +25,9 @@ from ...utility.punch_utils import *
 CONNECT_TIMEOUT = 5.0
 RETRY_INTERVAL = 0.05
 
+
 def setup_engine(af, port_allocs, src_ip, nic_id):
+    # type: (Any, List[Any], Optional[str], Optional[str]) -> Tuple[List[Any], Any]
     # TCP hole punching uses ONE socket per port.
     # No listen sockets. Each socket will perform active open only.
     pre_connect_infos = bind_tcp_sockets(af, nic_id, port_allocs, src_ip)
@@ -39,7 +41,13 @@ def setup_engine(af, port_allocs, src_ip, nic_id):
 
     return (pre_connect_infos, sel)
 
-def socket_event_monitor(sel, monitor_duration=CONNECT_TIMEOUT, retry_interval=RETRY_INTERVAL):
+
+def socket_event_monitor(
+    sel,
+    monitor_duration=CONNECT_TIMEOUT,
+    retry_interval=RETRY_INTERVAL,
+):
+    # type: (Any, float, float) -> Any
     """
     Poll the selector for `monitor_duration` seconds and collect successfully
     connected sockets.
@@ -85,7 +93,19 @@ def socket_event_monitor(sel, monitor_duration=CONNECT_TIMEOUT, retry_interval=R
 
     return successful
 
-def tcp_selector_punch_engine(af, nic_id, port_allocs, src_ip, dest_ip, f_sleep_until, our_ip, same_machine, params=None):
+
+def tcp_selector_punch_engine(
+    af,
+    nic_id,
+    port_allocs,
+    src_ip,
+    dest_ip,
+    f_sleep_until,
+    our_ip,
+    same_machine,
+    params=None,
+):
+    # type: (Any, Optional[str], List[Any], Optional[str], str, Any, Optional[str], bool, Optional[Dict[str, Any]]) -> Optional[Any]
     """
     TCP hole-punch engine.
 
@@ -96,13 +116,13 @@ def tcp_selector_punch_engine(af, nic_id, port_allocs, src_ip, dest_ip, f_sleep_
 
     # Resolve timing values from params (or fall back to module-level constants).
     if params is not None:
-        spray_duration   = params.get("connect_timeout",  CONNECT_TIMEOUT)
-        monitor_duration = params.get("monitor_timeout",  CONNECT_TIMEOUT)
-        retry_interval   = params.get("retry_interval",   RETRY_INTERVAL)
+        spray_duration = params.get("connect_timeout", CONNECT_TIMEOUT)
+        monitor_duration = params.get("monitor_timeout", CONNECT_TIMEOUT)
+        retry_interval = params.get("retry_interval", RETRY_INTERVAL)
     else:
-        spray_duration   = CONNECT_TIMEOUT
+        spray_duration = CONNECT_TIMEOUT
         monitor_duration = CONNECT_TIMEOUT
-        retry_interval   = RETRY_INTERVAL
+        retry_interval = RETRY_INTERVAL
 
     pre_connect_infos, sel = setup_engine(af, port_allocs, src_ip, nic_id)
 
@@ -110,13 +130,14 @@ def tcp_selector_punch_engine(af, nic_id, port_allocs, src_ip, dest_ip, f_sleep_
     f_sleep_until()
 
     # Initiate simultaneous open
-    connect_on_tcp_sockets(same_machine, pre_connect_infos, dest_ip,
-                           spray_duration=spray_duration)
+    connect_on_tcp_sockets(
+        same_machine, pre_connect_infos, dest_ip, spray_duration=spray_duration
+    )
 
     # Immediately monitor, no blind sleep
-    successful = socket_event_monitor(sel,
-                                      monitor_duration=monitor_duration,
-                                      retry_interval=retry_interval)
+    successful = socket_event_monitor(
+        sel, monitor_duration=monitor_duration, retry_interval=retry_interval
+    )
 
     sock_list = list(successful)
 

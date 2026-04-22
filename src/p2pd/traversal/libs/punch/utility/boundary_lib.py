@@ -4,7 +4,7 @@ import random
 # --- NTP Constants ---
 NTP_SERVER = "pool.ntp.org"
 NTP_PORT = 123
-NTP_DELTA = 2208988800 # 70-year offset between NTP epoch (1900) and Unix epoch (1970)
+NTP_DELTA = 2208988800  # 70-year offset between NTP epoch (1900) and Unix epoch (1970)
 NTP_PACKET_SIZE = 48
 MAX_NTP_RETRIES = 5
 NTP_TIMEOUT = 1.0
@@ -14,7 +14,7 @@ NTP_TIMEOUT = 1.0
 # WINDOW must be > 2 * MAX_CLOCK_ERROR (2 * 20 = 40) to guarantee both hosts
 # select the same time bucket/boundary despite the clock offset.
 WINDOW = 42
-MAX_CLOCK_ERROR = 20 # The known max clock difference (1-20s)
+MAX_CLOCK_ERROR = 20  # The known max clock difference (1-20s)
 MIN_RUN_WINDOW = 10  # Minimum time required to run setup before the rendezvous
 NUM_PORTS = 16
 BASE_PORT = 30000
@@ -42,55 +42,65 @@ LARGE_PRIME = 2654435761
 
 DEFAULT_PUNCH_PARAMS = {
     # Time rendezvous
-    "window": WINDOW,               # 42 s
+    "window": WINDOW,  # 42 s
     "max_clock_error": MAX_CLOCK_ERROR,  # 20 s
-    "min_run_window": MIN_RUN_WINDOW,    # 10 s
+    "min_run_window": MIN_RUN_WINDOW,  # 10 s
     # Engine timing
     "connect_timeout": CONNECT_TIMEOUT,  # 5.0 s spray window
     "monitor_timeout": CONNECT_TIMEOUT,  # 5.0 s monitor window
-    "retry_interval": RETRY_INTERVAL,    # 0.05 s selector poll interval
+    "retry_interval": RETRY_INTERVAL,  # 0.05 s selector poll interval
     # PunchClient / plugin timing
-    "max_sleep": MAX_SLEEP,              # 10 s cap for sleep_until
-    "coordinator_delay": 2.0,            # s delay before spawning punch process
+    "max_sleep": MAX_SLEEP,  # 10 s cap for sleep_until
+    "coordinator_delay": 2.0,  # s delay before spawning punch process
 }
 
 FAST_PUNCH_PARAMS = {
     # Time rendezvous — much tighter window for protocol-coordinated punching.
     # punch_time is communicated via PunchMsg so independent NTP alignment is
     # not required; we just need window > 2 * max_clock_error for bucket safety.
-    "window": 6,             # 6 s  (> 2 * 2 s max_clock_error)
-    "max_clock_error": 2,    # 2 s  (NTP is typically < 0.5 s; 2 s is conservative)
-    "min_run_window": 2,     # 2 s  (enough for protocol exchange + process startup)
+    "window": 6,  # 6 s  (> 2 * 2 s max_clock_error)
+    "max_clock_error": 2,  # 2 s  (NTP is typically < 0.5 s; 2 s is conservative)
+    "min_run_window": 2,  # 2 s  (enough for protocol exchange + process startup)
     # Engine timing — shorter for LAN / in-protocol usage
     "connect_timeout": 2.0,  # 2.0 s spray window
     "monitor_timeout": 2.0,  # 2.0 s monitor window
     "retry_interval": 0.05,  # 0.05 s selector poll interval (unchanged)
     # PunchClient / plugin timing
-    "max_sleep": 8,           # 8 s cap — above worst-case (window + min_run_window)
-                              # so sleep_until reaches the actual rendezvous time.
-    "coordinator_delay": 0.5, # 0.5 s delay (reduced from 2 s)
+    "max_sleep": 8,  # 8 s cap — above worst-case (window + min_run_window)
+    # so sleep_until reaches the actual rendezvous time.
+    "coordinator_delay": 0.5,  # 0.5 s delay (reduced from 2 s)
 }
 
+
 def now_from_network(network_timer, network_time):
+    # type: (float, int) -> int
     """Returns the current Unix timestamp aligned to the NTP reference."""
     elapsed = time.monotonic() - network_timer
     return network_time + int(elapsed)
 
+
 def quantized_bucket(now, window=WINDOW, max_error=MAX_CLOCK_ERROR):
+    # type: (int, int, int) -> int
     """
     Calculates the time bucket number, robust against clock offsets.
-    By subtracting the max error, we shift the timeline so that both hosts, 
+    By subtracting the max error, we shift the timeline so that both hosts,
     regardless of their actual time offset, fall into the same integer bucket.
     """
     return int((now - max_error) // window)
 
+
 def stable_boundary(bucket):
+    # type: (int) -> int
     """
     Deterministic boundary stable against small clock offsets, used as PRNG seed.
     """
     return (bucket * LARGE_PRIME) % 0xFFFFFFFF
 
-def stable_ports(boundary, num_ports=NUM_PORTS, base_port=BASE_PORT, port_range=PORT_RANGE):
+
+def stable_ports(
+    boundary, num_ports=NUM_PORTS, base_port=BASE_PORT, port_range=PORT_RANGE
+):
+    # type: (int, int, int, int) -> list
     """
     Deterministic, smooth port selection using PRNG seeded by boundary.
     """
@@ -99,10 +109,14 @@ def stable_ports(boundary, num_ports=NUM_PORTS, base_port=BASE_PORT, port_range=
     while len(ports) < num_ports:
         port = base_port + rng.randint(0, port_range - 1)
         ports.add(port)
-        
+
     return sorted(ports, reverse=True)
 
-def compute_rendezvous(now, window=WINDOW, min_run_window=MIN_RUN_WINDOW, max_error=MAX_CLOCK_ERROR):
+
+def compute_rendezvous(
+    now, window=WINDOW, min_run_window=MIN_RUN_WINDOW, max_error=MAX_CLOCK_ERROR
+):
+    # type: (int, int, int, int) -> Tuple[int, int]
     """
     Computes the current time bucket and the rendezvous time (start of the NEXT bucket).
     """
@@ -117,5 +131,5 @@ def compute_rendezvous(now, window=WINDOW, min_run_window=MIN_RUN_WINDOW, max_er
     if rendezvous_time - now < min_run_window:
         bucket += 1
         rendezvous_time = (bucket + 1) * window + max_error
-        
+
     return bucket, rendezvous_time

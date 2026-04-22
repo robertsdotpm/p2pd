@@ -28,7 +28,7 @@ class MQTTConnectError(MQTTError):
         3: "Connection Refused: broker unavailable",
         4: "Connection Refused: bad user name or password",
         5: "Connection Refused: not authorised",
-        10: 'Cannot handle CONNACK package',
+        10: "Cannot handle CONNACK package",
         128: "Connection Refused: Unspecified error",
         129: "Connection Refused: Malformed Packet",
         130: "Connection Refused: Protocol Error",
@@ -54,8 +54,7 @@ class MQTTConnectError(MQTTError):
 
     def __init__(self, code):
         self._code = code
-        self.message = self.__messages__.get(code, 'Unknown error')\
-
+        self.message = self.__messages__.get(code, "Unknown error")
 
     def __str__(self):
         return "code {} ({})".format(self._code, self.message)
@@ -88,27 +87,26 @@ class EventCallback(object):
         self._reconnecting_now = False
 
     def stop_reconnect(self):
-        self._config['reconnect_retries'] = 0
+        self._config["reconnect_retries"] = 0
 
     def set_config(self, config):
         self._config.update(config)
 
     @property
     def reconnect_delay(self):
-        return self._config['reconnect_delay']
+        return self._config["reconnect_delay"]
 
     @reconnect_delay.setter
     def reconnect_delay(self, value):
-        self._config['reconnect_delay'] = value
+        self._config["reconnect_delay"] = value
 
     @property
     def reconnect_retries(self):
-        return self._config['reconnect_retries']
+        return self._config["reconnect_retries"]
 
     @reconnect_retries.setter
     def reconnect_retries(self, value):
-        self._config['reconnect_retries'] = value
-
+        self._config["reconnect_retries"] = value
 
     @property
     def on_subscribe(self):
@@ -170,14 +168,16 @@ class MqttPackageHandler(EventCallback):
         self._connection = None
         self._server_topics_aliases = {}
 
-        self._id_generator = IdGenerator(max=kwargs.get('receive_maximum', 65535))
+        self._id_generator = IdGenerator(max=kwargs.get("receive_maximum", 65535))
 
         if self.protocol_version == MQTTv50:
-            self._optimistic_acknowledgement = kwargs.get('optimistic_acknowledgement', True)
+            self._optimistic_acknowledgement = kwargs.get(
+                "optimistic_acknowledgement", True
+            )
         else:
             self._optimistic_acknowledgement = True
 
-        self._logger = kwargs.get('logger', logging.getLogger(__name__))
+        self._logger = kwargs.get("logger", logging.getLogger(__name__))
 
     def _clear_topics_aliases(self):
         self._server_topics_aliases = {}
@@ -189,37 +189,51 @@ class MqttPackageHandler(EventCallback):
         raise NotImplementedError
 
     def _send_puback(self, mid, reason_code=0):
-        self._send_command_with_mid(MQTTCommands.PUBACK, mid, False, reason_code=reason_code)
+        self._send_command_with_mid(
+            MQTTCommands.PUBACK, mid, False, reason_code=reason_code
+        )
 
     def _send_pubrec(self, mid, reason_code=0):
-        self._send_command_with_mid(MQTTCommands.PUBREC, mid, False, reason_code=reason_code)
+        self._send_command_with_mid(
+            MQTTCommands.PUBREC, mid, False, reason_code=reason_code
+        )
 
     def _send_pubrel(self, mid, dup, reason_code=0):
-        self._send_command_with_mid(MQTTCommands.PUBREL | 2, mid, dup, reason_code=reason_code)
+        self._send_command_with_mid(
+            MQTTCommands.PUBREL | 2, mid, dup, reason_code=reason_code
+        )
 
     def _send_pubcomp(self, mid, dup, reason_code=0):
-        self._send_command_with_mid(MQTTCommands.PUBCOMP, mid, dup, reason_code=reason_code)
+        self._send_command_with_mid(
+            MQTTCommands.PUBCOMP, mid, dup, reason_code=reason_code
+        )
 
     def __get_handler__(self, cmd):
         cmd_type = cmd & 0xF0
         if cmd_type not in self._handler_cache:
-            handler_name = '_handle_{}_packet'.format(MQTTCommands(cmd_type).name.lower())
-            self._handler_cache[cmd_type] = getattr(self, handler_name, self._default_handler)
+            handler_name = "_handle_{}_packet".format(
+                MQTTCommands(cmd_type).name.lower()
+            )
+            self._handler_cache[cmd_type] = getattr(
+                self, handler_name, self._default_handler
+            )
         return self._handler_cache[cmd_type]
 
     def _handle_packet(self, cmd, packet):
-        self._logger.debug('[CMD %s] %s', hex(cmd), packet)
+        self._logger.debug("[CMD %s] %s", hex(cmd), packet)
         handler = self.__get_handler__(cmd)
         handler(cmd, packet)
         self._last_msg_in = time.monotonic()
 
     def _handle_exception_in_future(self, future):
         if future.exception():
-            self._logger.warning('[EXC OCCURED] in reconnect future %s', future.exception())
+            self._logger.warning(
+                "[EXC OCCURED] in reconnect future %s", future.exception()
+            )
             return
 
     def _default_handler(self, cmd, packet):
-        self._logger.warning('[UNKNOWN CMD] %s %s', hex(cmd), packet)
+        self._logger.warning("[UNKNOWN CMD] %s %s", hex(cmd), packet)
 
     def _handle_disconnect_packet(self, cmd, packet):
         # reset server topics on disconnect
@@ -238,10 +252,14 @@ class MqttPackageHandler(EventCallback):
         left_packet = left_packet[properties_len:]
         properties_dict = defaultdict(list)
         while packet:
-            property_identifier, = struct.unpack("!B", packet[:1])
+            (property_identifier,) = struct.unpack("!B", packet[:1])
             property_obj = Property.factory(id_=property_identifier)
             if property_obj is None:
-                self._logger.critical('[PROPERTIES] received invalid property id {}, disconnecting'.format(property_identifier))
+                self._logger.critical(
+                    "[PROPERTIES] received invalid property id {}, disconnecting".format(
+                        property_identifier
+                    )
+                )
                 return None, None
             result, packet = property_obj.loads(packet[1:])
             for k, v in result.items():
@@ -250,9 +268,9 @@ class MqttPackageHandler(EventCallback):
         return properties_dict, left_packet
 
     def _update_keepalive_if_needed(self):
-        if not self._connack_properties.get('server_keep_alive'):
+        if not self._connack_properties.get("server_keep_alive"):
             return
-        self._keepalive = self._connack_properties['server_keep_alive'][0]
+        self._keepalive = self._connack_properties["server_keep_alive"][0]
         self._connection.keepalive = self._keepalive
 
     def _handle_connack_packet(self, cmd, packet):
@@ -265,10 +283,10 @@ class MqttPackageHandler(EventCallback):
             asyncio.ensure_future(self._clear_resend_qos_queue())
 
         if result != 0:
-            self._logger.warning('[CONNACK] %s', hex(result))
+            self._logger.warning("[CONNACK] %s", hex(result))
             self.failed_connections += 1
             if result == 1 and self.protocol_version == MQTTv50:
-                self._logger.info('[CONNACK] Downgrading to MQTT 3.1 protocol version')
+                self._logger.info("[CONNACK] Downgrading to MQTT 3.1 protocol version")
                 MQTTProtocol.proto_ver = MQTTv311
                 future = asyncio.ensure_future(self.reconnect(delay=True))
                 future.add_done_callback(self._handle_exception_in_future)
@@ -291,7 +309,11 @@ class MqttPackageHandler(EventCallback):
         # TODO: Implement checking for the flags and results
         # see 3.2.2.3 Connect Return code of the http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.pdf
 
-        self._logger.debug('[CONNACK] session_present: %s, result: %s', hex(session_present), hex(result))
+        self._logger.debug(
+            "[CONNACK] session_present: %s, result: %s",
+            hex(session_present),
+            hex(result),
+        )
         self.on_connect(self, session_present, result, self.properties)
 
     def _handle_publish_packet(self, cmd, raw_packet):
@@ -301,51 +323,55 @@ class MqttPackageHandler(EventCallback):
         qos = (header & 0x06) >> 1
         retain = header & 0x01
 
-        pack_format = "!H" + str(len(raw_packet) - 2) + 's'
+        pack_format = "!H" + str(len(raw_packet) - 2) + "s"
         (slen, packet) = struct.unpack(pack_format, raw_packet)
 
-        pack_format = '!' + str(slen) + 's' + str(len(packet) - slen) + 's'
+        pack_format = "!" + str(slen) + "s" + str(len(packet) - slen) + "s"
         (topic, packet) = struct.unpack(pack_format, packet)
 
         # we will change the packet ref, let's save origin
         payload = packet
 
         if qos > 0:
-            pack_format = "!H" + str(len(packet) - 2) + 's'
+            pack_format = "!H" + str(len(packet) - 2) + "s"
             (mid, packet) = struct.unpack(pack_format, packet)
         else:
             mid = None
 
         properties, packet = self._parse_properties(packet)
-        properties['dup'] = dup
-        properties['retain'] = retain
+        properties["dup"] = dup
+        properties["retain"] = retain
 
         if packet is None:
-            self._logger.critical('[INVALID MESSAGE] skipping: {}'.format(raw_packet))
+            self._logger.critical("[INVALID MESSAGE] skipping: {}".format(raw_packet))
             return
 
-        if 'topic_alias' in properties:
+        if "topic_alias" in properties:
             # TODO: need to add validation (topic alias must be greater than 0 and less than topic_alias_maximum)
-            topic_alias = properties['topic_alias'][0]
+            topic_alias = properties["topic_alias"][0]
             if topic:
                 self._server_topics_aliases[topic_alias] = topic
             else:
                 topic = self._server_topics_aliases.get(topic_alias, None)
 
         if not topic:
-            self._logger.warning('[MQTT ERR PROTO] topic name is empty (or server has send invalid topic alias)')
+            self._logger.warning(
+                "[MQTT ERR PROTO] topic name is empty (or server has send invalid topic alias)"
+            )
             return
 
         try:
-            print_topic = topic.decode('utf-8')
+            print_topic = topic.decode("utf-8")
         except UnicodeDecodeError as exc:
-            self._logger.warning('[INVALID CHARACTER IN TOPIC] %s', topic, exc_info=exc)
+            self._logger.warning("[INVALID CHARACTER IN TOPIC] %s", topic, exc_info=exc)
             print_topic = topic
 
-        self._logger.debug('[RECV %s with QoS: %s] %s', print_topic, qos, payload)
+        self._logger.debug("[RECV %s with QoS: %s] %s", print_topic, qos, payload)
 
         if qos == 0:
-            run_coroutine_or_function(self.on_message, self, print_topic, packet, qos, properties)
+            run_coroutine_or_function(
+                self.on_message, self, print_topic, packet, qos, properties
+            )
         elif qos == 1:
             self._handle_qos_1_publish_packet(mid, packet, print_topic, properties)
         elif qos == 2:
@@ -355,15 +381,24 @@ class MqttPackageHandler(EventCallback):
     def _handle_qos_2_publish_packet(self, mid, packet, print_topic, properties):
         if self._optimistic_acknowledgement:
             self._send_pubrec(mid)
-            run_coroutine_or_function(self.on_message, self, print_topic, packet, 2, properties)
+            run_coroutine_or_function(
+                self.on_message, self, print_topic, packet, 2, properties
+            )
         else:
-            run_coroutine_or_function(self.on_message, self, print_topic, packet, 2, properties,
-                                      callback=partial(self.__handle_publish_callback, qos=2, mid=mid))
+            run_coroutine_or_function(
+                self.on_message,
+                self,
+                print_topic,
+                packet,
+                2,
+                properties,
+                callback=partial(self.__handle_publish_callback, qos=2, mid=mid),
+            )
 
     def __handle_publish_callback(self, f, qos=None, mid=None):
         reason_code = f.result()
         if reason_code not in (c.value for c in PubRecReasonCode):
-            raise ValueError('Invalid PUBREC reason code {}'.format(reason_code))
+            raise ValueError("Invalid PUBREC reason code {}".format(reason_code))
         if qos == 2:
             self._send_pubrec(mid, reason_code=reason_code)
         else:
@@ -373,21 +408,30 @@ class MqttPackageHandler(EventCallback):
     def _handle_qos_1_publish_packet(self, mid, packet, print_topic, properties):
         if self._optimistic_acknowledgement:
             self._send_puback(mid)
-            run_coroutine_or_function(self.on_message, self, print_topic, packet, 1, properties)
+            run_coroutine_or_function(
+                self.on_message, self, print_topic, packet, 1, properties
+            )
         else:
-            run_coroutine_or_function(self.on_message, self, print_topic, packet, 1, properties,
-                                      callback=partial(self.__handle_publish_callback, qos=1, mid=mid))
+            run_coroutine_or_function(
+                self.on_message,
+                self,
+                print_topic,
+                packet,
+                1,
+                properties,
+                callback=partial(self.__handle_publish_callback, qos=1, mid=mid),
+            )
 
     def __call__(self, cmd, packet):
         try:
             result = self._handle_packet(cmd, packet)
         except Exception as exc:
-            self._logger.error('[ERROR HANDLE PKG]', exc_info=exc)
+            self._logger.error("[ERROR HANDLE PKG]", exc_info=exc)
             result = None
         return result
 
     def _handle_suback_packet(self, cmd, raw_packet):
-        pack_format = "!H" + str(len(raw_packet) - 2) + 's'
+        pack_format = "!H" + str(len(raw_packet) - 2) + "s"
         (mid, packet) = struct.unpack(pack_format, raw_packet)
         properties, packet = self._parse_properties(packet)
 
@@ -403,7 +447,7 @@ class MqttPackageHandler(EventCallback):
                 sub.acknowledged = True
                 sub.qos = granted_qos
 
-        self._logger.info('[SUBACK] %s %s', mid, granted_qoses)
+        self._logger.info("[SUBACK] %s %s", mid, granted_qoses)
         self.on_subscribe(self, mid, granted_qoses, properties)
 
         for sub in self.subscriptions:
@@ -412,29 +456,29 @@ class MqttPackageHandler(EventCallback):
         self._id_generator.free_id(mid)
 
     def _handle_unsuback_packet(self, cmd, raw_packet):
-        pack_format = "!H" + str(len(raw_packet) - 2) + 's'
+        pack_format = "!H" + str(len(raw_packet) - 2) + "s"
         (mid, packet) = struct.unpack(pack_format, raw_packet)
         pack_format = "!" + "B" * len(packet)
         granted_qos = struct.unpack(pack_format, packet)
 
-        self._logger.info('[UNSUBACK] %s %s', mid, granted_qos)
+        self._logger.info("[UNSUBACK] %s %s", mid, granted_qos)
 
         self.on_unsubscribe(self, mid, granted_qos)
         self._id_generator.free_id(mid)
 
     def _handle_pingreq_packet(self, cmd, packet):
-        self._logger.debug('[PING REQUEST] %s %s', hex(cmd), packet)
+        self._logger.debug("[PING REQUEST] %s %s", hex(cmd), packet)
         pass
 
     def _handle_pingresp_packet(self, cmd, packet):
-        self._logger.debug('[PONG REQUEST] %s %s', hex(cmd), packet)
+        self._logger.debug("[PONG REQUEST] %s %s", hex(cmd), packet)
 
     def _handle_puback_packet(self, cmd, packet):
-        (mid, ) = struct.unpack("!H", packet[:2])
+        (mid,) = struct.unpack("!H", packet[:2])
 
         # TODO: For MQTT 5.0 parse reason code and properties
 
-        self._logger.debug('[RECEIVED PUBACK FOR] %s', mid)
+        self._logger.debug("[RECEIVED PUBACK FOR] %s", mid)
 
         self._id_generator.free_id(mid)
         self._remove_message_from_query(mid)
@@ -444,14 +488,14 @@ class MqttPackageHandler(EventCallback):
 
     def _handle_pubrec_packet(self, cmd, packet):
         (mid,) = struct.unpack("!H", packet[:2])
-        self._logger.debug('[RECEIVED PUBREC FOR] %s', mid)
+        self._logger.debug("[RECEIVED PUBREC FOR] %s", mid)
         self._id_generator.free_id(mid)
         self._remove_message_from_query(mid)
         self._send_pubrel(mid, 0)
 
     def _handle_pubrel_packet(self, cmd, packet):
-        (mid, ) = struct.unpack("!H", packet[:2])
-        self._logger.debug('[RECEIVED PUBREL FOR] %s', mid)
+        (mid,) = struct.unpack("!H", packet[:2])
+        self._logger.debug("[RECEIVED PUBREL FOR] %s", mid)
         self._send_pubcomp(mid, 0)
 
         self._id_generator.free_id(mid)

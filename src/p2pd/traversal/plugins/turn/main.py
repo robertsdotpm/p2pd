@@ -6,7 +6,10 @@ from .turn_utils import get_first_working_turn_client, rendezvous_rank
 
 
 class TURNPlugin(TraversalPlugin):
+    """Traversal plugin that establishes a P2P connection via a TURN relay server."""
+
     def __init__(self):
+        # type: () -> None
         super().__init__()
 
         # Resolved by a second run() call on this same instance when the peer's
@@ -14,6 +17,7 @@ class TURNPlugin(TraversalPlugin):
         self.ready = asyncio.Future()
 
     async def run(self, reply=None):
+        # type: (Optional[Any]) -> None
         # TURN relay requires a public relay server; skip for direct NIC binds.
         if self.route_type == NIC_BIND:
             return
@@ -26,7 +30,10 @@ class TURNPlugin(TraversalPlugin):
             groups = get_infra(self.af, UDP, "TURN", no=100)
             servers = rendezvous_rank(self.plugin_id, [g[0] for g in groups])
             client = await get_first_working_turn_client(
-                self.af, servers, self.nic, self.msg_cb,
+                self.af,
+                servers,
+                self.nic,
+                self.msg_cb,
             )
 
             # A concurrent run() may have raced through the await above and
@@ -59,17 +66,22 @@ class TURNPlugin(TraversalPlugin):
 
             our_relay = await client.relay_tup_future
             log_p2p(
-                fstr("Whitelist {0} -> {1} to '{2}'", (dest_peer, our_relay, self.nic.name)),
+                fstr(
+                    "Whitelist {0} -> {1} to '{2}'",
+                    (dest_peer, our_relay, self.nic.name),
+                ),
                 self.node_id[:8],
             )
 
         # --- Advertise our relay address to the peer ---
-        msg = TURNMsg({
-            "payload": {
-                "peer_tup": await client.client_tup_future,
-                "relay_tup": await client.relay_tup_future,
-            },
-        })
+        msg = TURNMsg(
+            {
+                "payload": {
+                    "peer_tup": await client.client_tup_future,
+                    "relay_tup": await client.relay_tup_future,
+                },
+            }
+        )
         msg.meta.plugin_name = "turn"
         await self.send_signal_msg(msg)
 
@@ -80,6 +92,7 @@ class TURNPlugin(TraversalPlugin):
             self.result.set_result(pipe)
 
     async def close(self):
+        # type: () -> None
         """Clean up after a TURN connection attempt.
 
         On failure (timeout, cancellation, error) the TURNClient is closed
@@ -96,7 +109,7 @@ class TURNPlugin(TraversalPlugin):
             # raises if pending, cancelled, or exception
             self.result.result()
             connection_succeeded = True
-        except (Exception, asyncio.CancelledError):
+        except BaseException:
             pass
 
         if not connection_succeeded:
@@ -107,13 +120,18 @@ class TURNPlugin(TraversalPlugin):
         if not self.ready.done():
             self.ready.cancel()
 
+
 class TURNPluginFactory:
+    """Creates and configures TURNPlugin instances sharing TURN client sessions."""
+
     def __init__(self, msg_cb=None, node_id=""):
+        # type: (Optional[Any], str) -> None
         self.turn_clients = {}
         self.msg_cb = msg_cb
         self.node_id = node_id
 
     def build_plugin(self):
+        # type: () -> TURNPlugin
         plugin = TURNPlugin()
         plugin.turn_clients = self.turn_clients
         plugin.msg_cb = self.msg_cb
@@ -121,6 +139,7 @@ class TURNPluginFactory:
         return plugin
 
     async def close(self):
+        # type: () -> None
         for client in list(self.turn_clients.values()):
             try:
                 await client.close()

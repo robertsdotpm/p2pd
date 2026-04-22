@@ -3,6 +3,7 @@ import socket
 import os
 from multiprocessing.reduction import send_handle, recv_handle
 
+
 # Worker function must now send the *shared handle data*
 def worker(conn):
     try:
@@ -22,6 +23,7 @@ def worker(conn):
     except Exception as e:
         print(f"Worker Error: {e}")
 
+
 if __name__ == "__main__":
     # Ensure this is run inside the __main__ block for multiprocessing to work
     parent_conn, child_conn = mp.Pipe()
@@ -34,10 +36,10 @@ if __name__ == "__main__":
 
     # Recreate the socket from the shared data
     s = socket.socket().fromshare(shared_data)
-    
+
     # Use the recreated socket
     s.send(b"GET / HTTP/1.0\r\n\r\n")
     print(s.recv(1024))
-    
+
     s.close()
     p.join()

@@ -10,7 +10,7 @@ import random
 # --- NTP Constants ---
 NTP_SERVER = "pool.ntp.org"
 NTP_PORT = 123
-NTP_DELTA = 2208988800 # 70-year offset between NTP epoch (1900) and Unix epoch (1970)
+NTP_DELTA = 2208988800  # 70-year offset between NTP epoch (1900) and Unix epoch (1970)
 NTP_PACKET_SIZE = 48
 MAX_NTP_RETRIES = 5
 NTP_TIMEOUT = 1.0
@@ -20,7 +20,7 @@ NTP_TIMEOUT = 1.0
 # WINDOW must be > 2 * MAX_CLOCK_ERROR (2 * 20 = 40) to guarantee both hosts
 # select the same time bucket/boundary despite the clock offset.
 WINDOW = 42
-MAX_CLOCK_ERROR = 20 # The known max clock difference (1-20s)
+MAX_CLOCK_ERROR = 20  # The known max clock difference (1-20s)
 MIN_RUN_WINDOW = 10  # Minimum time required to run setup before the rendezvous
 NUM_PORTS = 16
 BASE_PORT = 30000
@@ -31,12 +31,15 @@ MAX_SLEEP = 10
 LARGE_PRIME = 2654435761
 # --------------------------
 
-def get_ntp_time(server=NTP_SERVER, port=NTP_PORT, retries=MAX_NTP_RETRIES, timeout=NTP_TIMEOUT):
+
+def get_ntp_time(
+    server=NTP_SERVER, port=NTP_PORT, retries=MAX_NTP_RETRIES, timeout=NTP_TIMEOUT
+):
     """
     Fetches the Unix timestamp from an NTP server using UDP sockets,
     with built-in retry logic for reliability.
     """
-    request_data = b'\x23' + 47 * b'\0'
+    request_data = b"\x23" + 47 * b"\0"
 
     for attempt in range(retries):
         try:
@@ -48,7 +51,7 @@ def get_ntp_time(server=NTP_SERVER, port=NTP_PORT, retries=MAX_NTP_RETRIES, time
                 if len(response_data) < NTP_PACKET_SIZE:
                     raise RuntimeError("NTP response too short")
 
-                ntp_time_seconds = struct.unpack('!I', response_data[40:44])[0]
+                ntp_time_seconds = struct.unpack("!I", response_data[40:44])[0]
                 unix_time = ntp_time_seconds - NTP_DELTA
                 return int(unix_time)
 
@@ -61,6 +64,7 @@ def get_ntp_time(server=NTP_SERVER, port=NTP_PORT, retries=MAX_NTP_RETRIES, time
 # Network-aligned time reference
 network_time = get_ntp_time()
 network_timer = time.monotonic()
+
 
 def now_from_network():
     """Returns the current Unix timestamp aligned to the NTP reference."""
@@ -79,7 +83,9 @@ def stable_boundary(bucket):
     return (bucket * LARGE_PRIME) % 0xFFFFFFFF
 
 
-def stable_ports(boundary, num_ports=NUM_PORTS, base_port=BASE_PORT, port_range=PORT_RANGE):
+def stable_ports(
+    boundary, num_ports=NUM_PORTS, base_port=BASE_PORT, port_range=PORT_RANGE
+):
     """
     Deterministic, smooth port selection using PRNG seeded by boundary.
     """
@@ -174,7 +180,6 @@ def main():
     successful = set()
 
     while now_from_network() < end:
-
         # SYN spray loop — repeated connect_ex drives TCP state machine
         for p, s in sockets:
             try:

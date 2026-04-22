@@ -1,9 +1,6 @@
 from aionetiface import *
 
-MQTT_CONF = dict_child({
-    "con_timeout": 4,
-    "recv_timeout": 4
-}, NET_CONF)
+MQTT_CONF = dict_child({"con_timeout": 4, "recv_timeout": 4}, NET_CONF)
 
 SIG_CON = 1
 SIG_TCP_PUNCH = 2
@@ -33,4 +30,3 @@ RELAY_FAIL = 14
 # It will need a special explanation for the developer.
 # SOCKS might be a better protocol for relaying in the future.
 P2P_STRATEGIES = [P2P_DIRECT, P2P_REVERSE, P2P_PUNCH]
-

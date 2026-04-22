@@ -24,17 +24,22 @@ import namebump
 from ecdsa import SigningKey, SECP256k1
 
 from aionetiface import (
-    IP4, IP6,
+    IP4,
+    IP6,
     Interface,
     SysClock,
     IPRange,
     STUNClient,
-    TCP, UDP,
+    TCP,
+    UDP,
     PNP_SERVERS,
     get_aionetiface_install_root,
     rand_plain,
-    to_s, to_h, h_to_b,
-    log, log_exception,
+    to_s,
+    to_h,
+    h_to_b,
+    log,
+    log_exception,
 )
 from aionetiface.utility.sys_clock import get_ntp
 
@@ -47,6 +52,7 @@ from p2pd.node.node_defs import NODE_TEST_CONF, NODE_PORT
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _default_nic():
     """Return the default Interface. Raises on failure."""
@@ -62,6 +68,7 @@ def _make_sk():
 # SysClock / NTP
 # ---------------------------------------------------------------------------
 
+
 class TestSysClock(unittest.IsolatedAsyncioTestCase):
     """SysClock.start() must sync to NTP; .time() must return a plausible ts."""
 
@@ -70,8 +77,7 @@ class TestSysClock(unittest.IsolatedAsyncioTestCase):
         clock = SysClock(nic)
         await asyncio.wait_for(clock.start(), timeout=30)
         self.assertNotEqual(
-            clock.ntp, 0,
-            "SysClock.ntp should be non-zero after start()"
+            clock.ntp, 0, "SysClock.ntp should be non-zero after start()"
         )
 
     async def test_time_returns_unix_timestamp(self):
@@ -80,8 +86,9 @@ class TestSysClock(unittest.IsolatedAsyncioTestCase):
         t = clock.time()
         now = time.time()
         # Sanity: within ±5 minutes of local system clock.
-        self.assertAlmostEqual(t, now, delta=300,
-            msg="clock.time() should be within 5 min of system time")
+        self.assertAlmostEqual(
+            t, now, delta=300, msg="clock.time() should be within 5 min of system time"
+        )
 
     async def test_time_increases(self):
         nic = await _default_nic()
@@ -97,8 +104,12 @@ class TestSysClock(unittest.IsolatedAsyncioTestCase):
         before = clock.time()
         clock.advance(100)
         after = clock.time()
-        self.assertAlmostEqual(after - before, 100, delta=1,
-            msg="advance(100) should shift clock by ~100 s")
+        self.assertAlmostEqual(
+            after - before,
+            100,
+            delta=1,
+            msg="advance(100) should shift clock by ~100 s",
+        )
 
     async def test_time_falls_back_to_system_clock_without_start(self):
         """SysClock.time() falls back to system clock when NTP not loaded."""
@@ -113,8 +124,9 @@ class TestSysClock(unittest.IsolatedAsyncioTestCase):
         for af in nic.supported():
             ntp = await asyncio.wait_for(get_ntp(af, nic), timeout=15)
             if ntp is not None:
-                self.assertGreater(ntp, 0,
-                    "get_ntp() should return a positive unix timestamp")
+                self.assertGreater(
+                    ntp, 0, "get_ntp() should return a positive unix timestamp"
+                )
                 return
         self.skipTest("No NTP server reachable via supported AFs")
 
@@ -122,6 +134,7 @@ class TestSysClock(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 # Nickname (PNP) — requires PNP servers to be up
 # ---------------------------------------------------------------------------
+
 
 class TestNickname(unittest.IsolatedAsyncioTestCase):
     """Full put / get / delete lifecycle against real PNP servers."""
@@ -153,14 +166,13 @@ class TestNickname(unittest.IsolatedAsyncioTestCase):
             for af_dict in self.nick.clients.values()
             for v in af_dict.values()
         )
-        self.assertTrue(any_connected,
-            "At least one PNP client should connect successfully")
+        self.assertTrue(
+            any_connected, "At least one PNP client should connect successfully"
+        )
 
     async def test_put_returns_fqn_with_tld(self):
         val = to_s(rand_plain(10))
-        fqn = await asyncio.wait_for(
-            self.nick.put(self.name, val), timeout=30
-        )
+        fqn = await asyncio.wait_for(self.nick.put(self.name, val), timeout=30)
         self.assertIsNotNone(fqn)
         self.assertIn(".", fqn, "put() should return a name with a TLD")
         # Clean up
@@ -171,14 +183,11 @@ class TestNickname(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_returns_stored_value(self):
         val = to_s(rand_plain(10))
-        fqn = await asyncio.wait_for(
-            self.nick.put(self.name, val), timeout=30
-        )
+        fqn = await asyncio.wait_for(self.nick.put(self.name, val), timeout=30)
         result = await asyncio.wait_for(self.nick.get(fqn), timeout=30)
         self.assertIsNotNone(result)
         self.assertEqual(
-            to_s(result.value), val,
-            "get() should return the same value that was put()"
+            to_s(result.value), val, "get() should return the same value that was put()"
         )
         # Clean up
         try:
@@ -188,18 +197,14 @@ class TestNickname(unittest.IsolatedAsyncioTestCase):
 
     async def test_delete_removes_entry(self):
         val = to_s(rand_plain(10))
-        fqn = await asyncio.wait_for(
-            self.nick.put(self.name, val), timeout=30
-        )
+        fqn = await asyncio.wait_for(self.nick.put(self.name, val), timeout=30)
         await asyncio.wait_for(self.nick.delete(fqn), timeout=20)
         with self.assertRaises(FullNameFailure):
             await asyncio.wait_for(self.nick.get(fqn), timeout=20)
 
     async def test_put_get_delete_roundtrip(self):
         val = to_s(rand_plain(10))
-        fqn = await asyncio.wait_for(
-            self.nick.put(self.name, val), timeout=30
-        )
+        fqn = await asyncio.wait_for(self.nick.put(self.name, val), timeout=30)
         result = await asyncio.wait_for(self.nick.get(fqn), timeout=30)
         self.assertEqual(to_s(result.value), val)
 
@@ -211,9 +216,7 @@ class TestNickname(unittest.IsolatedAsyncioTestCase):
         """Second put() with the same name should overwrite the value."""
         val1 = to_s(rand_plain(10))
         val2 = to_s(rand_plain(10))
-        fqn = await asyncio.wait_for(
-            self.nick.put(self.name, val1), timeout=30
-        )
+        fqn = await asyncio.wait_for(self.nick.put(self.name, val1), timeout=30)
         # Server uses integer-second timestamps for anti-replay; wait to get a
         # distinct timestamp so the UPDATE is accepted.
         await asyncio.sleep(1.1)
@@ -232,6 +235,7 @@ class TestNickname(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 # STUN — WAN IP discovery
 # ---------------------------------------------------------------------------
+
 
 class TestSTUN(unittest.IsolatedAsyncioTestCase):
     """STUN clients should return a public IP address."""
@@ -256,8 +260,7 @@ class TestSTUN(unittest.IsolatedAsyncioTestCase):
         if ip is None:
             self.skipTest("No STUN server reachable via IPv4")
         ipr = IPRange(ip, bitlen=32)
-        self.assertTrue(ipr.is_public,
-            f"STUN should return a public IP, got: {ip}")
+        self.assertTrue(ipr.is_public, f"STUN should return a public IP, got: {ip}")
 
     async def test_stun_result_is_valid_ipv4_string(self):
         ip = await self._get_wan_ip(IP4)
@@ -281,13 +284,15 @@ class TestSTUN(unittest.IsolatedAsyncioTestCase):
             self.skipTest("STUN TCP unreachable")
         if ip:
             ipr = IPRange(ip, bitlen=32)
-            self.assertTrue(ipr.is_public,
-                f"STUN TCP should return a public IP, got: {ip}")
+            self.assertTrue(
+                ipr.is_public, f"STUN TCP should return a public IP, got: {ip}"
+            )
 
 
 # ---------------------------------------------------------------------------
 # MQTT connectivity
 # ---------------------------------------------------------------------------
+
 
 class TestMQTT(unittest.IsolatedAsyncioTestCase):
     """MQTT signaling infrastructure should accept connections."""
@@ -311,10 +316,12 @@ class TestMQTT(unittest.IsolatedAsyncioTestCase):
             await router.close()
 
         # clients is a list of connected MQTTClient objects.
-        self.assertIsNotNone(clients,
-            "Router.start() must return a list of connected clients")
-        self.assertGreater(len(clients), 0,
-            "Router should connect to at least one MQTT broker")
+        self.assertIsNotNone(
+            clients, "Router.start() must return a list of connected clients"
+        )
+        self.assertGreater(
+            len(clients), 0, "Router should connect to at least one MQTT broker"
+        )
 
     async def test_router_subscribe_and_publish(self):
         """After start(), Router can subscribe and receive a published message."""
@@ -340,8 +347,7 @@ class TestMQTT(unittest.IsolatedAsyncioTestCase):
             # Getting a pipe to ourselves exercises the subscribe path.
             vk_hex = kp.public_key_hex
             pipe = await asyncio.wait_for(
-                router.pipe(vk_hex, lambda *a: None, use_cache=False),
-                timeout=15
+                router.pipe(vk_hex, lambda *a: None, use_cache=False), timeout=15
             )
             self.assertIsNotNone(pipe)
         except Exception as e:
@@ -354,76 +360,73 @@ class TestMQTT(unittest.IsolatedAsyncioTestCase):
 # Node startup / shutdown
 # ---------------------------------------------------------------------------
 
+
 class TestNodeStart(unittest.IsolatedAsyncioTestCase):
     """Node should start, produce a valid addr_bytes, and close cleanly."""
 
     async def test_node_starts_and_closes(self):
         try:
-            node = await asyncio.wait_for(
-                Node(conf=NODE_TEST_CONF), timeout=30
-            )
+            node = await asyncio.wait_for(Node(conf=NODE_TEST_CONF), timeout=30)
         except Exception as e:
             self.skipTest(f"Node startup failed (network issue?): {e}")
 
         try:
-            self.assertIsNotNone(node.addr_bytes,
-                "node.addr_bytes should be set after startup")
+            self.assertIsNotNone(
+                node.addr_bytes, "node.addr_bytes should be set after startup"
+            )
             self.assertGreater(len(node.addr_bytes), 0)
         finally:
             await asyncio.wait_for(node.close(), timeout=10)
 
     async def test_node_addr_is_parseable(self):
         from aionetiface import parse_node_addr
+
         try:
-            node = await asyncio.wait_for(
-                Node(conf=NODE_TEST_CONF), timeout=30
-            )
+            node = await asyncio.wait_for(Node(conf=NODE_TEST_CONF), timeout=30)
         except Exception as e:
             self.skipTest(f"Node startup failed: {e}")
 
         try:
             addr = parse_node_addr(node.addr_bytes)
-            self.assertIsNotNone(addr,
-                "addr_bytes produced by Node must parse cleanly")
-            self.assertIn("pub_key_hex", addr,
-                "Parsed address must include pub_key_hex")
-            self.assertIn("machine_id", addr,
-                "Parsed address must include machine_id")
+            self.assertIsNotNone(addr, "addr_bytes produced by Node must parse cleanly")
+            self.assertIn(
+                "pub_key_hex", addr, "Parsed address must include pub_key_hex"
+            )
+            self.assertIn("machine_id", addr, "Parsed address must include machine_id")
         finally:
             await asyncio.wait_for(node.close(), timeout=10)
 
     async def test_node_has_traversal_wired(self):
         """TraversalManager must be wired to the node after startup."""
         try:
-            node = await asyncio.wait_for(
-                Node(conf=NODE_TEST_CONF), timeout=30
-            )
+            node = await asyncio.wait_for(Node(conf=NODE_TEST_CONF), timeout=30)
         except Exception as e:
             self.skipTest(f"Node startup failed: {e}")
 
         try:
-            self.assertIsNotNone(node.traversal,
-                "traversal should be set after node start")
-            self.assertIs(node.traversal.inbound_pipes, node.inbound_pipes,
-                "traversal.inbound_pipes should share the node's inbound_pipes dict")
+            self.assertIsNotNone(
+                node.traversal, "traversal should be set after node start"
+            )
+            self.assertIs(
+                node.traversal.inbound_pipes,
+                node.inbound_pipes,
+                "traversal.inbound_pipes should share the node's inbound_pipes dict",
+            )
         finally:
             await asyncio.wait_for(node.close(), timeout=10)
 
     async def test_node_id_is_derived_from_pub_key(self):
         """node_id == sha256(compressed_vk)[:25] — verified against live startup."""
         try:
-            node = await asyncio.wait_for(
-                Node(conf=NODE_TEST_CONF), timeout=30
-            )
+            node = await asyncio.wait_for(Node(conf=NODE_TEST_CONF), timeout=30)
         except Exception as e:
             self.skipTest(f"Node startup failed: {e}")
 
         try:
-            expected = hashlib.sha256(
-                node.vk.to_string("compressed")
-            ).hexdigest()[:25]
-            self.assertEqual(node.node_id, expected,
-                "node_id must equal sha256(compressed_vk)[:25]")
+            expected = hashlib.sha256(node.vk.to_string("compressed")).hexdigest()[:25]
+            self.assertEqual(
+                node.node_id, expected, "node_id must equal sha256(compressed_vk)[:25]"
+            )
         finally:
             await asyncio.wait_for(node.close(), timeout=10)
 

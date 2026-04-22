@@ -36,12 +36,18 @@ from unittest.mock import patch
 
 import aionetiface
 from aionetiface import (
-    Interface, Pipe, UDP,
-    IP4, IP6,
+    Interface,
+    Pipe,
+    UDP,
+    IP4,
+    IP6,
     EXT_BIND,
-    to_s, rand_plain,
-    async_wrap_errors, log_exception,
-    bind_closure, binder_async,
+    to_s,
+    rand_plain,
+    async_wrap_errors,
+    log_exception,
+    bind_closure,
+    binder_async,
 )
 
 from p2pd.protocol.turn.turn_client import TURNClient
@@ -67,6 +73,7 @@ from tests.turn_server import (
 if sys.version_info >= (3, 8):
     AsyncTestCase = unittest.IsolatedAsyncioTestCase
 else:
+
     class AsyncTestCase(unittest.TestCase):
         """
         Minimal asyncio-compatible TestCase for Python 3.5+.
@@ -104,8 +111,10 @@ else:
                 except AttributeError:
                     # _loop not set yet (e.g. during test collection).
                     return val
+
                 def sync_wrapper(coro_fn=val, ev_loop=loop):
                     ev_loop.run_until_complete(coro_fn())
+
                 return sync_wrapper
             return val
 
@@ -113,6 +122,7 @@ else:
 # ──────────────────────────────────────────────────────────────────────────────
 # Shared fixture helpers
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def make_turn_client(nic, dest_ip="127.0.0.1", port=TURN_TEST_PORT):
     """Return an uninitialised TURNClient aimed at the local test server."""
@@ -154,6 +164,7 @@ async def start_client_ip6(nic, dest_ip="::1", port=TURN_TEST_PORT, timeout=12):
 # Test 1 -- Loopback relay (same 127.0.0.1, different ports)
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TestTURNLoopback(AsyncTestCase):
     """
     Two TURNClients on loopback exchange a message through the local server.
@@ -167,7 +178,7 @@ class TestTURNLoopback(AsyncTestCase):
         self.nic = await Interface()
         if IP4 not in self.nic.supported():
             self.skipTest("IPv4 not available")
-        self.server   = TURNServer(self.nic)
+        self.server = TURNServer(self.nic)
         self.client_a = None
         self.client_b = None
         await self.server.start()
@@ -183,10 +194,10 @@ class TestTURNLoopback(AsyncTestCase):
         self.client_a = await start_client(self.nic)
         self.client_b = await start_client(self.nic)
 
-        tup_a   = await asyncio.wait_for(self.client_a.client_tup_future, 5)
-        relay_a = await asyncio.wait_for(self.client_a.relay_tup_future,  5)
-        tup_b   = await asyncio.wait_for(self.client_b.client_tup_future, 5)
-        relay_b = await asyncio.wait_for(self.client_b.relay_tup_future,  5)
+        tup_a = await asyncio.wait_for(self.client_a.client_tup_future, 5)
+        relay_a = await asyncio.wait_for(self.client_a.relay_tup_future, 5)
+        tup_b = await asyncio.wait_for(self.client_b.client_tup_future, 5)
+        relay_b = await asyncio.wait_for(self.client_b.relay_tup_future, 5)
 
         # Mutual whitelist (CreatePermission on each side).
         await asyncio.wait_for(self.client_a.accept_peer(tup_b, relay_b), 8)
@@ -203,13 +214,10 @@ class TestTURNLoopback(AsyncTestCase):
         relay_b = await asyncio.wait_for(self.client_b.relay_tup_future, 5)
 
         # Both relay IPs match the server's loopback.
-        self.assertEqual(relay_a[0], "127.0.0.1",
-                         "relay_a IP should be loopback")
-        self.assertEqual(relay_b[0], "127.0.0.1",
-                         "relay_b IP should be loopback")
+        self.assertEqual(relay_a[0], "127.0.0.1", "relay_a IP should be loopback")
+        self.assertEqual(relay_b[0], "127.0.0.1", "relay_b IP should be loopback")
         # Different ports -- each client gets its own relay socket.
-        self.assertNotEqual(relay_a[1], relay_b[1],
-                            "relay ports must differ")
+        self.assertNotEqual(relay_a[1], relay_b[1], "relay ports must differ")
 
     async def test_mapped_addresses_assigned(self):
         """Server returns a valid XorMappedAddress for each client."""
@@ -273,6 +281,7 @@ class TestTURNLoopback(AsyncTestCase):
 # Test 2 -- Two different NIC IPs
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TestTURNNicIPs(AsyncTestCase):
     """
     Client A is bound to NIC IP[0], Client B to NIC IP[1].
@@ -298,11 +307,11 @@ class TestTURNNicIPs(AsyncTestCase):
 
         self.ipr_a = r4.nic_ips[0]
         self.ipr_b = r4.nic_ips[1]
-        self.ip_a  = str(self.ipr_a.ip)
-        self.ip_b  = str(self.ipr_b.ip)
+        self.ip_a = str(self.ipr_a.ip)
+        self.ip_b = str(self.ipr_b.ip)
 
         # Server binds to the first NIC IP (both clients can reach it).
-        self.server   = TURNServer(self.nic, bind_ip=self.ip_a)
+        self.server = TURNServer(self.nic, bind_ip=self.ip_a)
         self.client_a = None
         self.client_b = None
         await self.server.start()
@@ -328,10 +337,12 @@ class TestTURNNicIPs(AsyncTestCase):
         tup_a = await asyncio.wait_for(self.client_a.client_tup_future, 5)
         tup_b = await asyncio.wait_for(self.client_b.client_tup_future, 5)
 
-        self.assertEqual(tup_a[0], self.ip_a,
-                         "client_a mapped IP should be {0}".format(self.ip_a))
-        self.assertEqual(tup_b[0], self.ip_b,
-                         "client_b mapped IP should be {0}".format(self.ip_b))
+        self.assertEqual(
+            tup_a[0], self.ip_a, "client_a mapped IP should be {0}".format(self.ip_a)
+        )
+        self.assertEqual(
+            tup_b[0], self.ip_b, "client_b mapped IP should be {0}".format(self.ip_b)
+        )
 
     async def test_relay_works_across_nic_ips(self):
         """
@@ -345,10 +356,10 @@ class TestTURNNicIPs(AsyncTestCase):
         self.client_a = await self.start_client_on_ip(self.ipr_a)
         self.client_b = await self.start_client_on_ip(self.ipr_b)
 
-        tup_a   = await asyncio.wait_for(self.client_a.client_tup_future, 5)
-        relay_a = await asyncio.wait_for(self.client_a.relay_tup_future,  5)
-        tup_b   = await asyncio.wait_for(self.client_b.client_tup_future, 5)
-        relay_b = await asyncio.wait_for(self.client_b.relay_tup_future,  5)
+        tup_a = await asyncio.wait_for(self.client_a.client_tup_future, 5)
+        relay_a = await asyncio.wait_for(self.client_a.relay_tup_future, 5)
+        tup_b = await asyncio.wait_for(self.client_b.client_tup_future, 5)
+        relay_b = await asyncio.wait_for(self.client_b.relay_tup_future, 5)
 
         await asyncio.wait_for(self.client_a.accept_peer(tup_b, relay_b), 8)
         await asyncio.wait_for(self.client_b.accept_peer(tup_a, relay_a), 8)
@@ -365,6 +376,7 @@ class TestTURNNicIPs(AsyncTestCase):
 # Test 3 -- IPv6 loopback relay (same ::1, different ports)
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TestTURNLoopbackIPv6(AsyncTestCase):
     """
     Two TURNClients on IPv6 loopback (::1) exchange a message through the
@@ -378,7 +390,7 @@ class TestTURNLoopbackIPv6(AsyncTestCase):
         self.nic = await Interface()
         if IP6 not in self.nic.supported():
             self.skipTest("IPv6 not available on this machine")
-        self.server   = TURNServer(self.nic)
+        self.server = TURNServer(self.nic)
         self.client_a = None
         self.client_b = None
         await self.server.start()
@@ -394,10 +406,10 @@ class TestTURNLoopbackIPv6(AsyncTestCase):
         self.client_a = await start_client_ip6(self.nic)
         self.client_b = await start_client_ip6(self.nic)
 
-        tup_a   = await asyncio.wait_for(self.client_a.client_tup_future, 5)
-        relay_a = await asyncio.wait_for(self.client_a.relay_tup_future,  5)
-        tup_b   = await asyncio.wait_for(self.client_b.client_tup_future, 5)
-        relay_b = await asyncio.wait_for(self.client_b.relay_tup_future,  5)
+        tup_a = await asyncio.wait_for(self.client_a.client_tup_future, 5)
+        relay_a = await asyncio.wait_for(self.client_a.relay_tup_future, 5)
+        tup_b = await asyncio.wait_for(self.client_b.client_tup_future, 5)
+        relay_b = await asyncio.wait_for(self.client_b.relay_tup_future, 5)
 
         await asyncio.wait_for(self.client_a.accept_peer(tup_b, relay_b), 8)
         await asyncio.wait_for(self.client_b.accept_peer(tup_a, relay_a), 8)
@@ -413,11 +425,10 @@ class TestTURNLoopbackIPv6(AsyncTestCase):
         relay_b = await asyncio.wait_for(self.client_b.relay_tup_future, 5)
 
         # Both relay IPs are IPv6 (contain ':').
-        self.assertIn(':', relay_a[0], "relay_a IP should be IPv6")
-        self.assertIn(':', relay_b[0], "relay_b IP should be IPv6")
+        self.assertIn(":", relay_a[0], "relay_a IP should be IPv6")
+        self.assertIn(":", relay_b[0], "relay_b IP should be IPv6")
         # Different ports -- each client gets its own relay socket.
-        self.assertNotEqual(relay_a[1], relay_b[1],
-                            "relay ports must differ")
+        self.assertNotEqual(relay_a[1], relay_b[1], "relay ports must differ")
 
     async def test_mapped_addresses_assigned(self):
         """Server returns a valid XorMappedAddress for each IPv6 client."""
@@ -427,8 +438,8 @@ class TestTURNLoopbackIPv6(AsyncTestCase):
         tup_a = await asyncio.wait_for(self.client_a.client_tup_future, 5)
         tup_b = await asyncio.wait_for(self.client_b.client_tup_future, 5)
 
-        self.assertIn(':', tup_a[0], "tup_a IP should be IPv6")
-        self.assertIn(':', tup_b[0], "tup_b IP should be IPv6")
+        self.assertIn(":", tup_a[0], "tup_a IP should be IPv6")
+        self.assertIn(":", tup_b[0], "tup_b IP should be IPv6")
         self.assertIsInstance(tup_a[1], int)
         self.assertIsInstance(tup_b[1], int)
         self.assertNotEqual(tup_a[1], tup_b[1])
@@ -477,6 +488,7 @@ class TestTURNLoopbackIPv6(AsyncTestCase):
 # Test 4 -- TURNPlugin integration (IPv6)
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TestTURNPluginIPv6(AsyncTestCase):
     """
     Exercises TURNPlugin end-to-end using the local test server over IPv6.
@@ -513,16 +525,16 @@ class TestTURNPluginIPv6(AsyncTestCase):
     def make_plugin(self, shared_pipes, pipe_id=None):
         p = TURNPlugin()
         p.turn_clients = {}
-        p.msg_cb       = None
-        p.node_id      = rand_plain(12)
-        p.af           = IP6
-        p.nic          = self.nic
-        p.src_info     = {}
-        p.dest_info    = {}
-        p.route_type   = None
+        p.msg_cb = None
+        p.node_id = rand_plain(12)
+        p.af = IP6
+        p.nic = self.nic
+        p.src_info = {}
+        p.dest_info = {}
+        p.route_type = None
         p.same_machine = False
-        p.set_bind     = False
-        p.timeout      = 15
+        p.set_bind = False
+        p.timeout = 15
         p.set_inbound_pipes(shared_pipes, plugin_id=pipe_id)
         return p
 
@@ -536,11 +548,11 @@ class TestTURNPluginIPv6(AsyncTestCase):
         )
         self.clients_to_close.append(client)
 
-        self.assertIsNotNone(peer_tup,  "peer_tup must not be None")
+        self.assertIsNotNone(peer_tup, "peer_tup must not be None")
         self.assertIsNotNone(relay_tup, "relay_tup must not be None")
-        self.assertIn(':', peer_tup[0],  "peer IP should be IPv6")
-        self.assertIn(':', relay_tup[0], "relay IP should be IPv6")
-        self.assertIsInstance(peer_tup[1],  int)
+        self.assertIn(":", peer_tup[0], "peer IP should be IPv6")
+        self.assertIn(":", relay_tup[0], "relay IP should be IPv6")
+        self.assertIsInstance(peer_tup[1], int)
         self.assertIsInstance(relay_tup[1], int)
 
     async def test_plugin_full_handshake_and_relay_ipv6(self):
@@ -552,7 +564,7 @@ class TestTURNPluginIPv6(AsyncTestCase):
 
         plugin_a = self.make_plugin(shared_pipes)
 
-        sig_a_sent  = asyncio.Event()
+        sig_a_sent = asyncio.Event()
         msgs_from_a = []
 
         async def sender_a(msg, _plugin, relay_no=2):
@@ -561,9 +573,7 @@ class TestTURNPluginIPv6(AsyncTestCase):
 
         plugin_a.set_send_signal_msg(sender_a)
 
-        task_a = asyncio.ensure_future(
-            async_wrap_errors(plugin_a.run())
-        )
+        task_a = asyncio.ensure_future(async_wrap_errors(plugin_a.run()))
 
         await asyncio.wait_for(sig_a_sent.wait(), 15)
         msg_a = msgs_from_a[0]
@@ -572,7 +582,7 @@ class TestTURNPluginIPv6(AsyncTestCase):
 
         plugin_b = self.make_plugin(shared_pipes, pipe_id=plugin_a.plugin_id)
 
-        sig_b_sent  = asyncio.Event()
+        sig_b_sent = asyncio.Event()
         msgs_from_b = []
 
         async def sender_b(msg, _plugin, relay_no=2):
@@ -581,18 +591,14 @@ class TestTURNPluginIPv6(AsyncTestCase):
 
         plugin_b.set_send_signal_msg(sender_b)
 
-        task_b = asyncio.ensure_future(
-            async_wrap_errors(plugin_b.run(reply=msg_a))
-        )
+        task_b = asyncio.ensure_future(async_wrap_errors(plugin_b.run(reply=msg_a)))
 
         await asyncio.wait_for(sig_b_sent.wait(), 15)
         msg_b = msgs_from_b[0]
         self.assertIsNotNone(msg_b.payload.peer_tup)
         self.assertIsNotNone(msg_b.payload.relay_tup)
 
-        task_a2 = asyncio.ensure_future(
-            async_wrap_errors(plugin_a.run(reply=msg_b))
-        )
+        task_a2 = asyncio.ensure_future(async_wrap_errors(plugin_a.run(reply=msg_b)))
 
         await asyncio.wait_for(asyncio.gather(task_a, task_b, task_a2), 15)
 
@@ -609,13 +615,17 @@ class TestTURNPluginIPv6(AsyncTestCase):
         TEST_MSG = b"plugin IPv6 relay smoke test"
         await client_a.send(TEST_MSG, tup_b)
         received = await asyncio.wait_for(client_b.recv(), 10)
-        self.assertEqual(received, TEST_MSG,
-                         "relay message must arrive intact after IPv6 plugin handshake")
+        self.assertEqual(
+            received,
+            TEST_MSG,
+            "relay message must arrive intact after IPv6 plugin handshake",
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Test 5 -- TURNPlugin integration (IPv4)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TestTURNPlugin(AsyncTestCase):
     """
@@ -662,17 +672,17 @@ class TestTURNPlugin(AsyncTestCase):
         """Create a minimally configured TURNPlugin for testing."""
         p = TURNPlugin()
         p.turn_clients = {}
-        p.msg_cb       = None
-        p.node_id      = rand_plain(12)
-        p.af           = IP4
-        p.nic          = self.nic
-        p.src_info     = {}
-        p.dest_info    = {}
+        p.msg_cb = None
+        p.node_id = rand_plain(12)
+        p.af = IP4
+        p.nic = self.nic
+        p.src_info = {}
+        p.dest_info = {}
         # route_type = None -> set_context skips select_dest_ipr
-        p.route_type   = None
+        p.route_type = None
         p.same_machine = False
-        p.set_bind     = False
-        p.timeout      = 15
+        p.set_bind = False
+        p.timeout = 15
         p.set_inbound_pipes(shared_pipes, plugin_id=pipe_id)
         return p
 
@@ -688,11 +698,11 @@ class TestTURNPlugin(AsyncTestCase):
         )
         self.clients_to_close.append(client)
 
-        self.assertIsNotNone(peer_tup,  "peer_tup must not be None")
+        self.assertIsNotNone(peer_tup, "peer_tup must not be None")
         self.assertIsNotNone(relay_tup, "relay_tup must not be None")
-        self.assertEqual(peer_tup[0],  "127.0.0.1")
+        self.assertEqual(peer_tup[0], "127.0.0.1")
         self.assertEqual(relay_tup[0], "127.0.0.1")
-        self.assertIsInstance(peer_tup[1],  int)
+        self.assertIsInstance(peer_tup[1], int)
         self.assertIsInstance(relay_tup[1], int)
 
     async def test_plugin_full_handshake_and_relay(self):
@@ -716,7 +726,7 @@ class TestTURNPlugin(AsyncTestCase):
         # -- plug A --
         plugin_a = self.make_plugin(shared_pipes)
 
-        sig_a_sent  = asyncio.Event()
+        sig_a_sent = asyncio.Event()
         msgs_from_a = []
 
         async def sender_a(msg, _plugin, relay_no=2):
@@ -726,9 +736,7 @@ class TestTURNPlugin(AsyncTestCase):
         plugin_a.set_send_signal_msg(sender_a)
 
         # Launch A in background; it will block on pipe future after sending.
-        task_a = asyncio.ensure_future(
-            async_wrap_errors(plugin_a.run())
-        )
+        task_a = asyncio.ensure_future(async_wrap_errors(plugin_a.run()))
 
         # -- wait for A's TURNMsg --
         await asyncio.wait_for(sig_a_sent.wait(), 15)
@@ -739,7 +747,7 @@ class TestTURNPlugin(AsyncTestCase):
         # -- plug B --
         plugin_b = self.make_plugin(shared_pipes, pipe_id=plugin_a.plugin_id)
 
-        sig_b_sent  = asyncio.Event()
+        sig_b_sent = asyncio.Event()
         msgs_from_b = []
 
         async def sender_b(msg, _plugin, relay_no=2):
@@ -749,9 +757,7 @@ class TestTURNPlugin(AsyncTestCase):
         plugin_b.set_send_signal_msg(sender_b)
 
         # Run B as responder; it accepts A's peer info and resolves the pipe.
-        task_b = asyncio.ensure_future(
-            async_wrap_errors(plugin_b.run(reply=msg_a))
-        )
+        task_b = asyncio.ensure_future(async_wrap_errors(plugin_b.run(reply=msg_a)))
 
         # Wait for B to send its TURNMsg back to A.
         await asyncio.wait_for(sig_b_sent.wait(), 15)
@@ -761,9 +767,7 @@ class TestTURNPlugin(AsyncTestCase):
 
         # -- A processes B's reply --
         # This second run() accepts B's peer info on client_a.
-        task_a2 = asyncio.ensure_future(
-            async_wrap_errors(plugin_a.run(reply=msg_b))
-        )
+        task_a2 = asyncio.ensure_future(async_wrap_errors(plugin_a.run(reply=msg_b)))
 
         # All three tasks should complete cleanly.
         await asyncio.wait_for(asyncio.gather(task_a, task_b, task_a2), 15)
@@ -784,34 +788,40 @@ class TestTURNPlugin(AsyncTestCase):
         TEST_MSG = b"plugin relay smoke test"
         await client_a.send(TEST_MSG, tup_b)
         received = await asyncio.wait_for(client_b.recv(), 10)
-        self.assertEqual(received, TEST_MSG,
-                         "relay message must arrive intact after plugin handshake")
+        self.assertEqual(
+            received,
+            TEST_MSG,
+            "relay message must arrive intact after plugin handshake",
+        )
 
     async def test_turn_msg_serialisation_roundtrip(self):
         """
         TURNMsg packs and unpacks without loss of peer_tup / relay_tup.
         """
-        peer_tup  = ("127.0.0.1", 51234)
+        peer_tup = ("127.0.0.1", 51234)
         relay_tup = ("127.0.0.1", 34001)
 
-        msg = TURNMsg({
-            "payload": {
-                "peer_tup":  list(peer_tup),
-                "relay_tup": list(relay_tup),
+        msg = TURNMsg(
+            {
+                "payload": {
+                    "peer_tup": list(peer_tup),
+                    "relay_tup": list(relay_tup),
+                }
             }
-        })
+        )
         msg.meta.plugin_name = "turn"
 
-        packed   = msg.pack()
-        unpacked = TURNMsg.unpack(packed[1:])   # skip the 1-byte type prefix
+        packed = msg.pack()
+        unpacked = TURNMsg.unpack(packed[1:])  # skip the 1-byte type prefix
 
-        self.assertEqual(tuple(unpacked.payload.peer_tup),  peer_tup)
+        self.assertEqual(tuple(unpacked.payload.peer_tup), peer_tup)
         self.assertEqual(tuple(unpacked.payload.relay_tup), relay_tup)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Test 6 -- Multi-client TURN relay mesh (nightmare difficulty)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TestTURNMultiClientMesh(AsyncTestCase):
     """
@@ -890,13 +900,17 @@ class TestTURNMultiClientMesh(AsyncTestCase):
 
         # Validation 3: All relays are on distinct ports (KEY REQUIREMENT)
         relay_ports = [relay_a[1], relay_b[1], relay_c[1]]
-        self.assertEqual(len(set(relay_ports)), 3,
-                         "All three clients must have DISTINCT relay ports")
+        self.assertEqual(
+            len(set(relay_ports)), 3, "All three clients must have DISTINCT relay ports"
+        )
 
         # Validation 4: All client ports are distinct
         client_ports = [tup_a[1], tup_b[1], tup_c[1]]
-        self.assertEqual(len(set(client_ports)), 3,
-                         "All three clients must have distinct source ports")
+        self.assertEqual(
+            len(set(client_ports)),
+            3,
+            "All three clients must have distinct source ports",
+        )
 
         # Validation 5: Establish all three relay pairs simultaneously
         # This tests concurrent CreatePermission handling on the server
@@ -913,9 +927,11 @@ class TestTURNMultiClientMesh(AsyncTestCase):
         # (the simplest case, mirrors the passing TestTURNLoopback test)
         await self.client_a.send(b"test from A to B", tup_b)
         msg = await asyncio.wait_for(self.client_b.recv(), 8)
-        self.assertEqual(msg, b"test from A to B",
-                         "Multi-client relay should preserve message integrity")
-
+        self.assertEqual(
+            msg,
+            b"test from A to B",
+            "Multi-client relay should preserve message integrity",
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

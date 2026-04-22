@@ -32,18 +32,19 @@ from p2pd.node.node import Node
 from p2pd.node.node_defs import NODE_TEST_CONF
 
 # Canonical (fully-expanded) forms used throughout.
-LINK_LOCAL = str(IPR("fe80::1"))      # fe80:0000:0000:0000:0000:0000:0000:0001
-GLOBAL_V6  = str(IPR("2606:4700:4700::1111"))  # Cloudflare DNS - truly public
-LAN_V4     = "192.168.1.10"
-WAN_V4     = "8.8.8.8"
-PORT       = 10001
-PUB_KEY    = "93e9d6f7e7791ea06544557a2"
+LINK_LOCAL = str(IPR("fe80::1"))  # fe80:0000:0000:0000:0000:0000:0000:0001
+GLOBAL_V6 = str(IPR("2606:4700:4700::1111"))  # Cloudflare DNS - truly public
+LAN_V4 = "192.168.1.10"
+WAN_V4 = "8.8.8.8"
+PORT = 10001
+PUB_KEY = "93e9d6f7e7791ea06544557a2"
 MACHINE_ID = "c88e78bafc408223a97b560ea94f1bb4d5fc58a5705a41a2a94d54466d552816"
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _base_nat():
     return nat_info(OPEN_INTERNET, delta_info(NA_DELTA, 0))
@@ -104,7 +105,7 @@ def _nic_global_v6_with_link_local():
     NIC with both a global IPv6 route and a link-local.
     The link-local is set on the route AND in RoutePool.link_locals.
     """
-    ll    = IPR(LINK_LOCAL)
+    ll = IPR(LINK_LOCAL)
     v6ext = IPR(GLOBAL_V6)
     route = Route(IP6, [v6ext], [v6ext], None)
     route.set_link_locals([ll])
@@ -124,17 +125,21 @@ class TestSortIpsByNicLinkLocal(unittest.TestCase):
         sort_ips_by_nic must still find it."""
         nic = _nic_link_local_only()
         result = sort_ips_by_nic([LINK_LOCAL], [nic])
-        self.assertIn(LINK_LOCAL, result["mock0"],
-                      "link-local not found on NIC that only has "
-                      "RoutePool-level link_locals (no global IPv6 routes)")
+        self.assertIn(
+            LINK_LOCAL,
+            result["mock0"],
+            "link-local not found on NIC that only has "
+            "RoutePool-level link_locals (no global IPv6 routes)",
+        )
 
     def test_finds_link_local_via_route_link_locals(self):
         """When the NIC has a global IPv6 route with link_locals set,
         the link-local is found through the route iteration path."""
         nic = _nic_global_v6_with_link_local()
         result = sort_ips_by_nic([LINK_LOCAL], [nic])
-        self.assertIn(LINK_LOCAL, result["mock0"],
-                      "link-local not found via route.link_locals")
+        self.assertIn(
+            LINK_LOCAL, result["mock0"], "link-local not found via route.link_locals"
+        )
 
     def test_non_link_local_ip_not_confused_with_link_local(self):
         """Passing a WAN IPv4 should not accidentally match the link-local."""
@@ -205,12 +210,14 @@ class TestMakeNodeAddrLinkLocal(unittest.TestCase):
         addr = self._addr_for(nic)
         parsed = parse_node_addr(addr)
 
-        self.assertGreater(len(parsed[IP6]), 0,
-                           "Expected IPv6 entries in node address")
+        self.assertGreater(len(parsed[IP6]), 0, "Expected IPv6 entries in node address")
         nic_ip = parsed[IP6][0]["nic"]
-        self.assertEqual(str(nic_ip), LINK_LOCAL,
-                         f"NIC IPv6 in address should be the link-local "
-                         f"{LINK_LOCAL!r}, got {str(nic_ip)!r}")
+        self.assertEqual(
+            str(nic_ip),
+            LINK_LOCAL,
+            f"NIC IPv6 in address should be the link-local "
+            f"{LINK_LOCAL!r}, got {str(nic_ip)!r}",
+        )
 
     def test_global_v6_encoded_as_ext_ip_in_addr(self):
         """The external IPv6 must remain the global address, not the link-local."""
@@ -219,9 +226,12 @@ class TestMakeNodeAddrLinkLocal(unittest.TestCase):
         parsed = parse_node_addr(addr)
 
         ext_ip = parsed[IP6][0]["ext"]
-        self.assertEqual(str(ext_ip), GLOBAL_V6,
-                         f"EXT IPv6 in address should be the global "
-                         f"{GLOBAL_V6!r}, got {str(ext_ip)!r}")
+        self.assertEqual(
+            str(ext_ip),
+            GLOBAL_V6,
+            f"EXT IPv6 in address should be the global "
+            f"{GLOBAL_V6!r}, got {str(ext_ip)!r}",
+        )
 
     def test_addr_roundtrip_with_link_local(self):
         """parse_node_addr(make_node_addr(...)) must succeed and preserve all fields."""
@@ -244,12 +254,14 @@ class TestMakeNodeAddrLinkLocal(unittest.TestCase):
 
         self.assertIsNotNone(parsed, "parse_node_addr returned None")
         self.assertGreater(
-            len(parsed[IP6]), 0,
-            "Expected IPv6 entry for link-local-only NIC in node address"
+            len(parsed[IP6]),
+            0,
+            "Expected IPv6 entry for link-local-only NIC in node address",
         )
         nic_ip = parsed[IP6][0]["nic"]
-        self.assertEqual(str(nic_ip), LINK_LOCAL,
-                         "NIC IPv6 field should contain the link-local")
+        self.assertEqual(
+            str(nic_ip), LINK_LOCAL, "NIC IPv6 field should contain the link-local"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +276,7 @@ class TestMakeNodeAddrLocalIPv4Fallback(unittest.TestCase):
         """NIC where IPv4 STUN failed — private IP stored in link_locals."""
         return _build_interface(
             _v4_local_only_route_pool(),
-            RoutePool()  # no IPv6
+            RoutePool(),  # no IPv6
         )
 
     def _addr_for(self, nic):
@@ -278,22 +290,34 @@ class TestMakeNodeAddrLocalIPv4Fallback(unittest.TestCase):
         parsed = parse_node_addr(addr)
 
         self.assertIsNotNone(parsed)
-        self.assertGreater(len(parsed[IP4]), 0,
-                           "Expected IPv4 entry for local-only NIC in node address")
+        self.assertGreater(
+            len(parsed[IP4]),
+            0,
+            "Expected IPv4 entry for local-only NIC in node address",
+        )
         ext_ip = parsed[IP4][0]["ext"]
         nic_ip = parsed[IP4][0]["nic"]
-        self.assertEqual(str(ext_ip), LAN_V4,
-                         f"ext IPv4 should be the LAN IP {LAN_V4!r}, got {str(ext_ip)!r}")
-        self.assertEqual(str(nic_ip), LAN_V4,
-                         f"nic IPv4 should be the LAN IP {LAN_V4!r}, got {str(nic_ip)!r}")
+        self.assertEqual(
+            str(ext_ip),
+            LAN_V4,
+            f"ext IPv4 should be the LAN IP {LAN_V4!r}, got {str(ext_ip)!r}",
+        )
+        self.assertEqual(
+            str(nic_ip),
+            LAN_V4,
+            f"nic IPv4 should be the LAN IP {LAN_V4!r}, got {str(nic_ip)!r}",
+        )
 
     def test_sort_ips_by_nic_finds_local_ipv4(self):
         """sort_ips_by_nic must locate a private IPv4 stored in link_locals
         (same fix as for IPv6 link-locals)."""
         nic = self._nic_local_v4_only()
         result = sort_ips_by_nic([LAN_V4], [nic])
-        self.assertIn(LAN_V4, result["mock0"],
-                      "private IPv4 not found on NIC with no global route")
+        self.assertIn(
+            LAN_V4,
+            result["mock0"],
+            "private IPv4 not found on NIC with no global route",
+        )
 
     def test_global_route_takes_precedence_over_link_locals(self):
         """When a global IPv4 route exists the link_locals fallback must not
@@ -303,8 +327,9 @@ class TestMakeNodeAddrLocalIPv4Fallback(unittest.TestCase):
         parsed = parse_node_addr(addr)
 
         ext_ip = parsed[IP4][0]["ext"]
-        self.assertEqual(str(ext_ip), WAN_V4,
-                         "global WAN IP should be used when a route exists")
+        self.assertEqual(
+            str(ext_ip), WAN_V4, "global WAN IP should be used when a route exists"
+        )
 
 
 if __name__ == "__main__":

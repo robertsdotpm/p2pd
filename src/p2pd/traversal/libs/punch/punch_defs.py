@@ -19,25 +19,29 @@ PUNCH_MAX_SLEEP = 3
 NTP_MEET_STEP = 6
 
 # Fine tune various network settings.
-PUNCH_CONF = dict_child({
-    # Reuse address tuple for bind() socket call.
-    "reuse_addr": True,
+PUNCH_CONF = dict_child(
+    {
+        # Reuse address tuple for bind() socket call.
+        "reuse_addr": True,
+        # Return the sock instead of the base proto.
+        # "sock_only": True,
+        # Disable closing sock on error
+        # Applies to the pipe_open only (may not be needed.)
+        "do_close": False,
+    },
+    NET_CONF,
+)
 
-    # Return the sock instead of the base proto.
-    #"sock_only": True,
 
-    # Disable closing sock on error
-    # Applies to the pipe_open only (may not be needed.)
-    "do_close": False,
-}, NET_CONF)
+class PortAlloc:
+    """Holds a source/destination port pair for a single TCP hole-punch attempt."""
 
-
-class PortAlloc():
     def __init__(self, src_port, dest_port):
+        # type: (int, int) -> None
         self.src_port = src_port
         self.dest_port = dest_port
 
     def __iter__(self):
+        # type: () -> Any
         yield self.src_port
         yield self.dest_port
-

@@ -11,16 +11,30 @@ routing and context, and either runs it directly or dispatches a reply to a
 running instance.
 """
 
-import hashlib
 import asyncio
 from collections import OrderedDict
-from aionetiface import *
-from .traversal_utils import *
-from .traversal_plugin import TraversalPlugin
-from ..protocol.traversal.proto_msg import GetAddr, ConMsg, ProtoMsg, SIG_PROTO
+from aionetiface import IP4, NIC_BIND
+from .traversal_utils import (
+    async_wrap_errors,
+    cancel_task,
+    cancel_tasks,
+    close_plugin,
+    get_if_infos_order,
+    h_to_b,
+    log_exception,
+    sig_msg_to_buf,
+    to_b,
+    to_s,
+    try_unpack_msg,
+)
+from ..protocol.traversal.proto_msg import ConMsg, ProtoMsg, SIG_PROTO
 
-class TraversalManager():
+
+class TraversalManager:
+    """Orchestrates traversal plugin lifecycle and routes signaling messages to plugins."""
+
     def __init__(self, router, stop_reader, inbound_pipes=None, nics=None):
+        # type: (Any, Any, Optional[Dict[str, Any]], Optional[List[Any]]) -> None
         # by plugin_id
         self.plugins = {}
         self.plugin_loaders = OrderedDict()
@@ -39,7 +53,7 @@ class TraversalManager():
         self.inbound_pipes = inbound_pipes if inbound_pipes is not None else {}
 
         # Long-lived background tasks spawned by signal handling.
-        self.tasks = [] 
+        self.tasks = []
 
         # Set after node_start runs.
         self.done_callback = None
@@ -48,6 +62,7 @@ class TraversalManager():
         self.cleanup_task = None
 
     def install_plugin(self, name, conf):
+        # type: (str, Dict[str, Any]) -> None
         if "class" not in conf:
             raise ValueError("plugin conf must include a 'class' key")
         conf = {
@@ -63,6 +78,7 @@ class TraversalManager():
     # Plugins return pipes directly or await a pipe future that is resolved
     # elsewhere when a reply arrives over the signaling channel.
     async def run_plugin(self, plugin, reply=None):
+        # type: (TraversalPlugin, Optional[Any]) -> None
         # Don't run if result is set.
         if plugin.result.done():
             return
@@ -77,15 +93,15 @@ class TraversalManager():
             reply.routing.load_if_extra(self.nics)
 
         # Each plugin has a run method.
-        await async_wrap_errors(
-            plugin.run(reply),
-            timeout=plugin.timeout
-        )
+        await async_wrap_errors(plugin.run(reply), timeout=plugin.timeout)
 
         if plugin.result.done():
             await close_plugin(plugin, self.plugins, self.inbound_pipes)
 
-    def create_plugin(self, af, route_type, src_info, dest_info, same_machine, plugin_name):
+    def create_plugin(
+        self, af, route_type, src_info, dest_info, same_machine, plugin_name
+    ):
+        # type: (Any, Any, Dict[str, Any], Dict[str, Any], bool, str) -> TraversalPlugin
         # Meta data for this specific plugin.
         plugin_loader = self.plugin_loaders[plugin_name]
 
@@ -107,19 +123,14 @@ class TraversalManager():
 
         # Load routing details in plugin.
         nic = self.nics[src_info["if_index"]]
-        plugin.set_routing(
-            af,
-            src_info,
-            dest_info,
-            nic
-        )
+        plugin.set_routing(af, src_info, dest_info, nic)
 
         # Load extra info about pathway.
         plugin.set_context(
             route_type,
             same_machine,
             plugin_loader["set_bind"],
-            plugin_loader["timeout"]
+            plugin_loader["timeout"],
         )
 
         # Used for cleaning up plugins that crash before future result ready.
@@ -141,35 +152,28 @@ class TraversalManager():
         return plugin
 
     # Use a plugin to try get a pipe to a destination node,
-    async def attempt_plugin(self, src_map, dest_map, sig_pipe, plugin_name, af=IP4, route_type=NIC_BIND):
+    async def attempt_plugin(
+        self, src_map, dest_map, sig_pipe, plugin_name, af=IP4, route_type=NIC_BIND
+    ):
+        # type: (Dict[str, Any], Dict[str, Any], Any, str, Any, Any) -> Optional[TraversalPlugin]
         # Need AF supported by both.
         if not src_map[af] or not dest_map[af]:
-            raise Exception("AF not supported between hosts.")
-        
+            raise ValueError("AF not supported between hosts.")
+
         # Is this a connection to a node on the same machine?
         if dest_map["machine_id"] == src_map["machine_id"]:
             same_machine = True
         else:
             same_machine = False
-        
+
         # Pairs of (src_info, dest_info) based on src / dest map.
-        if_infos_order = get_if_infos_order(
-            af,
-            route_type,
-            src_map,
-            dest_map
-        )
+        if_infos_order = get_if_infos_order(af, route_type, src_map, dest_map)
 
         # Try every interface info pair for the plugins.
         for if_infos in if_infos_order:
             src_info, dest_info = if_infos
             plugin = self.create_plugin(
-                af,
-                route_type,
-                src_info,
-                dest_info,
-                same_machine,
-                plugin_name
+                af, route_type, src_info, dest_info, same_machine, plugin_name
             )
 
             # Load overall addr info into the plugin.
@@ -181,8 +185,7 @@ class TraversalManager():
             # Run plugin function -- timeout based on plugin meta.
             await self.run_plugin(plugin)
             return plugin
-        
-    
+
     # create_plugin builds a plugin from explicit parameters — used when we are
     # the initiator and already know our src/dest addresses and route type.
     #
@@ -191,50 +194,55 @@ class TraversalManager():
     # "their dest" becomes our src and "their src" becomes our dest. It also
     # reuses the pipe_id from the message so both sides share the same session.
     def create_inbound_plugin(self, msg):
+        # type: (Any) -> TraversalPlugin
         # TODO: map GetAddr messages to the return_addr plugin handler.
         if isinstance(msg, ConMsg):
             msg.meta.plugin_name = "direct_connect"
 
         if msg.meta.plugin_name not in self.plugin_loaders:
-            raise Exception("Plugin not installed.")
+            raise RuntimeError("Plugin not installed.")
 
         # Creates a new plugin to handle a new incoming message from router.
         plugin = self.create_plugin(
             msg.meta.af,
             msg.meta.route_type,
             src_info=msg.routing.dest_info,  # their dest = our src
-            dest_info=msg.meta.src_info,     # their src = our dest
+            dest_info=msg.meta.src_info,  # their src = our dest
             same_machine=msg.meta.same_machine,
-            plugin_name=msg.meta.plugin_name
+            plugin_name=msg.meta.plugin_name,
         )
         plugin.set_addrs(msg.routing.dest, msg.meta.src)
         plugin.set_inbound_pipes(self.inbound_pipes, msg.meta.pipe_id)
         return plugin
-                
+
     # Use signal router to send a message to the destination.
     async def send_signal_msg(self, msg, plugin, relay_no=2):
+        # type: (Any, TraversalPlugin, int) -> None
         try:
             # Specify the plugin to use in the destination.
-            msg.meta = ProtoMsg.Meta.from_dict({
-                "ttl": int(self.router.get_time()) + 30,
-                "pipe_id": plugin.plugin_id,
-                "af": plugin.af,
-
-                # Our node address with interface details.
-                "src_buf": plugin.src_map["bytes"],
-                "src_index": plugin.src_info["if_index"],
-                "route_type": plugin.route_type,
-                "same_machine": plugin.same_machine,
-                "plugin_name": msg.meta.plugin_name,
-            })
+            msg.meta = ProtoMsg.Meta.from_dict(
+                {
+                    "ttl": int(self.router.get_time()) + 30,
+                    "pipe_id": plugin.plugin_id,
+                    "af": plugin.af,
+                    # Our node address with interface details.
+                    "src_buf": plugin.src_map["bytes"],
+                    "src_index": plugin.src_info["if_index"],
+                    "route_type": plugin.route_type,
+                    "same_machine": plugin.same_machine,
+                    "plugin_name": msg.meta.plugin_name,
+                }
+            )
 
             # Specify details of the destination address.
             # Also includes their interface.
-            msg.routing = ProtoMsg.Routing.from_dict({
-                "af": plugin.af,
-                "dest_buf": plugin.dest_map["bytes"],
-                "dest_index": plugin.dest_info["if_index"],
-            })
+            msg.routing = ProtoMsg.Routing.from_dict(
+                {
+                    "af": plugin.af,
+                    "dest_buf": plugin.dest_map["bytes"],
+                    "dest_index": plugin.dest_info["if_index"],
+                }
+            )
 
             # Convert to bytes and send via MQTT.
             buf = to_s(sig_msg_to_buf(msg, h_to_b(plugin.dest_map["pub_key_hex"])))
@@ -245,11 +253,12 @@ class TraversalManager():
     # Receive a signal message from the router and pass it to a plugin.
     # Called by the MQTT client as: handler(msg, src_pk, queue_id, client)
     async def recv_signal_msg(self, msg, src_pk_hex, pipe_id_hex, client):
+        # type: (Any, str, str, Any) -> None
         msg = try_unpack_msg(to_b(msg), self.kp.private_key, SIG_PROTO)
 
         # Message has expired.
         if int(self.router.get_time()) >= msg.meta.ttl:
-            raise Exception("Discarding expired msg.")
+            raise ValueError("Discarding expired msg.")
 
         # Update routing destination with our current address.
         msg.set_cur_addr(self.addr_bytes)
@@ -258,27 +267,24 @@ class TraversalManager():
         if msg.meta.pipe_id in self.plugins:
             plugin = self.plugins[msg.meta.pipe_id]
             if src_pk_hex != plugin.dest_map["pub_key_hex"]:
-                raise Exception("src_pk_hex mismatch for existing plugin.")
-        
+                raise ValueError("src_pk_hex mismatch for existing plugin.")
+
         # Plugin doesn't exist so create it.
         if msg.meta.pipe_id not in self.plugins:
             plugin = self.create_inbound_plugin(msg)
-        
+
         # Route to destination via MQTT.
         if plugin.sig_pipe is None:
             plugin.sig_pipe = await self.router.pipe(
-                plugin.dest_map["pub_key_hex"],
-                use_cache=True
+                plugin.dest_map["pub_key_hex"], use_cache=True
             )
 
         # Schedule the plugin run as a background task.
         # Keep a reference so the task isn't garbage-collected mid-run.
         task = asyncio.create_task(
-            async_wrap_errors(
-                self.run_plugin(plugin, reply=msg)
-            )
+            async_wrap_errors(self.run_plugin(plugin, reply=msg))
         )
-        
+
         # Record task ref to avoid garbage collection.
         self.tasks.append(task)
 
@@ -286,6 +292,7 @@ class TraversalManager():
         self.tasks = [t for t in self.tasks if not t.done()]
 
     async def close(self):
+        # type: () -> None
         await cancel_task(self.cleanup_task)
         for plugin in list(self.plugins.values()):
             try:
@@ -298,6 +305,7 @@ class TraversalManager():
 
     # Cleanup timed out plugins.
     async def cleanup_loop(self):
+        # type: () -> None
         while True:
             await asyncio.sleep(5)
             now = asyncio.get_event_loop().time()
@@ -306,7 +314,9 @@ class TraversalManager():
                     await close_plugin(plugin, self.plugins, self.inbound_pipes)
 
     def install_plugin_done_callback(self, done_callback):
+        # type: (Callable) -> None
         self.done_callback = done_callback
-    
+
     def set_send_signal_msg(self, send_signal_msg):
+        # type: (Callable) -> None
         self.send_signal_msg = send_signal_msg

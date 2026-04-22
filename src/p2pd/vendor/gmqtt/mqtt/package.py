@@ -13,7 +13,7 @@ USED_IDS = set()
 
 
 class Packet(object):
-    __slots__ = ['cmd', 'data']
+    __slots__ = ["cmd", "data"]
 
     def __init__(self, cmd, data):
         self.cmd = cmd
@@ -34,7 +34,7 @@ class PackageFactory(object):
     @classmethod
     def _pack_str16(cls, packet, data):
         if isinstance(data, str):
-            data = data.encode('utf-8')
+            data = data.encode("utf-8")
         packet.extend(struct.pack("!H", len(data)))
         packet.extend(data)
 
@@ -46,7 +46,11 @@ class PackageFactory(object):
         for property_name, property_value in properties_dict.items():
             property = Property.factory(name=property_name)
             if property is None:
-                logger.warning('[GMQTT] property {} is not supported, it was ignored'.format(property_name))
+                logger.warning(
+                    "[GMQTT] property {} is not supported, it was ignored".format(
+                        property_name
+                    )
+                )
                 continue
             property_bytes = property.dumps(property_value)
             data.extend(property_bytes)
@@ -57,7 +61,17 @@ class PackageFactory(object):
 
 class LoginPackageFactor(PackageFactory):
     @classmethod
-    def build_package(cls, client_id, username, password, clean_session, keepalive, protocol, will_message=None, **kwargs):
+    def build_package(
+        cls,
+        client_id,
+        username,
+        password,
+        clean_session,
+        keepalive,
+        protocol,
+        will_message=None,
+        **kwargs,
+    ):
         remaining_length = 2 + len(protocol.proto_name) + 1 + 1 + 2 + 2 + len(client_id)
 
         connect_flags = 0
@@ -65,9 +79,21 @@ class LoginPackageFactor(PackageFactory):
             connect_flags |= 0x02
 
         if will_message:
-            will_prop_bytes = cls._build_properties_data(will_message.properties, protocol.proto_ver)
-            remaining_length += 2 + len(will_message.topic) + 2 + len(will_message.payload) + len(will_prop_bytes)
-            connect_flags |= 0x04 | ((will_message.qos & 0x03) << 3) | ((will_message.retain & 0x01) << 5)
+            will_prop_bytes = cls._build_properties_data(
+                will_message.properties, protocol.proto_ver
+            )
+            remaining_length += (
+                2
+                + len(will_message.topic)
+                + 2
+                + len(will_message.payload)
+                + len(will_prop_bytes)
+            )
+            connect_flags |= (
+                0x04
+                | ((will_message.qos & 0x03) << 3)
+                | ((will_message.retain & 0x01) << 5)
+            )
 
         if username is not None:
             remaining_length += 2 + len(username)
@@ -84,12 +110,16 @@ class LoginPackageFactor(PackageFactory):
         remaining_length += len(prop_bytes)
 
         packet.extend(pack_variable_byte_integer(remaining_length))
-        packet.extend(struct.pack("!H" + str(len(protocol.proto_name)) + "sBBH",
-                                  len(protocol.proto_name),
-                                  protocol.proto_name,
-                                  protocol.proto_ver,
-                                  connect_flags,
-                                  keepalive))
+        packet.extend(
+            struct.pack(
+                "!H" + str(len(protocol.proto_name)) + "sBBH",
+                len(protocol.proto_name),
+                protocol.proto_name,
+                protocol.proto_ver,
+                connect_flags,
+                keepalive,
+            )
+        )
 
         packet.extend(prop_bytes)
 
@@ -134,7 +164,7 @@ class UnsubscribePacket(PackageFactory):
         for t in topics:
             cls._pack_str16(packet, t)
 
-        logger.info('[SEND UNSUB] %s', topics)
+        logger.info("[SEND UNSUB] %s", topics)
 
         return local_mid, packet
 
@@ -147,7 +177,7 @@ class SubscribePacket(PackageFactory):
         remaining_length = 2
 
         topics = []
-        subscription_identifier = kwargs.get('subscription_identifier', cls.sentinel)
+        subscription_identifier = kwargs.get("subscription_identifier", cls.sentinel)
 
         for s in subscriptions:
             topic = s.topic
@@ -163,10 +193,10 @@ class SubscribePacket(PackageFactory):
                 subscription_identifier = s.subscription_identifier
 
         if subscription_identifier is not cls.sentinel:
-            kwargs['subscription_identifier'] = subscription_identifier
+            kwargs["subscription_identifier"] = subscription_identifier
 
         if subscription_identifier is None:
-            kwargs.pop('subscription_identifier', None)
+            kwargs.pop("subscription_identifier", None)
 
         properties = cls._build_properties_data(kwargs, protocol.proto_ver)
         remaining_length += len(properties)
@@ -180,10 +210,15 @@ class SubscribePacket(PackageFactory):
         packet.extend(properties)
         for s in subscriptions:
             cls._pack_str16(packet, s.topic)
-            subscribe_options = s.retain_handling_options << 4 | s.retain_as_published << 3 | s.no_local << 2 | s.qos
+            subscribe_options = (
+                s.retain_handling_options << 4
+                | s.retain_as_published << 3
+                | s.no_local << 2
+                | s.qos
+            )
             packet.append(subscribe_options)
 
-        logger.info('[SEND SUB] %s %s', local_mid, topics)
+        logger.info("[SEND SUB] %s %s", local_mid, topics)
 
         return local_mid, packet
 
@@ -191,25 +226,39 @@ class SubscribePacket(PackageFactory):
 class SimpleCommandPacket(PackageFactory):
     @classmethod
     def build_package(cls, command) -> bytes:
-        return struct.pack('!BB', command, 0)
+        return struct.pack("!BB", command, 0)
 
 
 class PublishPacket(PackageFactory):
     @classmethod
     def build_package(cls, message, protocol) -> Tuple[int, bytes]:
-        command = MQTTCommands.PUBLISH | ((message.dup & 0x1) << 3) | (message.qos << 1) | (message.retain & 0x1)
+        command = (
+            MQTTCommands.PUBLISH
+            | ((message.dup & 0x1) << 3)
+            | (message.qos << 1)
+            | (message.retain & 0x1)
+        )
 
         packet = bytearray()
         packet.append(command)
 
         remaining_length = 2 + len(message.topic) + message.payload_size
-        prop_bytes = cls._build_properties_data(message.properties, protocol_version=protocol.proto_ver)
+        prop_bytes = cls._build_properties_data(
+            message.properties, protocol_version=protocol.proto_ver
+        )
         remaining_length += len(prop_bytes)
 
         if message.payload_size == 0:
-            logger.debug("Sending PUBLISH (q%d), '%s' (NULL payload)", message.qos, message.topic)
+            logger.debug(
+                "Sending PUBLISH (q%d), '%s' (NULL payload)", message.qos, message.topic
+            )
         else:
-            logger.debug("Sending PUBLISH (q%d), '%s', ... (%d bytes)", message.qos, message.topic, message.payload_size)
+            logger.debug(
+                "Sending PUBLISH (q%d), '%s', ... (%d bytes)",
+                message.qos,
+                message.topic,
+                message.payload_size,
+            )
 
         if message.qos > 0:
             # For message id
@@ -235,23 +284,29 @@ class DisconnectPacket(PackageFactory):
     @classmethod
     def build_package(cls, protocol, reason_code=0, **properties):
         if protocol.proto_ver == MQTTv50:
-            prop_bytes = cls._build_properties_data(properties, protocol_version=protocol.proto_ver)
+            prop_bytes = cls._build_properties_data(
+                properties, protocol_version=protocol.proto_ver
+            )
             remaining_length = 1 + len(prop_bytes)
-            return struct.pack('!BBB', MQTTCommands.DISCONNECT.value, remaining_length, reason_code) + prop_bytes
+            return (
+                struct.pack(
+                    "!BBB", MQTTCommands.DISCONNECT.value, remaining_length, reason_code
+                )
+                + prop_bytes
+            )
         else:
-            return struct.pack('!BB', MQTTCommands.DISCONNECT.value, 0)
+            return struct.pack("!BB", MQTTCommands.DISCONNECT.value, 0)
 
 
 class CommandWithMidPacket(PackageFactory):
-
     @classmethod
     def build_package(cls, cmd, mid, dup, reason_code=0, proto_ver=MQTTv50) -> bytes:
         if dup:
             cmd |= 0x8
         if proto_ver == MQTTv50:
             remaining_length = 4
-            packet = struct.pack('!BBHBB', cmd, remaining_length, mid, reason_code, 0)
+            packet = struct.pack("!BBHBB", cmd, remaining_length, mid, reason_code, 0)
         else:
             remaining_length = 2
-            packet = struct.pack('!BBH', cmd, remaining_length, mid)
+            packet = struct.pack("!BBH", cmd, remaining_length, mid)
         return packet

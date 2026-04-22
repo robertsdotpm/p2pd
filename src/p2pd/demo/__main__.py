@@ -4,10 +4,13 @@ code a function for is_node_reachable_over_mqtt for debugging
 I did delete the thing that saves send msg tasks in the mqtt client
 idk if thats relevant.
 
-python3 -m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd 0dl4 --dest_addr 5b5ed965936a5f28c2795724a.p2p --echo "hello world"
+python3 -m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd 0dl4 \
+    --dest_addr 5b5ed965936a5f28c2795724a.p2p --echo "hello world"
 
-python3 -m p2pd.demo --disable_upnp 1 --pnp_server 0,4,10.0.1.204,5300 --ip 10.0.1.230
-python3 -m p2pd.demo --disable_upnp 1 --pnp_server 0,4,10.0.1.204,5300 --ip 10.0.1.19
+python3 -m p2pd.demo --disable_upnp 1 \
+    --pnp_server 0,4,10.0.1.204,5300 --ip 10.0.1.230
+python3 -m p2pd.demo --disable_upnp 1 \
+    --pnp_server 0,4,10.0.1.204,5300 --ip 10.0.1.19
 
 python3 -m p2pd.demo --disable_upnp 1 --nic 000c2957d05c
 python3 -m p2pd.demo --disable_upnp 1 --nic ens34
@@ -25,14 +28,16 @@ from .menu import *
 from ..node.node_defs import *
 
 """Load interfaces, start node, and return node info."""
+
+
 async def setup_node():
+    # type: () -> Tuple[List[Any], List[Any], Optional[str]]
     # Display program banner.
     cout(PROGRAM_BANNER)
     cout("pid = " + str(os.getpid()))
 
     # Load interfaces on machine.
     cout("Loading networking interfaces...")
-    get_nickname = args.cmd == "get_nickname"
     if_names = await list_interfaces()
     if args.nic:
         filtered_nics = list(find_intersect(if_names, args.nic))
@@ -40,14 +45,10 @@ async def setup_node():
             if_names = filtered_nics
 
             # NIC list used as names -- disable for mac filtering.
-            args.nic = [] 
+            args.nic = []
 
     ifs = await load_interfaces(
-        if_names,
-        Interface,
-        min_agree=1,
-        max_agree=2,
-        timeout=4
+        if_names, Interface, min_agree=1, max_agree=2, timeout=4
     )
 
     """
@@ -58,26 +59,22 @@ async def setup_node():
         ifs = filter_nics_by_mac(args.nic, ifs)
 
     if not ifs:
-        raise Exception("Failed to load interfaces.")
+        raise RuntimeError("Failed to load interfaces.")
 
     # Show the ifs loaded.
     display_ifs_loaded(ifs)
 
     # Main node class with chosen ifs and conf.
-    #print(stop_rw)
+    # print(stop_rw)
     node = Node(
-        ifs=ifs, 
-        ip=args.ip, 
-        port=args.port, 
-        stop_rw=stop_rw, 
-        conf=demo_node_conf
+        ifs=ifs, ip=args.ip, port=args.port, stop_rw=stop_rw, conf=demo_node_conf
     )
 
     # Start the node and install echo protocol handler.
     cout("Starting node on %d..." % (node.listen_port,))
     node.add_msg_cb(add_echo_support)
     await node.start(out=True, cout=cout)
-    #print(node.pp_executor)
+    # print(node.pp_executor)
 
     # Show the nodes address and listen port.
     cout()
@@ -99,8 +96,12 @@ async def setup_node():
     nodes = [node]
     return nodes, ifs, nick
 
+
 """Run the main menu loop for node interaction."""
+
+
 async def run_node_loop(nodes, ifs, nick):
+    # type: (List[Any], List[Any], Optional[str]) -> None
     # Options for making a connection.
     # Set connection menu mode.
     menu_option = cmd_opts = None
@@ -120,20 +121,18 @@ async def run_node_loop(nodes, ifs, nick):
         last_addr = args.dest
 
     # Show menu and choose option.
-    con_opts = (last_addr, echo_data, cmd_opts,)
+    con_opts = (
+        last_addr,
+        echo_data,
+        cmd_opts,
+    )
     while not sock_has_data(stop_rw[0]):
         try:
             # Show menu choices.
             cout(MENU_BANNER)
 
             # Shows the main menu options.
-            outcome = await run_menu_program(
-                nick,
-                ifs,
-                nodes,
-                con_opts,
-                menu_option
-            )
+            outcome = await run_menu_program(nick, ifs, nodes, con_opts, menu_option)
 
             # Watch for attempts to exit loop.
             outcome = outcome.lower().strip()
@@ -144,15 +143,21 @@ async def run_node_loop(nodes, ifs, nick):
         except TunnelFailed:
             cout("Tunnel connection failed!")
 
+
 """
 Run the main program which accepts input and shows menu options.
 Also waits for close events and handles cleanup.
 """
+
+
 async def main():
+    # type: () -> None
     # Catch process exit signals (not supported on win32.)
     nodes = []
     if sys.platform != "win32":
+
         def set_shut_down():
+            # type: () -> None
             # Signal the stop socket so the main loop exits.
             try:
                 stop_rw[1].send(b"Shut down.")
@@ -161,7 +166,7 @@ async def main():
 
             # Unblock any ainput() call waiting in an executor thread.
             try:
-                os.write(ainput_interrupt_w, b'\x01')
+                os.write(ainput_interrupt_w, b"\x01")
             except OSError:
                 pass
 
@@ -202,29 +207,24 @@ async def main():
                 return
 
             # Only execute program for this long.
-            await asyncio.wait_for(
-                run_node_loop(nodes, ifs, nick),
-                timeout=run_time
-            )
+            await asyncio.wait_for(run_node_loop(nodes, ifs, nick), timeout=run_time)
         else:
             await run_node_loop(nodes, ifs, nick)
     except asyncio.TimeoutError:
         log("Command run time met.")
-        #what_exception()
+        # what_exception()
     except asyncio.CancelledError:
         log("Main task cancelled!")
         log_exception()
-        #what_exception()
+        # what_exception()
     finally:
         log("stop nodes clause reached.")
-        #what_exception()
+        # what_exception()
 
         # Stop all nodes
         if nodes:
             try:
-                await async_wrap_errors(
-                    stop_nodes_option(nodes)
-                )
+                await async_wrap_errors(stop_nodes_option(nodes))
             except asyncio.CancelledError:
                 # ignore cancellation during cleanup
                 pass
@@ -233,14 +233,15 @@ async def main():
 
         log("end of stop nodes clause.")
 
+
 if __name__ == "__main__":
     try:
         async_run(main())
         log("main task done.")
     except KeyboardInterrupt:
-        #print("keyboard interrupt")
+        # print("keyboard interrupt")
         log("keyboard interrupt clause reached.")
-        #print("ended")
+        # print("ended")
 
     # Force exit to prevent Windows from hanging on dead threads.
     # Placed outside finally so cleanup in async_run() can finish first.

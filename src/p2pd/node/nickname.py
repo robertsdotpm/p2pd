@@ -8,7 +8,6 @@ python3 run_pnp_serv.py
 from aionetiface import *
 import namebump
 from ..errors import *
-from ecdsa import SigningKey
 
 PNP_INDEX_TO_TLD = {
     frozenset([0]): ".p2p",
@@ -22,48 +21,67 @@ PNP_TLD_TO_INDEX = {
     ".peer": frozenset([0, 1]),
 }
 
+
 def pnp_get_tld(offsets):
+    # type: (List[int]) -> str
     index = frozenset(offsets)
     return PNP_INDEX_TO_TLD[index]
 
+
 def pnp_get_offsets(tld):
+    # type: (str) -> List[int]
     index = PNP_TLD_TO_INDEX[tld]
     return list(index)
 
+
 def pnp_strip_tlds(name):
+    # type: (Any) -> str
     name = to_s(name)
     for tld in PNP_TLD_TO_INDEX:
         # Grab the last len(tld) characters in name.
         # Underflows will grab everything.
-        portion = name[-len(tld):]
+        portion = name[-len(tld) :]
 
         # TLD found so strip it.
         # Underflows set the str to "" empty.
         if portion == tld:
-            name = name[:-len(tld)]
+            name = name[: -len(tld)]
             break
 
     return name
 
+
 def pnp_name_has_tld(name):
+    # type: (Any) -> bool
     name = to_s(name)
     for tld in PNP_TLD_TO_INDEX:
-        portion = name[-len(tld):]
+        portion = name[-len(tld) :]
         if portion == tld:
             return True
-        
+
     return False
+
 
 NAMING_TIMEOUT = 10
 
+
 class PartialNameSuccess(Exception):
+    """Raised when a nickname was registered on some but not all PNP servers."""
+
     pass
+
 
 class FullNameFailure(Exception):
+    """Raised when a nickname registration failed on all PNP servers."""
+
     pass
 
-class Nickname():
+
+class Nickname:
+    """Manages PNP nickname registration and lookup for a P2P node."""
+
     def __init__(self, sk, ifs, sys_clock):
+        # type: (SigningKey, List[Any], Any) -> None
         self.sk = sk
         self.ifs = ifs
         self.sys_clock = sys_clock
@@ -84,6 +102,7 @@ class Nickname():
         self.started = False
 
     async def start(self, timeout=2):
+        # type: (int) -> Nickname
         tasks = []
 
         for index in range(len(PNP_SERVERS[IP4])):
@@ -98,17 +117,17 @@ class Nickname():
                     dest,
                     h_to_b(serv_info["pk"]),
                     sys_clock=self.sys_clock,
-                    nic=self.interface
+                    nic=self.interface,
                 )
                 client.kp = namebump.Keypair(self.sk)
 
                 async def job(af=af, index=index, client=client):
+                    # type: (Any, int, Any) -> Tuple[Any, int, Optional[Any]]
                     pipe = None
                     try:
                         await client.start()
                         pipe = await asyncio.wait_for(
-                            client.get_dest_pipe(),
-                            timeout=timeout
+                            client.get_dest_pipe(), timeout=timeout
                         )
                         if pipe is None:
                             return (af, index, None)
@@ -137,18 +156,22 @@ class Nickname():
         return self
 
     async def put(self, name, value, behavior=namebump.DO_BUMP, timeout=NAMING_TIMEOUT):
+        # type: (Any, Any, Any, int) -> str
         if not self.started:
             raise RuntimeError("Nickname client not started. Call start() first.")
         name = pnp_strip_tlds(name)
 
         # Single coro for storing at one server.
         async def worker(offset):
+            # type: (int) -> Optional[int]
             for af in VALID_AFS:
                 try:
                     client = self.clients[af][offset]
-                    if client is None: continue
+                    if client is None:
+                        continue
                     ret = await client.put(name, value, client.kp, behavior)
-                    if ret is None: continue
+                    if ret is None:
+                        continue
                     if ret.value is not None:
                         return offset
                 except (OSError, ConnectionError, asyncio.TimeoutError):
@@ -169,20 +192,29 @@ class Nickname():
         offsets = strip_none(results)
         if not len(offsets):
             raise FullNameFailure("All name servers failed.")
-        
+
         # Translate success offsets into specific TLD.
         tld = pnp_get_tld(offsets)
-        return fstr("{0}{1}", (name, tld,))
+        return fstr(
+            "{0}{1}",
+            (
+                name,
+                tld,
+            ),
+        )
 
     async def get(self, name, timeout=NAMING_TIMEOUT):
+        # type: (Any, int) -> Optional[Any]
         if not self.started:
             raise RuntimeError("Nickname client not started. Call start() first.")
 
         async def worker(offset, name):
+            # type: (int, Any) -> Optional[Any]
             for af in VALID_AFS:
                 try:
                     client = self.clients[af][offset]
-                    if client is None: continue
+                    if client is None:
+                        continue
                     ret = await client.get(name)
                     if ret is not None:
                         return ret
@@ -194,17 +226,12 @@ class Nickname():
         # Convert TLD to client offset list.
         tld = "." + name.split(".")[-1]
         offsets = pnp_get_offsets(tld)
-        name = name[:-len(tld)]
+        name = name[: -len(tld)]
 
         # Build concurrent fetch tasks.
         tasks = []
         for offset in offsets:
-            tasks.append(
-                async_wrap_errors(
-                    worker(offset, name),
-                    timeout
-                )
-            )
+            tasks.append(async_wrap_errors(worker(offset, name), timeout))
 
         # Return first success. Outer timeout is a safety net in case
         # async_wrap_errors doesn't catch a hanging task.
@@ -219,17 +246,20 @@ class Nickname():
             pass
 
         raise FullNameFailure(fstr("Could not fetch {0}", (name,)))
-        
+
     async def delete(self, name, timeout=NAMING_TIMEOUT):
+        # type: (Any, int) -> None
         if not self.started:
             raise RuntimeError("Nickname client not started. Call start() first.")
         name = pnp_strip_tlds(name)
 
         async def worker(offset):
+            # type: (int) -> Optional[Any]
             for af in VALID_AFS:
                 try:
                     client = self.clients[af][offset]
-                    if client is None: continue
+                    if client is None:
+                        continue
                     ret = await client.delete(name, client.kp)
                     if ret is not None:
                         return ret
@@ -238,16 +268,12 @@ class Nickname():
 
         tasks = []
         for offset in range(0, len(self.clients[IP4])):
-            tasks.append(
-                async_wrap_errors(
-                    worker(offset),
-                    timeout
-                )
-            )
+            tasks.append(async_wrap_errors(worker(offset), timeout))
 
         await asyncio.gather(*tasks)
 
     async def close(self):
+        # type: () -> None
         for af in self.clients:
             for index in list(self.clients[af]):
                 client = self.clients[af][index]
@@ -260,20 +286,26 @@ class Nickname():
         self.started = False
 
     async def __aenter__(self):
+        # type: () -> Nickname
         await self.start()
         return self
 
     async def __aexit__(self, *_):
+        # type: (Any) -> bool
         await self.close()
         return False
 
     def __await__(self):
+        # type: () -> Any
         return self.start().__await__()
 
 
 async def workspace():
+    # type: () -> None
     return
-    TEST_SK = b'\xfe\xb1w~v\xfe\xc4:\x83\xa6C\x19\xde\x11\xc2\xc8\xc4A\xdaEC\x01\xc2\x9d'
+    TEST_SK = (
+        b"\xfe\xb1w~v\xfe\xc4:\x83\xa6C\x19\xde\x11\xc2\xc8\xc4A\xdaEC\x01\xc2\x9d"
+    )
     TEST_SK = (b"12345" * 100)[:24]
     test_sk_hex = to_h(TEST_SK)
     i = await Interface()
@@ -293,8 +325,6 @@ async def workspace():
     print(out)
 
     await asyncio.sleep(2)
-
-
 
 
 """
@@ -317,4 +347,3 @@ delete:
 
 
 """
-

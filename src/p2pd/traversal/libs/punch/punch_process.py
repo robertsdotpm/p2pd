@@ -6,7 +6,7 @@ in the main process (like so):
 
             punch proc             |      main proc
 ---------------------------------------------------------
-remote client <---- punched sock   |  reverse server accept():     
+remote client <---- punched sock   |  reverse server accept():
                     reverse sock ---->  punch proc connection
                                    |
         sock forwarding agent      |
@@ -24,7 +24,9 @@ from ....node.node_defs import *
 from .engines.tcp_selector_simple.engine import *
 from aionetiface.net.selector_proxy import selector_proxy
 
+
 def punching_process(puncher, reverse_server_dest, stop_reader):
+    # type: (Any, Any, Any) -> None
     try:
         # New punched TCP sock to destination.
         punched_sock = puncher.run_engine(tcp_selector_punch_engine)
@@ -42,7 +44,9 @@ def punching_process(puncher, reverse_server_dest, stop_reader):
     except (OSError, ConnectionError):
         log_exception()
 
+
 async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
+    # type: (Any, Any, Any, Optional[Any]) -> Optional[Any]
     reverse_server = None
     try:
         # Create a listen server for receiving a connection
@@ -61,30 +65,21 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
         # Store the future so the caller can inspect / cancel it if needed.
         loop = asyncio.get_event_loop()
         args = (puncher, reverse_server_dest, stop_reader)
-        loop.run_in_executor(
-            proc_pool,
-            punching_process,
-            *args
-        )
+        loop.run_in_executor(proc_pool, punching_process, *args)
 
         # The punch process makes a new connection to the
         # reverse connect server which we accept to connect the processes.
         punch_process_connection = await asyncio.wait_for(
-            reverse_server.accept(),
-            timeout=20
+            reverse_server.accept(), timeout=20
         )
 
         return punch_process_connection
     except (asyncio.TimeoutError, asyncio.CancelledError) as e:
         log("start_punching_process timed out or cancelled: " + repr(e))
-    except (OSError, ConnectionError) as e:
+    except (OSError, ConnectionError):
         log_exception()
     finally:
         # Always close the listen pipe to release the bound port / fd.
         # Keep clients makes sure not to close the accepted clients.
         if reverse_server is not None:
-            await async_wrap_errors(
-                reverse_server.close(keep_clients=True)
-            )
-
-
+            await async_wrap_errors(reverse_server.close(keep_clients=True))

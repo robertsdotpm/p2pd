@@ -3,8 +3,12 @@ from aionetiface import *
 from ....node.node_defs import *
 from ...traversal_plugin import TraversalPlugin
 
+
 class DirectConnect(TraversalPlugin):
+    """Traversal plugin that attempts a straightforward TCP connection to the peer."""
+
     async def run(self, reply=None):
+        # type: (Optional[Any]) -> None
         # Connect to this address.
         dest = (
             str(self.dest_info["ip"]),
@@ -19,9 +23,7 @@ class DirectConnect(TraversalPlugin):
         if self.af == IP6:
             if "fe80" == dest[0][:4]:
                 route = self.nic.route(self.af)
-                await route.bind(
-                    ips=str(route.link_locals[0])
-                )
+                await route.bind(ips=str(route.link_locals[0]))
             else:
                 route = await self.nic.route(self.af).bind()
 
@@ -34,7 +36,7 @@ class DirectConnect(TraversalPlugin):
 
         if pipe is None:
             return
-        
+
         if pipe.sock is None:
             return
 

@@ -6,13 +6,15 @@ from ntpath import join as nt_join
 from defs import *
 from error import *
 
+
 def get_chain_cmds(server):
     def chain_cmds(*args):
-        assert("\n" not in args)
+        assert "\n" not in args
         out = " && ".join(args)
         return out
-    
+
     return chain_cmds
+
 
 def get_path_join(server):
     """
@@ -26,10 +28,12 @@ def get_path_join(server):
 
     return path_join
 
+
 def get_p2pd_code_path(server):
     path_join = get_path_join(server)
     p2pd_dir = path_join(*server["home"], "p2pd_dev", "p2pd")
     return p2pd_dir
+
 
 def ssh_connect(server):
     port = 22
@@ -42,18 +46,19 @@ def ssh_connect(server):
         username=server["user"],
         client_keys=[ID_RSA_PATH],
         port=port,
-        #options=opts,
+        # options=opts,
     )
+
 
 def server_has_py_ver(py_ver, server):
     if "pyenv" in server:
         if py_ver in server["pyenv"]:
             return True
-        
+
     if "py" in server:
         if py_ver == server["py"]:
             return True
-        
+
     return False
 
 
@@ -61,7 +66,7 @@ def pyenv_run_cmd(py_ver, server, cmd):
     # Ensure server supports requested Python version.
     if not server_has_py_ver(py_ver, server):
         raise PythonVersionNotSupported(py_ver, server)
-    
+
     # Run the next command with a given env set.
     if "windows" in server["os"]:
         sep = " && "
@@ -75,39 +80,44 @@ def pyenv_run_cmd(py_ver, server, cmd):
 
     return out
 
+
 def pyenv_install_p2pd(py_ver, server):
     p2pd_dir = get_p2pd_code_path(server)
-    assert("\n" not in p2pd_dir)
+    assert "\n" not in p2pd_dir
     pip_install = f'-m pip install --force-reinstall -e "{p2pd_dir}"'
     return pyenv_run_cmd(py_ver, server, pip_install)
+
 
 def choose_first_py_ver(server):
     if "pyenv" in server:
         return server["pyenv"][0]
     else:
         return server["py"]
-    
+
+
 def init_pyenv_vars_cmd(server):
     if "windows" in server["os"]:
-        buf  = "set PYENV_ROOT=%USERPROFILE%\\.pyenv"
+        buf = "set PYENV_ROOT=%USERPROFILE%\\.pyenv"
         buf += "set PATH=%PYENV_ROOT%\\bin;%PATH%"
     else:
-        buf  = 'export PYENV_ROOT="$HOME/.pyenv"; '
+        buf = 'export PYENV_ROOT="$HOME/.pyenv"; '
         buf += 'export PATH="$PYENV_ROOT/bin:$PATH"; '
         buf += 'eval "$(pyenv init -)"\n'
 
     return buf
 
+
 async def shell_write(cmd, shell):
     if not cmd or cmd[-1] != "\n":
         raise UnterminatedShellCmd(cmd)
-    
+
     if "\n" in cmd[:-1]:
         print(cmd)
         raise MalformedShellCmd(cmd)
 
     shell.stdin.write(cmd)
     await shell.stdin.drain()
+
 
 async def ssh_await_cmd(cmd, shell, chain_cms, timeout=2):
     marker = "__CMD_DONE_MARKER__"
@@ -135,4 +145,3 @@ async def ssh_await_cmd(cmd, shell, chain_cms, timeout=2):
 
     output = "\n".join(lines).strip()
     return output if output else "[no output]"
-

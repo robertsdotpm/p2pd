@@ -17,11 +17,16 @@ import sys
 import unittest
 
 from aionetiface import (
-    Interface, STUNClient,
-    IP4, IP6, UDP, TCP,
+    Interface,
+    STUNClient,
+    IP4,
+    IP6,
+    UDP,
+    TCP,
     to_s,
     async_wrap_errors,
-    RFC3489, RFC5389,
+    RFC3489,
+    RFC5389,
 )
 
 from tests.stun_server import STUNServer, STUN_TEST_PORT
@@ -30,6 +35,7 @@ from tests.stun_server import STUNServer, STUN_TEST_PORT
 if sys.version_info >= (3, 8):
     AsyncTestCase = unittest.IsolatedAsyncioTestCase
 else:
+
     class AsyncTestCase(unittest.TestCase):
         def run(self, result=None):
             self._loop = asyncio.new_event_loop()
@@ -59,8 +65,10 @@ else:
                     loop = object.__getattribute__(self, "_loop")
                 except AttributeError:
                     return val
+
                 def sync_wrapper(coro_fn=val, ev_loop=loop):
                     ev_loop.run_until_complete(coro_fn())
+
                 return sync_wrapper
             return val
 
@@ -73,6 +81,7 @@ def make_stun_client(nic, af, port=STUN_TEST_PORT, mode=RFC5389, proto=UDP):
 # ──────────────────────────────────────────────────────────────────────────────
 # Test 1 -- IPv4 Binding Request/Response
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TestSTUNClientIPv4(AsyncTestCase):
     async def asyncSetUp(self):
@@ -87,13 +96,12 @@ class TestSTUNClientIPv4(AsyncTestCase):
 
     async def test_binding_request_returns_mapped_address(self):
         client = make_stun_client(self.nic, IP4, mode=RFC5389)
-        reply = await asyncio.wait_for(
-            client.get_stun_reply(),
-            timeout=10
-        )
+        reply = await asyncio.wait_for(client.get_stun_reply(), timeout=10)
 
         self.assertIsNotNone(reply)
-        self.assertTrue(hasattr(reply, "rtup"), "reply should have rtup (mapped address)")
+        self.assertTrue(
+            hasattr(reply, "rtup"), "reply should have rtup (mapped address)"
+        )
         ip, port = reply.rtup
         self.assertEqual(ip, "127.0.0.1", "mapped IP should be loopback for IPv4")
         self.assertIsInstance(port, int)
@@ -105,10 +113,7 @@ class TestSTUNClientIPv4(AsyncTestCase):
         await server.start()
         try:
             client = make_stun_client(self.nic, IP4, mode=RFC3489)
-            reply = await asyncio.wait_for(
-                client.get_stun_reply(),
-                timeout=10
-            )
+            reply = await asyncio.wait_for(client.get_stun_reply(), timeout=10)
 
             self.assertIsNotNone(reply)
             self.assertTrue(hasattr(reply, "rtup"))
@@ -123,10 +128,7 @@ class TestSTUNClientIPv4(AsyncTestCase):
         ips_and_ports = []
 
         for _ in range(3):
-            reply = await asyncio.wait_for(
-                client.get_stun_reply(),
-                timeout=10
-            )
+            reply = await asyncio.wait_for(client.get_stun_reply(), timeout=10)
             self.assertIsNotNone(reply)
             ips_and_ports.append(reply.rtup)
 
@@ -138,6 +140,7 @@ class TestSTUNClientIPv4(AsyncTestCase):
 # ──────────────────────────────────────────────────────────────────────────────
 # Test 2 -- IPv6 Binding Request/Response
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TestSTUNClientIPv6(AsyncTestCase):
     async def asyncSetUp(self):
@@ -152,10 +155,7 @@ class TestSTUNClientIPv6(AsyncTestCase):
 
     async def test_ipv6_binding_request_returns_mapped_address(self):
         client = make_stun_client(self.nic, IP6, mode=RFC5389)
-        reply = await asyncio.wait_for(
-            client.get_stun_reply(),
-            timeout=10
-        )
+        reply = await asyncio.wait_for(client.get_stun_reply(), timeout=10)
 
         self.assertIsNotNone(reply)
         self.assertTrue(hasattr(reply, "rtup"))
@@ -170,10 +170,7 @@ class TestSTUNClientIPv6(AsyncTestCase):
         await server.start()
         try:
             client = make_stun_client(self.nic, IP6, mode=RFC3489)
-            reply = await asyncio.wait_for(
-                client.get_stun_reply(),
-                timeout=10
-            )
+            reply = await asyncio.wait_for(client.get_stun_reply(), timeout=10)
 
             self.assertIsNotNone(reply)
             self.assertTrue(hasattr(reply, "rtup"))
@@ -188,10 +185,7 @@ class TestSTUNClientIPv6(AsyncTestCase):
         ips_and_ports = []
 
         for _ in range(3):
-            reply = await asyncio.wait_for(
-                client.get_stun_reply(),
-                timeout=10
-            )
+            reply = await asyncio.wait_for(client.get_stun_reply(), timeout=10)
             self.assertIsNotNone(reply)
             ips_and_ports.append(reply.rtup)
 
@@ -203,6 +197,7 @@ class TestSTUNClientIPv6(AsyncTestCase):
 # ──────────────────────────────────────────────────────────────────────────────
 # Test 3 -- TCP IPv4 Binding Request/Response
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TestSTUNClientTCPIPv4(AsyncTestCase):
     async def asyncSetUp(self):
@@ -217,10 +212,7 @@ class TestSTUNClientTCPIPv4(AsyncTestCase):
 
     async def test_tcp_binding_request_returns_mapped_address(self):
         client = make_stun_client(self.nic, IP4, mode=RFC5389, proto=TCP)
-        reply = await asyncio.wait_for(
-            client.get_stun_reply(),
-            timeout=10
-        )
+        reply = await asyncio.wait_for(client.get_stun_reply(), timeout=10)
 
         self.assertIsNotNone(reply)
         self.assertTrue(hasattr(reply, "rtup"))
@@ -233,11 +225,10 @@ class TestSTUNClientTCPIPv4(AsyncTestCase):
         server = STUNServer(self.nic, mode=RFC3489, port=STUN_TEST_PORT + 1)
         await server.start()
         try:
-            client = make_stun_client(self.nic, IP4, mode=RFC3489, proto=TCP, port=STUN_TEST_PORT + 1)
-            reply = await asyncio.wait_for(
-                client.get_stun_reply(),
-                timeout=10
+            client = make_stun_client(
+                self.nic, IP4, mode=RFC3489, proto=TCP, port=STUN_TEST_PORT + 1
             )
+            reply = await asyncio.wait_for(client.get_stun_reply(), timeout=10)
 
             self.assertIsNotNone(reply)
             self.assertTrue(hasattr(reply, "rtup"))
@@ -250,6 +241,7 @@ class TestSTUNClientTCPIPv4(AsyncTestCase):
 # ──────────────────────────────────────────────────────────────────────────────
 # Test 4 -- TCP IPv6 Binding Request/Response
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TestSTUNClientTCPIPv6(AsyncTestCase):
     async def asyncSetUp(self):
@@ -264,10 +256,7 @@ class TestSTUNClientTCPIPv6(AsyncTestCase):
 
     async def test_tcp_ipv6_binding_request_returns_mapped_address(self):
         client = make_stun_client(self.nic, IP6, mode=RFC5389, proto=TCP)
-        reply = await asyncio.wait_for(
-            client.get_stun_reply(),
-            timeout=10
-        )
+        reply = await asyncio.wait_for(client.get_stun_reply(), timeout=10)
 
         self.assertIsNotNone(reply)
         self.assertTrue(hasattr(reply, "rtup"))
@@ -280,11 +269,10 @@ class TestSTUNClientTCPIPv6(AsyncTestCase):
         server = STUNServer(self.nic, mode=RFC3489, port=STUN_TEST_PORT + 1)
         await server.start()
         try:
-            client = make_stun_client(self.nic, IP6, mode=RFC3489, proto=TCP, port=STUN_TEST_PORT + 1)
-            reply = await asyncio.wait_for(
-                client.get_stun_reply(),
-                timeout=10
+            client = make_stun_client(
+                self.nic, IP6, mode=RFC3489, proto=TCP, port=STUN_TEST_PORT + 1
             )
+            reply = await asyncio.wait_for(client.get_stun_reply(), timeout=10)
 
             self.assertIsNotNone(reply)
             self.assertTrue(hasattr(reply, "rtup"))

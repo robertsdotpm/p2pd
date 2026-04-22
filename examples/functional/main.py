@@ -23,6 +23,7 @@ disabling pp_executors for now as a test
 
 PY_VER = "3.7.9"
 
+
 async def git_pull_latest(servers):
     for server in servers:
         print(f"{server['os']}> Git pull latest code.")
@@ -35,6 +36,7 @@ async def git_pull_latest(servers):
         async with ssh_connect(server) as con:
             cmd = f"""cd "{p2pd_dir}" && git pull"""
             await con.run(cmd, check=True)
+
 
 async def pyenv_install_latest(servers):
     for server in servers:
@@ -51,6 +53,7 @@ async def pyenv_install_latest(servers):
         await shell.await_cmd(pyenv_cmd)
         await shell.close()
 
+
 async def tunnel_test(active, passive):
     """
     If running script in rapid succession against same node pairs
@@ -59,9 +62,8 @@ async def tunnel_test(active, passive):
     await asyncio.sleep(2)
     passive_shell = active_shell = None
     try:
-
         # Use local machines PNP server so names have no limits.
-        p2pd_cmd  = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 "
+        p2pd_cmd = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 "
         p2pd_cmd += "--disable_upnp 1 --run_time 120 --cmd "
 
         # Setup shell and env for passive server.
@@ -82,7 +84,7 @@ async def tunnel_test(active, passive):
         # Start passive node listening for cons.
         print(f"{passive['os']} (p)> Starting passive node.")
         cmd = p2pd_cmd + "1"
-        cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n" # TODO: background on win?
+        cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n"  # TODO: background on win?
         print(cmd)
         cmd = "cmd.exe /k " + cmd
         passive_proc = await passive_shell.write(cmd, long_running=True)
@@ -98,40 +100,48 @@ async def tunnel_test(active, passive):
         # NOTE: changed to (r) to test reverse con
         print(f"{active['os']} (a)> Try connect and echo to passive node.")
         cmd = f'{p2pd_cmd}0pl4 --echo "CLEAN_SHUTDOWN" --dest_addr {passive_pnp}'
-        #print(cmd)
+        # print(cmd)
         cmd = pyenv_run_cmd(py_ver, active, cmd)
-        #cmd = "start " + cmd
+        # cmd = "start " + cmd
         print(cmd)
         cmd = "cmd.exe /k " + cmd
         proc = await active_shell.write(cmd + "\n", timeout=120)
         print("try read return.")
         print(active_shell.stdout)
-        #results = await active_shell.readline()
-        #results = await passive_shell.readline()
+        # results = await active_shell.readline()
+        # results = await passive_shell.readline()
         print(results)
     finally:
-        shells = (active_shell, passive_shell,)
+        shells = (
+            active_shell,
+            passive_shell,
+        )
         for shell in shells:
             if shell is not None:
                 await shell.close()
 
+
 async def windows_test(node):
     con = await ssh_connect(node)
-    result = await con.run('dir', check=True)
-    print(result.stdout, end='')
+    result = await con.run("dir", check=True)
+    print(result.stdout, end="")
+
 
 async def run_client():
     # Freebsd and fedora, chosen arbitrary to start testing with.
-    servers = (SSH_SERVERS[0], SSH_SERVERS[1],)
-    #servers = (SSH_SERVERS[5], SSH_SERVERS[6],)
+    servers = (
+        SSH_SERVERS[0],
+        SSH_SERVERS[1],
+    )
+    # servers = (SSH_SERVERS[5], SSH_SERVERS[6],)
     await git_pull_latest(servers)
     await pyenv_install_latest(servers)
 
-    #await windows_test(servers[0])
+    # await windows_test(servers[0])
     await tunnel_test(*servers)
-    
+
 
 try:
     asyncio.get_event_loop().run_until_complete(run_client())
 except (OSError, asyncssh.Error) as exc:
-    sys.exit('SSH connection failed: ' + str(exc))
+    sys.exit("SSH connection failed: " + str(exc))

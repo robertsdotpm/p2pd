@@ -12,15 +12,20 @@ IDs for each message and acknowledgements. It doesn't
 guarantee ordered delivery. Inherited by udp_stream.
 """
 
-class ACKUDP():
+
+class ACKUDP:
+    """Mixin providing acknowledged delivery over UDP with per-message sequence numbers."""
+
     def __init__(self):
-        self.seq = {} # Waiting for acks.
+        # type: () -> None
+        self.seq = {}  # Waiting for acks.
         self.ack_send_tasks = []
 
     # Returns a sequence number if a message is an ack.
     def is_ack(self, data, stream):
+        # type: (bytes, Any) -> Optional[int]
         if len(data) >= 9:
-            seq, = struct.unpack("!Q", data[0:8])
+            (seq,) = struct.unpack("!Q", data[0:8])
             is_ack = data[8]
             if is_ack == 1:
                 return seq
@@ -30,9 +35,10 @@ class ACKUDP():
     # Received message that needs to be acked.
     # Return its sequence number and valid ack response.
     def is_ackable(self, data, stream):
-        payload = ack = is_ack = seq = None
+        # type: (bytes, Any) -> List[Optional[Any]]
+        ack = is_ack = seq = None
         if len(data) >= 9:
-            seq, = struct.unpack("!Q", data[0:8])
+            (seq,) = struct.unpack("!Q", data[0:8])
             is_ack = data[8]
         else:
             return [None, None, None]
@@ -51,7 +57,9 @@ class ACKUDP():
     yet. Keep code to skip acking if a peer sent a message.
     This prevents getting into loops for the sender.
     """
+
     def handle_ack(self, data, f_is_ack, f_is_ackable, f_send):
+        # type: (bytes, Optional[Any], Optional[Any], Any) -> Tuple[int, Optional[bytes]]
         self.ack_send_tasks = rm_done_tasks(self.ack_send_tasks)
         data = data
         payload = recv_seq = ack_seq = ack = None
@@ -100,11 +108,7 @@ class ACKUDP():
         in a channel message which allows the server to deliver the message.
         """
         if ack is not None:
-            task = asyncio.create_task(
-                async_wrap_errors(
-                    f_send(ack)
-                )
-            )
+            task = asyncio.create_task(async_wrap_errors(f_send(ack)))
 
             self.ack_send_tasks.append(task)
             return 2, payload
@@ -118,7 +122,9 @@ class ACKUDP():
     a value of 0 (no errors.) The code uses events to wait on ACKs
     so there are no inefficient busy-loop checks.
     """
+
     async def ack_send(self, data, dest_tup, seq=None, sock_timeout=0, tries=3):
+        # type: (bytes, Any, Optional[int], int, int) -> Tuple[Any, asyncio.Event]
         # Keep sending until max sends reached.
         # For acks we send max transmits as they're small messages.
         if seq is None:
@@ -134,17 +140,14 @@ class ACKUDP():
 
         # Do the sending concurrently so event can be returned.
         async def worker():
+            # type: () -> None
             # Record when the process started.
             start = 0
             if sock_timeout:
                 start = timestamp()
 
             # Build data to send.
-            buf = bytearray().join([
-                pack("!Q", seq),
-                pack("!B", 0),
-                memoryview(data)
-            ])
+            buf = bytearray().join([pack("!Q", seq), pack("!B", 0), memoryview(data)])
 
             # Await on ACK events.
             # Break on transmits >= tries, timeout, or success.
@@ -167,10 +170,7 @@ class ACKUDP():
                     # at the send() await above, bail out rather than KeyError.
                     if seq not in self.seq:
                         break
-                    await asyncio.wait_for(
-                        self.seq[seq].wait(),
-                        3
-                    )
+                    await asyncio.wait_for(self.seq[seq].wait(), 3)
 
                     # No timeout error = success.
                     break
@@ -195,12 +195,17 @@ class ACKUDP():
         # Wait for ACK.
         return task, event
 
+
 class BaseACKProto(asyncio.Protocol):
+    """Base asyncio Protocol with duplicate-message filtering for ACK-UDP streams."""
+
     def __init__(self, conf):
+        # type: (Any) -> None
         self.conf = conf
 
     # Supports dropping duplicate messages.
     def is_unique_msg(self, pipe, data, client_tup):
+        # type: (Any, bytes, Any) -> int
         # Reset seen msgs after dict fills.
         if len(self.msg_ids) > self.conf["max_msg_ids"]:
             self.msg_ids = {}

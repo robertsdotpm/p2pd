@@ -8,6 +8,6 @@ class TestP2PAddr(unittest.IsolatedAsyncioTestCase):
         print(out)
         self.assertTrue(len(out[IP4]))
 
-if __name__ == '__main__':
-    main()
 
+if __name__ == "__main__":
+    main()

@@ -16,6 +16,7 @@ except NameError:
 # Parse a TURN message.
 # Use bitwise OPs to get valid method and status codes.
 def turn_parse_msg(buf):
+    # type: (Any) -> Tuple[Optional[Any], Optional[Any], Optional[Any]]
     try:
         turn_msg, _ = STUNMsg.unpack(buf, mode=RFC5389)
         turn_method = b_and(turn_msg.msg_type, b"\x00\x0f")
@@ -23,6 +24,7 @@ def turn_parse_msg(buf):
         return turn_msg, turn_method, turn_status
     except (ValueError, struct.error):
         return None, None, None
+
 
 """
 Messages sent to a relay address get returned by the TURN
@@ -32,7 +34,10 @@ B) Peer Address attribute (the sender)
 
 Return this information to the caller.
 """
+
+
 def turn_get_data_attr(msg, af, client):
+    # type: (Any, Any, Any) -> Tuple[Optional[bytes], Optional[Any]]
     # Step through all attributes.
     data = peer_tup = None
     while not msg.eof():
@@ -58,11 +63,14 @@ def turn_get_data_attr(msg, af, client):
             # Validate the peer addr.
             ext = client.turn_pipe.route.ext()
             if peer_tup[0] == ext:
-                error = fstr("""
+                error = fstr(
+                    """
                 We received a TURN message from ourselves
                 this might indicate bad logic
                 msg peer_tup 0 == {0}
-                """, (ext,))
+                """,
+                    (ext,),
+                )
                 log(error)
 
     # Reset attribute pointer to start.
@@ -71,8 +79,10 @@ def turn_get_data_attr(msg, af, client):
     # Return results (if any.)
     return data, peer_tup
 
+
 # True when all the fields in the client needed for auth are set.
 def is_auth_ready(self):
+    # type: (Any) -> bool
     key_con = self.key is not None
     realm_con = self.realm is not None
     nonce_con = self.nonce is not None
@@ -80,10 +90,12 @@ def is_auth_ready(self):
         return True
     else:
         return False
-    
+
+
 def turn_proc_attrs(af, attr_code, attr_data, msg, self):
+    # type: (Any, Any, Any, Any, Any) -> List[Any]
     error_code = 0
-    error_msg = b''
+    error_msg = b""
 
     # Server address given back for relaying messages.
     if attr_code == STUNAttrs.XorRelayedAddress:
@@ -104,33 +116,41 @@ def turn_proc_attrs(af, attr_code, attr_data, msg, self):
 
             # Validate relay tup IP.
             if self.relay_tup[0] != self.dest[0]:
-                error = fstr("""
+                error = fstr(
+                    """
                 Our XOR relay tup IP was decoded as 
                 {0} which is different 
                 from the address of the TURN server 
                 {1} which may 
                 indicate a XOR decoding error.
-                """, (self.relay_tup[0], self.dest[0],))
+                """,
+                    (
+                        self.relay_tup[0],
+                        self.dest[0],
+                    ),
+                )
                 log(error)
 
     # Handle authentication.
     if attr_code == STUNAttrs.Realm:
         self.realm = attr_data
         if self.turn_user is not None and self.turn_pw is not None:
-            self.key = md5(self.turn_user + b':' + self.realm + b':' + self.turn_pw).digest()
-            log("> Turn setting key = %s" % ( to_s(to_h(self.key)) ) )
+            self.key = md5(
+                self.turn_user + b":" + self.realm + b":" + self.turn_pw
+            ).digest()
+            log("> Turn setting key = %s" % (to_s(to_h(self.key))))
 
     # Nonce is used for reply protection.
     # As our client uses a state-machine the impact of this is minimal.
     elif attr_code == STUNAttrs.Nonce:
         self.nonce = attr_data
         if IS_DEBUG:
-            log("> Turn setting nonce = %s" % ( to_s(to_h(self.nonce.tobytes()))  ) )
+            log("> Turn setting nonce = %s" % (to_s(to_h(self.nonce.tobytes()))))
 
     elif attr_code == STUNAttrs.Lifetime:
-        self.lifetime, = unpack("!I", attr_data)
+        (self.lifetime,) = unpack("!I", attr_data)
         if IS_DEBUG:
-            log("> Turn setting lifetime = %d" % ( self.lifetime ))
+            log("> Turn setting lifetime = %d" % (self.lifetime))
 
     # Return any error codes.
     elif attr_code == STUNAttrs.ErrorCode:
@@ -139,14 +159,15 @@ def turn_proc_attrs(af, attr_code, attr_data, msg, self):
         error_code = (d[2] & 0x7) * 100 + d[3]
         error_msg = b2.read()
 
-
     return [error_code, error_msg]
+
 
 # Processes attributes from a TURN message.
 async def process_attributes(af, self, msg):
+    # type: (Any, Any, Any) -> List[Any]
     # Unpack attributes from message.
     error_code = 0
-    error_msg = b''
+    error_msg = b""
     while not msg.eof():
         attr_code, _, attr_data = msg.read_attr()
         turn_proc_attrs(af, attr_code, attr_data, msg, self)
@@ -155,7 +176,6 @@ async def process_attributes(af, self, msg):
             if not len(self.mapped):
                 self.mapped = msg.rtup
                 self.client_tup_future.set_result(self.mapped)
-
 
     # Trigger auth ready event.
     if is_auth_ready(self):
@@ -168,9 +188,11 @@ async def process_attributes(af, self, msg):
     # Return any errors info.
     return [error_code, error_msg]
 
+
 # Process any replies from the TURN server.
 # This function is run concurrently and doesn't block the main program.
 async def process_replies(self):
+    # type: (Any) -> None
     # Keep processing until stopped.
     while self.state != TURN_ERROR_STOPPED:
         # Prune old tasks.
@@ -204,11 +226,14 @@ async def process_replies(self):
             # Not a peer we white listed.
             peer_tup = norm_client_tup(peer_tup)
             if peer_tup not in self.peers:
-                error = fstr("""
+                error = fstr(
+                    """
                 Got a TURN data message from an 
                 unknown peer = {0} which 
                 may indicate a decoding error.
-                """, (peer_tup,))
+                """,
+                    (peer_tup,),
+                )
                 log(error)
                 continue
 
@@ -220,7 +245,7 @@ async def process_replies(self):
                 msg_data,
                 self.stream.is_ack,
                 self.stream.is_ackable,
-                lambda buf: self.stream.send(buf, peer_relay_tup)
+                lambda buf: self.stream.send(buf, peer_relay_tup),
             )
 
             """
@@ -246,7 +271,7 @@ async def process_replies(self):
             """
             self.handle_data(payload, peer_tup)
             continue
-    
+
         """
         When a TURN message is sent it has a unique TXID.
         Replies in response to these messages use the same TXID.
@@ -260,14 +285,16 @@ async def process_replies(self):
         # A few important attributes are saved into the client for future use.
         # Mostly details for relaying and authentication.
         try:
-            error_code, error_msg = await process_attributes(self.turn_pipe.route.af, self, turn_msg)
+            error_code, error_msg = await process_attributes(
+                self.turn_pipe.route.af, self, turn_msg
+            )
         except (OSError, ValueError):
             log_exception()
             continue
 
         # Log any error messages.
         if turn_status == STUNMsgCodes.ErrorResp:
-            log('Turn error {}: {}'.format(error_code, error_msg))
+            log("Turn error {}: {}".format(error_code, error_msg))
             log(fstr("turn hex msg: {0}", (to_h(turn_msg.pack()),)))
 
             # Stale nonce.
@@ -284,12 +311,12 @@ async def process_replies(self):
             self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
             if turn_status == STUNMsgCodes.SuccessResp:
                 if self.state != TURN_TRY_ALLOCATE:
-                    #self.txid = txid
-                    #self.requires_auth = False
+                    # self.txid = txid
+                    # self.requires_auth = False
                     self.auth_event.set()
             else:
                 log("Error in TURN allocate")
-                
+
             """
             The first 'allocate' message makes the server return attributes
             needed to authenticate and sign all future messages.
@@ -302,10 +329,7 @@ async def process_replies(self):
 
                     # All future messages from here-on in are 'signed.'
                     task = asyncio.create_task(
-                        async_retry(
-                            lambda: self.allocate_relay(sign=True),
-                            count=5
-                        )
+                        async_retry(lambda: self.allocate_relay(sign=True), count=5)
                     )
                     self.tasks.append(task)
 
@@ -317,9 +341,9 @@ async def process_replies(self):
                 # Notify sender that message was received.
                 self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
             else:
-                error = \
-                fstr("Error in TURN create permission = ") + \
-                fstr("{0}", (to_h(turn_msg.pack()),))
+                error = fstr("Error in TURN create permission = ") + fstr(
+                    "{0}", (to_h(turn_msg.pack()),)
+                )
                 log(error)
 
             continue

@@ -1,7 +1,5 @@
 import socket
 import time
-import selectors
-import errno
 from ...punch_defs import *
 from aionetiface.net.bind.bind_rules import binder_sync
 from aionetiface.net.net_utils import ip_strip_if
@@ -10,7 +8,10 @@ from aionetiface.net.net_utils import ip_strip_if
 These magic sock options are required for TCP hole punching on
 different operating systems.
 """
+
+
 def sock_opt_voodoo(s):
+    # type: (Any) -> None
     s.setblocking(False)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
@@ -25,7 +26,9 @@ def sock_opt_voodoo(s):
         pass
     """
 
+
 def bind_tcp_sockets(af, nic_id, port_allocs, src_ip=None):
+    # type: (Any, Optional[str], List[Any], Optional[str]) -> List[Tuple[Any, Any]]
     # Listen address.
     if src_ip:
         bind_ip = src_ip
@@ -41,14 +44,16 @@ def bind_tcp_sockets(af, nic_id, port_allocs, src_ip=None):
         try:
             s.bind(bind_tup)
             bound_socks.append((p, s))
-        except OSError as e:
+        except OSError:
             # print(f"Could not bind to port {p}: {e}")
             # Port colission so don't save.
             s.close()
 
     return bound_socks
 
+
 def listen_on_tcp_sockets(bound_infos):
+    # type: (List[Tuple[Any, Any]]) -> List[Tuple[Any, Any]]
     listen_infos = []
     for bound_info in bound_infos:
         p, s = bound_info
@@ -60,7 +65,9 @@ def listen_on_tcp_sockets(bound_infos):
 
     return listen_infos
 
+
 def connect_on_tcp_sockets(same_machine, bound_infos, dest_ip, spray_duration=5.0):
+    # type: (bool, List[Tuple[Any, Any]], str, float) -> None
     """
     Spray SYN packets at the destination for `spray_duration` seconds.
 
@@ -72,7 +79,7 @@ def connect_on_tcp_sockets(same_machine, bound_infos, dest_ip, spray_duration=5.
     while time.monotonic() < end:
         for p, s in bound_infos:
             try:
-                err = s.connect_ex((dest_ip, p.dest_port))
+                s.connect_ex((dest_ip, p.dest_port))
             except OSError:
                 pass
 
@@ -85,9 +92,11 @@ def connect_on_tcp_sockets(same_machine, bound_infos, dest_ip, spray_duration=5.
             x -- based on rtt?
             ?
             """
-            time.sleep(0.01)   # 10ms is typical sweet spot
+            time.sleep(0.01)  # 10ms is typical sweet spot
+
 
 def sleep_until(punch_time, f_timer, max_sleep=10):
+    # type: (float, Any, int) -> None
     now = f_timer()
     sleep_time = max(0, punch_time - now)
 
@@ -97,4 +106,3 @@ def sleep_until(punch_time, f_timer, max_sleep=10):
 
     if sleep_time > 0:
         time.sleep(sleep_time)
-

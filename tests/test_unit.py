@@ -12,7 +12,10 @@ import tempfile
 import unittest
 
 from p2pd import (
-    IP4, IP6, EXT_BIND, NIC_BIND,
+    IP4,
+    IP6,
+    EXT_BIND,
+    NIC_BIND,
     parse_node_addr,
 )
 from p2pd.node.node import Node
@@ -29,9 +32,17 @@ from p2pd.traversal.traversal_manager import TraversalManager
 from p2pd.traversal.traversal_plugin import TraversalPlugin
 from p2pd.traversal.traversal_utils import select_dest_ipr, sort_pairs_by_overlap
 from p2pd.protocol.traversal.proto_msg import (
-    ConMsg, GetAddr, ReturnAddr, PunchMsg, TURNMsg,
-    ProtoMsg, SIG_PROTO, SIG_CON, SIG_TCP_PUNCH,
-    SIG_GET_ADDR, SIG_RETURN_ADDR,
+    ConMsg,
+    GetAddr,
+    ReturnAddr,
+    PunchMsg,
+    TURNMsg,
+    ProtoMsg,
+    SIG_PROTO,
+    SIG_CON,
+    SIG_TCP_PUNCH,
+    SIG_GET_ADDR,
+    SIG_RETURN_ADDR,
 )
 from p2pd.traversal.traversal_utils import try_unpack_msg, sig_msg_to_buf
 
@@ -151,6 +162,7 @@ class TestNicknameNotStarted(unittest.IsolatedAsyncioTestCase):
     async def _make_nick(self):
         """Build a Nickname without calling start()."""
         from ecdsa import SigningKey, SECP256k1
+
         sk = SigningKey.generate(curve=SECP256k1)
         # Nickname.__init__ accepts ifs/sys_clock; we pass [] and None
         # because we never call start().
@@ -187,15 +199,21 @@ class TestProtoMessages(unittest.TestCase):
 
     def test_conmsg_plugin_name_preserved(self):
         msg = ConMsg({"meta": {"plugin_name": "direct_connect"}})
-        _, up = self._roundtrip(ConMsg, SIG_CON, {"meta": {"plugin_name": "direct_connect"}})
+        _, up = self._roundtrip(
+            ConMsg, SIG_CON, {"meta": {"plugin_name": "direct_connect"}}
+        )
         self.assertEqual(up.meta.plugin_name, "direct_connect")
 
     def test_getaddr_plugin_name(self):
-        _, up = self._roundtrip(GetAddr, SIG_GET_ADDR, {"meta": {"plugin_name": "return_addr"}})
+        _, up = self._roundtrip(
+            GetAddr, SIG_GET_ADDR, {"meta": {"plugin_name": "return_addr"}}
+        )
         self.assertEqual(up.meta.plugin_name, "return_addr")
 
     def test_returnaddr_plugin_name(self):
-        _, up = self._roundtrip(ReturnAddr, SIG_RETURN_ADDR, {"meta": {"plugin_name": "get_addr"}})
+        _, up = self._roundtrip(
+            ReturnAddr, SIG_RETURN_ADDR, {"meta": {"plugin_name": "get_addr"}}
+        )
         self.assertEqual(up.meta.plugin_name, "get_addr")
 
     def test_punchmsg_payload_roundtrip(self):
@@ -225,11 +243,13 @@ class TestProtoMessages(unittest.TestCase):
         """Wire sig_msg_to_buf -> try_unpack_msg with a live ConMsg."""
         msg = ConMsg({"meta": {"plugin_name": "direct_connect", "af": IP4}})
         # Set routing with a real dest_buf so routing.dest is populated.
-        msg.routing = ProtoMsg.Routing.from_dict({
-            "af": IP4,
-            "dest_buf": VALID_ADDR,
-            "dest_index": 0,
-        })
+        msg.routing = ProtoMsg.Routing.from_dict(
+            {
+                "af": IP4,
+                "dest_buf": VALID_ADDR,
+                "dest_index": 0,
+            }
+        )
 
         buf = sig_msg_to_buf(msg, None)
         unpacked = try_unpack_msg(buf, None, SIG_PROTO)
@@ -239,13 +259,16 @@ class TestProtoMessages(unittest.TestCase):
     def test_sig_msg_to_buf_unencrypted_when_no_vk(self):
         """When dest vk is None the message should NOT be encrypted."""
         msg = ConMsg({})
-        msg.routing = ProtoMsg.Routing.from_dict({
-            "af": IP4,
-            "dest_buf": VALID_ADDR,
-            "dest_index": 0,
-        })
+        msg.routing = ProtoMsg.Routing.from_dict(
+            {
+                "af": IP4,
+                "dest_buf": VALID_ADDR,
+                "dest_index": 0,
+            }
+        )
         # vk from parse_node_addr is None so message should be unencrypted
         from aionetiface import h_to_b, to_b
+
         raw = h_to_b(to_b(sig_msg_to_buf(msg, None)))
         is_encrypted = raw[0]
         self.assertEqual(is_encrypted, 0)
@@ -451,14 +474,14 @@ class TestLoadSigningKey(unittest.TestCase):
             self.assertNotEqual(sk1.to_string(), sk2.to_string())
 
     def test_different_dirs_give_different_keys(self):
-        with tempfile.TemporaryDirectory() as td1, \
-             tempfile.TemporaryDirectory() as td2:
+        with tempfile.TemporaryDirectory() as td1, tempfile.TemporaryDirectory() as td2:
             sk1 = load_signing_key([], [], 10001, td1)
             sk2 = load_signing_key([], [], 10001, td2)
             # Different install paths produce different key files.
             # Keys MAY be different (different random seeds).
             # At minimum both are valid SigningKey objects.
             from ecdsa import SigningKey
+
             self.assertIsInstance(sk1, SigningKey)
             self.assertIsInstance(sk2, SigningKey)
 

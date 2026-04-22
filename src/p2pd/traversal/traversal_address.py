@@ -7,7 +7,11 @@ Then because the node may have moved or changed,
 an MQTT signaling message asks that node for its most
 recent address bytes.
 """
+
+
 async def get_updated_addr_bytes(node, dest_addr):
+    # type: (Any, Any) -> Any
+    # type: (Any, Any) -> Any
     """
     Resolve a nickname to address bytes, then ask the peer for its current
     address via the get_addr plugin (MQTT signaling).
@@ -16,19 +20,30 @@ async def get_updated_addr_bytes(node, dest_addr):
     uses the plugin system. Kept for reference.
     """
     if not pnp_name_has_tld(dest_addr):
-        raise Exception("dest addr is not a pnp name")
+        raise ValueError("dest addr is not a pnp name")
 
     log_p2p(fstr("Translating '{0}'", (dest_addr,)), node.node_id[:8])
 
     pkt = await node.nick_client.get(dest_addr)
     if pkt is None or pkt.value is None:
-        raise Exception(fstr("Nickname lookup failed for '{0}'", (dest_addr,)))
+        raise LookupError(fstr("Nickname lookup failed for '{0}'", (dest_addr,)))
 
     if not pkt.vkc or not isinstance(pkt.vkc, bytes):
-        raise Exception(fstr("Missing vkc in nickname response for '{0}'", (dest_addr,)))
+        raise ValueError(
+            fstr("Missing vkc in nickname response for '{0}'", (dest_addr,))
+        )
 
     addr_bytes = pkt.value
-    log_p2p(fstr("Resolved '{0}' = '{1}'", (dest_addr, addr_bytes,)), node.node_id[:8])
+    log_p2p(
+        fstr(
+            "Resolved '{0}' = '{1}'",
+            (
+                dest_addr,
+                addr_bytes,
+            ),
+        ),
+        node.node_id[:8],
+    )
 
     # Use the plugin system to request the peer's most recent address.
     try:
@@ -40,8 +55,11 @@ async def get_updated_addr_bytes(node, dest_addr):
 
     return addr_bytes
 
+
 async def get_updated_addr_from_mqtt(node, dest_bytes):
-    af = None        # AF selection is handled inside connect().
+    # type: (Any, Any) -> Optional[Any]
+    # type: (Any, Any) -> Optional[Any]
+    af = None  # AF selection is handled inside connect().
     route_type = None
     plugin = await node.connect(af, route_type, dest_bytes, "get_addr")
     try:

@@ -2,8 +2,12 @@ from aionetiface import *
 from ...traversal_plugin import TraversalPlugin
 from ....protocol.traversal.proto_msg import ReturnAddr
 
+
 class ReturnAddrPlugin(TraversalPlugin):
+    """Traversal plugin that replies to a GetAddr request with the sender's own address."""
+
     async def run(self, reply=None):
+        # type: (Optional[Any]) -> None
         msg = ReturnAddr()
         msg.meta.plugin_name = "get_addr"
 

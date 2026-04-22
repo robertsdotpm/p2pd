@@ -1,5 +1,4 @@
 import socket
-import selectors
 
 NODE_PORT = 10001
 TRY_OVERLAP_EXTS = 1
@@ -10,7 +9,7 @@ CON_ID_MSG = b"P2P_CON_ID_EQ"
 NODE_ADDR_MAX_INTERFACES = 4
 
 # No more than n signal pipes to send signals to nodes.
-SIGNAL_PIPE_NO = 1 # TODO: change back to 3
+SIGNAL_PIPE_NO = 1  # TODO: change back to 3
 
 # create socket pair
 stop_rw = socket.socketpair()
@@ -26,10 +25,9 @@ NODE_CONF = {
     "enable_punching": True,
     "enable_nickname": True,
     "enable_stun_clients": True,
-
 }
 
-NODE_TEST_CONF =  {
+NODE_TEST_CONF = {
     "reuse_addr": False,
     "enable_upnp": False,
     "sig_pipe_no": 0,

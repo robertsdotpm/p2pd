@@ -175,3 +175,6 @@ otherwise they will just build up.
 - put not overwriting same name
    - 1 second update is that bad? lets add a comment somewhere
     - going to have to edit schema on remote and local 
+
+- we need some kind of auto-connect without plugin selection for use with the
+examples. we can maybe add this again back into the demo as a discrete step.

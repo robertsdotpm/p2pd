@@ -14,7 +14,7 @@ In IPv4 a lease time of 0 (unlimited) is allowed which is the approach
 taken here. So duel-stack hosts will at least have one route that's
 reachable. Assuming that the rules aren't wiped out after the router
 is rebooted. It's quite possible they are. Maybe useful for security
-and cleanup purposes. 
+and cleanup purposes.
 
 Finally, the response messages after port mapping can be inconsistent
 with the true outcome of the request. In testing IPv4 port forwarding
@@ -22,7 +22,7 @@ on an Open-WRT VirtualBox VM using the miniupnpd package it replies
 with a 501 error message when follow-up calls indicate the mappings
 were created successfully. UPnP stacks aren't perfect.
 
-Developer resources: 
+Developer resources:
 https://github.com/jeremypoulter/DeveloperToolsForUPnP
     - The AV server does IPv6 and is useful for testing IPv6 code.
 https://openwrt.org/docs/guide-user/virtualization/vmware#upgradedupdated_ova_for_openwrt21
@@ -30,7 +30,7 @@ https://openwrt.org/docs/guide-user/virtualization/vmware#upgradedupdated_ova_fo
     Do not follow the first part. Skip directly to the section that
     has an 'updated OVA for VMWare' this file is gold.
     Don't use VMWare for it. Open this in VirtualBox.
-    It is configured to use LAN IP 192.168.1.1 by default. 
+    It is configured to use LAN IP 192.168.1.1 by default.
 
     This is important:
         - When you start the VM enter passwd and set a password for root
@@ -61,9 +61,14 @@ import socket
 from aionetiface import *
 from .upnp_utils import *
 
-async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto, add_host=None):
+
+async def brute_force_port_forward(
+    af, interface, ext_port, src_tup, desc, proto, add_host=None
+):
+    # type: (Any, Any, int, Tuple[str, int], str, str, Optional[str]) -> Any
     # Check if a port is open.
     async def try_connect(port, host):
+        # type: (int, str) -> Optional[Tuple[str, int]]
         dest = (host, port)
         route = await interface.route(af).bind()
         try:
@@ -75,14 +80,11 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
 
     # Try to load forwarding services at path and use them.
     async def try_service_path(path, dest):
+        # type: (str, Tuple[str, int]) -> int
         # Get service URLs for port forwarding or pin hole.
         route = await interface.route(af).bind()
         service_info = await async_wrap_errors(
-            get_upnp_forwarding_services(
-                route,
-                dest,
-                path
-            )
+            get_upnp_forwarding_services(route, dest, path)
         )
 
         # Failed.
@@ -105,7 +107,7 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
         # Success so return.
         if forward_success:
             return 1
-        
+
         return 0
 
     # List of hosts to try get a rootXML from.
@@ -137,20 +139,15 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
     ports = [
         # UPnP port.
         1900,
-
         # MiniUPnP
         5000,
-
         # Libupnp
         49152,
-
         # Many routers
         5431,
-
         # Default web server ports.
         80,
         8080,
-
         56688,
     ]
 
@@ -160,11 +157,7 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
     for host in hosts:
         tasks = []
         for port in ports:
-            tasks.append(
-                async_wrap_errors(
-                    try_connect(port, host)
-                )
-            )
+            tasks.append(async_wrap_errors(try_connect(port, host)))
 
         # Socket limit to port list * ifs.
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -175,12 +168,8 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
     for dest in dests:
         for i in range(0, int(len(UPNP_PATHS) / step) + 1):
             tasks = []
-            for path in UPNP_PATHS[i * step:(i  * step) + step]:
-                tasks.append(
-                    async_wrap_errors(
-                        try_service_path(path, dest)
-                    )
-                )
+            for path in UPNP_PATHS[i * step : (i * step) + step]:
+                tasks.append(async_wrap_errors(try_service_path(path, dest)))
 
             # Socket limit to path list * ifs.
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -190,12 +179,17 @@ async def brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto
     # All failed.
     return 0
 
+
 async def discover_upnp_devices(af, nic):
+    # type: (Any, Any) -> Optional[List[Any]]
     # Set protocol family for multicast socket.
-    sock_conf = dict_child({
-        "sock_proto": socket.IPPROTO_UDP,
-        "reuse_addr": True,
-    }, NET_CONF)
+    sock_conf = dict_child(
+        {
+            "sock_proto": socket.IPPROTO_UDP,
+            "reuse_addr": True,
+        },
+        NET_CONF,
+    )
 
     # Make multicast socket for M-search.
     route = await nic.route(af).bind(ips="*")
@@ -207,7 +201,7 @@ async def discover_upnp_devices(af, nic):
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
 
     if af == IP6:
-        #sock.setsockopt(socket.IPPROTO_IPV6, socket.IP_MULTICAST_TTL, 2)
+        # sock.setsockopt(socket.IPPROTO_IPV6, socket.IP_MULTICAST_TTL, 2)
         sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_HOPS, 22)
 
     # Create async pipe wrapper for multicast socket.
@@ -218,10 +212,18 @@ async def discover_upnp_devices(af, nic):
         log_exception()
         pipe = None
 
-    #print("discover upnp devs ", af, pipe)
+    # print("discover upnp devs ", af, pipe)
 
     if pipe is None:
-        log(fstr("discover upnp pipe none {0} {1}", (af, nic.name,)))
+        log(
+            fstr(
+                "discover upnp pipe none {0} {1}",
+                (
+                    af,
+                    nic.name,
+                ),
+            )
+        )
         return
 
     # Send m-search message.
@@ -254,7 +256,11 @@ async def discover_upnp_devices(af, nic):
     # Cleanup multicast socket.
     return replies
 
-async def port_forward_from_multicast(af, interface, ext_port, src_tup, desc, proto="TCP"):
+
+async def port_forward_from_multicast(
+    af, interface, ext_port, src_tup, desc, proto="TCP"
+):
+    # type: (Any, Any, int, Tuple[str, int], str, str) -> Any
     try:
         # Get list of possible devices supporting UPNP.
         # I think NAT-PMP devices also reply here.
@@ -263,10 +269,7 @@ async def port_forward_from_multicast(af, interface, ext_port, src_tup, desc, pr
 
         # Get a list of service URLs that match forwarding or pin hole.
         service_infos = await get_upnp_forwarding_services_for_replies(
-            af,
-            src_tup,
-            interface,
-            replies
+            af, src_tup, interface, replies
         )
 
         # Try to use the service URLs for forwarding.
@@ -280,7 +283,7 @@ async def port_forward_from_multicast(af, interface, ext_port, src_tup, desc, pr
             service_infos,
         )
 
-        #print("multi forward ", forward_success)
+        # print("multi forward ", forward_success)
 
         return forward_success
     except (OSError, ConnectionError, asyncio.TimeoutError, ValueError):
@@ -288,12 +291,16 @@ async def port_forward_from_multicast(af, interface, ext_port, src_tup, desc, pr
         log_exception()
         return False
 
+
 """
 Two algorithms are run concurrently to try do UPnP based on the AF.
 Which ever succeeds first causes the other task to be cancelled and
 the function returns as soon as possible.
 """
+
+
 async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
+    # type: (Any, Any, int, Tuple[str, int], str, str) -> int
     """
     This process is very slow and will be done in the background
     incrementally. This is because there is a 64 socket max limit
@@ -301,21 +308,12 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
     """
     brute_force_task = asyncio.create_task(
         async_wrap_errors(
-            brute_force_port_forward(
-                af,
-                interface,
-                ext_port,
-                src_tup,
-                desc,
-                proto
-            )
+            brute_force_port_forward(af, interface, ext_port, src_tup, desc, proto)
         )
     )
 
     multicast_task = asyncio.create_task(
-        port_forward_from_multicast(
-            af, interface, ext_port, src_tup, desc, proto="TCP"
-        )
+        port_forward_from_multicast(af, interface, ext_port, src_tup, desc, proto="TCP")
     )
 
     tasks = [brute_force_task, multicast_task]
@@ -331,9 +329,12 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
 
     return winner
 
+
 if __name__ == "__main__":
+
     async def upnp_main():
         from .interface import Interface
+
         nic = await Interface("enp0s25")
         af = IP4
         route = nic.route(af)
@@ -353,13 +354,12 @@ if __name__ == "__main__":
         else:
             src_ip = route.ext()
 
-        #src_ip = route.ext()
-        
+        # src_ip = route.ext()
+
         print(src_ip)
-        task = await port_forward(af, nic, 60001, (src_ip, 8000), "test")
+        await port_forward(af, nic, 60001, (src_ip, 8000), "test")
         while True:
             await asyncio.sleep(1)
-
 
     async_test(upnp_main)
 

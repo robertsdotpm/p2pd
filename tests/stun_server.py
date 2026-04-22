@@ -24,8 +24,14 @@ from struct import pack
 from aionetiface import *
 from aionetiface.net.net_defs import NET_CONF
 from aionetiface.protocol.stun.stun_defs import (
-    STUNMsg, STUNMsgTypes, STUNMsgCodes, STUNAttrs, STUNAddrTup,
-    RFC3489, RFC5389, STUN_MAGIC_COOKIE
+    STUNMsg,
+    STUNMsgTypes,
+    STUNMsgCodes,
+    STUNAttrs,
+    STUNAddrTup,
+    RFC3489,
+    RFC5389,
+    STUN_MAGIC_COOKIE,
 )
 
 
@@ -86,9 +92,7 @@ class STUNServer:
         lo = self.loopback(af)
 
         async def cb(data, client_tup, pipe):
-            await async_wrap_errors(
-                self.on_binding_request(af, data, client_tup, pipe)
-            )
+            await async_wrap_errors(self.on_binding_request(af, data, client_tup, pipe))
 
         pipe = await Pipe(UDP, None, route).connect(cb)
         self.control_pipes[(af, UDP)] = pipe
@@ -98,9 +102,7 @@ class STUNServer:
         lo = self.loopback(af)
 
         async def cb(data, client_tup, pipe):
-            await async_wrap_errors(
-                self.on_binding_request(af, data, client_tup, pipe)
-            )
+            await async_wrap_errors(self.on_binding_request(af, data, client_tup, pipe))
 
         reuse_conf = {**NET_CONF, "reuse_addr": True}
         pipe = await Pipe(TCP, None, route, conf=reuse_conf).connect(cb)
@@ -122,13 +124,16 @@ class STUNServer:
         reply = STUNMsg(
             msg_type=STUNMsgTypes.Binding,
             msg_code=STUNMsgCodes.SuccessResp,
-            mode=self.mode
+            mode=self.mode,
         )
         reply.txn_id = bytes(msg.txn_id)
 
         mapped_buf = encode_stun_addr(
-            client_tup[0], client_tup[1], af,
-            reply.txn_id, reply.magic_cookie,
+            client_tup[0],
+            client_tup[1],
+            af,
+            reply.txn_id,
+            reply.magic_cookie,
             STUNAttrs.XorMappedAddress,
         )
         reply.write_attr(STUNAttrs.XorMappedAddress, mapped_buf)

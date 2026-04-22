@@ -10,14 +10,12 @@ class TestSignaling(unittest.IsolatedAsyncioTestCase):
 
         return
         """
-        
+
         msg = "test msg"
         peerid = to_s(rand_plain(10))
         nic = await Interface()
         for af in nic.supported():
             for server in MQTT_SERVERS:
-                
-
                 if server[af] is None:
                     continue
 
@@ -27,13 +25,29 @@ class TestSignaling(unittest.IsolatedAsyncioTestCase):
                 client = await is_valid_mqtt(dest)
 
                 if not client:
-                    print(fstr("mqtt {0} {1} broken", (af, dest,)))
+                    print(
+                        fstr(
+                            "mqtt {0} {1} broken",
+                            (
+                                af,
+                                dest,
+                            ),
+                        )
+                    )
                     continue
                 else:
-                    print(fstr("mqtt {0} {1} works", (af, dest,)))
-                    
+                    print(
+                        fstr(
+                            "mqtt {0} {1} works",
+                            (
+                                af,
+                                dest,
+                            ),
+                        )
+                    )
 
                 await client.close()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

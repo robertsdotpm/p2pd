@@ -21,6 +21,7 @@ pkill -9 -f 'p2pd'
 disabling pp_executors for now as a test
 """
 
+
 async def git_pull_latest(servers):
     for server in servers:
         print(f"{server['os']}> Git pull latest code.")
@@ -33,6 +34,7 @@ async def git_pull_latest(servers):
         async with ssh_connect(server) as con:
             cmd = f"""cd "{p2pd_dir}" && git pull"""
             await con.run(cmd, check=True)
+
 
 async def pyenv_install_latest(servers):
     for server in servers:
@@ -54,6 +56,7 @@ async def pyenv_install_latest(servers):
                 # Waits for the command to be done in the active shell session.
                 await ssh_await_cmd(pyenv_cmd, shell, chain_cmds)
 
+
 async def tunnel_test(active, passive):
     """
     If running script in rapid succession against same node pairs
@@ -62,9 +65,8 @@ async def tunnel_test(active, passive):
     await asyncio.sleep(2)
     passive_shell = active_shell = None
     try:
-
         # Use local machines PNP server so names have no limits.
-        p2pd_cmd  = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 "
+        p2pd_cmd = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 "
         p2pd_cmd += "--disable_upnp 1 --run_time 120 --cmd "
         chain_cmds = get_chain_cmds(active)
 
@@ -72,7 +74,7 @@ async def tunnel_test(active, passive):
         print(f"{passive['os']}> Starting passive shell.")
         passive_con = await ssh_connect(passive)
         passive_shell = await passive_con.create_process("bash -l")
-        #await shell_write("pkill -f p2pd\n", passive_shell) # TODO: win
+        # await shell_write("pkill -f p2pd\n", passive_shell) # TODO: win
         await shell_write("export P2PD_DEBUG=1\n", passive_shell)
         init_cmd = init_pyenv_vars_cmd(passive)
         await shell_write(init_cmd, passive_shell)
@@ -91,7 +93,7 @@ async def tunnel_test(active, passive):
         # Start passive node listening for cons.
         print(f"{passive['os']}> Starting passive node.")
         cmd = p2pd_cmd + "1"
-        cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n" # TODO: background on win?
+        cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n"  # TODO: background on win?
         await shell_write(cmd, passive_shell)
         await asyncio.sleep(5)
 
@@ -100,7 +102,7 @@ async def tunnel_test(active, passive):
         active_con = await ssh_connect(active)
         active_shell = await active_con.create_process("bash -l")
         await shell_write("export P2PD_DEBUG=1\n", active_shell)
-        #await shell_write("pkill -f p2pd\n", active_shell) # TODO: win?
+        # await shell_write("pkill -f p2pd\n", active_shell) # TODO: win?
         init_cmd = init_pyenv_vars_cmd(active)
         await shell_write(init_cmd, active_shell)
 
@@ -110,7 +112,7 @@ async def tunnel_test(active, passive):
         # NOTE: changed to (r) to test reverse con
         print(f"{active['os']}> Try connect and echo to passive node.")
         cmd = f'{p2pd_cmd}0pl4 --echo "CLEAN_SHUTDOWN" --dest_addr {passive_pnp}'
-        #print(cmd)
+        # print(cmd)
         cmd = pyenv_run_cmd(py_ver, active, cmd)
         await shell_write(cmd + "\n", active_shell)
         print(cmd)
@@ -119,11 +121,14 @@ async def tunnel_test(active, passive):
 
         # Close long-running processes.
         # TODO: task kill on win?
-        #cmd = "pkill -15 p2pd\n"
-        #await shell_write(cmd, active_shell)
-        #await shell_write(cmd, passive_shell)
+        # cmd = "pkill -15 p2pd\n"
+        # await shell_write(cmd, active_shell)
+        # await shell_write(cmd, passive_shell)
     finally:
-        shells = (active_shell, passive_shell,)
+        shells = (
+            active_shell,
+            passive_shell,
+        )
         for shell in shells:
             if shell is not None:
                 shell.close()
@@ -132,15 +137,19 @@ async def tunnel_test(active, passive):
     passive_con.close()
     active_con.close()
 
+
 async def run_client():
     # Freebsd and fedora, chosen arbitrary to start testing with.
-    servers = (SSH_SERVERS[3], SSH_SERVERS[4],)
+    servers = (
+        SSH_SERVERS[3],
+        SSH_SERVERS[4],
+    )
     await git_pull_latest(servers)
     await pyenv_install_latest(servers)
     await tunnel_test(*servers)
-    
+
 
 try:
     asyncio.get_event_loop().run_until_complete(run_client())
 except (OSError, asyncssh.Error) as exc:
-    sys.exit('SSH connection failed: ' + str(exc))
+    sys.exit("SSH connection failed: " + str(exc))

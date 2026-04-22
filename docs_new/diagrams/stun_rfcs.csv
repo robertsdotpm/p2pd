@@ -1,0 +1,3 @@
+RFC,Magic cookie,TXID len,Supports
+3489,,16,see your remote ip:port; control reply ip and port
+>= 5389,2112A442,12,see your remote ip:port

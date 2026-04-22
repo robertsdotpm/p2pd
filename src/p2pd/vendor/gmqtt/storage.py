@@ -1,5 +1,4 @@
 import asyncio
-from typing import Callable, Tuple, Set
 
 import heapq
 
@@ -44,7 +43,9 @@ class HeapPersistentStorage(BasePersistentStorage):
 
     def _check_empty(self):
         if not self._queue:
-            self._notify_waiters(self._empty_waiters, lambda waiter: waiter.set_result(None))
+            self._notify_waiters(
+                self._empty_waiters, lambda waiter: waiter.set_result(None)
+            )
 
     async def push_message(self, mid, raw_package):
         tm = asyncio.get_event_loop().time()
@@ -75,7 +76,9 @@ class HeapPersistentStorage(BasePersistentStorage):
 
     async def clear(self):
         self._queue = []
-        self._notify_waiters(self._empty_waiters, lambda waiter: waiter.set_result(None))
+        self._notify_waiters(
+            self._empty_waiters, lambda waiter: waiter.set_result(None)
+        )
 
     async def get_all(self):
         return self._queue
