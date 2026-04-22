@@ -59,7 +59,7 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
         ifs = filter_nics_by_mac(args.nic, ifs)
 
     if not ifs:
-        raise RuntimeError("Failed to load interfaces.")
+        raise ValueError("Failed to load interfaces.")
 
     # Show the ifs loaded.
     display_ifs_loaded(ifs)

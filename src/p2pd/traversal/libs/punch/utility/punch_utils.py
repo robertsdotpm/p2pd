@@ -40,7 +40,7 @@ server: str = NTP_SERVER,
                 response_data, _ = s.recvfrom(NTP_PACKET_SIZE)
 
                 if len(response_data) < NTP_PACKET_SIZE:
-                    raise RuntimeError("NTP response too short")
+                    raise ValueError("NTP response too short")
 
                 # The Transmit Timestamp is the last 8 bytes (offset 40)
                 # It is a 64-bit unsigned fixed-point number (seconds + fraction)
@@ -58,7 +58,7 @@ server: str = NTP_SERVER,
             # Handle other socket errors or unpacking issues
             time.sleep(0.1)
 
-    raise RuntimeError("Failed to get reliable network time")
+    raise OSError("Failed to get reliable network time")
 
 
 """

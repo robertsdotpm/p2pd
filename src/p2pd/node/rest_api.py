@@ -411,12 +411,12 @@ async def start_p2pd_server(port: int = REST_API_PORT, ifs: Optional[List[Any]] 
         # Load a list of interface names.
         if_names = await list_interfaces(netifaces=netifaces)
         if not if_names:
-            raise RuntimeError("p2pd rest could not find if names")
+            raise AssertionError("p2pd rest could not find if names")
 
         # Load those interfaces with NAT details.
         ifs = await load_interfaces(if_names, Interface)
         if not ifs:
-            raise RuntimeError("p2pd rest no ifs loaded.")
+            raise AssertionError("p2pd rest no ifs loaded.")
 
     # Start P2PD node.
     node = P2PNode(ifs, port=NODE_PORT + 60 + 1, conf=node_conf)

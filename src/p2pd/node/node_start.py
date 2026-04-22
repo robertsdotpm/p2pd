@@ -79,7 +79,7 @@ async def load_network_interfaces(node: Any) -> None:
     node.ifs = sorted(node.ifs, key=lambda x: x.name)
 
     if not node.ifs:
-        raise RuntimeError("p2p node could not load ifs.")
+        raise AssertionError("p2p node could not load ifs.")
 
 
 def start_background_port_forwarding(node: Any) -> Optional[Any]:
@@ -115,7 +115,7 @@ async def load_machine_identity(node: Any) -> None:
     node.machine_id = await load_machine_id("p2pd", node.ifs[0].netifaces)
 
     if node.machine_id in (None, ""):
-        raise RuntimeError("Could not load machine id.")
+        raise AssertionError("Could not load machine id.")
 
     # The listen port is set deterministically to avoid conflicts
     # with port forwarding with multiple nodes in the LAN.
@@ -214,7 +214,7 @@ async def setup_signal_router(node: Any, router: Any, out: bool, cout: Callable)
         if out:
             cout("\t\t", clients)
     except asyncio.TimeoutError as exc:
-        raise RuntimeError("Router MQTT start timed out - signaling may be degraded") from exc
+        raise OSError("Router MQTT start timed out - signaling may be degraded") from exc
 
 
 # ==========================================
@@ -245,7 +245,7 @@ def start_maintenance_tasks(node: Any) -> None:
 def build_node_address(node: Any, out: bool) -> None:
     """Serialise the node's public key and interface info into addr_bytes and parse it into addr_map."""
     if node.node_id is None:
-        raise RuntimeError("node_id was not set before building node address.")
+        raise AssertionError("node_id was not set before building node address.")
 
     node.addr_bytes = make_node_addr(
         node.kp.public_key_hex,
@@ -267,7 +267,7 @@ def build_node_address(node: Any, out: bool) -> None:
         raise
     except (ValueError, TypeError) as exc:
         log_exception()
-        raise RuntimeError("Can't parse nodes p2p addr.") from exc
+        raise ValueError("Can't parse nodes p2p addr.") from exc
 
 
 async def finalize_port_forwarding(node: Any, upnp_task: Optional[Any], out: bool, cout: Callable) -> None:

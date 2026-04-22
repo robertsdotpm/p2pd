@@ -224,7 +224,7 @@ class TraversalManager:
             msg.meta.plugin_name = "direct_connect"
 
         if msg.meta.plugin_name not in self.plugin_loaders:
-            raise RuntimeError("Plugin not installed.")
+            raise ValueError("Plugin not installed.")
 
         # Creates a new plugin to handle a new incoming message from router.
         plugin = self.create_plugin(

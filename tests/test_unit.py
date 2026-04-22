@@ -156,7 +156,7 @@ class TestNicknameTLD(unittest.TestCase):
 
 
 # ===========================================================================
-# 3. Nickname raises RuntimeError when called before start()
+# 3. Nickname raises AssertionError when called before start()
 # ===========================================================================
 class TestNicknameNotStarted(unittest.IsolatedAsyncioTestCase):
     async def _make_nick(self):
@@ -170,17 +170,17 @@ class TestNicknameNotStarted(unittest.IsolatedAsyncioTestCase):
 
     async def test_put_before_start_raises(self):
         nick = await self._make_nick()
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(AssertionError):
             await nick.put("name", b"value")
 
     async def test_get_before_start_raises(self):
         nick = await self._make_nick()
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(AssertionError):
             await nick.get("name.p2p")
 
     async def test_delete_before_start_raises(self):
         nick = await self._make_nick()
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(AssertionError):
             await nick.delete("name.p2p")
 
 

@@ -223,7 +223,14 @@ async def get_pp_executors(workers: Optional[int] = None) -> Tuple[int, Optional
         if sys.version_info >= (3, 7):
             pp_executor = ProcessPoolExecutor(max_workers=workers, initializer=worker_init)
         else:
-            pp_executor = ProcessPoolExecutor(max_workers=workers)
+            # Python < 3.7 has no initializer= on ProcessPoolExecutor.
+            # Set SIG_IGN before fork so children inherit it, then restore
+            # the parent's handler once the pool is created.
+            old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
+            try:
+                pp_executor = ProcessPoolExecutor(max_workers=workers)
+            finally:
+                signal.signal(signal.SIGINT, old_sigint)
     except asyncio.CancelledError:  # pylint: disable=try-except-raise
         raise
     except (OSError, RuntimeError):

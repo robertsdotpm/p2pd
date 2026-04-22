@@ -275,7 +275,7 @@ mode: int,
     # dest_port). The only way to support them is if they also have a
     # non-random delta. Reaching this point means a random-delta symmetric
     # NAT — unpredictable and unsupported.
-    raise RuntimeError("Can't predict this NAT type.")
+    raise AssertionError("Can't predict this NAT type.")
 
 
 async def nat_prediction(mode: int, src_nat: Dict[str, Any], dest_nat: Dict[str, Any], stuns: List[Any], recv_mappings: Optional[List[NATMapping]] = None, test_no: int = 2) -> Tuple[List[NATMapping], List[NATMapping]]:

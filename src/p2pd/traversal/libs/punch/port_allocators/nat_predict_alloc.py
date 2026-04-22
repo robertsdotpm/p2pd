@@ -44,7 +44,7 @@ def nat_predict_states(dest_mappings: Optional[List[Any]], state: Optional[int])
 
         return (to_state, sides[to_state])
 
-    raise RuntimeError("Invalid nat predict state progression.")
+    raise AssertionError("Invalid nat predict state progression.")
 
 
 class NATPredictAlloc:

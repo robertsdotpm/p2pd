@@ -154,7 +154,7 @@ class Nickname:
     async def put(self, name: Any, value: Any, behavior: Any = namebump.DO_BUMP, timeout: int = NAMING_TIMEOUT) -> str:
         """Store value under name on all reachable PNP servers and return the resulting name with TLD."""
         if not self.started:
-            raise RuntimeError("Nickname client not started. Call start() first.")
+            raise AssertionError("Nickname client not started. Call start() first.")
         name = pnp_strip_tlds(name)
 
         # Single coro for storing at one server.
@@ -202,7 +202,7 @@ class Nickname:
     async def get(self, name: Any, timeout: int = NAMING_TIMEOUT) -> Optional[Any]:
         """Look up name on the authoritative PNP servers and return the first successful result."""
         if not self.started:
-            raise RuntimeError("Nickname client not started. Call start() first.")
+            raise AssertionError("Nickname client not started. Call start() first.")
 
         async def worker(offset: int, name: Any) -> Optional[Any]:
             """Query the PNP server at offset for name and return the first non-None record."""
@@ -246,7 +246,7 @@ class Nickname:
     async def delete(self, name: Any, timeout: int = NAMING_TIMEOUT) -> None:
         """Delete the record for name from all reachable PNP servers concurrently."""
         if not self.started:
-            raise RuntimeError("Nickname client not started. Call start() first.")
+            raise AssertionError("Nickname client not started. Call start() first.")
         name = pnp_strip_tlds(name)
 
         async def worker(offset: int) -> Optional[Any]:
