@@ -10,6 +10,7 @@ REST_API_PORT = 12333
 
 def con_info(self, con_name, con):
     # type: (Any, str, Any) -> Dict[str, Any]
+    """Return a dict of connection metadata, tolerating closed/unconnected sockets."""
     # A socket might not be connected.
     try:
         raddr = con.sock.getpeername()
@@ -45,6 +46,7 @@ def con_info(self, con_name, con):
 
 def get_opt_param(v, name):
     # type: (Dict[str, Any], str) -> Optional[Any]
+    """Return the positional value following name in the parsed request, or None."""
     for index in range(0, len(v["pos"])):
         found_name = v["pos"][index]
         if found_name != name:
@@ -58,6 +60,7 @@ def get_opt_param(v, name):
 
 def get_sub_params(v):
     # type: (Dict[str, Any]) -> List[Any]
+    """Build a subscription filter from request params, applying msg pattern and addr overrides."""
     # Messages are put into buckets.
     sub = SUB_ALL[:]
     if "msg_p" in v["name"]:
@@ -80,6 +83,7 @@ def get_sub_params(v):
 
 def load_sub_or_default(v, subs):
     # type: (Dict[str, Any], Dict[str, Any]) -> Any
+    """Return the named subscription filter from subs, falling back to SUB_ALL."""
     sub_name = get_opt_param(v, "name")
     if sub_name in subs:
         return subs[sub_name]
@@ -162,8 +166,10 @@ class P2PDServer(RESTD):
             # Remove con from table.
             def build_do_cleanup():
                 # type: () -> Any
+                """Return a closure that removes con_name from the connections table."""
                 def do_cleanup(msg, client_tup, pipe):
                     # type: (Any, Any, Any) -> None
+                    """Remove the connection from the table when the pipe ends."""
                     del self.cons[con_name]
 
                 return do_cleanup

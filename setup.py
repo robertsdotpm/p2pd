@@ -31,7 +31,7 @@ setup(
     package_dir={"": "src"},
     packages=find_packages(where="src", exclude=("tests", "docs")),
     include_package_data=True,
-    python_requires=">=3.8",
+    python_requires=">=3.5",
     install_requires=install_reqs,
     classifiers=[
         "Intended Audience :: Developers",

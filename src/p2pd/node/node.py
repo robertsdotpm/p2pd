@@ -71,10 +71,12 @@ class Node(Daemon):
 
     def address(self):
         # type: () -> Optional[bytes]
+        """Return the node's address bytes, or None if the node has not started."""
         return self.addr_bytes
 
     def supported(self):
         # type: () -> List[Any]
+        """Return sorted list of address families supported across all interfaces."""
         afs = set()
         for nic in self.ifs:
             for af in nic.supported():
@@ -84,10 +86,12 @@ class Node(Daemon):
 
     def add_msg_cb(self, msg_cb):
         # type: (Callable) -> None
+        """Register a message callback to receive all inbound pipe messages."""
         self.msg_cbs.append(msg_cb)
 
     def on_plugin_done(self, future):
         # type: (Any) -> None
+        """Attach the node message callback to any pipe-like result from a finished plugin."""
         try:
             result = future.result()
             pipe_like = (Pipe, PipeClient, TCPClientProtocol, PipeEvents)
@@ -98,10 +102,12 @@ class Node(Daemon):
 
     def pipe_future(self, pipe_id):
         # type: (str) -> Any
+        """Return a Future that resolves when the inbound pipe with pipe_id is ready."""
         return pipe_future(self.inbound_pipes, pipe_id)
 
     def pipe_ready(self, pipe_id, pipe):
         # type: (str, Any) -> Any
+        """Resolve the Future for pipe_id with the given pipe, unblocking any waiters."""
         return pipe_ready(self.inbound_pipes, pipe_id, pipe)
 
     async def close(self):

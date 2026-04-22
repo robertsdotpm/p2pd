@@ -63,6 +63,7 @@ class TraversalManager:
 
     def install_plugin(self, name, conf):
         # type: (str, Dict[str, Any]) -> None
+        """Register a traversal plugin class under name with the given configuration."""
         if "class" not in conf:
             raise ValueError("plugin conf must include a 'class' key")
         conf = {
@@ -79,6 +80,7 @@ class TraversalManager:
     # elsewhere when a reply arrives over the signaling channel.
     async def run_plugin(self, plugin, reply=None):
         # type: (TraversalPlugin, Optional[Any]) -> None
+        """Run a single traversal plugin, optionally providing a reply message."""
         # Don't run if result is set.
         if plugin.result.done():
             return
@@ -102,6 +104,7 @@ class TraversalManager:
         self, af, route_type, src_info, dest_info, same_machine, plugin_name
     ):
         # type: (Any, Any, Dict[str, Any], Dict[str, Any], bool, str) -> TraversalPlugin
+        """Instantiate and configure a traversal plugin for the given src/dest pair."""
         # Meta data for this specific plugin.
         plugin_loader = self.plugin_loaders[plugin_name]
 
@@ -195,6 +198,7 @@ class TraversalManager:
     # reuses the pipe_id from the message so both sides share the same session.
     def create_inbound_plugin(self, msg):
         # type: (Any) -> TraversalPlugin
+        """Create a traversal plugin for an inbound connection request, inverting src/dest."""
         # TODO: map GetAddr messages to the return_addr plugin handler.
         if isinstance(msg, ConMsg):
             msg.meta.plugin_name = "direct_connect"
@@ -315,8 +319,10 @@ class TraversalManager:
 
     def install_plugin_done_callback(self, done_callback):
         # type: (Callable) -> None
+        """Register a callback to be invoked when any plugin finishes."""
         self.done_callback = done_callback
 
     def set_send_signal_msg(self, send_signal_msg):
         # type: (Callable) -> None
+        """Register the function used to send signalling messages to peers."""
         self.send_signal_msg = send_signal_msg

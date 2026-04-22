@@ -25,6 +25,7 @@ class ACKUDP:
     # Returns a sequence number if a message is an ack.
     def is_ack(self, data, stream):
         # type: (bytes, Any) -> Optional[int]
+        """Return the sequence number from data if it is an ACK packet, else None."""
         if len(data) >= 9:
             (seq,) = struct.unpack("!Q", data[0:8])
             is_ack = data[8]
@@ -37,6 +38,7 @@ class ACKUDP:
     # Return its sequence number and valid ack response.
     def is_ackable(self, data, stream):
         # type: (bytes, Any) -> List[Optional[Any]]
+        """Return [seq, ack_bytes, payload] for an ackable message, or [None, None, None]."""
         ack = is_ack = seq = None
         if len(data) >= 9:
             (seq,) = struct.unpack("!Q", data[0:8])
@@ -61,6 +63,7 @@ class ACKUDP:
 
     def handle_ack(self, data, f_is_ack, f_is_ackable, f_send):
         # type: (bytes, Optional[Any], Optional[Any], Any) -> Tuple[int, Optional[bytes]]
+        """Dispatch incoming data as an ACK or ackable message, scheduling the ACK reply if needed."""
         self.ack_send_tasks = rm_done_tasks(self.ack_send_tasks)
         data = data
         payload = recv_seq = ack_seq = ack = None
@@ -207,6 +210,7 @@ class BaseACKProto(asyncio.Protocol):
     # Supports dropping duplicate messages.
     def is_unique_msg(self, pipe, data, client_tup):
         # type: (Any, bytes, Any) -> int
+        """Return 1 if this (client_tup, data) pair has not been seen before, else 0."""
         # Reset seen msgs after dict fills.
         if len(self.msg_ids) > self.conf["max_msg_ids"]:
             self.msg_ids = {}
