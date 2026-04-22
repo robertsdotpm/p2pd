@@ -1,6 +1,7 @@
 """Address resolution helpers used during NAT traversal."""
 from typing import Any, Optional
-from aionetiface import *
+import asyncio
+from aionetiface import fstr, log, log_exception, log_p2p
 from ..node.nickname import *
 
 # A node's PNS address gets resolved to address bytes.

@@ -1,7 +1,7 @@
 """Resource lifecycle management for a p2pd node."""
 from typing import Any
 import asyncio
-from aionetiface import *
+from aionetiface import log_exception, cancel_tasks
 
 
 class NodeResources:

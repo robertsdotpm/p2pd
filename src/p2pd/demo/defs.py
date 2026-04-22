@@ -1,5 +1,11 @@
 """Constants and shared state for the p2pd demo."""
-from aionetiface import *
+from aionetiface import (
+    dict_child, NET_CONF, get_aionetiface_install_root,
+    OPEN_INTERNET, SYMMETRIC_UDP_FIREWALL, FULL_CONE, RESTRICT_NAT,
+    RESTRICT_PORT_NAT, SYMMETRIC_NAT, BLOCKED_NAT,
+    NA_DELTA, EQUAL_DELTA, PRESERV_DELTA, INDEPENDENT_DELTA,
+    DEPENDENT_DELTA, RANDOM_DELTA,
+)
 from ..do_imports import *
 
 IS_DEBUG = 2

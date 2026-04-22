@@ -59,7 +59,13 @@ http://10.0.1.1:1900/igd.xml
 
 from typing import Any, List, Optional, Tuple
 import socket
-from aionetiface import *
+import asyncio
+import time
+from aionetiface import (
+    Pipe, TCP, UDP, async_wrap_errors, strip_none, fstr, log, log_exception,
+    socket_factory, ParseHTTPResponse, IP4, IP6, cancel_tasks,
+    what_exception, dict_child, async_test,
+)
 from .upnp_utils import *
 
 

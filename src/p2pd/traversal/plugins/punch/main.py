@@ -1,7 +1,7 @@
 """Traversal plugin for TCP/UDP hole punching."""
 from typing import Any, Dict, Optional, Tuple
 import asyncio
-from aionetiface import *
+from aionetiface import log, NIC_BIND, SysClock, async_wrap_errors, cancel_task, shutdown_proc_pool
 from ....protocol.traversal.proto_msg import PunchMsg
 from ...libs.punch.punch_defs import *
 from ...libs.punch.utility.punch_utils import *

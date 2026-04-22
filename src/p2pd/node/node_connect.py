@@ -1,7 +1,10 @@
 """Outbound connection logic for a p2pd node."""
 from typing import Any, Optional, Tuple
 import asyncio
-from aionetiface import *
+from aionetiface import (
+    sort_ips_by_nic, route_pool_from_ips, fstr, log, parse_node_addr,
+    IP4, IP6, NIC_BIND, EXT_BIND,
+)
 from .node_utils import *
 from ..traversal.traversal_address import *
 from ..traversal.plugins.direct_connect.main import DirectConnect

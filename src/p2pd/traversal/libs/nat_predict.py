@@ -1,6 +1,16 @@
 """NAT port-prediction algorithms used by hole-punching."""
 from typing import Any, Dict, List, Optional, Tuple
-from aionetiface import *
+import asyncio
+import random
+from aionetiface import (
+    fstr, log_exception, TCP, STUN_PORT, MAX_PORT,
+    get_high_port_socket, socket_factory, from_range,
+    OPEN_INTERNET, delta_info, NA_DELTA, nat_info, RESTRICT_PORT_NAT,
+    nats_can_predict, nats_intersect, field_wrap, in_range, port_wrap,
+    n_dist, strip_none,
+    EQUAL_DELTA, PRESERV_DELTA, INDEPENDENT_DELTA, DEPENDENT_DELTA,
+    RANDOM_DELTA, PREDICTABLE_NATS,
+)
 
 MAX_PREDICT_NO = 100
 

@@ -2,7 +2,6 @@
 from typing import Any, List, Optional, Tuple
 import socket
 import time
-from ...punch_defs import *
 from aionetiface.net.bind.bind_rules import binder_sync
 from aionetiface.net.net_utils import ip_strip_if
 

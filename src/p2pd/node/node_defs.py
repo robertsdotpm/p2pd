@@ -10,7 +10,7 @@ CON_ID_MSG = b"P2P_CON_ID_EQ"
 NODE_ADDR_MAX_INTERFACES = 4
 
 # No more than n signal pipes to send signals to nodes.
-SIGNAL_PIPE_NO = 1  # TODO: change back to 3
+SIGNAL_PIPE_NO = 1
 
 
 def make_stop_pipe():

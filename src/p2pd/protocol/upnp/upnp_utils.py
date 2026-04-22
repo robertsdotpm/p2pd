@@ -1,6 +1,11 @@
 """Helper functions for UPnP IGD port-mapping."""
 from typing import Any, Dict, List, Optional, Tuple
-from aionetiface import *
+import asyncio
+import urllib.parse
+from aionetiface import (
+    dict_child, NET_CONF, IP4, IP6, to_s, to_b, fstr, log, log_exception,
+    WebCurl, async_wrap_errors, strip_none,
+)
 from aionetiface.vendor import xmltodict
 
 UPNP_CONF = dict_child(

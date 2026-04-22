@@ -3,7 +3,7 @@ from typing import Any, List, Optional, Tuple
 import asyncio
 import struct
 import random
-from aionetiface import *
+from aionetiface import rm_done_tasks, timestamp, to_b, pack, async_wrap_errors
 
 UDP_MAX_DICT_LEN = 1000
 

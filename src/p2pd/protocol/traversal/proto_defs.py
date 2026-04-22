@@ -1,5 +1,5 @@
 """Constants for the p2pd traversal signalling protocol."""
-from aionetiface import *
+from aionetiface import dict_child, NET_CONF, IP4, IP6, EXT_BIND, NIC_BIND
 
 MQTT_CONF = dict_child({"con_timeout": 4, "recv_timeout": 4}, NET_CONF)
 

@@ -43,9 +43,11 @@ Design:
 
 from typing import Any, Dict, Optional
 import sys
+import time
 import argparse
 import socket
-from aionetiface import *
+import asyncio
+from aionetiface import IP6, ip_norm, patch_connect_ip
 from .punch_defs import *
 from .port_allocators.boundary_alloc import *
 from .engines.tcp_selector_simple.engine import *

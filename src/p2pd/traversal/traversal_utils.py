@@ -1,8 +1,18 @@
 """Utility functions shared across traversal strategies."""
 from typing import Any, Dict, List, Optional, Tuple
 import asyncio
-from aionetiface import *
-from sidewire import *
+from aionetiface import (
+    IP4, IP6,
+    NIC_BIND, EXT_BIND, NIC_FAIL, EXT_FAIL,
+    to_s, to_b, to_h, h_to_b, rand_plain,
+    fstr, log, log_p2p, log_exception,
+    async_wrap_errors, decrypt, encrypt,
+    cancel_task, cancel_tasks,
+)
+from ..protocol.traversal.proto_msg import ProtoMsg
+
+__all__ = ["cancel_task", "cancel_tasks"]
+
 
 def f_path_txt(x):
     """Return 'local' for NIC_BIND paths, 'external' otherwise."""
@@ -200,9 +210,9 @@ strat: str,
                 timeout,
             )
 
-            if isinstance(result, SigMsg):
+            if isinstance(result, ProtoMsg):
                 msg = result
-                msg.meta = SigMsg.Meta.from_dict(
+                msg.meta = ProtoMsg.Meta.from_dict(
                     {
                         "ttl": int(pp.node.sys_clock.time()) + 30,
                         "pipe_id": pipe_id,
@@ -213,7 +223,7 @@ strat: str,
                     }
                 )
 
-                msg.routing = SigMsg.Routing.from_dict(
+                msg.routing = ProtoMsg.Routing.from_dict(
                     {
                         "af": af,
                         "dest_buf": pp.dest_bytes,

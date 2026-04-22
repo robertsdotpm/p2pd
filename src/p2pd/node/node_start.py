@@ -8,8 +8,13 @@ from typing import Any, Callable, Optional
 import asyncio
 import hashlib
 import time
-from aionetiface import *
-from sidewire import *
+from aionetiface import (
+    fstr, log, log_exception, log_p2p, async_wrap_errors,
+    IP4, IP6, OPEN_INTERNET, Interface, SysClock,
+    list_interfaces, load_interfaces, parse_node_addr, make_node_addr,
+    field_wrap, dhash, create_task, Signing,
+)
+from sidewire import Router
 from .node_utils import *
 from .nickname import *
 from ..traversal.traversal_address import *

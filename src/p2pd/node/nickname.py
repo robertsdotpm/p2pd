@@ -6,7 +6,12 @@ python3 run_pnp_serv.py
 """
 
 from typing import Any, List, Optional, Tuple
-from aionetiface import *
+import asyncio
+from aionetiface import (
+    to_s, fstr, log_exception, h_to_b,
+    DUEL_STACK, IP4, IP6, PNP_SERVERS, VALID_AFS,
+    strip_none, async_wrap_errors, SigningKey,
+)
 import namebump
 from ..errors import *
 

@@ -1,7 +1,8 @@
 """Base class and lifecycle helpers for traversal plugins."""
 from typing import Any, Callable, Dict, Optional
 import asyncio
-from .traversal_utils import *
+from .traversal_utils import select_dest_ipr
+from aionetiface import to_s, rand_plain, log
 
 
 class TraversalPlugin:

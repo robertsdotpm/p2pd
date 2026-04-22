@@ -1,9 +1,15 @@
 """Embedded REST API server exposed by a p2pd node."""
 from typing import Any, Dict, List, Optional
 import asyncio
-from aionetiface import *
-from .node import *
-from .node_utils import *
+from aionetiface import (
+    SUB_ALL, to_b, to_s, fstr, log_exception, RESTD, create_task,
+    async_wrap_errors, urldecode, if_list_to_dict, aionetiface_setup_netifaces,
+    list_interfaces, load_interfaces, Interface, TCP, async_test,
+    dict_child,
+)
+from .node import Node
+from .node_defs import NODE_PORT, NODE_CONF
+from ..protocol.traversal.proto_defs import P2P_STRATEGIES
 
 REST_API_PORT = 12333
 
@@ -419,7 +425,7 @@ async def start_p2pd_server(port: int = REST_API_PORT, ifs: Optional[List[Any]] 
             raise AssertionError("p2pd rest no ifs loaded.")
 
     # Start P2PD node.
-    node = P2PNode(ifs, port=NODE_PORT + 60 + 1, conf=node_conf)
+    node = Node(ifs, port=NODE_PORT + 60 + 1, conf=node_conf)
     await node.start()
 
     # Start P2PD server.

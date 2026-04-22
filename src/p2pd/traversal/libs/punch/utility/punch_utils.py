@@ -4,7 +4,8 @@ import time
 import socket
 import struct
 import selectors
-from aionetiface import *
+import asyncio
+from aionetiface import IPRange, fstr, log, SysClock
 from ..punch_defs import *
 
 # --- NTP Constants ---

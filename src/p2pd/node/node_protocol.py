@@ -7,7 +7,7 @@ index by host name even if its longer.
 from typing import Any, Tuple
 import asyncio
 import time
-from aionetiface import *
+from aionetiface import fstr, log, to_s
 from .node_defs import CON_ID_MSG
 
 

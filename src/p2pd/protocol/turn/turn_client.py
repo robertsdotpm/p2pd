@@ -19,7 +19,12 @@ TODO: implement shared-secret authentication (currently uses static credentials)
 from typing import Any, Dict, Optional, Tuple
 import asyncio
 from struct import pack
-from aionetiface import *
+from aionetiface import (
+    PipeEvents, Pipe, UDP, NET_CONF, to_b, to_s, fstr, log, log_exception,
+    SUB_ALL, async_wrap_errors, async_retry, gather_or_cancel, timestamp,
+    af_from_ip_s, STUNMsg, STUNAttrs, STUNAddrTup, STUNMsgTypes, RFC5389,
+    norm_client_tup, tup_to_sub, async_test, resolv_dest,
+)
 from .turn_process import *
 from .turn_defs import *
 

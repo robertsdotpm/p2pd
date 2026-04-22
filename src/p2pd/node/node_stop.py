@@ -2,7 +2,7 @@
 from typing import Any
 import asyncio
 from contextlib import suppress
-from aionetiface import *
+from aionetiface import log, log_exception, Daemon
 from ..errors import AlreadyClosedError
 
 

@@ -20,7 +20,7 @@ if int(vmin) < 8:
     exit()
 
 from . import __version__ as p2pdv  # noqa: E402
-from aionetiface import *  # noqa: E402
+from aionetiface import fstr  # noqa: E402
 
 
 class AsyncIOInteractiveConsole(code.InteractiveConsole):
@@ -156,8 +156,9 @@ if __name__ == "__main__":
     console = AsyncIOInteractiveConsole(repl_locals, loop)
 
     try:
-        import readline  # NoQA
-    except ImportError:
+        import readline
+        readline.get_history_length()  # activate readline support (side effect of import)
+    except (ImportError, AttributeError):
         pass
 
     repl_thread = REPLThread()

@@ -5,7 +5,12 @@ import io
 import struct
 from struct import unpack
 from hashlib import md5
-from aionetiface import *
+from aionetiface import (
+    STUNMsg, RFC5389, STUNAttrs, STUNAddrTup, STUNMsgTypes, STUNMsgCodes,
+    b_and, fstr, log, log_exception, to_s, to_h,
+    rm_done_tasks, async_retry, STATUS_RETRY, STATUS_SUCCESS,
+    stun_proc_attrs, norm_client_tup,
+)
 from .turn_defs import *
 
 # IS_DEBUG is referenced below but not exported by aionetiface.

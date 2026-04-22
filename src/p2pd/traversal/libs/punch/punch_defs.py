@@ -1,6 +1,6 @@
 """Constants and data structures for the punch engine."""
 from typing import Any
-from aionetiface import *
+from aionetiface import dict_child, NET_CONF
 
 # Punch modes.
 TCP_PUNCH_LAN = 1

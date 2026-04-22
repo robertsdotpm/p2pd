@@ -1,6 +1,9 @@
 """Simple echo server used for connectivity testing."""
 from typing import Any
-from aionetiface import *
+import asyncio
+from aionetiface import (
+    Daemon, async_wrap_errors, fstr, get_running_loop, Interface, TCP, IP4,
+)
 
 
 class EchoServer(Daemon):

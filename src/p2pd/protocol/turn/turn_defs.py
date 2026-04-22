@@ -1,6 +1,5 @@
 """Constants and helper functions for the TURN protocol."""
 from typing import Any, Dict, List, Optional
-from aionetiface import *
 
 # Config variables -------------------------------------
 

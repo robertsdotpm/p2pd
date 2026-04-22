@@ -1,6 +1,5 @@
 """Traversal plugin that resolves peer addresses via signalling."""
 from typing import Any, Optional
-from aionetiface import *
 from ...traversal_plugin import TraversalPlugin
 from ....protocol.traversal.proto_msg import GetAddr
 

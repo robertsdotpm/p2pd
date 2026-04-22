@@ -2,7 +2,7 @@
 from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 import copy
-from aionetiface import *
+from aionetiface import Interface, get_n_stun_clients, UDP
 from p2pd.traversal.libs.nat_predict import *
 from ..utility.punch_utils import *
 from ..punch_defs import *

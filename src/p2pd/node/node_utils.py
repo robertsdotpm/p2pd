@@ -5,10 +5,17 @@ import hashlib
 import os
 import socket
 import signal
+import time
 from ecdsa import SigningKey, SECP256k1
 from concurrent.futures import ProcessPoolExecutor
 import pathlib
-from aionetiface import *
+from aionetiface import (
+    fstr, log, log_exception, ip_norm, get_aionetiface_install_root,
+    get_n_stun_clients, TCP, RFC5389, IP4, IP6, IPR,
+    async_wrap_errors, strip_none, sock_has_data, hash160, to_h, to_b, to_s,
+    h_to_b, WebCurl, get_default_iface, USE_MAP_NO,
+)
+from aionetiface.nic.netifaces.netiface_extra import get_mac_address
 from ..traversal.libs.punch.punch_defs import PUNCH_CONF
 from ..vendor.machine_id import hashed_machine_id
 

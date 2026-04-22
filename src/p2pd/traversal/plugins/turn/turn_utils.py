@@ -1,6 +1,7 @@
 """Helpers for the TURN traversal plugin."""
 from typing import Any, Dict, List, Optional, Tuple
-from aionetiface import *
+import asyncio
+from aionetiface import to_b, rendezvous_score, log_exception
 from ....protocol.turn.turn_client import TURNClient
 
 

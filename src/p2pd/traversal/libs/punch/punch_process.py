@@ -18,7 +18,7 @@ punched sock <---> reverse sock <-----> punch proc connection
 
 from typing import Any, Optional
 import asyncio
-from aionetiface import *
+from aionetiface import Pipe, TCP, log, log_exception, async_wrap_errors, patch_connect_ip
 from .utility.punch_utils import *
 from .punch_defs import *
 from ....node.node_defs import *

@@ -1,6 +1,7 @@
 """Traversal plugin for signalling a public return address."""
 from typing import Any, Optional
-from aionetiface import *
+import asyncio
+from aionetiface import log_exception
 from ...traversal_plugin import TraversalPlugin
 from ....protocol.traversal.proto_msg import ReturnAddr
 

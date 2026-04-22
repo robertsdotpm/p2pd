@@ -1,8 +1,10 @@
 """Traversal signalling protocol message serialisation."""
 import json
 from typing import Any, Dict, List, Optional, Tuple
-from aionetiface import *
-from sidewire import *
+from aionetiface import (
+    to_s, to_b, to_n, i_to_af, fstr, parse_node_addr, log, IP4, EXT_BIND,
+    af_from_ip_s, IPRange,
+)
 from .proto_defs import *
 
 TCP_PUNCH_LAN = 1

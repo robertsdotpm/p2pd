@@ -1,7 +1,7 @@
 """Traversal plugin that relays connections through a TURN server."""
 from typing import Any, Optional
 import asyncio
-from aionetiface import *
+from aionetiface import NIC_BIND, UDP, get_infra, fstr, log_p2p
 from ...traversal_plugin import TraversalPlugin
 from ....protocol.traversal.proto_msg import TURNMsg
 from .turn_utils import get_first_working_turn_client, rendezvous_rank
