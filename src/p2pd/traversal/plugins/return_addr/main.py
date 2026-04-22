@@ -9,6 +9,7 @@ class ReturnAddrPlugin(TraversalPlugin):
 
     async def run(self, reply=None):
         # type: (Optional[Any]) -> None
+        """Send a ReturnAddr signal message back to the requester with our current address."""
         msg = ReturnAddr()
         msg.meta.plugin_name = "get_addr"
 

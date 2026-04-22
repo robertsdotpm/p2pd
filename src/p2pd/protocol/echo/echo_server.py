@@ -11,6 +11,7 @@ class EchoServer(Daemon):
 
     async def msg_cb(self, msg, client_tup, pipe):
         # type: (bytes, Any, Any) -> None
+        """Echo msg back to client_tup on the same pipe."""
         await async_wrap_errors(pipe.send(msg, client_tup))
 
 
@@ -18,7 +19,10 @@ if __name__ == "__main__":  # pragma: no cover
     print("See tests/test_daemon.py for code that uses this.")
 
     class EchoProtocol(asyncio.Protocol):
+        """asyncio.Protocol that logs connections and echoes all received data."""
+
         def connection_made(self, transport):
+            """Store the transport and log the incoming connection address."""
             self.transport = transport
             print(transport)
             print(transport.get_extra_info("socket"))
@@ -26,6 +30,7 @@ if __name__ == "__main__":  # pragma: no cover
             print(fstr("Connection from {0}", (addr,)))
 
         def data_received(self, data):
+            """Log and echo back the received data."""
             message = data.decode()
             addr = self.transport.get_extra_info("peername")
             print(
@@ -41,11 +46,13 @@ if __name__ == "__main__":  # pragma: no cover
             self.transport.write(data)
 
         def connection_lost(self, exc):
+            """Log the closed connection address."""
             addr = self.transport.get_extra_info("peername")
             print(fstr("Connection closed from {0}", (addr,)))
 
     async def echo_main():
-        loop = asyncio.get_running_loop()
+        """Start a standalone TCP echo server on 127.0.0.1:3000 for manual testing."""
+        loop = get_running_loop()
         server = await loop.create_server(lambda: EchoProtocol(), "127.0.0.1", 3000)
 
         print("Echo server listening on 127.0.0.1:3000")

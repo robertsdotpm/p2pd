@@ -21,18 +21,22 @@ class NodeResources:
 
     def register(self, closeable):
         # type: (Any) -> None
+        """Add a closeable object to be shut down when the node stops."""
         self.closeables.append(closeable)
 
     def add_task(self, task):
         # type: (Any) -> None
+        """Track a background asyncio task so it can be cancelled on shutdown."""
         self.tasks.append(task)
 
     def set_idle_closer(self, task):
         # type: (Any) -> None
+        """Store the idle-pipe-closer task so it can be cancelled during shutdown."""
         self.idle_pipe_closer = task
 
     async def close(self):
         # type: () -> None
+        """Cancel all tracked tasks and close all registered closeables in order."""
         if self.idle_pipe_closer is not None:
             await cancel_tasks([self.idle_pipe_closer])
             self.idle_pipe_closer = None

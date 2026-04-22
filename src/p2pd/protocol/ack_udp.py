@@ -129,6 +129,7 @@ class ACKUDP:
 
     async def ack_send(self, data, dest_tup, seq=None, sock_timeout=0, tries=3):
         # type: (bytes, Any, Optional[int], int, int) -> Tuple[Any, asyncio.Event]
+        """Send data with retransmission until acknowledged, timing out, or exhausting tries."""
         # Keep sending until max sends reached.
         # For acks we send max transmits as they're small messages.
         if seq is None:
@@ -145,6 +146,7 @@ class ACKUDP:
         # Do the sending concurrently so event can be returned.
         async def worker():
             # type: () -> None
+            """Retransmit data and wait for an ACK event, stopping on success or failure conditions."""
             # Record when the process started.
             start = 0
             if sock_timeout:

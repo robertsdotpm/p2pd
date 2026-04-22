@@ -89,6 +89,7 @@ class TURNClient(PipeEvents):
 
     def get_turn_server(self, af=None):
         # type: (Optional[Any]) -> Dict[str, Any]
+        """Return a server info dict describing this TURN client's endpoint and credentials."""
         return {
             "host": self.dest[0],
             "port": self.dest[1],
@@ -100,6 +101,7 @@ class TURNClient(PipeEvents):
 
     def get_relay_tup(self, peer_tup):
         # type: (Any) -> Optional[Any]
+        """Return the relay address tuple for peer_tup, or None if the peer is not registered."""
         if peer_tup in self.peers:
             return self.peers[peer_tup]
         else:
@@ -107,11 +109,13 @@ class TURNClient(PipeEvents):
 
     def toggle_blank_rudp_headers(self, val):
         # type: (bool) -> None
+        """Allow or disallow processing relay messages that lack RUDP headers."""
         self.blank_rudp_headers = val
 
     # Make this whole clas look like a 'pipe' object.
     def super_init(self, transport, sock, route, conf=NET_CONF):
         # type: (Any, Any, Any, Any) -> None
+        """Initialise the PipeEvents base and wire the UDP transport so this object acts as a pipe."""
         super().__init__(sock=sock, route=route, conf=conf)
         self.connection_made(transport)
         self.stream.set_handle(transport, client_tup=None)
@@ -119,6 +123,7 @@ class TURNClient(PipeEvents):
     # Start the TURN client.
     async def start(self, n=0):
         # type: (int) -> TURNClient
+        """Connect to the TURN server, allocate a relay address, and start the processing loop."""
         # Set and validate peer address.
         log("> Turn starting client.")
         if self.turn_user is None and self.turn_pw is None:
@@ -185,6 +190,7 @@ class TURNClient(PipeEvents):
 
         # Refresh allocations.
         async def refresher():
+            """Periodically refresh the TURN allocation to prevent it from expiring."""
             while True:
                 await asyncio.sleep(TURN_REFRESH_EXPIRY - 60)
                 try:
@@ -209,6 +215,7 @@ class TURNClient(PipeEvents):
 
     async def get_tups(self):
         # type: () -> Tuple[Any, Any]
+        """Await and return both the client address tuple and the relay address tuple."""
         client_tup = await self.client_tup_future
         relay_tup = await self.relay_tup_future
         return client_tup, relay_tup
@@ -229,6 +236,7 @@ class TURNClient(PipeEvents):
 
     async def reconnect(self, n=0):
         # type: (int) -> None
+        """Close the current session and restart the TURN client from scratch."""
         await self.close()
 
         # Snapshot state before __init__ wipes it.
@@ -257,15 +265,18 @@ class TURNClient(PipeEvents):
     # Changes the protocol state machine.
     def set_state(self, state):
         # type: (int) -> None
+        """Transition the TURN client state machine to the given state."""
         log("> Turn moving state from %s to %s." % (self.state, state))
         self.state = state
 
     def new_node_event(self, node_id):
         # type: (Any) -> None
+        """Create a new asyncio Event keyed by node_id for signalling per-node readiness."""
         self.node_events[to_s(node_id)] = asyncio.Event()
 
     def get_first_peer_tup(self):
         # type: () -> Optional[Any]
+        """Return the relay address of the first accepted peer, or None if no peers exist."""
         for peer_tup in self.peers:
             return self.peers[peer_tup]
 
@@ -274,6 +285,7 @@ class TURNClient(PipeEvents):
     # Overwrite the BaseProto send method and require ACKs.
     async def send(self, data, dest_tup=None):
         # type: (bytes, Optional[Tuple[str, int]]) -> None
+        """Queue an ACK-reliable send to dest_tup via the TURN relay, defaulting to the first peer."""
         # Attempt to use the first peer_tup.
         if dest_tup is None:
             dest_tup = self.get_first_peer_tup()
@@ -334,6 +346,7 @@ class TURNClient(PipeEvents):
 
     async def recv(self, sub=SUB_ALL, timeout=2):
         # type: (Any, int) -> Optional[Any]
+        """Receive a message from an accepted peer, defaulting to the first peer's subscription."""
         # Build a sub from the first accepted peer.
         if sub == SUB_ALL:
             sub = None
@@ -350,6 +363,7 @@ class TURNClient(PipeEvents):
     # Will write credential and HMAC if a message needs 'signing.'
     async def send_turn_msg(self, msg, do_sign=False):
         # type: (Any, bool) -> None
+        """Serialise and send a TURN control message, signing with HMAC-MD5 if requested."""
         buf, _ = STUNMsg.unpack(msg.pack(), mode=RFC5389)
         if self.requires_auth:
             if do_sign and self.key:
@@ -363,19 +377,23 @@ class TURNClient(PipeEvents):
     # Events are triggered on receipt.
     def record_msg(self, msg):
         # type: (Any) -> Tuple[Any, Any, Any]
+        """Register a TURN message by TXID and return (future, retransmit_closure, new_future_fn)."""
         f = asyncio.Future()
         self.msgs[msg.txn_id] = {"status": f, "timestamp": timestamp(), "msg": msg}
 
         def new_future():
             # type: () -> asyncio.Future
+            """Replace the status future for this TXID with a fresh one and return it."""
             a_future = asyncio.Future()
             self.msgs[msg.txn_id]["status"] = a_future
             return a_future
 
         def closure():
             # type: () -> Any
+            """Return a retransmit coroutine function bound to the current message."""
             async def retransmit():
                 # type: () -> None
+                """Re-send the recorded TURN message with authentication."""
                 await self.send_turn_msg(msg, do_sign=True)
 
             return retransmit
@@ -386,6 +404,7 @@ class TURNClient(PipeEvents):
     # Results in a new relay address being allocated for the client.
     async def allocate_relay(self, sign):
         # type: (bool) -> Tuple[Any, Any, Any]
+        """Send an Allocate request to the TURN server and return the recorded message tuple."""
         msg = await self.allocate_msg()
         f, retransmit, new_future = self.record_msg(msg)
         await self.send_turn_msg(msg, do_sign=sign)
@@ -396,6 +415,7 @@ class TURNClient(PipeEvents):
     # Allows a peer to send messages to our relay address.
     async def accept_peer(self, peer_tup, peer_relay_tup):
         # type: (Any, Any) -> bool
+        """Whitelist peer_tup on our TURN relay and start a permission-refresh loop."""
         # Fixed 'compressed' IPv6 addresses.
         peer_tup = norm_client_tup(peer_tup)
 
@@ -418,6 +438,7 @@ class TURNClient(PipeEvents):
 
         async def handler(peer_tup, peer_relay_tup):
             # type: (Any, Any) -> Tuple[Any, Any, Any]
+            """Send a CreatePermission for peer_tup and record the relay mapping."""
             # Generate message to send.
             msg = await self.white_list_msg(peer_tup)
             self.peers[peer_tup] = peer_relay_tup
@@ -428,9 +449,11 @@ class TURNClient(PipeEvents):
 
         # Refresh permissions.
         def f():
+            """Return the handler coroutine bound to the current peer and relay tuples."""
             return handler(peer_tup, peer_relay_tup)
 
         async def refresher():
+            """Refresh the peer permission before it expires until the TURN session stops."""
             while self.state != TURN_ERROR_STOPPED:
                 await asyncio.sleep(TURN_REFRESH_EXPIRY - 60)
                 await async_retry(f, count=5, timeout=5)
@@ -455,6 +478,7 @@ class TURNClient(PipeEvents):
     # This creates and sends a message to refresh the lifetime.
     async def refresh_allocation(self):
         # type: () -> Tuple[Any, Any, Any]
+        """Send a Refresh message to extend the relay allocation lifetime."""
         log("> Turn refreshing allocate lifetime.")
         msg = await self.refresh_msg()
         f, retransmit, new_future = self.record_msg(msg)
@@ -463,6 +487,7 @@ class TURNClient(PipeEvents):
     # Main step 1 -- allocate a relay address msg.
     async def allocate_msg(self):
         # type: () -> Any
+        """Build and return a TURN Allocate request message."""
         reply = STUNMsg(msg_type=STUNMsgTypes.Allocate, mode=RFC5389)
         reply.write_attr(STUNAttrs.RequestedTransport, TURN_PROTOCOL_UDP)
 
@@ -474,6 +499,7 @@ class TURNClient(PipeEvents):
     # Permissions are made per IP.
     async def white_list_msg(self, src_tup):
         # type: (Any) -> Any
+        """Build and return a TURN CreatePermission request for the given peer address."""
         # Try write the peer address.
         reply = STUNMsg(msg_type=STUNMsgTypes.CreatePermission, mode=RFC5389)
 
@@ -510,6 +536,7 @@ class TURNClient(PipeEvents):
     # Step 3 - refresh allocation to avoid lifetime timeouts.
     async def refresh_msg(self):
         # type: () -> Any
+        """Build and return a TURN Refresh request with the configured lifetime."""
         # 32 bit unsigned int
         reply = STUNMsg(msg_type=STUNMsgTypes.Refresh, mode=RFC5389)
         reply.write_attr(STUNAttrs.Lifetime, pack("!I", TURN_REFRESH_EXPIRY))
@@ -528,6 +555,7 @@ class TURNClient(PipeEvents):
     # Close the client socket and move state to done.
     async def do_cleanup(self):
         # type: () -> None
+        """Close the UDP pipe and resolve all pending futures so background tasks can exit."""
         if self.turn_pipe is not None:
             await self.turn_pipe.close()
 
@@ -547,6 +575,7 @@ class TURNClient(PipeEvents):
 
     async def close(self):
         # type: () -> None
+        """Shut down the TURN client, waiting for the processing loop to finish."""
         # Already closed.
         if self.turn_client_stopped.is_set():
             return

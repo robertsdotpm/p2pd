@@ -74,7 +74,7 @@ def pyenv_run_cmd(py_ver, server, cmd):
         sep = " "
 
     # Full command looks like this with some edge-cases.
-    out = f"PYENV_VERSION={py_ver}{sep}pyenv exec python -u {cmd}"
+    out = "PYENV_VERSION={}{}pyenv exec python -u {}".format(py_ver, sep, cmd)
     if "windows" in server["os"]:
         out = "set " + out
 
@@ -84,7 +84,7 @@ def pyenv_run_cmd(py_ver, server, cmd):
 def pyenv_install_p2pd(py_ver, server):
     p2pd_dir = get_p2pd_code_path(server)
     assert "\n" not in p2pd_dir
-    pip_install = f'-m pip install --force-reinstall -e "{p2pd_dir}"'
+    pip_install = '-m pip install --force-reinstall -e "{}"'.format(p2pd_dir)
     return pyenv_run_cmd(py_ver, server, pip_install)
 
 
@@ -121,7 +121,7 @@ async def shell_write(cmd, shell):
 
 async def ssh_await_cmd(cmd, shell, chain_cms, timeout=2):
     marker = "__CMD_DONE_MARKER__"
-    cmd = chain_cms(cmd, f"echo {marker}") + "\n"
+    cmd = chain_cms(cmd, "echo {}".format(marker)) + "\n"
     await shell_write(cmd, shell)
 
     lines = []
@@ -130,7 +130,7 @@ async def ssh_await_cmd(cmd, shell, chain_cms, timeout=2):
             try:
                 line = await asyncio.wait_for(shell.stdout.readline(), timeout=timeout)
             except asyncio.TimeoutError:
-                lines.append(f"[timeout after {timeout}s]")
+                lines.append("[timeout after {}s]".format(timeout))
                 break
 
             if not line:
@@ -141,7 +141,7 @@ async def ssh_await_cmd(cmd, shell, chain_cms, timeout=2):
 
     except Exception as e:
         output = "\n".join(lines).strip()
-        raise Exception(output + f"[error: {e}]")
+        raise Exception(output + "[error: {}]".format(e))
 
     output = "\n".join(lines).strip()
     return output if output else "[no output]"

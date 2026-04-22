@@ -381,8 +381,8 @@ class TestPunchPluginBidirectional(AsyncTestCase):
         # ── in-process message router ─────────────────────────────────────
         # Each plugin's send_signal_msg writes into a queue; the test loop
         # reads from the queues and delivers messages to the other plugin.
-        msgs_for_b: asyncio.Queue = asyncio.Queue()
-        msgs_for_a: asyncio.Queue = asyncio.Queue()
+        msgs_for_b = asyncio.Queue()
+        msgs_for_a = asyncio.Queue()
 
         async def sender_a(msg, plugin, relay_no=2):
             """A sends → captured for delivery to B."""
@@ -773,8 +773,8 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
 
         plugin_b.set_inbound_pipes({}, plugin_id=plugin_a.plugin_id)
 
-        msgs_for_b: asyncio.Queue = asyncio.Queue()
-        msgs_for_a: asyncio.Queue = asyncio.Queue()
+        msgs_for_b = asyncio.Queue()
+        msgs_for_a = asyncio.Queue()
 
         async def sender_a(msg, plugin=None, relay_no=2):
             await msgs_for_b.put(msg)

@@ -18,6 +18,7 @@ class PunchPlugin(TraversalPlugin):
 
     async def run(self, reply=None):
         # type: (Optional[Any]) -> None
+        """Coordinate the hole-punch exchange and launch the background punching process."""
         # --- Get or create the PunchClient for this session ---
         puncher = self.punch_clients.get(self.plugin_id)
         if puncher is None:
@@ -144,6 +145,7 @@ class PunchPlugin(TraversalPlugin):
 
     async def advance_punching_protocol(self, puncher, reply, punch_time):
         # type: (Any, Optional[Any], int) -> Optional[Any]
+        """Compute the next round of port predictions and return an outgoing PunchMsg, or None when done."""
         # Convert raw mappings from the peer into internal objects.
         recv_mappings = None
         if reply is not None:
@@ -176,6 +178,7 @@ class PunchPlugin(TraversalPlugin):
     # ... (other methods, including delayed_start_punching_proc) ...
     async def delayed_start_punching_proc(self, nic, puncher):
         # type: (Any, Any) -> None
+        """Wait a short coordinator delay then launch the punching process and resolve the result."""
         # Wait for the peer to receive our message and set up its own process.
         # The delay is kept short when using FAST_PUNCH_PARAMS because the
         # rendezvous window is small and synchronised via sleep_until().
@@ -232,6 +235,7 @@ class PunchPluginFactory:
     @classmethod
     async def create(cls, stun_clients, sys_clock):
         # type: (Any, Any) -> PunchPluginFactory
+        """Async factory that allocates a process pool executor and returns a ready factory."""
         factory = cls(stun_clients, sys_clock)
         factory.max_workers, factory.proc_pool = await get_pp_executors()
         factory.active_punchers = 0
@@ -239,6 +243,7 @@ class PunchPluginFactory:
 
     def build_plugin(self):
         # type: () -> PunchPlugin
+        """Create a new PunchPlugin wired to this factory's shared STUN clients and state."""
         plugin = PunchPlugin()
         plugin.stun_clients = self.stun_clients
         plugin.sys_clock = self.sys_clock
@@ -249,6 +254,7 @@ class PunchPluginFactory:
 
     async def close(self):
         # type: () -> None
+        """Shut down the process pool executor used for running punch workers."""
         if not self.proc_pool:
             return
         await shutdown_proc_pool(self.proc_pool)

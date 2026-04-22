@@ -60,6 +60,7 @@ async def get_updated_addr_bytes(node, dest_addr):
 async def get_updated_addr_from_mqtt(node, dest_bytes):
     # type: (Any, Any) -> Optional[Any]
     # type: (Any, Any) -> Optional[Any]
+    """Ask the peer for its freshest address bytes via the get_addr plugin over MQTT."""
     af = None  # AF selection is handled inside connect().
     route_type = None
     plugin = await node.connect(af, route_type, dest_bytes, "get_addr")

@@ -13,6 +13,7 @@ different operating systems.
 
 def sock_opt_voodoo(s):
     # type: (Any) -> None
+    """Apply non-blocking mode and SO_REUSEADDR/SO_REUSEPORT socket options for hole punching."""
     s.setblocking(False)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
@@ -30,6 +31,7 @@ def sock_opt_voodoo(s):
 
 def bind_tcp_sockets(af, nic_id, port_allocs, src_ip=None):
     # type: (Any, Optional[str], List[Any], Optional[str]) -> List[Tuple[Any, Any]]
+    """Create and bind one TCP socket per port allocation, returning successful (alloc, socket) pairs."""
     # Listen address.
     if src_ip:
         bind_ip = src_ip
@@ -55,6 +57,7 @@ def bind_tcp_sockets(af, nic_id, port_allocs, src_ip=None):
 
 def listen_on_tcp_sockets(bound_infos):
     # type: (List[Tuple[Any, Any]]) -> List[Tuple[Any, Any]]
+    """Call listen() on each bound socket, returning those that succeed."""
     listen_infos = []
     for bound_info in bound_infos:
         p, s = bound_info
@@ -98,6 +101,7 @@ def connect_on_tcp_sockets(same_machine, bound_infos, dest_ip, spray_duration=5.
 
 def sleep_until(punch_time, f_timer, max_sleep=10):
     # type: (float, Any, int) -> None
+    """Block until punch_time (from f_timer()), sleeping at most max_sleep seconds."""
     now = f_timer()
     sleep_time = max(0, punch_time - now)
 

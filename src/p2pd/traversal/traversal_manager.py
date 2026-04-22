@@ -95,7 +95,12 @@ class TraversalManager:
             reply.routing.load_if_extra(self.nics)
 
         # Each plugin has a run method.
-        await async_wrap_errors(plugin.run(reply), timeout=plugin.timeout)
+        try:
+            await asyncio.wait_for(plugin.run(reply), timeout=plugin.timeout)
+        except asyncio.CancelledError:
+            raise
+        except (asyncio.TimeoutError, OSError, ConnectionError):
+            log_exception()
 
         if plugin.result.done():
             await close_plugin(plugin, self.plugins, self.inbound_pipes)
@@ -137,7 +142,7 @@ class TraversalManager:
         )
 
         # Used for cleaning up plugins that crash before future result ready.
-        plugin.expires_at = asyncio.get_event_loop().time() + plugin.timeout
+        plugin.expires_at = get_running_loop().time() + plugin.timeout
 
         # Set function for plugin to send signaling replies.
         plugin.set_send_signal_msg(self.send_signal_msg)
@@ -159,6 +164,7 @@ class TraversalManager:
         self, src_map, dest_map, sig_pipe, plugin_name, af=IP4, route_type=NIC_BIND
     ):
         # type: (Dict[str, Any], Dict[str, Any], Any, str, Any, Any) -> Optional[TraversalPlugin]
+        """Select interface pairs and run the named traversal plugin to reach the destination."""
         # Need AF supported by both.
         if not src_map[af] or not dest_map[af]:
             raise ValueError("AF not supported between hosts.")
@@ -222,6 +228,7 @@ class TraversalManager:
     # Use signal router to send a message to the destination.
     async def send_signal_msg(self, msg, plugin, relay_no=2):
         # type: (Any, TraversalPlugin, int) -> None
+        """Encrypt and deliver a signalling message to the peer via the MQTT router."""
         try:
             # Specify the plugin to use in the destination.
             msg.meta = ProtoMsg.Meta.from_dict(
@@ -258,6 +265,7 @@ class TraversalManager:
     # Called by the MQTT client as: handler(msg, src_pk, queue_id, client)
     async def recv_signal_msg(self, msg, src_pk_hex, pipe_id_hex, client):
         # type: (Any, str, str, Any) -> None
+        """Decrypt an incoming signal message and dispatch it to the matching or new plugin."""
         msg = try_unpack_msg(to_b(msg), self.kp.private_key, SIG_PROTO)
 
         # Message has expired.
@@ -297,6 +305,7 @@ class TraversalManager:
 
     async def close(self):
         # type: () -> None
+        """Cancel all pending plugins and background tasks, releasing their resources."""
         await cancel_task(self.cleanup_task)
         for plugin in list(self.plugins.values()):
             try:
@@ -310,9 +319,10 @@ class TraversalManager:
     # Cleanup timed out plugins.
     async def cleanup_loop(self):
         # type: () -> None
+        """Periodically scan for expired plugins and close them to free resources."""
         while True:
             await asyncio.sleep(5)
-            now = asyncio.get_event_loop().time()
+            now = get_running_loop().time()
             for plugin in list(self.plugins.values()):
                 if now >= plugin.expires_at:
                     await close_plugin(plugin, self.plugins, self.inbound_pipes)

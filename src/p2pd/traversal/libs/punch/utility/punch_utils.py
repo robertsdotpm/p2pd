@@ -67,6 +67,7 @@ based on how close the destination is.
 
 def get_punch_mode(af, dest_ip, same_machine):
     # type: (Any, str, bool) -> int
+    """Return the punch mode constant (remote, LAN, or self) for the given destination IP."""
     host_limit = 0
     dest_ipr = IPRange(dest_ip, bitlen=host_limit)
 
@@ -82,6 +83,7 @@ def get_punch_mode(af, dest_ip, same_machine):
 
 def punching_sanity_check(mode, our_wan, dest_addr, send_mappings, recv_mappings):
     # type: (int, Any, str, List[Any], List[Any]) -> None
+    """Log warnings when port or address conflicts are detected in the punch configuration."""
     if mode == TCP_PUNCH_SELF:
         for sm in send_mappings:
             for rm in recv_mappings:
@@ -106,6 +108,7 @@ def punching_sanity_check(mode, our_wan, dest_addr, send_mappings, recv_mappings
 # Not really the best approach but process communication is a pain.
 async def punch_close_msg(msg, client_tup, pipe):
     # type: (bytes, Any, Any) -> None
+    """Close the pipe after a short delay when a punch-end message is received."""
     if msg in PUNCH_END:
         # Allow time to send message down pipes.
         await asyncio.sleep(2)
@@ -114,6 +117,7 @@ async def punch_close_msg(msg, client_tup, pipe):
 
 async def setup_punch_coordination(node, sys_clock=None):
     # type: (Any, Optional[Any]) -> None
+    """Initialise and attach the NTP-synchronised SysClock to the node for punch timing."""
     if sys_clock is None:
         sys_clock = await SysClock(node.ifs[0]).start()
 
@@ -207,6 +211,7 @@ def wait_for_first_with_data(sockets, timeout=5.0):
 # In a LAN = lan ip, or for WAN targets = wan IPs.
 def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
     # type: (str, List[Any], Optional[str]) -> Optional[Any]
+    """Select one winning socket from a punched connection set, closing the rest."""
     # No open sockets.
     if not sock_list:
         return None

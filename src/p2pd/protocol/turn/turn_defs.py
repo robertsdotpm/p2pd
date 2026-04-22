@@ -34,6 +34,7 @@ TURN_ERROR_STOPPED = 9
 
 def turn_vars_to_server(var_list, af):
     # type: (List[Any], Any) -> Dict[str, Any]
+    """Build a server info dict from a positional var list [host, port, user, pass, realm]."""
     return {
         "host": var_list[0],
         "port": var_list[1],
@@ -45,6 +46,7 @@ def turn_vars_to_server(var_list, af):
 
 def find_turn_server(turn_server, turn_servers, af=None):
     # type: (Dict[str, Any], List[Dict[str, Any]], Optional[Any]) -> bool
+    """Return True if turn_server matches an entry in turn_servers by host, port, credentials, and AF."""
     for needle in turn_servers:
         # Not the same server host or IP.
         if needle["host"] != turn_server["host"]:

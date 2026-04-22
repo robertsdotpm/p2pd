@@ -26,6 +26,7 @@ def apply_listen_ips(node):
 
 def install_default_plugins(node):
     # type: (Any) -> None
+    """Register the built-in traversal plugins (direct, get_addr, return_addr, reverse_connect) on the node."""
     node.traversal.install_plugin("direct_connect", {"class": DirectConnect})
     node.traversal.install_plugin("get_addr", {"class": GetAddrPlugin})
     node.traversal.install_plugin("return_addr", {"class": ReturnAddrPlugin})
@@ -64,6 +65,7 @@ async def resolve_pnp_addr(node, pnp_addr):
 
 async def connect(node, af, route_type, pnp_addr, plugin_name=None):
     # type: (Any, Any, Any, Any, Optional[str]) -> Any
+    """Resolve the destination address and run the traversal plugin to establish a P2P connection."""
     addr_bytes, dest_vk, _ = await resolve_pnp_addr(node, pnp_addr)
     dest_map = parse_node_addr(addr_bytes)
     sig_pipe = await node.router.pipe(dest_map["pub_key_hex"], use_cache=True)

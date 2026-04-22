@@ -12,6 +12,7 @@ from .node_defs import CON_ID_MSG
 
 async def node_protocol(node, msg, client_tup, pipe):
     # type: (Any, bytes, Tuple[str, int], Any) -> None
+    """Dispatch each newline-delimited message from the pipe to handle_msg and all registered callbacks."""
     # Track idle pipe recv time.
     if pipe in node.resources.last_recv_queue:
         node.resources.last_recv_table[pipe.sock] = time.time()
@@ -34,6 +35,7 @@ async def node_protocol(node, msg, client_tup, pipe):
 
 async def handle_msg(node, msg, client_tup, pipe):
     # type: (Any, bytes, Tuple[str, int], Any) -> None
+    """Parse a single node protocol message and act on recognised commands such as CON_ID_MSG."""
     log(
         fstr(
             "> node proto = {0}, {1}",

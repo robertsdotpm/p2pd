@@ -32,6 +32,7 @@ from ..node.node_defs import *
 
 async def setup_node():
     # type: () -> Tuple[List[Any], List[Any], Optional[str]]
+    """Load network interfaces, start the P2P node, and register a default nickname."""
     # Display program banner.
     cout(PROGRAM_BANNER)
     cout("pid = " + str(os.getpid()))
@@ -102,6 +103,7 @@ async def setup_node():
 
 async def run_node_loop(nodes, ifs, nick):
     # type: (List[Any], List[Any], Optional[str]) -> None
+    """Drive the interactive menu loop until the user exits or a stop signal arrives."""
     # Options for making a connection.
     # Set connection menu mode.
     menu_option = cmd_opts = None
@@ -152,12 +154,14 @@ Also waits for close events and handles cleanup.
 
 async def main():
     # type: () -> None
+    """Entry point: set up signal handlers, start the node, and run the menu loop."""
     # Catch process exit signals (not supported on win32.)
     nodes = []
     if sys.platform != "win32":
 
         def set_shut_down():
             # type: () -> None
+            """Send a shutdown signal to all waiting loops and unblock pending ainput calls."""
             # Signal the stop socket so the main loop exits.
             try:
                 stop_rw[1].send(b"Shut down.")

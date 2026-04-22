@@ -5,6 +5,7 @@ import os
 import socket
 import signal
 from ecdsa import SigningKey, SECP256k1
+from concurrent.futures import ProcessPoolExecutor
 import pathlib
 from aionetiface import *
 from ..traversal.libs.punch.punch_defs import PUNCH_CONF
@@ -67,6 +68,7 @@ def norm_listen_ips(listen_ips):
 
 def load_signing_key(nics, listen_ips, listen_port, install_path):
     # type: (List[Any], List[str], int, str) -> SigningKey
+    """Load the node's ECDSA signing key from disk, generating and persisting a new one if absent."""
     # Make install dir if needed.
     pathlib.Path(install_path).mkdir(parents=True, exist_ok=True)
 
@@ -97,6 +99,7 @@ def load_signing_key(nics, listen_ips, listen_port, install_path):
 
 async def fallback_machine_id(netifaces, app_id="p2pd"):
     # type: (Any, str) -> str
+    """Derive a stable machine ID from hostname, default interface name, and MAC address."""
     host = socket.gethostname()
     if_name = get_default_iface(netifaces)
     mac = await get_mac_address(if_name, netifaces)
@@ -176,6 +179,7 @@ async def close_idle_pipes(node):
 
 async def load_stun_clients(ifs, limit=USE_MAP_NO):
     # type: (List[Any], int) -> Dict[Any, Dict[int, List[Any]]]
+    """Concurrently load up to limit TCP STUN clients per AF per interface and return them indexed."""
     stun_clients = {IP4: {}, IP6: {}}
     tasks = []
 
@@ -185,6 +189,7 @@ async def load_stun_clients(ifs, limit=USE_MAP_NO):
 
             async def job(af=af, if_index=if_index, interface=interface):
                 # type: (Any, int, Any) -> Tuple[Any, int, List[Any]]
+                """Fetch STUN clients for one (af, interface) pair and return them with their index."""
                 clients = await get_n_stun_clients(
                     af=af,
                     n=limit,
@@ -220,11 +225,16 @@ def worker_init():
 
 async def get_pp_executors(workers=None):
     # type: (Optional[int]) -> Tuple[int, Optional[Any]]
+    """Create a ProcessPoolExecutor with worker_init, returning (worker_count, executor_or_None)."""
     workers = workers or min(32, os.cpu_count() + 4)
     pp_executor = None
     # return 0, None
     try:
-        pp_executor = ProcessPoolExecutor(max_workers=workers, initializer=worker_init)
+        import sys
+        if sys.version_info >= (3, 7):
+            pp_executor = ProcessPoolExecutor(max_workers=workers, initializer=worker_init)
+        else:
+            pp_executor = ProcessPoolExecutor(max_workers=workers)
     except asyncio.CancelledError:
         raise
     except (OSError, RuntimeError):
@@ -241,6 +251,7 @@ async def get_pp_executors(workers=None):
 
 async def load_machine_id(app_id, netifaces):
     # type: (str, Any) -> str
+    """Return a hashed machine ID for app_id, falling back to a network-derived value on failure."""
     try:
         return hashed_machine_id(app_id)
     except asyncio.CancelledError:
@@ -251,6 +262,7 @@ async def load_machine_id(app_id, netifaces):
 
 async def listen_on_ifs(node):
     # type: (Any) -> None
+    """Bind and start TCP listeners on all interfaces (or only the requested listen IPs)."""
     for nic in node.ifs:
         if node.listen_ips:
             listen_iprs = [IPR(ip) for ip in node.listen_ips]
@@ -270,6 +282,7 @@ async def listen_on_ifs(node):
 
 async def remote_reachability_cb(reachability, _msg, client_tup, pipe):
     # type: (Dict[Any, Dict[Any, Any]], Any, Any, Any) -> None
+    """Mark the NIC as reachable when an inbound connection arrives from the known p2pd probe server."""
     try:
         p2pd_ips = (
             IPR("2607:5300:60:80b0::1", af=IP6),
@@ -291,12 +304,14 @@ async def remote_reachability_cb(reachability, _msg, client_tup, pipe):
 
 async def forward(node, port, reachability):
     # type: (Any, int, Dict[Any, Dict[Any, Any]]) -> Tuple[List[Any], List[Any]]
+    """Run UPnP port forwarding for every NIC/AF and probe reachability, returning (forwarded, reachable) lists."""
     tasks = []
     for nic in node.ifs:
         for af in nic.supported():
 
             async def do_forward(af=af, nic=nic):
                 # type: (Any, Any) -> Optional[List[Any]]
+                """Forward the listen port for one (af, nic) pair and return [af, nic.id] on success."""
                 reachability[af][nic.id] = asyncio.Future()
                 route = await nic.route(af).bind()
                 ret = await route.forward(port=port)
@@ -311,6 +326,7 @@ async def forward(node, port, reachability):
 
     async def reachability_test(af, nic):
         # type: (Any, Any) -> None
+        """Trigger the remote p2pd probe server to connect back to us on the forwarded port."""
         route = nic.route(af)
         curl = WebCurl((test_addr[af], 80), route, do_close=0)
         try:

@@ -18,6 +18,7 @@ except NameError:
 # Use bitwise OPs to get valid method and status codes.
 def turn_parse_msg(buf):
     # type: (Any) -> Tuple[Optional[Any], Optional[Any], Optional[Any]]
+    """Parse raw bytes into (turn_msg, method, status) or (None, None, None) on failure."""
     try:
         turn_msg, _ = STUNMsg.unpack(buf, mode=RFC5389)
         turn_method = b_and(turn_msg.msg_type, b"\x00\x0f")
@@ -39,6 +40,7 @@ Return this information to the caller.
 
 def turn_get_data_attr(msg, af, client):
     # type: (Any, Any, Any) -> Tuple[Optional[bytes], Optional[Any]]
+    """Extract the DATA payload and XorPeerAddress from a TURN relay message."""
     # Step through all attributes.
     data = peer_tup = None
     while not msg.eof():
@@ -84,6 +86,7 @@ def turn_get_data_attr(msg, af, client):
 # True when all the fields in the client needed for auth are set.
 def is_auth_ready(self):
     # type: (Any) -> bool
+    """Return True when key, realm, and nonce are all set on the client."""
     key_con = self.key is not None
     realm_con = self.realm is not None
     nonce_con = self.nonce is not None
@@ -95,6 +98,7 @@ def is_auth_ready(self):
 
 def turn_proc_attrs(af, attr_code, attr_data, msg, self):
     # type: (Any, Any, Any, Any, Any) -> List[Any]
+    """Process a single TURN attribute and update client state, returning [error_code, error_msg]."""
     error_code = 0
     error_msg = b""
 
@@ -166,6 +170,7 @@ def turn_proc_attrs(af, attr_code, attr_data, msg, self):
 # Processes attributes from a TURN message.
 async def process_attributes(af, self, msg):
     # type: (Any, Any, Any) -> List[Any]
+    """Walk all attributes in a TURN message, updating client state and returning any error info."""
     # Unpack attributes from message.
     error_code = 0
     error_msg = b""
@@ -194,6 +199,7 @@ async def process_attributes(af, self, msg):
 # This function is run concurrently and doesn't block the main program.
 async def process_replies(self):
     # type: (Any) -> None
+    """Continuously receive and dispatch TURN server messages until the session stops."""
     # Keep processing until stopped.
     while self.state != TURN_ERROR_STOPPED:
         # Prune old tasks.

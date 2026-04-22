@@ -23,6 +23,7 @@ from .node_connect import install_default_plugins
 # ==========================================
 async def node_start(node, sys_clock=None, out=False, cout=print):
     # type: (Any, Optional[Any], bool, Callable) -> Any
+    """Execute the full ordered startup sequence for a P2P node and return it when ready."""
     # Hardware & Network Setup
     await load_network_interfaces(node)
     upnp_task = start_background_port_forwarding(node)
@@ -64,6 +65,7 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 # ==========================================
 async def load_network_interfaces(node):
     # type: (Any) -> None
+    """Discover and sort all available network interfaces, raising RuntimeError if none are found."""
     if not len(node.ifs):
         try:
             if_names = await list_interfaces()
@@ -83,6 +85,7 @@ async def load_network_interfaces(node):
 
 def start_background_port_forwarding(node):
     # type: (Any) -> Optional[Any]
+    """Launch a background UPnP port-forwarding task if the node is behind NAT and UPnP is enabled."""
     # Check if all NICs are already open
     all_open_internet = True
     for nic in node.ifs:
@@ -96,6 +99,7 @@ def start_background_port_forwarding(node):
 
         async def reachability_cb(msg, client_tup, pipe):
             # type: (Any, Any, Any) -> None
+            """Forward inbound messages to the shared reachability checker."""
             await remote_reachability_cb(reachability, msg, client_tup, pipe)
 
         node.add_msg_cb(reachability_cb)
@@ -111,6 +115,7 @@ def start_background_port_forwarding(node):
 # ==========================================
 async def load_machine_identity(node):
     # type: (Any) -> None
+    """Load or derive a stable machine ID and set the node's listen port deterministically."""
     node.machine_id = await load_machine_id("p2pd", node.ifs[0].netifaces)
 
     if node.machine_id in (None, ""):
@@ -124,6 +129,7 @@ async def load_machine_identity(node):
 
 def load_cryptography_and_auth(node):
     # type: (Any) -> Any
+    """Load or generate the node's ECDSA signing key, derive the node ID, and return the keypair."""
     install_path = resolve_install_path(node.conf)
     node.sk = load_signing_key(
         node.ifs, node.listen_ips, node.listen_port, install_path
@@ -149,6 +155,7 @@ def load_cryptography_and_auth(node):
 # ==========================================
 async def initialize_system_clock(node, sys_clock, out, cout):
     # type: (Any, Optional[Any], bool, Callable) -> None
+    """Create or reuse the system clock, optionally synchronising it against NTP."""
     if sys_clock is None:
         if node.conf["init_clock_skew"]:
             sys_clock = SysClock(interface=node.ifs[0])
@@ -164,6 +171,7 @@ async def initialize_system_clock(node, sys_clock, out, cout):
 
 async def load_p2p_stun_clients(node, out, cout):
     # type: (Any, bool, Callable) -> None
+    """Load TCP STUN clients for each interface and AF if hole-punching is enabled."""
     if node.conf.get("enable_punching", True):
         if out:
             cout("\tLoading STUN clients...")
@@ -189,6 +197,7 @@ async def load_p2p_stun_clients(node, out, cout):
 
 async def setup_router_and_signal(node, kp, out, cout):
     # type: (Any, Any, bool, Callable) -> None
+    """Instantiate the MQTT router, install default traversal plugins, and start the signal channel."""
     router = Router(kp, nic=Interface("default"))
     node.traversal = TraversalManager(
         router, node.stop_reader, node.inbound_pipes, node.ifs
@@ -203,6 +212,7 @@ async def setup_router_and_signal(node, kp, out, cout):
 
 async def setup_signal_router(node, router, out, cout):
     # type: (Any, Any, bool, Callable) -> None
+    """Attach the router to the node and start MQTT subscriptions for inbound signalling."""
     node.router = router
 
     # Subscribe to our own MQTT topic so we can receive incoming signals.
@@ -221,6 +231,7 @@ async def setup_signal_router(node, router, out, cout):
 # ==========================================
 async def initialize_punch_coordination(node, out, cout):
     # type: (Any, bool, Callable) -> None
+    """Log the NTP clock skew value used to coordinate hole-punch timing across peers."""
     if out:
         cout("\tLoading NTP clock skew...")
     if node.conf["init_clock_skew"]:
@@ -234,6 +245,7 @@ async def initialize_punch_coordination(node, out, cout):
 # ==========================================
 def start_maintenance_tasks(node):
     # type: (Any) -> None
+    """Launch the background idle-pipe-closer loop and register it for cancellation on shutdown."""
     # Simple loop to close idle tasks.
     node.resources.set_idle_closer(create_task(close_idle_pipes(node)))
 
@@ -243,6 +255,7 @@ def start_maintenance_tasks(node):
 # ==========================================
 def build_node_address(node, out):
     # type: (Any, bool) -> None
+    """Serialise the node's public key and interface info into addr_bytes and parse it into addr_map."""
     if node.node_id is None:
         raise RuntimeError("node_id was not set before building node address.")
 
@@ -271,6 +284,7 @@ def build_node_address(node, out):
 
 async def finalize_port_forwarding(node, upnp_task, out, cout):
     # type: (Any, Optional[Any], bool, Callable) -> None
+    """Await the background UPnP task and log whether forwarding and reachability succeeded."""
     if upnp_task:
         if out:
             cout("\tStarting UPnP forwarding...")
@@ -297,6 +311,7 @@ async def finalize_port_forwarding(node, upnp_task, out, cout):
 # ==========================================
 async def setup_nickname_service(node):
     # type: (Any) -> None
+    """Initialise the PNP nickname client and optionally register this node's ID."""
     node.nick_client = await Nickname(
         node.sk,
         node.ifs,
@@ -311,6 +326,7 @@ async def setup_nickname_service(node):
 
 async def setup_traversal_plugins(node):
     # type: (Any) -> None
+    """Create and register the TCP punch and TURN relay plugin factories with the traversal manager."""
     if node.conf.get("enable_punching", True):
         punch_factory = await PunchPluginFactory.create(
             node.stun_clients, node.sys_clock

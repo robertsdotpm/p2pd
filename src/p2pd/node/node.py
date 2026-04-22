@@ -52,19 +52,23 @@ class Node(Daemon):
 
     async def msg_cb(self, msg, client_tup, pipe):
         # type: (Any, Any, Any) -> None
+        """Route inbound pipe messages through the node protocol dispatcher."""
         await node_protocol(self, msg, client_tup, pipe)
 
     async def start(self, sys_clock=None, out=False, cout=print):
         # type: (Optional[Any], bool, Callable) -> Node
+        """Run the full node startup sequence and return self when the node is ready."""
         await node_start(self, sys_clock=sys_clock, out=out, cout=cout)
         return self
 
     async def connect(self, af, route_type, pnp_addr, plugin_name=None):
         # type: (Any, Any, Any, Optional[str]) -> Any
+        """Establish a P2P connection to pnp_addr using the given AF, route type, and optional plugin."""
         return await node_connect(self, af, route_type, pnp_addr, plugin_name)
 
     async def nickname(self, name, value=None):
         # type: (Any, Optional[Any]) -> str
+        """Register name in the PNP system, defaulting value to this node's address bytes."""
         value = value or self.addr_bytes
         name = await self.nick_client.put(name, value)
         return name
@@ -112,6 +116,7 @@ class Node(Daemon):
 
     async def close(self):
         # type: () -> None
+        """Gracefully shut down the node, closing all connections, tasks, and services."""
         await node_stop(self)
 
     def __await__(self):

@@ -27,6 +27,7 @@ from aionetiface.net.selector_proxy import selector_proxy
 
 def punching_process(puncher, reverse_server_dest, stop_reader):
     # type: (Any, Any, Any) -> None
+    """Run the blocking punch engine and proxy the result back through a reverse connection."""
     try:
         # New punched TCP sock to destination.
         punched_sock = puncher.run_engine(tcp_selector_punch_engine)
@@ -47,6 +48,7 @@ def punching_process(puncher, reverse_server_dest, stop_reader):
 
 async def start_punching_process(nic, puncher, stop_reader, proc_pool=None):
     # type: (Any, Any, Any, Optional[Any]) -> Optional[Any]
+    """Start the out-of-process punch worker and accept the reverse connection it makes back."""
     reverse_server = None
     try:
         # Create a listen server for receiving a connection

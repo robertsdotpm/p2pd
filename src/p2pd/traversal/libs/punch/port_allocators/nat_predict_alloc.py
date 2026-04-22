@@ -9,6 +9,7 @@ from ..punch_defs import *
 
 def nat_mapping_to_port_alloc(nat_mappings):
     # type: (List[Any]) -> List[Any]
+    """Convert a list of NATMapping objects into PortAlloc entries for the punch engine."""
     out = []
     for m in nat_mappings:
         out.append(PortAlloc(src_port=m.local, dest_port=m.remote))
@@ -18,6 +19,7 @@ def nat_mapping_to_port_alloc(nat_mappings):
 
 def nat_predict_states(dest_mappings, state):
     # type: (Optional[List[Any]], Optional[int]) -> Tuple[int, int]
+    """Advance the NAT prediction state machine and return the new (state, side) tuple."""
     # bool of dest_mappings, start state, to state.
     progressions = [
         [False, None, INITIATED_PREDICTIONS],
@@ -62,12 +64,14 @@ class NATPredictAlloc:
 
     def set_nat_info(self, src_nat=None, dest_nat=None):
         # type: (Optional[Dict[str, Any]], Optional[Dict[str, Any]]) -> None
+        """Store the source and destination NAT info, defaulting to restricted-port NAT."""
         nat_default = nat_info(RESTRICT_PORT_NAT, delta_info(EQUAL_DELTA, 0))
         self.src_nat = src_nat or copy.deepcopy(nat_default)
         self.dest_nat = dest_nat or copy.deepcopy(nat_default)
 
     async def port_alloc(self, recv_mappings=None):
         # type: (Optional[List[Any]]) -> Tuple[List[Any], int]
+        """Progress the exchange state machine and return (port_allocs, is_end) for this round."""
         # Change protocol state transition.
         self.state, self.side = nat_predict_states(
             recv_mappings,
@@ -122,10 +126,12 @@ class NATPredictAlloc:
 
     def set_punch_mode(self, same_machine, dest_ip="192.168.0.100"):
         # type: (bool, str) -> None
+        """Determine and store the punch mode (LAN, remote, or self) from the destination IP."""
         self.punch_mode = get_punch_mode(self.af, str(dest_ip), self.same_machine)
 
 
 async def workspace():
+    """Interactive workspace for testing NATPredictAlloc locally."""
     nic = await Interface()
     stun_clients = await get_n_stun_clients(
         af=nic.supported()[0], n=5, proto=UDP, interface=nic, conf=PUNCH_CONF

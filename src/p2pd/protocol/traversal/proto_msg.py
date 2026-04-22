@@ -15,6 +15,7 @@ class ProtoMsg:
     @staticmethod
     def load_addr(af, addr_buf, if_index):
         # type: (Any, Any, int) -> Tuple[Any, Dict[str, Any]]
+        """Parse addr_buf into (af, addr_dict), validating that if_index is present."""
         # Validate src address.
         addr = parse_node_addr(addr_buf)
 
@@ -58,6 +59,7 @@ class ProtoMsg:
 
         def load_src_addr(self):
             # type: () -> None
+            """Parse src_buf and populate af, src, and src_info on this Meta instance."""
             # Parse src_buf to addr.
             self.af, self.src = ProtoMsg.load_addr(
                 self.af,
@@ -71,6 +73,7 @@ class ProtoMsg:
 
         def to_dict(self):
             # type: () -> Dict[str, Any]
+            """Serialise this Meta to a plain dict suitable for JSON encoding."""
             return {
                 "ttl": self.ttl,
                 "pipe_id": self.pipe_id,
@@ -85,6 +88,7 @@ class ProtoMsg:
         @staticmethod
         def from_dict(d):
             # type: (Dict[str, Any]) -> ProtoMsg.Meta
+            """Construct a Meta instance from a plain dict, using safe defaults for missing keys."""
             return ProtoMsg.Meta(
                 d.get("ttl", 0),
                 d.get("pipe_id", b""),
@@ -111,6 +115,7 @@ class ProtoMsg:
 
         def load_if_extra(self, nics):
             # type: (List[Any]) -> None
+            """Resolve the dest_index to the matching NIC object from the provided list."""
             if_index = self.dest_index
             self.interface = nics[if_index]
 
@@ -122,6 +127,7 @@ class ProtoMsg:
 
         def set_cur_dest(self, cur_dest_buf):
             # type: (Any) -> None
+            """Update the destination address from a fresh address buffer and reparse routing info."""
             self.cur_dest_buf = to_s(cur_dest_buf)
             self.af, self.dest = ProtoMsg.load_addr(
                 self.af,
@@ -135,6 +141,7 @@ class ProtoMsg:
 
         def to_dict(self):
             # type: () -> Dict[str, Any]
+            """Serialise this Routing to a plain dict suitable for JSON encoding."""
             return {
                 "af": int(self.af),
                 "dest_buf": self.dest_buf,
@@ -144,6 +151,7 @@ class ProtoMsg:
         @staticmethod
         def from_dict(d):
             # type: (Dict[str, Any]) -> ProtoMsg.Routing
+            """Construct a Routing instance from a plain dict, using safe defaults for missing keys."""
             return ProtoMsg.Routing(
                 d.get("af", IP4),
                 d.get("dest_buf", b""),
@@ -160,11 +168,13 @@ class ProtoMsg:
 
         def to_dict(self):
             # type: () -> Dict[str, Any]
+            """Return an empty dict; subclasses override to include their fields."""
             return {}
 
         @staticmethod
         def from_dict(d):
             # type: (Dict[str, Any]) -> ProtoMsg.Payload
+            """Construct an empty Payload; subclasses override to deserialise their fields."""
             return ProtoMsg.Payload()
 
     def __init__(self, data, enum):
@@ -179,6 +189,7 @@ class ProtoMsg:
 
     def to_dict(self):
         # type: () -> Dict[str, Any]
+        """Serialise the full message (meta, routing, payload) to a JSON-compatible dict."""
         d = {
             "meta": self.meta.to_dict(),
             "routing": self.routing.to_dict(),
@@ -189,11 +200,13 @@ class ProtoMsg:
 
     def pack(self, sk=None):
         # type: (Optional[Any]) -> bytes
+        """Serialise this message to bytes with the enum prefix followed by JSON payload."""
         return bytes([self.enum]) + to_b(json.dumps(self.to_dict()))
 
     @classmethod
     def unpack(cls, buf):
         # type: (Any) -> ProtoMsg
+        """Deserialise bytes (without the leading enum byte) into a ProtoMsg instance."""
         try:
             d = json.loads(to_s(buf))
         except (ValueError, UnicodeDecodeError) as e:
@@ -208,6 +221,7 @@ class ProtoMsg:
 
     def set_cur_addr(self, cur_addr_buf):
         # type: (Any) -> None
+        """Update routing with the current address buffer and set the same-machine flag."""
         self.routing.set_cur_dest(cur_addr_buf)
 
         # Set same machine flag.

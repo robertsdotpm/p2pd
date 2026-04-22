@@ -237,7 +237,7 @@ class TestProtoMessages(unittest.TestCase):
         self.assertIn(SIG_GET_ADDR, SIG_PROTO)
         self.assertIn(SIG_RETURN_ADDR, SIG_PROTO)
         for enum, info in SIG_PROTO.items():
-            self.assertIsNotNone(info[0], f"No class for SIG_PROTO[{enum}]")
+            self.assertIsNotNone(info[0], "No class for SIG_PROTO[{}]".format(enum))
 
     def test_sig_msg_to_buf_and_try_unpack_roundtrip(self):
         """Wire sig_msg_to_buf -> try_unpack_msg with a live ConMsg."""

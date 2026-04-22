@@ -9,6 +9,7 @@ class GetAddrPlugin(TraversalPlugin):
 
     async def run(self, reply=None):
         # type: (Optional[Any]) -> None
+        """Resolve the peer's address: extract from reply or send a GetAddr request."""
         if reply:
             self.result.set_result(reply.meta.src["bytes"])
             return

@@ -125,21 +125,25 @@ class PunchClient:
 
     def set_src_ip(self, src_ip):
         # type: (str) -> None
+        """Override the source IP address used when binding punch sockets."""
         self.src_ip = src_ip
 
     # Timestamp is a unix timestamp.
     def set_timestamp(self, timestamp):
         # type: (int) -> None
+        """Record the NTP-synchronised Unix timestamp as the clock reference for this punch."""
         self.timestamp = timestamp
         self.start_time = time.monotonic()
 
     # Punch time is a future unix timestamp to start punching.
     def set_punch_time(self, punch_time):
         # type: (int) -> None
+        """Set the future Unix timestamp at which both peers will simultaneously send SYNs."""
         self.punch_time = punch_time
 
     def sleep_until(self):
         # type: () -> None
+        """Block the calling thread until the punch time is reached, capped by max_sleep."""
         # Time elapsed in seconds since first starting.
         elapsed = time.monotonic() - self.start_time
 
@@ -159,6 +163,7 @@ class PunchClient:
 
     def add_port_allocator(self, f_port_alloc, n=16):
         # type: (Any, int) -> None
+        """Run a port-allocation function and append unique PortAlloc entries to the list."""
         port_allocs, reserved = f_port_alloc(self.timestamp, n=n, params=self.params)
         for port_alloc in port_allocs:
             is_unique = True
@@ -173,6 +178,7 @@ class PunchClient:
     # Return a socket (punched hole) on success.
     def run_engine(self, f_engine):
         # type: (Any) -> Optional[Any]
+        """Execute the given punch engine function with this client's configuration and return the result socket."""
         return f_engine(
             af=self.af,
             nic_id=self.nic_id,
@@ -189,6 +195,7 @@ class PunchClient:
 if __name__ == "__main__":
 
     async def main():
+        """Run a standalone punch test from the command line."""
         # from ....nic.interface import Interface
         # nic = await Interface()
 

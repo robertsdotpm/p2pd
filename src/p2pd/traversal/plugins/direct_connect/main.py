@@ -10,6 +10,7 @@ class DirectConnect(TraversalPlugin):
 
     async def run(self, reply=None):
         # type: (Optional[Any]) -> None
+        """Open a direct TCP connection to the peer and store the resulting pipe."""
         # Connect to this address.
         dest = (
             str(self.dest_info["ip"]),

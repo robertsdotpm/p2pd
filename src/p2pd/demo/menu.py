@@ -10,6 +10,7 @@ from .utils import *
 # Accepts a PNP address or a full node address.
 async def connect_option(node, con_opts):
     # type: (Any, Tuple[Any, Optional[bytes], Optional[Any]]) -> str
+    """Open a P2P tunnel to a remote address and run an interactive echo session."""
     # Some variables set by command line flags or other parts.
     last_addr, echo_data, cmd_opts = con_opts
     con_method = pathway = addr_type = None
@@ -90,6 +91,7 @@ async def connect_option(node, con_opts):
 
 async def accept_option(nick):
     # type: (Optional[str]) -> str
+    """Wait in an accept loop, printing the node's PNP nickname, until a stop signal arrives."""
     print("\tListen on PNP: ", nick, flush=True)
     while not sock_has_data(stop_rw[0]):
         await asyncio.sleep(1)
@@ -99,6 +101,7 @@ async def accept_option(nick):
 
 async def nickname_option(node):
     # type: (Any) -> str
+    """Prompt for a nickname string and register it on the PNP network."""
     choice = await ainput("Enter nickname: ")
     try:
         ret = await node.nickname(choice)
@@ -111,6 +114,7 @@ async def nickname_option(node):
 
 async def stop_nodes_option(nodes):
     # type: (List[Any]) -> str
+    """Gracefully shut down all provided nodes."""
     cout("")
     cout("Stopping nodes...")
     for n in nodes:
@@ -129,6 +133,7 @@ async def run_menu_program(nick, ifs, nodes, con_opts=None, menu_option=None):
     #     Optional[Tuple[Any, Optional[bytes], Optional[Any]]],
     #     Optional[str],
     # ) -> str
+    """Display the interactive menu and dispatch to the chosen option handler."""
     # Select menu program.
     menu_option = menu_option or (await ainput("Select menu option: "))
     menu_option = menu_option.lower().strip()

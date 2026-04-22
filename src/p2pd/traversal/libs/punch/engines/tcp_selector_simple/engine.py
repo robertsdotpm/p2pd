@@ -28,6 +28,7 @@ RETRY_INTERVAL = 0.05
 
 def setup_engine(af, port_allocs, src_ip, nic_id):
     # type: (Any, List[Any], Optional[str], Optional[str]) -> Tuple[List[Any], Any]
+    """Bind all sockets for the given port allocations and register them with a selector."""
     # TCP hole punching uses ONE socket per port.
     # No listen sockets. Each socket will perform active open only.
     pre_connect_infos = bind_tcp_sockets(af, nic_id, port_allocs, src_ip)

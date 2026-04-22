@@ -106,6 +106,7 @@ class P2PDServer(RESTD):
     @RESTD.GET(["version"])
     async def get_version(self, v, pipe):
         # type: (Any, Any) -> Dict[str, Any]
+        """Return the P2PD version and author information."""
         return {
             "title": "P2PD",
             "author": "Matthew@Roberts.PM",
@@ -116,6 +117,7 @@ class P2PDServer(RESTD):
     @RESTD.GET(["ifs"])
     async def get_interfaces(self, v, pipe):
         # type: (Any, Any) -> Dict[str, Any]
+        """Return a JSON-serialised list of all loaded network interfaces."""
         try:
             return {"ifs": if_list_to_dict(self.interfaces), "error": 0}
         except (ValueError, AttributeError):
@@ -125,6 +127,7 @@ class P2PDServer(RESTD):
     @RESTD.GET(["addr"])
     async def get_peer_addr(self, v, pipe):
         # type: (Any, Any) -> Dict[str, Any]
+        """Return the serialised P2P address bytes of this node."""
         if self.node.addr_bytes is None:
             return {"error": 5, "msg": "p2pd node addr bytes is none."}
         else:
@@ -133,6 +136,7 @@ class P2PDServer(RESTD):
     @RESTD.GET(["open"])
     async def open_p2p_pipe(self, v, pipe):
         # type: (Any, Any) -> Optional[Dict[str, Any]]
+        """Initiate a P2P connection to dest_addr and store it under the given con_name."""
         con_name = v["name"]["open"]
         dest_addr = v["pos"][0]
 
@@ -188,6 +192,7 @@ class P2PDServer(RESTD):
     @RESTD.GET(["info"])
     async def get_con_info(self, v, pipe):
         # type: (Any, Any) -> Dict[str, Any]
+        """Return socket and route metadata for the named open connection."""
         con_name = v["name"]["con"]
         if con_name not in self.cons:
             return {"error": 7, "msg": fstr("con {0} does not exist", (con_name,))}
@@ -199,6 +204,7 @@ class P2PDServer(RESTD):
     @RESTD.GET(["send"])
     async def pipe_send_text(self, v, pipe):
         # type: (Any, Any) -> Dict[str, Any]
+        """URL-decode the message parameter and send it as text over the named connection."""
         con_name = v["name"]["send"]
         en_msg = urldecode(v["pos"][0])
 
@@ -218,6 +224,7 @@ class P2PDServer(RESTD):
     @RESTD.GET(["recv"])
     async def pipe_recv_text(self, v, pipe):
         # type: (Any, Any) -> Dict[str, Any]
+        """Wait for and return a text message from the named connection's receive buffer."""
         con_name = v["name"]["recv"]
 
         # Get something from recv buffer.
@@ -241,6 +248,7 @@ class P2PDServer(RESTD):
     @RESTD.GET(["close"])
     async def pipe_close(self, v, pipe):
         # type: (Any, Any) -> Dict[str, Any]
+        """Close the named P2P connection and remove it from the connection table."""
         con_name = v["name"]["close"]
 
         # Close the con -- fires cleanup handler.
@@ -253,6 +261,7 @@ class P2PDServer(RESTD):
     @RESTD.POST(["binary"])
     async def pipe_send_binary(self, v, pipe):
         # type: (Any, Any) -> Dict[str, Any]
+        """Send the raw POST body as binary data over the named P2P connection."""
         con_name = v["name"]["binary"]
 
         # Send binary data from octet-stream POST.
@@ -269,6 +278,7 @@ class P2PDServer(RESTD):
     @RESTD.GET(["binary"])
     async def pipe_get_binary(self, v, pipe):
         # type: (Any, Any) -> Any
+        """Read raw binary data from the named connection's receive buffer and return it directly."""
         con_name = v["name"]["binary"]
 
         # Send binary data from octet-stream POST.
@@ -289,6 +299,7 @@ class P2PDServer(RESTD):
     @RESTD.GET(["tunnel"])
     async def http_tunnel_trick(self, v, pipe):
         # type: (Any, Any) -> None
+        """Upgrade this HTTP connection to a transparent bidirectional tunnel to the named P2P pipe."""
         con_name = v["name"]["pipe"]
 
         # Send binary data from octet-stream POST.
@@ -312,6 +323,7 @@ class P2PDServer(RESTD):
     @RESTD.GET(["sub"], ["name"], ["msg_p"])
     async def pipe_do_sub(self, v, pipe):
         # type: (Any, Any) -> Dict[str, Any]
+        """Create a named message subscription filter on the specified P2P connection."""
         # Get variable names.
         con_name = v["name"]["sub"]
         sub_name = v["name"]["name"]
@@ -344,6 +356,7 @@ class P2PDServer(RESTD):
     @RESTD.DELETE(["sub"], ["name"])
     async def pipe_do_unsub(self, v, pipe):
         # type: (Any, Any) -> Dict[str, Any]
+        """Remove a named subscription filter from the specified P2P connection."""
         con_name = v["name"]["sub"]
         sub_name = v["name"]["name"]
         con = self.cons[con_name]
@@ -362,6 +375,7 @@ class P2PDServer(RESTD):
 # pragma: no cover
 async def start_p2pd_server(port=REST_API_PORT, ifs=None, enable_upnp=False):
     # type: (int, Optional[List[Any]], bool) -> Any
+    """Start a P2PD node and bind the REST API server to the loopback interface on port."""
     print("Loading interfaces...")
     print("If you've just connected a new NIC ")
     print("there can be a slight delay until it's online.")
@@ -403,6 +417,7 @@ async def start_p2pd_server(port=REST_API_PORT, ifs=None, enable_upnp=False):
 
 async def p2pd_workspace():
     # type: () -> None
+    """Launch the P2PD REST server and block indefinitely for manual testing."""
     await start_p2pd_server()
     print(fstr("http://localhost:{0}/", (REST_API_PORT,)))
     while True:

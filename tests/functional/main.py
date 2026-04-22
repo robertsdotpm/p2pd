@@ -24,7 +24,7 @@ disabling pp_executors for now as a test
 
 async def git_pull_latest(servers):
     for server in servers:
-        print(f"{server['os']}> Git pull latest code.")
+        print("{}> Git pull latest code.".format(server['os']))
 
         """
         Change to the P2PD code dir and then git pull the latest code
@@ -32,7 +32,7 @@ async def git_pull_latest(servers):
         """
         p2pd_dir = get_p2pd_code_path(server)
         async with ssh_connect(server) as con:
-            cmd = f"""cd "{p2pd_dir}" && git pull"""
+            cmd = 'cd "{}" && git pull'.format(p2pd_dir)
             await con.run(cmd, check=True)
 
 
@@ -41,7 +41,7 @@ async def pyenv_install_latest(servers):
         # For now just choose any Python version.
         pyver = choose_first_py_ver(server)
 
-        print(f"{server['os']}> Installing latest P2PD ({pyver}).")
+        print("{}> Installing latest P2PD ({}).".format(server['os'], pyver))
         chain_cmds = get_chain_cmds(server)
         async with ssh_connect(server) as con:
             # Start a persistent shell
@@ -71,7 +71,7 @@ async def tunnel_test(active, passive):
         chain_cmds = get_chain_cmds(active)
 
         # Setup shell and env for passive server.
-        print(f"{passive['os']}> Starting passive shell.")
+        print("{}> Starting passive shell.".format(passive['os']))
         passive_con = await ssh_connect(passive)
         passive_shell = await passive_con.create_process("bash -l")
         # await shell_write("pkill -f p2pd\n", passive_shell) # TODO: win
@@ -80,7 +80,7 @@ async def tunnel_test(active, passive):
         await shell_write(init_cmd, passive_shell)
 
         # Get PNP address of the passive node.
-        print(f"{passive['os']}> Getting passive node address.")
+        print("{}> Getting passive node address.".format(passive['os']))
         py_ver = choose_first_py_ver(passive)
         cmd = p2pd_cmd + "get_nickname"
         cmd = pyenv_run_cmd(py_ver, passive, cmd)
@@ -91,14 +91,14 @@ async def tunnel_test(active, passive):
         print("\t", passive_pnp)
 
         # Start passive node listening for cons.
-        print(f"{passive['os']}> Starting passive node.")
+        print("{}> Starting passive node.".format(passive['os']))
         cmd = p2pd_cmd + "1"
         cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n"  # TODO: background on win?
         await shell_write(cmd, passive_shell)
         await asyncio.sleep(5)
 
         # Setup shell and env for active server.
-        print(f"{active['os']}> Starting active shell.")
+        print("{}> Starting active shell.".format(active['os']))
         active_con = await ssh_connect(active)
         active_shell = await active_con.create_process("bash -l")
         await shell_write("export P2PD_DEBUG=1\n", active_shell)
@@ -110,8 +110,8 @@ async def tunnel_test(active, passive):
         # Echo down the returned pipe and get the output.
         # (0) connect (d)irect (l)an ipv(4)
         # NOTE: changed to (r) to test reverse con
-        print(f"{active['os']}> Try connect and echo to passive node.")
-        cmd = f'{p2pd_cmd}0pl4 --echo "CLEAN_SHUTDOWN" --dest_addr {passive_pnp}'
+        print("{}> Try connect and echo to passive node.".format(active['os']))
+        cmd = '{}0pl4 --echo "CLEAN_SHUTDOWN" --dest_addr {}'.format(p2pd_cmd, passive_pnp)
         # print(cmd)
         cmd = pyenv_run_cmd(py_ver, active, cmd)
         await shell_write(cmd + "\n", active_shell)

@@ -243,7 +243,7 @@ class TestSTUN(unittest.IsolatedAsyncioTestCase):
     async def _get_wan_ip(self, af):
         nic = await _default_nic()
         if af not in nic.supported():
-            self.skipTest(f"AF {af} not supported on this machine")
+            self.skipTest("AF {} not supported on this machine".format(af))
         hosts = [("stun1.p2pd.net", 3478), ("stun2.p2pd.net", 3478)]
         for host in hosts:
             client = STUNClient(af, host, nic, proto=UDP)
@@ -260,14 +260,14 @@ class TestSTUN(unittest.IsolatedAsyncioTestCase):
         if ip is None:
             self.skipTest("No STUN server reachable via IPv4")
         ipr = IPRange(ip, bitlen=32)
-        self.assertTrue(ipr.is_public, f"STUN should return a public IP, got: {ip}")
+        self.assertTrue(ipr.is_public, "STUN should return a public IP, got: {}".format(ip))
 
     async def test_stun_result_is_valid_ipv4_string(self):
         ip = await self._get_wan_ip(IP4)
         if ip is None:
             self.skipTest("No STUN server reachable via IPv4")
         parts = ip.split(".")
-        self.assertEqual(len(parts), 4, f"Expected IPv4 dotted quad, got: {ip}")
+        self.assertEqual(len(parts), 4, "Expected IPv4 dotted quad, got: {}".format(ip))
         for p in parts:
             self.assertTrue(p.isdigit())
             self.assertIn(int(p), range(0, 256))
@@ -285,7 +285,7 @@ class TestSTUN(unittest.IsolatedAsyncioTestCase):
         if ip:
             ipr = IPRange(ip, bitlen=32)
             self.assertTrue(
-                ipr.is_public, f"STUN TCP should return a public IP, got: {ip}"
+                ipr.is_public, "STUN TCP should return a public IP, got: {}".format(ip)
             )
 
 
@@ -311,7 +311,7 @@ class TestMQTT(unittest.IsolatedAsyncioTestCase):
         try:
             clients = await asyncio.wait_for(router.start(), timeout=20)
         except Exception as e:
-            self.skipTest(f"Router.start() raised: {e}")
+            self.skipTest("Router.start() raised: {}".format(e))
         finally:
             await router.close()
 
@@ -338,7 +338,7 @@ class TestMQTT(unittest.IsolatedAsyncioTestCase):
             clients = await asyncio.wait_for(router.start(), timeout=20)
         except Exception as e:
             await router.close()
-            self.skipTest(f"Router.start() raised: {e}")
+            self.skipTest("Router.start() raised: {}".format(e))
         if not clients:
             await router.close()
             self.skipTest("No MQTT brokers reachable")
@@ -351,7 +351,7 @@ class TestMQTT(unittest.IsolatedAsyncioTestCase):
             )
             self.assertIsNotNone(pipe)
         except Exception as e:
-            self.skipTest(f"Router.pipe() raised: {e}")
+            self.skipTest("Router.pipe() raised: {}".format(e))
         finally:
             await router.close()
 
@@ -368,7 +368,7 @@ class TestNodeStart(unittest.IsolatedAsyncioTestCase):
         try:
             node = await asyncio.wait_for(Node(conf=NODE_TEST_CONF), timeout=30)
         except Exception as e:
-            self.skipTest(f"Node startup failed (network issue?): {e}")
+            self.skipTest("Node startup failed (network issue?): {}".format(e))
 
         try:
             self.assertIsNotNone(
@@ -384,7 +384,7 @@ class TestNodeStart(unittest.IsolatedAsyncioTestCase):
         try:
             node = await asyncio.wait_for(Node(conf=NODE_TEST_CONF), timeout=30)
         except Exception as e:
-            self.skipTest(f"Node startup failed: {e}")
+            self.skipTest("Node startup failed: {}".format(e))
 
         try:
             addr = parse_node_addr(node.addr_bytes)
@@ -401,7 +401,7 @@ class TestNodeStart(unittest.IsolatedAsyncioTestCase):
         try:
             node = await asyncio.wait_for(Node(conf=NODE_TEST_CONF), timeout=30)
         except Exception as e:
-            self.skipTest(f"Node startup failed: {e}")
+            self.skipTest("Node startup failed: {}".format(e))
 
         try:
             self.assertIsNotNone(
@@ -420,7 +420,7 @@ class TestNodeStart(unittest.IsolatedAsyncioTestCase):
         try:
             node = await asyncio.wait_for(Node(conf=NODE_TEST_CONF), timeout=30)
         except Exception as e:
-            self.skipTest(f"Node startup failed: {e}")
+            self.skipTest("Node startup failed: {}".format(e))
 
         try:
             expected = hashlib.sha256(node.vk.to_string("compressed")).hexdigest()[:25]

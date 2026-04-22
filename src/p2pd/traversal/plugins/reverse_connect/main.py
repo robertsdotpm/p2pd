@@ -9,6 +9,7 @@ class ReverseConnectPlugin(TraversalPlugin):
 
     async def run(self, reply=None):
         # type: (Optional[Any]) -> None
+        """Signal the remote peer to connect back to us and await the inbound pipe."""
         msg = ConMsg()
         msg.meta.plugin_name = "direct_connect"
         self.register_inbound()

@@ -34,10 +34,12 @@ class AsyncIOInteractiveConsole(code.InteractiveConsole):
 
     def runcode(self, code):
         # type: (Any) -> None
+        """Execute a code object in the asyncio event loop, supporting top-level await."""
         future = concurrent.futures.Future()
 
         def callback():
             # type: () -> None
+            """Schedule the coroutine from the compiled code on the asyncio loop."""
             global repl_future
             global repl_future_interrupted
 
@@ -85,6 +87,7 @@ class REPLThread(threading.Thread):
 
     def run(self):
         # type: () -> None
+        """Drive the interactive REPL console until the user exits."""
         try:
             loop_policy = str(asyncio.get_event_loop_policy())
             if "elector" in loop_policy:

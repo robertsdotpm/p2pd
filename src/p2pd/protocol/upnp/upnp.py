@@ -66,9 +66,11 @@ async def brute_force_port_forward(
     af, interface, ext_port, src_tup, desc, proto, add_host=None
 ):
     # type: (Any, Any, int, Tuple[str, int], str, str, Optional[str]) -> Any
+    """Probe known UPnP ports on local gateways and attempt port forwarding via all found services."""
     # Check if a port is open.
     async def try_connect(port, host):
         # type: (int, str) -> Optional[Tuple[str, int]]
+        """Attempt a TCP connection to host:port and return the dest tuple on success."""
         dest = (host, port)
         route = await interface.route(af).bind()
         try:
@@ -81,6 +83,7 @@ async def brute_force_port_forward(
     # Try to load forwarding services at path and use them.
     async def try_service_path(path, dest):
         # type: (str, Tuple[str, int]) -> int
+        """Fetch the UPnP description at path on dest and attempt to apply the forwarding rule."""
         # Get service URLs for port forwarding or pin hole.
         route = await interface.route(af).bind()
         service_info = await async_wrap_errors(
@@ -182,6 +185,7 @@ async def brute_force_port_forward(
 
 async def discover_upnp_devices(af, nic):
     # type: (Any, Any) -> Optional[List[Any]]
+    """Send an SSDP M-SEARCH multicast and collect HTTP replies from responding UPnP devices."""
     # Set protocol family for multicast socket.
     sock_conf = dict_child(
         {
@@ -261,6 +265,7 @@ async def port_forward_from_multicast(
     af, interface, ext_port, src_tup, desc, proto="TCP"
 ):
     # type: (Any, Any, int, Tuple[str, int], str, str) -> Any
+    """Discover UPnP devices via multicast and attempt port forwarding through each one."""
     try:
         # Get list of possible devices supporting UPNP.
         # I think NAT-PMP devices also reply here.
@@ -333,6 +338,7 @@ async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
 if __name__ == "__main__":
 
     async def upnp_main():
+        """Standalone test entry point that runs port_forward on the first IPv4 interface."""
         from .interface import Interface
 
         nic = await Interface("enp0s25")

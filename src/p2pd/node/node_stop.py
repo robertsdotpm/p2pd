@@ -7,6 +7,7 @@ from ..errors import AlreadyClosedError
 
 async def close_helper(p):
     # type: (Any) -> None
+    """Call p.close(), silently swallowing AlreadyClosedError and logging other exceptions."""
     try:
         await p.close()
     except AlreadyClosedError:
@@ -18,6 +19,7 @@ async def close_helper(p):
 
 async def close_with_timeout(p):
     # type: (Any) -> None
+    """Close p with a 2-second timeout, logging a warning if the close operation hangs."""
     try:
         await asyncio.wait_for(close_helper(p), timeout=2)
     except asyncio.TimeoutError:
@@ -27,6 +29,7 @@ async def close_with_timeout(p):
 # Shutdown the node server and do cleanup.
 async def node_stop(node):
     # type: (Any) -> None
+    """Shut down the node, closing traversal plugins, resources, the daemon, and the stop socket pair."""
     # Send stop signal (any amount of data.)
     try:
         node.stop_writer.send(b"Meow")

@@ -19,6 +19,7 @@ class TURNPlugin(TraversalPlugin):
 
     async def run(self, reply=None):
         # type: (Optional[Any]) -> None
+        """Allocate a TURN relay, exchange addresses with the peer, and establish the channel."""
         # TURN relay requires a public relay server; skip for direct NIC binds.
         if self.route_type == NIC_BIND:
             return
@@ -133,6 +134,7 @@ class TURNPluginFactory:
 
     def build_plugin(self):
         # type: () -> TURNPlugin
+        """Create a new TURNPlugin instance wired to this factory's shared client pool."""
         plugin = TURNPlugin()
         plugin.turn_clients = self.turn_clients
         plugin.msg_cb = self.msg_cb
@@ -141,6 +143,7 @@ class TURNPluginFactory:
 
     async def close(self):
         # type: () -> None
+        """Close all shared TURN clients and clear the pool."""
         for client in list(self.turn_clients.values()):
             try:
                 await client.close()

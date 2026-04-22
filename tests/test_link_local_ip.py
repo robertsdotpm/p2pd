@@ -215,8 +215,7 @@ class TestMakeNodeAddrLinkLocal(unittest.TestCase):
         self.assertEqual(
             str(nic_ip),
             LINK_LOCAL,
-            f"NIC IPv6 in address should be the link-local "
-            f"{LINK_LOCAL!r}, got {str(nic_ip)!r}",
+            "NIC IPv6 in address should be the link-local {}, got {}".format(repr(LINK_LOCAL), repr(str(nic_ip))),
         )
 
     def test_global_v6_encoded_as_ext_ip_in_addr(self):
@@ -229,8 +228,7 @@ class TestMakeNodeAddrLinkLocal(unittest.TestCase):
         self.assertEqual(
             str(ext_ip),
             GLOBAL_V6,
-            f"EXT IPv6 in address should be the global "
-            f"{GLOBAL_V6!r}, got {str(ext_ip)!r}",
+            "EXT IPv6 in address should be the global {}, got {}".format(repr(GLOBAL_V6), repr(str(ext_ip))),
         )
 
     def test_addr_roundtrip_with_link_local(self):
@@ -300,12 +298,12 @@ class TestMakeNodeAddrLocalIPv4Fallback(unittest.TestCase):
         self.assertEqual(
             str(ext_ip),
             LAN_V4,
-            f"ext IPv4 should be the LAN IP {LAN_V4!r}, got {str(ext_ip)!r}",
+            "ext IPv4 should be the LAN IP {}, got {}".format(repr(LAN_V4), repr(str(ext_ip))),
         )
         self.assertEqual(
             str(nic_ip),
             LAN_V4,
-            f"nic IPv4 should be the LAN IP {LAN_V4!r}, got {str(nic_ip)!r}",
+            "nic IPv4 should be the LAN IP {}, got {}".format(repr(LAN_V4), repr(str(nic_ip))),
         )
 
     def test_sort_ips_by_nic_finds_local_ipv4(self):

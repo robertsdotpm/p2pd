@@ -15,6 +15,7 @@ def rendezvous_rank(key, servers):
 
     def score(s):
         # type: (Dict[str, Any]) -> Any
+        """Compute a rendezvous hash score for server s against the shared key."""
         return rendezvous_score(key_b, to_b(s["ip"]), str(s["port"]).encode())
 
     return sorted(servers, key=score, reverse=True)
@@ -24,6 +25,7 @@ async def get_turn_client(
     af, server, interface, dest_peer=None, dest_relay=None, msg_cb=None
 ):
     # type: (Any, Dict[str, Any], Any, Optional[Any], Optional[Any], Optional[Any]) -> Tuple[Any, Any, TURNClient]
+    """Connect to a TURN server, allocate a relay, and optionally whitelist a peer."""
     turn_client = TURNClient(
         af=af,
         dest=(server["ip"], server["port"]),
@@ -46,6 +48,7 @@ async def get_turn_client(
 
 async def get_first_working_turn_client(af, servers, nic, msg_cb):
     # type: (Any, List[Dict[str, Any]], Any, Any) -> Optional[TURNClient]
+    """Try each TURN server in ranked order and return the first one that connects."""
     for server in servers:
         try:
             peer_tup, relay_tup, turn_client = await get_turn_client(

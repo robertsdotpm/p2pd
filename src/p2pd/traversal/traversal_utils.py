@@ -83,6 +83,7 @@ def select_dest_ipr(af, same_pc, src_info, dest_info, addr_types, has_set_bind=T
 
 def sort_pairs_by_overlap(src_infos, dest_infos):
     # type: (List[Dict[str, Any]], List[Dict[str, Any]]) -> Tuple[List[Any], List[Any]]
+    """Partition (src_info, dest_info) pairs into overlapping and non-overlapping external IPs."""
     overlap = []
     unique = []
     for src_info in src_infos:
@@ -109,6 +110,7 @@ async def for_addr_infos(
 
     async def try_addr_infos(af, strat, addr_type, src_info, dest_info):
         # type: (Any, str, Any, Dict[str, Any], Dict[str, Any]) -> Optional[Any]
+        """Attempt one connectivity strategy for a specific src/dest interface pair."""
         # Local addressing and/or remote.
         try:
             # Create a future for pending pipes.
@@ -352,6 +354,7 @@ def get_if_infos_order(af, route_type, src_map, dest_map):
 
 def try_unpack_msg(buf, sk, sig_proto_map):
     # type: (Any, Any, Dict[Any, Any]) -> Any
+    """Decrypt (if needed) and deserialise an incoming signal buffer into a protocol message."""
     buf = h_to_b(buf)
 
     # Try to decrypt message if its encrypted.
@@ -378,6 +381,7 @@ def try_unpack_msg(buf, sk, sig_proto_map):
 
 def sig_msg_to_buf(msg, dest_pk):
     # type: (Any, Optional[Any]) -> bytes
+    """Serialise a signal message, optionally encrypting it with the destination's public key."""
     if dest_pk:
         buf = b"\1" + encrypt(dest_pk, msg.pack())
     else:
@@ -390,6 +394,7 @@ def sig_msg_to_buf(msg, dest_pk):
 
 async def close_plugin(plugin, plugins, inbound_pipes):
     # type: (Any, Dict[str, Any], Dict[str, Any]) -> None
+    """Remove a plugin from the registries and call its close method if present."""
     if hasattr(plugin, "plugin_id"):
         plugins.pop(plugin.plugin_id, None)
         inbound_pipes.pop(plugin.plugin_id, None)

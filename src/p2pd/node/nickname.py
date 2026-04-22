@@ -24,18 +24,21 @@ PNP_TLD_TO_INDEX = {
 
 def pnp_get_tld(offsets):
     # type: (List[int]) -> str
+    """Return the PNP TLD string (e.g. '.peer') corresponding to the given server index list."""
     index = frozenset(offsets)
     return PNP_INDEX_TO_TLD[index]
 
 
 def pnp_get_offsets(tld):
     # type: (str) -> List[int]
+    """Return the list of PNP server offsets that must hold a record for the given TLD."""
     index = PNP_TLD_TO_INDEX[tld]
     return list(index)
 
 
 def pnp_strip_tlds(name):
     # type: (Any) -> str
+    """Strip any known PNP TLD suffix from name and return the bare label."""
     name = to_s(name)
     for tld in PNP_TLD_TO_INDEX:
         # Grab the last len(tld) characters in name.
@@ -53,6 +56,7 @@ def pnp_strip_tlds(name):
 
 def pnp_name_has_tld(name):
     # type: (Any) -> bool
+    """Return True if name ends with a recognised PNP TLD suffix."""
     name = to_s(name)
     for tld in PNP_TLD_TO_INDEX:
         portion = name[-len(tld) :]
@@ -103,6 +107,7 @@ class Nickname:
 
     async def start(self, timeout=2):
         # type: (int) -> Nickname
+        """Connect to all reachable PNP servers and mark the client as started."""
         tasks = []
 
         for index in range(len(PNP_SERVERS[IP4])):
@@ -123,6 +128,7 @@ class Nickname:
 
                 async def job(af=af, index=index, client=client):
                     # type: (Any, int, Any) -> Tuple[Any, int, Optional[Any]]
+                    """Start the namebump client and verify connectivity, returning (af, index, client)."""
                     pipe = None
                     try:
                         await client.start()
@@ -157,6 +163,7 @@ class Nickname:
 
     async def put(self, name, value, behavior=namebump.DO_BUMP, timeout=NAMING_TIMEOUT):
         # type: (Any, Any, Any, int) -> str
+        """Store value under name on all reachable PNP servers and return the resulting name with TLD."""
         if not self.started:
             raise RuntimeError("Nickname client not started. Call start() first.")
         name = pnp_strip_tlds(name)
@@ -164,6 +171,7 @@ class Nickname:
         # Single coro for storing at one server.
         async def worker(offset):
             # type: (int) -> Optional[int]
+            """Attempt to store the name on the PNP server at offset and return offset on success."""
             for af in VALID_AFS:
                 try:
                     client = self.clients[af][offset]
@@ -205,11 +213,13 @@ class Nickname:
 
     async def get(self, name, timeout=NAMING_TIMEOUT):
         # type: (Any, int) -> Optional[Any]
+        """Look up name on the authoritative PNP servers and return the first successful result."""
         if not self.started:
             raise RuntimeError("Nickname client not started. Call start() first.")
 
         async def worker(offset, name):
             # type: (int, Any) -> Optional[Any]
+            """Query the PNP server at offset for name and return the first non-None record."""
             for af in VALID_AFS:
                 try:
                     client = self.clients[af][offset]
@@ -249,12 +259,14 @@ class Nickname:
 
     async def delete(self, name, timeout=NAMING_TIMEOUT):
         # type: (Any, int) -> None
+        """Delete the record for name from all reachable PNP servers concurrently."""
         if not self.started:
             raise RuntimeError("Nickname client not started. Call start() first.")
         name = pnp_strip_tlds(name)
 
         async def worker(offset):
             # type: (int) -> Optional[Any]
+            """Send a delete request for name to the PNP server at offset and return the result."""
             for af in VALID_AFS:
                 try:
                     client = self.clients[af][offset]
@@ -274,6 +286,7 @@ class Nickname:
 
     async def close(self):
         # type: () -> None
+        """Close all active PNP client connections and reset the started flag."""
         for af in self.clients:
             for index in list(self.clients[af]):
                 client = self.clients[af][index]
@@ -302,6 +315,7 @@ class Nickname:
 
 async def workspace():
     # type: () -> None
+    """Developer sandbox for manual Nickname testing; returns immediately in normal use."""
     return
     TEST_SK = (
         b"\xfe\xb1w~v\xfe\xc4:\x83\xa6C\x19\xde\x11\xc2\xc8\xc4A\xdaEC\x01\xc2\x9d"

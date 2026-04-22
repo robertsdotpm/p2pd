@@ -14,10 +14,12 @@ ainput_interrupt_r, ainput_interrupt_w = os.pipe()
 
 async def ainput(prompt):
     # type: (str) -> str
+    """Read a line of input from stdin asynchronously, unblocking on shutdown signals."""
     loop = asyncio.get_event_loop()
 
     def _blocking_input():
         # type: () -> str
+        """Block in a thread waiting for stdin input or a shutdown interrupt."""
         sys.stdout.write(prompt)
         sys.stdout.flush()
         try:
@@ -47,6 +49,7 @@ async def ainput(prompt):
 
 def cout(*fargs):
     # type: (*Any) -> None
+    """Print output to stdout unless running in non-interactive command mode."""
     if args.cmd:
         return
     else:
@@ -58,6 +61,7 @@ def cout(*fargs):
 
 async def add_echo_support(msg, client_tup, pipe):
     # type: (bytes, Any, Any) -> None
+    """Handle incoming ECHO protocol messages by stripping the prefix and sending back the payload."""
     print("in add echo sup ", msg)
     if b"ECHO" == msg[:4]:
         cout()
@@ -82,12 +86,14 @@ async def add_echo_support(msg, client_tup, pipe):
 
 def patch_log_p2p(m, node_id=""):
     # type: (Any, str) -> None
+    """Format and print a P2P log line prefixed with the node ID via cout."""
     out = fstr("p2p: <{0}> ", (node_id,)) + to_s(m)
     cout(out)
 
 
 def get_req_serv_parts(parts):
     # type: (List[str]) -> Any
+    """Parse a comma-separated server spec into (offset, af, ip, port) tuple."""
     ip = parts[2]
     offset = int(parts[0])
     af = int(parts[1])
@@ -102,6 +108,7 @@ def get_req_serv_parts(parts):
 
 def patch_server_af_dict(arg_list, serv_dict):
     # type: (List[str], Dict[Any, Any]) -> None
+    """Override host/ip/port entries in an AF-keyed server dict using CLI arg strings."""
     # offset, af, ip, port
     serv_infos = arg_list
     for serv_info in serv_infos:
@@ -116,6 +123,7 @@ def patch_server_af_dict(arg_list, serv_dict):
 
 def patch_server_list(arg_list, server_list):
     # type: (List[str], List[Dict[str, Any]]) -> None
+    """Patch entries in a flat server list with addresses and credentials from CLI arg strings."""
     # offset, af, ip, port, (optional) user, (optional) password
     serv_infos = arg_list
     for serv_info in serv_infos:
@@ -147,6 +155,7 @@ def patch_server_list(arg_list, server_list):
 
 def filter_nics_by_mac(mac_list, ifs):
     # type: (List[str], List[Any]) -> List[Any]
+    """Return only the NICs whose MAC address appears in mac_list."""
     mac_list = [mac_norm(mac) for mac in mac_list]
     new_ifs = []
     for nic in ifs:
@@ -158,6 +167,7 @@ def filter_nics_by_mac(mac_list, ifs):
 
 def display_ifs_loaded(ifs):
     # type: (List[Any]) -> None
+    """Print a summary of each loaded interface including AF support and NAT type."""
     buf = ""
     for nic in ifs:
         buf += fstr("\t{0} ", (nic.name,))
