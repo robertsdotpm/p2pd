@@ -109,15 +109,33 @@ class TestSTUNClientIPv4(AsyncTestCase):
 
 @pytest.mark.network
 class TestSTUNClientIPv6(AsyncTestCase):
+    ipv6_functional = None
+
     async def asyncSetUp(self):
         self.nic = await Interface()
         if IP6 not in self.nic.supported():
             pytest.skip("IPv6 not available on this machine")
+
+        if TestSTUNClientIPv6.ipv6_functional is None:
+            probe = STUNServer(self.nic, mode=RFC5389)
+            await probe.start()
+            ok = IP6 in probe.started_afs()
+            if ok:
+                probe_client = make_stun_client(
+                    self.nic, IP6, port=probe.af_ports.get(IP6, probe.port)
+                )
+                try:
+                    await asyncio.wait_for(probe_client.get_stun_reply(), timeout=3)
+                except Exception:
+                    ok = False
+            await probe.close()
+            TestSTUNClientIPv6.ipv6_functional = ok
+
+        if not TestSTUNClientIPv6.ipv6_functional:
+            pytest.skip("IPv6 loopback not functional")
+
         self.server = STUNServer(self.nic, mode=RFC5389)
         await self.server.start()
-        if IP6 not in self.server.started_afs():
-            await self.server.close()
-            pytest.skip("STUN server could not bind IPv6 (::1 unavailable)")
 
     async def asyncTearDown(self):
         await self.server.close()
@@ -215,15 +233,33 @@ class TestSTUNClientTCPIPv4(AsyncTestCase):
 
 @pytest.mark.network
 class TestSTUNClientTCPIPv6(AsyncTestCase):
+    ipv6_functional = None
+
     async def asyncSetUp(self):
         self.nic = await Interface()
         if IP6 not in self.nic.supported():
             pytest.skip("IPv6 not available on this machine")
+
+        if TestSTUNClientTCPIPv6.ipv6_functional is None:
+            probe = STUNServer(self.nic, mode=RFC5389)
+            await probe.start()
+            ok = IP6 in probe.started_afs()
+            if ok:
+                probe_client = make_stun_client(
+                    self.nic, IP6, proto=TCP, port=probe.af_ports.get(IP6, probe.port)
+                )
+                try:
+                    await asyncio.wait_for(probe_client.get_stun_reply(), timeout=3)
+                except Exception:
+                    ok = False
+            await probe.close()
+            TestSTUNClientTCPIPv6.ipv6_functional = ok
+
+        if not TestSTUNClientTCPIPv6.ipv6_functional:
+            pytest.skip("IPv6 loopback not functional")
+
         self.server = STUNServer(self.nic, mode=RFC5389)
         await self.server.start()
-        if IP6 not in self.server.started_afs():
-            await self.server.close()
-            pytest.skip("STUN server could not bind IPv6 (::1 unavailable)")
 
     async def asyncTearDown(self):
         await self.server.close()

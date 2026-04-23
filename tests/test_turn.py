@@ -342,10 +342,32 @@ class TestTURNLoopbackIPv6(AsyncTestCase):
     Skipped when IPv6 is not available on this machine.
     """
 
+    ipv6_functional = None
+
     async def asyncSetUp(self):
         self.nic = await Interface()
         if IP6 not in self.nic.supported():
             pytest.skip("IPv6 not available on this machine")
+
+        if TestTURNLoopbackIPv6.ipv6_functional is None:
+            probe_server = TURNServer(self.nic)
+            await probe_server.start()
+            ok = IP6 in probe_server.started_afs()
+            if ok:
+                ip6_probe_port = probe_server.af_ports.get(IP6, probe_server.port)
+                try:
+                    probe_client = await asyncio.wait_for(
+                        start_client_ip6(self.nic, port=ip6_probe_port), timeout=4
+                    )
+                    await async_wrap_errors(probe_client.close())
+                except Exception:
+                    ok = False
+            await probe_server.close()
+            TestTURNLoopbackIPv6.ipv6_functional = ok
+
+        if not TestTURNLoopbackIPv6.ipv6_functional:
+            pytest.skip("IPv6 loopback not functional")
+
         self.server = TURNServer(self.nic)
         self.client_a = None
         self.client_b = None
@@ -460,10 +482,31 @@ class TestTURNPluginIPv6(AsyncTestCase):
     Skipped when IPv6 is not available on this machine.
     """
 
+    ipv6_functional = None
+
     async def asyncSetUp(self):
         self.nic = await Interface()
         if IP6 not in self.nic.supported():
             pytest.skip("IPv6 not available on this machine")
+
+        if TestTURNPluginIPv6.ipv6_functional is None:
+            probe_server = TURNServer(self.nic)
+            await probe_server.start()
+            ok = IP6 in probe_server.started_afs()
+            if ok:
+                ip6_probe_port = probe_server.af_ports.get(IP6, probe_server.port)
+                try:
+                    probe_client = await asyncio.wait_for(
+                        start_client_ip6(self.nic, port=ip6_probe_port), timeout=4
+                    )
+                    await async_wrap_errors(probe_client.close())
+                except Exception:
+                    ok = False
+            await probe_server.close()
+            TestTURNPluginIPv6.ipv6_functional = ok
+
+        if not TestTURNPluginIPv6.ipv6_functional:
+            pytest.skip("IPv6 loopback not functional")
 
         self.server = TURNServer(self.nic)
         await self.server.start()

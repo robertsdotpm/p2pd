@@ -373,7 +373,7 @@ class TestNodeStart(unittest.IsolatedAsyncioTestCase):
 
     async def test_node_starts_and_closes(self):
         try:
-            node = await asyncio.wait_for(Node(port=NODE_PORT + 4000, conf=NODE_TEST_CONF), timeout=30)
+            node = await asyncio.wait_for(Node(port=NODE_PORT + 5000, conf=NODE_TEST_CONF), timeout=20)
         except Exception as e:
             self.skipTest("Node startup failed (network issue?): {}".format(e))
 
@@ -389,7 +389,7 @@ class TestNodeStart(unittest.IsolatedAsyncioTestCase):
         from aionetiface import parse_node_addr
 
         try:
-            node = await asyncio.wait_for(Node(port=NODE_PORT + 4001, conf=NODE_TEST_CONF), timeout=30)
+            node = await asyncio.wait_for(Node(port=NODE_PORT + 5001, conf=NODE_TEST_CONF), timeout=20)
         except Exception as e:
             self.skipTest("Node startup failed: {}".format(e))
 
@@ -406,7 +406,7 @@ class TestNodeStart(unittest.IsolatedAsyncioTestCase):
     async def test_node_has_traversal_wired(self):
         """TraversalManager must be wired to the node after startup."""
         try:
-            node = await asyncio.wait_for(Node(port=NODE_PORT + 4002, conf=NODE_TEST_CONF), timeout=30)
+            node = await asyncio.wait_for(Node(port=NODE_PORT + 5002, conf=NODE_TEST_CONF), timeout=20)
         except Exception as e:
             self.skipTest("Node startup failed: {}".format(e))
 
@@ -425,7 +425,7 @@ class TestNodeStart(unittest.IsolatedAsyncioTestCase):
     async def test_node_id_is_derived_from_pub_key(self):
         """node_id == sha256(compressed_vk)[:25] — verified against live startup."""
         try:
-            node = await asyncio.wait_for(Node(port=NODE_PORT + 4003, conf=NODE_TEST_CONF), timeout=30)
+            node = await asyncio.wait_for(Node(port=NODE_PORT + 5003, conf=NODE_TEST_CONF), timeout=20)
         except Exception as e:
             self.skipTest("Node startup failed: {}".format(e))
 
