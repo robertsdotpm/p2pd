@@ -98,8 +98,7 @@ async def race_plugin_results(
     if not plugins:
         return None, None
 
-    loop = asyncio.get_event_loop()
-    resolved = loop.create_future()
+    resolved = asyncio.Future()
     outstanding = [len(plugins)]
 
     def make_cb(plugin):
