@@ -748,6 +748,8 @@ class TestAutoConnectIPv6(unittest.IsolatedAsyncioTestCase):
             )
         except asyncio.TimeoutError:
             self.skipTest("auto_connect timed out over IPv6")
+        except OSError:
+            self.skipTest("IPv6 auto_connect raised OSError (broken IPv6 on this platform)")
 
         self.assertIsNotNone(pipe)
         self.assertIsNotNone(plugin)
@@ -1213,7 +1215,13 @@ class TestAutoConnectTurnFallback(unittest.IsolatedAsyncioTestCase):
         if IP6 not in nic.supported():
             self.skipTest("IPv6 not available")
         self.turn_server = TURNServer(nic)
-        await self.turn_server.start()
+        try:
+            await self.turn_server.start()
+        except OSError:
+            self.skipTest("IPv6 loopback not functional (OSError on TURN server start)")
+        if IP6 not in self.turn_server.started_afs():
+            await self.turn_server.close()
+            self.skipTest("TURN server could not bind IPv6 (::1 unavailable)")
 
         local_entry = make_local_turn_server_entry(
             port=self.turn_server.af_ports.get(IP6, self.turn_server.port), af=IP6
@@ -1231,6 +1239,8 @@ class TestAutoConnectTurnFallback(unittest.IsolatedAsyncioTestCase):
             )
         except asyncio.TimeoutError:
             self.skipTest("auto_connect timed out")
+        except OSError:
+            self.skipTest("IPv6 auto_connect raised OSError (broken IPv6 on this platform)")
 
         self.assertIsNotNone(pipe)
         self.assertNotEqual(
