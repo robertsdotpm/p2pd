@@ -176,6 +176,10 @@ class TURNServer:
 
     # ── lifecycle ──────────────────────────────────────────────
 
+    def started_afs(self):
+        """Return the set of address families the server successfully bound."""
+        return set(self.control_pipes.keys())
+
     async def start(self):
         """Bind one control socket per supported address family."""
         for af in self.interface.supported():

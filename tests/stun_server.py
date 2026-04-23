@@ -57,6 +57,10 @@ class STUNServer:
         self.bind_ip = bind_ip
         self.control_pipes = {}
 
+    def started_afs(self):
+        """Return the set of address families the server successfully bound."""
+        return set(af for (af, _proto) in self.control_pipes)
+
     async def start(self):
         for af in self.interface.supported():
             try:

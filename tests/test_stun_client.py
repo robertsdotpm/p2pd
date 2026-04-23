@@ -112,9 +112,12 @@ class TestSTUNClientIPv6(AsyncTestCase):
     async def asyncSetUp(self):
         self.nic = await Interface()
         if IP6 not in self.nic.supported():
-            self.skipTest("IPv6 not available on this machine")
+            pytest.skip("IPv6 not available on this machine")
         self.server = STUNServer(self.nic, mode=RFC5389)
         await self.server.start()
+        if IP6 not in self.server.started_afs():
+            await self.server.close()
+            pytest.skip("STUN server could not bind IPv6 (::1 unavailable)")
 
     async def asyncTearDown(self):
         await self.server.close()
@@ -215,9 +218,12 @@ class TestSTUNClientTCPIPv6(AsyncTestCase):
     async def asyncSetUp(self):
         self.nic = await Interface()
         if IP6 not in self.nic.supported():
-            self.skipTest("IPv6 not available on this machine")
+            pytest.skip("IPv6 not available on this machine")
         self.server = STUNServer(self.nic, mode=RFC5389)
         await self.server.start()
+        if IP6 not in self.server.started_afs():
+            await self.server.close()
+            pytest.skip("STUN server could not bind IPv6 (::1 unavailable)")
 
     async def asyncTearDown(self):
         await self.server.close()
