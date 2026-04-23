@@ -332,10 +332,15 @@ class TraversalManager:
         """Periodically scan for expired plugins and close them to free resources."""
         while True:
             await asyncio.sleep(5)
-            now = get_running_loop().time()
-            for plugin in list(self.plugins.values()):
-                if now >= plugin.expires_at:
-                    await close_plugin(plugin, self.plugins, self.inbound_pipes)
+            try:
+                now = get_running_loop().time()
+                for plugin in list(self.plugins.values()):
+                    if now >= plugin.expires_at:
+                        await close_plugin(plugin, self.plugins, self.inbound_pipes)
+            except asyncio.CancelledError:
+                raise
+            except (OSError, AttributeError, asyncio.TimeoutError):
+                log_exception()
 
     def install_plugin_done_callback(self, done_callback: Callable) -> None:
         """Register a callback to be invoked when any plugin finishes."""

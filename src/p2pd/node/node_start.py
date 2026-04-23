@@ -27,9 +27,7 @@ from .node_utils import (
 )
 from .nickname import Nickname
 from ..traversal.traversal_manager import TraversalManager
-from ..traversal.plugins.punch.main import PunchPluginFactory
-from ..traversal.plugins.turn.main import TURNPluginFactory
-from .node_connect import install_default_plugins
+from ..traversal.plugin_loader import load_plugins
 
 
 # ==========================================
@@ -39,7 +37,6 @@ async def node_start(node: Any, sys_clock: Optional[Any] = None, out: bool = Fal
     """Execute the full ordered startup sequence for a P2P node and return it when ready."""
     # Hardware & Network Setup
     await load_network_interfaces(node)
-    upnp_task = start_background_port_forwarding(node)
 
     # Identity & Security
     await load_machine_identity(node)
@@ -62,13 +59,17 @@ async def node_start(node: Any, sys_clock: Optional[Any] = None, out: bool = Fal
     start_maintenance_tasks(node)
     await listen_on_ifs(node)
 
-    # Finalize Connectivity
+    # Finalize Connectivity — start UPnP only after the node is listening and
+    # the listen port is known; await it after high-level setup so UPnP runs
+    # concurrently with nickname and plugin initialisation.
     build_node_address(node, out)
-    await finalize_port_forwarding(node, upnp_task, out, cout)
+    upnp_task = start_background_port_forwarding(node)
 
     # High-Level Services
     await setup_nickname_service(node)
     await setup_traversal_plugins(node)
+
+    await finalize_port_forwarding(node, upnp_task, out, cout)
 
     return node
 
@@ -115,7 +116,7 @@ def start_background_port_forwarding(node: Any) -> Optional[Any]:
         node.add_msg_cb(reachability_cb)
 
         return asyncio.create_task(
-            async_wrap_errors(forward(node, node.listen_port, reachability), timeout=10)
+            async_wrap_errors(forward(node, node.listen_port, reachability))
         )
     return None
 
@@ -207,7 +208,6 @@ async def setup_router_and_signal(node: Any, kp: Any, out: bool, cout: Callable)
     node.traversal = TraversalManager(
         router, node.stop_reader, node.inbound_pipes, node.ifs
     )
-    install_default_plugins(node)
     router.add_msg_handler(node.traversal.recv_signal_msg)
 
     node.traversal.kp = node.kp
@@ -224,8 +224,6 @@ async def setup_signal_router(node: Any, router: Any, out: bool, cout: Callable)
         cout("\tLoading MQTT router...")
     try:
         clients = await asyncio.wait_for(router.start(), timeout=8)
-        if out:
-            cout("\t\t", clients)
     except asyncio.TimeoutError as exc:
         raise OSError("Router MQTT start timed out - signaling may be degraded") from exc
 
@@ -319,22 +317,11 @@ async def setup_nickname_service(node: Any) -> None:
 
     if node.conf.get("enable_nickname", True):
         # Keep a reference so the task is not garbage-collected mid-run.
-        task = asyncio.create_task(node.nickname(node.node_id))
+        task = asyncio.create_task(async_wrap_errors(node.nickname(node.node_id)))
         node.resources.add_task(task)
 
 
 async def setup_traversal_plugins(node: Any) -> None:
-    """Create and register the TCP punch and TURN relay plugin factories with the traversal manager."""
-    if node.conf.get("enable_punching", True):
-        punch_factory = await PunchPluginFactory.create(
-            node.stun_clients, node.sys_clock
-        )
-        node.resources.punch_factory = punch_factory
-        node.resources.register(punch_factory)
-        node.traversal.install_plugin("punch", {"class": punch_factory, "timeout": 40})
-
-    turn_factory = TURNPluginFactory(node.msg_cb, node.node_id)
-    node.resources.register(turn_factory)
-    node.traversal.install_plugin("turn", {"class": turn_factory, "timeout": 20})
-
+    """Discover and install all traversal plugins found under the plugins/ directory."""
+    await load_plugins(node)
     log("traversal plugin_loaders: " + str(node.traversal.plugin_loaders))

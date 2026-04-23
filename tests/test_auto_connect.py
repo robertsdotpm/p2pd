@@ -13,8 +13,10 @@ Integration tests (require network + MQTT):
   TestAutoConnectIPv4           -- direct_connect, IPv4 NIC_BIND.
   TestAutoConnectIPv6           -- direct_connect, IPv6 EXT_BIND (global addrs).
   TestAutoConnectReverseConnect -- reverse_connect wins when direct is removed.
-  TestAutoConnectMultiInterface -- two fake-NIC nodes (IPv4 + IPv6 each).
+  TestAutoConnectMultiInterface -- two fake-NIC nodes (IPv4 + IPv6 each);
+                                   also verifies fake NICs appear in serialised addr_bytes.
   TestAutoConnectPunch          -- punch wins when direct+reverse are removed.
+  TestAutoConnectTurnFallback   -- TURN relay used when all direct plugins are removed.
 
 Run from project root:
     python3 -m pytest tests/test_auto_connect.py -v
@@ -24,6 +26,7 @@ import asyncio
 import copy
 import sys
 import unittest
+from unittest.mock import patch
 
 import pytest
 
@@ -39,11 +42,12 @@ from aionetiface import (
     load_interfaces,
     parse_node_addr,
     sort_ips_by_nic,
+    DUEL_STACK,
 )
 
 from p2pd import Node
 from p2pd.node.node_defs import NODE_TEST_CONF, NODE_PORT
-from p2pd.node.auto_connect import auto_connect, _has_valid_pair, _auto_combos
+from p2pd.node.auto_connect import auto_connect, has_valid_pair, auto_combos
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -90,6 +94,8 @@ PORT_A_PUNCH = NODE_PORT + 2006
 PORT_B_PUNCH = NODE_PORT + 2007
 PORT_A_REV = NODE_PORT + 2008
 PORT_B_REV = NODE_PORT + 2009
+PORT_A_TURN = NODE_PORT + 2010
+PORT_B_TURN = NODE_PORT + 2011
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -97,7 +103,7 @@ PORT_B_REV = NODE_PORT + 2009
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _make_fake_info(nic_ip, ext_ip, if_index=0, netiface_index=0, port=10001):
+def make_fake_info(nic_ip, ext_ip, if_index=0, netiface_index=0, port=10001):
     """Build a minimal addr_map info dict as returned by parse_node_addr."""
     return {
         "nic": IPRange(nic_ip),
@@ -109,7 +115,7 @@ def _make_fake_info(nic_ip, ext_ip, if_index=0, netiface_index=0, port=10001):
     }
 
 
-def _make_fake_addr_map(ip4_pairs=None, ip6_pairs=None, machine_id="machine-A"):
+def make_fake_addr_map(ip4_pairs=None, ip6_pairs=None, machine_id="machine-A"):
     """Build a minimal addr_map dict for unit tests.
 
     ip4_pairs / ip6_pairs: list of (nic_ip, ext_ip) tuples, one per interface
@@ -118,10 +124,10 @@ def _make_fake_addr_map(ip4_pairs=None, ip6_pairs=None, machine_id="machine-A"):
     amap = {IP4: {}, IP6: {}, "machine_id": machine_id, "pub_key_hex": "aabb", "bytes": b""}
     if ip4_pairs:
         for i, (nic, ext) in enumerate(ip4_pairs):
-            amap[IP4][i] = _make_fake_info(nic, ext, if_index=i)
+            amap[IP4][i] = make_fake_info(nic, ext, if_index=i)
     if ip6_pairs:
         for i, (nic, ext) in enumerate(ip6_pairs):
-            amap[IP6][i] = _make_fake_info(nic, ext, if_index=i)
+            amap[IP6][i] = make_fake_info(nic, ext, if_index=i)
     return amap
 
 
@@ -162,6 +168,15 @@ def clone_nic(real_nic, new_id, ip_list):
             rp[af] = RoutePool()
 
     nic.rp = rp
+
+    # Set stack to match only the AFs that have routes, so nic.supported()
+    # doesn't claim IPv6 when only IPv4 addresses were requested (which would
+    # cause node startup to call nic.route(IP6) on an empty route pool).
+    if len(represented_afs) == 1:
+        nic.stack = list(represented_afs)[0]
+    else:
+        nic.stack = DUEL_STACK
+
     return nic
 
 
@@ -170,34 +185,34 @@ def clone_nic(real_nic, new_id, ip_list):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-async def _fresh_ifs():
+async def fresh_ifs():
     """Load a fresh set of interfaces (without NAT detection) for one node."""
     if_names = await list_interfaces()
     return await load_interfaces(if_names, Interface, skip_nat=True)
 
 
-async def _start_node(ip, port, conf=None):
+async def start_node(ip, port, conf=None):
     """Start a node bound to a single IP on freshly loaded interfaces."""
-    ifs = await _fresh_ifs()
+    ifs = await fresh_ifs()
     node = Node(ifs=ifs, ip=[ip], port=port, conf=conf or AUTO_TEST_CONF)
     await asyncio.wait_for(node.start(), timeout=35)
     return node
 
 
-async def _start_node_with_ifs(ifs, ip_list, port, conf=None):
+async def start_node_with_ifs(ifs, ip_list, port, conf=None):
     """Start a node with a pre-built ifs list and explicit listen-IP list."""
     node = Node(ifs=ifs, ip=ip_list, port=port, conf=conf or AUTO_TEST_CONF)
     await asyncio.wait_for(node.start(), timeout=35)
     return node
 
 
-def _ifs_have_ip(ifs, ip_str):
+def ifs_have_ip(ifs, ip_str):
     """Return True if ip_str appears in any NIC's route pool (primary or secondary)."""
     by_nic = sort_ips_by_nic([ip_str], ifs)
     return any(ips for ips in by_nic.values())
 
 
-def _global_ipv6_addrs(ifs):
+def global_ipv6_addrs(ifs):
     """Return unique global (non-link-local, non-loopback) IPv6 strings from all NICs."""
     seen = set()
     addrs = []
@@ -215,7 +230,7 @@ def _global_ipv6_addrs(ifs):
     return addrs
 
 
-async def _close_nodes(*nodes):
+async def close_nodes(*nodes):
     for node in nodes:
         if node is not None:
             try:
@@ -230,51 +245,51 @@ async def _close_nodes(*nodes):
 
 
 class TestHasValidPairVariants(unittest.TestCase):
-    """_has_valid_pair across all (af, route_type, same/diff) combinations."""
+    """has_valid_pair across all (af, route_type, same/diff) combinations."""
 
-    def _check(self, src_pairs, dest_pairs, af, route_type):
-        src = _make_fake_addr_map(
+    def check(self, src_pairs, dest_pairs, af, route_type):
+        src = make_fake_addr_map(
             ip4_pairs=src_pairs if af == IP4 else None,
             ip6_pairs=src_pairs if af == IP6 else None,
         )
-        dst = _make_fake_addr_map(
+        dst = make_fake_addr_map(
             ip4_pairs=dest_pairs if af == IP4 else None,
             ip6_pairs=dest_pairs if af == IP6 else None,
         )
-        return _has_valid_pair(src, dst, af, route_type)
+        return has_valid_pair(src, dst, af, route_type)
 
     # ── IPv4 / NIC_BIND ──────────────────────────────────────────────────────
     def test_ip4_nic_bind_diff_nic_valid(self):
-        self.assertTrue(self._check(
+        self.assertTrue(self.check(
             [("10.0.1.76", "1.2.3.4")], [("10.0.1.100", "1.2.3.4")], IP4, NIC_BIND,
         ))
 
     def test_ip4_nic_bind_same_nic_invalid(self):
-        self.assertFalse(self._check(
+        self.assertFalse(self.check(
             [("10.0.1.76", "1.2.3.4")], [("10.0.1.76", "1.2.3.4")], IP4, NIC_BIND,
         ))
 
     # ── IPv4 / EXT_BIND ──────────────────────────────────────────────────────
     def test_ip4_ext_bind_diff_ext_valid(self):
-        self.assertTrue(self._check(
+        self.assertTrue(self.check(
             [("10.0.1.76", "1.2.3.4")], [("10.0.1.100", "5.6.7.8")], IP4, EXT_BIND,
         ))
 
     def test_ip4_ext_bind_same_ext_invalid(self):
-        self.assertFalse(self._check(
+        self.assertFalse(self.check(
             [("10.0.1.76", "1.2.3.4")], [("10.0.1.100", "1.2.3.4")], IP4, EXT_BIND,
         ))
 
     # ── IPv6 / NIC_BIND ──────────────────────────────────────────────────────
     def test_ip6_nic_bind_diff_nic_valid(self):
-        self.assertTrue(self._check(
+        self.assertTrue(self.check(
             [("fe80:0000:0000:0000:0000:0000:0000:0001", "2001:db8::1")],
             [("fe80:0000:0000:0000:0000:0000:0000:0002", "2001:db8::2")],
             IP6, NIC_BIND,
         ))
 
     def test_ip6_nic_bind_same_nic_invalid(self):
-        self.assertFalse(self._check(
+        self.assertFalse(self.check(
             [("fe80:0000:0000:0000:0000:0000:0000:0001", "2001:db8::1")],
             [("fe80:0000:0000:0000:0000:0000:0000:0001", "2001:db8::2")],
             IP6, NIC_BIND,
@@ -282,14 +297,14 @@ class TestHasValidPairVariants(unittest.TestCase):
 
     # ── IPv6 / EXT_BIND ──────────────────────────────────────────────────────
     def test_ip6_ext_bind_diff_ext_valid(self):
-        self.assertTrue(self._check(
+        self.assertTrue(self.check(
             [("fe80:0000:0000:0000:0000:0000:0000:0001", "2001:db8::1")],
             [("fe80:0000:0000:0000:0000:0000:0000:0002", "2001:db8::2")],
             IP6, EXT_BIND,
         ))
 
     def test_ip6_ext_bind_same_ext_invalid(self):
-        self.assertFalse(self._check(
+        self.assertFalse(self.check(
             [("fe80:0000:0000:0000:0000:0000:0000:0001", "2001:db8::1")],
             [("fe80:0000:0000:0000:0000:0000:0000:0002", "2001:db8::1")],
             IP6, EXT_BIND,
@@ -297,62 +312,62 @@ class TestHasValidPairVariants(unittest.TestCase):
 
     # ── Edge cases ────────────────────────────────────────────────────────────
     def test_empty_af_returns_false(self):
-        src = _make_fake_addr_map()
-        dst = _make_fake_addr_map()
-        self.assertFalse(_has_valid_pair(src, dst, IP4, NIC_BIND))
-        self.assertFalse(_has_valid_pair(src, dst, IP6, EXT_BIND))
+        src = make_fake_addr_map()
+        dst = make_fake_addr_map()
+        self.assertFalse(has_valid_pair(src, dst, IP4, NIC_BIND))
+        self.assertFalse(has_valid_pair(src, dst, IP6, EXT_BIND))
 
     def test_no_shared_if_index_optimistic_true(self):
-        src = _make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
-        dst = _make_fake_addr_map()
-        dst[IP4] = {99: _make_fake_info("10.0.1.100", "1.2.3.4", if_index=99)}
-        self.assertTrue(_has_valid_pair(src, dst, IP4, NIC_BIND))
+        src = make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
+        dst = make_fake_addr_map()
+        dst[IP4] = {99: make_fake_info("10.0.1.100", "1.2.3.4", if_index=99)}
+        self.assertTrue(has_valid_pair(src, dst, IP4, NIC_BIND))
 
     # ── Multi-interface ───────────────────────────────────────────────────────
     def test_multi_if_first_invalid_second_valid_returns_true(self):
-        src = _make_fake_addr_map(ip4_pairs=[
+        src = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.76", "1.2.3.4"),   # if_index 0 — same nic as dst
             ("192.168.1.1", "5.6.7.8"), # if_index 1 — different nic
         ])
-        dst = _make_fake_addr_map(ip4_pairs=[
+        dst = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.76", "1.2.3.4"),   # if_index 0 — same nic, invalid
             ("192.168.1.2", "9.10.11.12"), # if_index 1 — diff nic, valid
         ])
-        self.assertTrue(_has_valid_pair(src, dst, IP4, NIC_BIND))
+        self.assertTrue(has_valid_pair(src, dst, IP4, NIC_BIND))
 
     def test_multi_if_all_same_nic_invalid(self):
-        src = _make_fake_addr_map(ip4_pairs=[
+        src = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.76", "1.2.3.4"),
             ("10.0.1.77", "1.2.3.4"),
         ])
-        dst = _make_fake_addr_map(ip4_pairs=[
+        dst = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.76", "1.2.3.4"),
             ("10.0.1.77", "1.2.3.4"),
         ])
-        self.assertFalse(_has_valid_pair(src, dst, IP4, NIC_BIND))
+        self.assertFalse(has_valid_pair(src, dst, IP4, NIC_BIND))
 
     def test_multi_if_ext_bind_one_pair_valid(self):
-        src = _make_fake_addr_map(ip4_pairs=[
+        src = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.76", "1.2.3.4"),  # same ext as dst if_0
             ("10.0.1.77", "9.0.0.1"),  # diff ext from dst if_1
         ])
-        dst = _make_fake_addr_map(ip4_pairs=[
+        dst = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.100", "1.2.3.4"),  # same ext, EXT_BIND invalid
             ("10.0.1.101", "9.0.0.2"),  # diff ext, EXT_BIND valid
         ])
-        self.assertTrue(_has_valid_pair(src, dst, IP4, EXT_BIND))
+        self.assertTrue(has_valid_pair(src, dst, IP4, EXT_BIND))
 
     def test_multi_if_dual_stack_ip4_valid_ip6_separate(self):
-        src = _make_fake_addr_map(
+        src = make_fake_addr_map(
             ip4_pairs=[("10.0.1.76", "1.2.3.4")],
             ip6_pairs=[("2001:db8::1", "2001:db8::1")],
         )
-        dst = _make_fake_addr_map(
+        dst = make_fake_addr_map(
             ip4_pairs=[("10.0.1.100", "1.2.3.4")],
             ip6_pairs=[("2001:db8::2", "2001:db8::1")],
         )
-        self.assertTrue(_has_valid_pair(src, dst, IP4, NIC_BIND))
-        self.assertFalse(_has_valid_pair(src, dst, IP6, EXT_BIND))
+        self.assertTrue(has_valid_pair(src, dst, IP4, NIC_BIND))
+        self.assertFalse(has_valid_pair(src, dst, IP6, EXT_BIND))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -361,119 +376,119 @@ class TestHasValidPairVariants(unittest.TestCase):
 
 
 class TestAutoComboVariants(unittest.TestCase):
-    """_auto_combos: correct combos for all (af, route_type, plugin, interface) dims."""
+    """auto_combos: correct combos for all (af, route_type, plugin, interface) dims."""
 
-    class _FakeTraversal:
+    class FakeTraversal:
         def __init__(self, names):
             self.plugin_loaders = {n: None for n in names}
 
-    class _FakeNode:
+    class FakeNode:
         def __init__(self, names):
-            self.traversal = TestAutoComboVariants._FakeTraversal(names)
+            self.traversal = TestAutoComboVariants.FakeTraversal(names)
 
-    def _node(self, plugins=None):
-        return self._FakeNode(plugins or ["direct_connect"])
+    def make_node(self, plugins=None):
+        return self.FakeNode(plugins or ["direct_connect"])
 
     # ── Skip-list filtering ───────────────────────────────────────────────────
     def test_turn_excluded(self):
-        node = self._FakeNode(["direct_connect", "turn"])
-        src = _make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
-        dst = _make_fake_addr_map(ip4_pairs=[("10.0.1.100", "5.6.7.8")], machine_id="B")
-        combos = _auto_combos(node, src, dst)
+        node = self.FakeNode(["direct_connect", "turn"])
+        src = make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
+        dst = make_fake_addr_map(ip4_pairs=[("10.0.1.100", "5.6.7.8")], machine_id="B")
+        combos = auto_combos(node, src, dst)
         self.assertNotIn("turn", {c[0] for c in combos})
         self.assertIn("direct_connect", {c[0] for c in combos})
 
     def test_get_addr_and_return_addr_excluded(self):
-        node = self._FakeNode(["direct_connect", "get_addr", "return_addr"])
-        src = _make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
-        dst = _make_fake_addr_map(ip4_pairs=[("10.0.1.100", "5.6.7.8")], machine_id="B")
-        combos = _auto_combos(node, src, dst)
+        node = self.FakeNode(["direct_connect", "get_addr", "return_addr"])
+        src = make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
+        dst = make_fake_addr_map(ip4_pairs=[("10.0.1.100", "5.6.7.8")], machine_id="B")
+        combos = auto_combos(node, src, dst)
         names = {c[0] for c in combos}
         self.assertNotIn("get_addr", names)
         self.assertNotIn("return_addr", names)
 
     # ── Address-family filtering ──────────────────────────────────────────────
     def test_ip4_only_src_no_ip6_combos(self):
-        node = self._node()
-        src = _make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
-        dst = _make_fake_addr_map(ip4_pairs=[("10.0.1.100", "5.6.7.8")], machine_id="B")
-        combos = _auto_combos(node, src, dst)
+        node = self.make_node()
+        src = make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
+        dst = make_fake_addr_map(ip4_pairs=[("10.0.1.100", "5.6.7.8")], machine_id="B")
+        combos = auto_combos(node, src, dst)
         self.assertNotIn(IP6, {c[1] for c in combos})
 
     def test_ip6_only_src_no_ip4_combos(self):
-        node = self._node()
-        src = _make_fake_addr_map(ip6_pairs=[("2001:db8::1", "2001:db8::1")])
-        dst = _make_fake_addr_map(ip6_pairs=[("2001:db8::2", "2001:db8::2")], machine_id="B")
-        combos = _auto_combos(node, src, dst)
+        node = self.make_node()
+        src = make_fake_addr_map(ip6_pairs=[("2001:db8::1", "2001:db8::1")])
+        dst = make_fake_addr_map(ip6_pairs=[("2001:db8::2", "2001:db8::2")], machine_id="B")
+        combos = auto_combos(node, src, dst)
         self.assertNotIn(IP4, {c[1] for c in combos})
 
     def test_dual_stack_both_afs_present(self):
-        node = self._node()
-        src = _make_fake_addr_map(
+        node = self.make_node()
+        src = make_fake_addr_map(
             ip4_pairs=[("10.0.1.76", "1.2.3.4")],
             ip6_pairs=[("2001:db8::1", "2001:db8::1")],
         )
-        dst = _make_fake_addr_map(
+        dst = make_fake_addr_map(
             ip4_pairs=[("10.0.1.100", "5.6.7.8")],
             ip6_pairs=[("2001:db8::2", "2001:db8::2")],
             machine_id="B",
         )
-        combos = _auto_combos(node, src, dst)
+        combos = auto_combos(node, src, dst)
         afs = {c[1] for c in combos}
         self.assertIn(IP4, afs)
         self.assertIn(IP6, afs)
 
     # ── Route-type filtering ──────────────────────────────────────────────────
     def test_same_ext_excludes_ext_bind(self):
-        node = self._node()
-        src = _make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
-        dst = _make_fake_addr_map(ip4_pairs=[("10.0.1.100", "1.2.3.4")], machine_id="B")
-        combos = _auto_combos(node, src, dst)
+        node = self.make_node()
+        src = make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
+        dst = make_fake_addr_map(ip4_pairs=[("10.0.1.100", "1.2.3.4")], machine_id="B")
+        combos = auto_combos(node, src, dst)
         route_types = {c[2] for c in combos}
         self.assertNotIn(EXT_BIND, route_types)
         self.assertIn(NIC_BIND, route_types)
 
     def test_diff_ext_includes_both_route_types(self):
-        node = self._node()
-        src = _make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
-        dst = _make_fake_addr_map(ip4_pairs=[("10.0.1.100", "5.6.7.8")], machine_id="B")
-        combos = _auto_combos(node, src, dst)
+        node = self.make_node()
+        src = make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
+        dst = make_fake_addr_map(ip4_pairs=[("10.0.1.100", "5.6.7.8")], machine_id="B")
+        combos = auto_combos(node, src, dst)
         route_types = {c[2] for c in combos}
         self.assertIn(NIC_BIND, route_types)
         self.assertIn(EXT_BIND, route_types)
 
     def test_nic_bind_listed_before_ext_bind(self):
-        node = self._node()
-        src = _make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
-        dst = _make_fake_addr_map(ip4_pairs=[("10.0.1.100", "5.6.7.8")], machine_id="B")
-        combos = _auto_combos(node, src, dst)
+        node = self.make_node()
+        src = make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
+        dst = make_fake_addr_map(ip4_pairs=[("10.0.1.100", "5.6.7.8")], machine_id="B")
+        combos = auto_combos(node, src, dst)
         route_types = [c[2] for c in combos]
         self.assertLess(route_types.index(NIC_BIND), route_types.index(EXT_BIND))
 
     # ── Multiple plugins ──────────────────────────────────────────────────────
     def test_each_plugin_present_once_per_af_route_type(self):
-        node = self._FakeNode(["direct_connect", "punch"])
-        src = _make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
-        dst = _make_fake_addr_map(ip4_pairs=[("10.0.1.100", "5.6.7.8")], machine_id="B")
-        combos = _auto_combos(node, src, dst)
+        node = self.FakeNode(["direct_connect", "punch"])
+        src = make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
+        dst = make_fake_addr_map(ip4_pairs=[("10.0.1.100", "5.6.7.8")], machine_id="B")
+        combos = auto_combos(node, src, dst)
         names = [c[0] for c in combos]
         self.assertEqual(names.count("direct_connect"), names.count("punch"))
         self.assertGreater(names.count("direct_connect"), 0)
 
     def test_ip6_ext_bind_excluded_same_ext(self):
-        node = self._node()
-        src = _make_fake_addr_map(ip6_pairs=[("fe80::1", "2001:db8::1")])
-        dst = _make_fake_addr_map(ip6_pairs=[("fe80::2", "2001:db8::1")], machine_id="B")
-        combos = _auto_combos(node, src, dst)
+        node = self.make_node()
+        src = make_fake_addr_map(ip6_pairs=[("fe80::1", "2001:db8::1")])
+        dst = make_fake_addr_map(ip6_pairs=[("fe80::2", "2001:db8::1")], machine_id="B")
+        combos = auto_combos(node, src, dst)
         route_types = {c[2] for c in combos}
         self.assertNotIn(EXT_BIND, route_types)
         self.assertIn(NIC_BIND, route_types)
 
     def test_ip6_ext_bind_included_diff_ext(self):
-        node = self._node()
-        src = _make_fake_addr_map(ip6_pairs=[("2001:db8::1", "2001:db8::1")])
-        dst = _make_fake_addr_map(ip6_pairs=[("2001:db8::2", "2001:db8::2")], machine_id="B")
-        combos = _auto_combos(node, src, dst)
+        node = self.make_node()
+        src = make_fake_addr_map(ip6_pairs=[("2001:db8::1", "2001:db8::1")])
+        dst = make_fake_addr_map(ip6_pairs=[("2001:db8::2", "2001:db8::2")], machine_id="B")
+        combos = auto_combos(node, src, dst)
         route_types = {c[2] for c in combos}
         self.assertIn(EXT_BIND, route_types)
 
@@ -484,99 +499,99 @@ class TestAutoComboVariants(unittest.TestCase):
 
 
 class TestAutoComboMultiInterface(unittest.TestCase):
-    """_auto_combos with multiple if_index entries in the addr_map."""
+    """auto_combos with multiple if_index entries in the addr_map."""
 
-    class _FakeNode:
-        class _FakeTraversal:
+    class FakeNode:
+        class FakeTraversal:
             def __init__(self, names):
                 self.plugin_loaders = {n: None for n in names}
         def __init__(self, names):
-            self.traversal = TestAutoComboMultiInterface._FakeNode._FakeTraversal(names)
+            self.traversal = TestAutoComboMultiInterface.FakeNode.FakeTraversal(names)
 
-    def _node(self, plugins=None):
-        return self._FakeNode(plugins or ["direct_connect"])
+    def make_node(self, plugins=None):
+        return self.FakeNode(plugins or ["direct_connect"])
 
     def test_dual_stack_generates_more_combos_than_ipv4_only(self):
-        # _auto_combos produces one combo per (plugin, af, route_type) triple.
+        # auto_combos produces one combo per (plugin, af, route_type) triple.
         # A single-AF node has at most 2 combos (NIC_BIND + EXT_BIND).
         # Adding a second AF (IPv6) via a second interface doubles the combos.
-        node = self._node()
+        node = self.make_node()
 
-        src_v4 = _make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
-        dst_v4 = _make_fake_addr_map(ip4_pairs=[("10.0.1.100", "5.6.7.8")], machine_id="B")
-        combos_v4 = _auto_combos(node, src_v4, dst_v4)
+        src_v4 = make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
+        dst_v4 = make_fake_addr_map(ip4_pairs=[("10.0.1.100", "5.6.7.8")], machine_id="B")
+        combos_v4 = auto_combos(node, src_v4, dst_v4)
 
-        src_dual = _make_fake_addr_map(
+        src_dual = make_fake_addr_map(
             ip4_pairs=[("10.0.1.76", "1.2.3.4")],
             ip6_pairs=[("2001:db8::1", "2001:db8::1")],
         )
-        dst_dual = _make_fake_addr_map(
+        dst_dual = make_fake_addr_map(
             ip4_pairs=[("10.0.1.100", "5.6.7.8")],
             ip6_pairs=[("2001:db8::2", "2001:db8::2")],
             machine_id="B",
         )
-        combos_dual = _auto_combos(node, src_dual, dst_dual)
+        combos_dual = auto_combos(node, src_dual, dst_dual)
 
         self.assertGreater(len(combos_dual), len(combos_v4))
 
     def test_dual_stack_multi_interface_combos_span_both_afs(self):
-        node = self._node()
-        src = _make_fake_addr_map(
+        node = self.make_node()
+        src = make_fake_addr_map(
             ip4_pairs=[("10.0.1.76", "1.2.3.4")],
             ip6_pairs=[("2001:db8::1", "2001:db8::1")],
         )
-        dst = _make_fake_addr_map(
+        dst = make_fake_addr_map(
             ip4_pairs=[("10.0.1.100", "5.6.7.8")],
             ip6_pairs=[("2001:db8::2", "2001:db8::2")],
             machine_id="B",
         )
-        combos = _auto_combos(node, src, dst)
+        combos = auto_combos(node, src, dst)
         afs = {c[1] for c in combos}
         self.assertIn(IP4, afs)
         self.assertIn(IP6, afs)
 
     def test_invalid_if_index_pair_does_not_suppress_valid_one(self):
-        node = self._node()
+        node = self.make_node()
         # if_index 0: same NIC IPs (NIC_BIND invalid), same ext IPs (EXT_BIND invalid)
         # if_index 1: diff NIC IPs (NIC_BIND valid)
-        src = _make_fake_addr_map(ip4_pairs=[
+        src = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.76", "1.2.3.4"),
             ("172.16.0.1", "9.9.9.9"),
         ])
-        dst = _make_fake_addr_map(ip4_pairs=[
+        dst = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.76", "1.2.3.4"),   # if_index 0 — all same, both invalid
             ("172.16.0.2", "8.8.8.8"),  # if_index 1 — both different, both valid
         ], machine_id="B")
-        combos = _auto_combos(node, src, dst)
+        combos = auto_combos(node, src, dst)
         self.assertGreater(len(combos), 0)
 
     def test_multi_plugin_multi_interface_count(self):
-        node = self._FakeNode(["direct_connect", "punch"])
-        src = _make_fake_addr_map(
+        node = self.FakeNode(["direct_connect", "punch"])
+        src = make_fake_addr_map(
             ip4_pairs=[("10.0.1.76", "1.2.3.4")],
             ip6_pairs=[("2001:db8::1", "2001:db8::1")],
         )
-        dst = _make_fake_addr_map(
+        dst = make_fake_addr_map(
             ip4_pairs=[("10.0.1.100", "5.6.7.8")],
             ip6_pairs=[("2001:db8::2", "2001:db8::2")],
             machine_id="B",
         )
-        combos = _auto_combos(node, src, dst)
+        combos = auto_combos(node, src, dst)
         # 2 plugins * 2 AFs * up-to-2 route_types = at most 8; at least 4
         self.assertGreaterEqual(len(combos), 4)
 
     def test_all_interfaces_invalid_returns_empty(self):
-        node = self._node()
+        node = self.make_node()
         # Every if_index pair has identical NIC and ext IPs → all invalid
-        src = _make_fake_addr_map(ip4_pairs=[
+        src = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.76", "1.2.3.4"),
             ("10.0.1.77", "1.2.3.4"),
         ])
-        dst = _make_fake_addr_map(ip4_pairs=[
+        dst = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.76", "1.2.3.4"),
             ("10.0.1.77", "1.2.3.4"),
         ], machine_id="B")
-        combos = _auto_combos(node, src, dst)
+        combos = auto_combos(node, src, dst)
         self.assertEqual(len(combos), 0)
 
 
@@ -590,19 +605,19 @@ class TestAutoConnectIPv4(unittest.IsolatedAsyncioTestCase):
     """auto_connect over IPv4 NIC_BIND between two nodes on the same host."""
 
     async def asyncSetUp(self):
-        probe_ifs = await _fresh_ifs()
-        if not (_ifs_have_ip(probe_ifs, IPV4_A) and _ifs_have_ip(probe_ifs, IPV4_B)):
+        probe_ifs = await fresh_ifs()
+        if not (ifs_have_ip(probe_ifs, IPV4_A) and ifs_have_ip(probe_ifs, IPV4_B)):
             self.skipTest("Needs both {} and {} on this machine".format(IPV4_A, IPV4_B))
         self.node_a = self.node_b = None
 
     async def asyncTearDown(self):
-        await _close_nodes(self.node_b, self.node_a)
+        await close_nodes(self.node_b, self.node_a)
 
     async def test_auto_connect_returns_pipe(self):
         """auto_connect must return a usable pipe."""
         try:
-            self.node_a = await _start_node(IPV4_A, PORT_A)
-            self.node_b = await _start_node(IPV4_B, PORT_B)
+            self.node_a = await start_node(IPV4_A, PORT_A)
+            self.node_b = await start_node(IPV4_B, PORT_B)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -624,8 +639,8 @@ class TestAutoConnectIPv4(unittest.IsolatedAsyncioTestCase):
     async def test_plugin_is_direct_connect_on_same_lan(self):
         """NIC_BIND direct_connect should win on the same LAN."""
         try:
-            self.node_a = await _start_node(IPV4_A, PORT_A)
-            self.node_b = await _start_node(IPV4_B, PORT_B)
+            self.node_a = await start_node(IPV4_A, PORT_A)
+            self.node_b = await start_node(IPV4_B, PORT_B)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -648,13 +663,13 @@ class TestAutoConnectIPv4(unittest.IsolatedAsyncioTestCase):
     async def test_combos_for_same_lan_exclude_ext_bind(self):
         """Same LAN → same ext IP → EXT_BIND excluded from combos."""
         try:
-            self.node_a = await _start_node(IPV4_A, PORT_A)
-            self.node_b = await _start_node(IPV4_B, PORT_B)
+            self.node_a = await start_node(IPV4_A, PORT_A)
+            self.node_b = await start_node(IPV4_B, PORT_B)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
         dest_map = parse_node_addr(self.node_b.addr_bytes)
-        combos = _auto_combos(self.node_a, self.node_a.addr_map, dest_map)
+        combos = auto_combos(self.node_a, self.node_a.addr_map, dest_map)
         route_types = {c[2] for c in combos}
         self.assertIn(NIC_BIND, route_types)
         self.assertNotIn(EXT_BIND, route_types)
@@ -670,8 +685,8 @@ class TestAutoConnectIPv6(unittest.IsolatedAsyncioTestCase):
     """auto_connect over IPv6 EXT_BIND using two distinct global addresses."""
 
     async def asyncSetUp(self):
-        probe_ifs = await _fresh_ifs()
-        globals_v6 = _global_ipv6_addrs(probe_ifs)
+        probe_ifs = await fresh_ifs()
+        globals_v6 = global_ipv6_addrs(probe_ifs)
         if len(globals_v6) < 2:
             self.skipTest(
                 "Need at least 2 global IPv6 addresses (found {})".format(len(globals_v6))
@@ -681,13 +696,13 @@ class TestAutoConnectIPv6(unittest.IsolatedAsyncioTestCase):
         self.node_a = self.node_b = None
 
     async def asyncTearDown(self):
-        await _close_nodes(self.node_b, self.node_a)
+        await close_nodes(self.node_b, self.node_a)
 
     async def test_auto_connect_returns_pipe(self):
         """auto_connect on distinct global IPv6 addresses must return a pipe."""
         try:
-            self.node_a = await _start_node(self.ipv6_a, PORT_A6)
-            self.node_b = await _start_node(self.ipv6_b, PORT_B6)
+            self.node_a = await start_node(self.ipv6_a, PORT_A6)
+            self.node_b = await start_node(self.ipv6_b, PORT_B6)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -706,13 +721,13 @@ class TestAutoConnectIPv6(unittest.IsolatedAsyncioTestCase):
     async def test_combos_include_ext_bind_for_diff_global_ipv6(self):
         """Different global IPv6 ext IPs → EXT_BIND combos must be generated."""
         try:
-            self.node_a = await _start_node(self.ipv6_a, PORT_A6)
-            self.node_b = await _start_node(self.ipv6_b, PORT_B6)
+            self.node_a = await start_node(self.ipv6_a, PORT_A6)
+            self.node_b = await start_node(self.ipv6_b, PORT_B6)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
         dest_map = parse_node_addr(self.node_b.addr_bytes)
-        combos = _auto_combos(self.node_a, self.node_a.addr_map, dest_map)
+        combos = auto_combos(self.node_a, self.node_a.addr_map, dest_map)
         v6_route_types = {c[2] for c in combos if c[1] == IP6}
         self.assertIn(EXT_BIND, v6_route_types)
 
@@ -727,19 +742,19 @@ class TestAutoConnectReverseConnect(unittest.IsolatedAsyncioTestCase):
     """auto_connect uses reverse_connect when direct_connect is unavailable on node_a."""
 
     async def asyncSetUp(self):
-        probe_ifs = await _fresh_ifs()
-        if not (_ifs_have_ip(probe_ifs, IPV4_A) and _ifs_have_ip(probe_ifs, IPV4_B)):
+        probe_ifs = await fresh_ifs()
+        if not (ifs_have_ip(probe_ifs, IPV4_A) and ifs_have_ip(probe_ifs, IPV4_B)):
             self.skipTest("Needs both {} and {} on this machine".format(IPV4_A, IPV4_B))
         self.node_a = self.node_b = None
 
     async def asyncTearDown(self):
-        await _close_nodes(self.node_b, self.node_a)
+        await close_nodes(self.node_b, self.node_a)
 
     async def test_reverse_connect_returns_pipe(self):
         """With direct_connect removed from the initiator, reverse_connect must win."""
         try:
-            self.node_a = await _start_node(IPV4_A, PORT_A_REV)
-            self.node_b = await _start_node(IPV4_B, PORT_B_REV)
+            self.node_a = await start_node(IPV4_A, PORT_A_REV)
+            self.node_b = await start_node(IPV4_B, PORT_B_REV)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -775,12 +790,12 @@ class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
     """auto_connect with nodes that each have two virtual interfaces (IPv4 + IPv6)."""
 
     async def asyncSetUp(self):
-        probe_ifs = await _fresh_ifs()
+        probe_ifs = await fresh_ifs()
 
-        if not (_ifs_have_ip(probe_ifs, IPV4_A) and _ifs_have_ip(probe_ifs, IPV4_B)):
+        if not (ifs_have_ip(probe_ifs, IPV4_A) and ifs_have_ip(probe_ifs, IPV4_B)):
             self.skipTest("Needs {} and {} on this machine".format(IPV4_A, IPV4_B))
 
-        globals_v6 = _global_ipv6_addrs(probe_ifs)
+        globals_v6 = global_ipv6_addrs(probe_ifs)
         if len(globals_v6) < 2:
             self.skipTest(
                 "Need at least 2 global IPv6 addresses (found {})".format(len(globals_v6))
@@ -791,11 +806,11 @@ class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
         self.node_a = self.node_b = None
 
     async def asyncTearDown(self):
-        await _close_nodes(self.node_b, self.node_a)
+        await close_nodes(self.node_b, self.node_a)
 
     async def test_addr_map_has_two_interfaces(self):
         """Node with two virtual NICs must have two if_index entries in addr_map."""
-        real_ifs = await _fresh_ifs()
+        real_ifs = await fresh_ifs()
         if not real_ifs:
             self.skipTest("No interfaces loaded")
         real_nic = real_ifs[0]
@@ -803,7 +818,7 @@ class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
         vnic_a0 = clone_nic(real_nic, "vnic_a0", [IPV4_A])
         vnic_a1 = clone_nic(real_nic, "vnic_a1", [self.ipv6_a])
         try:
-            self.node_a = await _start_node_with_ifs(
+            self.node_a = await start_node_with_ifs(
                 [vnic_a0, vnic_a1], [IPV4_A, self.ipv6_a], PORT_A_MULTI
             )
         except Exception as exc:
@@ -820,9 +835,68 @@ class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
             ),
         )
 
+    async def test_addr_bytes_encodes_both_interfaces(self):
+        """addr_bytes serialised by a two-virtual-NIC node must round-trip to an
+        addr_map that contains one IPv4 entry and one IPv6 entry, each with the
+        correct NIC IP, a non-None netiface_index, and distinct if_index values.
+
+        This verifies that fake (clone_nic) interfaces are visible in the wire
+        representation that a peer would receive and parse.
+        """
+        real_ifs = await fresh_ifs()
+        if not real_ifs:
+            self.skipTest("No interfaces loaded")
+        real_nic = real_ifs[0]
+
+        vnic_a0 = clone_nic(real_nic, "vnic_a0", [IPV4_A])
+        vnic_a1 = clone_nic(real_nic, "vnic_a1", [self.ipv6_a])
+        try:
+            self.node_a = await start_node_with_ifs(
+                [vnic_a0, vnic_a1], [IPV4_A, self.ipv6_a], PORT_A_MULTI
+            )
+        except Exception as exc:
+            self.skipTest("Multi-interface node startup failed: {}".format(exc))
+
+        # Round-trip: serialise then parse exactly as a peer would.
+        addr_map = parse_node_addr(self.node_a.addr_bytes)
+
+        # Must have at least one IPv4 and one IPv6 entry.
+        v4_entries = addr_map.get(IP4, {})
+        v6_entries = addr_map.get(IP6, {})
+        self.assertTrue(v4_entries, "addr_bytes must encode at least one IPv4 interface")
+        self.assertTrue(v6_entries, "addr_bytes must encode at least one IPv6 interface")
+
+        # The IPv4 entry must carry the correct NIC IP.
+        v4_info = next(iter(v4_entries.values()))
+        self.assertEqual(
+            str(v4_info["nic"]), IPV4_A,
+            "IPv4 NIC IP in addr_bytes should be {}".format(IPV4_A),
+        )
+
+        # The IPv6 entry must carry the global address we assigned.
+        v6_info = next(iter(v6_entries.values()))
+        self.assertEqual(
+            str(v6_info["ext"]), self.ipv6_a,
+            "IPv6 ext IP in addr_bytes should be {}".format(self.ipv6_a),
+        )
+
+        # netiface_index must be set (non-None, non-negative).
+        self.assertIsNotNone(v4_info["netiface_index"])
+        self.assertIsNotNone(v6_info["netiface_index"])
+        self.assertGreaterEqual(v4_info["netiface_index"], 0)
+        self.assertGreaterEqual(v6_info["netiface_index"], 0)
+
+        # if_index values must be distinct (each virtual NIC has its own slot).
+        v4_idx = v4_info["if_index"]
+        v6_idx = v6_info["if_index"]
+        self.assertNotEqual(
+            v4_idx, v6_idx,
+            "IPv4 and IPv6 entries must have distinct if_index values, got both {}".format(v4_idx),
+        )
+
     async def test_combos_span_both_interfaces(self):
         """Combos for a multi-interface node must include both IPv4 and IPv6 paths."""
-        real_ifs = await _fresh_ifs()
+        real_ifs = await fresh_ifs()
         if not real_ifs:
             self.skipTest("No interfaces loaded")
         real_nic = real_ifs[0]
@@ -833,24 +907,24 @@ class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
         vnic_b1 = clone_nic(real_nic, "vnic_b1", [self.ipv6_b])
 
         try:
-            self.node_a = await _start_node_with_ifs(
+            self.node_a = await start_node_with_ifs(
                 [vnic_a0, vnic_a1], [IPV4_A, self.ipv6_a], PORT_A_MULTI
             )
-            self.node_b = await _start_node_with_ifs(
+            self.node_b = await start_node_with_ifs(
                 [vnic_b0, vnic_b1], [IPV4_B, self.ipv6_b], PORT_B_MULTI
             )
         except Exception as exc:
             self.skipTest("Multi-interface node startup failed: {}".format(exc))
 
         dest_map = parse_node_addr(self.node_b.addr_bytes)
-        combos = _auto_combos(self.node_a, self.node_a.addr_map, dest_map)
+        combos = auto_combos(self.node_a, self.node_a.addr_map, dest_map)
         afs = {c[1] for c in combos}
         self.assertIn(IP4, afs, "Expected IPv4 combos for multi-interface node")
         self.assertIn(IP6, afs, "Expected IPv6 combos for multi-interface node")
 
     async def test_auto_connect_succeeds_with_two_interfaces(self):
         """auto_connect on a two-interface node pair must return a pipe."""
-        real_ifs = await _fresh_ifs()
+        real_ifs = await fresh_ifs()
         if not real_ifs:
             self.skipTest("No interfaces loaded")
         real_nic = real_ifs[0]
@@ -861,10 +935,10 @@ class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
         vnic_b1 = clone_nic(real_nic, "vnic_b1", [self.ipv6_b])
 
         try:
-            self.node_a = await _start_node_with_ifs(
+            self.node_a = await start_node_with_ifs(
                 [vnic_a0, vnic_a1], [IPV4_A, self.ipv6_a], PORT_A_MULTI
             )
-            self.node_b = await _start_node_with_ifs(
+            self.node_b = await start_node_with_ifs(
                 [vnic_b0, vnic_b1], [IPV4_B, self.ipv6_b], PORT_B_MULTI
             )
         except Exception as exc:
@@ -893,19 +967,19 @@ class TestAutoConnectPunch(unittest.IsolatedAsyncioTestCase):
     """auto_connect uses TCP punch when direct_connect and reverse_connect are removed."""
 
     async def asyncSetUp(self):
-        probe_ifs = await _fresh_ifs()
-        if not (_ifs_have_ip(probe_ifs, IPV4_A) and _ifs_have_ip(probe_ifs, IPV4_B)):
+        probe_ifs = await fresh_ifs()
+        if not (ifs_have_ip(probe_ifs, IPV4_A) and ifs_have_ip(probe_ifs, IPV4_B)):
             self.skipTest("Needs {} and {} on this machine".format(IPV4_A, IPV4_B))
         self.node_a = self.node_b = None
 
     async def asyncTearDown(self):
-        await _close_nodes(self.node_b, self.node_a)
+        await close_nodes(self.node_b, self.node_a)
 
     async def test_punch_returns_pipe(self):
         """With direct_connect and reverse_connect removed, punch must establish the pipe."""
         try:
-            self.node_a = await _start_node(IPV4_A, PORT_A_PUNCH, conf=PUNCH_TEST_CONF)
-            self.node_b = await _start_node(IPV4_B, PORT_B_PUNCH, conf=PUNCH_TEST_CONF)
+            self.node_a = await start_node(IPV4_A, PORT_A_PUNCH, conf=PUNCH_TEST_CONF)
+            self.node_b = await start_node(IPV4_B, PORT_B_PUNCH, conf=PUNCH_TEST_CONF)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -936,10 +1010,10 @@ class TestAutoConnectPunch(unittest.IsolatedAsyncioTestCase):
         await pipe.close()
 
     async def test_punch_plugin_is_tried_in_combos(self):
-        """With punch installed, _auto_combos must include punch combos."""
+        """With punch installed, auto_combos must include punch combos."""
         try:
-            self.node_a = await _start_node(IPV4_A, PORT_A_PUNCH, conf=PUNCH_TEST_CONF)
-            self.node_b = await _start_node(IPV4_B, PORT_B_PUNCH, conf=PUNCH_TEST_CONF)
+            self.node_a = await start_node(IPV4_A, PORT_A_PUNCH, conf=PUNCH_TEST_CONF)
+            self.node_b = await start_node(IPV4_B, PORT_B_PUNCH, conf=PUNCH_TEST_CONF)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -947,11 +1021,166 @@ class TestAutoConnectPunch(unittest.IsolatedAsyncioTestCase):
             self.skipTest("punch plugin not installed")
 
         dest_map = parse_node_addr(self.node_b.addr_bytes)
-        combos = _auto_combos(self.node_a, self.node_a.addr_map, dest_map)
+        combos = auto_combos(self.node_a, self.node_a.addr_map, dest_map)
         plugin_names = {c[0] for c in combos}
         self.assertIn(
             "punch", plugin_names, "punch must appear in auto_connect combos"
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Integration tests — TURN fallback
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.network
+class TestAutoConnectTurnFallback(unittest.IsolatedAsyncioTestCase):
+    """auto_connect falls back to the TURN relay when all direct plugins are removed.
+
+    Setup
+    -----
+    * Two nodes on distinct global IPv6 addresses (required for EXT_BIND, which
+      is the only route_type _turn_fallback tries).
+    * All non-TURN, non-skip plugins (direct_connect, reverse_connect) are
+      removed from the initiator so auto_combos returns an empty list and
+      _race_plugin_results immediately returns (None, None).
+    * A local TURNServer is started and get_infra is monkey-patched to point at
+      it, so no external TURN infrastructure is needed.
+    """
+
+    async def asyncSetUp(self):
+        probe_ifs = await fresh_ifs()
+        globals_v6 = global_ipv6_addrs(probe_ifs)
+        if len(globals_v6) < 2:
+            self.skipTest(
+                "Need at least 2 global IPv6 addresses for TURN fallback test "
+                "(found {})".format(len(globals_v6))
+            )
+        self.ipv6_a = globals_v6[0]
+        self.ipv6_b = globals_v6[1]
+        self.node_a = self.node_b = None
+        self.turn_server = None
+        self.get_infra_patcher = None
+
+    async def asyncTearDown(self):
+        if self.get_infra_patcher is not None:
+            self.get_infra_patcher.stop()
+        if self.turn_server is not None:
+            try:
+                await asyncio.wait_for(self.turn_server.close(), timeout=5)
+            except Exception:
+                pass
+        await close_nodes(self.node_b, self.node_a)
+
+    async def test_turn_fallback_returns_pipe(self):
+        """With all direct plugins removed, auto_connect must relay via TURN."""
+        from tests.turn_server import (
+            TURNServer,
+            make_local_turn_server_entry,
+        )
+
+        try:
+            self.node_a = await start_node(self.ipv6_a, PORT_A_TURN)
+            self.node_b = await start_node(self.ipv6_b, PORT_B_TURN)
+        except Exception as exc:
+            self.skipTest("Node startup failed: {}".format(exc))
+
+        if "turn" not in self.node_a.traversal.plugin_loaders:
+            self.skipTest("turn plugin not installed")
+
+        # Start local TURN server (binds to ::1).
+        nic = await Interface()
+        if IP6 not in nic.supported():
+            self.skipTest("IPv6 not available on loopback interface")
+        self.turn_server = TURNServer(nic)
+        await self.turn_server.start()
+
+        # Redirect all TURN infrastructure lookups to our local server.
+        local_entry = make_local_turn_server_entry(af=IP6)
+        self.get_infra_patcher = patch(
+            "p2pd.traversal.plugins.turn.main.get_infra",
+            return_value=[[local_entry]],
+        )
+        self.get_infra_patcher.start()
+
+        # Remove all concurrent (non-TURN) plugins from the initiator so that
+        # auto_combos returns [] and the code falls straight through to
+        # _turn_fallback.
+        for name in ("direct_connect", "reverse_connect", "punch"):
+            self.node_a.traversal.plugin_loaders.pop(name, None)
+
+        try:
+            pipe, plugin = await asyncio.wait_for(
+                auto_connect(self.node_a, self.node_b.addr_bytes, timeout=25),
+                timeout=35,
+            )
+        except asyncio.TimeoutError:
+            self.skipTest("TURN fallback timed out (check TURN server / MQTT)")
+
+        self.assertIsNotNone(pipe, "TURN fallback must return a pipe")
+        self.assertIsNotNone(plugin)
+        self.assertEqual(
+            type(plugin).__name__,
+            "TURNPlugin",
+            "Expected TURNPlugin from fallback, got {}".format(type(plugin).__name__),
+        )
+        await pipe.close()
+
+    async def test_turn_plugin_in_plugin_loaders_by_default(self):
+        """turn must be registered in plugin_loaders after normal node startup."""
+        try:
+            self.node_a = await start_node(self.ipv6_a, PORT_A_TURN)
+        except Exception as exc:
+            self.skipTest("Node startup failed: {}".format(exc))
+
+        self.assertIn(
+            "turn",
+            self.node_a.traversal.plugin_loaders,
+            "turn must be in plugin_loaders after startup",
+        )
+
+    async def test_turn_fallback_not_triggered_when_direct_succeeds(self):
+        """When direct_connect is present it wins; TURN fallback must not run."""
+        from tests.turn_server import TURNServer, make_local_turn_server_entry
+
+        try:
+            self.node_a = await start_node(self.ipv6_a, PORT_A_TURN)
+            self.node_b = await start_node(self.ipv6_b, PORT_B_TURN)
+        except Exception as exc:
+            self.skipTest("Node startup failed: {}".format(exc))
+
+        # TURN server started but direct_connect is still present — it should
+        # win before TURN is ever attempted.
+        nic = await Interface()
+        if IP6 not in nic.supported():
+            self.skipTest("IPv6 not available")
+        self.turn_server = TURNServer(nic)
+        await self.turn_server.start()
+
+        local_entry = make_local_turn_server_entry(af=IP6)
+        self.get_infra_patcher = patch(
+            "p2pd.traversal.plugins.turn.main.get_infra",
+            return_value=[[local_entry]],
+        )
+        self.get_infra_patcher.start()
+
+        try:
+            pipe, plugin = await asyncio.wait_for(
+                auto_connect(self.node_a, self.node_b.addr_bytes, timeout=20),
+                timeout=25,
+            )
+        except asyncio.TimeoutError:
+            self.skipTest("auto_connect timed out")
+
+        self.assertIsNotNone(pipe)
+        self.assertNotEqual(
+            type(plugin).__name__,
+            "TURNPlugin",
+            "direct_connect should win before TURN is tried, got {}".format(
+                type(plugin).__name__
+            ),
+        )
+        await pipe.close()
 
 
 if __name__ == "__main__":

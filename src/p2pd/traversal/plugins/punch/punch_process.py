@@ -18,6 +18,7 @@ punched sock <---> reverse sock <-----> punch proc connection
 
 from typing import Any, Optional
 import asyncio
+import signal
 from aionetiface import Pipe, TCP, log, log_exception, async_wrap_errors, patch_connect_ip
 from .tcp_punch_engine import tcp_selector_punch_engine
 from aionetiface.net.selector_proxy import selector_proxy
@@ -25,6 +26,10 @@ from aionetiface.net.selector_proxy import selector_proxy
 
 def punching_process(puncher: Any, reverse_server_dest: Any, stop_reader: Any) -> None:
     """Run the blocking punch engine and proxy the result back through a reverse connection."""
+    try:
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+    except (OSError, AttributeError):
+        pass
     try:
         # New punched TCP sock to destination.
         punched_sock = puncher.run_engine(tcp_selector_punch_engine)

@@ -15,3 +15,5 @@ class ReverseConnectPlugin(TraversalPlugin):
         await self.send_signal_msg(msg)
         con = await self.wait_for_inbound()
         self.result.set_result(con)
+
+PLUGIN_CLASS = ReverseConnectPlugin

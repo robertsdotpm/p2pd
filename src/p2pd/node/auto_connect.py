@@ -11,15 +11,15 @@ from ..traversal.traversal_manager import TraversalManager
 
 
 # Plugins that should never be tried in auto-mode: signaling-only or relay
-_SKIP_IN_AUTO = frozenset({"turn", "get_addr", "return_addr"})
+SKIP_IN_AUTO = frozenset({"turn", "get_addr", "return_addr"})
 
 
-def _af_compatible(src_map: Dict[str, Any], dest_map: Dict[str, Any], af: Any) -> bool:
+def af_compatible(src_map: Dict[str, Any], dest_map: Dict[str, Any], af: Any) -> bool:
     """True if both nodes have at least one interface for this address family."""
     return bool(src_map.get(af)) and bool(dest_map.get(af))
 
 
-def _auto_combos(
+def auto_combos(
     node: Any,
     src_map: Dict[str, Any],
     dest_map: Dict[str, Any],
@@ -34,20 +34,20 @@ def _auto_combos(
 
     NIC_BIND pairs are listed before EXT_BIND so local paths are tried first.
     """
-    names = [n for n in node.traversal.plugin_loaders if n not in _SKIP_IN_AUTO]
+    names = [n for n in node.traversal.plugin_loaders if n not in SKIP_IN_AUTO]
     combos = []
     for af in (IP4, IP6):
-        if not _af_compatible(src_map, dest_map, af):
+        if not af_compatible(src_map, dest_map, af):
             continue
         for route_type in (NIC_BIND, EXT_BIND):
-            if not _has_valid_pair(src_map, dest_map, af, route_type):
+            if not has_valid_pair(src_map, dest_map, af, route_type):
                 continue
             for name in names:
                 combos.append((name, af, route_type))
     return combos
 
 
-def _has_valid_pair(
+def has_valid_pair(
     src_map: Dict[str, Any],
     dest_map: Dict[str, Any],
     af: Any,
@@ -82,7 +82,7 @@ def _has_valid_pair(
     return not found_shared  # no shared if_index → let attempt_plugin decide
 
 
-async def _race_plugin_results(
+async def race_plugin_results(
     plugins: List[Any],
     timeout: float,
 ) -> Tuple[Optional[Any], Optional[Any]]:
@@ -147,7 +147,7 @@ async def _race_plugin_results(
     return result  # (pipe, plugin)
 
 
-async def _turn_fallback(
+async def turn_fallback(
     node: Any,
     src_map: Dict[str, Any],
     dest_map: Dict[str, Any],
@@ -168,9 +168,9 @@ async def _turn_fallback(
 
     count = 0
     for af in (IP4, IP6):
-        if not _af_compatible(src_map, dest_map, af):
+        if not af_compatible(src_map, dest_map, af):
             continue
-        if not _has_valid_pair(src_map, dest_map, af, EXT_BIND):
+        if not has_valid_pair(src_map, dest_map, af, EXT_BIND):
             continue
 
         if_pairs = get_if_infos_order(af, EXT_BIND, src_map, dest_map)
@@ -244,7 +244,7 @@ async def auto_connect(
     src_map = node.addr_map
 
     # --- 2. Build combos ---
-    combos = _auto_combos(node, src_map, dest_map)
+    combos = auto_combos(node, src_map, dest_map)
     log(fstr("auto_connect: {0} combos for {1}", (len(combos), dest_addr)))
 
     # --- 3. Launch plugins concurrently ---
@@ -267,7 +267,7 @@ async def auto_connect(
             log_exception()
 
     # --- 4. Race results ---
-    winner_pipe, winner_plugin = await _race_plugin_results(plugins, timeout)
+    winner_pipe, winner_plugin = await race_plugin_results(plugins, timeout)
 
     # Clean up losers regardless of outcome
     for p in plugins:
@@ -278,6 +278,6 @@ async def auto_connect(
         return winner_pipe, winner_plugin
 
     # --- 5. TURN fallback ---
-    return await _turn_fallback(
+    return await turn_fallback(
         node, src_map, dest_map, sig_pipe, timeout, turn_limit
     )

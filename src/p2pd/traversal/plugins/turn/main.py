@@ -149,3 +149,13 @@ class TURNPluginFactory:
                 pass
 
         self.turn_clients.clear()
+
+
+PLUGIN_CONF = {"timeout": 20}
+
+
+async def setup_plugin(node):
+    """Create the TURN factory and register it for cleanup."""
+    factory = TURNPluginFactory(node.msg_cb, node.node_id)
+    node.resources.register(factory)
+    return factory

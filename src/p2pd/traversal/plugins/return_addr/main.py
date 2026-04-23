@@ -21,3 +21,5 @@ class ReturnAddrPlugin(TraversalPlugin):
             log_exception()
 
         self.result.set_result("Done")
+
+PLUGIN_CLASS = ReturnAddrPlugin

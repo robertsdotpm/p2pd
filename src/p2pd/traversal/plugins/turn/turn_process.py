@@ -8,7 +8,7 @@ from hashlib import md5
 from aionetiface import (
     STUNMsg, RFC5389, STUNAttrs, STUNAddrTup, STUNMsgTypes, STUNMsgCodes,
     b_and, fstr, log, log_exception, to_s, to_h,
-    rm_done_tasks, async_retry, STATUS_RETRY, STATUS_SUCCESS,
+    rm_done_tasks, async_retry, async_wrap_errors, STATUS_RETRY, STATUS_SUCCESS,
     stun_proc_attrs, norm_client_tup,
 )
 from .turn_defs import (
@@ -326,7 +326,7 @@ async def process_replies(self) -> None:
 
                     # All future messages from here-on in are 'signed.'
                     task = asyncio.create_task(
-                        async_retry(lambda: self.allocate_relay(sign=True), count=5)
+                        async_wrap_errors(async_retry(lambda: self.allocate_relay(sign=True), count=5))
                     )
                     self.tasks.append(task)
 

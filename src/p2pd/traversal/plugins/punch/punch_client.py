@@ -229,6 +229,6 @@ if __name__ == "__main__":
 
         # New punching engine uses non-blocking selector events.
         sock = punch.run_engine(tcp_selector_punch_engine)
-        print(sock)
+        #print(sock)
 
     asyncio.run(main())

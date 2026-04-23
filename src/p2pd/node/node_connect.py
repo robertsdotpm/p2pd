@@ -6,10 +6,6 @@ from aionetiface import (
     IP4, IP6, NIC_BIND, EXT_BIND,
 )
 from ..traversal.traversal_address import get_updated_addr_from_mqtt, pnp_name_has_tld
-from ..traversal.plugins.direct_connect.main import DirectConnect
-from ..traversal.plugins.get_addr.main import GetAddrPlugin
-from ..traversal.plugins.return_addr.main import ReturnAddrPlugin
-from ..traversal.plugins.reverse_connect.main import ReverseConnectPlugin
 
 
 def apply_listen_ips(node: Any) -> None:
@@ -24,15 +20,6 @@ def apply_listen_ips(node: Any) -> None:
     missing = [ip for ip in node.listen_ips if ip not in found]
     if missing:
         raise ValueError("listen IPs not found on any interface: " + ", ".join(missing))
-
-
-def install_default_plugins(node: Any) -> None:
-    """Register the built-in traversal plugins (direct, get_addr, return_addr, reverse_connect) on the node."""
-    node.traversal.install_plugin("direct_connect", {"class": DirectConnect})
-    node.traversal.install_plugin("get_addr", {"class": GetAddrPlugin})
-    node.traversal.install_plugin("return_addr", {"class": ReturnAddrPlugin})
-    node.traversal.install_plugin("reverse_connect", {"class": ReverseConnectPlugin})
-    node.traversal.install_plugin_done_callback(node.on_plugin_done)
 
 
 async def resolve_pnp_addr(node: Any, pnp_addr: Any) -> Tuple[Any, Optional[Any], Optional[str]]:

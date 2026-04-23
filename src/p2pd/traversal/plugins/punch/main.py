@@ -253,3 +253,16 @@ self,
             return
         await shutdown_proc_pool(self.proc_pool)
         self.proc_pool = None
+
+
+PLUGIN_CONF = {"timeout": 40}
+
+
+async def setup_plugin(node):
+    """Create the punch factory; returns None if punching is disabled in node.conf."""
+    if not node.conf.get("enable_punching", True):
+        return None
+    factory = await PunchPluginFactory.create(node.stun_clients, node.sys_clock)
+    node.resources.punch_factory = factory
+    node.resources.register(factory)
+    return factory

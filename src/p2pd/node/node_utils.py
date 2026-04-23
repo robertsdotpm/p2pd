@@ -231,11 +231,20 @@ async def get_pp_executors(workers: Optional[int] = None) -> Tuple[int, Optional
             pp_executor = ProcessPoolExecutor(max_workers=workers, initializer=worker_init)
         else:
             # Python < 3.7 has no initializer= on ProcessPoolExecutor.
-            # Set SIG_IGN before fork so children inherit it, then restore
-            # the parent's handler once the pool is created.
+            # Workers are spawned lazily on first submit(), not at __init__,
+            # so we must keep SIG_IGN active through the warm-up submit() call
+            # that actually forks the worker processes.
             old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
             try:
                 pp_executor = ProcessPoolExecutor(max_workers=workers)
+                # Force all workers to spawn now while SIG_IGN is still set,
+                # so they inherit it before the parent restores its handler.
+                futs = [pp_executor.submit(int) for _ in range(workers)]
+                for f in futs:
+                    try:
+                        f.result(timeout=5)
+                    except Exception:
+                        pass
             finally:
                 signal.signal(signal.SIGINT, old_sigint)
     except asyncio.CancelledError:  # pylint: disable=try-except-raise
@@ -302,6 +311,8 @@ async def remote_reachability_cb(reachability: Dict[Any, Dict[Any, Any]], _msg: 
 
 async def forward(node: Any, port: int, reachability: Dict[Any, Dict[Any, Any]]) -> Tuple[List[Any], List[Any]]:
     """Run UPnP port forwarding for every NIC/AF and probe reachability, returning (forwarded, reachable) lists."""
+    from ..traversal.plugins.upnp.main import port_forward as upnp_port_forward
+
     tasks = []
     for nic in node.ifs:
         for af in nic.supported():
@@ -310,7 +321,9 @@ async def forward(node: Any, port: int, reachability: Dict[Any, Dict[Any, Any]])
                 """Forward the listen port for one (af, nic) pair and return [af, nic.id] on success."""
                 reachability[af][nic.id] = asyncio.Future()
                 route = await nic.route(af).bind()
-                ret = await route.forward(port=port)
+                src_ip = route.nic() if af == IP4 else route.ext()
+                src_tup = (src_ip, port)
+                ret = await upnp_port_forward(af, nic, port, src_tup, "p2pd")
                 if ret:
                     return [af, nic.id]
 

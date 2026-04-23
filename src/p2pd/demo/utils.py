@@ -64,7 +64,6 @@ def cout(*fargs) -> None:
 
 async def add_echo_support(msg: bytes, client_tup: Any, pipe: Any) -> None:
     """Handle incoming ECHO protocol messages by stripping the prefix and sending back the payload."""
-    print("in add echo sup ", msg)
     if b"ECHO" == msg[:4]:
         cout()
         cout("\tGot echo proto msg: " + to_s(msg) + fstr(" from {0}", (client_tup,)))
