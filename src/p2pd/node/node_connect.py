@@ -9,13 +9,16 @@ from ..traversal.traversal_address import get_updated_addr_from_mqtt, pnp_name_h
 
 
 def apply_listen_ips(node: Any) -> None:
-    """Restrict each NIC's route pool to the explicitly requested listen IPs."""
+    """Restrict node.ifs to NICs that own a listen IP, and narrow each NIC's route pool."""
     by_nic = sort_ips_by_nic(node.listen_ips, node.ifs)
     found = set()
+    new_ifs = []
     for nic in node.ifs:
         if by_nic[nic.id]:
             found.update(by_nic[nic.id])
             nic.rp = route_pool_from_ips(by_nic[nic.id], nic)
+            new_ifs.append(nic)
+    node.ifs = new_ifs
 
     missing = [ip for ip in node.listen_ips if ip not in found]
     if missing:
