@@ -87,8 +87,8 @@ class TestSysClock(unittest.IsolatedAsyncioTestCase):
         nic = await _default_nic()
         clock = await asyncio.wait_for(SysClock(nic).start(), timeout=30)
         t = clock.time()
-        self.assertGreater(t, 1_000_000_000, "clock.time() should be a plausible Unix timestamp")
-        self.assertLess(t, 9_999_999_999, "clock.time() should be a plausible Unix timestamp")
+        self.assertGreater(t, 1000000000, "clock.time() should be a plausible Unix timestamp")
+        self.assertLess(t, 9999999999, "clock.time() should be a plausible Unix timestamp")
 
     async def test_time_increases(self):
         nic = await _default_nic()
