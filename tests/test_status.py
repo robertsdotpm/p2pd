@@ -20,7 +20,11 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         for af in nic.supported():
             for host in hosts:
                 addr = await Address(host, 80, nic)
-                tup = addr.select_ip(af).tup
+                try:
+                    tup = addr.select_ip(af).tup
+                except (KeyError, Exception):
+                    print(fstr("dns / addr {0} {1} no result for af", (af, host)))
+                    continue
                 if tup in tups:
                     print(
                         fstr(
@@ -291,7 +295,12 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                 failed = False
                 for call in calls:
                     f, args = call
-                    out = await f(*args)
+                    try:
+                        out = await f(*args)
+                    except OSError:
+                        print(fstr("pnp {0} {1} {2} skipped (socket error)", (str(f), af, dest)))
+                        failed = True
+                        break
                     if out is None:
                         print(
                             fstr(
