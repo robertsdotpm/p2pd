@@ -50,12 +50,13 @@ def encode_stun_addr(ip, port, af, txid, magic_cookie, attr_code):
 
 
 class STUNServer:
-    def __init__(self, interface, port=STUN_TEST_PORT, mode=RFC5389, bind_ip=None):
+    def __init__(self, interface, port=0, mode=RFC5389, bind_ip=None):
         self.interface = interface
         self.port = port
         self.mode = mode
         self.bind_ip = bind_ip
         self.control_pipes = {}
+        self.af_ports = {}
 
     def started_afs(self):
         """Return the set of address families the server successfully bound."""
@@ -68,8 +69,12 @@ class STUNServer:
                 route = self.interface.route(af)
                 await route.bind(ips=lo, port=self.port)
                 await self.start_af_udp(af, route)
+                actual_port = route.bind_port
+                self.af_ports[af] = actual_port
+                if af == IP4:
+                    self.port = actual_port
                 route2 = self.interface.route(af)
-                await route2.bind(ips=lo, port=self.port)
+                await route2.bind(ips=lo, port=actual_port)
                 await self.start_af_tcp(af, route2)
             except Exception:
                 log_exception()
@@ -100,7 +105,7 @@ class STUNServer:
 
         pipe = await Pipe(UDP, None, route).connect(cb)
         self.control_pipes[(af, UDP)] = pipe
-        log(fstr("STUNServer: AF={0} UDP listening on {1}:{2}", (af, lo, self.port)))
+        log(fstr("STUNServer: AF={0} UDP listening on {1}:{2}", (af, lo, route.bind_port)))
 
     async def start_af_tcp(self, af, route):
         lo = self.loopback(af)
@@ -111,7 +116,7 @@ class STUNServer:
         reuse_conf = {**NET_CONF, "reuse_addr": True}
         pipe = await Pipe(TCP, None, route, conf=reuse_conf).connect(cb)
         self.control_pipes[(af, TCP)] = pipe
-        log(fstr("STUNServer: AF={0} TCP listening on {1}:{2}", (af, lo, self.port)))
+        log(fstr("STUNServer: AF={0} TCP listening on {1}:{2}", (af, lo, route.bind_port)))
 
     async def build_stun_reply(self, af, data, client_tup):
         try:

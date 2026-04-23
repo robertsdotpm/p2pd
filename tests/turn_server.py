@@ -147,11 +147,11 @@ class TURNServer:
     def __init__(
         self,
         interface,
-        port=TURN_TEST_PORT,
+        port=0,
         realm=TURN_TEST_REALM,
         user=TURN_TEST_USER,
         pw=TURN_TEST_PASS,
-        relay_base=TURN_RELAY_BASE,
+        relay_base=0,
         bind_ip=None,
     ):
         self.interface = interface
@@ -171,8 +171,8 @@ class TURNServer:
 
         # af -> control Pipe
         self.control_pipes = {}
-
-        self._next_relay_port = relay_base
+        # af -> actual bound port
+        self.af_ports = {}
 
     # ── lifecycle ──────────────────────────────────────────────
 
@@ -227,8 +227,12 @@ class TURNServer:
             await async_wrap_errors(self.on_control(af, data, client_tup, pipe))
 
         pipe = await Pipe(UDP, None, route).connect(cb)
+        actual_port = route.bind_port
+        self.af_ports[af] = actual_port
+        if af == IP4:
+            self.port = actual_port
         self.control_pipes[af] = pipe
-        log(fstr("TURNServer: AF={0} listening on {1}:{2}", (af, lo, self.port)))
+        log(fstr("TURNServer: AF={0} listening on {1}:{2}", (af, lo, actual_port)))
 
     # ── relay socket allocation ────────────────────────────────
 
@@ -241,21 +245,20 @@ class TURNServer:
         forwards it to the allocation owner.
         """
         lo = self.loopback(af)
-        relay_port = self._next_relay_port
-        self._next_relay_port += 1
 
         route = self.interface.route(af)
-        await route.bind(ips=lo, port=relay_port)
+        await route.bind(ips=lo, port=0)
 
         # Mutable reference so the closure can see the alloc after creation.
         holder = {}
 
-        async def relay_cb(data, source_tup, _relay_pipe):
+        async def relay_cb(data, source_tup, relay_pipe):
             alloc = holder.get("a")
             if alloc is not None:
                 await async_wrap_errors(self.forward(af, data, source_tup, alloc))
 
         relay_pipe = await Pipe(UDP, None, route).connect(relay_cb)
+        relay_port = route.bind_port
         relay_tup = (lo, relay_port)
 
         alloc = {

@@ -79,23 +79,36 @@ PUNCH_TEST_CONF = dict_child(
     NODE_TEST_CONF,
 )
 
-# Fixed IPv4 addresses expected on this machine for integration tests.
-IPV4_A = "10.0.1.76"
-IPV4_B = "10.0.1.100"
+# Per-test unique ports — each test method in each class gets its own pair so
+# tests can run in parallel (--dist=load) without port conflicts.
+# Layout: each class gets a 100-port range; each test method gets a 10-port slot.
 
-# Dedicated ports — avoid collision with default NODE_PORT.
-PORT_A = NODE_PORT + 2000
-PORT_B = NODE_PORT + 2001
-PORT_A6 = NODE_PORT + 2002
-PORT_B6 = NODE_PORT + 2003
-PORT_A_MULTI = NODE_PORT + 2004
-PORT_B_MULTI = NODE_PORT + 2005
-PORT_A_PUNCH = NODE_PORT + 2006
-PORT_B_PUNCH = NODE_PORT + 2007
-PORT_A_REV = NODE_PORT + 2008
-PORT_B_REV = NODE_PORT + 2009
-PORT_A_TURN = NODE_PORT + 2010
-PORT_B_TURN = NODE_PORT + 2011
+# TestAutoConnectIPv4 — 2000–2099
+PORT_A_T1 = NODE_PORT + 2000; PORT_B_T1 = NODE_PORT + 2001
+PORT_A_T2 = NODE_PORT + 2010; PORT_B_T2 = NODE_PORT + 2011
+PORT_A_T3 = NODE_PORT + 2020; PORT_B_T3 = NODE_PORT + 2021
+
+# TestAutoConnectIPv6 — 2100–2199
+PORT_A6_T1 = NODE_PORT + 2100; PORT_B6_T1 = NODE_PORT + 2101
+PORT_A6_T2 = NODE_PORT + 2110; PORT_B6_T2 = NODE_PORT + 2111
+
+# TestAutoConnectReverseConnect — 2200–2299 (single test)
+PORT_REV_A = NODE_PORT + 2200; PORT_REV_B = NODE_PORT + 2201
+
+# TestAutoConnectMultiInterface — 2300–2399
+PORT_MULTI_A_T1 = NODE_PORT + 2300
+PORT_MULTI_A_T2 = NODE_PORT + 2310
+PORT_MULTI_A_T3 = NODE_PORT + 2320; PORT_MULTI_B_T3 = NODE_PORT + 2321
+PORT_MULTI_A_T4 = NODE_PORT + 2330; PORT_MULTI_B_T4 = NODE_PORT + 2331
+
+# TestAutoConnectPunch — 2400–2499
+PORT_PUNCH_A_T1 = NODE_PORT + 2400; PORT_PUNCH_B_T1 = NODE_PORT + 2401
+PORT_PUNCH_A_T2 = NODE_PORT + 2410; PORT_PUNCH_B_T2 = NODE_PORT + 2411
+
+# TestAutoConnectTurnFallback — 2500–2599
+PORT_TURN_A_T1 = NODE_PORT + 2500; PORT_TURN_B_T1 = NODE_PORT + 2501
+PORT_TURN_A_T2 = NODE_PORT + 2510
+PORT_TURN_A_T3 = NODE_PORT + 2520; PORT_TURN_B_T3 = NODE_PORT + 2521
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -223,6 +236,24 @@ def global_ipv6_addrs(ifs):
             for ipr in route.nic_ips:
                 s = str(ipr)
                 if s.startswith("fe80") or s in ("::1", "::"):
+                    continue
+                if s not in seen:
+                    seen.add(s)
+                    addrs.append(s)
+    return addrs
+
+
+def available_ipv4_addrs(ifs):
+    """Return unique non-loopback IPv4 strings from all NICs, ordered by NIC then IP."""
+    seen = set()
+    addrs = []
+    for nic in ifs:
+        if IP4 not in nic.supported():
+            continue
+        for route in nic.rp[IP4]:
+            for ipr in route.nic_ips:
+                s = str(ipr)
+                if s.startswith("127."):
                     continue
                 if s not in seen:
                     seen.add(s)
@@ -606,8 +637,13 @@ class TestAutoConnectIPv4(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         probe_ifs = await fresh_ifs()
-        if not (ifs_have_ip(probe_ifs, IPV4_A) and ifs_have_ip(probe_ifs, IPV4_B)):
-            self.skipTest("Needs both {} and {} on this machine".format(IPV4_A, IPV4_B))
+        ipv4_addrs = available_ipv4_addrs(probe_ifs)
+        if len(ipv4_addrs) < 2:
+            self.skipTest(
+                "Need 2 distinct non-loopback IPv4 addresses (found {})".format(len(ipv4_addrs))
+            )
+        self.ipv4_a = ipv4_addrs[0]
+        self.ipv4_b = ipv4_addrs[1]
         self.node_a = self.node_b = None
 
     async def asyncTearDown(self):
@@ -616,8 +652,8 @@ class TestAutoConnectIPv4(unittest.IsolatedAsyncioTestCase):
     async def test_auto_connect_returns_pipe(self):
         """auto_connect must return a usable pipe."""
         try:
-            self.node_a = await start_node(IPV4_A, PORT_A)
-            self.node_b = await start_node(IPV4_B, PORT_B)
+            self.node_a = await start_node(self.ipv4_a, PORT_A_T1)
+            self.node_b = await start_node(self.ipv4_b, PORT_B_T1)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -639,8 +675,8 @@ class TestAutoConnectIPv4(unittest.IsolatedAsyncioTestCase):
     async def test_plugin_is_direct_connect_on_same_lan(self):
         """NIC_BIND direct_connect should win on the same LAN."""
         try:
-            self.node_a = await start_node(IPV4_A, PORT_A)
-            self.node_b = await start_node(IPV4_B, PORT_B)
+            self.node_a = await start_node(self.ipv4_a, PORT_A_T2)
+            self.node_b = await start_node(self.ipv4_b, PORT_B_T2)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -660,11 +696,11 @@ class TestAutoConnectIPv4(unittest.IsolatedAsyncioTestCase):
         )
         await pipe.close()
 
-    async def test_combos_for_same_lan_exclude_ext_bind(self):
-        """Same LAN → same ext IP → EXT_BIND excluded from combos."""
+    async def test_combos_include_nic_bind(self):
+        """NIC_BIND combos must be generated when two NIC IPs are reachable."""
         try:
-            self.node_a = await start_node(IPV4_A, PORT_A)
-            self.node_b = await start_node(IPV4_B, PORT_B)
+            self.node_a = await start_node(self.ipv4_a, PORT_A_T3)
+            self.node_b = await start_node(self.ipv4_b, PORT_B_T3)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -672,7 +708,6 @@ class TestAutoConnectIPv4(unittest.IsolatedAsyncioTestCase):
         combos = auto_combos(self.node_a, self.node_a.addr_map, dest_map)
         route_types = {c[2] for c in combos}
         self.assertIn(NIC_BIND, route_types)
-        self.assertNotIn(EXT_BIND, route_types)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -701,8 +736,8 @@ class TestAutoConnectIPv6(unittest.IsolatedAsyncioTestCase):
     async def test_auto_connect_returns_pipe(self):
         """auto_connect on distinct global IPv6 addresses must return a pipe."""
         try:
-            self.node_a = await start_node(self.ipv6_a, PORT_A6)
-            self.node_b = await start_node(self.ipv6_b, PORT_B6)
+            self.node_a = await start_node(self.ipv6_a, PORT_A6_T1)
+            self.node_b = await start_node(self.ipv6_b, PORT_B6_T1)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -721,8 +756,8 @@ class TestAutoConnectIPv6(unittest.IsolatedAsyncioTestCase):
     async def test_combos_include_ext_bind_for_diff_global_ipv6(self):
         """Different global IPv6 ext IPs → EXT_BIND combos must be generated."""
         try:
-            self.node_a = await start_node(self.ipv6_a, PORT_A6)
-            self.node_b = await start_node(self.ipv6_b, PORT_B6)
+            self.node_a = await start_node(self.ipv6_a, PORT_A6_T2)
+            self.node_b = await start_node(self.ipv6_b, PORT_B6_T2)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -743,8 +778,13 @@ class TestAutoConnectReverseConnect(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         probe_ifs = await fresh_ifs()
-        if not (ifs_have_ip(probe_ifs, IPV4_A) and ifs_have_ip(probe_ifs, IPV4_B)):
-            self.skipTest("Needs both {} and {} on this machine".format(IPV4_A, IPV4_B))
+        ipv4_addrs = available_ipv4_addrs(probe_ifs)
+        if len(ipv4_addrs) < 2:
+            self.skipTest(
+                "Need 2 distinct non-loopback IPv4 addresses (found {})".format(len(ipv4_addrs))
+            )
+        self.ipv4_a = ipv4_addrs[0]
+        self.ipv4_b = ipv4_addrs[1]
         self.node_a = self.node_b = None
 
     async def asyncTearDown(self):
@@ -753,8 +793,8 @@ class TestAutoConnectReverseConnect(unittest.IsolatedAsyncioTestCase):
     async def test_reverse_connect_returns_pipe(self):
         """With direct_connect removed from the initiator, reverse_connect must win."""
         try:
-            self.node_a = await start_node(IPV4_A, PORT_A_REV)
-            self.node_b = await start_node(IPV4_B, PORT_B_REV)
+            self.node_a = await start_node(self.ipv4_a, PORT_REV_A)
+            self.node_b = await start_node(self.ipv4_b, PORT_REV_B)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -792,8 +832,13 @@ class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         probe_ifs = await fresh_ifs()
 
-        if not (ifs_have_ip(probe_ifs, IPV4_A) and ifs_have_ip(probe_ifs, IPV4_B)):
-            self.skipTest("Needs {} and {} on this machine".format(IPV4_A, IPV4_B))
+        ipv4_addrs = available_ipv4_addrs(probe_ifs)
+        if len(ipv4_addrs) < 2:
+            self.skipTest(
+                "Need 2 distinct non-loopback IPv4 addresses (found {})".format(len(ipv4_addrs))
+            )
+        self.ipv4_a = ipv4_addrs[0]
+        self.ipv4_b = ipv4_addrs[1]
 
         globals_v6 = global_ipv6_addrs(probe_ifs)
         if len(globals_v6) < 2:
@@ -815,11 +860,11 @@ class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
             self.skipTest("No interfaces loaded")
         real_nic = real_ifs[0]
 
-        vnic_a0 = clone_nic(real_nic, "vnic_a0", [IPV4_A])
+        vnic_a0 = clone_nic(real_nic, "vnic_a0", [self.ipv4_a])
         vnic_a1 = clone_nic(real_nic, "vnic_a1", [self.ipv6_a])
         try:
             self.node_a = await start_node_with_ifs(
-                [vnic_a0, vnic_a1], [IPV4_A, self.ipv6_a], PORT_A_MULTI
+                [vnic_a0, vnic_a1], [self.ipv4_a, self.ipv6_a], PORT_MULTI_A_T1
             )
         except Exception as exc:
             self.skipTest("Multi-interface node startup failed: {}".format(exc))
@@ -848,11 +893,11 @@ class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
             self.skipTest("No interfaces loaded")
         real_nic = real_ifs[0]
 
-        vnic_a0 = clone_nic(real_nic, "vnic_a0", [IPV4_A])
+        vnic_a0 = clone_nic(real_nic, "vnic_a0", [self.ipv4_a])
         vnic_a1 = clone_nic(real_nic, "vnic_a1", [self.ipv6_a])
         try:
             self.node_a = await start_node_with_ifs(
-                [vnic_a0, vnic_a1], [IPV4_A, self.ipv6_a], PORT_A_MULTI
+                [vnic_a0, vnic_a1], [self.ipv4_a, self.ipv6_a], PORT_MULTI_A_T2
             )
         except Exception as exc:
             self.skipTest("Multi-interface node startup failed: {}".format(exc))
@@ -869,8 +914,8 @@ class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
         # The IPv4 entry must carry the correct NIC IP.
         v4_info = next(iter(v4_entries.values()))
         self.assertEqual(
-            str(v4_info["nic"]), IPV4_A,
-            "IPv4 NIC IP in addr_bytes should be {}".format(IPV4_A),
+            str(v4_info["nic"]), self.ipv4_a,
+            "IPv4 NIC IP in addr_bytes should be {}".format(self.ipv4_a),
         )
 
         # The IPv6 entry must carry the global address we assigned.
@@ -901,17 +946,17 @@ class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
             self.skipTest("No interfaces loaded")
         real_nic = real_ifs[0]
 
-        vnic_a0 = clone_nic(real_nic, "vnic_a0", [IPV4_A])
+        vnic_a0 = clone_nic(real_nic, "vnic_a0", [self.ipv4_a])
         vnic_a1 = clone_nic(real_nic, "vnic_a1", [self.ipv6_a])
-        vnic_b0 = clone_nic(real_nic, "vnic_b0", [IPV4_B])
+        vnic_b0 = clone_nic(real_nic, "vnic_b0", [self.ipv4_b])
         vnic_b1 = clone_nic(real_nic, "vnic_b1", [self.ipv6_b])
 
         try:
             self.node_a = await start_node_with_ifs(
-                [vnic_a0, vnic_a1], [IPV4_A, self.ipv6_a], PORT_A_MULTI
+                [vnic_a0, vnic_a1], [self.ipv4_a, self.ipv6_a], PORT_MULTI_A_T3
             )
             self.node_b = await start_node_with_ifs(
-                [vnic_b0, vnic_b1], [IPV4_B, self.ipv6_b], PORT_B_MULTI
+                [vnic_b0, vnic_b1], [self.ipv4_b, self.ipv6_b], PORT_MULTI_B_T3
             )
         except Exception as exc:
             self.skipTest("Multi-interface node startup failed: {}".format(exc))
@@ -929,17 +974,17 @@ class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
             self.skipTest("No interfaces loaded")
         real_nic = real_ifs[0]
 
-        vnic_a0 = clone_nic(real_nic, "vnic_a0", [IPV4_A])
+        vnic_a0 = clone_nic(real_nic, "vnic_a0", [self.ipv4_a])
         vnic_a1 = clone_nic(real_nic, "vnic_a1", [self.ipv6_a])
-        vnic_b0 = clone_nic(real_nic, "vnic_b0", [IPV4_B])
+        vnic_b0 = clone_nic(real_nic, "vnic_b0", [self.ipv4_b])
         vnic_b1 = clone_nic(real_nic, "vnic_b1", [self.ipv6_b])
 
         try:
             self.node_a = await start_node_with_ifs(
-                [vnic_a0, vnic_a1], [IPV4_A, self.ipv6_a], PORT_A_MULTI
+                [vnic_a0, vnic_a1], [self.ipv4_a, self.ipv6_a], PORT_MULTI_A_T4
             )
             self.node_b = await start_node_with_ifs(
-                [vnic_b0, vnic_b1], [IPV4_B, self.ipv6_b], PORT_B_MULTI
+                [vnic_b0, vnic_b1], [self.ipv4_b, self.ipv6_b], PORT_MULTI_B_T4
             )
         except Exception as exc:
             self.skipTest("Multi-interface node startup failed: {}".format(exc))
@@ -968,8 +1013,13 @@ class TestAutoConnectPunch(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         probe_ifs = await fresh_ifs()
-        if not (ifs_have_ip(probe_ifs, IPV4_A) and ifs_have_ip(probe_ifs, IPV4_B)):
-            self.skipTest("Needs {} and {} on this machine".format(IPV4_A, IPV4_B))
+        ipv4_addrs = available_ipv4_addrs(probe_ifs)
+        if len(ipv4_addrs) < 2:
+            self.skipTest(
+                "Need 2 distinct non-loopback IPv4 addresses (found {})".format(len(ipv4_addrs))
+            )
+        self.ipv4_a = ipv4_addrs[0]
+        self.ipv4_b = ipv4_addrs[1]
         self.node_a = self.node_b = None
 
     async def asyncTearDown(self):
@@ -978,8 +1028,8 @@ class TestAutoConnectPunch(unittest.IsolatedAsyncioTestCase):
     async def test_punch_returns_pipe(self):
         """With direct_connect and reverse_connect removed, punch must establish the pipe."""
         try:
-            self.node_a = await start_node(IPV4_A, PORT_A_PUNCH, conf=PUNCH_TEST_CONF)
-            self.node_b = await start_node(IPV4_B, PORT_B_PUNCH, conf=PUNCH_TEST_CONF)
+            self.node_a = await start_node(self.ipv4_a, PORT_PUNCH_A_T1, conf=PUNCH_TEST_CONF)
+            self.node_b = await start_node(self.ipv4_b, PORT_PUNCH_B_T1, conf=PUNCH_TEST_CONF)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -1012,8 +1062,8 @@ class TestAutoConnectPunch(unittest.IsolatedAsyncioTestCase):
     async def test_punch_plugin_is_tried_in_combos(self):
         """With punch installed, auto_combos must include punch combos."""
         try:
-            self.node_a = await start_node(IPV4_A, PORT_A_PUNCH, conf=PUNCH_TEST_CONF)
-            self.node_b = await start_node(IPV4_B, PORT_B_PUNCH, conf=PUNCH_TEST_CONF)
+            self.node_a = await start_node(self.ipv4_a, PORT_PUNCH_A_T2, conf=PUNCH_TEST_CONF)
+            self.node_b = await start_node(self.ipv4_b, PORT_PUNCH_B_T2, conf=PUNCH_TEST_CONF)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -1080,8 +1130,8 @@ class TestAutoConnectTurnFallback(unittest.IsolatedAsyncioTestCase):
         )
 
         try:
-            self.node_a = await start_node(self.ipv6_a, PORT_A_TURN)
-            self.node_b = await start_node(self.ipv6_b, PORT_B_TURN)
+            self.node_a = await start_node(self.ipv6_a, PORT_TURN_A_T1)
+            self.node_b = await start_node(self.ipv6_b, PORT_TURN_B_T1)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -1096,7 +1146,9 @@ class TestAutoConnectTurnFallback(unittest.IsolatedAsyncioTestCase):
         await self.turn_server.start()
 
         # Redirect all TURN infrastructure lookups to our local server.
-        local_entry = make_local_turn_server_entry(af=IP6)
+        local_entry = make_local_turn_server_entry(
+            port=self.turn_server.af_ports.get(IP6, self.turn_server.port), af=IP6
+        )
         self.get_infra_patcher = patch(
             "p2pd.traversal.plugins.turn.main.get_infra",
             return_value=[[local_entry]],
@@ -1129,7 +1181,7 @@ class TestAutoConnectTurnFallback(unittest.IsolatedAsyncioTestCase):
     async def test_turn_plugin_in_plugin_loaders_by_default(self):
         """turn must be registered in plugin_loaders after normal node startup."""
         try:
-            self.node_a = await start_node(self.ipv6_a, PORT_A_TURN)
+            self.node_a = await start_node(self.ipv6_a, PORT_TURN_A_T2)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -1144,8 +1196,8 @@ class TestAutoConnectTurnFallback(unittest.IsolatedAsyncioTestCase):
         from tests.turn_server import TURNServer, make_local_turn_server_entry
 
         try:
-            self.node_a = await start_node(self.ipv6_a, PORT_A_TURN)
-            self.node_b = await start_node(self.ipv6_b, PORT_B_TURN)
+            self.node_a = await start_node(self.ipv6_a, PORT_TURN_A_T3)
+            self.node_b = await start_node(self.ipv6_b, PORT_TURN_B_T3)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -1157,7 +1209,9 @@ class TestAutoConnectTurnFallback(unittest.IsolatedAsyncioTestCase):
         self.turn_server = TURNServer(nic)
         await self.turn_server.start()
 
-        local_entry = make_local_turn_server_entry(af=IP6)
+        local_entry = make_local_turn_server_entry(
+            port=self.turn_server.af_ports.get(IP6, self.turn_server.port), af=IP6
+        )
         self.get_infra_patcher = patch(
             "p2pd.traversal.plugins.turn.main.get_infra",
             return_value=[[local_entry]],

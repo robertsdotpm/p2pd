@@ -85,7 +85,7 @@ class TestSysClock(unittest.IsolatedAsyncioTestCase):
 
     async def test_time_returns_unix_timestamp(self):
         nic = await _default_nic()
-        clock = await asyncio.wait_for(SysClock(nic), timeout=30)
+        clock = await asyncio.wait_for(SysClock(nic).start(), timeout=30)
         t = clock.time()
         now = time.time()
         # Sanity: within ±5 minutes of local system clock.
@@ -95,7 +95,7 @@ class TestSysClock(unittest.IsolatedAsyncioTestCase):
 
     async def test_time_increases(self):
         nic = await _default_nic()
-        clock = await asyncio.wait_for(SysClock(nic), timeout=30)
+        clock = await asyncio.wait_for(SysClock(nic).start(), timeout=30)
         t1 = clock.time()
         await asyncio.sleep(0.05)
         t2 = clock.time()
@@ -103,7 +103,7 @@ class TestSysClock(unittest.IsolatedAsyncioTestCase):
 
     async def test_advance_shifts_clock(self):
         nic = await _default_nic()
-        clock = await asyncio.wait_for(SysClock(nic), timeout=30)
+        clock = await asyncio.wait_for(SysClock(nic).start(), timeout=30)
         before = clock.time()
         clock.advance(100)
         after = clock.time()
@@ -145,7 +145,7 @@ class TestNickname(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         self.nic = await _default_nic()
-        self.clock = await asyncio.wait_for(SysClock(self.nic), timeout=30)
+        self.clock = await asyncio.wait_for(SysClock(self.nic).start(), timeout=30)
         self.sk = _make_sk()
         vk_compressed = self.sk.verifying_key.to_string("compressed")
         # Use deterministic name derived from our key so parallel runs
@@ -309,7 +309,7 @@ class TestMQTT(unittest.IsolatedAsyncioTestCase):
         from aionetiface import Signing
 
         nic = await _default_nic()
-        clock = await asyncio.wait_for(SysClock(nic), timeout=30)
+        clock = await asyncio.wait_for(SysClock(nic).start(), timeout=30)
         sk = _make_sk()
         kp = Signing(sk)
 
@@ -335,7 +335,7 @@ class TestMQTT(unittest.IsolatedAsyncioTestCase):
         from aionetiface import Signing
 
         nic = await _default_nic()
-        clock = await asyncio.wait_for(SysClock(nic), timeout=30)
+        clock = await asyncio.wait_for(SysClock(nic).start(), timeout=30)
         sk = _make_sk()
         kp = Signing(sk)
 
@@ -373,7 +373,7 @@ class TestNodeStart(unittest.IsolatedAsyncioTestCase):
 
     async def test_node_starts_and_closes(self):
         try:
-            node = await asyncio.wait_for(Node(conf=NODE_TEST_CONF), timeout=30)
+            node = await asyncio.wait_for(Node(port=NODE_PORT + 4000, conf=NODE_TEST_CONF), timeout=30)
         except Exception as e:
             self.skipTest("Node startup failed (network issue?): {}".format(e))
 
@@ -389,7 +389,7 @@ class TestNodeStart(unittest.IsolatedAsyncioTestCase):
         from aionetiface import parse_node_addr
 
         try:
-            node = await asyncio.wait_for(Node(conf=NODE_TEST_CONF), timeout=30)
+            node = await asyncio.wait_for(Node(port=NODE_PORT + 4001, conf=NODE_TEST_CONF), timeout=30)
         except Exception as e:
             self.skipTest("Node startup failed: {}".format(e))
 
@@ -406,7 +406,7 @@ class TestNodeStart(unittest.IsolatedAsyncioTestCase):
     async def test_node_has_traversal_wired(self):
         """TraversalManager must be wired to the node after startup."""
         try:
-            node = await asyncio.wait_for(Node(conf=NODE_TEST_CONF), timeout=30)
+            node = await asyncio.wait_for(Node(port=NODE_PORT + 4002, conf=NODE_TEST_CONF), timeout=30)
         except Exception as e:
             self.skipTest("Node startup failed: {}".format(e))
 
@@ -425,7 +425,7 @@ class TestNodeStart(unittest.IsolatedAsyncioTestCase):
     async def test_node_id_is_derived_from_pub_key(self):
         """node_id == sha256(compressed_vk)[:25] — verified against live startup."""
         try:
-            node = await asyncio.wait_for(Node(conf=NODE_TEST_CONF), timeout=30)
+            node = await asyncio.wait_for(Node(port=NODE_PORT + 4003, conf=NODE_TEST_CONF), timeout=30)
         except Exception as e:
             self.skipTest("Node startup failed: {}".format(e))
 

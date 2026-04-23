@@ -145,8 +145,8 @@ class TestTURNLoopback(AsyncTestCase):
 
     async def pair(self):
         """Start both clients, whitelist each other, and return their tups."""
-        self.client_a = await start_client(self.nic)
-        self.client_b = await start_client(self.nic)
+        self.client_a = await start_client(self.nic, port=self.server.port)
+        self.client_b = await start_client(self.nic, port=self.server.port)
 
         tup_a = await asyncio.wait_for(self.client_a.client_tup_future, 5)
         relay_a = await asyncio.wait_for(self.client_a.relay_tup_future, 5)
@@ -161,8 +161,8 @@ class TestTURNLoopback(AsyncTestCase):
 
     async def test_relay_addresses_are_assigned_and_distinct(self):
         """Each client gets its own relay address on 127.0.0.1."""
-        self.client_a = await start_client(self.nic)
-        self.client_b = await start_client(self.nic)
+        self.client_a = await start_client(self.nic, port=self.server.port)
+        self.client_b = await start_client(self.nic, port=self.server.port)
 
         relay_a = await asyncio.wait_for(self.client_a.relay_tup_future, 5)
         relay_b = await asyncio.wait_for(self.client_b.relay_tup_future, 5)
@@ -175,8 +175,8 @@ class TestTURNLoopback(AsyncTestCase):
 
     async def test_mapped_addresses_assigned(self):
         """Server returns a valid XorMappedAddress for each client."""
-        self.client_a = await start_client(self.nic)
-        self.client_b = await start_client(self.nic)
+        self.client_a = await start_client(self.nic, port=self.server.port)
+        self.client_b = await start_client(self.nic, port=self.server.port)
 
         tup_a = await asyncio.wait_for(self.client_a.client_tup_future, 5)
         tup_b = await asyncio.wait_for(self.client_b.client_tup_future, 5)
@@ -279,7 +279,7 @@ class TestTURNNicIPs(AsyncTestCase):
 
     async def start_client_on_ip(self, target_ipr):
         fake = make_fake_nic(self.nic, IP4, target_ipr)
-        return await start_client(fake, dest_ip=self.ip_a)
+        return await start_client(fake, dest_ip=self.ip_a, port=self.server.port)
 
     async def test_clients_have_distinct_source_ips(self):
         """
@@ -362,8 +362,9 @@ class TestTURNLoopbackIPv6(AsyncTestCase):
 
     async def pair(self):
         """Start both IPv6 clients, whitelist each other, and return their tups."""
-        self.client_a = await start_client_ip6(self.nic)
-        self.client_b = await start_client_ip6(self.nic)
+        ip6_port = self.server.af_ports.get(IP6, self.server.port)
+        self.client_a = await start_client_ip6(self.nic, port=ip6_port)
+        self.client_b = await start_client_ip6(self.nic, port=ip6_port)
 
         tup_a = await asyncio.wait_for(self.client_a.client_tup_future, 5)
         relay_a = await asyncio.wait_for(self.client_a.relay_tup_future, 5)
@@ -377,8 +378,9 @@ class TestTURNLoopbackIPv6(AsyncTestCase):
 
     async def test_relay_addresses_are_assigned_and_distinct(self):
         """Each client gets its own relay address on ::1."""
-        self.client_a = await start_client_ip6(self.nic)
-        self.client_b = await start_client_ip6(self.nic)
+        ip6_port = self.server.af_ports.get(IP6, self.server.port)
+        self.client_a = await start_client_ip6(self.nic, port=ip6_port)
+        self.client_b = await start_client_ip6(self.nic, port=ip6_port)
 
         relay_a = await asyncio.wait_for(self.client_a.relay_tup_future, 5)
         relay_b = await asyncio.wait_for(self.client_b.relay_tup_future, 5)
@@ -391,8 +393,9 @@ class TestTURNLoopbackIPv6(AsyncTestCase):
 
     async def test_mapped_addresses_assigned(self):
         """Server returns a valid XorMappedAddress for each IPv6 client."""
-        self.client_a = await start_client_ip6(self.nic)
-        self.client_b = await start_client_ip6(self.nic)
+        ip6_port = self.server.af_ports.get(IP6, self.server.port)
+        self.client_a = await start_client_ip6(self.nic, port=ip6_port)
+        self.client_b = await start_client_ip6(self.nic, port=ip6_port)
 
         tup_a = await asyncio.wait_for(self.client_a.client_tup_future, 5)
         tup_b = await asyncio.wait_for(self.client_b.client_tup_future, 5)
@@ -468,7 +471,7 @@ class TestTURNPluginIPv6(AsyncTestCase):
             await self.server.close()
             pytest.skip("TURN server could not bind IPv6 (::1 unavailable)")
 
-        self.local_entry = make_local_turn_server_entry(af=IP6)
+        self.local_entry = make_local_turn_server_entry(port=self.server.af_ports.get(IP6, self.server.port), af=IP6)
         self._get_infra_patcher = patch(
             "p2pd.traversal.plugins.turn.main.get_infra",
             return_value=[[self.local_entry]],
@@ -615,7 +618,7 @@ class TestTURNPlugin(AsyncTestCase):
         self.server = TURNServer(self.nic)
         await self.server.start()
 
-        self.local_entry = make_local_turn_server_entry(af=IP4)
+        self.local_entry = make_local_turn_server_entry(port=self.server.port, af=IP4)
         self._get_infra_patcher = patch(
             "p2pd.traversal.plugins.turn.main.get_infra",
             return_value=[[self.local_entry]],
@@ -839,9 +842,9 @@ class TestTURNMultiClientMesh(AsyncTestCase):
         relying on recv() which may have state issues after multiple calls.
         """
         # Start all 3 clients concurrently
-        self.client_a = await start_client(self.nic)
-        self.client_b = await start_client(self.nic)
-        self.client_c = await start_client(self.nic)
+        self.client_a = await start_client(self.nic, port=self.server.port)
+        self.client_b = await start_client(self.nic, port=self.server.port)
+        self.client_c = await start_client(self.nic, port=self.server.port)
 
         # Get all client and relay tuples
         tup_a = await asyncio.wait_for(self.client_a.client_tup_future, 5)
