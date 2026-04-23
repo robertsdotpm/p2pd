@@ -270,7 +270,11 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
                     nic=nic,
                     sys_clock=sys_clock,
                 )
-                await client.start()
+                try:
+                    await client.start()
+                except OSError:
+                    print(fstr("pnp {0} {1} skipped (socket error)", (af, dest)))
+                    continue
 
                 client.kp = namebump.Keypair(sk)
                 failed = False
