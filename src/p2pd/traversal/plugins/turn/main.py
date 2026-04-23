@@ -40,6 +40,9 @@ class TURNPlugin(TraversalPlugin):
                 self.msg_cb,
             )
 
+            if client is None:
+                return
+
             # A concurrent run() may have raced through the await above and
             # already stored a client — reuse it and discard ours.
             existing = self.turn_clients.get(self.plugin_id)
@@ -48,6 +51,9 @@ class TURNPlugin(TraversalPlugin):
                 client = existing
             else:
                 self.turn_clients[self.plugin_id] = client
+
+        if client is None:
+            return
 
         # --- Accept the peer's relay (reply path only) ---
         # When the peer's TURNMsg arrives, whitelist their relay address so
