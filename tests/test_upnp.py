@@ -17,10 +17,23 @@ Run from project root:
 """
 
 import asyncio
+import sys
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+
+if sys.version_info >= (3, 8):
+    from unittest.mock import AsyncMock
+else:
+    # AsyncMock was added in Python 3.8. On older versions use a MagicMock
+    # whose return value is a coroutine so async code can await it.
+    def AsyncMock(*args, **kwargs):
+        mock = MagicMock(*args, **kwargs)
+        async def coro(*a, **k):
+            return mock.return_value
+        mock.side_effect = coro
+        return mock
 
 from aionetiface import IP4, IP6, Interface, IPR
 

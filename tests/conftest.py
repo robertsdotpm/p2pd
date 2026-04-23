@@ -1,6 +1,14 @@
 """Backport unittest.IsolatedAsyncioTestCase for Python < 3.8."""
 import asyncio
+import sys
 import unittest
+
+
+def _get_pending_tasks(loop):
+    """Return pending tasks for loop, compatible with Python 3.5+."""
+    if sys.version_info >= (3, 7):
+        return asyncio.all_tasks(loop)
+    return asyncio.Task.all_tasks(loop)
 
 
 if not hasattr(unittest, "IsolatedAsyncioTestCase"):
@@ -14,7 +22,7 @@ if not hasattr(unittest, "IsolatedAsyncioTestCase"):
                 return loop.run_until_complete(coro)
             finally:
                 try:
-                    pending = asyncio.all_tasks(loop)
+                    pending = _get_pending_tasks(loop)
                     for t in pending:
                         t.cancel()
                     if pending:

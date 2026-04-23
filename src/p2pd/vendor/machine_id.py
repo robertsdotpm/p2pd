@@ -89,7 +89,10 @@ def get_machine_id(winregistry=True):
             )
 
         if not x:
-            x = __exec__("wmic csproduct get uuid").split("\n")[2].strip()
+            wmic_out = __exec__("wmic csproduct get uuid")
+            if wmic_out:
+                parts = wmic_out.split("\n")
+                x = parts[2].strip() if len(parts) > 2 else None
 
     # Linux and possibly Android.
     if platform.startswith("linux"):
