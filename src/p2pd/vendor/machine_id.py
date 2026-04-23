@@ -125,6 +125,10 @@ def get_machine_id(winregistry=True):
             x = __exec__("kenv -q smbios.system.uuid")
 
     if not x:
+        import socket
+        x = socket.gethostname()
+
+    if not x:
         raise RuntimeError("failed to obtain id on {}".format(platform))
 
     return __sanitize__(x)

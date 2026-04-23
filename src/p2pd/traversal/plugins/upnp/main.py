@@ -223,7 +223,7 @@ async def discover_upnp_devices(af: Any, nic: Any) -> Optional[List[Any]]:
     if af == IP4:
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
 
-    if af == IP6:
+    if af == IP6 and hasattr(socket, "IPPROTO_IPV6"):
         # sock.setsockopt(socket.IPPROTO_IPV6, socket.IP_MULTICAST_TTL, 2)
         sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_HOPS, 22)
 
