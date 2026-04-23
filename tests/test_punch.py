@@ -96,62 +96,11 @@ from p2pd.traversal.plugins.punch.tcp_punch_engine import (
     tcp_selector_punch_engine,
 )
 
-from tests.turn_server import (
-    make_fake_nic,
-)
+from aionetiface.testing import make_fake_nic
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Async test base compatible with Python 3.5+
-# ──────────────────────────────────────────────────────────────────────────────
-
-if sys.version_info >= (3, 8):
-    AsyncTestCase = unittest.IsolatedAsyncioTestCase
-else:
-
-    class AsyncTestCase(unittest.TestCase):
-        """
-        Minimal asyncio-compatible TestCase for Python 3.5+.
-
-        Provides asyncSetUp / asyncTearDown hooks and runs async test
-        methods in a dedicated event loop created fresh for each test.
-        """
-
-        def run(self, result=None):
-            self._loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self._loop)
-            try:
-                return super(AsyncTestCase, self).run(result)
-            finally:
-                self._loop.close()
-                asyncio.set_event_loop(None)
-
-        def setUp(self):
-            self._loop.run_until_complete(self.asyncSetUp())
-
-        def tearDown(self):
-            self._loop.run_until_complete(self.asyncTearDown())
-
-        async def asyncSetUp(self):
-            pass
-
-        async def asyncTearDown(self):
-            pass
-
-        def __getattribute__(self, name):
-            val = object.__getattribute__(self, name)
-            if name.startswith("test") and asyncio.iscoroutinefunction(val):
-                try:
-                    loop = object.__getattribute__(self, "_loop")
-                except AttributeError:
-                    # _loop not set yet (e.g. during test collection).
-                    return val
-
-                def sync_wrapper(coro_fn=val, ev_loop=loop):
-                    ev_loop.run_until_complete(coro_fn())
-
-                return sync_wrapper
-            return val
+from aionetiface.testing import AsyncTestCase
 
 
 # ──────────────────────────────────────────────────────────────────────────────
