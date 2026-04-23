@@ -935,11 +935,15 @@ class TestTURNMultiClientMesh(AsyncTestCase):
         )
 
         # All whitelisting completed - test message from A to B.
-        # Start recv before send so the message isn't missed if it
-        # arrives before recv() is ready to consume it.
-        recv_task = asyncio.ensure_future(self.client_b.recv())
+        # Pass explicit sub for tup_a so dict ordering doesn't
+        # cause recv() to wait on peer C instead (Python 3.5 dicts
+        # have no guaranteed iteration order). Also use a longer
+        # timeout for slow machines, and start recv before send.
+        recv_task = asyncio.ensure_future(
+            self.client_b.recv(sub=(b"", tup_a), timeout=10)
+        )
         await self.client_a.send(b"test from A to B", tup_b)
-        msg = await asyncio.wait_for(recv_task, 8)
+        msg = await asyncio.wait_for(recv_task, 12)
         self.assertEqual(
             msg,
             b"test from A to B",
