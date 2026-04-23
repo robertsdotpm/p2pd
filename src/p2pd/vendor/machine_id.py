@@ -41,7 +41,8 @@ def __sanitize__(s):
 def __exec__(cmd):
     try:
         return subprocess.run(
-            cmd, shell=True, capture_output=True, check=True, encoding="utf-8"
+            cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            check=True, encoding="utf-8"
         ).stdout.strip()
     except Exception:
         return None
