@@ -934,10 +934,12 @@ class TestTURNMultiClientMesh(AsyncTestCase):
             asyncio.wait_for(self.client_c.accept_peer(tup_b, relay_b), 8),
         )
 
-        # All whitelisting completed - test message from A to B
-        # (the simplest case, mirrors the passing TestTURNLoopback test)
+        # All whitelisting completed - test message from A to B.
+        # Start recv before send so the message isn't missed if it
+        # arrives before recv() is ready to consume it.
+        recv_task = asyncio.ensure_future(self.client_b.recv())
         await self.client_a.send(b"test from A to B", tup_b)
-        msg = await asyncio.wait_for(self.client_b.recv(), 8)
+        msg = await asyncio.wait_for(recv_task, 8)
         self.assertEqual(
             msg,
             b"test from A to B",

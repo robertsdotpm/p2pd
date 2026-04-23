@@ -357,7 +357,9 @@ class TestStatus(unittest.IsolatedAsyncioTestCase):
         # Test push works.
         val = rand_plain(10)
         name = sk.verifying_key.to_string("compressed")
-        name = hashlib.sha256(name).hexdigest()[:25]
+        # Use a distinct suffix so this name doesn't collide with
+        # test_network.py::TestNickname when both run concurrently via xdist.
+        name = hashlib.sha256(name).hexdigest()[:24] + "s"
 
         fqn = None
         calls = [
