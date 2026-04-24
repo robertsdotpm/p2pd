@@ -1,4 +1,5 @@
-import pytest
+import asyncio
+import unittest
 
 from p2pd import *
 
@@ -41,7 +42,6 @@ async def get_turn_client(af, interface, turn_offset):
     return client
 
 
-@pytest.mark.network
 class TestTurn(unittest.IsolatedAsyncioTestCase):
     async def test_turn_duel_ifs(self):
         # Offset of turn server to use.

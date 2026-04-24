@@ -8,15 +8,12 @@ Covers three scenarios:
   3. make_node_addr correctly encodes the link-local as the NIC IPv6 field in the
      node address, and parse_node_addr can read it back.
 
-Run with:
-    python3 -m pytest tests/test_link_local_ip.py -v
-or:
-    python3 -m unittest tests.test_link_local_ip -v
+
 """
 
 import socket
+import asyncio
 import unittest
-
 from aionetiface import IP4, IP6
 from aionetiface.net.ip_range import IPRange as IPR
 from aionetiface.net.net_defs import DUEL_STACK

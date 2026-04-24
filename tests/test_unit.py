@@ -18,6 +18,7 @@ from p2pd import (
     NIC_BIND,
     parse_node_addr,
 )
+from aionetiface.testing import AsyncTestCase
 from p2pd.node.node import Node
 from p2pd.node.node_defs import NODE_TEST_CONF
 from p2pd.node.node_utils import norm_listen_ips, load_signing_key

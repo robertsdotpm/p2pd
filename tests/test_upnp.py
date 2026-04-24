@@ -11,17 +11,12 @@ Integration tests (require a UPnP-enabled router on the LAN):
   TestUPnPForwardIPv4        -- AddPortMapping succeeds on the router.
   TestUPnPDiscoverIPv6       -- IPv6 M-SEARCH (skipped when no IPv6 UPnP device found).
   TestUPnPForwardIPv6        -- AddPinhole succeeds (skipped when unsupported).
-
-Run from project root:
-    python3 -m pytest tests/test_upnp.py -v
 """
 
 import asyncio
 import sys
 import unittest
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 if sys.version_info >= (3, 8):
     from unittest.mock import AsyncMock
@@ -252,7 +247,6 @@ class TestSortRepliesByLocation(unittest.TestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
 class TestUPnPDiscoverIPv4(unittest.IsolatedAsyncioTestCase):
     """Discover UPnP devices via IPv4 multicast M-SEARCH."""
 
@@ -292,7 +286,6 @@ class TestUPnPDiscoverIPv4(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
 class TestUPnPForwardIPv4(unittest.IsolatedAsyncioTestCase):
     """Attempt AddPortMapping via a real router.
 
@@ -339,7 +332,6 @@ class TestUPnPForwardIPv4(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
 class TestUPnPDiscoverIPv6(unittest.IsolatedAsyncioTestCase):
     """Discover UPnP devices via IPv6 multicast M-SEARCH.
 
@@ -374,7 +366,6 @@ class TestUPnPDiscoverIPv6(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
 class TestUPnPForwardIPv6(unittest.IsolatedAsyncioTestCase):
     """Attempt AddPinhole via a real router.
 

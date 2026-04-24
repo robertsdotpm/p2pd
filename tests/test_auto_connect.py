@@ -18,8 +18,7 @@ Integration tests (require network + MQTT):
   TestAutoConnectPunch          -- punch wins when direct+reverse are removed.
   TestAutoConnectTurnFallback   -- TURN relay used when all direct plugins are removed.
 
-Run from project root:
-    python3 -m pytest tests/test_auto_connect.py -v
+
 """
 
 import asyncio
@@ -27,8 +26,8 @@ import copy
 import sys
 import unittest
 from unittest.mock import patch
+from aionetiface.testing import AsyncTestCase
 
-import pytest
 
 from aionetiface import (
     IP4,
@@ -48,6 +47,7 @@ from aionetiface import (
 from p2pd import Node
 from p2pd.node.node_defs import NODE_TEST_CONF, NODE_PORT
 from p2pd.node.auto_connect import auto_connect, has_valid_pair, auto_combos
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -631,7 +631,7 @@ class TestAutoComboMultiInterface(unittest.TestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
+
 class TestAutoConnectIPv4(unittest.IsolatedAsyncioTestCase):
     """auto_connect over IPv4 NIC_BIND between two nodes on the same host."""
 
@@ -721,7 +721,7 @@ class TestAutoConnectIPv4(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
+
 class TestAutoConnectIPv6(unittest.IsolatedAsyncioTestCase):
     """auto_connect over IPv6 EXT_BIND using two distinct global addresses."""
 
@@ -783,7 +783,7 @@ class TestAutoConnectIPv6(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
+
 class TestAutoConnectReverseConnect(unittest.IsolatedAsyncioTestCase):
     """auto_connect uses reverse_connect when direct_connect is unavailable on node_a."""
 
@@ -839,7 +839,6 @@ class TestAutoConnectReverseConnect(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
 class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
     """auto_connect with nodes that each have two virtual interfaces (IPv4 + IPv6)."""
 
@@ -1024,7 +1023,6 @@ class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
 class TestAutoConnectPunch(unittest.IsolatedAsyncioTestCase):
     """auto_connect uses TCP punch when direct_connect and reverse_connect are removed."""
 
@@ -1105,7 +1103,6 @@ class TestAutoConnectPunch(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
 class TestAutoConnectTurnFallback(unittest.IsolatedAsyncioTestCase):
     """auto_connect falls back to the TURN relay when all direct plugins are removed.
 
@@ -1146,7 +1143,7 @@ class TestAutoConnectTurnFallback(unittest.IsolatedAsyncioTestCase):
 
     async def test_turn_fallback_returns_pipe(self):
         """With all direct plugins removed, auto_connect must relay via TURN."""
-        from tests.turn_server import (
+        from turn_server import (
             TURNServer,
             make_local_turn_server_entry,
         )
@@ -1224,7 +1221,7 @@ class TestAutoConnectTurnFallback(unittest.IsolatedAsyncioTestCase):
 
     async def test_turn_fallback_not_triggered_when_direct_succeeds(self):
         """When direct_connect is present it wins; TURN fallback must not run."""
-        from tests.turn_server import TURNServer, make_local_turn_server_entry
+        from turn_server import TURNServer, make_local_turn_server_entry
 
         try:
             self.node_a = await start_node(self.ipv6_a, PORT_TURN_A_T3)

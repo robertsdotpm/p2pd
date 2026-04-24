@@ -5,16 +5,12 @@ Verifies that the code shown in docs/quickstart.md runs correctly.
 These are same-machine integration tests using NODE_TEST_CONF so they
 run quickly without needing real NAT traversal, UPnP, or STUN.
 
-Run with:
-    python3 -m pytest tests/test_docs_quickstart.py -v
 """
 
 import asyncio
 import unittest
-
-import pytest
-
 from aionetiface import SUB_ALL, dict_child, Interface, list_interfaces, load_interfaces
+from aionetiface.testing import AsyncTestCase
 from p2pd import Node
 from p2pd.node.node_defs import NODE_TEST_CONF, NODE_PORT
 from p2pd.node.auto_connect import auto_connect
@@ -103,7 +99,6 @@ class TestNodeLifecycle(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
 class TestQuickstartConnect(unittest.IsolatedAsyncioTestCase):
     """Two nodes on the same machine connect and exchange a message."""
 
@@ -244,7 +239,6 @@ class TestQuickstartConnect(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
 class TestMsgCallback(unittest.IsolatedAsyncioTestCase):
     """Messages sent to a node are delivered to registered msg_cb handlers."""
 
@@ -280,7 +274,7 @@ class TestMsgCallback(unittest.IsolatedAsyncioTestCase):
 
         if pipe is None:
             self.skipTest("auto_connect returned no pipe (no multi-path routes available)")
-        await pipe.send(b"test payload")
+        await pipe.send(b"test payload\r\n")
 
         try:
             await asyncio.wait_for(received.wait(), timeout=5)

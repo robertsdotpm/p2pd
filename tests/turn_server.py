@@ -23,6 +23,7 @@ Usage:
 import asyncio
 import os
 import copy
+import unittest
 from struct import pack
 from hashlib import md5
 

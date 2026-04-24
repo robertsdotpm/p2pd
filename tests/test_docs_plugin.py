@@ -5,17 +5,14 @@ Verifies that the plugin pattern shown in docs/writing_a_plugin.md
 actually works: a custom TraversalPlugin subclass can be installed
 and used with auto_connect.
 
-Run with:
-    python3 -m pytest tests/test_docs_plugin.py -v
+
 """
 
 import asyncio
 import unittest
 from typing import Optional, Any
-
-import pytest
-
 from aionetiface import TCP, IP4, Pipe, dict_child, log_exception, SUB_ALL
+from aionetiface.testing import AsyncTestCase
 from p2pd import Node
 from p2pd.node.node_defs import NODE_TEST_CONF, NODE_PORT
 from p2pd.node.auto_connect import auto_connect
@@ -142,7 +139,6 @@ class TestTraversalPluginInterface(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
 class TestCustomDirectPlugin(unittest.IsolatedAsyncioTestCase):
     """DocsDirectPlugin (from the docs example) can establish a connection."""
 
@@ -222,7 +218,6 @@ class TestCustomDirectPlugin(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
 class TestInstallPluginAPI(unittest.IsolatedAsyncioTestCase):
     """node.traversal.install_plugin() registers a plugin for use by auto_connect."""
 

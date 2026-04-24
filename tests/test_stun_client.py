@@ -5,18 +5,11 @@ Validates:
   - IPv4 and IPv6 binding requests
   - XorMappedAddress decoding
   - RFC3489 and RFC5389 modes
-
-Run from project root:
-    python -m pytest tests/test_stun_client.py -v
-or
-    python -m unittest tests/test_stun_client -v
 """
 
 import asyncio
 import sys
 import unittest
-
-import pytest
 
 from aionetiface import (
     Interface,
@@ -32,7 +25,7 @@ from aionetiface import (
     ErrorNoReply,
 )
 
-from tests.stun_server import STUNServer, STUN_TEST_PORT
+from stun_server import STUNServer, STUN_TEST_PORT
 
 
 from aionetiface.testing import AsyncTestCase
@@ -48,7 +41,6 @@ def make_stun_client(nic, af, port=STUN_TEST_PORT, mode=RFC5389, proto=UDP):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
 class TestSTUNClientIPv4(AsyncTestCase):
     async def asyncSetUp(self):
         self.nic = await Interface()
@@ -111,7 +103,6 @@ class TestSTUNClientIPv4(AsyncTestCase):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
 class TestSTUNClientIPv6(AsyncTestCase):
     ipv6_functional = None
 
@@ -206,7 +197,6 @@ class TestSTUNClientIPv6(AsyncTestCase):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
 class TestSTUNClientTCPIPv4(AsyncTestCase):
     async def asyncSetUp(self):
         self.nic = await Interface()
@@ -254,7 +244,6 @@ class TestSTUNClientTCPIPv4(AsyncTestCase):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.network
 class TestSTUNClientTCPIPv6(AsyncTestCase):
     ipv6_functional = None
 

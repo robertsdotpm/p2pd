@@ -1,17 +1,15 @@
 """
 Focused tests for loopback socket binding (IPv4 + IPv6, UDP + TCP, port=0).
 
-Run alone for fast iteration:
-    python -m pytest tests/test_loopback.py -v --timeout=30
-"""
-import asyncio
-import socket
-import unittest
 
+"""
+import socket
+import asyncio
+import unittest
 from aionetiface import IP4, IP6, UDP, TCP, Interface
 from aionetiface.testing import AsyncTestCase
 
-from tests.stun_server import STUNServer, STUN_TEST_PORT
+from stun_server import STUNServer, STUN_TEST_PORT
 
 
 class TestLoopbackBindIPv4(AsyncTestCase):

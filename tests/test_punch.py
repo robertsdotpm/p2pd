@@ -14,11 +14,6 @@ Two complementary test suites:
 
   These tests validate TCP hole punching across multiple local IPs.
 
-Run from project root:
-    python3 -m pytest tests/test_punch.py -v
-or
-    python3 -m unittest tests/test_punch -v
-
 TESTING WITH THE PUNCH PROGRAM ON MULTIPLE IPs
 ──────────────────────────────────────────────
 
@@ -80,6 +75,7 @@ from aionetiface import (
     bind_closure,
     binder_async,
     binder_sync,
+    ip_norm,
 )
 
 from p2pd.traversal.plugins.punch.punch_client import PunchClient
@@ -1076,7 +1072,7 @@ class TestPunchIPv6Loopback(AsyncTestCase):
 
     async def test_ipv6_link_local_vs_global(self):
         """Test that link-local and global IPv6 addresses are both supported."""
-        link_local = "fe80::1%eth0"
+        link_local = 'fe80::1%ens34'
         global_ipv6 = "2001:db8::1"
 
         puncher_ll = PunchClient(
@@ -1100,7 +1096,7 @@ class TestPunchIPv6Loopback(AsyncTestCase):
         self.assertEqual(puncher_global.af, socket.AF_INET6)
 
         # Link-local should have extracted NIC ID
-        self.assertEqual(puncher_ll.nic_id, "eth0")
+        self.assertEqual(puncher_ll.nic_id, "ens34")
 
         # Global should not have NIC ID set (no % in address)
         self.assertIsNone(puncher_global.nic_id)
@@ -1268,6 +1264,8 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
             self.server.accept_one(timeout=5), timeout=6
         )
 
+        #print(addr)
+
         self.assertIsNotNone(
             conn,
             "IPv6 Server on {}:{} should accept connection from {}".format(
@@ -1275,8 +1273,8 @@ class TestPunchIPv6NicIPs(AsyncTestCase):
             ),
         )
         self.assertEqual(
-            socket.inet_pton(socket.AF_INET6, addr[0]),
-            socket.inet_pton(socket.AF_INET6, self.ip_b),
+            socket.inet_pton(socket.AF_INET6, ip_norm(addr[0])),
+            socket.inet_pton(socket.AF_INET6, ip_norm(self.ip_b)),
             "Server should see connection from IPv6 IP B",
         )
 
