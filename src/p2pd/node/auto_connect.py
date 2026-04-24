@@ -233,12 +233,20 @@ async def auto_connect(
     Returns (pipe, plugin) on success, (None, None) on total failure.
     """
     # --- 1. Resolve destination ---
-    addr_bytes, dest_vk, _ = await resolve_pnp_addr(node, dest_addr)
-    dest_map = parse_node_addr(addr_bytes)
+    try:
+        addr_bytes, dest_vk, _ = await resolve_pnp_addr(node, dest_addr)
+        dest_map = parse_node_addr(addr_bytes)
+    except (ValueError, OSError, ConnectionError, asyncio.TimeoutError):
+        log_exception()
+        return None, None
     if dest_vk:
         dest_map["vk"] = dest_vk
 
-    sig_pipe = await node.router.pipe(dest_map["pub_key_hex"], use_cache=True)
+    try:
+        sig_pipe = await node.router.pipe(dest_map["pub_key_hex"], use_cache=True)
+    except (OSError, ConnectionError, asyncio.TimeoutError):
+        log_exception()
+        return None, None
     src_map = node.addr_map
 
     # --- 2. Build combos ---
