@@ -74,7 +74,7 @@ async def close_nodes(*nodes):
         if node is not None:
             try:
                 await asyncio.wait_for(node.close(), timeout=10)
-            except (OSError, asyncio.TimeoutError):
+            except Exception:
                 pass
 
 

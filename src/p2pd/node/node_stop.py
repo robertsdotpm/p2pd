@@ -38,8 +38,13 @@ async def node_stop(node: Any) -> None:
     log(None)
 
     # Close all pipes stored in plugins.
-    for pipe_id in node.traversal.plugins:
-        plugin = node.traversal.plugins[pipe_id]
+    traversal_plugins = (
+        node.traversal.plugins
+        if getattr(node, "traversal", None) is not None
+        else {}
+    )
+    for pipe_id in traversal_plugins:
+        plugin = traversal_plugins[pipe_id]
         result = plugin.result
         if isinstance(result, asyncio.Future):
             if result.cancelled():
