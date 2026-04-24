@@ -12,12 +12,12 @@ aionetiface_setup_event_loop()
 if not hasattr(unittest, "IsolatedAsyncioTestCase"):
     unittest.IsolatedAsyncioTestCase = AsyncTestCase
 
-# Python 3.12+ IsolatedAsyncioTestCase runs with asyncio debug=True, which
+# IsolatedAsyncioTestCase (Python 3.8+) runs with asyncio debug=True, which
 # triggers linecache.checkcache() on every call_soon via Handle.__init__.
 # On Windows this makes each test take 30-60s instead of ~5s.
 # Replacing checkcache with a no-op removes the overhead without affecting
 # asyncio debug semantics that tests actually rely on.
-if sys.version_info >= (3, 12):
+if sys.version_info >= (3, 8):
     import linecache
     linecache.checkcache = lambda filename=None: None
 

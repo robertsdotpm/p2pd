@@ -52,6 +52,16 @@ On Windows (pyenv-win), use the versioned python.exe directly:
 C:\Users\<user>\.pyenv\pyenv-win\versions\<ver>\python.exe -m pytest tests/ -n auto --dist=loadfile --timeout=90 -q
 ```
 
+## asyncio debug mode — never enable with concurrent tests
+
+**Never call `loop.set_debug(True)` in any code path that runs under pytest-xdist.**
+
+When asyncio debug mode is on, every `loop.call_soon()` and `loop.create_future()` calls `traceback.extract_stack()` which internally calls `linecache.checkcache()`. Under parallel xdist workers this adds 30–60 seconds of overhead per trivial async operation, causing the `--timeout=90` guard to fire and the worker process to crash with `[gw*] node down: Not properly terminated`.
+
+This is already mitigated in `tests/conftest.py` by replacing `linecache.checkcache` with a no-op on Python 3.8+ (where `IsolatedAsyncioTestCase` sets `loop.set_debug(True)` unconditionally after loop creation). If you ever see workers crashing with that message on a machine running Python 3.8–3.11, confirm that `conftest.py` is at the version that checks `>= (3, 8)` — older versions of the check used `>= (3, 12)` and left 3.8–3.11 unprotected.
+
+Do not call `loop.set_debug(True)` in production code either; it changes callback-scheduling semantics (callbacks are run via a slower path) which can mask real timing issues.
+
 ## Test dependencies
 
 These packages are required to run the test suite but are not package dependencies. Install them separately:
