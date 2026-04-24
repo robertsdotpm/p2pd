@@ -4,7 +4,10 @@ import unittest
 
 import pytest
 
+from aionetiface import aionetiface_setup_event_loop
 from aionetiface.testing import AsyncTestCase, allow_windows_firewall, remove_windows_firewall
+
+aionetiface_setup_event_loop()
 
 if not hasattr(unittest, "IsolatedAsyncioTestCase"):
     unittest.IsolatedAsyncioTestCase = AsyncTestCase
