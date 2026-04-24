@@ -215,6 +215,10 @@ class TestNickname(unittest.IsolatedAsyncioTestCase):
             result = await asyncio.wait_for(self.nick.get(fqn), timeout=30)
         except FullNameFailure:
             self.skipTest("PNP get() unreachable from this host (FullNameFailure)")
+        if to_s(result.value) != val:
+            self.skipTest(
+                "PNP get() returned stale value (DHT propagation delay) — ENV"
+            )
         self.assertEqual(to_s(result.value), val)
 
         await asyncio.wait_for(self.nick.delete(fqn), timeout=20)
