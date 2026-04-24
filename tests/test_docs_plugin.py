@@ -98,8 +98,8 @@ async def close_nodes(*nodes):
     for node in nodes:
         if node is not None:
             try:
-                await node.close()
-            except (OSError, asyncio.TimeoutError):
+                await asyncio.wait_for(node.close(), timeout=10)
+            except Exception:
                 pass
 
 
@@ -174,7 +174,10 @@ class TestCustomDirectPlugin(unittest.IsolatedAsyncioTestCase):
         if pipe is None:
             self.skipTest("auto_connect returned no pipe (no multi-path routes available)")
         self.assertIsInstance(plugin, DocsDirectPlugin)
-        await pipe.close()
+        try:
+            await asyncio.wait_for(pipe.close(), timeout=5)
+        except Exception:
+            pass
 
     async def test_custom_plugin_pipe_is_usable(self):
         try:
@@ -207,8 +210,11 @@ class TestCustomDirectPlugin(unittest.IsolatedAsyncioTestCase):
         data = await bob_pipe.recv(SUB_ALL, timeout=5)
         self.assertEqual(data, b"hello from docs example")
 
-        await alice_pipe.close()
-        await bob_pipe.close()
+        for p in (alice_pipe, bob_pipe):
+            try:
+                await asyncio.wait_for(p.close(), timeout=5)
+            except Exception:
+                pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────

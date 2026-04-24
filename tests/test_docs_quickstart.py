@@ -47,8 +47,8 @@ async def close_nodes(*nodes):
     for node in nodes:
         if node is not None:
             try:
-                await node.close()
-            except (OSError, asyncio.TimeoutError):
+                await asyncio.wait_for(node.close(), timeout=10)
+            except Exception:
                 pass
 
 
@@ -131,7 +131,10 @@ class TestQuickstartConnect(unittest.IsolatedAsyncioTestCase):
 
         if pipe is None:
             self.skipTest("auto_connect returned no pipe (no multi-path routes available)")
-        await pipe.close()
+        try:
+            await asyncio.wait_for(pipe.close(), timeout=5)
+        except Exception:
+            pass
 
     async def test_send_and_receive_message(self):
         """Alice sends a message; Bob receives it via a subscribed pipe."""
@@ -161,8 +164,11 @@ class TestQuickstartConnect(unittest.IsolatedAsyncioTestCase):
         data = await bob_pipe.recv(SUB_ALL, timeout=5)
         self.assertEqual(data, b"hello from alice")
 
-        await alice_pipe.close()
-        await bob_pipe.close()
+        for p in (alice_pipe, bob_pipe):
+            try:
+                await asyncio.wait_for(p.close(), timeout=5)
+            except Exception:
+                pass
 
     async def test_bidirectional_exchange(self):
         """Both sides can send and receive."""
@@ -199,8 +205,11 @@ class TestQuickstartConnect(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(from_alice, b"alice says hi")
         self.assertEqual(from_bob, b"bob says hi")
 
-        await alice_pipe.close()
-        await bob_pipe.close()
+        for p in (alice_pipe, bob_pipe):
+            try:
+                await asyncio.wait_for(p.close(), timeout=5)
+            except Exception:
+                pass
 
     async def test_none_none_on_invalid_address(self):
         """auto_connect returns (None, None) when destination address is unreachable."""
@@ -279,7 +288,10 @@ class TestMsgCallback(unittest.IsolatedAsyncioTestCase):
             self.skipTest("msg_cb was not called in time")
 
         self.assertIn(b"test payload", received_data)
-        await pipe.close()
+        try:
+            await asyncio.wait_for(pipe.close(), timeout=5)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

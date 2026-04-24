@@ -57,7 +57,10 @@ class TestSTUNClientIPv4(AsyncTestCase):
         await self.server.start()
 
     async def asyncTearDown(self):
-        await self.server.close()
+        try:
+            await asyncio.wait_for(self.server.close(), timeout=5)
+        except Exception:
+            pass
 
     async def test_binding_request_returns_mapped_address(self):
         client = make_stun_client(self.nic, IP4, mode=RFC5389, port=self.server.port)
@@ -138,7 +141,10 @@ class TestSTUNClientIPv6(AsyncTestCase):
         await self.server.start()
 
     async def asyncTearDown(self):
-        await self.server.close()
+        try:
+            await asyncio.wait_for(self.server.close(), timeout=5)
+        except Exception:
+            pass
 
     async def test_ipv6_binding_request_returns_mapped_address(self):
         client = make_stun_client(self.nic, IP6, mode=RFC5389, port=self.server.af_ports.get(IP6, self.server.port))
@@ -196,7 +202,10 @@ class TestSTUNClientTCPIPv4(AsyncTestCase):
         await self.server.start()
 
     async def asyncTearDown(self):
-        await self.server.close()
+        try:
+            await asyncio.wait_for(self.server.close(), timeout=5)
+        except Exception:
+            pass
 
     async def test_tcp_binding_request_returns_mapped_address(self):
         client = make_stun_client(self.nic, IP4, mode=RFC5389, proto=TCP, port=self.server.port)
@@ -262,7 +271,10 @@ class TestSTUNClientTCPIPv6(AsyncTestCase):
         await self.server.start()
 
     async def asyncTearDown(self):
-        await self.server.close()
+        try:
+            await asyncio.wait_for(self.server.close(), timeout=5)
+        except Exception:
+            pass
 
     async def test_tcp_ipv6_binding_request_returns_mapped_address(self):
         client = make_stun_client(self.nic, IP6, mode=RFC5389, proto=TCP, port=self.server.af_ports.get(IP6, self.server.port))

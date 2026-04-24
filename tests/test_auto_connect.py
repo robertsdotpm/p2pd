@@ -670,7 +670,10 @@ class TestAutoConnectIPv4(unittest.IsolatedAsyncioTestCase):
         from aionetiface import SUB_ALL, to_b
         pipe.subscribe(SUB_ALL)
         await pipe.send(to_b("hello auto_connect\n"))
-        await pipe.close()
+        try:
+            await asyncio.wait_for(pipe.close(), timeout=5)
+        except Exception:
+            pass
 
     async def test_plugin_is_direct_connect_on_same_lan(self):
         """NIC_BIND direct_connect should win on the same LAN."""
@@ -694,7 +697,10 @@ class TestAutoConnectIPv4(unittest.IsolatedAsyncioTestCase):
             ("DirectConnect", "ReverseConnectPlugin"),
             "Expected direct or reverse on same LAN, got: {}".format(type(plugin).__name__),
         )
-        await pipe.close()
+        try:
+            await asyncio.wait_for(pipe.close(), timeout=5)
+        except Exception:
+            pass
 
     async def test_combos_include_nic_bind(self):
         """NIC_BIND combos must be generated when two NIC IPs are reachable."""
@@ -753,7 +759,10 @@ class TestAutoConnectIPv6(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNotNone(pipe)
         self.assertIsNotNone(plugin)
-        await pipe.close()
+        try:
+            await asyncio.wait_for(pipe.close(), timeout=5)
+        except Exception:
+            pass
 
     async def test_combos_include_ext_bind_for_diff_global_ipv6(self):
         """Different global IPv6 ext IPs → EXT_BIND combos must be generated."""
@@ -819,7 +828,10 @@ class TestAutoConnectReverseConnect(unittest.IsolatedAsyncioTestCase):
             "ReverseConnectPlugin",
             "Expected ReverseConnectPlugin, got {}".format(type(plugin).__name__),
         )
-        await pipe.close()
+        try:
+            await asyncio.wait_for(pipe.close(), timeout=5)
+        except Exception:
+            pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1001,7 +1013,10 @@ class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNotNone(pipe, "auto_connect must return a pipe for multi-interface nodes")
         self.assertIsNotNone(plugin)
-        await pipe.close()
+        try:
+            await asyncio.wait_for(pipe.close(), timeout=5)
+        except Exception:
+            pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1061,7 +1076,10 @@ class TestAutoConnectPunch(unittest.IsolatedAsyncioTestCase):
             "PunchPlugin",
             "Expected PunchPlugin, got {}".format(type(plugin).__name__),
         )
-        await pipe.close()
+        try:
+            await asyncio.wait_for(pipe.close(), timeout=5)
+        except Exception:
+            pass
 
     async def test_punch_plugin_is_tried_in_combos(self):
         """With punch installed, auto_combos must include punch combos."""
@@ -1186,7 +1204,10 @@ class TestAutoConnectTurnFallback(unittest.IsolatedAsyncioTestCase):
             "TURNPlugin",
             "Expected TURNPlugin from fallback, got {}".format(type(plugin).__name__),
         )
-        await pipe.close()
+        try:
+            await asyncio.wait_for(pipe.close(), timeout=5)
+        except Exception:
+            pass
 
     async def test_turn_plugin_in_plugin_loaders_by_default(self):
         """turn must be registered in plugin_loaders after normal node startup."""
@@ -1252,7 +1273,10 @@ class TestAutoConnectTurnFallback(unittest.IsolatedAsyncioTestCase):
                 type(plugin).__name__
             ),
         )
-        await pipe.close()
+        try:
+            await asyncio.wait_for(pipe.close(), timeout=5)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

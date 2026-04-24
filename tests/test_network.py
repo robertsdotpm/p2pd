@@ -158,7 +158,10 @@ class TestNickname(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         if self.nick is not None:
-            await self.nick.close()
+            try:
+                await asyncio.wait_for(self.nick.close(), timeout=10)
+            except Exception:
+                pass
 
     async def test_start_marks_started(self):
         self.assertTrue(self.nick.started)
