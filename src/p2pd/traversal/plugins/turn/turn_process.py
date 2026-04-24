@@ -279,6 +279,14 @@ async def process_replies(self) -> None:
             log("Got turn message with unknown TXID.")
             continue
 
+        # PolledDatagramTransport batches recvfrom calls, so duplicate
+        # responses for the same TXID (e.g. two 401s from two unsigned
+        # retransmits) can arrive back-to-back.  set_result() raises
+        # InvalidStateError on an already-resolved Future, which kills
+        # process_replies before the signed-Allocate 200 is processed.
+        if self.msgs[txid]["status"].done():
+            continue
+
         # A few important attributes are saved into the client for future use.
         # Mostly details for relaying and authentication.
         try:
