@@ -145,9 +145,11 @@ class TestNickname(unittest.IsolatedAsyncioTestCase):
         self.clock = await asyncio.wait_for(SysClock(self.nic).start(), timeout=30)
         self.sk = _make_sk()
         vk_compressed = self.sk.verifying_key.to_string("compressed")
-        # Use deterministic name derived from our key so parallel runs
-        # don't collide and old leftover entries are ours to overwrite.
-        self.name = hashlib.sha256(vk_compressed).hexdigest()[:25]
+        # Unique per (machine-key × test-method) but deterministic across runs,
+        # so repeated test runs reuse the same DHT slot rather than accumulating
+        # new entries that exhaust the server's per-key limit.
+        method_bytes = self.id().encode("utf-8")
+        self.name = hashlib.sha256(vk_compressed + method_bytes).hexdigest()[:25]
         self.nick = Nickname(sk=self.sk, ifs=[self.nic], sys_clock=self.clock)
         try:
             await asyncio.wait_for(self.nick.start(), timeout=20)

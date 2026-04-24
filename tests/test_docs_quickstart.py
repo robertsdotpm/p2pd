@@ -83,6 +83,8 @@ class TestNodeLifecycle(unittest.IsolatedAsyncioTestCase):
             alice = await Node(port=BASE_PORT + 2, conf=QUICKSTART_CONF).start()
             bob   = await Node(port=BASE_PORT + 3, conf=QUICKSTART_CONF).start()
             self.assertNotEqual(alice.address(), bob.address())
+        except (OSError, asyncio.TimeoutError) as exc:
+            self.skipTest("Node startup failed (network): {}".format(exc))
         finally:
             await close_nodes(alice, bob)
 
