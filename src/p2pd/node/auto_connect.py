@@ -7,7 +7,6 @@ from aionetiface import (
 )
 from .node_connect import resolve_pnp_addr
 from ..traversal.traversal_utils import close_plugin
-from ..traversal.traversal_manager import TraversalManager
 
 
 # Plugins that should never be tried in auto-mode: signaling-only or relay
@@ -56,8 +55,8 @@ def has_valid_pair(
     """Return True if at least one matched (src_info, dest_info) by if_index has
     distinct addresses for the given route_type.
 
-    EXT_BIND: requires different external IPs (different NATs / WAN addresses).
     NIC_BIND: requires different NIC IPs (can't use same socket on same IP).
+    EXT_BIND: requires different external IPs (different NATs / WAN addresses).
     If neither dict is empty but no if_index is shared, we optimistically allow it
     and let attempt_plugin handle pair selection.
     Returns False if either AF dict is empty (no addresses to connect with).
