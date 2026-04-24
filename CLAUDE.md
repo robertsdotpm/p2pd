@@ -31,8 +31,14 @@ Never remove or comment out `print()` calls. They are intentional debugging and 
 
 ## Running tests
 
-Use Python 3.5 from pyenv to run the test suite so breakage on the minimum supported version is caught immediately:
+Always run with pytest-xdist for parallel execution. Use Python 3.5 from pyenv so breakage on the minimum supported version is caught immediately:
 
 ```sh
-~/.pyenv/versions/3.5.10/bin/python -m pytest tests/ -q
+~/.pyenv/versions/3.5.10/bin/python -m pytest tests/ -n auto --dist=loadfile -q
+```
+
+On Windows (pyenv-win), use the versioned python.exe directly:
+
+```cmd
+C:\Users\<user>\.pyenv\pyenv-win\versions\<ver>\python.exe -m pytest tests/ -n auto --dist=loadfile -q
 ```
