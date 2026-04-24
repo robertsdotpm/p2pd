@@ -190,7 +190,7 @@ class TestDemoNodeAddress(unittest.IsolatedAsyncioTestCase):
         try:
             self.node = await start_demo_node(BASE_PORT + 10)
         except Exception as exc:
-            pytest.skip("Node startup failed: {}".format(exc))
+            self.skipTest("Node startup failed: {}".format(exc))
 
     async def asyncTearDown(self):
         await close_nodes(self.node)

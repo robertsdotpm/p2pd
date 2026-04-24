@@ -67,7 +67,7 @@ class STUNServer:
             try:
                 lo = self.loopback(af)
                 route = self.interface.route(af)
-                await route.bind(ips=lo, port=self.port)
+                await route.bind(ips=lo, port=0)
                 await self.start_af_udp(af, route)
                 actual_port = route.bind_port
                 self.af_ports[af] = actual_port

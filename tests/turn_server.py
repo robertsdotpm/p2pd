@@ -221,7 +221,7 @@ class TURNServer:
     async def start_af(self, af):
         lo = self.loopback(af)
         route = self.interface.route(af)
-        await route.bind(ips=lo, port=self.port)
+        await route.bind(ips=lo, port=0)
 
         async def cb(data, client_tup, pipe):
             await async_wrap_errors(self.on_control(af, data, client_tup, pipe))

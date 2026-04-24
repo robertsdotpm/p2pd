@@ -347,7 +347,7 @@ class TestTURNLoopbackIPv6(AsyncTestCase):
     async def asyncSetUp(self):
         self.nic = await Interface()
         if IP6 not in self.nic.supported():
-            pytest.skip("IPv6 not available on this machine")
+            self.skipTest("IPv6 not available on this machine")
 
         if TestTURNLoopbackIPv6.ipv6_functional is None:
             probe_server = TURNServer(self.nic)
@@ -366,7 +366,7 @@ class TestTURNLoopbackIPv6(AsyncTestCase):
             TestTURNLoopbackIPv6.ipv6_functional = ok
 
         if not TestTURNLoopbackIPv6.ipv6_functional:
-            pytest.skip("IPv6 loopback not functional")
+            self.skipTest("IPv6 loopback not functional")
 
         self.server = TURNServer(self.nic)
         self.client_a = None
@@ -374,7 +374,7 @@ class TestTURNLoopbackIPv6(AsyncTestCase):
         await self.server.start()
         if IP6 not in self.server.started_afs():
             await self.server.close()
-            pytest.skip("TURN server could not bind IPv6 (::1 unavailable)")
+            self.skipTest("TURN server could not bind IPv6 (::1 unavailable)")
 
     async def asyncTearDown(self):
         for c in (self.client_a, self.client_b):
@@ -487,7 +487,7 @@ class TestTURNPluginIPv6(AsyncTestCase):
     async def asyncSetUp(self):
         self.nic = await Interface()
         if IP6 not in self.nic.supported():
-            pytest.skip("IPv6 not available on this machine")
+            self.skipTest("IPv6 not available on this machine")
 
         if TestTURNPluginIPv6.ipv6_functional is None:
             probe_server = TURNServer(self.nic)
@@ -506,13 +506,13 @@ class TestTURNPluginIPv6(AsyncTestCase):
             TestTURNPluginIPv6.ipv6_functional = ok
 
         if not TestTURNPluginIPv6.ipv6_functional:
-            pytest.skip("IPv6 loopback not functional")
+            self.skipTest("IPv6 loopback not functional")
 
         self.server = TURNServer(self.nic)
         await self.server.start()
         if IP6 not in self.server.started_afs():
             await self.server.close()
-            pytest.skip("TURN server could not bind IPv6 (::1 unavailable)")
+            self.skipTest("TURN server could not bind IPv6 (::1 unavailable)")
 
         self.local_entry = make_local_turn_server_entry(port=self.server.af_ports.get(IP6, self.server.port), af=IP6)
         self._get_infra_patcher = patch(

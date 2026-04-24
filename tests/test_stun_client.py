@@ -114,7 +114,7 @@ class TestSTUNClientIPv6(AsyncTestCase):
     async def asyncSetUp(self):
         self.nic = await Interface()
         if IP6 not in self.nic.supported():
-            pytest.skip("IPv6 not available on this machine")
+            self.skipTest("IPv6 not available on this machine")
 
         if TestSTUNClientIPv6.ipv6_functional is None:
             probe = STUNServer(self.nic, mode=RFC5389)
@@ -132,7 +132,7 @@ class TestSTUNClientIPv6(AsyncTestCase):
             TestSTUNClientIPv6.ipv6_functional = ok
 
         if not TestSTUNClientIPv6.ipv6_functional:
-            pytest.skip("IPv6 loopback not functional")
+            self.skipTest("IPv6 loopback not functional")
 
         self.server = STUNServer(self.nic, mode=RFC5389)
         await self.server.start()
@@ -238,7 +238,7 @@ class TestSTUNClientTCPIPv6(AsyncTestCase):
     async def asyncSetUp(self):
         self.nic = await Interface()
         if IP6 not in self.nic.supported():
-            pytest.skip("IPv6 not available on this machine")
+            self.skipTest("IPv6 not available on this machine")
 
         if TestSTUNClientTCPIPv6.ipv6_functional is None:
             probe = STUNServer(self.nic, mode=RFC5389)
@@ -256,7 +256,7 @@ class TestSTUNClientTCPIPv6(AsyncTestCase):
             TestSTUNClientTCPIPv6.ipv6_functional = ok
 
         if not TestSTUNClientTCPIPv6.ipv6_functional:
-            pytest.skip("IPv6 loopback not functional")
+            self.skipTest("IPv6 loopback not functional")
 
         self.server = STUNServer(self.nic, mode=RFC5389)
         await self.server.start()
