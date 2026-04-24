@@ -78,21 +78,30 @@ class TestSysClock(unittest.IsolatedAsyncioTestCase):
     async def test_start_syncs_ntp(self):
         nic = await _default_nic()
         clock = SysClock(nic)
-        await asyncio.wait_for(clock.start(), timeout=30)
+        try:
+            await asyncio.wait_for(clock.start(), timeout=30)
+        except (asyncio.TimeoutError, OSError):
+            self.skipTest("NTP server not reachable")
         self.assertNotEqual(
             clock.ntp, 0, "SysClock.ntp should be non-zero after start()"
         )
 
     async def test_time_returns_unix_timestamp(self):
         nic = await _default_nic()
-        clock = await asyncio.wait_for(SysClock(nic).start(), timeout=30)
+        try:
+            clock = await asyncio.wait_for(SysClock(nic).start(), timeout=30)
+        except (asyncio.TimeoutError, OSError):
+            self.skipTest("NTP server not reachable")
         t = clock.time()
         self.assertGreater(t, 1000000000, "clock.time() should be a plausible Unix timestamp")
         self.assertLess(t, 9999999999, "clock.time() should be a plausible Unix timestamp")
 
     async def test_time_increases(self):
         nic = await _default_nic()
-        clock = await asyncio.wait_for(SysClock(nic).start(), timeout=30)
+        try:
+            clock = await asyncio.wait_for(SysClock(nic).start(), timeout=30)
+        except (asyncio.TimeoutError, OSError):
+            self.skipTest("NTP server not reachable")
         t1 = clock.time()
         await asyncio.sleep(0.05)
         t2 = clock.time()
@@ -100,7 +109,10 @@ class TestSysClock(unittest.IsolatedAsyncioTestCase):
 
     async def test_advance_shifts_clock(self):
         nic = await _default_nic()
-        clock = await asyncio.wait_for(SysClock(nic).start(), timeout=30)
+        try:
+            clock = await asyncio.wait_for(SysClock(nic).start(), timeout=30)
+        except (asyncio.TimeoutError, OSError):
+            self.skipTest("NTP server not reachable")
         before = clock.time()
         clock.advance(100)
         after = clock.time()
@@ -142,7 +154,10 @@ class TestNickname(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         self.nic = await _default_nic()
-        self.clock = await asyncio.wait_for(SysClock(self.nic).start(), timeout=30)
+        try:
+            self.clock = await asyncio.wait_for(SysClock(self.nic).start(), timeout=30)
+        except (asyncio.TimeoutError, OSError):
+            self.skipTest("NTP server not reachable")
         self.sk = _make_sk()
         vk_compressed = self.sk.verifying_key.to_string("compressed")
         # Unique per (machine-key × test-method) but deterministic across runs,

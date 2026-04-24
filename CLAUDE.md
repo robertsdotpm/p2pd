@@ -31,6 +31,15 @@ Never remove or comment out `print()` calls. They are intentional debugging and 
 
 ## Running tests
 
+Before running tests on any machine, always pull all four sibling repos to get the latest fixes. On Windows, use `git fetch && git reset --hard origin/ai_experiment` rather than `git pull` to avoid stale-file conflicts from manual SCP operations:
+
+```cmd
+cd C:\Users\<user>\projects\p2pd && git fetch origin && git reset --hard origin/ai_experiment
+cd C:\Users\<user>\projects\aionetiface && git fetch origin && git reset --hard origin/ai_experiment
+cd C:\Users\<user>\projects\namebump && git fetch origin && git reset --hard origin/main
+cd C:\Users\<user>\projects\sidewire && git fetch origin && git reset --hard origin/main
+```
+
 Always run with pytest-xdist for parallel execution and `--timeout=90` to prevent hung network tests from blocking the session forever. Use Python 3.5 from pyenv so breakage on the minimum supported version is caught immediately:
 
 ```sh
