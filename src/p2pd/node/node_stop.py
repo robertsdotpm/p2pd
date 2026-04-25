@@ -70,6 +70,16 @@ async def node_stop(node: Any) -> None:
     if traversal is not None and hasattr(traversal, "close"):
         await traversal.close()
 
+    # Close the MQTT router and its background dispatcher tasks. Without this,
+    # dispatcher coroutines from each MQTTClient stay pending after node_stop
+    # and hang the test runner's final asyncio.gather on cancelled tasks.
+    router = getattr(node, "router", None)
+    if router is not None and hasattr(router, "close"):
+        try:
+            await asyncio.wait_for(router.close(), timeout=4)
+        except asyncio.TimeoutError:
+            log("Timeout closing node.router")
+
     # Stop node server (Daemon.close closes all listener pipes).
     # Using Daemon.close(node) directly rather than super(node.__class__, node).close()
     # because the super() pattern breaks if Node is ever subclassed: super(SubClass, node)
