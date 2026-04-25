@@ -7,7 +7,7 @@ from aionetiface import (
     fstr, log, log_exception, parse_node_addr,
 )
 from .node_connect import resolve_pnp_addr
-from ..traversal.traversal_utils import close_plugin, get_if_infos_order
+from ..traversal.traversal_utils import close_plugin
 
 
 # Plugins that should never be tried in auto-mode: signaling-only or relay
@@ -78,12 +78,27 @@ def viable_pairs_for_arc(
 ) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
     """Ordered list of (src_info, dest_info) pairs that survive per-pair filtering.
 
-    Order is taken from get_if_infos_order which puts overlap-first for
-    NIC_BIND (LAN-style co-located peers) and unique-first for EXT_BIND
-    (cross-NAT). Pairs that fail pair_distinct are dropped.
+    Restricted to matching-if_index pairs to match has_valid_pair semantics:
+    a node's if_index 0 is its first NIC, the peer's if_index 0 is its first
+    NIC, and we only attempt connections between corresponding interfaces.
+    The Cartesian product (cross-if_index pairs) is intentionally excluded
+    because crossing interfaces requires routing context the addr_map
+    doesn't capture (alice's NIC0 may not have a route to bob's NIC1's
+    subnet) and would emit unreachable pairs as if they were viable.
+
+    Pairs that fail pair_distinct (NIC_BIND wants different NIC IPs,
+    EXT_BIND wants different ext IPs) are dropped.
     """
+    src_af = src_map.get(af, {}) or {}
+    dest_af = dest_map.get(af, {}) or {}
+    if not src_af or not dest_af:
+        return []
+
     pairs = []
-    for src_info, dest_info in get_if_infos_order(af, route_type, src_map, dest_map):
+    for if_idx, dest_info in dest_af.items():
+        src_info = src_af.get(if_idx)
+        if src_info is None:
+            continue
         if pair_distinct(route_type, src_info, dest_info):
             pairs.append((src_info, dest_info))
     return pairs
