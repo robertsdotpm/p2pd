@@ -1,7 +1,6 @@
 """auto_connect: try installed plugins in batched per-pair rounds, fall back to TURN."""
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 import asyncio
-import random
 from aionetiface import (
     IP4, IP6, NIC_BIND, EXT_BIND,
     fstr, log, log_exception, parse_node_addr,
@@ -13,10 +12,8 @@ from ..traversal.traversal_utils import close_plugin
 # Plugins that should never be tried in auto-mode: signaling-only or relay
 SKIP_IN_AUTO = frozenset({"turn", "get_addr", "return_addr"})
 
-# Default batching knobs. auto_connect kwargs override these.
+# Default batching knob. auto_connect kwarg overrides this.
 DEFAULT_MAX_ROUNDS = 3
-DEFAULT_PLUGIN_JITTER = 0.5    # max secs each plugin sleeps before its own work
-DEFAULT_BATCH_JITTER = 1.0     # max secs slept between batches (skipped on round 0)
 
 
 def af_compatible(src_map: Dict[str, Any], dest_map: Dict[str, Any], af: Any) -> bool:
@@ -192,22 +189,14 @@ def auto_combo_batches(
             yield batch
 
 
-async def staggered_attempt(
+async def attempt_one_combo(
     node: Any,
     sig_pipe: Any,
     src_map: Dict[str, Any],
     dest_map: Dict[str, Any],
     combo: Tuple[str, Any, Any, Dict[str, Any], Dict[str, Any]],
-    plugin_jitter: float,
 ) -> Optional[Any]:
-    """Sleep up to plugin_jitter seconds, then attempt one plugin instance.
-
-    Within-batch jitter avoids thundering-herd on the MQTT signal channel
-    when many plugins in one batch all try to send their signaling burst at
-    the exact same instant.
-    """
-    if plugin_jitter:
-        await asyncio.sleep(random.uniform(0, plugin_jitter))
+    """Run one (plugin, af, route_type, src_info, dest_info) attempt to completion."""
     plugin_name, af, route_type, src_info, dest_info = combo
     try:
         return await node.traversal.attempt_plugin(
@@ -381,8 +370,6 @@ async def auto_connect(
     timeout: float = 60.0,
     turn_limit: int = 3,
     max_rounds: int = DEFAULT_MAX_ROUNDS,
-    plugin_jitter: float = DEFAULT_PLUGIN_JITTER,
-    batch_jitter: float = DEFAULT_BATCH_JITTER,
 ) -> Tuple[Optional[Any], Optional[Any]]:
     """Establish a P2P connection to dest_addr without specifying a plugin manually.
 
@@ -391,9 +378,9 @@ async def auto_connect(
       2. Build successive batches of (plugin, af, route_type, src_info, dest_info)
          tuples, one batch per pair index. Round 0 uses the highest-priority
          pair from each (af, route_type) arc; round 1 the next; up to max_rounds.
-      3. For each batch, launch every combo concurrently with optional
-         within-batch start jitter, then race their results. The first
-         non-None pipe wins.
+      3. For each batch, launch every combo concurrently as tasks, then
+         race them via as_completed. The first non-None pipe wins; the
+         remaining tasks are cancelled.
       4. If all batches fail, fall back to TURN (a separate pathway, never
          interleaved with the direct/punch/reverse plugins above).
 
@@ -425,16 +412,13 @@ async def auto_connect(
         (len(batches), dest_addr),
     ))
 
-    for batch_idx, batch in enumerate(batches):
-        if batch_idx > 0 and batch_jitter:
-            await asyncio.sleep(random.uniform(0, batch_jitter))
-
+    for batch in batches:
         # Launch every combo in this batch concurrently. attempt_plugin
         # awaits the underlying plugin.run() to completion, so each task
         # resolves with a finalised plugin (success / failure / timeout).
         attempt_tasks = [
             asyncio.ensure_future(
-                staggered_attempt(node, sig_pipe, src_map, dest_map, combo, plugin_jitter)
+                attempt_one_combo(node, sig_pipe, src_map, dest_map, combo)
             )
             for combo in batch
         ]
