@@ -70,6 +70,12 @@ class TestMyFeature(AsyncTestCase):
 - Never import `pytest`. Never use `@pytest.mark.*` decorators.
 - `aionetiface.testing` calls `aionetiface_setup_event_loop()`, applies the linecache no-op, and opens the Windows firewall rule automatically when imported. No conftest.py setup needed.
 
+### Heavy tests live in their own file
+
+The runner spawns one unittest subprocess per `test_*.py` file, so every file's tests share one Python process. Tests that start `Node`s, open MQTT/TCP connections, or spawn dispatcher tasks accumulate state across each test in that process — sockets in TIME_WAIT, MQTT sessions the broker is rate-limiting, dispatcher tasks the loop never fully drained. By the 4th or 5th heavy test in a single file, that residue can stall the next test long enough to hit the runner's per-file SIGKILL budget. We hit this in real life: `test_demo_smoke.py`, `test_docs_quickstart.py`, and `test_auto_connect.py` all had connectivity classes that hung 300s on multiple VMs until each heavy class was extracted into its own file.
+
+Rule: when a class spins up real `Node`s / MQTT clients / TURN servers, move it into its own `test_*.py` so it gets a fresh subprocess. Keep network-free unit tests grouped together; isolate the heavy stuff. Put the heavy class's helpers into a sibling `<name>_helpers.py` (no `test_` prefix so the runner doesn't pick it up) and import from there. Reference layout: `test_auto_connect.py` keeps the unit-test classes; `test_auto_connect_ipv4.py` / `_ipv6` / `_reverse` / `_multi` / `_punch` / `_turn` each hold one AsyncTestCase class; shared helpers live in `auto_connect_helpers.py`.
+
 ### Running tests
 
 Pull all four repos first:
