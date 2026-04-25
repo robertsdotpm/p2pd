@@ -15,10 +15,16 @@ def sock_opt_voodoo(s: Any) -> None:
     """Apply non-blocking mode and SO_REUSEADDR/SO_REUSEPORT socket options for hole punching."""
     s.setblocking(False)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    try:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-    except OSError:
-        pass  # SO_REUSEPORT is not available on all systems
+    # Windows' Python socket module has no SO_REUSEPORT attribute at all
+    # (raising AttributeError before setsockopt is even called), while some
+    # Unixes have the attribute but reject it at runtime (OSError). Both
+    # cases are non-fatal here -- punch works without REUSEPORT on platforms
+    # that don't support it.
+    if hasattr(socket, "SO_REUSEPORT"):
+        try:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        except OSError:
+            pass
 
     """
     try:
