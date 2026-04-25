@@ -10,10 +10,10 @@ with open(path.join(here, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
 install_reqs = [
-    "aionetiface>=0.0.15",
-    "namebump>=0.0.8",
-    "sidewire>=0.1.1",
-    "ecdsa>=0.18",
+    "aionetiface",
+    "namebump",
+    "sidewire",
+    "ecdsa",
 ]
 setup(
     version="4.0.1",
