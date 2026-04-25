@@ -66,11 +66,22 @@ class TestAutoConnectIPv4(AsyncTestCase):
 
     async def test_plugin_is_direct_connect_on_same_lan(self):
         """NIC_BIND direct_connect should win on the same LAN."""
+        print("[IPV4-TEST] setup ip_a={} ip_b={}".format(self.ip_a, self.ip_b))
+        print("[IPV4-TEST] ifs_a={}".format([nic.id for nic in self.ifs_a]))
+        print("[IPV4-TEST] ifs_b={}".format([nic.id for nic in self.ifs_b]))
         try:
             self.node_a = await start_node_with_ifs(self.ifs_a, [self.ip_a], PORT_A_T2)
             self.node_b = await start_node_with_ifs(self.ifs_b, [self.ip_b], PORT_B_T2)
         except Exception as exc:
+            print("[IPV4-TEST] node startup failed: {!r}".format(exc))
             self.skipTest("Node startup failed: {}".format(exc))
+
+        print("[IPV4-TEST] node_a addr_map IP4={}".format(self.node_a.addr_map.get(IP4)))
+        print("[IPV4-TEST] node_b addr_map IP4={}".format(self.node_b.addr_map.get(IP4)))
+        print("[IPV4-TEST] node_a plugins={}".format(
+            list(self.node_a.traversal.plugin_loaders.keys())
+        ))
+        print("[IPV4-TEST] calling auto_connect ...")
 
         try:
             pipe, plugin = await asyncio.wait_for(
@@ -78,7 +89,12 @@ class TestAutoConnectIPv4(AsyncTestCase):
                 timeout=25,
             )
         except asyncio.TimeoutError:
+            print("[IPV4-TEST] auto_connect timed out at outer wait_for")
             self.skipTest("auto_connect timed out")
+
+        print("[IPV4-TEST] auto_connect returned pipe={!r} plugin={}".format(
+            pipe, type(plugin).__name__ if plugin is not None else None,
+        ))
 
         self.assertIsNotNone(pipe)
         self.assertIn(

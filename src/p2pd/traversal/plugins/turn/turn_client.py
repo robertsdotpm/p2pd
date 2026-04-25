@@ -61,12 +61,21 @@ self,
         self.blank_rudp_headers = False
 
         # Remote address for the TURN server.
-        # Username and password are optional.
-        self.requires_auth = True
+        # Username and password are optional. A server entry may legitimately
+        # carry None / "" auth fields when long-term credentials are not
+        # required (e.g. a local test TURN server, or a relay that uses
+        # short-term tokens that haven't been minted yet). Don't let to_b
+        # crash on those.
         self.af = af
         self.dest = dest
-        self.turn_user = to_b(auth[0])
-        self.turn_pw = to_b(auth[1])
+        user = auth[0] if auth and len(auth) >= 1 else None
+        pw = auth[1] if auth and len(auth) >= 2 else None
+        self.turn_user = to_b(user) if user is not None else b""
+        self.turn_pw = to_b(pw) if pw is not None else b""
+        # requires_auth is False when no credentials were supplied; the
+        # protocol code can use this to decide whether to send a STUN
+        # MESSAGE-INTEGRITY attribute.
+        self.requires_auth = bool(self.turn_user) and bool(self.turn_pw)
         self.msg_cb = msg_cb
 
         # Set from attributes in replies.

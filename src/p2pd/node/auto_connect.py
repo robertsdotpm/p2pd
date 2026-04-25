@@ -411,8 +411,13 @@ async def auto_connect(
         "auto_connect: {0} batches for {1}",
         (len(batches), dest_addr),
     ))
+    for bi, b in enumerate(batches):
+        log(fstr(
+            "auto_connect: batch[{0}] size={1} combos={2}",
+            (bi, len(b), [(c[0], c[1], c[2]) for c in b]),
+        ))
 
-    for batch in batches:
+    for batch_idx, batch in enumerate(batches):
         # Launch every combo in this batch concurrently. attempt_plugin
         # awaits the underlying plugin.run() to completion, so each task
         # resolves with a finalised plugin (success / failure / timeout).
@@ -432,6 +437,10 @@ async def auto_connect(
         winner_plugin = None
         plugins = []
         batch_to = batch_timeout(node, batch)
+        log(fstr(
+            "auto_connect: starting batch {0} (size={1}, batch_timeout={2}s)",
+            (batch_idx, len(batch), batch_to),
+        ))
         try:
             for fut in asyncio.as_completed(attempt_tasks, timeout=batch_to):
                 try:
@@ -439,22 +448,33 @@ async def auto_connect(
                 except asyncio.CancelledError:  # pylint: disable=try-except-raise
                     raise
                 except (asyncio.TimeoutError, OSError, ConnectionError, ValueError):
+                    log_exception()
                     plugin = None
-                except Exception:  # noqa: BLE001 -- staggered_attempt logs unexpected paths
+                except Exception:  # noqa: BLE001 -- attempt_one_combo logs unexpected paths
                     log_exception()
                     plugin = None
                 if plugin is None:
+                    log(fstr(
+                        "auto_connect: batch {0} attempt produced no plugin",
+                        (batch_idx,),
+                    ))
                     continue
                 plugins.append(plugin)
-                if plugin.result.done():
+                result_done = plugin.result.done()
+                pipe = None
+                if result_done:
                     try:
                         pipe = plugin.result.result()
                     except Exception:  # noqa: BLE001
                         pipe = None
-                    if pipe is not None:
-                        winner_pipe = pipe
-                        winner_plugin = plugin
-                        break
+                log(fstr(
+                    "auto_connect: batch {0} got plugin={1} result_done={2} pipe={3}",
+                    (batch_idx, type(plugin).__name__, result_done, pipe is not None),
+                ))
+                if pipe is not None:
+                    winner_pipe = pipe
+                    winner_plugin = plugin
+                    break
         except asyncio.TimeoutError:
             # Whole-batch ceiling hit — no winner. Fall through to cleanup
             # and the next batch (or TURN fallback).

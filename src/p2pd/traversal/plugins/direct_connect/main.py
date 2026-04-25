@@ -16,6 +16,10 @@ class DirectConnect(TraversalPlugin):
             str(self.dest_info["ip"]),
             self.dest_info["port"],
         )
+        log(fstr(
+            "direct_connect[{0}]: af={1} dest={2} nic.id={3} reply={4}",
+            (self.plugin_id, self.af, dest, getattr(self.nic, "id", "?"), reply is not None),
+        ))
 
         # (1) Get first interface for AF.
         # (2) Build a 'route' from it with it's main NIC IP.
@@ -29,6 +33,11 @@ class DirectConnect(TraversalPlugin):
             else:
                 route = await self.nic.route(self.af).bind()
 
+        log(fstr(
+            "direct_connect[{0}]: bound, attempting TCP connect to {1}",
+            (self.plugin_id, dest),
+        ))
+
         # Connect to destination.
         try:
             pipe = await Pipe(TCP, dest, route).connect()
@@ -37,12 +46,24 @@ class DirectConnect(TraversalPlugin):
             pipe = None
 
         if pipe is None:
+            log(fstr(
+                "direct_connect[{0}]: TCP connect to {1} returned None",
+                (self.plugin_id, dest),
+            ))
             return
 
         if pipe.sock is None:
+            log(fstr(
+                "direct_connect[{0}]: pipe.sock is None after connect",
+                (self.plugin_id,),
+            ))
             return
 
         await pipe.send(CON_ID_MSG + to_b(fstr(" {0}\n", (self.plugin_id,))))
+        log(fstr(
+            "direct_connect[{0}]: sent CON_ID_MSG, setting result",
+            (self.plugin_id,),
+        ))
         self.result.set_result(pipe)
 
 PLUGIN_CLASS = DirectConnect
