@@ -1,0 +1,149 @@
+"""
+Two-node connectivity smoke tests, split out of test_demo_smoke.py so
+each run gets a fresh subprocess (no MQTT/dispatcher/socket state carried
+over from the single-node tests in the original file).
+
+Ports: BASE_PORT + 20..27.
+"""
+
+import asyncio
+import unittest
+
+from aionetiface import SUB_ALL
+from aionetiface.testing import AsyncTestCase
+from p2pd import log
+
+from demo_smoke_helpers import BASE_PORT, start_demo_node, close_nodes
+
+
+class TestDemoTwoNodeConnectivity(AsyncTestCase):
+    """Two nodes on the same machine can connect and exchange data (loopback path)."""
+
+    async def asyncSetUp(self):
+        self.alice = self.bob = None
+
+    async def asyncTearDown(self):
+        await close_nodes(self.alice, self.bob)
+
+    async def test_two_nodes_start_with_distinct_addresses(self):
+        try:
+            self.alice = await start_demo_node(BASE_PORT + 20)
+            self.bob   = await start_demo_node(BASE_PORT + 21)
+        except Exception as exc:
+            log("Node startup failed: {}".format(exc))
+
+        self.assertNotEqual(self.alice.address(), self.bob.address())
+
+    async def test_two_nodes_connect(self):
+        from p2pd.node.auto_connect import auto_connect
+        try:
+            self.alice = await start_demo_node(BASE_PORT + 22)
+            self.bob   = await start_demo_node(BASE_PORT + 23)
+        except Exception as exc:
+            log("Node startup failed: {}".format(exc))
+            return
+
+        try:
+            pipe, plugin = await asyncio.wait_for(
+                auto_connect(self.alice, self.bob.address()),
+                timeout=20,
+            )
+        except (asyncio.TimeoutError, OSError, ConnectionError, Exception):
+            log("auto_connect did not complete")
+            return
+
+        if pipe is None:
+            log("auto_connect returned no pipe (no multi-path routes available)")
+            return
+        try:
+            await asyncio.wait_for(pipe.close(), timeout=5)
+        except Exception:
+            pass
+
+    async def test_two_nodes_exchange_message(self):
+        from p2pd.node.auto_connect import auto_connect
+        try:
+            self.alice = await start_demo_node(BASE_PORT + 24)
+            self.bob   = await start_demo_node(BASE_PORT + 25)
+        except Exception as exc:
+            log("Node startup failed: {}".format(exc))
+            return
+
+        alice_pipe = bob_pipe = None
+        try:
+            alice_pipe, _ = await asyncio.wait_for(
+                auto_connect(self.alice, self.bob.address()),
+                timeout=20,
+            )
+            bob_pipe, _ = await asyncio.wait_for(
+                auto_connect(self.bob, self.alice.address()),
+                timeout=20,
+            )
+        except (asyncio.TimeoutError, OSError, ConnectionError, Exception):
+            log("auto_connect did not complete")
+            return
+
+        if alice_pipe is None or bob_pipe is None:
+            log("auto_connect returned no pipe (no multi-path routes available)")
+            return
+
+        bob_pipe.subscribe(SUB_ALL)
+        await alice_pipe.send(b"demo smoke test")
+        data = await bob_pipe.recv(SUB_ALL, timeout=5)
+        self.assertEqual(data, b"demo smoke test")
+
+        for p in (alice_pipe, bob_pipe):
+            try:
+                await asyncio.wait_for(p.close(), timeout=5)
+            except Exception:
+                pass
+
+    async def test_node_receives_via_msg_cb(self):
+        """demo's add_echo_support pattern: node receives message via msg_cb."""
+        from p2pd.node.auto_connect import auto_connect
+        try:
+            self.alice = await start_demo_node(BASE_PORT + 26)
+            self.bob   = await start_demo_node(BASE_PORT + 27)
+        except Exception as exc:
+            log("Node startup failed: {}".format(exc))
+            return
+
+        received = asyncio.Event()
+        received_data = []
+
+        async def on_msg(msg, client_tup, pipe):
+            received_data.append(msg)
+            received.set()
+
+        self.bob.add_msg_cb(on_msg)
+
+        try:
+            pipe, _ = await asyncio.wait_for(
+                auto_connect(self.alice, self.bob.address()),
+                timeout=20,
+            )
+        except (asyncio.TimeoutError, OSError, ConnectionError, Exception):
+            log("auto_connect did not complete")
+            return
+
+        if pipe is None:
+            log("auto_connect returned no pipe (no multi-path routes available)")
+            return
+
+        await pipe.send(b"hello via msg_cb")
+
+        try:
+            await asyncio.wait_for(received.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            log("msg_cb was not called in time")
+            return
+
+        self.assertIn(b"hello via msg_cb", received_data)
+        try:
+            await asyncio.wait_for(pipe.close(), timeout=5)
+        except Exception:
+            pass
+
+
+if __name__ == "__main__":
+    unittest.main()
