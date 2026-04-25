@@ -4,6 +4,10 @@
 
 `requires-python = ">=3.5"` is intentional and must not be changed. Do not raise the minimum Python version under any circumstances.
 
+## Dependency versions
+
+Never add version pins to package dependencies in `setup.py`, `pyproject.toml`, or any requirements file. List packages by name only (e.g. `"ecdsa"` not `"ecdsa>=0.18"`). The only version constraint that may appear is `python_requires=">=3.5"`.
+
 ## String formatting
 
 Never use f-string literals (`f"..."`). They require Python 3.6+ and break the 3.5 constraint. Use `.format()` or import and use `fstr(template, args_tuple)` from `aionetiface.utility.utils`:
