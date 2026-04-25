@@ -1,7 +1,7 @@
 """Traversal plugin for direct (non-NATed) connections."""
 from typing import Any, Optional
 import asyncio
-from aionetiface import IP4, IP6, TCP, Pipe, log_exception, to_b, fstr
+from aionetiface import IP4, IP6, TCP, Pipe, log, log_exception, to_b, fstr
 from ....node.node_defs import CON_ID_MSG
 from ...traversal_plugin import TraversalPlugin
 
