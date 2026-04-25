@@ -233,6 +233,41 @@ def routable_ips_per_nic(ifs, af):
     return result
 
 
+def loopback_split_setup(probe_ifs, af):
+    """Build alice/bob clones bound to two distinct loopback aliases.
+
+    On the same machine, two loopback IPs are always reachable from each
+    other regardless of how external NICs are routed. This is the only
+    fixture that reliably works for direct_connect across all OSes when
+    the test box doesn't have two routable IPs on a single physical NIC.
+
+    Returns ((ifs_a, ip_a), (ifs_b, ip_b)) or None if not enough loopback
+    aliases bind. On Linux the entire 127.0.0.0/8 is usable so we get
+    plenty; on macOS/Windows often only 127.0.0.1, in which case the
+    caller falls back / skips.
+    """
+    if af != IP4:
+        # IPv6 loopback is just ::1; aliases on ::1 don't bind on most OSes.
+        return None
+    if not probe_ifs:
+        return None
+    real_nic = probe_ifs[0]
+
+    # Local import: aionetiface.testing pulls in heavy deps and is only
+    # available in the test environment.
+    try:
+        from aionetiface.testing import probe_loopback_ips
+    except ImportError:
+        return None
+    loopback_ips = probe_loopback_ips(max_count=4)
+    if len(loopback_ips) < 2:
+        return None
+
+    clone_a = clone_nic(real_nic, "node_a_loopback", [loopback_ips[0]])
+    clone_b = clone_nic(real_nic, "node_b_loopback", [loopback_ips[1]])
+    return (([clone_a], loopback_ips[0]), ([clone_b], loopback_ips[1]))
+
+
 def split_two_node_setups(probe_ifs, af):
     """Build two single-NIC node setups so alice's and bob's addr_maps differ.
 
@@ -244,29 +279,46 @@ def split_two_node_setups(probe_ifs, af):
     in fact have two routable IPs.
 
     Strategy (in order, for the requested address family):
-      1. If two NICs each carry at least one routable `af` IP, give alice a
-         clone of NIC0 holding only its first IP and bob a clone of NIC1
-         holding only its first IP. This is the natural two-NIC case.
-      2. Else if one NIC carries at least two distinct routable `af` IPs,
-         clone it twice -- alice gets ip[0], bob gets ip[1]. This covers
-         single-NIC machines with multiple addresses (e.g. dual-stack with
-         two IPv6 globals, or aliased IPv4).
-      3. Else return None (caller skipTests with a clear reason).
+      1. If one NIC carries at least two distinct routable `af` IPs, clone
+         it twice -- alice gets ip[0], bob gets ip[1]. Same physical NIC,
+         OS handles loopback-style routing between the two IPs cleanly.
+      2. (IPv4 only) Loopback aliases (127.0.0.1, 127.0.0.2, ...). Always
+         reachable on a single host, ideal for direct_connect. Linux
+         supports the full 127.0.0.0/8; macOS/Windows often only the
+         primary, in which case this branch is skipped.
+      3. Two physical NICs each carrying one routable IP. This works when
+         the NICs are on the same routable subnet (e.g. two LAN NICs) but
+         is unreliable when they belong to different ISPs (e.g. a LAN
+         NIC + a mobile NIC with no LAN-to-mobile route). Tried last for
+         that reason.
+      4. Else None (caller skipTests with a clear reason).
 
     Returns ((ifs_a, ip_a), (ifs_b, ip_b)) or None.
     """
     per_nic = routable_ips_per_nic(probe_ifs, af)
+
+    # 1. Same NIC with multiple IPs -- routing is whatever the kernel does
+    # locally for that NIC's address aliases, which is reliable.
+    for nic, ips in per_nic:
+        if len(ips) >= 2:
+            clone_a = clone_nic(nic, "node_a_only", [ips[0]])
+            clone_b = clone_nic(nic, "node_b_only", [ips[1]])
+            return (([clone_a], ips[0]), ([clone_b], ips[1]))
+
+    # 2. Loopback aliases (IPv4 only).
+    loop_setup = loopback_split_setup(probe_ifs, af)
+    if loop_setup is not None:
+        return loop_setup
+
+    # 3. Two physical NICs as a last resort -- only works if the NICs share
+    # a routable subnet. Cross-ISP NIC pairs (e.g. LAN + mobile carrier)
+    # cannot direct_connect across, but we still try because a co-located
+    # multi-NIC LAN setup would succeed here.
     if len(per_nic) >= 2:
         nic_a, ips_a = per_nic[0]
         nic_b, ips_b = per_nic[1]
         clone_a = clone_nic(nic_a, "node_a_only", [ips_a[0]])
         clone_b = clone_nic(nic_b, "node_b_only", [ips_b[0]])
         return (([clone_a], ips_a[0]), ([clone_b], ips_b[0]))
-    if len(per_nic) == 1:
-        nic, ips = per_nic[0]
-        if len(ips) < 2:
-            return None
-        clone_a = clone_nic(nic, "node_a_only", [ips[0]])
-        clone_b = clone_nic(nic, "node_b_only", [ips[1]])
-        return (([clone_a], ips[0]), ([clone_b], ips[1]))
+
     return None
