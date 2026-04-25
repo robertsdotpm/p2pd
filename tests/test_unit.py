@@ -159,7 +159,7 @@ class TestNicknameTLD(unittest.TestCase):
 # ===========================================================================
 # 3. Nickname raises AssertionError when called before start()
 # ===========================================================================
-class TestNicknameNotStarted(unittest.IsolatedAsyncioTestCase):
+class TestNicknameNotStarted(AsyncTestCase):
     async def _make_nick(self):
         """Build a Nickname without calling start()."""
         from ecdsa import SigningKey, SECP256k1
@@ -329,7 +329,7 @@ class TestTraversalManagerInit(unittest.TestCase):
 # ===========================================================================
 # 6. TraversalPlugin initialisation
 # ===========================================================================
-class TestTraversalPlugin(unittest.IsolatedAsyncioTestCase):
+class TestTraversalPlugin(AsyncTestCase):
     async def test_result_is_future(self):
         p = TraversalPlugin()
         self.assertIsInstance(p.result, asyncio.Future)
@@ -403,7 +403,7 @@ class TestNodeInit(unittest.TestCase):
 # ===========================================================================
 # 8. pipe_future / pipe_ready (the return-value bug we fixed)
 # ===========================================================================
-class TestPipeFuture(unittest.IsolatedAsyncioTestCase):
+class TestPipeFuture(AsyncTestCase):
     def _make_node(self):
         rw = socket.socketpair()
         rw[0].setblocking(False)

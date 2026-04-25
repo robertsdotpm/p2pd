@@ -4,7 +4,7 @@ from p2pd import *
 
 
 # NOTE: changed sub so this is currently broken
-class TestP2PDServer(unittest.IsolatedAsyncioTestCase):
+class TestP2PDServer(AsyncTestCase):
     async def test_p2pd_server(self):
         return  # TODO: fix this test
 

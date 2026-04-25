@@ -112,7 +112,7 @@ def install_only(node, plugin_name, plugin_class):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestTraversalPluginInterface(unittest.IsolatedAsyncioTestCase):
+class TestTraversalPluginInterface(AsyncTestCase):
     """TraversalPlugin subclass has the expected attributes."""
 
     async def test_plugin_has_result_future(self):
@@ -139,7 +139,7 @@ class TestTraversalPluginInterface(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestCustomDirectPlugin(unittest.IsolatedAsyncioTestCase):
+class TestCustomDirectPlugin(AsyncTestCase):
     """DocsDirectPlugin (from the docs example) can establish a connection."""
 
     async def asyncSetUp(self):
@@ -218,7 +218,7 @@ class TestCustomDirectPlugin(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestInstallPluginAPI(unittest.IsolatedAsyncioTestCase):
+class TestInstallPluginAPI(AsyncTestCase):
     """node.traversal.install_plugin() registers a plugin for use by auto_connect."""
 
     async def asyncSetUp(self):
@@ -254,7 +254,7 @@ class TestInstallPluginAPI(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestPluginClassConvention(unittest.IsolatedAsyncioTestCase):
+class TestPluginClassConvention(AsyncTestCase):
     """Plugins should expose PLUGIN_CLASS at module level for auto-discovery."""
 
     async def test_docs_direct_plugin_class_is_traversal_plugin(self):

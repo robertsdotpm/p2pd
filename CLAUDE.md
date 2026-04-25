@@ -29,9 +29,46 @@ Never remove or comment out `print()` calls. They are intentional debugging and 
 - Do not use `ast.literal_eval` on user-supplied input — parse it explicitly.
 - Pick one error idiom per function: either return a sentinel value or raise — not both.
 
-## Running tests
+## Writing tests
 
-Before running tests on any machine, always pull all four sibling repos to get the latest fixes. On Windows, use `git fetch && git reset --hard origin/ai_experiment` rather than `git pull` to avoid stale-file conflicts from manual SCP operations:
+**Never use pytest-specific code.** All tests use `unittest` with `AsyncTestCase` from `aionetiface.testing`.
+
+### The required pattern
+
+```python
+import unittest
+from aionetiface.testing import AsyncTestCase
+
+class TestMyFeature(AsyncTestCase):
+    async def asyncSetUp(self):
+        # async setup — runs before each test
+        self.node = await start_something()
+
+    async def asyncTearDown(self):
+        # async teardown — runs after each test
+        await self.node.close()
+
+    async def test_something(self):
+        result = await self.node.do_thing()
+        self.assertEqual(result, expected)
+
+    async def test_skip_example(self):
+        if condition:
+            self.skipTest("reason")
+        ...
+```
+
+### Rules
+
+- Base class is always `AsyncTestCase` — never `unittest.TestCase`, `unittest.IsolatedAsyncioTestCase`, or any pytest class.
+- Test methods are `async def` coroutines — the backport handles them on Python 3.5–3.7.
+- Use `self.skipTest("reason")` — never `pytest.skip(...)`.
+- Never import `pytest`. Never use `@pytest.mark.*` decorators.
+- `aionetiface.testing` calls `aionetiface_setup_event_loop()`, applies the linecache no-op, and opens the Windows firewall rule automatically when imported. No conftest.py setup needed.
+
+### Running tests
+
+Pull all four repos first:
 
 ```cmd
 cd C:\Users\<user>\projects\p2pd && git fetch origin && git reset --hard origin/ai_experiment
@@ -40,69 +77,36 @@ cd C:\Users\<user>\projects\namebump && git fetch origin && git reset --hard ori
 cd C:\Users\<user>\projects\sidewire && git fetch origin && git reset --hard origin/main
 ```
 
-Always run with pytest-xdist for parallel execution and `--timeout=90` to prevent hung network tests from blocking the session forever. Use Python 3.5 from pyenv so breakage on the minimum supported version is caught immediately:
+Run with `unittest discover` (sequential, reliable):
 
 ```sh
-~/.pyenv/versions/3.5.10/bin/python -m pytest tests/ -n auto --dist=loadfile --timeout=90 -q
+python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-On Windows (pyenv-win), use the versioned python.exe directly:
+On Windows:
 
 ```cmd
-C:\Users\<user>\.pyenv\pyenv-win\versions\<ver>\python.exe -m pytest tests/ -n auto --dist=loadfile --timeout=90 -q
+C:\Users\<user>\.pyenv\pyenv-win\versions\3.8.6\python.exe -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-## asyncio debug mode — never enable with concurrent tests
+### asyncio debug mode
 
-**Never call `loop.set_debug(True)` in any code path that runs under pytest-xdist.**
+Never call `loop.set_debug(True)`. `IsolatedAsyncioTestCase` (Python 3.8+) sets it automatically, but `aionetiface.testing` neutralises the linecache overhead with a no-op patch.
 
-When asyncio debug mode is on, every `loop.call_soon()` and `loop.create_future()` calls `traceback.extract_stack()` which internally calls `linecache.checkcache()`. Under parallel xdist workers this adds 30–60 seconds of overhead per trivial async operation, causing the `--timeout=90` guard to fire and the worker process to crash with `[gw*] node down: Not properly terminated`.
+### Install quirks (Python 3.5)
 
-This is already mitigated in `tests/conftest.py` by replacing `linecache.checkcache` with a no-op on Python 3.8+ (where `IsolatedAsyncioTestCase` sets `loop.set_debug(True)` unconditionally after loop creation). If you ever see workers crashing with that message on a machine running Python 3.8–3.11, confirm that `conftest.py` is at the version that checks `>= (3, 8)` — older versions of the check used `>= (3, 12)` and left 3.8–3.11 unprotected.
-
-Do not call `loop.set_debug(True)` in production code either; it changes callback-scheduling semantics (callbacks are run via a slower path) which can mask real timing issues.
-
-## Test dependencies
-
-These packages are required to run the test suite but are not package dependencies. Install them separately:
-
-```text
-pytest-xdist     # parallel workers (-n auto --dist=loadfile)
-pytest-timeout   # per-test timeout (--timeout=90) — without this, hung network tests block forever
-```
-
-```sh
-pip install pytest-xdist pytest-timeout
-```
-
-### Python 3.5 install quirks
-
-`setuptools>=68` uses Python 3.8+ syntax (walrus operator). On Python 3.5, bypass the build system:
+`setuptools>=68` uses Python 3.8+ syntax. On Python 3.5, bypass the build system:
 
 ```sh
 pip install wheel "setuptools<50"
 pip install --no-build-isolation --no-deps -e .
-```
-
-The following sibling repos must be installed from their **local checkouts** using the same flags — do **not** let pip pull them from PyPI (the PyPI versions may be stale or incompatible):
-
-```sh
 pip install --no-build-isolation --no-deps -e ../aionetiface
 pip install --no-build-isolation --no-deps -e ../namebump
 pip install --no-build-isolation --no-deps -e ../sidewire
 ```
 
-### Python 3.5.0 specifically (not 3.5.1+)
-
-`typing.Type` was added in Python 3.5.3. Packages importing it crash on 3.5.0. Pin these:
+On Python 3.5.0 specifically:
 
 ```sh
-pip install "pathlib2==2.2.1" "pytest==4.6.11" "pytest-xdist==1.34.0"
-```
-
-If pip was accidentally upgraded past 21.x on a 3.5.0 interpreter, restore it first:
-
-```sh
-python -m ensurepip
-python -m pip install "pip==20.3.4" "setuptools<50"
+pip install "pathlib2==2.2.1" "pytest==4.6.11"
 ```

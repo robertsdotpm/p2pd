@@ -632,7 +632,7 @@ class TestAutoComboMultiInterface(unittest.TestCase):
 
 
 
-class TestAutoConnectIPv4(unittest.IsolatedAsyncioTestCase):
+class TestAutoConnectIPv4(AsyncTestCase):
     """auto_connect over IPv4 NIC_BIND between two nodes on the same host."""
 
     async def asyncSetUp(self):
@@ -722,7 +722,7 @@ class TestAutoConnectIPv4(unittest.IsolatedAsyncioTestCase):
 
 
 
-class TestAutoConnectIPv6(unittest.IsolatedAsyncioTestCase):
+class TestAutoConnectIPv6(AsyncTestCase):
     """auto_connect over IPv6 EXT_BIND using two distinct global addresses."""
 
     async def asyncSetUp(self):
@@ -784,7 +784,7 @@ class TestAutoConnectIPv6(unittest.IsolatedAsyncioTestCase):
 
 
 
-class TestAutoConnectReverseConnect(unittest.IsolatedAsyncioTestCase):
+class TestAutoConnectReverseConnect(AsyncTestCase):
     """auto_connect uses reverse_connect when direct_connect is unavailable on node_a."""
 
     async def asyncSetUp(self):
@@ -839,7 +839,7 @@ class TestAutoConnectReverseConnect(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
+class TestAutoConnectMultiInterface(AsyncTestCase):
     """auto_connect with nodes that each have two virtual interfaces (IPv4 + IPv6)."""
 
     async def asyncSetUp(self):
@@ -1023,7 +1023,7 @@ class TestAutoConnectMultiInterface(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestAutoConnectPunch(unittest.IsolatedAsyncioTestCase):
+class TestAutoConnectPunch(AsyncTestCase):
     """auto_connect uses TCP punch when direct_connect and reverse_connect are removed."""
 
     async def asyncSetUp(self):
@@ -1103,7 +1103,7 @@ class TestAutoConnectPunch(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestAutoConnectTurnFallback(unittest.IsolatedAsyncioTestCase):
+class TestAutoConnectTurnFallback(AsyncTestCase):
     """auto_connect falls back to the TURN relay when all direct plugins are removed.
 
     Setup

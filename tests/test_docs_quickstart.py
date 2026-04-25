@@ -53,7 +53,7 @@ async def close_nodes(*nodes):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestNodeLifecycle(unittest.IsolatedAsyncioTestCase):
+class TestNodeLifecycle(AsyncTestCase):
     """Node can be started, yields an address, and can be closed."""
 
     async def test_node_starts_and_has_address(self):
@@ -99,7 +99,7 @@ class TestNodeLifecycle(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestQuickstartConnect(unittest.IsolatedAsyncioTestCase):
+class TestQuickstartConnect(AsyncTestCase):
     """Two nodes on the same machine connect and exchange a message."""
 
     async def asyncSetUp(self):
@@ -239,7 +239,7 @@ class TestQuickstartConnect(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestMsgCallback(unittest.IsolatedAsyncioTestCase):
+class TestMsgCallback(AsyncTestCase):
     """Messages sent to a node are delivered to registered msg_cb handlers."""
 
     async def asyncTearDown(self):

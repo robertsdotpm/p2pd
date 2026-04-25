@@ -11,7 +11,7 @@ machines. Tests are organised by component:
   TestMQTT       — MQTT broker reachability
   TestNodeStart  — full Node startup / shutdown
 
-All tests use asyncio.IsolatedAsyncioTestCase so each gets a clean event
+All tests use AsyncTestCase so each gets a clean event
 loop. Timeouts are generous enough to survive slow connections.
 """
 
@@ -69,7 +69,7 @@ def _make_sk():
 # ---------------------------------------------------------------------------
 
 
-class TestSysClock(unittest.IsolatedAsyncioTestCase):
+class TestSysClock(AsyncTestCase):
     """SysClock.start() must sync to NTP; .time() must return a plausible ts."""
 
     async def test_start_syncs_ntp(self):
@@ -133,7 +133,7 @@ class TestSysClock(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 
 
-class TestNickname(unittest.IsolatedAsyncioTestCase):
+class TestNickname(AsyncTestCase):
     """Full put / get / delete lifecycle against real PNP servers."""
 
     async def asyncSetUp(self):
@@ -252,7 +252,7 @@ class TestNickname(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 
 
-class TestSTUN(unittest.IsolatedAsyncioTestCase):
+class TestSTUN(AsyncTestCase):
     """STUN clients should return a public IP address."""
 
     async def _get_wan_ip(self, af):
@@ -309,7 +309,7 @@ class TestSTUN(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 
 
-class TestMQTT(unittest.IsolatedAsyncioTestCase):
+class TestMQTT(AsyncTestCase):
     """MQTT signaling infrastructure should accept connections."""
 
     async def test_router_connects_to_at_least_one_broker(self):
@@ -376,7 +376,7 @@ class TestMQTT(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 
 
-class TestNodeStart(unittest.IsolatedAsyncioTestCase):
+class TestNodeStart(AsyncTestCase):
     """Node should start, produce a valid addr_bytes, and close cleanly."""
 
     async def test_node_starts_and_closes(self):

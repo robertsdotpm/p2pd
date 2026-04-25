@@ -2,7 +2,7 @@ import unittest
 from p2pd import *
 
 
-class TestSignaling(unittest.IsolatedAsyncioTestCase):
+class TestSignaling(AsyncTestCase):
     @unittest.skip("MQTT removed")
     async def test_node_signaling(self):
         """

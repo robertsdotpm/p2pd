@@ -2,7 +2,7 @@ from aionetiface import *
 from p2pd import *
 
 
-class TestInterface(unittest.IsolatedAsyncioTestCase):
+class TestInterface(AsyncTestCase):
     async def test_if(self):
         try:
             if_names = await list_interfaces()

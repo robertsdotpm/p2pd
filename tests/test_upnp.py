@@ -247,7 +247,7 @@ class TestSortRepliesByLocation(unittest.TestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestUPnPDiscoverIPv4(unittest.IsolatedAsyncioTestCase):
+class TestUPnPDiscoverIPv4(AsyncTestCase):
     """Discover UPnP devices via IPv4 multicast M-SEARCH."""
 
     async def asyncSetUp(self):
@@ -286,7 +286,7 @@ class TestUPnPDiscoverIPv4(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestUPnPForwardIPv4(unittest.IsolatedAsyncioTestCase):
+class TestUPnPForwardIPv4(AsyncTestCase):
     """Attempt AddPortMapping via a real router.
 
     Skipped when no UPnP device is reachable.  The mapping persists on the
@@ -332,7 +332,7 @@ class TestUPnPForwardIPv4(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestUPnPDiscoverIPv6(unittest.IsolatedAsyncioTestCase):
+class TestUPnPDiscoverIPv6(AsyncTestCase):
     """Discover UPnP devices via IPv6 multicast M-SEARCH.
 
     Skipped when IPv6 is not available or when no IPv6 UPnP devices reply.
@@ -366,7 +366,7 @@ class TestUPnPDiscoverIPv6(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestUPnPForwardIPv6(unittest.IsolatedAsyncioTestCase):
+class TestUPnPForwardIPv6(AsyncTestCase):
     """Attempt AddPinhole via a real router.
 
     Skipped when IPv6 is unavailable, when no IPv6 UPnP device is found, or
@@ -429,7 +429,7 @@ PROBE_IP4 = "158.69.27.176"
 PROBE_IP6 = "2607:5300:60:80b0::1"
 
 
-class TestRemoteReachabilityCb(unittest.IsolatedAsyncioTestCase):
+class TestRemoteReachabilityCb(AsyncTestCase):
     """remote_reachability_cb resolves the right future when the p2pd probe connects."""
 
     async def test_probe_ip4_resolves_future(self):
@@ -507,7 +507,7 @@ class FakeNic:
         return route
 
 
-class TestForwardWiring(unittest.IsolatedAsyncioTestCase):
+class TestForwardWiring(AsyncTestCase):
     """forward() populates reachability futures and returns (forwarded, reachable)."""
 
     async def test_successful_forward_is_in_forward_success(self):

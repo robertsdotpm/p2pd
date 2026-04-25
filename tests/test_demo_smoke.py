@@ -83,7 +83,7 @@ async def close_nodes(*nodes):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestDemoInterfaceLoading(unittest.IsolatedAsyncioTestCase):
+class TestDemoInterfaceLoading(AsyncTestCase):
     """list_interfaces and load_interfaces work correctly on this host."""
 
     async def test_list_interfaces_returns_names(self):
@@ -111,7 +111,7 @@ class TestDemoInterfaceLoading(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestDemoNodeStart(unittest.IsolatedAsyncioTestCase):
+class TestDemoNodeStart(AsyncTestCase):
     """A node starts successfully and exposes the expected attributes."""
 
     async def asyncSetUp(self):
@@ -180,7 +180,7 @@ class TestDemoNodeStart(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestDemoNodeAddress(unittest.IsolatedAsyncioTestCase):
+class TestDemoNodeAddress(AsyncTestCase):
     """node.address() serialises correctly and parse_node_addr recovers all fields."""
 
     async def asyncSetUp(self):
@@ -240,7 +240,7 @@ class TestDemoNodeAddress(unittest.IsolatedAsyncioTestCase):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestDemoTwoNodeConnectivity(unittest.IsolatedAsyncioTestCase):
+class TestDemoTwoNodeConnectivity(AsyncTestCase):
     """Two nodes on the same machine can connect and exchange data (loopback path)."""
 
     async def asyncSetUp(self):

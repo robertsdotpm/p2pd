@@ -12,7 +12,7 @@ import hashlib
 NIC_NAME = ""
 
 
-class TestStatus(unittest.IsolatedAsyncioTestCase):
+class TestStatus(AsyncTestCase):
     async def test_address(self):
         nic = await Interface(NIC_NAME)
         hosts = ["www.google.com", "www.example.com", "p2pd.net"]

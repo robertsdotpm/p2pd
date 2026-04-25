@@ -42,7 +42,7 @@ async def get_turn_client(af, interface, turn_offset):
     return client
 
 
-class TestTurn(unittest.IsolatedAsyncioTestCase):
+class TestTurn(AsyncTestCase):
     async def test_turn_duel_ifs(self):
         # Offset of turn server to use.
         turn_offset = 2
