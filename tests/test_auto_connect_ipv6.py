@@ -3,6 +3,10 @@ Integration tests — IPv6 direct_connect (global addresses).
 
 Split out of test_auto_connect.py so the heavy AsyncTestCase classes each
 get their own subprocess.
+
+Each test gives alice and bob their own (cloned) NIC subset via
+split_two_node_setups so their addr_maps differ and direct_connect has
+viable NIC_BIND/EXT_BIND combos.
 """
 
 import asyncio
@@ -14,7 +18,7 @@ from p2pd.node.auto_connect import auto_connect, auto_combos
 
 from auto_connect_helpers import (
     PORT_A6_T1, PORT_B6_T1, PORT_A6_T2, PORT_B6_T2,
-    close_nodes, fresh_ifs, global_ipv6_addrs, start_node,
+    close_nodes, fresh_ifs, split_two_node_setups, start_node_with_ifs,
 )
 
 
@@ -23,13 +27,12 @@ class TestAutoConnectIPv6(AsyncTestCase):
 
     async def asyncSetUp(self):
         probe_ifs = await fresh_ifs()
-        globals_v6 = global_ipv6_addrs(probe_ifs)
-        if len(globals_v6) < 2:
+        setups = split_two_node_setups(probe_ifs, IP6)
+        if setups is None:
             self.skipTest(
-                "Need at least 2 global IPv6 addresses (found {})".format(len(globals_v6))
+                "Need either 2 NICs with global IPv6 each, or 1 NIC with 2 globals"
             )
-        self.ipv6_a = globals_v6[0]
-        self.ipv6_b = globals_v6[1]
+        (self.ifs_a, self.ip_a), (self.ifs_b, self.ip_b) = setups
         self.node_a = self.node_b = None
 
     async def asyncTearDown(self):
@@ -38,8 +41,8 @@ class TestAutoConnectIPv6(AsyncTestCase):
     async def test_auto_connect_returns_pipe(self):
         """auto_connect on distinct global IPv6 addresses must return a pipe."""
         try:
-            self.node_a = await start_node(self.ipv6_a, PORT_A6_T1)
-            self.node_b = await start_node(self.ipv6_b, PORT_B6_T1)
+            self.node_a = await start_node_with_ifs(self.ifs_a, [self.ip_a], PORT_A6_T1)
+            self.node_b = await start_node_with_ifs(self.ifs_b, [self.ip_b], PORT_B6_T1)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -63,8 +66,8 @@ class TestAutoConnectIPv6(AsyncTestCase):
     async def test_combos_include_ext_bind_for_diff_global_ipv6(self):
         """Different global IPv6 ext IPs -> EXT_BIND combos must be generated."""
         try:
-            self.node_a = await start_node(self.ipv6_a, PORT_A6_T2)
-            self.node_b = await start_node(self.ipv6_b, PORT_B6_T2)
+            self.node_a = await start_node_with_ifs(self.ifs_a, [self.ip_a], PORT_A6_T2)
+            self.node_b = await start_node_with_ifs(self.ifs_b, [self.ip_b], PORT_B6_T2)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 

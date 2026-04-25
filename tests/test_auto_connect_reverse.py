@@ -3,17 +3,21 @@ Integration tests — reverse_connect.
 
 Split out of test_auto_connect.py so the heavy AsyncTestCase classes each
 get their own subprocess.
+
+Each test gives alice and bob their own (cloned) NIC subset via
+split_two_node_setups so their addr_maps differ.
 """
 
 import asyncio
 import unittest
 
+from aionetiface import IP4
 from aionetiface.testing import AsyncTestCase
 from p2pd.node.auto_connect import auto_connect
 
 from auto_connect_helpers import (
     PORT_REV_A, PORT_REV_B,
-    available_ipv4_addrs, close_nodes, fresh_ifs, start_node,
+    close_nodes, fresh_ifs, split_two_node_setups, start_node_with_ifs,
 )
 
 
@@ -22,13 +26,12 @@ class TestAutoConnectReverseConnect(AsyncTestCase):
 
     async def asyncSetUp(self):
         probe_ifs = await fresh_ifs()
-        ipv4_addrs = available_ipv4_addrs(probe_ifs)
-        if len(ipv4_addrs) < 2:
+        setups = split_two_node_setups(probe_ifs, IP4)
+        if setups is None:
             self.skipTest(
-                "Need 2 distinct non-loopback IPv4 addresses (found {})".format(len(ipv4_addrs))
+                "Need either 2 NICs with IPv4 each, or 1 NIC with 2 IPv4 addresses"
             )
-        self.ipv4_a = ipv4_addrs[0]
-        self.ipv4_b = ipv4_addrs[1]
+        (self.ifs_a, self.ip_a), (self.ifs_b, self.ip_b) = setups
         self.node_a = self.node_b = None
 
     async def asyncTearDown(self):
@@ -37,8 +40,8 @@ class TestAutoConnectReverseConnect(AsyncTestCase):
     async def test_reverse_connect_returns_pipe(self):
         """With direct_connect removed from the initiator, reverse_connect must win."""
         try:
-            self.node_a = await start_node(self.ipv4_a, PORT_REV_A)
-            self.node_b = await start_node(self.ipv4_b, PORT_REV_B)
+            self.node_a = await start_node_with_ifs(self.ifs_a, [self.ip_a], PORT_REV_A)
+            self.node_b = await start_node_with_ifs(self.ifs_b, [self.ip_b], PORT_REV_B)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 

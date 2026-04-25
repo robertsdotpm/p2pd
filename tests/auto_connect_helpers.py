@@ -194,3 +194,79 @@ async def close_nodes(*nodes):
                 await asyncio.wait_for(node.close(), timeout=10)
             except Exception:
                 pass
+
+
+def routable_ips_per_nic(ifs, af):
+    """Return [(nic, [ip, ip, ...]), ...] for NICs that hold at least one
+    non-loopback address in family `af`.
+
+    For IPv6 we keep link-local (fe80::/10) addresses -- they are valid
+    distinct local IPs on different NICs and the demo CLI explicitly uses
+    them via `--ip fe80:...` for testing direct_connect with no public
+    routing required. Only true loopback (::1 / ::) is filtered.
+
+    The IP order is stable (dedup-preserving order of appearance).
+    """
+    result = []
+    for nic in ifs:
+        if af not in nic.supported():
+            continue
+        try:
+            rp = nic.rp[af]
+        except (KeyError, AttributeError):
+            continue
+        seen = set()
+        ips = []
+        for route in rp:
+            for ipr in route.nic_ips:
+                s = str(ipr)
+                if af == IP4 and s.startswith("127."):
+                    continue
+                if af == IP6 and s in ("::1", "::"):
+                    continue
+                if s in seen:
+                    continue
+                seen.add(s)
+                ips.append(s)
+        if ips:
+            result.append((nic, ips))
+    return result
+
+
+def split_two_node_setups(probe_ifs, af):
+    """Build two single-NIC node setups so alice's and bob's addr_maps differ.
+
+    The original test fixture passed the full `ifs` list to both nodes and
+    differed only in their listen IP. With both nodes seeing every NIC the
+    machine owns, alice's and bob's addr_maps were effectively identical at
+    the NIC level, has_valid_pair returned False for NIC_BIND, and direct_connect
+    never had a viable combo to try -- forcing skips on machines that did
+    in fact have two routable IPs.
+
+    Strategy (in order, for the requested address family):
+      1. If two NICs each carry at least one routable `af` IP, give alice a
+         clone of NIC0 holding only its first IP and bob a clone of NIC1
+         holding only its first IP. This is the natural two-NIC case.
+      2. Else if one NIC carries at least two distinct routable `af` IPs,
+         clone it twice -- alice gets ip[0], bob gets ip[1]. This covers
+         single-NIC machines with multiple addresses (e.g. dual-stack with
+         two IPv6 globals, or aliased IPv4).
+      3. Else return None (caller skipTests with a clear reason).
+
+    Returns ((ifs_a, ip_a), (ifs_b, ip_b)) or None.
+    """
+    per_nic = routable_ips_per_nic(probe_ifs, af)
+    if len(per_nic) >= 2:
+        nic_a, ips_a = per_nic[0]
+        nic_b, ips_b = per_nic[1]
+        clone_a = clone_nic(nic_a, "node_a_only", [ips_a[0]])
+        clone_b = clone_nic(nic_b, "node_b_only", [ips_b[0]])
+        return (([clone_a], ips_a[0]), ([clone_b], ips_b[0]))
+    if len(per_nic) == 1:
+        nic, ips = per_nic[0]
+        if len(ips) < 2:
+            return None
+        clone_a = clone_nic(nic, "node_a_only", [ips[0]])
+        clone_b = clone_nic(nic, "node_b_only", [ips[1]])
+        return (([clone_a], ips[0]), ([clone_b], ips[1]))
+    return None

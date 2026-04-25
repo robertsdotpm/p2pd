@@ -3,6 +3,12 @@ Integration tests — TURN fallback.
 
 Split out of test_auto_connect.py so the heavy AsyncTestCase classes each
 get their own subprocess.
+
+The TURN server is started locally (binds to ::1), so the two nodes only
+need distinct local IPv6 addresses to relay through it -- distinct globals
+only matter when there are different gateways involved, and there aren't
+on a same-machine loopback path. We use split_two_node_setups for both
+nodes' IPv6 setup so link-local fe80 addresses on different NICs work too.
 """
 
 import asyncio
@@ -16,7 +22,7 @@ from p2pd.node.auto_connect import auto_connect
 from auto_connect_helpers import (
     PORT_TURN_A_T1, PORT_TURN_B_T1, PORT_TURN_A_T2,
     PORT_TURN_A_T3, PORT_TURN_B_T3,
-    close_nodes, fresh_ifs, global_ipv6_addrs, start_node,
+    close_nodes, fresh_ifs, split_two_node_setups, start_node_with_ifs,
 )
 
 
@@ -25,8 +31,8 @@ class TestAutoConnectTurnFallback(AsyncTestCase):
 
     Setup
     -----
-    * Two nodes on distinct global IPv6 addresses (required for EXT_BIND, which
-      is the only route_type _turn_fallback tries).
+    * Two nodes on distinct local IPv6 addresses (link-local on different NICs
+      is fine — TURN server is local so no cross-gateway routing is needed).
     * All non-TURN, non-skip plugins (direct_connect, reverse_connect) are
       removed from the initiator so auto_combos returns an empty list and
       _race_plugin_results immediately returns (None, None).
@@ -36,14 +42,12 @@ class TestAutoConnectTurnFallback(AsyncTestCase):
 
     async def asyncSetUp(self):
         probe_ifs = await fresh_ifs()
-        globals_v6 = global_ipv6_addrs(probe_ifs)
-        if len(globals_v6) < 2:
+        setups = split_two_node_setups(probe_ifs, IP6)
+        if setups is None:
             self.skipTest(
-                "Need at least 2 global IPv6 addresses for TURN fallback test "
-                "(found {})".format(len(globals_v6))
+                "Need either 2 NICs with IPv6 each, or 1 NIC with 2 IPv6 addresses"
             )
-        self.ipv6_a = globals_v6[0]
-        self.ipv6_b = globals_v6[1]
+        (self.ifs_a, self.ip_a), (self.ifs_b, self.ip_b) = setups
         self.node_a = self.node_b = None
         self.turn_server = None
         self.get_infra_patcher = None
@@ -66,8 +70,8 @@ class TestAutoConnectTurnFallback(AsyncTestCase):
         )
 
         try:
-            self.node_a = await start_node(self.ipv6_a, PORT_TURN_A_T1)
-            self.node_b = await start_node(self.ipv6_b, PORT_TURN_B_T1)
+            self.node_a = await start_node_with_ifs(self.ifs_a, [self.ip_a], PORT_TURN_A_T1)
+            self.node_b = await start_node_with_ifs(self.ifs_b, [self.ip_b], PORT_TURN_B_T1)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -126,7 +130,7 @@ class TestAutoConnectTurnFallback(AsyncTestCase):
     async def test_turn_plugin_in_plugin_loaders_by_default(self):
         """turn must be registered in plugin_loaders after normal node startup."""
         try:
-            self.node_a = await start_node(self.ipv6_a, PORT_TURN_A_T2)
+            self.node_a = await start_node_with_ifs(self.ifs_a, [self.ip_a], PORT_TURN_A_T2)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
@@ -141,8 +145,8 @@ class TestAutoConnectTurnFallback(AsyncTestCase):
         from turn_server import TURNServer, make_local_turn_server_entry
 
         try:
-            self.node_a = await start_node(self.ipv6_a, PORT_TURN_A_T3)
-            self.node_b = await start_node(self.ipv6_b, PORT_TURN_B_T3)
+            self.node_a = await start_node_with_ifs(self.ifs_a, [self.ip_a], PORT_TURN_A_T3)
+            self.node_b = await start_node_with_ifs(self.ifs_b, [self.ip_b], PORT_TURN_B_T3)
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
