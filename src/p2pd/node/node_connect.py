@@ -53,6 +53,37 @@ async def resolve_pnp_addr(node: Any, pnp_addr: Any) -> Tuple[Any, Optional[Any]
     return addr_bytes, dest_vk, source
 
 
+def select_first_viable_pair(
+    af: Any,
+    route_type: Any,
+    src_map: Any,
+    dest_map: Any,
+) -> Optional[Tuple[Any, Any]]:
+    """Walk get_if_infos_order in priority order and return the first
+    (src_info, dest_info) pair whose addresses are distinct enough to be
+    useful for the given route_type.
+
+    NIC_BIND wants different NIC IPs (matching local IPs would collide on
+    the same machine). EXT_BIND wants different external IPs (matching ext
+    IPs would loop back through the WAN to the local stack). For other
+    route_types or `None`, the first pair in priority order is returned
+    without further filtering.
+    """
+    # Local import keeps node_connect free of a hard import on the
+    # traversal package at module load time.
+    from ..traversal.traversal_utils import get_if_infos_order
+
+    for src_info, dest_info in get_if_infos_order(af, route_type, src_map, dest_map):
+        if route_type == NIC_BIND:
+            if int(src_info["nic"]) == int(dest_info["nic"]):
+                continue
+        elif route_type == EXT_BIND:
+            if int(src_info["ext"]) == int(dest_info["ext"]):
+                continue
+        return src_info, dest_info
+    return None
+
+
 async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_name: Optional[str] = None) -> Any:
     """Resolve the destination address and run the traversal plugin to establish a P2P connection."""
     addr_bytes, dest_vk, _ = await resolve_pnp_addr(node, pnp_addr)
@@ -73,7 +104,7 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
         raise ValueError("No supported shared AF.")
 
     # Sanity check: running multiple node instances with the same IP on
-    # the same interface is not supported.  The check is keyed on if_index
+    # the same interface is not supported. The check is keyed on if_index
     # so that two nodes can legitimately share an IP on *different*
     # interfaces (e.g. both have fe80::2 but on separate NICs).
     if plugin_name == "get_addr":
@@ -103,11 +134,25 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
                     )
                 )
 
+    # attempt_plugin is now single-pair: pick the highest-priority viable
+    # (src_info, dest_info) pair from get_if_infos_order. Manual control
+    # via explicit if_index args can be added later if needed.
+    pair = select_first_viable_pair(af, route_type, src_map, dest_map)
+    if pair is None:
+        raise ValueError(
+            "No viable (src, dest) interface pair for af={} route_type={}".format(
+                af, route_type,
+            )
+        )
+    src_info, dest_info = pair
+
     return await node.traversal.attempt_plugin(
         src_map=src_map,
         dest_map=dest_map,
         sig_pipe=sig_pipe,
         plugin_name=plugin_name,
+        src_info=src_info,
+        dest_info=dest_info,
         af=af,
         route_type=route_type,
     )

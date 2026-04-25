@@ -21,7 +21,6 @@ from .traversal_utils import (
     cancel_task,
     cancel_tasks,
     close_plugin,
-    get_if_infos_order,
     h_to_b,
     log_exception,
     sig_msg_to_buf,
@@ -169,46 +168,44 @@ class TraversalManager:
 
         return plugin
 
-    # Use a plugin to try get a pipe to a destination node,
+    # Use a plugin to try get a pipe to a destination node for one explicit
+    # (src_info, dest_info) interface pair. Pair selection now lives at the
+    # caller — auto_connect generates one (plugin, af, route_type, src_info,
+    # dest_info) combo per viable pair, and node.connect picks the first
+    # viable pair from get_if_infos_order. Keeping the pair out of this
+    # method makes multi-interface fan-out work: launch one plugin per pair
+    # and let race_plugin_results pick the winner.
     async def attempt_plugin(
         self,
         src_map: Dict[str, Any],
         dest_map: Dict[str, Any],
         sig_pipe: Any,
         plugin_name: str,
+        src_info: Dict[str, Any],
+        dest_info: Dict[str, Any],
         af: Any = IP4,
         route_type: Any = NIC_BIND,
     ) -> Optional[TraversalPlugin]:
-        """Select interface pairs and run the named traversal plugin to reach the destination."""
+        """Run the named traversal plugin for one explicit src_info/dest_info pair."""
         # Need AF supported by both.
         if not src_map[af] or not dest_map[af]:
             raise ValueError("AF not supported between hosts.")
 
-        # Is this a connection to a node on the same machine?
-        if dest_map["machine_id"] == src_map["machine_id"]:
-            same_machine = True
-        else:
-            same_machine = False
+        same_machine = dest_map["machine_id"] == src_map["machine_id"]
 
-        # Pairs of (src_info, dest_info) based on src / dest map.
-        if_infos_order = get_if_infos_order(af, route_type, src_map, dest_map)
+        plugin = self.create_plugin(
+            af, route_type, src_info, dest_info, same_machine, plugin_name
+        )
 
-        # Try every interface info pair for the plugins.
-        for if_infos in if_infos_order:
-            src_info, dest_info = if_infos
-            plugin = self.create_plugin(
-                af, route_type, src_info, dest_info, same_machine, plugin_name
-            )
+        # Load overall addr info into the plugin.
+        plugin.set_addrs(src_map, dest_map)
 
-            # Load overall addr info into the plugin.
-            plugin.set_addrs(src_map, dest_map)
+        # Used to communicate on MQTT.
+        plugin.sig_pipe = sig_pipe
 
-            # Used to communicate on MQTT.
-            plugin.sig_pipe = sig_pipe
-
-            # Run plugin function -- timeout based on plugin meta.
-            await self.run_plugin(plugin)
-            return plugin
+        # Run plugin function -- timeout based on plugin meta.
+        await self.run_plugin(plugin)
+        return plugin
 
     # create_plugin builds a plugin from explicit parameters — used when we are
     # the initiator and already know our src/dest addresses and route type.
