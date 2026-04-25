@@ -1,4 +1,5 @@
 import unittest
+from aionetiface.testing import AsyncTestCase
 from p2pd import *
 
 

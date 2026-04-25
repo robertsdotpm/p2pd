@@ -42,6 +42,7 @@ from aionetiface import (
     log_exception,
 )
 from aionetiface.utility.sys_clock import get_ntp
+from aionetiface.testing import AsyncTestCase
 
 from p2pd import Node
 from p2pd.node.nickname import Nickname, FullNameFailure

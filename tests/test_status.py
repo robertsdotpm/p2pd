@@ -1,4 +1,5 @@
 import unittest
+from aionetiface.testing import AsyncTestCase
 from aionetiface.utility.test_init import *
 from p2pd import *
 from p2pd.node.node_defs import NODE_TEST_CONF

@@ -31,6 +31,7 @@ else:
         return mock
 
 from aionetiface import IP4, IP6, Interface, IPR
+from aionetiface.testing import AsyncTestCase
 
 from p2pd.traversal.plugins.upnp.upnp_utils import (
     UPNP_IP,

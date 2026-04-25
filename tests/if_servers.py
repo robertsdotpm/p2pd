@@ -1,4 +1,5 @@
 from aionetiface import *
+from aionetiface.testing import AsyncTestCase
 from p2pd import *
 
 
