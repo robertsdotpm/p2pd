@@ -468,16 +468,16 @@ async def listen_on_ifs(node: Any) -> None:
         candidates = []
         print("[LISTEN-DBG] couldn't compute loopback candidates: {0!r}".format(exc))
 
+    import copy as _copy
     for cand_af, cand_ip, cand_port in candidates:
         try:
-            nic = None
-            for n in node.ifs:
-                if cand_af in n.supported() if hasattr(n, "supported") else True:
-                    nic = n
-                    break
-            if nic is None:
-                nic = node.ifs[0]
-            cand_route = nic.route(cand_af)
+            nic = node.ifs[0]
+            # Deepcopy the route per candidate. nic.route(af) returns a
+            # cached object, and add_listener stores a reference to the
+            # Route in the resulting Pipe. Without a copy, the next
+            # iteration's bind(ips=...) would mutate the previous
+            # listener's route in place and silently corrupt the pipe.
+            cand_route = _copy.deepcopy(nic.route(cand_af))
             await cand_route.bind(ips=cand_ip, port=cand_port)
             await node.add_listener(TCP, cand_route)
             successes += 1
