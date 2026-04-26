@@ -51,6 +51,9 @@ class TestMsgCallback(AsyncTestCase):
 
         if pipe is None:
             self.skipTest("auto_connect returned no pipe (no multi-path routes available)")
+        # The pipe framer splits on \n, so b"test payload\r\n" lands as
+        # [b"test payload\r", b""] -- exact-match assertIn would miss.
+        # Substring-match instead so a stripped \n / \r doesn't false-fail.
         await pipe.send(b"test payload\r\n")
 
         try:
@@ -58,7 +61,10 @@ class TestMsgCallback(AsyncTestCase):
         except asyncio.TimeoutError:
             self.skipTest("msg_cb was not called in time")
 
-        self.assertIn(b"test payload", received_data)
+        self.assertTrue(
+            any(b"test payload" in m for m in received_data),
+            "msg_cb did not see 'test payload' in: {!r}".format(received_data),
+        )
         try:
             await asyncio.wait_for(pipe.close(), timeout=5)
         except Exception:
