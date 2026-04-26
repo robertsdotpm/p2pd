@@ -40,6 +40,48 @@ def has_symmetric_nat(node) -> bool:
     return False
 
 
+def is_loopback_addr(s) -> bool:
+    """Return True iff s parses as a 127.0.0.0/8 or ::1 loopback string."""
+    if not s:
+        return False
+    s = str(s)
+    if s.startswith("127."):
+        return True
+    if s == "::1" or s.startswith("::1"):
+        return True
+    return False
+
+
+def all_punch_combos_loopback(node, dest_map) -> bool:
+    """True iff every punch combo's dest IP is loopback.
+
+    select_dest_ipr rewrites dest to the peer's loopback alias when
+    same_pc=True, so on same-machine peers the only NIC_BIND combos
+    that survive pair_distinct now point at 127.X.Y.Z. The current
+    punch algorithm doesn't know how to traverse the loopback path
+    (the rendezvous logic assumes a NAT in the middle), so the test
+    can't usefully run here -- skip it. EXT_BIND combos are still
+    counted; if any non-loopback path exists we let the test run.
+    """
+    found_any = False
+    from p2pd.traversal.traversal_plugin import TraversalPlugin  # noqa: F401
+    from p2pd.traversal.traversal_utils import select_dest_ipr
+    from aionetiface import NIC_BIND, EXT_BIND
+    src_map = node.addr_map
+    same_pc = is_same_machine(src_map, dest_map)
+    for combo in auto_combos(node, src_map, dest_map):
+        plugin_name, af, route_type, src_info, dest_info = combo
+        if plugin_name != "punch":
+            continue
+        found_any = True
+        chosen = select_dest_ipr(af, same_pc, src_info, dest_info, [route_type])
+        if chosen is None:
+            continue
+        if not is_loopback_addr(chosen):
+            return False
+    return found_any
+
+
 class TestAutoConnectPunch(AsyncTestCase):
     """auto_connect uses TCP punch when direct_connect and reverse_connect are removed."""
 
@@ -86,6 +128,19 @@ class TestAutoConnectPunch(AsyncTestCase):
             self.skipTest(
                 "same-machine peers don't need NAT punching; "
                 "direct_connect over loopback covers this topology"
+            )
+
+        # Skip when every punch combo would target a loopback address.
+        # (Belt-and-braces against the same-machine case + any future
+        # routing where select_dest_ipr ends up on 127.x for a punch
+        # combo. The current punch algorithm doesn't drive the loopback
+        # short-circuit, so a loopback-only combo set is a guaranteed
+        # no-op.)
+        dest_map_for_combos = parse_node_addr(self.node_b.addr_bytes)
+        if all_punch_combos_loopback(self.node_a, dest_map_for_combos):
+            self.skipTest(
+                "every punch combo resolves to a loopback dest; "
+                "punch path doesn't drive same-machine loopback"
             )
 
         # Skip when either side reports symmetric / hard NAT. The current

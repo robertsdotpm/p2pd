@@ -1,7 +1,7 @@
 """Traversal plugin for TCP/UDP hole punching."""
 from typing import Any, Dict, Optional, Tuple
 import asyncio
-from aionetiface import IP4, IP6, log, NIC_BIND, SysClock, async_wrap_errors, cancel_task, shutdown_proc_pool
+from aionetiface import log, NIC_BIND, SysClock, async_wrap_errors, cancel_task, shutdown_proc_pool
 from ....protocol.proto_msg import PunchMsg
 from .boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 from .punch_client import PunchClient
@@ -83,39 +83,13 @@ class PunchPlugin(TraversalPlugin):
             except (TypeError, ValueError):
                 pass
 
-        is_v4_lo = (self.af == IP4) and dest_ip[:4] == "127."
-        is_v6_lo = (self.af == IP6) and (dest_ip == "::1" or dest_ip.startswith("::1"))
-        if is_v4_lo or is_v6_lo:
-            # Same-machine loopback path. Bind the route on alice's own
-            # loopback alias (her per-pubkey 127.X.Y.Z when AF=IP4, ::1
-            # when AF=IP6) so the punch exchange uses consistent
-            # loopback addressing on both ends. Without that, Windows
-            # silently drops cross-subnet src->loopback packets.
-            #
-            # The peer's full candidate list (per-pubkey alias / 127.0.0.1 /
-            # ::1 / pub-key-derived-port) lives on dest_info["loopback_candidates"];
-            # if the primary dest_ip selected by select_dest_ipr fails,
-            # the punch process can fall through to TURN. The candidate
-            # list could in future be walked by the punch process itself.
-            src_lo = self.src_info.get("loopback")
-            if self.af == IP4:
-                if src_lo is not None and str(src_lo).startswith("127."):
-                    src_str = str(src_lo)
-                else:
-                    src_str = "127.0.0.1"
-            else:
-                src_str = "::1"
-            route = self.nic.route(self.af)
-            await route.bind(ips=src_str)
-            src_ip = src_str
+        route = await self.nic.route(self.af).bind()
+        if "fe80" == dest_ip[:4]:
+            # Use link-local source for link-local destination
+            src_ip = str(route.link_locals[0])
         else:
-            route = await self.nic.route(self.af).bind()
-            if "fe80" == dest_ip[:4]:
-                # Use link-local source for link-local destination
-                src_ip = str(route.link_locals[0])
-            else:
-                # Use the interface's local IP
-                src_ip = route.nic()
+            # Use the interface's local IP
+            src_ip = route.nic()
 
         # Determine the decider IP for master/slave role selection.
         if self.route_type == NIC_BIND:
