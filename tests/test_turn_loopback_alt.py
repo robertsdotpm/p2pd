@@ -24,6 +24,7 @@ from turn_helpers import (
     close_clients,
     close_server,
     relay_round_trip,
+    skip_on_windows_for_cross_loopback,
     start_local_turn,
     start_turn_client,
     whitelist_pair,
@@ -34,6 +35,15 @@ class TestTURNLoopbackAltIP(AsyncTestCase):
     """One client per loopback alias; relay round-trip across the two IPs."""
 
     async def asyncSetUp(self):
+        # Cross-loopback-alias UDP from the default NIC source IP
+        # doesn't reach 127.0.0.2 on Windows.  See
+        # turn_helpers.skip_on_windows_for_cross_loopback for the
+        # full explanation.
+        skip_on_windows_for_cross_loopback(
+            self,
+            "TURN relay across two 127.0.0.x aliases is Linux/macOS only "
+            "until the FakeInterface.id SO_BINDTODEVICE crash is fixed.",
+        )
         self.nic = await Interface()
         if IP4 not in self.nic.supported():
             self.skipTest("IPv4 not available on the default NIC")

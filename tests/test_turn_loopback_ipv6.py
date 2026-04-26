@@ -19,6 +19,7 @@ from turn_helpers import (
     close_clients,
     close_server,
     relay_round_trip,
+    skip_on_windows_for_cross_loopback,
     start_local_turn,
     start_turn_client,
     whitelist_pair,
@@ -29,6 +30,13 @@ class TestTURNLoopbackIPv6(AsyncTestCase):
     """Two TURNClients on ::1 relay a payload through the local server."""
 
     async def asyncSetUp(self):
+        # IPv6 ::1 from the default NIC source IP doesn't loop back
+        # on Windows.  See turn_helpers.skip_on_windows_for_cross_loopback.
+        skip_on_windows_for_cross_loopback(
+            self,
+            "IPv6 TURN loopback round-trip is Linux/macOS only "
+            "until the FakeInterface.id SO_BINDTODEVICE crash is fixed.",
+        )
         self.nic = await Interface()
         if IP6 not in self.nic.supported():
             self.skipTest("IPv6 not available on the default NIC")
