@@ -440,25 +440,21 @@ class RandomProbePlugin(TraversalPlugin):
         # being handed to create_datagram_endpoint and this point
         # asyncio may have already dispatched a few late sym
         # probes via datagram_received -> handle_data ->
-        # stream.add_msg -> queued.  Walking the subs and draining
-        # their queues here makes the application-facing recv()
-        # start with a clean queue.
+        # stream.add_msg -> queued.  Drop the existing
+        # subscriptions entirely and re-subscribe SUB_ALL fresh
+        # so the application-facing recv() starts on a clean
+        # asyncio.Queue with no stale refs.
         try:
-            subs = pipe.pipe_events.stream.subs
-        except AttributeError:
-            subs = {}
-        cleared = 0
-        for entry in subs.values():
-            try:
-                _sub, q, _handler = entry
-            except (TypeError, ValueError):
-                continue
-            while True:
-                try:
-                    q.get_nowait()
-                    cleared += 1
-                except asyncio.QueueEmpty:
-                    break
+            from aionetiface import SUB_ALL
+            stream = pipe.pipe_events.stream
+            cleared = sum(
+                drain_queue(entry[1]) for entry in stream.subs.values()
+                if isinstance(entry, list) and len(entry) >= 2
+            )
+            stream.subs = {}
+            pipe.subscribe(SUB_ALL)
+        except (AttributeError, TypeError):
+            cleared = 0
         if cleared:
             log("RandomProbePlugin: cleared {0} residue items from "
                 "pipe subscription queues".format(cleared))
@@ -627,6 +623,18 @@ class RandomProbePlugin(TraversalPlugin):
 def p_or_default(key: str) -> float:
     """Look up *key* in FAST_PUNCH_PARAMS with a sensible fallback."""
     return float(FAST_PUNCH_PARAMS.get(key, 8.0))
+
+
+def drain_queue(q: Any) -> int:
+    """Drain an asyncio.Queue without blocking; return count drained."""
+    n = 0
+    while True:
+        try:
+            q.get_nowait()
+            n += 1
+        except asyncio.QueueEmpty:
+            break
+    return n
 
 
 class RandomProbePluginFactory:
