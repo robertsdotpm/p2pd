@@ -23,6 +23,7 @@ and other tests' UDP socket state can't bleed into it.
 
 import asyncio
 import os
+import sys
 import unittest
 
 from aionetiface.testing import AsyncTestCase, probe_loopback_ips
@@ -44,6 +45,19 @@ class TestRandomProbeLocal(AsyncTestCase):
     """Cone + symmetric run in parallel and converge on a usable 4-tuple."""
 
     async def asyncSetUp(self):
+        # Windows' select.select() caps at FD_SETSIZE=64.  The sym side
+        # opens PROBE_COUNT (512 here) UDP sockets in a single asyncio
+        # selector loop, which immediately blows that ceiling and aborts
+        # the whole event loop with "too many file descriptors in
+        # select()".  Lowering PROBE_COUNT below ~30 collapses the
+        # birthday-paradox collision rate, so the only clean fix is to
+        # skip this proof on Windows.  The algorithm is still exercised
+        # on the matrix via the lighter-weight test_random_probe_e2e.
+        if sys.platform == "win32":
+            self.skipTest(
+                "Windows select() FD_SETSIZE=64 < PROBE_COUNT sockets; "
+                "run this proof on Linux (matrix Linux box)"
+            )
         ips = probe_loopback_ips(max_count=4)
         if len(ips) < 2:
             self.skipTest(

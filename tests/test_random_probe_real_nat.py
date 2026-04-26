@@ -39,6 +39,7 @@ Run:
 
 import asyncio
 import os
+import sys
 import unittest
 
 from aionetiface import (
@@ -82,6 +83,21 @@ class TestRandomProbeRealNat(AsyncTestCase):
     """random_probe via real cross-internet path between two local NICs."""
 
     async def asyncSetUp(self):
+        # This test is shaped for a Linux dev box with two physical
+        # NICs each on a distinct internet uplink (e.g. ens34 home ISP
+        # + ens37 mobile carrier).  On Windows VMs the visible NICs
+        # are typically virtual adapters bound to a single uplink,
+        # SO_BINDTODEVICE doesn't exist, and Interface() can't even
+        # load the VMware NICs cleanly (matrix saw InterfaceNotFound
+        # on win11).  Skip on Windows -- the matrix Linux box is the
+        # right venue.
+        if sys.platform == "win32":
+            self.skipTest(
+                "real-NAT dual-uplink test is Linux-only "
+                "(needs SO_BINDTODEVICE + two physical NICs with "
+                "distinct external IPs)"
+            )
+
         self.node_a = self.node_b = None
         self.plugin_a = None
 

@@ -27,6 +27,7 @@ Skipped when:
 """
 
 import asyncio
+import sys
 import unittest
 
 from aionetiface import IP4, SUB_ALL, to_b
@@ -89,6 +90,18 @@ class TestRandomProbeEcho(AsyncTestCase):
     """random_probe: pipe round-trips a real payload between two nodes."""
 
     async def asyncSetUp(self):
+        # Windows hits two ceilings here: select.select()'s FD_SETSIZE=64
+        # cap chokes on the symmetric side's PROBE_COUNT sockets, and
+        # the collapse_ext_to_nic + lo-shortcut routing trick this test
+        # relies on for hairpin-free convergence is Linux-specific.
+        # Matrix VMs with the flaky mobile NIC also can't keep the
+        # ext-IP path alive long enough for the echo to round-trip.
+        # Linux dev box (matrix Linux node) is the right venue.
+        if sys.platform == "win32":
+            self.skipTest(
+                "random_probe echo round-trip is Linux-only "
+                "(FD_SETSIZE + lo-routing assumptions)"
+            )
         self.ifs_a, self.ip_a, self.ifs_b, self.ip_b = await load_two_nodes(
             self, IP4, label="random_probe echo",
         )
