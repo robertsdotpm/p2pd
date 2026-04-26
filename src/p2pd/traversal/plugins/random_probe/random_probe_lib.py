@@ -153,6 +153,42 @@ def close_all(socks: List[socket.socket]) -> None:
             pass
 
 
+def drain_probe_residue(sock: socket.socket, want_nonce: bytes) -> int:
+    """Drain in-flight probe datagrams from *sock* without blocking.
+
+    After convergence both peers have stopped firing fresh probes,
+    but the kernel may still have queued probe datagrams (sym
+    side's 256-pack, late cone probes, the post-CONFIRM ROLE_SYM
+    probe).  If we hand the socket up to a Pipe with that residue
+    queued, pipe.recv() returns probe bytes to the application
+    instead of real payload.
+
+    Returns the number of probe datagrams drained -- handy for
+    tests / debug logging.  Non-probe datagrams (anything that
+    doesn't decode as one of *our* probes) are left in the queue
+    so we don't accidentally swallow real user data that happened
+    to arrive in the same window.
+    """
+    drained = 0
+    sock.setblocking(False)
+    while True:
+        try:
+            data, _addr = sock.recvfrom(4096)
+        except (BlockingIOError, InterruptedError):
+            break
+        except OSError:
+            break
+        if decode_probe(data, want_nonce) is None:
+            # Not one of our probes -- can't safely drop it.  Stop
+            # draining and leave it for the application to read.
+            # In practice users won't be sending unsolicited UDP at
+            # this 4-tuple before the algorithm completes, so this
+            # path is rare.
+            break
+        drained += 1
+    return drained
+
+
 async def stun_discover_mapping(
     loop: Any,
     sock: socket.socket,

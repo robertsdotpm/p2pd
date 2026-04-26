@@ -34,6 +34,7 @@ from ..punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 
 from .random_probe_defs import DEFAULT_PROBE_COUNT, PROBE_LISTEN_TIMEOUT
 from .random_probe_lib import (
+    drain_probe_residue,
     make_udp_socket,
     run_non_sym_side,
     run_symmetric_side,
@@ -270,6 +271,16 @@ class RandomProbePlugin(TraversalPlugin):
             if not self.result.done():
                 self.result.set_result(None)
             return
+
+        # Drain any probe datagrams still queued in the kernel
+        # buffer for the winning socket before handing it up to
+        # the user as a Pipe.  Without this, pipe.recv() returns
+        # leftover probe bytes (sym's 256-pack, late cone probes,
+        # the post-CONFIRM ROLE_SYM acknowledgement) instead of the
+        # application's first real message.
+        drained = drain_probe_residue(res["sock"], nonce)
+        log("RandomProbePlugin: drained {0} residual probe(s) "
+            "from winning sock".format(drained))
 
         # Wrap the winning UDP socket in a Pipe directly, *without*
         # calling sock.connect(peer) first.  Connecting a UDP socket
