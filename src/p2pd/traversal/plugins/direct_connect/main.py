@@ -136,10 +136,19 @@ class DirectConnect(TraversalPlugin):
         for ip, port in candidates:
             target = (ip, port)
             try:
-                src_str = loopback_src_for(self)
+                # Match the connect-socket source to the destination's
+                # loopback class. On Windows XP only 127.0.0.1 is
+                # routable, so binding src to alice's per-pubkey
+                # 127.X.Y.Z (even when dest is 127.0.0.1) makes the
+                # whole connect time out. Picking src by dest category
+                # keeps the path symmetric and works across XP, Vista,
+                # 7, 8.1, 10, 11, Linux, macOS.
                 if self.af == IP4:
-                    if src_str is None or not src_str.startswith("127."):
+                    if ip == "127.0.0.1":
                         src_str = "127.0.0.1"
+                    else:
+                        src_lo = loopback_src_for(self)
+                        src_str = src_lo if (src_lo and src_lo.startswith("127.")) else "127.0.0.1"
                 else:
                     src_str = "::1"
                 route = self.nic.route(self.af)
