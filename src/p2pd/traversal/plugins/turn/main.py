@@ -157,7 +157,15 @@ class TURNPluginFactory:
         self.turn_clients.clear()
 
 
-PLUGIN_CONF = {"timeout": 20}
+# Total budget the traversal manager gives this plugin's run() call.
+# get_first_working_turn_client walks the rendezvous-ranked server list
+# with a 6s per-server cap (PER_SERVER_TIMEOUT in turn_utils.py); we
+# need enough headroom here to absorb several bad-server fall-throughs
+# before reaching a working relay PLUS the CreatePermission round-trip
+# and the relay-tup futures. ~8 server attempts (48s) leaves ~12s for
+# the post-allocate signaling exchange and tail latency on slower
+# OSes / network paths.
+PLUGIN_CONF = {"timeout": 60}
 
 
 async def setup_plugin(node):

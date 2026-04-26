@@ -50,15 +50,36 @@ af: Any,
     return peer_tup, relay_tup, turn_client
 
 
-async def get_first_working_turn_client(af: Any, servers: List[Dict[str, Any]], nic: Any, msg_cb: Any) -> Optional[TURNClient]:
-    """Try each TURN server in ranked order and return the first one that connects."""
+PER_SERVER_TIMEOUT = 6.0
+
+
+async def get_first_working_turn_client(
+    af: Any,
+    servers: List[Dict[str, Any]],
+    nic: Any,
+    msg_cb: Any,
+    per_server_timeout: float = PER_SERVER_TIMEOUT,
+) -> Optional[TURNClient]:
+    """Try each TURN server in ranked order and return the first one that connects.
+
+    Each server attempt is bounded by ``per_server_timeout`` so a single
+    unreachable / slow server (typically one with high failed_tests in
+    servers.json that rendezvous_rank still happened to hash up front)
+    cannot eat the plugin's overall budget. The plugin's PLUGIN_CONF
+    timeout must be set high enough to absorb several of these
+    per-server caps in a row -- if it isn't, we'll bail before
+    finding a working relay even though the network is fine.
+    """
     for server in servers:
         try:
-            _, _, turn_client = await get_turn_client(
-                af,
-                server,
-                nic,
-                msg_cb=msg_cb,
+            _, _, turn_client = await asyncio.wait_for(
+                get_turn_client(
+                    af,
+                    server,
+                    nic,
+                    msg_cb=msg_cb,
+                ),
+                timeout=per_server_timeout,
             )
             return turn_client
         except (OSError, ConnectionError, asyncio.TimeoutError):
