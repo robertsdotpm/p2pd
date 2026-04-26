@@ -32,9 +32,16 @@ def enrich_addr_map_with_loopback(addr_map: Dict[str, Any]) -> Dict[str, Any]:
     loopback convention; we add the field on the p2pd side after parse so
     select_dest_ipr can reach it as dest_info["loopback"]. Mutates and
     returns addr_map for the convenience of callers that want to chain.
+
+    Only attaches when the addr_map advertises at least one IPv4
+    interface -- 127.0.0.0/8 is IPv4-only, so on a v6-only peer the
+    loopback alias would be unreachable and select_dest_ipr would route
+    to a black hole. Stay quiet in that case.
     """
     pub = addr_map.get("pub_key_hex")
     if not pub:
+        return addr_map
+    if not addr_map.get(IP4):
         return addr_map
     try:
         lo_str = loopback_ip_for_node(pub)
@@ -395,34 +402,43 @@ async def listen_on_ifs(node: Any) -> None:
                 successes += 1
 
     # Per-node loopback alias: lets same-machine peers reach this node via
-    # 127.X.Y.Z without depending on cross-subnet kernel routing. Failure
-    # is non-fatal — most platforms accept any 127.0.0.0/8 bind, but if
-    # the OS rejects it (e.g. an aggressive firewall), the node still has
-    # its NIC binds.
-    if node.ifs:
-        loopback_nic = node.ifs[0]
+    # 127.X.Y.Z without depending on cross-subnet kernel routing. Only
+    # makes sense when at least one NIC supports IP4 -- 127.0.0.0/8 is
+    # IPv4-only, and on a v6-only host the alias would be unreachable
+    # anyway. Failure is non-fatal: if the OS rejects the bind (firewall,
+    # weird loopback config), the node still has its NIC binds.
+    v4_route = None
+    for nic in node.ifs:
         try:
-            v4_route = loopback_nic.route(IP4)
+            supported = nic.supported()
+        except (AttributeError, TypeError):
+            continue
+        if IP4 not in supported:
+            continue
+        try:
+            v4_route = nic.route(IP4)
         except (KeyError, ValueError, AttributeError):
             v4_route = None
         if v4_route is not None:
+            break
+    if v4_route is not None:
+        try:
+            pub = node.kp.public_key_hex
+        except AttributeError:
+            pub = None
+        if pub:
+            lo_ip = loopback_ip_for_node(pub)
             try:
-                pub = node.kp.public_key_hex
-            except AttributeError:
-                pub = None
-            if pub:
-                lo_ip = loopback_ip_for_node(pub)
-                try:
-                    await v4_route.bind(ips=lo_ip, port=node.listen_port)
-                    await node.add_listener(TCP, v4_route)
-                    successes += 1
-                except (OSError, ValueError, AssertionError) as exc:
-                    log(fstr(
-                        "listen_on_ifs: loopback alias {0} bind failed: {1}",
-                        (lo_ip, exc),
-                    ))
-                except asyncio.CancelledError:  # pylint: disable=try-except-raise
-                    raise
+                await v4_route.bind(ips=lo_ip, port=node.listen_port)
+                await node.add_listener(TCP, v4_route)
+                successes += 1
+            except (OSError, ValueError, AssertionError) as exc:
+                log(fstr(
+                    "listen_on_ifs: loopback alias {0} bind failed: {1}",
+                    (lo_ip, exc),
+                ))
+            except asyncio.CancelledError:  # pylint: disable=try-except-raise
+                raise
 
     if successes == 0:
         raise AssertionError(
