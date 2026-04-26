@@ -116,7 +116,7 @@ class TestRandomProbeE2E(AsyncTestCase):
         # *after* the combo loop.  We pop it from plugin_loaders
         # so even that fallback is gone -- random_probe is the
         # only remaining candidate.
-        for name in ("direct_connect", "reverse_connect", "punch", "turn"):
+        for name in ("direct_connect", "reverse_connect", "tcp_punch", "turn"):
             self.node_a.traversal.plugin_loaders.pop(name, None)
             self.node_b.traversal.plugin_loaders.pop(name, None)
 

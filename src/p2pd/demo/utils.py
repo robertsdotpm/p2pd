@@ -267,7 +267,7 @@ async def choose_connection_methods(con_method: Optional[str]) -> str:
     cout("Connection methods:")
     cout("  0) direct        (TCP)")
     cout("  1) reverse       (TCP)")
-    cout("  2) punch         (TCP, predictable NAT)")
+    cout("  2) tcp_punch     (TCP, predictable NAT)")
     cout("  3) turn relay    (UDP)")
     cout("  4) random probe  (UDP, symmetric NAT)")
     cout("  5) auto          (try each in order)")

@@ -71,7 +71,7 @@ def all_punch_combos_loopback(node, dest_map) -> bool:
     same_pc = is_same_machine(src_map, dest_map)
     for combo in auto_combos(node, src_map, dest_map):
         plugin_name, af, route_type, src_info, dest_info = combo
-        if plugin_name != "punch":
+        if plugin_name != "tcp_punch":
             continue
         found_any = True
         chosen = select_dest_ipr(af, same_pc, src_info, dest_info, [route_type])
@@ -91,7 +91,7 @@ class TestAutoConnectPunch(AsyncTestCase):
 
     async def asyncSetUp(self):
         self.ifs_a, self.ip_a, self.ifs_b, self.ip_b = await load_two_nodes(
-            self, IP4, label="punch",
+            self, IP4, label="tcp_punch",
         )
         print("[PUNCH-TEST] setup ip_a={0} ip_b={1} ifs_a={2} ifs_b={3}".format(
             self.ip_a, self.ip_b,
@@ -158,7 +158,7 @@ class TestAutoConnectPunch(AsyncTestCase):
             )
 
         self.assertIn(
-            "punch", self.node_a.traversal.plugin_loaders,
+            "tcp_punch", self.node_a.traversal.plugin_loaders,
             "punch plugin not installed (enable_punching=False?)",
         )
 
@@ -198,7 +198,7 @@ class TestAutoConnectPunch(AsyncTestCase):
             self.ifs_b, [self.ip_b], PORT_PUNCH_B_T2, conf=PUNCH_TEST_CONF
         )
         self.assertIn(
-            "punch", self.node_a.traversal.plugin_loaders,
+            "tcp_punch", self.node_a.traversal.plugin_loaders,
             "punch plugin not installed",
         )
 
@@ -207,7 +207,7 @@ class TestAutoConnectPunch(AsyncTestCase):
         plugin_names = {c[0] for c in combos}
         print("[PUNCH-TEST] combos plugin_names={}".format(plugin_names))
         self.assertIn(
-            "punch", plugin_names, "punch must appear in auto_connect combos"
+            "tcp_punch", plugin_names, "punch must appear in auto_connect combos"
         )
 
 

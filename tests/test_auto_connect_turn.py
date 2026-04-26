@@ -96,7 +96,7 @@ class TestAutoConnectTurnFallback(AsyncTestCase):
 
         # Remove all concurrent (non-TURN) plugins from the initiator so
         # auto_combos returns [] and falls through to TURN.
-        for name in ("direct_connect", "reverse_connect", "punch"):
+        for name in ("direct_connect", "reverse_connect", "tcp_punch"):
             self.node_a.traversal.plugin_loaders.pop(name, None)
 
         pipe, plugin = await asyncio.wait_for(

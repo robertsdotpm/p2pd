@@ -304,12 +304,12 @@ class TestAutoComboVariants(unittest.TestCase):
         self.assertLess(route_types.index(NIC_BIND), route_types.index(EXT_BIND))
 
     def test_each_plugin_present_once_per_af_route_type(self):
-        node = self.FakeNode(["direct_connect", "punch"])
+        node = self.FakeNode(["direct_connect", "tcp_punch"])
         src = make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
         dst = make_fake_addr_map(ip4_pairs=[("10.0.1.100", "5.6.7.8")], machine_id="B")
         combos = auto_combos(node, src, dst)
         names = [c[0] for c in combos]
-        self.assertEqual(names.count("direct_connect"), names.count("punch"))
+        self.assertEqual(names.count("direct_connect"), names.count("tcp_punch"))
         self.assertGreater(names.count("direct_connect"), 0)
 
     def test_ip6_ext_bind_excluded_same_ext(self):
@@ -398,7 +398,7 @@ class TestAutoComboMultiInterface(unittest.TestCase):
         self.assertGreater(len(combos), 0)
 
     def test_multi_plugin_multi_interface_count(self):
-        node = self.FakeNode(["direct_connect", "punch"])
+        node = self.FakeNode(["direct_connect", "tcp_punch"])
         src = make_fake_addr_map(
             ip4_pairs=[("10.0.1.76", "1.2.3.4")],
             ip6_pairs=[("2001:db8::1", "2001:db8::1")],

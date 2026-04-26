@@ -1,14 +1,18 @@
 """
-Using offsets for servers is a bad idea as server
-lists need to be updated. Use short, unique IDs or
-index by host name even if its longer.
+node_protocol is a dumb proxy.
+
+The historical CON_ID_MSG in-band handshake (the responder's "this TCP
+pipe belongs to plugin X" announcement) has moved to a SIG_CON_ID
+signal over the MQTT router. With that out of the way, node_protocol
+no longer needs to peek at the first datagram on every inbound pipe;
+it just splits TCP frames on newline and fans out to whichever msg_cbs
+the application has registered.
 """
 
 from typing import Any, Tuple
 import asyncio
 import time
-from aionetiface import fstr, log, to_s
-from .node_defs import CON_ID_MSG
+from aionetiface import log
 from ..traversal.plugins.random_probe.random_probe_defs import (
     PROBE_LEN,
     PROBE_MAGIC,
@@ -29,9 +33,9 @@ def is_random_probe_datagram(msg: bytes) -> bool:
 
 
 async def node_protocol(node: Any, msg: bytes, client_tup: Tuple[str, int], pipe: Any) -> None:
+    """Dispatch each newline-delimited message from the pipe to all registered msg_cbs."""
     print("Node proto: ", msg)
 
-    """Dispatch each newline-delimited message from the pipe to handle_msg and all registered callbacks."""
     # Drop residual random_probe probe datagrams: they're algorithm
     # artefacts, not application data, and dispatching them through
     # node_protocol just hands probe bytes up to the user's
@@ -47,9 +51,17 @@ async def node_protocol(node: Any, msg: bytes, client_tup: Tuple[str, int], pipe
     # TCP may buffer multiple messages — split and dispatch each.
     coros = []
     for m in msg.split(b"\n"):
-        coros.append(handle_msg(node, m, client_tup, pipe))
+        if m == b"long_p2pd_test_string_abcd123":
+            # Reachability probe used by remote_reachability_cb / matrix
+            # smoke checks. Echo back and skip msg_cbs -- it isn't
+            # application traffic.
+            await pipe.send(b"p2pd test string\r\n\r\n", client_tup)
+            continue
         for cb in node.msg_cbs:
             coros.append(cb(m, client_tup, pipe))
+
+    if not coros:
+        return
 
     results = await asyncio.gather(*coros, return_exceptions=True)
     for r in results:
@@ -58,29 +70,3 @@ async def node_protocol(node: Any, msg: bytes, client_tup: Tuple[str, int], pipe
             raise r
         if isinstance(r, Exception):
             log("msg_cb coro raised: " + repr(r))
-
-
-async def handle_msg(node: Any, msg: bytes, client_tup: Tuple[str, int], pipe: Any) -> None:
-    """Parse a single node protocol message and act on recognised commands such as CON_ID_MSG."""
-    log(
-        fstr(
-            "> node proto = {0}, {1}",
-            (
-                msg,
-                client_tup,
-            ),
-        )
-    )
-
-    if msg == b"long_p2pd_test_string_abcd123":
-        await pipe.send(b"p2pd test string\r\n\r\n", client_tup)
-        return
-
-    parts = msg.split(b" ")
-    cmd = parts[0]
-
-    if cmd == CON_ID_MSG:
-        if len(parts) != 2:
-            log("ID: Invalid parts len.")
-            return
-        node.pipe_ready(to_s(parts[1]), pipe)

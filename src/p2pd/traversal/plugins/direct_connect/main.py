@@ -1,8 +1,8 @@
 """Traversal plugin for direct (non-NATed) connections."""
 from typing import Any, List, Optional, Tuple
 import asyncio
-from aionetiface import IP4, IP6, TCP, Pipe, log, log_exception, to_b, fstr
-from ....node.node_defs import CON_ID_MSG
+from aionetiface import IP4, IP6, TCP, Pipe, log, log_exception, fstr
+from ....protocol.proto_msg import ConIdMsg
 from ...traversal_plugin import TraversalPlugin
 
 
@@ -94,7 +94,15 @@ class DirectConnect(TraversalPlugin):
                 (self.plugin_id, dest),
             ))
             try:
-                pipe = await Pipe(TCP, dest, route).connect()
+                # Fail-fast on dead paths so a single combo doesn't dominate
+                # the auto_connect batch budget. 2.5s covers slow-LAN /
+                # WAN-via-router; longer than that on a real direct path is
+                # almost always a hairpinning/dead-route timeout that would
+                # have failed at the kernel timeout in any case.
+                pipe = await asyncio.wait_for(
+                    Pipe(TCP, dest, route).connect(),
+                    timeout=2.5,
+                )
             except (OSError, ConnectionError, asyncio.TimeoutError) as exc:
                 print("[DIRECT-DBG] TCP connect to {0} raised: {1!r}".format(dest, exc))
                 log_exception()
@@ -115,9 +123,29 @@ class DirectConnect(TraversalPlugin):
             ))
             return
 
-        await pipe.send(CON_ID_MSG + to_b(fstr(" {0}\n", (self.plugin_id,))))
+        # Tell the responder over MQTT signal which plugin_id this
+        # already-open TCP pipe corresponds to. The responder's
+        # TraversalManager.handle_con_id rendezvouses pipe (matched by
+        # client_tup in inbound_pipes_by_tup) with the plugin_id, and
+        # resolves the inbound_pipes future the reverse_connect plugin
+        # was awaiting on. Replaces the legacy in-band CON_ID_MSG byte
+        # blob -- node_protocol no longer parses any per-plugin framing.
+        try:
+            local_tup = pipe.sock.getsockname()
+        except (OSError, AttributeError):
+            local_tup = ("", 0)
+        con_id_msg = ConIdMsg({
+            "payload": {
+                "src_ip": str(local_tup[0]) if local_tup else "",
+                "src_port": int(local_tup[1]) if local_tup else 0,
+            },
+        })
+        try:
+            await self.send_signal_msg(con_id_msg)
+        except (OSError, ConnectionError, asyncio.TimeoutError):
+            log_exception()
         log(fstr(
-            "direct_connect[{0}]: sent CON_ID_MSG, setting result",
+            "direct_connect[{0}]: sent SIG_CON_ID over signal, setting result",
             (self.plugin_id,),
         ))
         self.result.set_result(pipe)

@@ -28,7 +28,7 @@ from .traversal_utils import (
     to_s,
     try_unpack_msg,
 )
-from ..protocol.proto_msg import ConMsg, ProtoMsg, SIG_PROTO
+from ..protocol.proto_msg import ConIdMsg, ConMsg, ProtoMsg, SIG_PROTO
 
 
 class TraversalManager:
@@ -57,6 +57,20 @@ class TraversalManager:
         # Inbound connections from the node server.
         # Futures by con id -> pipe.
         self.inbound_pipes = inbound_pipes if inbound_pipes is not None else {}
+
+        # Newly-accepted inbound pipes, keyed by (src_ip, src_port).
+        # Populated by Node.up_cb on accept; consumed by handle_con_id when
+        # a ConIdMsg arrives over the signal channel.  Lets the rendezvous
+        # between "TCP arrived" and "signal said this TCP belongs to plugin
+        # X" happen out of band, so node_protocol no longer needs to peek
+        # at the first datagram on every inbound pipe.
+        self.inbound_pipes_by_tup = {}
+
+        # ConIdMsg claims that arrived BEFORE the matching TCP accept fired.
+        # Up_cb checks this on each accept and dispatches if a match is
+        # already pending.  Bounded in practice by the number of in-flight
+        # reverse_connect attempts.
+        self.pending_con_id_by_tup = {}
 
         # Long-lived background tasks spawned by signal handling.
         self.tasks = []
@@ -284,6 +298,16 @@ class TraversalManager:
         # Update routing destination with our current address.
         msg.set_cur_addr(self.addr_bytes)
 
+        # ConIdMsg is a pure rendezvous notification, not a plugin request.
+        # The initiator already opened the TCP from src_tup; we look up the
+        # accepted pipe by tup and resolve the existing inbound_pipes future
+        # under meta.pipe_id (the reverse_connect plugin pre-registered it
+        # before sending the ConMsg that triggered this connection).  No
+        # plugin instance to run -- handle it inline and return.
+        if isinstance(msg, ConIdMsg):
+            self.handle_con_id(msg)
+            return
+
         # If plugin exists check sender is authorized to reach plugin.
         if msg.meta.pipe_id in self.plugins:
             plugin = self.plugins[msg.meta.pipe_id]
@@ -311,6 +335,54 @@ class TraversalManager:
 
         # Prune completed tasks to avoid unbounded growth.
         self.tasks = [t for t in self.tasks if not t.done()]
+
+    # ConIdMsg rendezvous: the initiator's already-open TCP pipe is in
+    # inbound_pipes_by_tup (registered by Node.up_cb on accept).  Match it
+    # to the plugin_id carried in meta.pipe_id and resolve the existing
+    # inbound_pipes[plugin_id] future the reverse_connect plugin is
+    # awaiting.  When the signal beats the accept, register a pending
+    # claim and let up_cb dispatch when the pipe arrives.
+    def handle_con_id(self, msg: Any) -> None:
+        """Match an incoming ConIdMsg to its accepted TCP pipe and resolve the plugin future."""
+        plugin_id = msg.meta.pipe_id
+        src_tup = (msg.payload.src_ip, int(msg.payload.src_port))
+
+        pipe = self.inbound_pipes_by_tup.pop(src_tup, None)
+        if pipe is None:
+            # Up_cb hasn't fired yet -- record the claim so the next
+            # accept on this tup can resolve it directly.
+            self.pending_con_id_by_tup[src_tup] = plugin_id
+            return
+
+        fut = self.inbound_pipes.get(plugin_id)
+        if fut is None:
+            # No reverse_connect plugin awaiting this id.  Silently drop;
+            # nothing to wire the pipe up to.
+            return
+        if fut.done():
+            return
+        fut.set_result(pipe)
+
+    # Called by Node.up_cb on every newly-accepted inbound TCP pipe.
+    # If a ConIdMsg already arrived for this tup, resolve immediately;
+    # otherwise stash the pipe so the next ConIdMsg can find it.
+    def register_inbound_pipe(self, pipe: Any) -> None:
+        """Bind a fresh inbound pipe to its source tuple for ConIdMsg-based rendezvous."""
+        client_tup = getattr(pipe, "client_tup", None)
+        if client_tup is None:
+            return
+        # Normalise IPv6 (ip, port, flowinfo, scope_id) to (ip, port) so the
+        # match key is the same shape the initiator's payload sends.
+        tup = (client_tup[0], int(client_tup[1]))
+
+        plugin_id = self.pending_con_id_by_tup.pop(tup, None)
+        if plugin_id is not None:
+            fut = self.inbound_pipes.get(plugin_id)
+            if fut is not None and not fut.done():
+                fut.set_result(pipe)
+                return
+
+        self.inbound_pipes_by_tup[tup] = pipe
 
     async def close(self) -> None:
         """Cancel all pending plugins and background tasks, releasing their resources."""

@@ -173,7 +173,7 @@ giving up on it (the overall `auto_connect` timeout is separate).
 To override a plugin timeout at runtime:
 
 ```python
-node.traversal.install_plugin("punch", {
+node.traversal.install_plugin("tcp_punch", {
     "class": PunchPlugin,
     "timeout": 60,
 })

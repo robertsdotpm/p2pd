@@ -14,6 +14,7 @@ from .proto_defs import (
     SIG_DONE,
     SIG_RETRY,
     SIG_RANDOM_PROBE,
+    SIG_CON_ID,
     P2P_DIRECT,
     P2P_PUNCH,
     P2P_RELAY,
@@ -444,6 +445,44 @@ class ConMsg(ProtoMsg):
         super().__init__(data or {}, enum)
 
 
+class ConIdMsg(ProtoMsg):
+    """Out-of-band claim from the initiator that an already-open TCP connection
+    (identified by the initiator's local socket tuple) belongs to a particular
+    plugin_id.  Replaces the legacy in-band CON_ID_MSG handshake so node_protocol
+    no longer needs to special-case the first datagram on every inbound pipe.
+    """
+
+    class Payload(ProtoMsg.Payload):
+        """Carries the initiator's view of its own (src_ip, src_port).
+
+        The receiver matches this against client_tup of the recently-accepted
+        TCP pipe; same-LAN/loopback paths see identical tuples on both sides
+        so the lookup is exact.  When the initiator is behind NAT, the
+        receiver's matcher falls back to the peer-pubkey known-IP set
+        carried by meta.src_buf.
+        """
+
+        def __init__(self, src_ip: str = "", src_port: int = 0) -> None:
+            self.src_ip = to_s(src_ip)
+            self.src_port = to_n(src_port)
+
+        def to_dict(self) -> Dict[str, Any]:
+            return {
+                "src_ip": self.src_ip,
+                "src_port": self.src_port,
+            }
+
+        @staticmethod
+        def from_dict(d: Dict[str, Any]) -> "ConIdMsg.Payload":
+            return ConIdMsg.Payload(
+                d.get("src_ip", ""),
+                d.get("src_port", 0),
+            )
+
+    def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_CON_ID) -> None:
+        super().__init__(data or {}, enum)
+
+
 class GetAddr(ProtoMsg):
     """Requests the current address of the peer node."""
 
@@ -465,5 +504,6 @@ SIG_PROTO = {
     SIG_GET_ADDR: [GetAddr, 0, 5],
     SIG_RETURN_ADDR: [ReturnAddr, 0, 6],
     SIG_RANDOM_PROBE: [RandomProbeMsg, P2P_RANDOM_PROBE, 18],
+    SIG_CON_ID: [ConIdMsg, P2P_DIRECT, 5],
     # SIG_ADDR: [AddrMsg, 0, 5],
 }

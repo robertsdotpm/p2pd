@@ -198,7 +198,7 @@ class PunchPlugin(TraversalPlugin):
             }
         )
 
-        msg.meta.plugin_name = "punch"
+        msg.meta.plugin_name = "tcp_punch"
         return msg
 
     # ... (other methods, including delayed_start_punching_proc) ...

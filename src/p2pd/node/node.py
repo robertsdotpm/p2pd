@@ -64,6 +64,19 @@ class Node(Daemon):
         """Route inbound pipe messages through the node protocol dispatcher."""
         await node_protocol(self, msg, client_tup, pipe)
 
+    def up_cb(self, _data: Any, _client_tup: Any, pipe: Any) -> None:
+        """Register every newly-accepted inbound TCP pipe by its remote tuple.
+
+        Called by aionetiface's PipeEvents.connection_made before any data
+        arrives. The TraversalManager keeps a tup -> pipe map so a later
+        ConIdMsg over the signal channel can rendezvous the data pipe with
+        the plugin_id the reverse_connect plugin is awaiting on -- without
+        needing an in-band first-message handshake on every inbound.
+        """
+        if self.traversal is None:
+            return
+        self.traversal.register_inbound_pipe(pipe)
+
     async def start(self, sys_clock: Optional[Any] = None, out: bool = False, cout: Callable = print) -> "Node":
         """Run the full node startup sequence and return self when the node is ready."""
         await node_start(self, sys_clock=sys_clock, out=out, cout=cout)
