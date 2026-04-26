@@ -163,6 +163,7 @@ def make_udp_socket(
         except (OSError, AttributeError):
             is_default = True
         if not is_default:
+            iface_bytes = b""
             try:
                 # Encode the interface id (string for real NICs,
                 # int for synthetic loopback FakeInterfaces -- the
@@ -175,10 +176,20 @@ def make_udp_socket(
                 )
                 if iface_bytes:
                     s.setsockopt(socket.SOL_SOCKET, 25, iface_bytes)
-            except OSError:
-                # Some platforms / non-root users can't set this.
-                # The bind still happens; egress just isn't pinned.
-                pass
+                    print("[RP-BIND] SO_BINDTODEVICE ok: bind={0}:{1} iface={2!r}".format(
+                        bind_ip, bind_port, iface_bytes,
+                    ))
+            except OSError as exc:
+                # Most likely EPERM (Linux SO_BINDTODEVICE needs
+                # CAP_NET_RAW / root).  The bind still happens, but
+                # egress falls back to the default route -- on a
+                # multi-NIC host that means packets sourced from a
+                # non-default NIC's IP can leave through the wrong
+                # interface and hairpin.
+                print("[RP-BIND] SO_BINDTODEVICE FAILED: bind={0}:{1} "
+                      "iface={2!r} err={3!r}  (need root / CAP_NET_RAW)".format(
+                          bind_ip, bind_port, iface_bytes, exc,
+                      ))
 
     s.setblocking(False)
     s.bind((bind_ip, bind_port))
