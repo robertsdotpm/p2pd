@@ -292,17 +292,40 @@ class TestSTUN(AsyncTestCase):
         nic = await _default_nic()
         if IP4 not in nic.supported():
             self.skipTest("IPv4 not supported on this machine")
-        host = ("stun1.p2pd.net", 3478)
-        client = STUNClient(IP4, host, nic, proto=TCP)
+        # Loop over multiple TCP STUN servers from get_infra so a single
+        # unreachable host doesn't fail the test. First one that returns a
+        # public IP wins; if none reply, skip.
+        from aionetiface import get_infra
         try:
-            ip = await asyncio.wait_for(client.get_wan_ip(), timeout=10)
+            groups = get_infra(IP4, TCP, "STUN(see_ip)", no=5)
         except Exception:
-            self.skipTest("STUN TCP unreachable")
-        if ip:
-            ipr = IPRange(ip, bitlen=32)
-            self.assertTrue(
-                ipr.is_public, "STUN TCP should return a public IP, got: {}".format(ip)
-            )
+            groups = []
+        hosts = []
+        for group in groups:
+            if not group:
+                continue
+            s = group[0]
+            fqn = (s.get("fqns") or [s.get("ip")])[0]
+            if fqn:
+                hosts.append((fqn, s.get("port", 3478)))
+        if not hosts:
+            hosts = [("stun1.p2pd.net", 3478), ("stun2.p2pd.net", 3478)]
+
+        ip = None
+        for host in hosts:
+            client = STUNClient(IP4, host, nic, proto=TCP)
+            try:
+                ip = await asyncio.wait_for(client.get_wan_ip(), timeout=10)
+                if ip:
+                    break
+            except Exception:
+                continue
+        if not ip:
+            self.skipTest("STUN TCP unreachable on every tried host")
+        ipr = IPRange(ip, bitlen=32)
+        self.assertTrue(
+            ipr.is_public, "STUN TCP should return a public IP, got: {}".format(ip)
+        )
 
 
 # ---------------------------------------------------------------------------
