@@ -12,7 +12,7 @@ import unittest
 
 from aionetiface import IP4, SYMMETRIC_NAT, parse_node_addr  # noqa: F401  IP4 used in print()s
 from aionetiface.testing import AsyncTestCase
-from p2pd.node.auto_connect import auto_connect, auto_combos
+from p2pd.node.auto_connect import auto_connect, auto_combos, is_same_machine
 
 from auto_connect_helpers import (
     PORT_PUNCH_A_T1, PORT_PUNCH_B_T1, PORT_PUNCH_A_T2, PORT_PUNCH_B_T2,
@@ -75,6 +75,18 @@ class TestAutoConnectPunch(AsyncTestCase):
         print("[PUNCH-TEST] node_b addr_map IP4={0} listen_ips={1}".format(
             self.node_b.addr_map.get(IP4), self.node_b.listen_ips,
         ))
+
+        # Skip when both peers are on the same machine. The only viable
+        # NIC_BIND pair in that env is the loopback alias path, where
+        # there is no NAT to traverse -- direct_connect already handles
+        # the full job. Forcing punch through the predict_alloc /
+        # rendezvous machinery here proves nothing about NAT traversal
+        # and is silly in concept (no NAT exists).
+        if is_same_machine(self.node_a.addr_map, self.node_b.addr_map):
+            self.skipTest(
+                "same-machine peers don't need NAT punching; "
+                "direct_connect over loopback covers this topology"
+            )
 
         # Skip when either side reports symmetric / hard NAT. The current
         # punch algorithm relies on predictable per-destination port
