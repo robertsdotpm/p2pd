@@ -1,7 +1,7 @@
 """Traversal plugin for direct (non-NATed) connections."""
 from typing import Any, List, Optional, Tuple
 import asyncio
-from aionetiface import IP4, IP6, TCP, Pipe, log, log_exception, fstr
+from aionetiface import IP4, IP6, Interface, TCP, Pipe, log, log_exception, fstr
 from ....protocol.proto_msg import ConIdMsg
 from ...traversal_plugin import TraversalPlugin
 
@@ -179,7 +179,16 @@ class DirectConnect(TraversalPlugin):
                         src_str = src_lo if (src_lo and src_lo.startswith("127.")) else "127.0.0.1"
                 else:
                     src_str = "::1"
-                route = self.nic.route(self.af)
+                # Loopback destinations don't traverse any physical NIC,
+                # so binding the connect socket to self.nic (e.g. ens37
+                # via SO_BINDTODEVICE) makes the Linux kernel reject
+                # the connect to 127.x with EINVAL: 127.x isn't reachable
+                # through ens37, only through lo.  Build the loopback
+                # connect on the default Interface for THIS attempt only;
+                # the per-NIC route stays the source of truth for every
+                # other path direct_connect drives.
+                default_nic = await Interface("default")
+                route = default_nic.route(self.af)
                 await route.bind(ips=src_str)
                 print("[DIRECT-DBG] {0} loopback try src={1} dest={2}".format(
                     self.plugin_id, src_str, target,
