@@ -25,6 +25,42 @@ def resolve_install_path(conf: Dict[str, Any]) -> str:
     return conf["install_path"] or get_aionetiface_install_root()
 
 
+def loopback_ip_for_node(pub_key_hex: str) -> str:
+    """Deterministic 127.X.Y.Z loopback address keyed on a node's pub_key.
+
+    Same-machine peers can't reliably TCP-connect between two of their own
+    NIC IPs across different subnets on Windows — the kernel doesn't
+    loopback-shortcut cross-subnet traffic. Both nodes instead bind a
+    127.X.Y.Z address derived from their pub_key; the peer reads the same
+    pub_key out of the addr_map and connects via the loopback interface,
+    which always works.
+
+    pub_key_hex is a node's compressed secp256k1 public key (66 hex chars),
+    globally unique per node. Mapping it modulo the usable 127.0.0.0/8
+    range keeps cross-node collisions effectively zero — and within one
+    machine the two nodes guaranteed to differ since their key pairs do.
+
+    Reserved corners are avoided:
+      - First octet is always 127 (loopback).
+      - Second octet (A) ∈ [1, 254] so 127.0.* / 127.255.* are skipped.
+      - Last octet (C) ∈ [2, 254] so 127.A.B.0 / 127.A.B.1 / 127.A.B.255
+        are skipped.
+
+    The resulting address is bind-able and reachable on every supported
+    platform: 127.0.0.0/8 is implicitly routed to the loopback iface by
+    Linux and Windows alike, no admin-side route table change needed.
+    """
+    val = int(pub_key_hex, 16)
+    # Available host addresses inside the 127.0.0.0/8 block after corner
+    # exclusions: A∈[1,254] (254), B∈[0,255] (256), C∈[2,254] (253).
+    c = 2 + (val % 253)
+    val //= 253
+    b = val % 256
+    val //= 256
+    a = 1 + (val % 254)
+    return "127.{0}.{1}.{2}".format(a, b, c)
+
+
 def make_stop_pair(existing: Optional[Any] = None) -> Tuple[Any, Any]:
     """Create a non-blocking/blocking socket pair used to signal shutdown, or return existing."""
     if existing:
@@ -269,23 +305,106 @@ async def load_machine_id(app_id: str, netifaces: Any) -> str:
         return await fallback_machine_id(netifaces, app_id)
 
 
+async def soft_bind_and_listen(node: Any, route: Any, label: str) -> bool:
+    """Bind and add_listener for one route; log on failure, never raise.
+
+    Returns True if a listener was attached, False if either step failed.
+    Used by listen_on_ifs so a single bad bind (e.g. a fe80 address whose
+    scope-id the OS rejects, or a loopback alias the firewall blocks)
+    doesn't take the whole node down — node_start only fails if EVERY
+    candidate path fails (no possible inbound route).
+    """
+    try:
+        await route.bind(port=node.listen_port)
+    except (OSError, ValueError, AssertionError) as exc:
+        log(fstr("listen_on_ifs: bind failed for {0}: {1}", (label, exc)))
+        return False
+    except asyncio.CancelledError:  # pylint: disable=try-except-raise
+        raise
+
+    try:
+        await node.add_listener(TCP, route)
+    except (OSError, ValueError, AssertionError) as exc:
+        log(fstr("listen_on_ifs: add_listener failed for {0}: {1}", (label, exc)))
+        return False
+    except asyncio.CancelledError:  # pylint: disable=try-except-raise
+        raise
+    return True
+
+
 async def listen_on_ifs(node: Any) -> None:
-    """Bind and start TCP listeners on all interfaces (or only the requested listen IPs)."""
+    """Bind TCP listeners across every NIC IP, plus the per-node loopback alias.
+
+    Each individual bind is best-effort — a failed loopback or fe80 link-
+    local doesn't prevent the rest from coming up. The function only
+    raises (AssertionError) when ZERO listeners ended up attached, which
+    means there is genuinely no inbound path the node could accept.
+    """
+    successes = 0
+
     for nic in node.ifs:
         if node.listen_ips:
             listen_iprs = [IPR(ip) for ip in node.listen_ips]
             for nic_ipr in nic:
                 if nic_ipr not in listen_iprs:
                     continue
-                route = await nic_ipr.route.bind(port=node.listen_port)
-                await async_wrap_errors(node.add_listener(TCP, route))
+                if await soft_bind_and_listen(
+                    node, nic_ipr.route, fstr("listen_ip {0}", (nic_ipr,))
+                ):
+                    successes += 1
             continue
 
-        await async_wrap_errors(node.listen_local(TCP, node.listen_port, nic))
+        # listen_local handles its own internal failures via async_wrap_errors;
+        # we count by counting back the listeners it returned. The wrap below
+        # also covers any unhandled exception path so this can't kill startup.
+        listed = []
+        try:
+            listed = await node.listen_local(TCP, node.listen_port, nic) or []
+        except (OSError, ValueError, AssertionError) as exc:
+            log(fstr("listen_on_ifs: listen_local failed for {0}: {1}", (nic.id, exc)))
+        except asyncio.CancelledError:  # pylint: disable=try-except-raise
+            raise
+        successes += sum(1 for x in listed if x is not None)
 
         if IP6 in nic.supported():
-            route = await nic.route(IP6).bind(port=node.listen_port)
-            await async_wrap_errors(node.add_listener(TCP, route))
+            v6_route = nic.route(IP6)
+            if await soft_bind_and_listen(node, v6_route, fstr("v6 ext nic={0}", (nic.id,))):
+                successes += 1
+
+    # Per-node loopback alias: lets same-machine peers reach this node via
+    # 127.X.Y.Z without depending on cross-subnet kernel routing. Failure
+    # is non-fatal — most platforms accept any 127.0.0.0/8 bind, but if
+    # the OS rejects it (e.g. an aggressive firewall), the node still has
+    # its NIC binds.
+    if node.ifs:
+        loopback_nic = node.ifs[0]
+        try:
+            v4_route = loopback_nic.route(IP4)
+        except (KeyError, ValueError, AttributeError):
+            v4_route = None
+        if v4_route is not None:
+            try:
+                pub = node.kp.public_key_hex
+            except AttributeError:
+                pub = None
+            if pub:
+                lo_ip = loopback_ip_for_node(pub)
+                try:
+                    await v4_route.bind(ips=lo_ip, port=node.listen_port)
+                    await node.add_listener(TCP, v4_route)
+                    successes += 1
+                except (OSError, ValueError, AssertionError) as exc:
+                    log(fstr(
+                        "listen_on_ifs: loopback alias {0} bind failed: {1}",
+                        (lo_ip, exc),
+                    ))
+                except asyncio.CancelledError:  # pylint: disable=try-except-raise
+                    raise
+
+    if successes == 0:
+        raise AssertionError(
+            "listen_on_ifs: no listeners attached -- no inbound path is possible"
+        )
 
 
 async def remote_reachability_cb(reachability: Dict[Any, Dict[Any, Any]], _msg: Any, client_tup: Any, pipe: Any) -> None:
