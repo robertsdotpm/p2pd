@@ -202,22 +202,6 @@ class TestRandomProbeRealNat(AsyncTestCase):
             self.node_a.machine_id, self.node_b.machine_id,
         ))
 
-        # NAT classification on this VM intermittently reports
-        # SYMMETRIC (type 6) for both NICs because the STUN test 3
-        # reply gets dropped and the classifier falls through to
-        # symmetric.  When that happens random_probe's alignment
-        # filter is enabled and the algorithm can't converge --
-        # even though the actual home NAT is full-cone.  Force
-        # the local view to FULL_CONE for the test so the
-        # algorithm proceeds; we're testing the random_probe
-        # plumbing, not the classifier.
-        from aionetiface.nic.nat.nat_defs import FULL_CONE
-        for node in (self.node_a, self.node_b):
-            for if_info in (node.addr_map.get(IP4) or {}).values():
-                nat = if_info.get("nat") or {}
-                nat["type"] = FULL_CONE
-                if_info["nat"] = nat
-
         # Echo handler on BOTH sides -- the plugin attaches
         # node.msg_cb to the pipe via on_plugin_done, which
         # dispatches to all registered msg_cbs.
