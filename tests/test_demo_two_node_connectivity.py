@@ -79,7 +79,11 @@ class TestDemoTwoNodeConnectivity(AsyncTestCase):
 
         async def on_bob_msg(msg, client_tup, pipe):
             received_data.append(msg)
-            received.set()
+            # Wait for the actual payload before releasing -- empty
+            # framer trailers and CON_ID handshake bytes from
+            # DirectConnect arrive first and would set() prematurely.
+            if msg and b"demo smoke test" in msg:
+                received.set()
 
         self.bob.add_msg_cb(on_bob_msg)
 
@@ -126,7 +130,10 @@ class TestDemoTwoNodeConnectivity(AsyncTestCase):
 
         async def on_msg(msg, client_tup, pipe):
             received_data.append(msg)
-            received.set()
+            # Match the actual payload, not spurious empty trailers
+            # / CON_ID handshake bytes that arrive first.
+            if msg and b"hello via msg_cb" in msg:
+                received.set()
 
         self.bob.add_msg_cb(on_msg)
 

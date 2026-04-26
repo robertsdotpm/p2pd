@@ -69,7 +69,10 @@ class TestQuickstartConnect(AsyncTestCase):
 
         async def on_bob_msg(msg, client_tup, pipe):
             received_data.append(msg)
-            received.set()
+            # Wait for the actual payload before releasing -- spurious
+            # framer trailers / CON_ID handshake bytes arrive first.
+            if msg and b"hello from alice" in msg:
+                received.set()
 
         self.bob.add_msg_cb(on_bob_msg)
 
@@ -89,9 +92,12 @@ class TestQuickstartConnect(AsyncTestCase):
         try:
             await asyncio.wait_for(received.wait(), timeout=5)
         except asyncio.TimeoutError:
-            self.fail("bob's msg_cb didn't fire within 5s")
+            self.fail("bob's msg_cb didn't fire within 5s for 'hello from alice'; got: {!r}".format(received_data))
 
-        self.assertIn(b"hello from alice", received_data)
+        self.assertTrue(
+            any(b"hello from alice" in m for m in received_data if m),
+            "msg_cb did not see 'hello from alice' in: {!r}".format(received_data),
+        )
 
         try:
             await asyncio.wait_for(alice_pipe.close(), timeout=5)
@@ -118,9 +124,12 @@ class TestQuickstartConnect(AsyncTestCase):
 
         async def on_bob_msg(msg, client_tup, pipe):
             bob_data.append(msg)
-            bob_received.set()
-            # Reply on the same pipe so alice can read it.
-            await pipe.send(b"bob says hi", client_tup)
+            # Only release on the actual payload; spurious empty/CON_ID
+            # bytes can fire msg_cb earlier on multi-listener nodes.
+            if msg and b"alice says hi" in msg:
+                bob_received.set()
+                # Reply on the same pipe so alice can read it.
+                await pipe.send(b"bob says hi", client_tup)
 
         self.bob.add_msg_cb(on_bob_msg)
 
@@ -141,8 +150,11 @@ class TestQuickstartConnect(AsyncTestCase):
         try:
             await asyncio.wait_for(bob_received.wait(), timeout=5)
         except asyncio.TimeoutError:
-            self.fail("bob's msg_cb didn't fire within 5s")
-        self.assertIn(b"alice says hi", bob_data)
+            self.fail("bob's msg_cb didn't fire within 5s for 'alice says hi'; got: {!r}".format(bob_data))
+        self.assertTrue(
+            any(b"alice says hi" in m for m in bob_data if m),
+            "msg_cb did not see 'alice says hi' in: {!r}".format(bob_data),
+        )
 
         from_bob = await alice_pipe.recv(SUB_ALL, timeout=5)
         self.assertEqual(from_bob, b"bob says hi")

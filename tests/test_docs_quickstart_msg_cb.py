@@ -37,7 +37,12 @@ class TestMsgCallback(AsyncTestCase):
 
         async def on_msg(msg, client_tup, pipe):
             received_data.append(msg)
-            received.set()
+            # Only release the awaiter once the actual payload arrives.
+            # Prior shape -- set() on first msg -- raced with empty
+            # framer trailers (b"") and CON_ID handshake bytes that
+            # show up first on multi-listener nodes.
+            if msg and b"test payload" in msg:
+                received.set()
 
         self.bob.add_msg_cb(on_msg)
 
