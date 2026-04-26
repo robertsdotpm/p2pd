@@ -25,7 +25,19 @@ class DirectConnect(TraversalPlugin):
         # (2) Build a 'route' from it with it's main NIC IP.
         # (3) Bind to the route at port 0. Return itself.
         if self.af == IP4:
-            route = await self.nic.route(self.af).bind()
+            # Same-machine cross-subnet: when dest is alice/bob's
+            # 127.X.Y.Z loopback alias, the source must also be
+            # loopback or the OS won't route the SYN over lo
+            # (Windows drops cross-subnet src->loopback dest entirely).
+            # alice's own loopback alias is already in src_info; fall
+            # back to 127.0.0.1 if for any reason it's missing.
+            if dest[0].startswith("127."):
+                src_lo = self.src_info.get("loopback")
+                src_ip = str(src_lo) if src_lo is not None else "127.0.0.1"
+                route = self.nic.route(self.af)
+                await route.bind(ips=src_ip)
+            else:
+                route = await self.nic.route(self.af).bind()
         if self.af == IP6:
             if "fe80" == dest[0][:4]:
                 route = self.nic.route(self.af)
