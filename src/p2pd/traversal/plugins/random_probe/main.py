@@ -15,7 +15,7 @@ for random-probe; see the design note at the bottom of this file.
 """
 
 import asyncio
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from aionetiface import (
     EXT_BIND,
@@ -37,6 +37,7 @@ from .random_probe_lib import (
     make_udp_socket,
     run_non_sym_side,
     run_symmetric_side,
+    stun_discover_mapping,
     wait_until,
 )
 
@@ -337,30 +338,47 @@ class RandomProbePlugin(TraversalPlugin):
         """Build the RandomProbeMsg this side sends to its peer.
 
         ext_ip in the payload carries whichever address the algorithm
-        will actually fire at -- self.my_addr_ip, populated in run()
-        based on same_machine.  Cross-machine: ext IP.  Same-machine:
-        NIC IP so the kernel routes via lo and there's no NAT in
-        the path.
+        will actually fire at:
+          * STUN-discovered mapped IP (highest priority -- this is
+            the real external address on a NAT'd host).
+          * self.my_addr_ip (NIC if same_machine, ext otherwise) as
+            the fallback when STUN didn't run (sym side) or didn't
+            return a mapping.
         """
+        ext_ip = (
+            getattr(self, "mapped_ip", None)
+            or getattr(self, "my_addr_ip", "")
+            or ""
+        )
         return RandomProbeMsg({
             "payload": {
                 "role": role,
                 "punch_time": int(punch_time),
                 "magic": magic,
-                "ext_ip": str(getattr(self, "my_addr_ip", "") or ""),
+                "ext_ip": str(ext_ip),
                 "known_port": self.our_known_port(),
                 "probe_count": DEFAULT_PROBE_COUNT,
             },
         })
 
     async def prebind_non_sym_sock(self) -> None:
-        """Bind the non-sym side's UDP socket *before* signaling.
+        """Bind the non-sym side's UDP socket *before* signaling +
+        STUN-discover the (mapped_ip, mapped_port) it lands at.
 
         Stashed on self.prebound_sock and reused by run_non_sym_side
-        at fire time.  We need to commit to a local source port now
-        so the symmetric peer knows where to aim its 256 probes --
-        sending it the post-bind ephemeral port is too late, the
-        signal exchange has already finished by then.
+        at fire time.  The peer needs the *mapped* (external) IP and
+        port to aim at, not the local bind port -- on a real NAT the
+        external port is whatever the router assigned, not necessarily
+        the local source port.  Without this STUN step the peer fires
+        256 probes at a port the cone's NAT has no mapping for, every
+        one gets dropped at the cone's NAT, and the round can never
+        converge.
+
+        Falls back to (local_ip, local_port) when no STUN servers are
+        available or the queries time out -- in that case the
+        algorithm only works on full-cone NATs that happen to do port
+        preservation, which matches the pre-STUN behaviour and is
+        still useful for same-machine / loopback testing.
         """
         try:
             route = await self.nic.route(self.af).bind()
@@ -374,23 +392,90 @@ class RandomProbePlugin(TraversalPlugin):
             log("RandomProbePlugin: pre-bind UDP socket failed")
             self.prebound_sock = None
             self.prebound_port = 0
+            return
+
+        # STUN-discover the external mapping.  We pull UDP STUN
+        # servers via get_infra (the existing node.stun_clients are
+        # TCP-only -- they're for the punch plugin) and try each in
+        # turn; the first one that replies wins.  On total failure
+        # we leave self.mapped_* unset and fall back to the local
+        # port (cone-NAT-with-port-preservation case + same-machine
+        # local tests where there's no NAT in the path).
+        self.mapped_ip = None
+        self.mapped_port = None
+        stun_servers = self.udp_stun_servers()
+        if not stun_servers:
+            log("RandomProbePlugin: no UDP STUN servers available, "
+                "advertising local port as known_port (works only "
+                "for full-cone-with-port-preservation peers)")
+            return
+
+        loop = asyncio.get_event_loop()
+        for stun_server in stun_servers:
+            try:
+                resolved = await self.resolve_stun_dest(stun_server)
+            except (OSError, ConnectionError, asyncio.TimeoutError):
+                continue
+            mapping = await stun_discover_mapping(
+                loop, self.prebound_sock, resolved, self.af,
+                timeout=2.0, retries=2,
+            )
+            if mapping is not None:
+                self.mapped_ip, self.mapped_port = mapping
+                log("RandomProbePlugin: STUN discovered mapping "
+                    "{0}:{1} for prebound local port {2}".format(
+                        self.mapped_ip, self.mapped_port,
+                        self.prebound_port,
+                    ))
+                return
+        log("RandomProbePlugin: STUN discovery failed on all servers; "
+            "falling back to local port {0}".format(self.prebound_port))
+
+    def udp_stun_servers(self) -> List[Tuple[str, int]]:
+        """Return up to 4 UDP STUN server (ip, port) tuples for our AF.
+
+        Pulls from aionetiface's get_infra rather than node.stun_clients
+        because the latter holds *TCP* STUN clients used by the punch
+        plugin -- random_probe is UDP-only and needs UDP servers.
+        """
+        try:
+            from aionetiface import get_infra, UDP
+        except ImportError:
+            return []
+        try:
+            entries = get_infra(self.af, UDP, "STUN(see_ip)", no=4)
+        except (KeyError, ValueError):
+            return []
+        out = []
+        for entry in entries:
+            # get_infra returns lists of dicts; first dict has ip/port.
+            try:
+                rec = entry[0] if isinstance(entry, list) else entry
+                out.append((rec["ip"], int(rec["port"])))
+            except (KeyError, IndexError, TypeError, ValueError):
+                continue
+        return out
+
+    async def resolve_stun_dest(self, dest: Tuple[str, int]) -> Tuple[str, int]:
+        """DNS-resolve *dest* using the plugin's NIC + AF context."""
+        from aionetiface import resolv_dest
+        return await resolv_dest(self.af, dest, self.nic)
 
     def our_known_port(self) -> int:
         """Non-symmetric side's known external port; 0 if we're sym."""
         if is_symmetric_nat(self.src_info.get("nat") or {}):
             return 0
-        # If we pre-bound a socket for the non-sym fire phase, that's
-        # the port we advertised to the peer -- always prefer it over
-        # any stale src_info["bind_port"].
+        # Prefer the STUN-discovered mapped port -- that's the port
+        # the peer's probes actually need to target on a real NAT.
+        mapped = getattr(self, "mapped_port", None)
+        if mapped:
+            return int(mapped)
+        # Fall back to the local prebind port: only correct when the
+        # NAT does port preservation (full cone, single ext = local)
+        # or when there's no NAT at all (same-machine / loopback).
         prebound = getattr(self, "prebound_port", 0)
         if prebound:
             return int(prebound)
-        # On a cone NAT the external port equals the local source port
-        # we bind, so we just publish whatever bind_port the route
-        # ended up with.  Fall back to 0 if the route hasn't bound yet
-        # (in which case the cone side will bind on a random ephemeral
-        # port at fire time and the symmetric side has nothing to aim
-        # at -- the round simply fails).
         bp = self.src_info.get("bind_port") or 0
         return int(bp)
 
@@ -403,12 +488,9 @@ def p_or_default(key: str) -> float:
 class RandomProbePluginFactory:
     """Builds RandomProbePlugin instances with a shared SysClock.
 
-    Mirrors PunchPluginFactory: the node's SysClock is sampled at
-    setup_plugin() time and injected into every plugin instance via
-    build_plugin().  Old VMs / boxes without time-sync rely on this
-    for FAST_PUNCH_PARAMS to coordinate the rendezvous instant
-    within the 2 s max_clock_error budget -- plain time.time()
-    drifts too far on hosts that haven't run NTP recently.
+    UDP STUN servers are pulled on-demand via get_infra inside
+    prebind_non_sym_sock (the node's own stun_clients dict is TCP,
+    used by the punch plugin).
     """
 
     def __init__(self, sys_clock: Optional[Any] = None) -> None:

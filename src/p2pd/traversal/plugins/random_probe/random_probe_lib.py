@@ -153,6 +153,77 @@ def close_all(socks: List[socket.socket]) -> None:
             pass
 
 
+async def stun_discover_mapping(
+    loop: Any,
+    sock: socket.socket,
+    stun_server: Tuple[str, int],
+    af: int,
+    timeout: float = 3.0,
+    retries: int = 3,
+) -> Optional[Tuple[str, int]]:
+    """
+    Send a STUN binding request via the *already-bound* UDP socket
+    and return the (mapped_ip, mapped_port) the server reports, or
+    None on timeout / parse failure.
+
+    The socket stays under our control -- no Pipe wrapping, no
+    create_datagram_endpoint -- so the algorithm can keep using
+    raw sendto / recvfrom_async on it after this call returns.
+    The NAT mapping installed by this round-trip (local_ip,
+    local_port -> wan_ip, mapped_port) is exactly what the peer
+    needs to aim at, so we want the same socket to keep that
+    mapping alive through the fire phase.
+
+    Imports the STUN message machinery lazily so plugin import
+    isn't load-bearing on aionetiface's STUN package.
+    """
+    from aionetiface.protocol.stun.stun_defs import (
+        RFC5389, STUNMsg, STUNMsgTypes, STUNMsgCodes,
+    )
+    from aionetiface.protocol.stun.stun_utils import stun_proto
+
+    for _ in range(retries):
+        msg = STUNMsg(
+            msg_type=STUNMsgTypes.Binding,
+            msg_code=STUNMsgCodes.Request,
+            mode=RFC5389,
+        )
+        txid = bytes(msg.txn_id)
+        try:
+            sock.sendto(msg.pack(), stun_server)
+        except OSError:
+            return None
+
+        deadline = loop.time() + timeout
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            try:
+                data, _addr = await asyncio.wait_for(
+                    recvfrom_async(loop, sock),
+                    timeout=remaining,
+                )
+            except asyncio.TimeoutError:
+                break
+            except OSError:
+                return None
+
+            # Match the response to our txid.  Anything else is a
+            # stray packet and is ignored.
+            if len(data) < 20 or bytes(data[8:20]) != txid:
+                continue
+            try:
+                reply, _ = stun_proto(data, af)
+            except (ValueError, IndexError):
+                continue
+            rtup = getattr(reply, "rtup", None)
+            if rtup is None:
+                continue
+            return (str(rtup[0]), int(rtup[1]))
+    return None
+
+
 async def recvfrom_async(loop: Any, sock: socket.socket, bufsize: int = 2048) -> Tuple[bytes, Tuple[str, int]]:
     """
     Async UDP recvfrom that works on Python 3.5+.
