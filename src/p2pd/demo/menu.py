@@ -79,6 +79,14 @@ async def connect_option(node: Any, con_opts: Tuple[Any, Optional[bytes], Option
     except (OSError, ConnectionError, asyncio.TimeoutError) as e:
         cout("Connection error: " + str(e))
         return "menu"
+    except ValueError as e:
+        # node.connect raises ValueError for predictable user-input
+        # mistakes -- e.g. picking NIC_BIND with a peer whose addr_map
+        # claims our own NIC IP, or asking for an AF the peer doesn't
+        # advertise. The validation message is the useful signal; the
+        # full traceback is just noise in interactive use.
+        cout("Cannot establish connection: " + str(e))
+        return "menu"
 
     plugin_holder = [plugin]
     pipe = await async_wrap_errors(plugin.result, timeout=40)
