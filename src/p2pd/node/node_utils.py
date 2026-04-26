@@ -190,33 +190,105 @@ def norm_listen_ips(listen_ips: List[str]) -> List[str]:
 
 
 def load_signing_key(nics: List[Any], listen_ips: List[str], listen_port: int, install_path: str) -> SigningKey:
-    """Load the node's ECDSA signing key from disk, generating and persisting a new one if absent."""
+    """Load the node's ECDSA signing key from disk, generating and persisting a new one if absent.
+
+    Identity stability rule: the on-disk path is keyed by (sorted NIC
+    names, listen_port) ONLY -- listen_ips is intentionally excluded.
+
+    Why: on IPv6-enabled hosts the kernel rotates privacy / temporary
+    addresses every few hours.  Mixing those into the hash made every
+    rotation generate a brand-new key, brand-new pub_key, brand-new
+    node_id, and brand-new nickname registration with PNP -- the
+    user's identity churned with every IPv6 address swap.
+
+    Two p2pd instances with the same NIC set + same listen_port can't
+    coexist anyway (port collision), so collapsing them onto the same
+    key file is fine -- the original disambiguation purpose still
+    holds for distinct (NIC, port) configs.
+
+    listen_ips is kept in the function signature for backwards
+    compatibility with older callers but is no longer hashed.
+    """
     # Make install dir if needed.
     pathlib.Path(install_path).mkdir(parents=True, exist_ok=True)
 
-    # Store cryptographic random bytes here for ECDSA ident.
-    listen_str = ",".join(listen_ips) + ":" + str(listen_port)
     nic_str = ";".join([n.name for n in nics])
-    listen_hash = hash160(nic_str + ">" + listen_str)  # hex
+    listen_hash = hash160(nic_str + ":" + str(listen_port))  # hex
+    # v2_ prefix distinguishes the listen_ips-free hashing scheme from
+    # the legacy listen_ips-namespaced files.  adopt_legacy_signing_key
+    # uses the absence of v2_ to identify pre-fix files for migration.
     sk_path = os.path.realpath(
-        os.path.join(install_path, fstr("PRIV_KEY_DONT_SHARE_{0}.hex", (listen_hash,)))
+        os.path.join(install_path, fstr("PRIV_KEY_DONT_SHARE_v2_{0}.hex", (listen_hash,)))
     )
 
-    # Read existing key, or generate and persist a new one.
+    # Read existing key, or migrate forward from any older
+    # listen_ips-namespaced key, or generate fresh.
     if os.path.exists(sk_path):
         with open(sk_path, mode="r", encoding="utf-8") as fp:
             sk_hex = fp.read()
     else:
-        sk = SigningKey.generate(curve=SECP256k1)
-        sk_buf = sk.to_string()
-        sk_hex = to_h(sk_buf)
-        with open(sk_path, "w", encoding="utf-8") as file:
-            file.write(sk_hex)
+        legacy_sk_hex = adopt_legacy_signing_key(install_path)
+        if legacy_sk_hex is not None:
+            sk_hex = legacy_sk_hex
+            with open(sk_path, "w", encoding="utf-8") as file:
+                file.write(sk_hex)
+        else:
+            sk = SigningKey.generate(curve=SECP256k1)
+            sk_buf = sk.to_string()
+            sk_hex = to_h(sk_buf)
+            with open(sk_path, "w", encoding="utf-8") as file:
+                file.write(sk_hex)
 
     # Convert secret key to a singing key.
     sk_buf = h_to_b(sk_hex)
     sk = SigningKey.from_string(sk_buf, curve=SECP256k1)
     return sk
+
+
+def adopt_legacy_signing_key(install_path: str) -> Optional[str]:
+    """Pick up an old listen_ips-namespaced key file when migrating to the
+    stable key path; returns the hex contents, or None when nothing fits.
+
+    Strategy: among all PRIV_KEY_DONT_SHARE_*.hex files in install_path,
+    use the most-recently-modified one (the user's last active identity).
+    Older churn-generated files are ignored.  We do NOT delete them --
+    silent deletion of crypto material is the wrong default; the user
+    can clean them up manually once they confirm the new pinned identity
+    works.
+    """
+    try:
+        entries = os.listdir(install_path)
+    except OSError:
+        return None
+
+    candidates = []
+    for name in entries:
+        if not name.startswith("PRIV_KEY_DONT_SHARE_"):
+            continue
+        if not name.endswith(".hex"):
+            continue
+        # Skip the v2 scheme -- those are already in the new format
+        # and shouldn't be cross-adopted between distinct (NIC, port)
+        # configs that happen to share an install_path.
+        if name.startswith("PRIV_KEY_DONT_SHARE_v2_"):
+            continue
+        full = os.path.join(install_path, name)
+        try:
+            mtime = os.path.getmtime(full)
+        except OSError:
+            continue
+        candidates.append((mtime, full))
+
+    if not candidates:
+        return None
+
+    candidates.sort(reverse=True)
+    newest = candidates[0][1]
+    try:
+        with open(newest, mode="r", encoding="utf-8") as fp:
+            return fp.read()
+    except OSError:
+        return None
 
 
 async def fallback_machine_id(netifaces: Any, app_id: str = "p2pd") -> str:
