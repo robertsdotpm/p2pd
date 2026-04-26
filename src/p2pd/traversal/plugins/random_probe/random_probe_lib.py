@@ -369,6 +369,7 @@ async def run_non_sym_side(
     sock: Optional[socket.socket] = None,
     own_ext_ip: Optional[str] = None,
     interface: Optional[Any] = None,
+    require_alignment: bool = True,
 ) -> Optional[Dict[str, Any]]:
     """
     Run the non-symmetric half of the random-probe rendezvous.
@@ -450,11 +451,22 @@ async def run_non_sym_side(
         # peer probe.
         if own_ext_ip and peer[0] == own_ext_ip:
             continue
-        if peer[1] not in expected_src_ports:
-            # Symmetric peer's NAT mapped this flow to an ext port
-            # outside our dst set -- replying here probably won't
-            # land anywhere useful.  Keep listening for an aligned
-            # one.
+        if require_alignment and peer[1] not in expected_src_ports:
+            # Restrict-port NAT case: our home router only routes
+            # inbound from peers we've previously sent to.  The
+            # symmetric peer's NAT mapped this flow to an ext port
+            # outside our dst set, so our home router didn't open
+            # an inbound permission for it -- replying probably
+            # won't land anywhere useful.  Keep listening for an
+            # aligned probe whose source port is one we fired at.
+            #
+            # Skipped (require_alignment=False) when our NAT is
+            # full-cone / open-internet: the home router routes
+            # inbound from ANY external source on the mapped port,
+            # so any sym probe reaches us and any reply we send
+            # back travels through the carrier's per-flow mapping
+            # to the right sym sock.  Filtering by alignment in
+            # that case rejects 37%+ of legitimate convergences.
             continue
         # Aligned 4-tuple.  Send the CONFIRM probe so the symmetric
         # side's watcher locks onto *this* socket pair, not whichever

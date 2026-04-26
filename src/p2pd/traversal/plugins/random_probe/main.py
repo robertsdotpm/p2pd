@@ -255,6 +255,24 @@ class RandomProbePlugin(TraversalPlugin):
                 or self.my_addr_ip
                 or None
             )
+            # require_alignment: only enforce the "src-port-in-dst-
+            # set" filter for restrict-port NATs.  Full-cone /
+            # open-internet route inbound from any source on the
+            # mapped port, so the alignment filter would reject
+            # legitimate sym probes whose carrier-assigned ext port
+            # doesn't happen to be in our random dst set (~37% of
+            # convergences thrown away).
+            from aionetiface.nic.nat.nat_defs import (
+                FULL_CONE,
+                OPEN_INTERNET,
+                SYMMETRIC_UDP_FIREWALL,
+            )
+            our_nat_type = int((my_nat or {}).get("type") or 0)
+            permissive_nats = (FULL_CONE, OPEN_INTERNET, SYMMETRIC_UDP_FIREWALL)
+            require_alignment = our_nat_type not in permissive_nats
+            print("[RP-FILTER] our_nat={0} require_alignment={1}".format(
+                our_nat_type, require_alignment,
+            ))
             res = await run_non_sym_side(
                 bind_ip=bind_ip,
                 known_port=self.our_known_port(),
@@ -265,6 +283,7 @@ class RandomProbePlugin(TraversalPlugin):
                 sock=getattr(self, "prebound_sock", None),
                 own_ext_ip=own_ext_for_filter,
                 interface=self.nic,
+                require_alignment=require_alignment,
             )
         else:
             res = await run_symmetric_side(
