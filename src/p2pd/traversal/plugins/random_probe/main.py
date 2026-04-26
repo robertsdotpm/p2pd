@@ -140,6 +140,12 @@ class RandomProbePlugin(TraversalPlugin):
             # can match them when the peer's reply arrives.
             self.session_nonce = rand_b(16)
             self.session_role = my_role
+            # NTP-aligned timestamp via SysClock.  Old VMs / boxes
+            # without time-sync drift far enough that plain
+            # time.time() blows the FAST_PUNCH_PARAMS.max_clock_error
+            # (2 s) budget; SysClock samples a quorum of NTP servers
+            # so both peers agree on the same Unix second within
+            # the allowed error.
             timestamp = self.sys_clock.time()
             p = FAST_PUNCH_PARAMS
             _, punch_time = compute_rendezvous(
@@ -268,8 +274,8 @@ class RandomProbePlugin(TraversalPlugin):
         })
 
     def our_known_port(self) -> int:
-        """Cone side's known external port; 0 for the symmetric side."""
-        if not is_cone_nat(self.src_info.get("nat") or {}):
+        """Non-symmetric side's known external port; 0 if we're sym."""
+        if is_symmetric_nat(self.src_info.get("nat") or {}):
             return 0
         # On a cone NAT the external port equals the local source port
         # we bind, so we just publish whatever bind_port the route
@@ -286,8 +292,37 @@ def p_or_default(key: str) -> float:
     return float(FAST_PUNCH_PARAMS.get(key, 8.0))
 
 
-PLUGIN_CLASS = RandomProbePlugin
+class RandomProbePluginFactory:
+    """Builds RandomProbePlugin instances with a shared SysClock.
+
+    Mirrors PunchPluginFactory: the node's SysClock is sampled at
+    setup_plugin() time and injected into every plugin instance via
+    build_plugin().  Old VMs / boxes without time-sync rely on this
+    for FAST_PUNCH_PARAMS to coordinate the rendezvous instant
+    within the 2 s max_clock_error budget -- plain time.time()
+    drifts too far on hosts that haven't run NTP recently.
+    """
+
+    def __init__(self, sys_clock: Optional[Any] = None) -> None:
+        self.sys_clock = sys_clock or SysClock(None, 0.1)
+
+    def build_plugin(self) -> "RandomProbePlugin":
+        """Create a new RandomProbePlugin wired to this factory's SysClock."""
+        plugin = RandomProbePlugin()
+        plugin.sys_clock = self.sys_clock
+        return plugin
+
+    async def close(self) -> None:
+        """No-op: the factory holds no socket / process state."""
+        return None
+
+
 PLUGIN_CONF = {"timeout": 30}
+
+
+async def setup_plugin(node: Any) -> RandomProbePluginFactory:
+    """Discovered by plugin_loader; injects node.sys_clock into the factory."""
+    return RandomProbePluginFactory(sys_clock=node.sys_clock)
 
 
 # ─────────────────────────────────────────────────────────────────
