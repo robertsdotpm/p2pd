@@ -223,8 +223,14 @@ async def setup_signal_router(node: Any, router: Any, out: bool, cout: Callable)
     # Subscribe to our own MQTT topic so we can receive incoming signals.
     if out:
         cout("\tLoading MQTT router...")
+    # XP's TCP/TLS-less MQTT handshake measurably slower than newer
+    # Windows; observed ~8-12s on a fresh socket. 15s gives headroom
+    # without dragging healthy hosts (which complete in <1s) into a
+    # noticeably slower startup. router.start internally connects to
+    # multiple MQTT brokers and racing the slower of them past 15s
+    # is genuinely unhealthy.
     try:
-        clients = await asyncio.wait_for(router.start(), timeout=8)
+        clients = await asyncio.wait_for(router.start(), timeout=15)
     except asyncio.TimeoutError as exc:
         raise OSError("Router MQTT start timed out - signaling may be degraded") from exc
 
