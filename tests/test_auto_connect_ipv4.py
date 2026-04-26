@@ -1,12 +1,10 @@
 """
 Integration tests — IPv4 direct_connect.
 
-Split out of test_auto_connect.py so the heavy AsyncTestCase classes each
-get their own subprocess (the runner schedules per test_*.py file).
-
-Each test gives alice and bob their own (cloned) NIC subset via
-split_two_node_setups so their addr_maps differ at the NIC level and
-direct_connect actually has a NIC_BIND combo to try.
+Strict on multi-NIC machines: once require_split_or_fail has handed us
+two real NICs each carrying an IPv4 IP, every subsequent failure is a
+real failure -- no skipTest fallbacks. Node startup exceptions, auto_connect
+timeouts, and pipe is None all propagate as ERROR / FAIL.
 """
 
 import asyncio
@@ -22,18 +20,32 @@ from auto_connect_helpers import (
 )
 
 
+def log_pipe(label, pipe, plugin=None):
+    print("[IPV4-TEST] {0}: pipe={1!r} sock={2!r} plugin={3}".format(
+        label, pipe, getattr(pipe, "sock", None),
+        type(plugin).__name__ if plugin is not None else None,
+    ))
+
+
+def log_node(label, node):
+    print("[IPV4-TEST] {0}: listen_ips={1} listen_port={2} addr_map[IP4]={3}".format(
+        label, node.listen_ips, node.listen_port, node.addr_map.get(IP4),
+    ))
+
+
 class TestAutoConnectIPv4(AsyncTestCase):
     """auto_connect over IPv4 NIC_BIND between two nodes on the same host."""
 
     async def asyncSetUp(self):
         probe_ifs = await fresh_ifs()
-        # Strict: on a multi-NIC machine the connectivity tests MUST run.
-        # require_split_or_fail skipTests cleanly only when fewer than 2
-        # NICs are present; otherwise it fails loudly so a fixture bug
-        # can never silently turn into a skip.
         self.ifs_a, self.ip_a, self.ifs_b, self.ip_b = require_split_or_fail(
             self, probe_ifs, IP4, label="auto_connect IPv4",
         )
+        print("[IPV4-TEST] setup ip_a={0} ip_b={1} ifs_a={2} ifs_b={3}".format(
+            self.ip_a, self.ip_b,
+            [nic.id for nic in self.ifs_a],
+            [nic.id for nic in self.ifs_b],
+        ))
         self.node_a = self.node_b = None
 
     async def asyncTearDown(self):
@@ -41,19 +53,16 @@ class TestAutoConnectIPv4(AsyncTestCase):
 
     async def test_auto_connect_returns_pipe(self):
         """auto_connect must return a usable pipe."""
-        try:
-            self.node_a = await start_node_with_ifs(self.ifs_a, [self.ip_a], PORT_A_T1)
-            self.node_b = await start_node_with_ifs(self.ifs_b, [self.ip_b], PORT_B_T1)
-        except Exception as exc:
-            self.skipTest("Node startup failed: {}".format(exc))
+        self.node_a = await start_node_with_ifs(self.ifs_a, [self.ip_a], PORT_A_T1)
+        self.node_b = await start_node_with_ifs(self.ifs_b, [self.ip_b], PORT_B_T1)
+        log_node("node_a", self.node_a)
+        log_node("node_b", self.node_b)
 
-        try:
-            pipe, plugin = await asyncio.wait_for(
-                auto_connect(self.node_a, self.node_b.addr_bytes, timeout=20),
-                timeout=25,
-            )
-        except asyncio.TimeoutError:
-            self.skipTest("auto_connect timed out")
+        pipe, plugin = await asyncio.wait_for(
+            auto_connect(self.node_a, self.node_b.addr_bytes, timeout=20),
+            timeout=25,
+        )
+        log_pipe("auto_connect_returns_pipe", pipe, plugin)
 
         self.assertIsNotNone(pipe)
         self.assertIsNotNone(plugin)
@@ -67,35 +76,19 @@ class TestAutoConnectIPv4(AsyncTestCase):
 
     async def test_plugin_is_direct_connect_on_same_lan(self):
         """NIC_BIND direct_connect should win on the same LAN."""
-        print("[IPV4-TEST] setup ip_a={} ip_b={}".format(self.ip_a, self.ip_b))
-        print("[IPV4-TEST] ifs_a={}".format([nic.id for nic in self.ifs_a]))
-        print("[IPV4-TEST] ifs_b={}".format([nic.id for nic in self.ifs_b]))
-        try:
-            self.node_a = await start_node_with_ifs(self.ifs_a, [self.ip_a], PORT_A_T2)
-            self.node_b = await start_node_with_ifs(self.ifs_b, [self.ip_b], PORT_B_T2)
-        except Exception as exc:
-            print("[IPV4-TEST] node startup failed: {!r}".format(exc))
-            self.skipTest("Node startup failed: {}".format(exc))
-
-        print("[IPV4-TEST] node_a addr_map IP4={}".format(self.node_a.addr_map.get(IP4)))
-        print("[IPV4-TEST] node_b addr_map IP4={}".format(self.node_b.addr_map.get(IP4)))
+        self.node_a = await start_node_with_ifs(self.ifs_a, [self.ip_a], PORT_A_T2)
+        self.node_b = await start_node_with_ifs(self.ifs_b, [self.ip_b], PORT_B_T2)
+        log_node("node_a", self.node_a)
+        log_node("node_b", self.node_b)
         print("[IPV4-TEST] node_a plugins={}".format(
             list(self.node_a.traversal.plugin_loaders.keys())
         ))
-        print("[IPV4-TEST] calling auto_connect ...")
 
-        try:
-            pipe, plugin = await asyncio.wait_for(
-                auto_connect(self.node_a, self.node_b.addr_bytes, timeout=20),
-                timeout=25,
-            )
-        except asyncio.TimeoutError:
-            print("[IPV4-TEST] auto_connect timed out at outer wait_for")
-            self.skipTest("auto_connect timed out")
-
-        print("[IPV4-TEST] auto_connect returned pipe={!r} plugin={}".format(
-            pipe, type(plugin).__name__ if plugin is not None else None,
-        ))
+        pipe, plugin = await asyncio.wait_for(
+            auto_connect(self.node_a, self.node_b.addr_bytes, timeout=20),
+            timeout=25,
+        )
+        log_pipe("direct_connect_on_same_lan", pipe, plugin)
 
         self.assertIsNotNone(pipe)
         self.assertIn(
@@ -110,15 +103,15 @@ class TestAutoConnectIPv4(AsyncTestCase):
 
     async def test_combos_include_nic_bind(self):
         """NIC_BIND combos must be generated when two NIC IPs are reachable."""
-        try:
-            self.node_a = await start_node_with_ifs(self.ifs_a, [self.ip_a], PORT_A_T3)
-            self.node_b = await start_node_with_ifs(self.ifs_b, [self.ip_b], PORT_B_T3)
-        except Exception as exc:
-            self.skipTest("Node startup failed: {}".format(exc))
+        self.node_a = await start_node_with_ifs(self.ifs_a, [self.ip_a], PORT_A_T3)
+        self.node_b = await start_node_with_ifs(self.ifs_b, [self.ip_b], PORT_B_T3)
+        log_node("node_a", self.node_a)
+        log_node("node_b", self.node_b)
 
         dest_map = parse_node_addr(self.node_b.addr_bytes)
         combos = auto_combos(self.node_a, self.node_a.addr_map, dest_map)
         route_types = {c[2] for c in combos}
+        print("[IPV4-TEST] combos route_types={}".format(route_types))
         self.assertIn(NIC_BIND, route_types)
 
 
