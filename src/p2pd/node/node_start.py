@@ -293,7 +293,20 @@ async def finalize_port_forwarding(node: Any, upnp_task: Optional[Any], out: boo
         if out:
             cout("\tStarting UPnP forwarding...")
 
-        upnp_ret = await upnp_task
+        # Cap UPnP discovery / port-forward at 8s -- on XP the SSDP
+        # stack drags this out to 13-15s, which combined with the
+        # other startup phases blows past the 30s wait_for budget
+        # callers like asyncio.wait_for(Node().start(), timeout=30)
+        # use, making node startup look like a hard timeout when it's
+        # actually just slow UPnP. 8s is enough for a working router
+        # on every other platform; failures degrade gracefully (no
+        # forwarding -> reverse_connect fallback still works).
+        try:
+            upnp_ret = await asyncio.wait_for(upnp_task, timeout=8)
+        except asyncio.TimeoutError:
+            upnp_ret = None
+            if out:
+                cout("\t\tUPnP timed out after 8s; continuing without forwarding.")
         if upnp_ret:
             forward_success, reachable = upnp_ret
         else:

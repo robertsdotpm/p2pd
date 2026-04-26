@@ -95,9 +95,48 @@ async def step_nickname():
     name = "xpstress" + str(int(time.time() * 1000))[-8:]
     val = b"xp-stress-value"
     fqn = await asyncio.wait_for(nick.put(name, val), timeout=30)
-    got = await asyncio.wait_for(nick.get(fqn), timeout=30)
-    await asyncio.wait_for(nick.delete(fqn), timeout=30)
-    return {"fqn": fqn, "got_ok": got is not None}
+    print("    [nickname-dbg] put OK fqn={0!r}".format(fqn))
+
+    # Catch the read-after-write window: try the immediate get,
+    # and if it fails, retry after a 2s settle and report both.
+    immediate_err = None
+    try:
+        got = await asyncio.wait_for(nick.get(fqn), timeout=30)
+        print("    [nickname-dbg] immediate get returned {0!r}".format(
+            got is not None
+        ))
+    except Exception as exc:
+        immediate_err = exc
+        got = None
+        print("    [nickname-dbg] immediate get failed: {0!r}".format(exc))
+
+    settled = None
+    settled_err = None
+    if got is None:
+        await asyncio.sleep(2)
+        try:
+            settled = await asyncio.wait_for(nick.get(fqn), timeout=30)
+            print("    [nickname-dbg] after 2s settle, get returned {0!r}".format(
+                settled is not None
+            ))
+        except Exception as exc:
+            settled_err = exc
+            print("    [nickname-dbg] after settle, get still failed: {0!r}".format(
+                exc
+            ))
+
+    try:
+        await asyncio.wait_for(nick.delete(fqn), timeout=30)
+    except Exception as exc:
+        print("    [nickname-dbg] delete failed: {0!r}".format(exc))
+
+    return {
+        "fqn": fqn,
+        "immediate_got": got is not None,
+        "settled_got": settled is not None,
+        "immediate_err": repr(immediate_err) if immediate_err else None,
+        "settled_err": repr(settled_err) if settled_err else None,
+    }
 
 
 async def step_node():
@@ -108,19 +147,67 @@ async def step_node():
     same loop don't collide on TIME_WAIT.
     """
     from p2pd.node.node import Node, NODE_PORT
+    from p2pd.node import node_start as ns_module
     port = NODE_PORT + 6000 + (int(time.time() * 1000) % 5000)
-    # Explicit .start() returns a coroutine -- Node() alone is awaitable
-    # via __await__ but Python 3.5.0's asyncio.ensure_future only
-    # accepts coroutines/futures, not arbitrary awaitables.
-    node = await asyncio.wait_for(Node(port=port).start(), timeout=30)
+
+    # Wrap each named startup phase to record entry/exit times so we
+    # can see which phase eats the budget on XP. Restore originals
+    # afterwards so the next iteration measures fresh.
+    phase_timings = []
+    phase_names = [
+        "load_network_interfaces",
+        "load_machine_identity",
+        "initialize_system_clock",
+        "load_p2p_stun_clients",
+        "setup_router_and_signal",
+        "initialize_punch_coordination",
+        "build_node_address",
+        "setup_nickname_service",
+        "setup_traversal_plugins",
+        "finalize_port_forwarding",
+    ]
+    originals = {}
+    for name in phase_names:
+        if not hasattr(ns_module, name):
+            continue
+        fn = getattr(ns_module, name)
+        # Only wrap async coroutine functions; wrapping a plain sync
+        # function would change its return type from value to coroutine
+        # and break callers (build_node_address used to warn about
+        # exactly this).
+        if not asyncio.iscoroutinefunction(fn):
+            continue
+        originals[name] = fn
+
+        def builder(n=name, fn=fn):
+            async def wrapper(*args, **kwargs):
+                t0 = time.time()
+                try:
+                    return await fn(*args, **kwargs)
+                finally:
+                    elapsed = time.time() - t0
+                    phase_timings.append((n, elapsed))
+                    print("        [node-phase] {0:35s} {1:6.2f}s".format(n, elapsed))
+            return wrapper
+        setattr(ns_module, name, builder())
+
     try:
-        addr = node.addr_bytes
-        return {"addr_len": len(addr) if addr else 0}
-    finally:
+        # Explicit .start() returns a coroutine -- Node() alone is
+        # awaitable via __await__ but Python 3.5.0's
+        # asyncio.ensure_future only accepts coroutines/futures.
+        node = await asyncio.wait_for(Node(port=port).start(), timeout=30)
         try:
-            await asyncio.wait_for(node.close(), timeout=15)
-        except Exception:
-            pass
+            addr = node.addr_bytes
+            return {"addr_len": len(addr) if addr else 0,
+                    "phases": phase_timings}
+        finally:
+            try:
+                await asyncio.wait_for(node.close(), timeout=15)
+            except Exception:
+                pass
+    finally:
+        for name, fn in originals.items():
+            setattr(ns_module, name, fn)
 
 
 async def run_step(label, coro_factory):
