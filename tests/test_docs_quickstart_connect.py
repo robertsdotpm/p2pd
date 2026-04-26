@@ -50,79 +50,107 @@ class TestQuickstartConnect(AsyncTestCase):
             pass
 
     async def test_send_and_receive_message(self):
-        """Alice sends a message; Bob receives it via a subscribed pipe."""
+        """Alice sends; bob's msg_cb captures the bytes.
+
+        alice's auto_connect pipe is alice's outgoing client socket. Bytes
+        alice sends arrive on bob's server-side accepted pipe; the daemon
+        hands them to bob's msg_cb. A second auto_connect from bob to alice
+        opens a different connection that wouldn't see alice's outbound
+        bytes, so we capture via msg_cb instead.
+        """
         try:
             self.alice = await Node(port=BASE_PORT + 12, conf=QUICKSTART_CONF).start()
             self.bob   = await Node(port=BASE_PORT + 13, conf=QUICKSTART_CONF).start()
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
-        alice_pipe = bob_pipe = None
+        received = asyncio.Event()
+        received_data = []
+
+        async def on_bob_msg(msg, client_tup, pipe):
+            received_data.append(msg)
+            received.set()
+
+        self.bob.add_msg_cb(on_bob_msg)
+
         try:
             alice_pipe, _ = await asyncio.wait_for(
                 auto_connect(self.alice, self.bob.address()),
                 timeout=20,
             )
-            bob_pipe, _ = await asyncio.wait_for(
-                auto_connect(self.bob, self.alice.address()),
-                timeout=20,
-            )
         except asyncio.TimeoutError:
             self.skipTest("auto_connect timed out")
 
-        if alice_pipe is None or bob_pipe is None:
+        if alice_pipe is None:
             self.skipTest("auto_connect returned no pipe (no multi-path routes available)")
-        bob_pipe.subscribe(SUB_ALL)
-        await alice_pipe.send(b"hello from alice")
-        data = await bob_pipe.recv(SUB_ALL, timeout=5)
-        self.assertEqual(data, b"hello from alice")
 
-        for p in (alice_pipe, bob_pipe):
-            try:
-                await asyncio.wait_for(p.close(), timeout=5)
-            except Exception:
-                pass
+        await alice_pipe.send(b"hello from alice")
+
+        try:
+            await asyncio.wait_for(received.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            self.fail("bob's msg_cb didn't fire within 5s")
+
+        self.assertIn(b"hello from alice", received_data)
+
+        try:
+            await asyncio.wait_for(alice_pipe.close(), timeout=5)
+        except Exception:
+            pass
 
     async def test_bidirectional_exchange(self):
-        """Both sides can send and receive."""
+        """Both sides can send and receive via msg_cb captures.
+
+        alice sends via her outgoing pipe -> bob's msg_cb fires; bob then
+        replies on the SAME inbound pipe (the one passed to msg_cb) so
+        alice's pipe.recv picks it up. That keeps the data on a single
+        socket pair instead of opening a second cross-direction connection
+        that wouldn't see alice's bytes.
+        """
         try:
             self.alice = await Node(port=BASE_PORT + 14, conf=QUICKSTART_CONF).start()
             self.bob   = await Node(port=BASE_PORT + 15, conf=QUICKSTART_CONF).start()
         except Exception as exc:
             self.skipTest("Node startup failed: {}".format(exc))
 
-        alice_pipe = bob_pipe = None
+        bob_received = asyncio.Event()
+        bob_data = []
+
+        async def on_bob_msg(msg, client_tup, pipe):
+            bob_data.append(msg)
+            bob_received.set()
+            # Reply on the same pipe so alice can read it.
+            await pipe.send(b"bob says hi", client_tup)
+
+        self.bob.add_msg_cb(on_bob_msg)
+
         try:
             alice_pipe, _ = await asyncio.wait_for(
                 auto_connect(self.alice, self.bob.address()),
                 timeout=20,
             )
-            bob_pipe, _ = await asyncio.wait_for(
-                auto_connect(self.bob, self.alice.address()),
-                timeout=20,
-            )
         except asyncio.TimeoutError:
             self.skipTest("auto_connect timed out")
 
-        if alice_pipe is None or bob_pipe is None:
+        if alice_pipe is None:
             self.skipTest("auto_connect returned no pipe (no multi-path routes available)")
+
         alice_pipe.subscribe(SUB_ALL)
-        bob_pipe.subscribe(SUB_ALL)
-
         await alice_pipe.send(b"alice says hi")
-        await bob_pipe.send(b"bob says hi")
 
-        from_alice = await bob_pipe.recv(SUB_ALL, timeout=5)
-        from_bob   = await alice_pipe.recv(SUB_ALL, timeout=5)
+        try:
+            await asyncio.wait_for(bob_received.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            self.fail("bob's msg_cb didn't fire within 5s")
+        self.assertIn(b"alice says hi", bob_data)
 
-        self.assertEqual(from_alice, b"alice says hi")
+        from_bob = await alice_pipe.recv(SUB_ALL, timeout=5)
         self.assertEqual(from_bob, b"bob says hi")
 
-        for p in (alice_pipe, bob_pipe):
-            try:
-                await asyncio.wait_for(p.close(), timeout=5)
-            except Exception:
-                pass
+        try:
+            await asyncio.wait_for(alice_pipe.close(), timeout=5)
+        except Exception:
+            pass
 
     async def test_none_none_on_invalid_address(self):
         """auto_connect returns (None, None) when destination address is unreachable."""

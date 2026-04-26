@@ -61,6 +61,11 @@ class TestDemoTwoNodeConnectivity(AsyncTestCase):
             pass
 
     async def test_two_nodes_exchange_message(self):
+        # alice's auto_connect returns alice's outgoing client pipe to bob;
+        # the bytes alice sends arrive on bob's server-side accepted pipe,
+        # which the daemon hands to bob's msg_cb. So we capture there
+        # instead of trying to read from a "bob_pipe" -- a separate
+        # bob -> alice connection wouldn't see alice's outbound bytes.
         from p2pd.node.auto_connect import auto_connect
         try:
             self.alice = await start_demo_node(BASE_PORT + 24)
@@ -69,34 +74,42 @@ class TestDemoTwoNodeConnectivity(AsyncTestCase):
             log("Node startup failed: {}".format(exc))
             return
 
-        alice_pipe = bob_pipe = None
+        received = asyncio.Event()
+        received_data = []
+
+        async def on_bob_msg(msg, client_tup, pipe):
+            received_data.append(msg)
+            received.set()
+
+        self.bob.add_msg_cb(on_bob_msg)
+
+        alice_pipe = None
         try:
             alice_pipe, _ = await asyncio.wait_for(
                 auto_connect(self.alice, self.bob.address()),
-                timeout=20,
-            )
-            bob_pipe, _ = await asyncio.wait_for(
-                auto_connect(self.bob, self.alice.address()),
                 timeout=20,
             )
         except (asyncio.TimeoutError, OSError, ConnectionError, Exception):
             log("auto_connect did not complete")
             return
 
-        if alice_pipe is None or bob_pipe is None:
+        if alice_pipe is None:
             log("auto_connect returned no pipe (no multi-path routes available)")
             return
 
-        bob_pipe.subscribe(SUB_ALL)
         await alice_pipe.send(b"demo smoke test")
-        data = await bob_pipe.recv(SUB_ALL, timeout=5)
-        self.assertEqual(data, b"demo smoke test")
 
-        for p in (alice_pipe, bob_pipe):
-            try:
-                await asyncio.wait_for(p.close(), timeout=5)
-            except Exception:
-                pass
+        try:
+            await asyncio.wait_for(received.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            self.fail("bob's msg_cb didn't fire within 5s")
+
+        self.assertIn(b"demo smoke test", received_data)
+
+        try:
+            await asyncio.wait_for(alice_pipe.close(), timeout=5)
+        except Exception:
+            pass
 
     async def test_node_receives_via_msg_cb(self):
         """demo's add_echo_support pattern: node receives message via msg_cb."""
