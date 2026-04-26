@@ -69,14 +69,11 @@ def pnp_name_has_tld(name: Any) -> bool:
 
 
 NAMING_TIMEOUT = 10
-
-# Per-server retry. namebump.Client itself has no retries -- a single hung
-# server response would otherwise eat the whole NAMING_TIMEOUT and fail
-# the operation. Three attempts with a short pause between them gives a
-# transient slow server a chance without inflating a healthy call's
-# best-case latency.
-NAMING_RETRIES = 3
-NAMING_RETRY_PAUSE = 0.5
+# Note: per-server retry now lives inside namebump.Client (with_retry).
+# Each call to client.put / get / delete already retries DEFAULT_RETRIES
+# times on transient network errors before propagating the exception.
+# Nickname methods therefore do not need their own retry loop; the
+# NAMING_TIMEOUT bound here applies across all of namebump's retries.
 
 
 class PartialNameSuccess(Exception):
@@ -169,47 +166,37 @@ class Nickname:
         if not self.started:
             raise AssertionError("Nickname client not started. Call start() first.")
         name = pnp_strip_tlds(name)
-        log(fstr(
-            "Nickname.put: name={0} timeout={1} retries={2}",
-            (name, timeout, NAMING_RETRIES),
-        ))
+        log(fstr("Nickname.put: name={0} timeout={1}", (name, timeout)))
 
-        # Single coro for storing at one server. Retries each attempt
-        # NAMING_RETRIES times with NAMING_RETRY_PAUSE between, since
-        # namebump itself has no retry layer.
+        # Single coro for storing at one server. namebump.Client.put
+        # retries internally on transient network errors, so this worker
+        # only needs to walk the AFs and surface any non-network failure.
         async def worker(offset: int) -> Optional[int]:
             """Attempt to store the name on the PNP server at offset and return offset on success."""
-            for attempt in range(NAMING_RETRIES):
-                for af in VALID_AFS:
-                    try:
-                        client = self.clients[af][offset]
-                        if client is None:
-                            continue
+            for af in VALID_AFS:
+                try:
+                    client = self.clients[af][offset]
+                    if client is None:
+                        continue
+                    log(fstr(
+                        "Nickname.put: offset={0} af={1} -> client.put",
+                        (offset, af),
+                    ))
+                    ret = await client.put(name, value, client.kp, behavior)
+                    if ret is None:
                         log(fstr(
-                            "Nickname.put: offset={0} af={1} attempt={2} -> client.put",
-                            (offset, af, attempt),
+                            "Nickname.put: offset={0} af={1} ret=None (continue)",
+                            (offset, af),
                         ))
-                        ret = await client.put(name, value, client.kp, behavior)
-                        if ret is None:
-                            log(fstr(
-                                "Nickname.put: offset={0} af={1} attempt={2} ret=None (continue)",
-                                (offset, af, attempt),
-                            ))
-                            continue
-                        if ret.value is not None:
-                            log(fstr(
-                                "Nickname.put: offset={0} af={1} attempt={2} success",
-                                (offset, af, attempt),
-                            ))
-                            return offset
-                    except (OSError, ConnectionError, asyncio.TimeoutError):
-                        log_exception()
-                if attempt + 1 < NAMING_RETRIES:
-                    await asyncio.sleep(NAMING_RETRY_PAUSE)
-            log(fstr(
-                "Nickname.put: offset={0} exhausted {1} attempts",
-                (offset, NAMING_RETRIES),
-            ))
+                        continue
+                    if ret.value is not None:
+                        log(fstr(
+                            "Nickname.put: offset={0} af={1} success",
+                            (offset, af),
+                        ))
+                        return offset
+                except (OSError, ConnectionError, asyncio.TimeoutError):
+                    log_exception()
             return None
 
         # Schedule store tasks at all PNP servers.
