@@ -79,6 +79,10 @@ PORT_TURN_A_T1 = NODE_PORT + 2500; PORT_TURN_B_T1 = NODE_PORT + 2501
 PORT_TURN_A_T2 = NODE_PORT + 2510
 PORT_TURN_A_T3 = NODE_PORT + 2520; PORT_TURN_B_T3 = NODE_PORT + 2521
 
+# TestAutoConnectTurnLive (IPv4 against real TURN infra) — 2600–2699
+PORT_TURN_LIVE_A = NODE_PORT + 2600
+PORT_TURN_LIVE_B = NODE_PORT + 2601
+
 
 def clone_nic(real_nic, new_id, ip_list):
     """Return a shallow copy of real_nic with a different id and a filtered route pool.
