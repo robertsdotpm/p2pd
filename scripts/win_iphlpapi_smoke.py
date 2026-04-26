@@ -11,7 +11,7 @@ each detected v4/v6 unicast address with prefix length.
 
 import sys
 
-from aionetiface.utility.win_iphlpapi import (
+from aionetiface.nic.netifaces.windows.win_iphlpapi import (
     get_interfaces,
     is_supported,
     to_netifaces_shape,
