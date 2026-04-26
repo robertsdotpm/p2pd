@@ -10,6 +10,7 @@ SIG_GET_ADDR = 4
 SIG_RETURN_ADDR = 5
 SIG_DONE = 6
 SIG_RETRY = 7
+SIG_RANDOM_PROBE = 8
 P2P_PIPE_CONF = {
     "addr_families": [IP4, IP6],
     "addr_types": [EXT_BIND, NIC_BIND],
@@ -20,12 +21,14 @@ P2P_DIRECT = 1
 P2P_REVERSE = 2
 P2P_PUNCH = 3
 P2P_RELAY = 4
+P2P_RANDOM_PROBE = 5
 
 
 DIRECT_FAIL = 11
 REVERSE_FAIL = 12
 PUNCH_FAIL = 13
 RELAY_FAIL = 14
+RANDOM_PROBE_FAIL = 15
 
 # TURN is not included as a default strategy because it uses UDP.
 # It will need a special explanation for the developer.

@@ -13,9 +13,11 @@ from .proto_defs import (
     SIG_RETURN_ADDR,
     SIG_DONE,
     SIG_RETRY,
+    SIG_RANDOM_PROBE,
     P2P_DIRECT,
     P2P_PUNCH,
     P2P_RELAY,
+    P2P_RANDOM_PROBE,
 )
 
 TCP_PUNCH_LAN = 1
@@ -346,6 +348,63 @@ class PunchMsg(ProtoMsg):
         super().__init__(data, enum)
 
 
+class RandomProbeMsg(ProtoMsg):
+    """Carries random-probe rendezvous parameters for symmetric NAT traversal.
+
+    Both sides exchange one of these.  The cone (endpoint-independent)
+    side advertises its known external (ip, port).  The symmetric side
+    advertises only its external IP -- its outbound port mappings are
+    random per-flow and have to be discovered via the probe collision.
+
+    role: "cone" or "sym"
+    """
+
+    class Payload:
+        """Random-probe payload: rendezvous time, both ext IPs, cone known port, magic."""
+
+        def __init__(
+            self,
+            role: str,
+            punch_time: int,
+            magic: str,
+            ext_ip: str,
+            known_port: int = 0,
+            probe_count: int = 256,
+        ) -> None:
+            self.role = to_s(role)
+            self.punch_time = int(punch_time)
+            self.magic = to_s(magic)
+            self.ext_ip = to_s(ext_ip)
+            self.known_port = int(known_port)
+            self.probe_count = int(probe_count)
+
+        def to_dict(self) -> Dict[str, Any]:
+            """Serialise the payload to a JSON-compatible dict."""
+            return {
+                "role": self.role,
+                "punch_time": self.punch_time,
+                "magic": self.magic,
+                "ext_ip": self.ext_ip,
+                "known_port": self.known_port,
+                "probe_count": self.probe_count,
+            }
+
+        @staticmethod
+        def from_dict(d: Dict[str, Any]) -> "RandomProbeMsg.Payload":
+            """Deserialise a dict into a RandomProbeMsg.Payload."""
+            return RandomProbeMsg.Payload(
+                d.get("role", "cone"),
+                d.get("punch_time", 0),
+                d.get("magic", ""),
+                d.get("ext_ip", ""),
+                d.get("known_port", 0),
+                d.get("probe_count", 256),
+            )
+
+    def __init__(self, data: Dict[str, Any], enum: int = SIG_RANDOM_PROBE) -> None:
+        super().__init__(data, enum)
+
+
 class TURNMsg(ProtoMsg):
     """Carries TURN relay and peer address tuples for TURN-based connections."""
 
@@ -402,5 +461,6 @@ SIG_PROTO = {
     SIG_TURN: [TURNMsg, P2P_RELAY, 10],
     SIG_GET_ADDR: [GetAddr, 0, 5],
     SIG_RETURN_ADDR: [ReturnAddr, 0, 6],
+    SIG_RANDOM_PROBE: [RandomProbeMsg, P2P_RANDOM_PROBE, 18],
     # SIG_ADDR: [AddrMsg, 0, 5],
 }
