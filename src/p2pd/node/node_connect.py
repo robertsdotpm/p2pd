@@ -54,20 +54,19 @@ async def resolve_pnp_addr(node: Any, pnp_addr: Any) -> Tuple[Any, Optional[Any]
     return addr_bytes, dest_vk, source
 
 
-def select_first_viable_pair(
+def iter_viable_pairs(
     af: Any,
     route_type: Any,
     src_map: Any,
     dest_map: Any,
-) -> Optional[Tuple[Any, Any]]:
-    """Walk get_if_infos_order in priority order and return the first
-    (src_info, dest_info) pair whose addresses are distinct enough to be
-    useful for the given route_type.
+):
+    """Yield every (src_info, dest_info) pair that's distinct enough
+    to be useful for *route_type*, in priority order.
 
     NIC_BIND      different NIC IPs
     LOOPBACK_BIND both sides advertise a loopback alias
     EXT_BIND      different external IPs
-    Other / None  first pair in priority order, no filter
+    Other / None  every pair in priority order, no filter
     """
     # Local import keeps node_connect free of a hard import on the
     # traversal package at module load time.
@@ -83,7 +82,18 @@ def select_first_viable_pair(
         elif route_type == EXT_BIND:
             if int(src_info["ext"]) == int(dest_info["ext"]):
                 continue
-        return src_info, dest_info
+        yield src_info, dest_info
+
+
+def select_first_viable_pair(
+    af: Any,
+    route_type: Any,
+    src_map: Any,
+    dest_map: Any,
+) -> Optional[Tuple[Any, Any]]:
+    """First-only convenience wrapper around iter_viable_pairs."""
+    for pair in iter_viable_pairs(af, route_type, src_map, dest_map):
+        return pair
     return None
 
 
@@ -138,25 +148,43 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
                     )
                 )
 
-    # attempt_plugin is now single-pair: pick the highest-priority viable
-    # (src_info, dest_info) pair from get_if_infos_order. Manual control
-    # via explicit if_index args can be added later if needed.
-    pair = select_first_viable_pair(af, route_type, src_map, dest_map)
-    if pair is None:
+    # Walk every viable (src_info, dest_info) pair in priority order.
+    # If the plugin raises ValueError on a pair (e.g. random_probe on
+    # a non-(sym, non-sym) pair, or a same-IP self-target check),
+    # log the reason and try the next pair.  Only when *every* pair
+    # fails do we surface the last ValueError to the caller.
+    last_err = None
+    tried = 0
+    for src_info, dest_info in iter_viable_pairs(af, route_type, src_map, dest_map):
+        tried += 1
+        try:
+            return await node.traversal.attempt_plugin(
+                src_map=src_map,
+                dest_map=dest_map,
+                sig_pipe=sig_pipe,
+                plugin_name=plugin_name,
+                src_info=src_info,
+                dest_info=dest_info,
+                af=af,
+                route_type=route_type,
+            )
+        except ValueError as exc:
+            log(
+                "node.connect: pair (src_if={0}, dest_if={1}) rejected "
+                "by {2}: {3}; trying next pair".format(
+                    src_info.get("if_index"), dest_info.get("if_index"),
+                    plugin_name, exc,
+                )
+            )
+            last_err = exc
+            continue
+
+    if tried == 0:
         raise ValueError(
             "No viable (src, dest) interface pair for af={} route_type={}".format(
                 af, route_type,
             )
         )
-    src_info, dest_info = pair
-
-    return await node.traversal.attempt_plugin(
-        src_map=src_map,
-        dest_map=dest_map,
-        sig_pipe=sig_pipe,
-        plugin_name=plugin_name,
-        src_info=src_info,
-        dest_info=dest_info,
-        af=af,
-        route_type=route_type,
-    )
+    # tried > 0 but every attempt raised ValueError -- re-surface the
+    # last reason so the caller (and the demo) sees something useful.
+    raise last_err
