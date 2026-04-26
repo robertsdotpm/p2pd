@@ -33,7 +33,7 @@ from aionetiface.nic.nat.nat_defs import SYMMETRIC_NAT
 
 from ....protocol.proto_msg import RandomProbeMsg
 from ...traversal_plugin import TraversalPlugin
-from ..punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
+from ..tcp_punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 
 from .random_probe_defs import (
     DEFAULT_PROBE_COUNT,
