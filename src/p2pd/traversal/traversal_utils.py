@@ -80,6 +80,18 @@ def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info:
             if not (same_pc or same_lan):
                 continue
 
+            # Same-machine peers: prefer the per-node 127.X.Y.Z loopback
+            # alias over the NIC IP. The kernel always loopback-shortcuts
+            # 127.0.0.0/8 reliably, while a cross-subnet src->NIC TCP
+            # connect on the same host can be silently dropped on Windows
+            # (no in-kernel route between two NICs in different subnets).
+            # The loopback IP is added by enrich_addr_map_with_loopback at
+            # parse time and the peer binds it in listen_on_ifs.
+            if same_pc:
+                lo = dest_info.get("loopback")
+                if lo is not None:
+                    return lo
+
             # Otherwise the NIC IP is fine to use.
             return dest_info["nic"]
 

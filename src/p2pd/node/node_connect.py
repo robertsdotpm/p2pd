@@ -5,6 +5,7 @@ from aionetiface import (
     sort_ips_by_nic, route_pool_from_ips, fstr, log, parse_node_addr,
     IP4, IP6, NIC_BIND, EXT_BIND,
 )
+from .node_utils import enrich_addr_map_with_loopback
 from ..traversal.traversal_address import get_updated_addr_from_mqtt, pnp_name_has_tld
 
 
@@ -88,6 +89,7 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
     """Resolve the destination address and run the traversal plugin to establish a P2P connection."""
     addr_bytes, dest_vk, _ = await resolve_pnp_addr(node, pnp_addr)
     dest_map = parse_node_addr(addr_bytes)
+    enrich_addr_map_with_loopback(dest_map)
     sig_pipe = await node.router.pipe(dest_map["pub_key_hex"], use_cache=True)
 
     src_map = node.addr_map

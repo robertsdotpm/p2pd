@@ -24,6 +24,7 @@ from .node_utils import (
     listen_on_ifs,
     forward,
     remote_reachability_cb,
+    enrich_addr_map_with_loopback,
 )
 from .nickname import Nickname
 from ..traversal.traversal_manager import TraversalManager
@@ -279,6 +280,11 @@ def build_node_address(node: Any, out: bool) -> None:
     except (ValueError, TypeError) as exc:
         log_exception()
         raise ValueError("Can't parse nodes p2p addr.") from exc
+
+    # Attach the per-node loopback alias to every if_info. select_dest_ipr
+    # uses dest_info["loopback"] when same_pc=True so cross-subnet
+    # same-machine peers route via 127.0.0.0/8 instead of NIC IPs.
+    enrich_addr_map_with_loopback(node.addr_map)
 
 
 async def finalize_port_forwarding(node: Any, upnp_task: Optional[Any], out: bool, cout: Callable) -> None:

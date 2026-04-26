@@ -25,6 +25,29 @@ def resolve_install_path(conf: Dict[str, Any]) -> str:
     return conf["install_path"] or get_aionetiface_install_root()
 
 
+def enrich_addr_map_with_loopback(addr_map: Dict[str, Any]) -> Dict[str, Any]:
+    """Attach the per-node loopback alias to every per-iface info in addr_map.
+
+    parse_node_addr (in aionetiface) is intentionally unaware of the p2pd
+    loopback convention; we add the field on the p2pd side after parse so
+    select_dest_ipr can reach it as dest_info["loopback"]. Mutates and
+    returns addr_map for the convenience of callers that want to chain.
+    """
+    pub = addr_map.get("pub_key_hex")
+    if not pub:
+        return addr_map
+    try:
+        lo_str = loopback_ip_for_node(pub)
+    except (ValueError, TypeError):
+        return addr_map
+    lo_ipr = IPR(lo_str)
+    for af in (IP4, IP6):
+        af_dict = addr_map.get(af) or {}
+        for info in af_dict.values():
+            info["loopback"] = lo_ipr
+    return addr_map
+
+
 def loopback_ip_for_node(pub_key_hex: str) -> str:
     """Deterministic 127.X.Y.Z loopback address keyed on a node's pub_key.
 

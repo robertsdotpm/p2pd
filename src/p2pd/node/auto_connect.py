@@ -6,6 +6,7 @@ from aionetiface import (
     fstr, log, log_exception, parse_node_addr,
 )
 from .node_connect import resolve_pnp_addr
+from .node_utils import enrich_addr_map_with_loopback
 from ..traversal.traversal_utils import close_plugin
 
 
@@ -445,6 +446,10 @@ async def auto_connect(
         return None, None
     if dest_vk:
         dest_map["vk"] = dest_vk
+
+    # Attach the per-iface loopback alias so select_dest_ipr can prefer
+    # 127.X.Y.Z over the peer's NIC IP when same_pc=True.
+    enrich_addr_map_with_loopback(dest_map)
 
     try:
         sig_pipe = await node.router.pipe(dest_map["pub_key_hex"], use_cache=True)
