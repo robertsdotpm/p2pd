@@ -83,6 +83,19 @@ class RandomProbePlugin(TraversalPlugin):
 
     async def run(self, reply: Optional[RandomProbeMsg] = None) -> None:
         """Drive the random-probe rendezvous from initiator or responder side."""
+        # When user-driven (demo / explicit node.connect), route_type
+        # may be NIC_BIND or LOOPBACK_BIND -- random_probe is an
+        # EXT-only algorithm by design.  Bail loudly with a
+        # ValueError so the demo prints something actionable rather
+        # than a generic "Connection failed".
+        if self.route_type is not None and self.route_type != EXT_BIND:
+            self.set_failed_result()
+            raise ValueError(
+                "random_probe is for the WAN path only "
+                "(needs both peers' external IP).  Pick (e)xternal, "
+                "not LAN."
+            )
+
         # Decide which side we are based on our own NAT type.
         # nat_info defaults to {} for clean attribute access.
         my_nat = self.src_info.get("nat") or {}
@@ -95,14 +108,15 @@ class RandomProbePlugin(TraversalPlugin):
             # OR both non-symmetric (regular punch / direct should
             # have worked first).  Either way random_probe isn't
             # the right tool for this pair.
-            log(
-                "RandomProbePlugin: pair both-{0}-symmetric "
-                "(my={1}, peer={2}); aborting".format(
-                    "" if my_is_sym else "non-",
-                    my_nat.get("type"), peer_nat.get("type"),
+            self.set_failed_result()
+            both = "" if my_is_sym else "non-"
+            raise ValueError(
+                "random_probe needs one symmetric NAT and one non-"
+                "symmetric NAT.  This pair is both-{0}symmetric "
+                "(my={1}, peer={2}).".format(
+                    both, my_nat.get("type"), peer_nat.get("type"),
                 )
             )
-            return
 
         # Role assignment is purely "am I the symmetric one or not".
         # We use "sym" / "non_sym" rather than "sym" / "cone"
@@ -224,6 +238,12 @@ class RandomProbePlugin(TraversalPlugin):
             self.result.set_result(pipe)
 
     # ── helpers ─────────────────────────────────────────────────
+
+    def set_failed_result(self) -> None:
+        """Resolve self.result with None so node.connect returns
+        promptly instead of waiting out the plugin timeout."""
+        if not self.result.done():
+            self.result.set_result(None)
 
     def build_msg(self, role: str, punch_time: int, magic: str) -> RandomProbeMsg:
         """Build the RandomProbeMsg this side sends to its peer."""
