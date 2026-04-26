@@ -314,17 +314,30 @@ async def finalize_port_forwarding(node: Any, upnp_task: Optional[Any], out: boo
 # Phase: High-Level Services
 # ==========================================
 async def setup_nickname_service(node: Any) -> None:
-    """Initialise the PNP nickname client and optionally register this node's ID."""
+    """Initialise the PNP nickname client and optionally register this node's ID.
+
+    Skips the entire client construction when enable_nickname=False --
+    Nickname's __await__ runs start() which tries to reach every PNP
+    server and raises StartNodeNicknameFailed if none come up. On
+    hosts whose TLS / network stack can't talk to those servers (e.g.
+    Windows XP), that fail kills node startup outright even when the
+    caller never intended to use nicknames. Tests that opt out via
+    enable_nickname=False shouldn't pay that cost. nick_client is
+    left None so put/get crash loudly if accidentally called.
+    """
+    if not node.conf.get("enable_nickname", True):
+        node.nick_client = None
+        return
+
     node.nick_client = await Nickname(
         node.sk,
         node.ifs,
         node.sys_clock,
     )
 
-    if node.conf.get("enable_nickname", True):
-        # Keep a reference so the task is not garbage-collected mid-run.
-        task = asyncio.create_task(async_wrap_errors(node.nickname(node.node_id)))
-        node.resources.add_task(task)
+    # Keep a reference so the task is not garbage-collected mid-run.
+    task = asyncio.create_task(async_wrap_errors(node.nickname(node.node_id)))
+    node.resources.add_task(task)
 
 
 async def setup_traversal_plugins(node: Any) -> None:
