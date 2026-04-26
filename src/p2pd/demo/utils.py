@@ -1,6 +1,7 @@
 """Helper utilities for the p2pd demo application."""
 import asyncio
 import os
+import platform
 import select
 import sys
 from aionetiface import (
@@ -15,8 +16,13 @@ from .defs import delta_txt, method_txt, nat_txt
 
 # Pipe used to unblock ainput() when the program shuts down.
 # Writing any byte to ainput_interrupt_w causes all pending ainput() calls
-# to return "".
-ainput_interrupt_r, ainput_interrupt_w = os.pipe()
+# to return "". POSIX-only -- on Windows we rely on the readline() blocking
+# call returning naturally on Ctrl+C / EOF since select.select() can't watch
+# stdin or pipe fds there.
+ainput_interrupt_r = ainput_interrupt_w = -1
+_IS_WINDOWS = platform.system() == "Windows"
+if not _IS_WINDOWS:
+    ainput_interrupt_r, ainput_interrupt_w = os.pipe()
 
 
 async def ainput(prompt: str) -> str:
@@ -24,9 +30,25 @@ async def ainput(prompt: str) -> str:
     loop = asyncio.get_event_loop()
 
     def blocking_input() -> str:
-        """Block in a thread waiting for stdin input or a shutdown interrupt."""
+        """Block in a thread waiting for stdin input or a shutdown interrupt.
+
+        On POSIX we use select() over stdin + a shutdown-interrupt
+        pipe so a Ctrl+C / signal can release the read. On Windows
+        select() only accepts socket fds (raises OSError on a stdin
+        or pipe fd) -- previously this fired on every iteration,
+        returned "" immediately, and the menu loop spun without ever
+        blocking. Plain readline() works there; the trade-off is the
+        Ctrl+C handling is whatever the runtime gives us by default.
+        """
         sys.stdout.write(prompt)
         sys.stdout.flush()
+        if _IS_WINDOWS:
+            try:
+                line = sys.stdin.readline()
+            except (OSError, IOError):
+                return ""
+            return line.rstrip("\n").rstrip("\r") if line else ""
+
         try:
             r, _, _ = select.select([sys.stdin.fileno(), ainput_interrupt_r], [], [])
         except (OSError, IOError):
@@ -45,10 +67,11 @@ async def ainput(prompt: str) -> str:
     except asyncio.CancelledError:
         # Unblock the blocking_input thread so the executor shuts down
         # cleanly.
-        try:
-            os.write(ainput_interrupt_w, b"\x01")
-        except OSError:
-            pass
+        if not _IS_WINDOWS and ainput_interrupt_w >= 0:
+            try:
+                os.write(ainput_interrupt_w, b"\x01")
+            except OSError:
+                pass
         raise
 
 
