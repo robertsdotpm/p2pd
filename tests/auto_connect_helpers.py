@@ -274,11 +274,12 @@ async def load_two_nodes(test_self, af, label="connectivity"):
     ip_a = pick_listen_ip(probe_ifs[0], af)
     ip_b = pick_listen_ip(probe_ifs[1], af)
     if not ip_a or not ip_b:
-        test_self.fail(
-            "Multi-interface machine ({0} NICs) but probe_ifs[0/1] don't both "
-            "carry a routable {1} IP (a={2!r} b={3!r}) for {4}".format(
-                len(probe_ifs), af, ip_a, ip_b, label,
-            )
+        # AF asymmetry between NICs is environmental (e.g. a mobile carrier
+        # NIC that doesn't bring up IPv6). It's not a regression in p2pd, so
+        # skip rather than fail.
+        test_self.skipTest(
+            "probe_ifs[0/1] don't both carry a routable {0} IP "
+            "(a={1!r} b={2!r}) for {3}".format(af, ip_a, ip_b, label)
         )
     # Wrap each NIC in a list so callers can pass directly to
     # start_node_with_ifs(ifs=[...], ...).

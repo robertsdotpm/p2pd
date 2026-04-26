@@ -138,8 +138,10 @@ class TestHasValidPairVariants(unittest.TestCase):
         self.assertFalse(has_valid_pair(src, dst, IP6, EXT_BIND))
 
     def test_no_shared_if_index_optimistic_true(self):
-        src = make_fake_addr_map(ip4_pairs=[("10.0.1.76", "1.2.3.4")])
-        dst = make_fake_addr_map()
+        src = make_fake_addr_map(
+            ip4_pairs=[("10.0.1.76", "1.2.3.4")], machine_id="machine-A"
+        )
+        dst = make_fake_addr_map(machine_id="machine-B")
         dst[IP4] = {99: make_fake_info("10.0.1.100", "1.2.3.4", if_index=99)}
         self.assertTrue(has_valid_pair(src, dst, IP4, NIC_BIND))
 
@@ -148,33 +150,35 @@ class TestHasValidPairVariants(unittest.TestCase):
         src = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.76", "1.2.3.4"),
             ("192.168.1.1", "5.6.7.8"),
-        ])
+        ], machine_id="machine-A")
         dst = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.76", "1.2.3.4"),
             ("192.168.1.2", "9.10.11.12"),
-        ])
+        ], machine_id="machine-B")
         self.assertTrue(has_valid_pair(src, dst, IP4, NIC_BIND))
 
     def test_multi_if_all_same_nic_invalid(self):
+        # Cross-machine peers: matched-if_index pairs all collide on the same
+        # NIC IPs, so NIC_BIND has no viable pair.
         src = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.76", "1.2.3.4"),
             ("10.0.1.77", "1.2.3.4"),
-        ])
+        ], machine_id="machine-A")
         dst = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.76", "1.2.3.4"),
             ("10.0.1.77", "1.2.3.4"),
-        ])
+        ], machine_id="machine-B")
         self.assertFalse(has_valid_pair(src, dst, IP4, NIC_BIND))
 
     def test_multi_if_ext_bind_one_pair_valid(self):
         src = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.76", "1.2.3.4"),
             ("10.0.1.77", "9.0.0.1"),
-        ])
+        ], machine_id="machine-A")
         dst = make_fake_addr_map(ip4_pairs=[
             ("10.0.1.100", "1.2.3.4"),
             ("10.0.1.101", "9.0.0.2"),
-        ])
+        ], machine_id="machine-B")
         self.assertTrue(has_valid_pair(src, dst, IP4, EXT_BIND))
 
     def test_multi_if_dual_stack_ip4_valid_ip6_separate(self):

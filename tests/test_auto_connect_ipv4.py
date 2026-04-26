@@ -28,8 +28,10 @@ def log_pipe(label, pipe, plugin=None):
 
 
 def log_node(label, node):
-    print("[IPV4-TEST] {0}: listen_ips={1} listen_port={2} addr_map[IP4]={3}".format(
-        label, node.listen_ips, node.listen_port, node.addr_map.get(IP4),
+    print("[IPV4-TEST] {0}: listen_ips={1} listen_port={2} machine_id={3} addr_map[IP4]={4}".format(
+        label, node.listen_ips, node.listen_port,
+        node.addr_map.get("machine_id"),
+        node.addr_map.get(IP4),
     ))
 
 
