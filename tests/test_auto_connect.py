@@ -69,10 +69,12 @@ class TestHasValidPairVariants(unittest.TestCase):
         src = make_fake_addr_map(
             ip4_pairs=src_pairs if af == IP4 else None,
             ip6_pairs=src_pairs if af == IP6 else None,
+            machine_id="machine-A",
         )
         dst = make_fake_addr_map(
             ip4_pairs=dest_pairs if af == IP4 else None,
             ip6_pairs=dest_pairs if af == IP6 else None,
+            machine_id="machine-B",
         )
         return has_valid_pair(src, dst, af, route_type)
 
@@ -179,13 +181,30 @@ class TestHasValidPairVariants(unittest.TestCase):
         src = make_fake_addr_map(
             ip4_pairs=[("10.0.1.76", "1.2.3.4")],
             ip6_pairs=[("2001:db8::1", "2001:db8::1")],
+            machine_id="machine-A",
         )
         dst = make_fake_addr_map(
             ip4_pairs=[("10.0.1.100", "1.2.3.4")],
             ip6_pairs=[("2001:db8::2", "2001:db8::1")],
+            machine_id="machine-B",
         )
         self.assertTrue(has_valid_pair(src, dst, IP4, NIC_BIND))
         self.assertFalse(has_valid_pair(src, dst, IP6, EXT_BIND))
+
+    # Same-machine peers: NIC_BIND must consider cross-if_index pairs because
+    # the kernel routes between any two local NICs locally. A pair that
+    # doesn't line up by if_index but has distinct NIC IPs is still viable.
+    def test_same_machine_cross_if_nic_bind_valid(self):
+        src = make_fake_addr_map(
+            ip4_pairs=[("10.0.1.76", "1.2.3.4")],
+            machine_id="host-1",
+        )
+        # dst's only NIC is on a different subnet at if_index=1 (no if_index=0
+        # match). Cross-machine logic would optimistically pass; same-machine
+        # logic must positively pass via the cross-if pair.
+        dst = make_fake_addr_map(machine_id="host-1")
+        dst[IP4] = {1: make_fake_info("20.0.0.57", "9.10.11.12", if_index=1)}
+        self.assertTrue(has_valid_pair(src, dst, IP4, NIC_BIND))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

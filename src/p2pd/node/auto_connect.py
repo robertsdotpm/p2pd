@@ -36,24 +36,49 @@ def pair_distinct(route_type: Any, src_info: Dict[str, Any], dest_info: Dict[str
     return True
 
 
+def is_same_machine(src_map: Dict[str, Any], dest_map: Dict[str, Any]) -> bool:
+    """Return True if both addr_maps belong to the same physical host.
+
+    Same-machine peers can route directly between any two of their local
+    NICs (kernel owns both, so packets short-circuit via loopback) even
+    when the NICs are on different L2 subnets. That changes pair-generation:
+    NIC_BIND combos are no longer restricted to matching if_index.
+    """
+    sid = src_map.get("machine_id")
+    did = dest_map.get("machine_id")
+    return bool(sid) and sid == did
+
+
 def has_valid_pair(
     src_map: Dict[str, Any],
     dest_map: Dict[str, Any],
     af: Any,
     route_type: Any,
 ) -> bool:
-    """Return True if at least one matched-by-if_index pair has distinct addresses
-    for the given route_type.
+    """Return True if at least one viable (src_info, dest_info) pair exists.
 
     NIC_BIND: requires different NIC IPs.
     EXT_BIND: requires different external IPs.
-    Returns False if either AF dict is empty (no addresses to connect with).
-    If neither dict is empty but no if_index is shared, optimistically allow it
+    Returns False if either AF dict is empty.
+
+    Different-machine peers: only matched-if_index pairs are considered
+    (alice's NIC0 may not have a route to bob's NIC1's subnet across
+    NATs). When the addr_maps share no if_index, optimistically allow it
     and let the per-pair filter in auto_combo_batches make the final call.
+
+    Same-machine peers: all (src, dest) pairs are considered, because the
+    OS routes between any two local NICs locally regardless of subnet.
     """
     src_af = src_map.get(af)
     dest_af = dest_map.get(af)
     if not src_af or not dest_af:
+        return False
+
+    if is_same_machine(src_map, dest_map):
+        for src_info in src_af.values():
+            for dest_info in dest_af.values():
+                if pair_distinct(route_type, src_info, dest_info):
+                    return True
         return False
 
     found_shared = False
@@ -75,13 +100,17 @@ def viable_pairs_for_arc(
 ) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
     """Ordered list of (src_info, dest_info) pairs that survive per-pair filtering.
 
-    Restricted to matching-if_index pairs to match has_valid_pair semantics:
-    a node's if_index 0 is its first NIC, the peer's if_index 0 is its first
-    NIC, and we only attempt connections between corresponding interfaces.
-    The Cartesian product (cross-if_index pairs) is intentionally excluded
-    because crossing interfaces requires routing context the addr_map
-    doesn't capture (alice's NIC0 may not have a route to bob's NIC1's
-    subnet) and would emit unreachable pairs as if they were viable.
+    Different-machine peers: restricted to matching-if_index pairs because
+    crossing interfaces requires routing context the addr_map doesn't
+    capture (alice's NIC0 may not have a route to bob's NIC1's subnet
+    across NATs).
+
+    Same-machine peers: all (src, dest) pairs are emitted as the
+    Cartesian product. Both nodes' NICs live in the same kernel's
+    routing table, so dest_info["nic"] is reachable from any src NIC
+    via the local stack — even when src and dest sit on different
+    L2 subnets. Matching-if_index pairs come first so direct in-subnet
+    paths (when they exist) are tried before cross-subnet local routing.
 
     Pairs that fail pair_distinct (NIC_BIND wants different NIC IPs,
     EXT_BIND wants different ext IPs) are dropped.
@@ -91,13 +120,32 @@ def viable_pairs_for_arc(
     if not src_af or not dest_af:
         return []
 
+    same_machine = is_same_machine(src_map, dest_map)
+
     pairs = []
+    seen = set()
+
+    # Matched-if_index pairs first (preserves the established priority order
+    # for normal cross-machine traversal).
     for if_idx, dest_info in dest_af.items():
         src_info = src_af.get(if_idx)
         if src_info is None:
             continue
         if pair_distinct(route_type, src_info, dest_info):
+            key = (id(src_info), id(dest_info))
+            seen.add(key)
             pairs.append((src_info, dest_info))
+
+    # Same-machine peers also emit cross-if_index pairs.
+    if same_machine:
+        for src_info in src_af.values():
+            for dest_info in dest_af.values():
+                key = (id(src_info), id(dest_info))
+                if key in seen:
+                    continue
+                if pair_distinct(route_type, src_info, dest_info):
+                    pairs.append((src_info, dest_info))
+
     return pairs
 
 
@@ -308,7 +356,7 @@ async def turn_fallback(
             continue
 
         if_pairs = get_if_infos_order(af, EXT_BIND, src_map, dest_map)
-        same_machine = dest_map["machine_id"] == src_map["machine_id"]
+        same_machine = is_same_machine(src_map, dest_map)
 
         for src_info, dest_info in if_pairs:
             if count >= limit:
