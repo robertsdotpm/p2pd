@@ -12,6 +12,7 @@ SIG_DONE = 6
 SIG_RETRY = 7
 SIG_RANDOM_PROBE = 8
 SIG_CON_ID = 9
+SIG_UDP_PUNCH = 10
 P2P_PIPE_CONF = {
     "addr_families": [IP4, IP6],
     "addr_types": [EXT_BIND, NIC_BIND],

@@ -15,6 +15,7 @@ from .proto_defs import (
     SIG_RETRY,
     SIG_RANDOM_PROBE,
     SIG_CON_ID,
+    SIG_UDP_PUNCH,
     P2P_DIRECT,
     P2P_PUNCH,
     P2P_RELAY,
@@ -259,12 +260,19 @@ class PunchMsg(ProtoMsg):
 
     # The main contents of this message.
     class Payload:
-        """Contains punch mode, NTP timestamp, and port mappings for the punch exchange."""
+        """Contains punch mode, NTP timestamp, and port mappings for the punch exchange.
 
-        def __init__(self, punch_mode: int, ntp: Any, mappings: List[Any]) -> None:
+        nonce is optional and only set by udp_punch (where the engine
+        needs an app-level token to distinguish real arrivals from
+        random scanner traffic on the predicted port). tcp_punch leaves
+        it empty; the receiver tolerates either case.
+        """
+
+        def __init__(self, punch_mode: int, ntp: Any, mappings: List[Any], nonce: str = "") -> None:
             self.ntp = ntp
             self.mappings = mappings
             self.punch_mode = int(punch_mode)
+            self.nonce = nonce
 
         def to_dict(self) -> Dict[str, Any]:
             """Serialise the payload to a JSON-compatible dict."""
@@ -272,6 +280,7 @@ class PunchMsg(ProtoMsg):
                 "punch_mode": self.punch_mode,
                 "ntp": self.ntp,
                 "mappings": self.mappings,
+                "nonce": self.nonce,
             }
 
         @staticmethod
@@ -281,6 +290,7 @@ class PunchMsg(ProtoMsg):
                 d.get("punch_mode", TCP_PUNCH_REMOTE),
                 d.get("ntp", 0),
                 d["mappings"],
+                d.get("nonce", ""),
             )
 
     # Note: having the dest the same as an if in our ifs is not
@@ -438,6 +448,19 @@ class TURNMsg(ProtoMsg):
         super().__init__(data, enum)
 
 
+class UdpPunchMsg(PunchMsg):
+    """PunchMsg variant that wires SIG_UDP_PUNCH on the wire so the receiver
+    routes the message to the udp_punch plugin instead of tcp_punch.
+
+    The payload schema is identical (mappings, ntp, punch_mode), so all the
+    nat_predict / boundary_alloc machinery is reused unchanged.  Only the
+    leading enum byte differs.
+    """
+
+    def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_UDP_PUNCH) -> None:
+        super().__init__(data or {}, enum)
+
+
 class ConMsg(ProtoMsg):
     """Initiates a direct connection attempt between two peers."""
 
@@ -505,5 +528,6 @@ SIG_PROTO = {
     SIG_RETURN_ADDR: [ReturnAddr, 0, 6],
     SIG_RANDOM_PROBE: [RandomProbeMsg, P2P_RANDOM_PROBE, 18],
     SIG_CON_ID: [ConIdMsg, P2P_DIRECT, 5],
+    SIG_UDP_PUNCH: [UdpPunchMsg, P2P_PUNCH, 20],
     # SIG_ADDR: [AddrMsg, 0, 5],
 }

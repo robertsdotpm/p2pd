@@ -49,6 +49,7 @@ method_txt = {
     "3": "turn",
     "4": "random_probe",
     "5": "auto_connect",
+    "6": "udp_punch",
 }
 
 PROGRAM_BANNER = """Universal reachability demo

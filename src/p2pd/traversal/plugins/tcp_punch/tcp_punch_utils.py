@@ -34,29 +34,43 @@ def sock_opt_voodoo(s: Any) -> None:
     """
 
 
-def bind_tcp_sockets(af: Any, nic_id: Optional[str], port_allocs: List[Any], src_ip: Optional[str] = None) -> List[Tuple[Any, Any]]:
-    """Create and bind one TCP socket per port allocation, returning successful (alloc, socket) pairs."""
-    # Listen address.
+def bind_punch_sockets(
+    af: Any,
+    nic_id: Optional[str],
+    port_allocs: List[Any],
+    src_ip: Optional[str] = None,
+    sock_type: int = socket.SOCK_STREAM,
+) -> List[Tuple[Any, Any]]:
+    """Create and bind one socket per port allocation; returns (alloc, sock) pairs.
+
+    Shared by tcp_punch (sock_type=SOCK_STREAM, default) and udp_punch
+    (sock_type=SOCK_DGRAM). The socket-opt voodoo, binder_sync call,
+    and per-alloc collision handling are identical for both protocols
+    so we have one implementation, not two.
+    """
     if src_ip:
         bind_ip = src_ip
     else:
         bind_ip = "0.0.0.0" if af == socket.AF_INET else "::"
 
-    # List of bound TCP sockets.
     bound_socks = []
     for p in port_allocs:
-        s = socket.socket(af, socket.SOCK_STREAM)
+        s = socket.socket(af, sock_type)
         sock_opt_voodoo(s)
         bind_tup = binder_sync(af, ip_strip_if(bind_ip), p.src_port, nic_id)
         try:
             s.bind(bind_tup)
             bound_socks.append((p, s))
         except OSError:
-            # print(f"Could not bind to port {p}: {e}")
-            # Port colission so don't save.
+            # Port collision -- close + skip.
             s.close()
 
     return bound_socks
+
+
+def bind_tcp_sockets(af: Any, nic_id: Optional[str], port_allocs: List[Any], src_ip: Optional[str] = None) -> List[Tuple[Any, Any]]:
+    """Create and bind one TCP socket per port allocation, returning successful (alloc, socket) pairs."""
+    return bind_punch_sockets(af, nic_id, port_allocs, src_ip, sock_type=socket.SOCK_STREAM)
 
 
 def listen_on_tcp_sockets(bound_infos: List[Tuple[Any, Any]]) -> List[Tuple[Any, Any]]:

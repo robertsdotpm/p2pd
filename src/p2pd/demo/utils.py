@@ -271,6 +271,7 @@ async def choose_connection_methods(con_method: Optional[str]) -> str:
     cout("  3) turn relay    (UDP)")
     cout("  4) random probe  (UDP, symmetric NAT)")
     cout("  5) auto          (try each in order)")
+    cout("  6) udp_punch     (UDP, predictable NAT)")
     cout("Type menu to return.")
     while True:
         # If pressing enter then use the default first method.
