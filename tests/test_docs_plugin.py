@@ -11,7 +11,7 @@ and used with auto_connect.
 import asyncio
 import unittest
 from typing import Optional, Any
-from aionetiface import TCP, IP4, Pipe, dict_child, log_exception, SUB_ALL
+from aionetiface import TCP, IP4, Pipe, dict_child, log_exception
 from aionetiface.testing import AsyncTestCase
 from p2pd import Node
 from p2pd.node.node_defs import NODE_TEST_CONF, NODE_PORT
@@ -31,11 +31,31 @@ class DocsDirectPlugin(TraversalPlugin):
     """Minimal plugin: open a direct TCP connection to the peer.
 
     This is the Example 1 code from docs/writing_a_plugin.md.
+
+    Same-machine peers can be reached via dest_info["ip"] in the
+    127.0.0.0/8 (or ::1) loopback range; binding the connect socket
+    to a matching loopback source IP is required on Windows XP whose
+    stack only routes 127.0.0.1 reliably (a connect from src=127.X.Y.Z
+    to dest=127.0.0.1 is silently dropped). Match src to dest's
+    loopback class -- modern Windows / Linux / macOS unaffected.
     """
 
     async def run(self, reply: Optional[Any] = None) -> None:
         dest = (str(self.dest_info["ip"]), self.dest_info["port"])
-        route = await self.nic.route(self.af).bind()
+
+        is_v4_loopback = (self.af == IP4) and dest[0].startswith("127.")
+        is_v6_loopback = dest[0] == "::1" or dest[0].startswith("::1")
+
+        if is_v4_loopback or is_v6_loopback:
+            if self.af == IP4:
+                src_lo = self.src_info.get("loopback") if self.src_info else None
+                src_str = str(src_lo) if (src_lo and str(src_lo).startswith("127.")) else "127.0.0.1"
+            else:
+                src_str = "::1"
+            route = self.nic.route(self.af)
+            await route.bind(ips=src_str)
+        else:
+            route = await self.nic.route(self.af).bind()
 
         try:
             pipe = await Pipe(TCP, dest, route).connect()
@@ -176,6 +196,11 @@ class TestCustomDirectPlugin(AsyncTestCase):
             pass
 
     async def test_custom_plugin_pipe_is_usable(self):
+        # alice's auto_connect pipe is alice's outgoing client socket.
+        # Bytes she sends arrive on bob's server-side accepted pipe;
+        # the daemon hands them to bob's msg_cb. A second auto_connect
+        # from bob to alice would open a separate socket that wouldn't
+        # see alice's outbound bytes -- capture via msg_cb instead.
         try:
             self.alice = await make_node(BASE_PORT + 2)
             self.bob   = await make_node(BASE_PORT + 3)
@@ -185,32 +210,46 @@ class TestCustomDirectPlugin(AsyncTestCase):
         install_only(self.alice, "docs_direct", DocsDirectPlugin)
         install_only(self.bob,   "docs_direct", DocsDirectPlugin)
 
-        # Also need the bob-side pipe so we can subscribe and receive.
-        bob_pipe = None
+        received = asyncio.Event()
+        received_data = []
+
+        async def on_bob_msg(msg, client_tup, pipe):
+            received_data.append(msg)
+            if msg and b"hello from docs example" in msg:
+                received.set()
+
+        self.bob.add_msg_cb(on_bob_msg)
+
         try:
             alice_pipe, _ = await asyncio.wait_for(
                 auto_connect(self.alice, self.bob.address()),
                 timeout=20,
             )
-            bob_pipe, _ = await asyncio.wait_for(
-                auto_connect(self.bob, self.alice.address()),
-                timeout=20,
-            )
         except asyncio.TimeoutError:
             self.skipTest("auto_connect timed out")
 
-        if alice_pipe is None or bob_pipe is None:
+        if alice_pipe is None:
             self.skipTest("auto_connect returned no pipe (no multi-path routes available)")
-        bob_pipe.subscribe(SUB_ALL)
-        await alice_pipe.send(b"hello from docs example")
-        data = await bob_pipe.recv(SUB_ALL, timeout=5)
-        self.assertEqual(data, b"hello from docs example")
 
-        for p in (alice_pipe, bob_pipe):
-            try:
-                await asyncio.wait_for(p.close(), timeout=5)
-            except Exception:
-                pass
+        await alice_pipe.send(b"hello from docs example")
+
+        try:
+            await asyncio.wait_for(received.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            self.fail(
+                "bob's msg_cb didn't see 'hello from docs example' in 5s; "
+                "got: {!r}".format(received_data)
+            )
+
+        self.assertTrue(
+            any(b"hello from docs example" in m for m in received_data if m),
+            "msg_cb didn't see payload; got: {!r}".format(received_data),
+        )
+
+        try:
+            await asyncio.wait_for(alice_pipe.close(), timeout=5)
+        except Exception:
+            pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
