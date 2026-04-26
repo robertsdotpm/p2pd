@@ -57,72 +57,12 @@ class TestDemoInterfaceLoading(AsyncTestCase):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. Node startup (mirrors demo setup_node step 2)
+# 2. Node startup -> moved to test_demo_node_start.py
+# Six back-to-back Node startups in a single subprocess wedged the asyncio
+# loop on Win11 (FD / socket residue accumulation past the 5th start). The
+# class lives in its own test_*.py now so the runner gives each subtest a
+# fresh process, per CLAUDE.md "Heavy tests live in their own file".
 # ─────────────────────────────────────────────────────────────────────────────
-
-
-class TestDemoNodeStart(AsyncTestCase):
-    """A node starts successfully and exposes the expected attributes."""
-
-    async def asyncSetUp(self):
-        self.node = None
-
-    async def asyncTearDown(self):
-        await close_nodes(self.node)
-
-    async def test_node_starts(self):
-        try:
-            self.node = await start_demo_node(BASE_PORT)
-        except Exception as exc:
-            log("Node startup failed: {}".format(exc))
-
-        self.assertIsNotNone(self.node)
-
-    async def test_node_has_address_after_start(self):
-        try:
-            self.node = await start_demo_node(BASE_PORT + 1)
-        except Exception as exc:
-            log("Node startup failed: {}".format(exc))
-
-        addr = self.node.address()
-        self.assertIsNotNone(addr)
-        self.assertIsInstance(addr, bytes)
-        self.assertGreater(len(addr), 0)
-
-    async def test_node_has_node_id_after_start(self):
-        try:
-            self.node = await start_demo_node(BASE_PORT + 2)
-        except Exception as exc:
-            log("Node startup failed: {}".format(exc))
-
-        self.assertIsNotNone(self.node.node_id)
-        self.assertIsInstance(self.node.node_id, str)
-        self.assertGreater(len(self.node.node_id), 0)
-
-    async def test_node_has_listen_port_after_start(self):
-        try:
-            self.node = await start_demo_node(BASE_PORT + 3)
-        except Exception as exc:
-            log("Node startup failed: {}".format(exc))
-
-        self.assertEqual(self.node.listen_port, BASE_PORT + 3)
-
-    async def test_node_has_interfaces_after_start(self):
-        try:
-            self.node = await start_demo_node(BASE_PORT + 4)
-        except Exception as exc:
-            log("Node startup failed: {}".format(exc))
-
-        self.assertGreater(len(self.node.ifs), 0)
-
-    async def test_node_supported_address_families(self):
-        try:
-            self.node = await start_demo_node(BASE_PORT + 5)
-        except Exception as exc:
-            log("Node startup failed: {}".format(exc))
-
-        supported = self.node.supported()
-        self.assertGreater(len(supported), 0, "Node has no supported address families")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
