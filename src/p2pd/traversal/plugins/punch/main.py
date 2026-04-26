@@ -16,6 +16,26 @@ from ....node.node_utils import get_pp_executors
 class PunchPlugin(TraversalPlugin):
     """Traversal plugin implementing TCP hole-punching via coordinated port prediction."""
 
+    def set_context(self, route_type: Any, same_machine: bool, set_bind: bool, timeout: int) -> None:
+        """Override the base set_context to keep punch off the loopback path.
+
+        The base class (via select_dest_ipr) substitutes the
+        per-node 127.X.Y.Z loopback alias for dest when same_pc=True
+        -- great for direct_connect / reverse_connect, wrong for
+        punch. Punch's predict_alloc / rendezvous machinery assumes
+        a NAT in the path; routing it through loopback produces no
+        useful work and historically wedged the proc-pool worker.
+
+        Strip the loopback field off dest_info before delegating so
+        select_dest_ipr falls through to dest_info["nic"]. Pair
+        selection upstream already used the loopback to relax
+        pair_distinct's same-NIC check, so the pair is still valid
+        -- we're only changing what dest_ip select_dest_ipr returns.
+        """
+        if self.dest_info is not None:
+            self.dest_info.pop("loopback", None)
+        return super().set_context(route_type, same_machine, set_bind, timeout)
+
     async def run(self, reply: Optional[Any] = None) -> None:
         """Coordinate the hole-punch exchange and launch the background punching process."""
         # --- Get or create the PunchClient for this session ---

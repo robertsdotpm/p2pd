@@ -148,6 +148,20 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
         )
     src_info, dest_info = pair
 
+    # User-driven entry point: stay literal to what the caller asked
+    # for. select_dest_ipr substitutes the same-machine 127.X.Y.Z
+    # loopback alias when same_pc=True and dest_info["loopback"] is
+    # set; great for auto_connect's "fastest path", wrong for the
+    # interactive demo where the user explicitly picked NIC_BIND
+    # because they want the peer's literal NIC IP. Pop the loopback
+    # field on the chosen dest_info so the substitution falls through
+    # to dest_info["nic"]. pair_distinct already used the loopback
+    # for the same-machine same-NIC relax during pair_selection, so
+    # the pair is already valid -- we're only changing what
+    # select_dest_ipr picks at attempt time.
+    dest_info = dict(dest_info)
+    dest_info.pop("loopback", None)
+
     return await node.traversal.attempt_plugin(
         src_map=src_map,
         dest_map=dest_map,
