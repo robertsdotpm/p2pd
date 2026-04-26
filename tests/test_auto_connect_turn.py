@@ -22,7 +22,7 @@ from p2pd.node.auto_connect import auto_connect
 from auto_connect_helpers import (
     PORT_TURN_A_T1, PORT_TURN_B_T1, PORT_TURN_A_T2,
     PORT_TURN_A_T3, PORT_TURN_B_T3,
-    close_nodes, fresh_ifs, split_two_node_setups, start_node_with_ifs,
+    close_nodes, fresh_ifs, require_split_or_fail, start_node_with_ifs,
 )
 
 
@@ -42,12 +42,9 @@ class TestAutoConnectTurnFallback(AsyncTestCase):
 
     async def asyncSetUp(self):
         probe_ifs = await fresh_ifs()
-        setups = split_two_node_setups(probe_ifs, IP6)
-        if setups is None:
-            self.skipTest(
-                "Need either 2 NICs with IPv6 each, or 1 NIC with 2 IPv6 addresses"
-            )
-        (self.ifs_a, self.ip_a), (self.ifs_b, self.ip_b) = setups
+        self.ifs_a, self.ip_a, self.ifs_b, self.ip_b = require_split_or_fail(
+            self, probe_ifs, IP6, label="TURN fallback",
+        )
         self.node_a = self.node_b = None
         self.turn_server = None
         self.get_infra_patcher = None

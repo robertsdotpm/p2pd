@@ -18,7 +18,7 @@ from p2pd.node.auto_connect import auto_connect, auto_combos
 from auto_connect_helpers import (
     PORT_PUNCH_A_T1, PORT_PUNCH_B_T1, PORT_PUNCH_A_T2, PORT_PUNCH_B_T2,
     PUNCH_TEST_CONF,
-    close_nodes, fresh_ifs, split_two_node_setups, start_node_with_ifs,
+    close_nodes, fresh_ifs, require_split_or_fail, start_node_with_ifs,
 )
 
 
@@ -31,12 +31,9 @@ class TestAutoConnectPunch(AsyncTestCase):
 
     async def asyncSetUp(self):
         probe_ifs = await fresh_ifs()
-        setups = split_two_node_setups(probe_ifs, IP4)
-        if setups is None:
-            self.skipTest(
-                "Need either 2 NICs with IPv4 each, or 1 NIC with 2 IPv4 addresses"
-            )
-        (self.ifs_a, self.ip_a), (self.ifs_b, self.ip_b) = setups
+        self.ifs_a, self.ip_a, self.ifs_b, self.ip_b = require_split_or_fail(
+            self, probe_ifs, IP4, label="punch",
+        )
         self.node_a = self.node_b = None
 
     async def asyncTearDown(self):

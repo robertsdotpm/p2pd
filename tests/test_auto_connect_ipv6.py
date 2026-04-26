@@ -18,7 +18,7 @@ from p2pd.node.auto_connect import auto_connect, auto_combos
 
 from auto_connect_helpers import (
     PORT_A6_T1, PORT_B6_T1, PORT_A6_T2, PORT_B6_T2,
-    close_nodes, fresh_ifs, split_two_node_setups, start_node_with_ifs,
+    close_nodes, fresh_ifs, require_split_or_fail, start_node_with_ifs,
 )
 
 
@@ -27,12 +27,9 @@ class TestAutoConnectIPv6(AsyncTestCase):
 
     async def asyncSetUp(self):
         probe_ifs = await fresh_ifs()
-        setups = split_two_node_setups(probe_ifs, IP6)
-        if setups is None:
-            self.skipTest(
-                "Need either 2 NICs with global IPv6 each, or 1 NIC with 2 globals"
-            )
-        (self.ifs_a, self.ip_a), (self.ifs_b, self.ip_b) = setups
+        self.ifs_a, self.ip_a, self.ifs_b, self.ip_b = require_split_or_fail(
+            self, probe_ifs, IP6, label="auto_connect IPv6",
+        )
         self.node_a = self.node_b = None
 
     async def asyncTearDown(self):

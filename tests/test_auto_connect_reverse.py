@@ -17,7 +17,7 @@ from p2pd.node.auto_connect import auto_connect
 
 from auto_connect_helpers import (
     PORT_REV_A, PORT_REV_B,
-    close_nodes, fresh_ifs, split_two_node_setups, start_node_with_ifs,
+    close_nodes, fresh_ifs, require_split_or_fail, start_node_with_ifs,
 )
 
 
@@ -26,12 +26,9 @@ class TestAutoConnectReverseConnect(AsyncTestCase):
 
     async def asyncSetUp(self):
         probe_ifs = await fresh_ifs()
-        setups = split_two_node_setups(probe_ifs, IP4)
-        if setups is None:
-            self.skipTest(
-                "Need either 2 NICs with IPv4 each, or 1 NIC with 2 IPv4 addresses"
-            )
-        (self.ifs_a, self.ip_a), (self.ifs_b, self.ip_b) = setups
+        self.ifs_a, self.ip_a, self.ifs_b, self.ip_b = require_split_or_fail(
+            self, probe_ifs, IP4, label="reverse_connect",
+        )
         self.node_a = self.node_b = None
 
     async def asyncTearDown(self):
