@@ -1,7 +1,7 @@
 """Traversal plugin for TCP/UDP hole punching."""
 from typing import Any, Dict, Optional, Tuple
 import asyncio
-from aionetiface import log, NIC_BIND, SysClock, async_wrap_errors, cancel_task, shutdown_proc_pool
+from aionetiface import IP4, IP6, log, NIC_BIND, SysClock, async_wrap_errors, cancel_task, shutdown_proc_pool
 from ....protocol.proto_msg import PunchMsg
 from .boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 from .punch_client import PunchClient
@@ -62,15 +62,28 @@ class PunchPlugin(TraversalPlugin):
 
         # Determine IP addresses via routing.
         dest_ip = self.dest_info["ip"]
-        # Same-machine cross-subnet: when dest is the peer's 127.X.Y.Z
-        # loopback alias, the source must also live on loopback or
-        # Windows refuses to short-circuit cross-subnet src->loopback
-        # via lo. Bind the route on alice's own loopback alias before
-        # taking route.nic() as src_ip so the rest of the punch
-        # exchange uses consistent loopback addressing.
-        if dest_ip[:4] == "127.":
+        is_v4_lo = (self.af == IP4) and dest_ip[:4] == "127."
+        is_v6_lo = (self.af == IP6) and (dest_ip == "::1" or dest_ip.startswith("::1"))
+        if is_v4_lo or is_v6_lo:
+            # Same-machine loopback path. Bind the route on alice's own
+            # loopback alias (her per-pubkey 127.X.Y.Z when AF=IP4, ::1
+            # when AF=IP6) so the punch exchange uses consistent
+            # loopback addressing on both ends. Without that, Windows
+            # silently drops cross-subnet src->loopback packets.
+            #
+            # The peer's full candidate list (per-pubkey alias / 127.0.0.1 /
+            # ::1 / pub-key-derived-port) lives on dest_info["loopback_candidates"];
+            # if the primary dest_ip selected by select_dest_ipr fails,
+            # the punch process can fall through to TURN. The candidate
+            # list could in future be walked by the punch process itself.
             src_lo = self.src_info.get("loopback")
-            src_str = str(src_lo) if src_lo is not None else "127.0.0.1"
+            if self.af == IP4:
+                if src_lo is not None and str(src_lo).startswith("127."):
+                    src_str = str(src_lo)
+                else:
+                    src_str = "127.0.0.1"
+            else:
+                src_str = "::1"
             route = self.nic.route(self.af)
             await route.bind(ips=src_str)
             src_ip = src_str

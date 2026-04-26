@@ -1,9 +1,50 @@
 """Traversal plugin for direct (non-NATed) connections."""
-from typing import Any, Optional
+from typing import Any, List, Optional, Tuple
 import asyncio
 from aionetiface import IP4, IP6, TCP, Pipe, log, log_exception, to_b, fstr
 from ....node.node_defs import CON_ID_MSG
 from ...traversal_plugin import TraversalPlugin
+
+
+def is_loopback_dest_str(s: str, af: Any) -> bool:
+    """True iff the dest IP string is in loopback range for its AF."""
+    if af == IP4:
+        return s.startswith("127.")
+    if af == IP6:
+        return s == "::1" or s.startswith("::1")
+    return False
+
+
+def loopback_dest_candidates(plugin: Any, primary_dest: Tuple[str, int]) -> List[Tuple[str, int]]:
+    """Return ordered (ip, port) candidates for the loopback connect path.
+
+    The peer's addr_info carries enrich_addr_map_with_loopback's full
+    candidate list (per-pubkey 127.X.Y.Z, 127.0.0.1:port, ::1:port,
+    127.0.0.1:fallback_port). Filter to the plugin's AF and dedupe so
+    DirectConnect can walk them in order on connect failure -- crucial
+    for platforms (Windows XP) whose stack doesn't route the full
+    127.0.0.0/8 block but does handle 127.0.0.1.
+    """
+    out = [primary_dest]
+    seen = {primary_dest}
+    candidates = plugin.dest_info.get("loopback_candidates") or []
+    for cand_af, cand_ip, cand_port in candidates:
+        if cand_af != plugin.af:
+            continue
+        key = (cand_ip, cand_port)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(key)
+    return out
+
+
+def loopback_src_for(plugin: Any) -> Optional[str]:
+    """Return alice's own loopback alias (str) for binding the connect socket."""
+    src_lo = plugin.src_info.get("loopback") if plugin.src_info else None
+    if src_lo is None:
+        return None
+    return str(src_lo)
 
 
 class DirectConnect(TraversalPlugin):
@@ -26,53 +67,46 @@ class DirectConnect(TraversalPlugin):
             getattr(self.nic, "id", "?"),
         ))
 
-        # (1) Get first interface for AF.
-        # (2) Build a 'route' from it with it's main NIC IP.
-        # (3) Bind to the route at port 0. Return itself.
-        if self.af == IP4:
-            # Same-machine cross-subnet: when dest is alice/bob's
-            # 127.X.Y.Z loopback alias, the source must also be
-            # loopback or the OS won't route the SYN over lo
-            # (Windows drops cross-subnet src->loopback dest entirely).
-            # alice's own loopback alias is already in src_info; fall
-            # back to 127.0.0.1 if for any reason it's missing.
-            if dest[0].startswith("127."):
-                src_lo = self.src_info.get("loopback")
-                src_ip = str(src_lo) if src_lo is not None else "127.0.0.1"
-                print("[DIRECT-DBG] picking loopback src_ip={0} for dest={1}".format(src_ip, dest))
-                route = self.nic.route(self.af)
-                await route.bind(ips=src_ip)
-            else:
-                print("[DIRECT-DBG] non-loopback dest, default route bind for dest={0}".format(dest))
+        if is_loopback_dest_str(dest[0], self.af):
+            # Same-machine loopback path. Walk every candidate in order
+            # so we cover both the per-pubkey alias and the universal
+            # 127.0.0.1 / ::1 fallbacks (and the pubkey-port collision
+            # backstop). First successful connect wins; the plugin
+            # registers that pipe and returns.
+            candidates = loopback_dest_candidates(self, dest)
+            print("[DIRECT-DBG] {0} loopback candidates: {1}".format(self.plugin_id, candidates))
+            pipe = await self.try_loopback_candidates(candidates)
+            if pipe is None:
+                return
+        else:
+            # Non-loopback path: standard NIC-bind connect.
+            print("[DIRECT-DBG] non-loopback dest, default route bind for dest={0}".format(dest))
+            if self.af == IP4:
                 route = await self.nic.route(self.af).bind()
-        if self.af == IP6:
-            if "fe80" == dest[0][:4]:
-                route = self.nic.route(self.af)
-                await route.bind(ips=str(route.link_locals[0]))
-            else:
-                route = await self.nic.route(self.af).bind()
-
-        log(fstr(
-            "direct_connect[{0}]: bound, attempting TCP connect to {1}",
-            (self.plugin_id, dest),
-        ))
-
-        # Connect to destination.
-        try:
-            pipe = await Pipe(TCP, dest, route).connect()
-        except (OSError, ConnectionError, asyncio.TimeoutError) as exc:
-            print("[DIRECT-DBG] TCP connect to {0} raised: {1!r}".format(dest, exc))
-            log_exception()
-            pipe = None
-
-        if pipe is None:
-            print("[DIRECT-DBG] TCP connect to {0} returned None".format(dest))
+            if self.af == IP6:
+                if "fe80" == dest[0][:4]:
+                    route = self.nic.route(self.af)
+                    await route.bind(ips=str(route.link_locals[0]))
+                else:
+                    route = await self.nic.route(self.af).bind()
             log(fstr(
-                "direct_connect[{0}]: TCP connect to {1} returned None",
+                "direct_connect[{0}]: bound, attempting TCP connect to {1}",
                 (self.plugin_id, dest),
             ))
-            return
-        print("[DIRECT-DBG] TCP connect to {0} OK, pipe={1!r}".format(dest, pipe))
+            try:
+                pipe = await Pipe(TCP, dest, route).connect()
+            except (OSError, ConnectionError, asyncio.TimeoutError) as exc:
+                print("[DIRECT-DBG] TCP connect to {0} raised: {1!r}".format(dest, exc))
+                log_exception()
+                pipe = None
+            if pipe is None:
+                print("[DIRECT-DBG] TCP connect to {0} returned None".format(dest))
+                log(fstr(
+                    "direct_connect[{0}]: TCP connect to {1} returned None",
+                    (self.plugin_id, dest),
+                ))
+                return
+            print("[DIRECT-DBG] TCP connect to {0} OK, pipe={1!r}".format(dest, pipe))
 
         if pipe.sock is None:
             log(fstr(
@@ -87,5 +121,54 @@ class DirectConnect(TraversalPlugin):
             (self.plugin_id,),
         ))
         self.result.set_result(pipe)
+
+    async def try_loopback_candidates(self, candidates: List[Tuple[str, int]]) -> Optional[Any]:
+        """Walk the loopback (ip, port) candidate list, returning the first
+        connected Pipe. Returns None if every candidate failed.
+
+        Each candidate is given a fresh route bound on alice's loopback
+        source (her own per-node alias when present, else a literal
+        127.0.0.1 / ::1). A short per-candidate timeout keeps the
+        outer auto_connect timeout budget honest -- without it a single
+        slow candidate could starve the rest.
+        """
+        per_cand_timeout = 4.0
+        for ip, port in candidates:
+            target = (ip, port)
+            try:
+                src_str = loopback_src_for(self)
+                if self.af == IP4:
+                    if src_str is None or not src_str.startswith("127."):
+                        src_str = "127.0.0.1"
+                else:
+                    src_str = "::1"
+                route = self.nic.route(self.af)
+                await route.bind(ips=src_str)
+                print("[DIRECT-DBG] {0} loopback try src={1} dest={2}".format(
+                    self.plugin_id, src_str, target,
+                ))
+                pipe = await asyncio.wait_for(
+                    Pipe(TCP, target, route).connect(),
+                    timeout=per_cand_timeout,
+                )
+            except asyncio.CancelledError:  # pylint: disable=try-except-raise
+                raise
+            except (OSError, ConnectionError, asyncio.TimeoutError, ValueError) as exc:
+                print("[DIRECT-DBG] {0} loopback dest={1} failed: {2!r}".format(
+                    self.plugin_id, target, exc,
+                ))
+                continue
+            if pipe is None:
+                print("[DIRECT-DBG] {0} loopback dest={1} returned None".format(
+                    self.plugin_id, target,
+                ))
+                continue
+            print("[DIRECT-DBG] {0} loopback dest={1} OK, pipe={2!r}".format(
+                self.plugin_id, target, pipe,
+            ))
+            return pipe
+        print("[DIRECT-DBG] {0} all loopback candidates failed".format(self.plugin_id))
+        return None
+
 
 PLUGIN_CLASS = DirectConnect

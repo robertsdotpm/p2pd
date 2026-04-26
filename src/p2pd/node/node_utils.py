@@ -25,18 +25,59 @@ def resolve_install_path(conf: Dict[str, Any]) -> str:
     return conf["install_path"] or get_aionetiface_install_root()
 
 
+def loopback_candidates_for(pub_key_hex: str, listen_port: int) -> List[Tuple[int, str, int]]:
+    """Ordered list of (af, ip, port) loopback candidates for same-machine traversal.
+
+    Listener tries each on bind (best-effort, ignores collisions); peer
+    tries each on connect until one accepts. Order is "most-likely-to-
+    work-without-collisions" first, "most-portable" second:
+
+      1. (IP4, 127.X.Y.Z, listen_port)
+         The per-node alias derived from pub_key. Unique address per node
+         so two same-machine peers never collide on the same loopback IP.
+         Doesn't work on platforms whose stack only routes 127.0.0.1
+         (Windows XP has been observed to silently drop traffic here).
+
+      2. (IP4, 127.0.0.1, listen_port)
+         The universally-routable IPv4 loopback. listen_port is unique
+         per node, so two same-machine peers don't collide on this
+         tuple either. Used as the XP-safe primary fallback.
+
+      3. (IP6, ::1, listen_port)
+         IPv6 loopback. Works when the host has IPv6 enabled and the
+         IPv4 stack is jammed (firewall, weird filter driver, etc.).
+
+      4. (IP4, 127.0.0.1, pub_key_derived_port)
+         Last-resort: pub_key-derived port in [30000, 60000) so two
+         peers competing for the same listen_port still don't collide
+         on this tuple. More likely to clash with unrelated services
+         on the host but kept as a safety net.
+    """
+    primary_v4 = loopback_ip_for_node(pub_key_hex)
+    val = int(pub_key_hex, 16)
+    fallback_port = 30000 + (val % 30000)
+    return [
+        (IP4, primary_v4, listen_port),
+        (IP4, "127.0.0.1", listen_port),
+        (IP6, "::1", listen_port),
+        (IP4, "127.0.0.1", fallback_port),
+    ]
+
+
 def enrich_addr_map_with_loopback(addr_map: Dict[str, Any]) -> Dict[str, Any]:
-    """Attach the per-node loopback alias to every per-iface info in addr_map.
+    """Attach the per-node loopback alias + candidate fallbacks to every if_info.
 
     parse_node_addr (in aionetiface) is intentionally unaware of the p2pd
     loopback convention; we add the field on the p2pd side after parse so
-    select_dest_ipr can reach it as dest_info["loopback"]. Mutates and
-    returns addr_map for the convenience of callers that want to chain.
+    select_dest_ipr can reach it as dest_info["loopback"] and the plugins
+    can iterate dest_info["loopback_candidates"] on connect failure.
+    Mutates and returns addr_map for the convenience of callers that
+    want to chain.
 
     Only attaches when the addr_map advertises at least one IPv4
-    interface -- 127.0.0.0/8 is IPv4-only, so on a v6-only peer the
-    loopback alias would be unreachable and select_dest_ipr would route
-    to a black hole. Stay quiet in that case.
+    interface -- the loopback fallbacks include IPv6 ::1, but for the
+    same-machine path to make sense we still need at least one IP4
+    if_info to anchor the loopback field on.
     """
     pub = addr_map.get("pub_key_hex")
     if not pub:
@@ -48,10 +89,23 @@ def enrich_addr_map_with_loopback(addr_map: Dict[str, Any]) -> Dict[str, Any]:
     except (ValueError, TypeError):
         return addr_map
     lo_ipr = IPR(lo_str)
+    # The candidates list uses the if_info's own listen port (per_iface).
+    # Different if_indexes on the same node may bind different ports, so
+    # build the list per-info rather than once.
     for af in (IP4, IP6):
         af_dict = addr_map.get(af) or {}
         for info in af_dict.values():
             info["loopback"] = lo_ipr
+            info_port = info.get("port")
+            if info_port:
+                try:
+                    info["loopback_candidates"] = loopback_candidates_for(
+                        pub, int(info_port)
+                    )
+                except (ValueError, TypeError):
+                    info["loopback_candidates"] = []
+            else:
+                info["loopback_candidates"] = []
     return addr_map
 
 
@@ -407,17 +461,35 @@ async def listen_on_ifs(node: Any) -> None:
     # even when STUN couldn't find a public IPv4 ext for any NIC. If
     # something exotic rejects it, the soft-bind path logs and moves on.
     try:
-        lo_ip = loopback_ip_for_node(node.kp.public_key_hex)
-        v4_route = node.ifs[0].route(IP4)
-        await v4_route.bind(ips=lo_ip, port=node.listen_port)
-        await node.add_listener(TCP, v4_route)
-        successes += 1
-        print("[LISTEN-DBG] loopback alias bound: {0}:{1}".format(lo_ip, node.listen_port))
-    except asyncio.CancelledError:  # pylint: disable=try-except-raise
-        raise
+        candidates = loopback_candidates_for(
+            node.kp.public_key_hex, node.listen_port
+        )
     except Exception as exc:
-        print("[LISTEN-DBG] loopback alias bind failed: {0!r}".format(exc))
-        log(fstr("listen_on_ifs: loopback alias bind failed: {0}", (exc,)))
+        candidates = []
+        print("[LISTEN-DBG] couldn't compute loopback candidates: {0!r}".format(exc))
+
+    for cand_af, cand_ip, cand_port in candidates:
+        try:
+            nic = None
+            for n in node.ifs:
+                if cand_af in n.supported() if hasattr(n, "supported") else True:
+                    nic = n
+                    break
+            if nic is None:
+                nic = node.ifs[0]
+            cand_route = nic.route(cand_af)
+            await cand_route.bind(ips=cand_ip, port=cand_port)
+            await node.add_listener(TCP, cand_route)
+            successes += 1
+            print("[LISTEN-DBG] loopback candidate bound: af={0} {1}:{2}".format(cand_af, cand_ip, cand_port))
+        except asyncio.CancelledError:  # pylint: disable=try-except-raise
+            raise
+        except Exception as exc:
+            print("[LISTEN-DBG] loopback candidate {0}:{1} bind failed: {2!r}".format(cand_ip, cand_port, exc))
+            log(fstr(
+                "listen_on_ifs: loopback candidate {0}:{1} bind failed: {2}",
+                (cand_ip, cand_port, exc),
+            ))
 
     if successes == 0:
         # Real production setups will hit this only if every NIC bind, the

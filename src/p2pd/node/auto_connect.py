@@ -29,8 +29,17 @@ def pair_distinct(route_type: Any, src_info: Dict[str, Any], dest_info: Dict[str
     address; the bind/connect will collide. EXT_BIND with matching ext IPs
     means both nodes are behind the same WAN address — connecting to that
     external address loops back to the local stack.
+
+    Same-machine exception: when both infos carry a "loopback" field (set
+    by enrich_addr_map_with_loopback when machine_id matches), the
+    NIC_BIND combo can always succeed via the per-node 127.X.Y.Z alias
+    or one of the fallback candidates -- even when the NIC IPs collide
+    (e.g. two same-machine peers on the same NIC). Treat such pairs as
+    distinct so the loopback path gets a chance.
     """
     if route_type == NIC_BIND:
+        if src_info.get("loopback") is not None and dest_info.get("loopback") is not None:
+            return True
         return int(src_info["nic"]) != int(dest_info["nic"])
     if route_type == EXT_BIND:
         return int(src_info["ext"]) != int(dest_info["ext"])
