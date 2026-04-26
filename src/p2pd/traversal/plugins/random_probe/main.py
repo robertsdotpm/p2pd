@@ -101,8 +101,6 @@ class RandomProbePlugin(TraversalPlugin):
 
         my_nat = self.src_info.get("nat") or {}
         peer_nat = self.dest_info.get("nat") or {}
-        my_is_sym = is_symmetric_nat(my_nat)
-        peer_is_sym = is_symmetric_nat(peer_nat)
 
         # Pick the addresses each side will fire probes at /from.
         # When the peer is on the same physical machine (machine_id
@@ -117,28 +115,26 @@ class RandomProbePlugin(TraversalPlugin):
             self.my_addr_ip = str(self.src_info.get("ext") or "")
             self.peer_addr_ip = str(self.dest_info.get("ext") or "")
 
-        # Role assignment.  Two regimes:
-        #
-        # 1) Exactly one side is symmetric -- the symmetric side
-        #    plays "sym" (opens N source-port-distinct sockets,
-        #    burns N NAT mappings) and the other plays "non_sym"
-        #    (opens one socket on a known port, fires N random
-        #    destination-port datagrams).  This is the case the
-        #    algorithm was designed for.
-        #
-        # 2) Neither / both are symmetric -- the algorithm doesn't
-        #    fundamentally apply, but the protocol still runs fine
-        #    and produces a usable Pipe on hosts where you'd just
-        #    like to exercise the code path (e.g. dev / test on
-        #    boxes with no real symmetric NAT).  Both sides need to
-        #    agree on roles deterministically; use the *sorted
-        #    addr-IP order* -- the side with the lexicographically
-        #    smaller IP is "non_sym", the other is "sym".  Both
-        #    peers compare the same pair of strings (each computes
-        #    my vs peer with own perspective) so roles always come
-        #    out opposite.
-        if my_is_sym != peer_is_sym:
-            my_role = "sym" if my_is_sym else "non_sym"
+        # Role assignment by NAT restrictiveness, then by IP:
+        #   1. Whichever side has the *higher* NAT type number plays
+        #      "sym" -- nat_defs.py orders types from least to most
+        #      restrictive (OPEN_INTERNET=1, FULL_CONE=3, RESTRICT=4,
+        #      RESTRICT_PORT=5, SYMMETRIC=6, BLOCKED=7).  The more
+        #      restrictive peer is the one that benefits from the
+        #      256-sockets-burst pattern, since its outbound is the
+        #      one that's hardest for the other side to predict.
+        #   2. On a tie (same NAT type number, both ends of the link
+        #      classified the same way), fall back to sorted IP --
+        #      the side with the lexicographically smaller addr_ip
+        #      plays "non_sym", the other plays "sym".  Both peers
+        #      see the same pair of strings, so they always pick
+        #      opposite roles.
+        my_nat_n = int(my_nat.get("type") or 0)
+        peer_nat_n = int(peer_nat.get("type") or 0)
+        if my_nat_n > peer_nat_n:
+            my_role = "sym"
+        elif my_nat_n < peer_nat_n:
+            my_role = "non_sym"
         else:
             # Tie-breaker on missing / equal addr: fall back to who
             # initiated (initiator = non_sym, responder = sym).
