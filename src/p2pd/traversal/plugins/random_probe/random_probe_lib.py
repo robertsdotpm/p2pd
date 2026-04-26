@@ -176,20 +176,17 @@ def make_udp_socket(
                 )
                 if iface_bytes:
                     s.setsockopt(socket.SOL_SOCKET, 25, iface_bytes)
-                    print("[RP-BIND] SO_BINDTODEVICE ok: bind={0}:{1} iface={2!r}".format(
-                        bind_ip, bind_port, iface_bytes,
-                    ))
-            except OSError as exc:
+            except OSError:
                 # Most likely EPERM (Linux SO_BINDTODEVICE needs
                 # CAP_NET_RAW / root).  The bind still happens, but
                 # egress falls back to the default route -- on a
                 # multi-NIC host that means packets sourced from a
                 # non-default NIC's IP can leave through the wrong
-                # interface and hairpin.
-                print("[RP-BIND] SO_BINDTODEVICE FAILED: bind={0}:{1} "
-                      "iface={2!r} err={3!r}  (need root / CAP_NET_RAW)".format(
-                          bind_ip, bind_port, iface_bytes, exc,
-                      ))
+                # interface and hairpin.  The plugin doesn't fail
+                # hard on this -- the algorithm will just converge
+                # via the default-route NIC and probably hit
+                # self-loop guards.
+                pass
 
     s.setblocking(False)
     s.bind((bind_ip, bind_port))

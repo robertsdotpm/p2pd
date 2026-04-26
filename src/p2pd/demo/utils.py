@@ -87,11 +87,13 @@ def cout(*fargs) -> None:
 
 async def add_echo_support(msg: bytes, client_tup: Any, pipe: Any) -> None:
     """Handle incoming ECHO protocol messages by stripping the prefix and sending back the payload."""
+    print("[ECHO-CB] msg={0!r} client_tup={1!r}".format(msg[:48], client_tup))
     if b"ECHO" == msg[:4]:
         cout()
         cout("\tGot echo proto msg: " + to_s(msg) + fstr(" from {0}", (client_tup,)))
         cout()
         await pipe.send(msg[4:], client_tup)
+        print("[ECHO-CB] replied to {0}".format(client_tup))
 
         # Maybe give event loop chance to send before exit, IDK.
 
