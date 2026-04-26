@@ -1,0 +1,83 @@
+cross-subnet same-machine routing
+=================================
+
+Context
+-------
+A node's "same_machine" flag (machine_id equality between src_map and
+dest_map) marks the case where two p2pd nodes are running on a single
+physical host. Before the loopback-alias work, NIC_BIND attempts in
+that case used the peer's local NIC IP as the destination
+(`dest_info["nic"]`). For two NICs on the SAME LAN subnet (e.g.
+both on 10.0.1.0/24, two aliases on one card, or a bridged setup)
+that just works -- the kernel sees the dest IP as directly attached
+and uses the loopback shortcut.
+
+The Windows quirk
+-----------------
+Two NICs on the same host but in DIFFERENT subnets do NOT
+loopback-shortcut on Windows. A SYN sent from 10.0.1.231 to
+20.0.0.57 (both bound on the same host) is handed to the LAN
+default-gateway adapter and dropped at the gateway -- there is no
+in-kernel route between the two NICs unless one of:
+
+    - the NICs are explicitly bridged in the OS network stack, or
+    - a manual `route add` is in place, or
+    - both addresses fall in the same subnet (one alias case).
+
+Linux behaves more permissively here: `local` table entries cover
+every locally-bound address and the kernel will short-circuit cross-
+subnet local-to-local TCP. We have to design for the Windows
+behaviour because the test matrix runs on it; Linux still wins because
+loopback works on every platform.
+
+This was empirically confirmed via the strict matrix on Win7 / Win8.1
+/ Win10 / Win11 / Srv22 / Vista / XP: with each test-Node bound to one
+NIC (probe_ifs[0] = LAN, probe_ifs[1] = mobile NIC), DirectConnect /
+ReverseConnect / Punch over NIC_BIND consistently timed out and TURN
+took over. machine_id matched between Nodes (so same_machine=True);
+auto_connect *did* generate the cross-iface NIC_BIND combo, but the
+TCP attempt died at the kernel level.
+
+The fix: per-node loopback alias
+--------------------------------
+Each node binds an additional listener on a 127.X.Y.Z address derived
+from its own pub_key (loopback_ip_for_node). That address is attached
+to every if_info in addr_map by enrich_addr_map_with_loopback. When
+select_dest_ipr sees same_pc=True it returns dest_info["loopback"]
+instead of dest_info["nic"], so the peer's connect() call goes to a
+127.0.0.0/8 address. Every supported OS routes 127.0.0.0/8 to the
+loopback iface unconditionally, so cross-subnet same-machine traffic
+is no longer blocked.
+
+When this is and isn't relevant
+-------------------------------
+Relevant:
+    - Tests / dev where two p2pd nodes run on one host (the matrix).
+    - Multi-NIC hosts that load_interfaces returns multiple distinct
+      probe NICs for, with NICs sitting on different subnets.
+
+Not relevant:
+    - Cross-machine peers: machine_id differs, same_pc=False, the
+      loopback path is never selected and traffic uses the NIC/EXT
+      IPs as before.
+    - Single-NIC hosts (Win11 in the matrix): there's only one NIC
+      to bind on, so the cross-subnet question never arises.
+
+Bridged-NIC subtlety
+--------------------
+When two NICs are bridged at the OS level they appear in the same L2
+domain, so cross-subnet routing IS available without the loopback
+hack. The hack is still safe in that environment -- it just wins a
+race that NIC_BIND would have won anyway. So we don't need to detect
+the bridged case explicitly.
+
+Implementation pointers
+-----------------------
+- loopback_ip_for_node          src/p2pd/node/node_utils.py
+- enrich_addr_map_with_loopback src/p2pd/node/node_utils.py
+- listen_on_ifs (loopback bind) src/p2pd/node/node_utils.py
+- select_dest_ipr (preference)  src/p2pd/traversal/traversal_utils.py
+- enrichment call sites:
+    - node_start.py (src_map after parse)
+    - auto_connect.py (dest_map after parse)
+    - node_connect.py (dest_map for connect())
