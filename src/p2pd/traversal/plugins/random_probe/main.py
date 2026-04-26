@@ -32,8 +32,14 @@ from ....protocol.proto_msg import RandomProbeMsg
 from ...traversal_plugin import TraversalPlugin
 from ..punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 
-from .random_probe_defs import DEFAULT_PROBE_COUNT, PROBE_LISTEN_TIMEOUT
+from .random_probe_defs import (
+    DEFAULT_PROBE_COUNT,
+    PROBE_LEN,
+    PROBE_LISTEN_TIMEOUT,
+    PROBE_MAGIC,
+)
 from .random_probe_lib import (
+    async_drain_probe_residue,
     drain_probe_residue,
     make_udp_socket,
     run_non_sym_side,
@@ -304,13 +310,14 @@ class RandomProbePlugin(TraversalPlugin):
 
         # Drain any probe datagrams still queued in the kernel
         # buffer for the winning socket before handing it up to
-        # the user as a Pipe.  Without this, pipe.recv() returns
-        # leftover probe bytes (sym's 256-pack, late cone probes,
-        # the post-CONFIRM ROLE_SYM acknowledgement) instead of the
-        # application's first real message.
+        # the user as a Pipe.  Instant pass first, then a short
+        # async pass to catch in-flight late probes (the carrier
+        # has hundreds of ms of buffering between sym's last
+        # probe send and arrival on the cone's NIC).
         drained = drain_probe_residue(res["sock"], nonce)
-        log("RandomProbePlugin: drained {0} residual probe(s) "
-            "from winning sock".format(drained))
+        late = await async_drain_probe_residue(res["sock"], nonce, duration=0.8)
+        log("RandomProbePlugin: drained {0}+{1} residual probe(s) "
+            "from winning sock".format(drained, late))
 
         # Diagnostic: bypass the Pipe wrap entirely and test the
         # raw socket round-trip.  Send a literal ECHO directly on
@@ -427,6 +434,34 @@ class RandomProbePlugin(TraversalPlugin):
             pipe.add_msg_cb(debug_inbound)
         except (AttributeError, TypeError):
             pass
+
+        # Reset pipe subscription queues + drop any in-flight
+        # probe residue from the live socket.  Between the sock
+        # being handed to create_datagram_endpoint and this point
+        # asyncio may have already dispatched a few late sym
+        # probes via datagram_received -> handle_data ->
+        # stream.add_msg -> queued.  Walking the subs and draining
+        # their queues here makes the application-facing recv()
+        # start with a clean queue.
+        try:
+            subs = pipe.pipe_events.stream.subs
+        except AttributeError:
+            subs = {}
+        cleared = 0
+        for entry in subs.values():
+            try:
+                _sub, q, _handler = entry
+            except (TypeError, ValueError):
+                continue
+            while True:
+                try:
+                    q.get_nowait()
+                    cleared += 1
+                except asyncio.QueueEmpty:
+                    break
+        if cleared:
+            log("RandomProbePlugin: cleared {0} residue items from "
+                "pipe subscription queues".format(cleared))
 
         log("RandomProbePlugin: returning pipe role={0} sock={1!r} peer={2}".format(
             my_role, res["sock"], res["peer"]))

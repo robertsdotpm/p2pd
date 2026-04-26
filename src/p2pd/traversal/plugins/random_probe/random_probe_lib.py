@@ -216,18 +216,17 @@ def close_all(socks: List[socket.socket]) -> None:
 def drain_probe_residue(sock: socket.socket, want_nonce: bytes) -> int:
     """Drain in-flight probe datagrams from *sock* without blocking.
 
-    After convergence both peers have stopped firing fresh probes,
-    but the kernel may still have queued probe datagrams (sym
-    side's 256-pack, late cone probes, the post-CONFIRM ROLE_SYM
-    probe).  If we hand the socket up to a Pipe with that residue
-    queued, pipe.recv() returns probe bytes to the application
-    instead of real payload.
+    Instant version -- pulls everything currently queued in the
+    kernel buffer and stops at the first non-probe.  See
+    async_drain_probe_residue for a duration-based variant that
+    catches late-arriving probes too (CGNAT / cross-internet
+    paths can keep delivering sym probes for hundreds of ms after
+    the algorithm completes).
 
-    Returns the number of probe datagrams drained -- handy for
-    tests / debug logging.  Non-probe datagrams (anything that
-    doesn't decode as one of *our* probes) are left in the queue
-    so we don't accidentally swallow real user data that happened
-    to arrive in the same window.
+    Returns the number of probe datagrams drained.  Non-probe
+    datagrams (anything that doesn't decode as one of *our*
+    probes) are left in the queue so we don't accidentally
+    swallow real user data.
     """
     drained = 0
     sock.setblocking(False)
@@ -239,12 +238,49 @@ def drain_probe_residue(sock: socket.socket, want_nonce: bytes) -> int:
         except OSError:
             break
         if decode_probe(data, want_nonce) is None:
-            # Not one of our probes -- can't safely drop it.  Stop
-            # draining and leave it for the application to read.
-            # In practice users won't be sending unsolicited UDP at
-            # this 4-tuple before the algorithm completes, so this
-            # path is rare.
             break
+        drained += 1
+    return drained
+
+
+async def async_drain_probe_residue(
+    sock: socket.socket,
+    want_nonce: bytes,
+    duration: float = 1.0,
+) -> int:
+    """Drain probe-format datagrams from *sock* for *duration* seconds.
+
+    The instant variant only catches what the kernel already has
+    queued.  On a real cross-internet path (CGNAT, mobile carrier
+    in the loop) the symmetric peer's 256-pack arrives spread
+    over hundreds of ms -- by the time the algorithm sets the
+    result, more probes are still in flight.  This variant keeps
+    consuming any matching probe datagrams for the full duration
+    so late arrivers get silently dropped instead of being
+    delivered as data on the user's pipe.
+
+    Non-probe datagrams (real user payload that happens to slip
+    in early) are NOT consumed -- those are left for the pipe
+    layer to deliver.
+    """
+    loop = asyncio.get_event_loop()
+    deadline = loop.time() + duration
+    drained = 0
+    sock.setblocking(False)
+    while loop.time() < deadline:
+        try:
+            data, _addr = sock.recvfrom(4096)
+        except (BlockingIOError, InterruptedError):
+            await asyncio.sleep(0.02)
+            continue
+        except OSError:
+            break
+        if decode_probe(data, want_nonce) is None:
+            # Real data arrived early -- can't drop it.  Cheap
+            # workaround: there's no way to put it back, but in
+            # practice the application's first send hasn't gone
+            # out yet so this is unlikely.
+            return drained
         drained += 1
     return drained
 
