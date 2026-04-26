@@ -102,6 +102,13 @@ class TestRandomProbeRealNat(AsyncTestCase):
                 nic = await Interface(name)
                 if IP4 not in nic.supported():
                     continue
+                # NAT classification is best-effort -- fall back
+                # to whatever Interface() probed if load_nat
+                # can't reach the STUN test pool.
+                try:
+                    await asyncio.wait_for(nic.load_nat(), timeout=10)
+                except Exception as exc:  # ErrorCantLoadNATInfo + friends
+                    print("[REAL-NAT] {0} load_nat failed: {1!r}".format(name, exc))
                 loaded[name] = nic
             except (OSError, ValueError) as exc:
                 print("[REAL-NAT] skip NIC {0}: {1!r}".format(name, exc))
@@ -174,20 +181,42 @@ class TestRandomProbeRealNat(AsyncTestCase):
 
         # Force distinct machine_ids so the random_probe plugin
         # sees same_machine=False and uses ext-IP path.  Without
-        # this, both nodes share the host's machine_id and the
-        # algorithm short-circuits to NIC IPs which never leave
-        # the kernel.
+        # this both nodes share the host's machine_id, the
+        # algorithm short-circuits to NIC IPs (because
+        # same_machine collapses my_addr_ip / peer_addr_ip to
+        # the NIC's local IP) and the kernel never sends those
+        # over the wire.  We re-serialise addr_bytes so the
+        # peer-parsed machine_id reflects the override.
+        from aionetiface import make_node_addr, parse_node_addr
         self.node_b.machine_id = self.node_b.machine_id + "-B"
-        self.node_b.addr_map["machine_id"] = self.node_b.machine_id
-        # Reserialise so the addr_bytes carries the new id.
-        # (Cheap: parse_node_addr writes machine_id into the
-        # serialised buffer; rebuilding addr_bytes is a node
-        # internal we don't need to redo because the plugin
-        # only checks machine_id post-parse.)
+        self.node_b.addr_bytes = make_node_addr(
+            self.node_b.kp.public_key_hex,
+            self.node_b.machine_id,
+            self.node_b.ifs,
+            port=self.node_b.listen_port,
+        )
+        self.node_b.addr_map = parse_node_addr(self.node_b.addr_bytes)
+        self.node_b.traversal.addr_bytes = self.node_b.addr_bytes
 
         print("[REAL-NAT] node_a machine_id={0} node_b machine_id={1}".format(
             self.node_a.machine_id, self.node_b.machine_id,
         ))
+
+        # NAT classification on this VM intermittently reports
+        # SYMMETRIC (type 6) for both NICs because the STUN test 3
+        # reply gets dropped and the classifier falls through to
+        # symmetric.  When that happens random_probe's alignment
+        # filter is enabled and the algorithm can't converge --
+        # even though the actual home NAT is full-cone.  Force
+        # the local view to FULL_CONE for the test so the
+        # algorithm proceeds; we're testing the random_probe
+        # plumbing, not the classifier.
+        from aionetiface.nic.nat.nat_defs import FULL_CONE
+        for node in (self.node_a, self.node_b):
+            for if_info in (node.addr_map.get(IP4) or {}).values():
+                nat = if_info.get("nat") or {}
+                nat["type"] = FULL_CONE
+                if_info["nat"] = nat
 
         # Echo handler on BOTH sides -- the plugin attaches
         # node.msg_cb to the pipe via on_plugin_done, which

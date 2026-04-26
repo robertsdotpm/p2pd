@@ -46,7 +46,7 @@ method_txt = {
     "0": "direct_connect",
     "1": "reverse_connect",
     "2": "punch",
-    "3": "relay",
+    "3": "turn",
     "4": "random_probe",
     "5": "auto_connect",
 }

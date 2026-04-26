@@ -15,6 +15,8 @@ for random-probe; see the design note at the bottom of this file.
 """
 
 import asyncio
+import os
+import socket as socket_mod
 from typing import Any, Dict, List, Optional, Tuple
 
 from aionetiface import (
@@ -23,6 +25,7 @@ from aionetiface import (
     SysClock,
     UDP,
     log,
+    log_exception,
     rand_b,
     to_s,
 )
@@ -42,9 +45,9 @@ from .random_probe_lib import (
     async_drain_probe_residue,
     drain_probe_residue,
     make_udp_socket,
-    run_non_sym_side,
-    run_symmetric_side,
-    stun_discover_mapping,
+    sync_run_non_sym_side,
+    sync_run_symmetric_side,
+    sync_stun_discover_mapping,
     wait_until,
 )
 
@@ -243,31 +246,30 @@ class RandomProbePlugin(TraversalPlugin):
             return
         bind_ip = str(route.nic())
 
+        print("[RP-FIRE] role={0} bind_ip={1} peer_addr={2} peer_known_port={3} "
+              "punch_time={4} now={5}".format(
+                  my_role, bind_ip, peer_addr_ip, peer_known_port,
+                  punch_time, int(self.sys_clock.time()),
+              ))
+
+        # Algorithm phase runs in a thread executor with PURE
+        # blocking-socket I/O (select + recvfrom) -- no
+        # asyncio.add_reader anywhere on these socks.  asyncio's
+        # create_datagram_endpoint(sock=existing) doesn't fire
+        # _read_ready reliably on a sock that's been cycled
+        # through add_reader/remove_reader many times during the
+        # algorithm phase (verified on real cross-NAT path:
+        # kernel queue has data, transport reader never fires).
+        # Keeping the algorithm sync side-steps the bug
+        # entirely: when the plugin hands the winning sock to
+        # Pipe.connect, asyncio's selector sees a fresh fd.
+        loop_for_algo = asyncio.get_event_loop()
         if my_role == "non_sym":
-            # Reuse the socket we pre-bound before sending the
-            # signal message.  Falling back to a fresh bind would
-            # land on a different port than the one we advertised,
-            # and the symmetric peer would fire all 256 probes at
-            # the wrong port.
-            #
-            # own_ext_ip lets the algorithm reject any "aligned"
-            # probe whose source is our own external IP -- on
-            # hosts with NAT loopback / asymmetric routing,
-            # outbound probes can hairpin back to us and look
-            # like a peer probe.  Replying there self-loops and
-            # the real peer never gets a CONFIRM.
             own_ext_for_filter = (
                 getattr(self, "mapped_ip", None)
                 or self.my_addr_ip
                 or None
             )
-            # require_alignment: only enforce the "src-port-in-dst-
-            # set" filter for restrict-port NATs.  Full-cone /
-            # open-internet route inbound from any source on the
-            # mapped port, so the alignment filter would reject
-            # legitimate sym probes whose carrier-assigned ext port
-            # doesn't happen to be in our random dst set (~37% of
-            # convergences thrown away).
             from aionetiface.nic.nat.nat_defs import (
                 FULL_CONE,
                 OPEN_INTERNET,
@@ -279,28 +281,39 @@ class RandomProbePlugin(TraversalPlugin):
             print("[RP-FILTER] our_nat={0} require_alignment={1}".format(
                 our_nat_type, require_alignment,
             ))
-            res = await run_non_sym_side(
-                bind_ip=bind_ip,
-                known_port=self.our_known_port(),
-                peer_ext_ip=peer_addr_ip,
-                nonce=nonce,
-                probe_count=probe_count,
-                listen_timeout=PROBE_LISTEN_TIMEOUT,
-                sock=getattr(self, "prebound_sock", None),
-                own_ext_ip=own_ext_for_filter,
-                interface=self.nic,
-                require_alignment=require_alignment,
+            res = await loop_for_algo.run_in_executor(
+                None,
+                lambda: sync_run_non_sym_side(
+                    bind_ip=bind_ip,
+                    known_port=self.our_known_port(),
+                    peer_ext_ip=peer_addr_ip,
+                    nonce=nonce,
+                    probe_count=probe_count,
+                    listen_timeout=PROBE_LISTEN_TIMEOUT,
+                    sock=getattr(self, "prebound_sock", None),
+                    own_ext_ip=own_ext_for_filter,
+                    interface=self.nic,
+                    require_alignment=require_alignment,
+                ),
             )
         else:
-            res = await run_symmetric_side(
-                bind_ip=bind_ip,
-                cone_ext_ip=peer_addr_ip,
-                cone_ext_port=peer_known_port,
-                nonce=nonce,
-                probe_count=probe_count,
-                listen_timeout=PROBE_LISTEN_TIMEOUT,
-                interface=self.nic,
+            res = await loop_for_algo.run_in_executor(
+                None,
+                lambda: sync_run_symmetric_side(
+                    bind_ip=bind_ip,
+                    cone_ext_ip=peer_addr_ip,
+                    cone_ext_port=peer_known_port,
+                    nonce=nonce,
+                    probe_count=probe_count,
+                    listen_timeout=PROBE_LISTEN_TIMEOUT,
+                    interface=self.nic,
+                ),
             )
+
+        print("[RP-FIRE-DONE] role={0} res={1}".format(
+            my_role,
+            "<converged>" if res else "None (timeout)",
+        ))
 
         if res is None:
             log("RandomProbePlugin: round did not converge; aborting")
@@ -366,19 +379,47 @@ class RandomProbePlugin(TraversalPlugin):
         except (OSError, AttributeError):
             pass
 
+        # Use the algorithm's winning sock directly -- earlier
+        # experiment with os.dup turned out to add complexity
+        # without solving the receive issue on real NICs.  The
+        # MSG_PEEK drain change ensures we don't eat user data
+        # before the Pipe gets a chance to consume it.
+        fresh_sock = res["sock"]
+
+        # Defensive: explicitly clear any lingering reader on
+        # this FD before letting create_datagram_endpoint install
+        # its own.  The algorithm phase ran many add_reader /
+        # remove_reader cycles (peek_then_recv_probe).  If the
+        # last cycle's remove_reader didn't fully clean up
+        # selector state -- or if a stale registration from a
+        # closed sibling sock got assigned this FD number --
+        # asyncio's transport reader silently won't fire on
+        # this fd post-Pipe-wrap (kernel queue has data,
+        # _read_ready never gets called).  Clearing first
+        # gives create_datagram_endpoint a clean slate.
+        try:
+            asyncio.get_event_loop().remove_reader(fresh_sock.fileno())
+        except (OSError, ValueError):
+            pass
+
         try:
             from aionetiface import Pipe, UDP
             pipe = await Pipe(
                 UDP,
                 dest=res["peer"],
                 route=route,
-                sock=res["sock"],
+                sock=fresh_sock,
             ).connect()
         except (OSError, ConnectionError, ValueError):
             log("RandomProbePlugin: Pipe wrap failed")
+            try:
+                fresh_sock.close()
+            except OSError:
+                pass
             if not self.result.done():
                 self.result.set_result(None)
             return
+
 
         # Verify wire-up: which sock, which dest_tup will pipe.send
         # default to, and is anyone receiving inbound on this pipe.
@@ -457,21 +498,6 @@ class RandomProbePlugin(TraversalPlugin):
         # If sym's [RP-INBOUND] shows this msg, the sock works
         # post-Pipe-wrap and the bug is in pipe.send.  If it
         # doesn't, the sock itself stopped working after wrap.
-        if my_role == "non_sym":
-            async def raw_sock_probe():
-                # Wait a moment for the responder's Pipe to wire up.
-                await asyncio.sleep(2)
-                try:
-                    res["sock"].sendto(
-                        b"RAWSOCK-TEST from non_sym\n",
-                        res["peer"],
-                    )
-                    print("[RP-RAWSEND-POST] non_sym sent test on raw sock to {0}".format(
-                        res["peer"],
-                    ))
-                except OSError as exc:
-                    print("[RP-RAWSEND-POST] non_sym raw sendto failed: {0!r}".format(exc))
-            asyncio.ensure_future(raw_sock_probe())
 
     # ── helpers ─────────────────────────────────────────────────
 
@@ -565,9 +591,16 @@ class RandomProbePlugin(TraversalPlugin):
                 resolved = await self.resolve_stun_dest(stun_server)
             except (OSError, ConnectionError, asyncio.TimeoutError):
                 continue
-            mapping = await stun_discover_mapping(
-                loop, self.prebound_sock, resolved, self.af,
-                timeout=2.0, retries=2,
+            # Run the STUN query in a thread executor using
+            # sync blocking I/O -- the prebound sock should
+            # never get touched by asyncio.add_reader before
+            # Pipe.connect takes ownership post-algorithm.
+            mapping = await loop.run_in_executor(
+                None,
+                lambda srv=resolved: sync_stun_discover_mapping(
+                    self.prebound_sock, srv, self.af,
+                    timeout=2.0, retries=2,
+                ),
             )
             if mapping is not None:
                 self.mapped_ip, self.mapped_port = mapping
@@ -611,8 +644,17 @@ class RandomProbePlugin(TraversalPlugin):
         return await resolv_dest(self.af, dest, self.nic)
 
     def our_known_port(self) -> int:
-        """Non-symmetric side's known external port; 0 if we're sym."""
-        if is_symmetric_nat(self.src_info.get("nat") or {}):
+        """Known external port to advertise; 0 when we're playing sym role.
+
+        Checks our *assigned role* (set in run() based on the
+        NAT-restrictiveness comparison + IP tie-break), NOT our raw
+        NAT type.  Both nodes can have SYMMETRIC_NAT and one still
+        plays "non_sym" via the tie-breaker -- in that case the
+        non_sym side has a prebound socket whose mapped port the
+        peer NEEDS to know, otherwise sym fires all 256 probes at
+        port 0 and the round can never converge.
+        """
+        if getattr(self, "session_role", None) == "sym":
             return 0
         # Prefer the STUN-discovered mapped port -- that's the port
         # the peer's probes actually need to target on a real NAT.

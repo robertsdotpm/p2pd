@@ -179,3 +179,6 @@ otherwise they will just build up.
 - we need some kind of auto-connect without plugin selection for use with the
 examples. we can maybe add this again back into the demo as a discrete step.
 - need to add tests for upnp and make sure its part of the demo / overall system.
+- framed byte lenth and streaming for node_proto
+- better checking for turn servers in dogdorm monitor and migration to new aionetiface
+- temp ipv6s constantly change and get loaded into the peer addr -- pub key might be based on that = constantly new node id we need to fix this

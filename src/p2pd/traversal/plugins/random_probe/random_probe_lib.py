@@ -213,28 +213,29 @@ def close_all(socks: List[socket.socket]) -> None:
 def drain_probe_residue(sock: socket.socket, want_nonce: bytes) -> int:
     """Drain in-flight probe datagrams from *sock* without blocking.
 
-    Instant version -- pulls everything currently queued in the
-    kernel buffer and stops at the first non-probe.  See
-    async_drain_probe_residue for a duration-based variant that
-    catches late-arriving probes too (CGNAT / cross-internet
-    paths can keep delivering sym probes for hundreds of ms after
-    the algorithm completes).
+    Uses MSG_PEEK to look without consuming -- only consumes
+    datagrams that decode as one of *our* probes.  Real user
+    payload at the head of the queue is left alone for the Pipe
+    layer to deliver (a plain recvfrom would consume it AND
+    leave us with no way to re-queue, eating user data).
 
-    Returns the number of probe datagrams drained.  Non-probe
-    datagrams (anything that doesn't decode as one of *our*
-    probes) are left in the queue so we don't accidentally
-    swallow real user data.
+    Instant version -- stops at the first non-probe at the head.
+    See async_drain_probe_residue for the duration-based variant.
     """
     drained = 0
     sock.setblocking(False)
     while True:
         try:
-            data, _addr = sock.recvfrom(4096)
+            data, _addr = sock.recvfrom(4096, socket.MSG_PEEK)
         except (BlockingIOError, InterruptedError):
             break
         except OSError:
             break
         if decode_probe(data, want_nonce) is None:
+            break
+        try:
+            sock.recvfrom(4096)
+        except (BlockingIOError, OSError):
             break
         drained += 1
     return drained
@@ -247,6 +248,12 @@ async def async_drain_probe_residue(
 ) -> int:
     """Drain probe-format datagrams from *sock* for *duration* seconds.
 
+    Uses MSG_PEEK to look at the head of the kernel queue
+    *without consuming* -- only consumes datagrams that decode
+    as one of *our* probes.  Real user payload that arrives
+    during the drain window stays queued and is delivered to the
+    Pipe layer as expected.
+
     The instant variant only catches what the kernel already has
     queued.  On a real cross-internet path (CGNAT, mobile carrier
     in the loop) the symmetric peer's 256-pack arrives spread
@@ -255,31 +262,99 @@ async def async_drain_probe_residue(
     consuming any matching probe datagrams for the full duration
     so late arrivers get silently dropped instead of being
     delivered as data on the user's pipe.
-
-    Non-probe datagrams (real user payload that happens to slip
-    in early) are NOT consumed -- those are left for the pipe
-    layer to deliver.
     """
     loop = asyncio.get_event_loop()
     deadline = loop.time() + duration
     drained = 0
     sock.setblocking(False)
     while loop.time() < deadline:
+        # Peek first.  If the head is a probe, consume it.  If
+        # it's anything else, leave it for the application.
         try:
-            data, _addr = sock.recvfrom(4096)
+            data, _addr = sock.recvfrom(4096, socket.MSG_PEEK)
         except (BlockingIOError, InterruptedError):
             await asyncio.sleep(0.02)
             continue
         except OSError:
             break
         if decode_probe(data, want_nonce) is None:
-            # Real data arrived early -- can't drop it.  Cheap
-            # workaround: there's no way to put it back, but in
-            # practice the application's first send hasn't gone
-            # out yet so this is unlikely.
-            return drained
-        drained += 1
+            # Real user data is at the head of the queue.  Stop
+            # draining so the Pipe layer can deliver it.  Don't
+            # busy-loop -- yield control briefly in case more
+            # late probes are coming behind it (we'll catch
+            # those next iteration if the user data also gets
+            # consumed by the Pipe quickly).
+            await asyncio.sleep(0.05)
+            continue
+        # It's a probe.  Consume it for real.
+        try:
+            sock.recvfrom(4096)
+            drained += 1
+        except (BlockingIOError, OSError):
+            break
     return drained
+
+
+def sync_stun_discover_mapping(
+    sock: socket.socket,
+    stun_server: Tuple[str, int],
+    af: int,
+    timeout: float = 3.0,
+    retries: int = 3,
+) -> Optional[Tuple[str, int]]:
+    """Sync version of stun_discover_mapping.
+
+    No asyncio.  Uses select() for the wait, plain recvfrom for
+    delivery.  Run from a thread executor or after switching the
+    sock to plain blocking mode.  Leaves the sock in non-blocking
+    mode at exit.
+    """
+    from aionetiface.protocol.stun.stun_defs import (
+        RFC5389, STUNMsg, STUNMsgTypes, STUNMsgCodes,
+    )
+    from aionetiface.protocol.stun.stun_utils import stun_proto
+    import select as select_mod
+
+    sock.setblocking(False)
+    for _ in range(retries):
+        msg = STUNMsg(
+            msg_type=STUNMsgTypes.Binding,
+            msg_code=STUNMsgCodes.Request,
+            mode=RFC5389,
+        )
+        txid = bytes(msg.txn_id)
+        try:
+            sock.sendto(msg.pack(), stun_server)
+        except OSError:
+            return None
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            try:
+                ready, _, _ = select_mod.select([sock], [], [], remaining)
+            except (OSError, select_mod.error):
+                break
+            if not ready:
+                break
+            try:
+                data, _addr = sock.recvfrom(2048)
+            except (BlockingIOError, InterruptedError):
+                continue
+            except OSError:
+                return None
+            if len(data) < 20 or bytes(data[8:20]) != txid:
+                continue
+            try:
+                reply, _ = stun_proto(data, af)
+            except (ValueError, IndexError):
+                continue
+            rtup = getattr(reply, "rtup", None)
+            if rtup is None:
+                continue
+            return (str(rtup[0]), int(rtup[1]))
+    return None
 
 
 async def stun_discover_mapping(
@@ -386,9 +461,252 @@ async def recvfrom_async(loop: Any, sock: socket.socket, bufsize: int = 2048) ->
             pass
 
 
+async def peek_then_recv_probe(
+    loop: Any,
+    sock: socket.socket,
+    want_nonce: bytes,
+    bufsize: int = 2048,
+) -> Tuple[Optional[Tuple[bytes, Tuple[str, int]]], bool]:
+    """Wait for inbound, peek at it, conditionally consume.
+
+    Returns ((data, addr), True) when a *probe* (PROBE_MAGIC +
+    matching nonce) is at the head of the queue and we've
+    consumed it, OR (None, False) when something arrived but it
+    wasn't a probe -- in that case the data is left in the
+    kernel queue for the next consumer (the application's Pipe)
+    so we don't eat real user data during the algorithm phase.
+
+    This is the fix for "the algorithm consumes user data".  The
+    cone side often converges first, returns from
+    run_non_sym_side, the application immediately calls
+    pipe.send().  The user's send arrives at the sym side before
+    sym's watch loop has finished -- without MSG_PEEK, sym's
+    recvfrom takes the user data off the queue, decode_probe
+    returns None, sym's loop continues, the data is gone.
+    """
+    fut = loop.create_future()
+
+    def on_readable() -> None:
+        if fut.done():
+            return
+        try:
+            # Peek -- do NOT consume.
+            data, addr = sock.recvfrom(bufsize, socket.MSG_PEEK)
+        except (BlockingIOError, InterruptedError):
+            return
+        except OSError as exc:
+            fut.set_exception(exc)
+            return
+        fut.set_result((data, addr))
+
+    loop.add_reader(sock.fileno(), on_readable)
+    try:
+        data, addr = await fut
+    finally:
+        try:
+            loop.remove_reader(sock.fileno())
+        except (OSError, ValueError):
+            pass
+
+    if decode_probe(data, want_nonce) is None:
+        # Not a probe -- leave for the Pipe layer.
+        return None, False
+    # Probe -- consume it now.
+    try:
+        sock.recvfrom(bufsize)
+    except (BlockingIOError, OSError):
+        pass
+    return (data, addr), True
+
+
 # ─────────────────────────────────────────────────────────────────
 # Cone side
 # ─────────────────────────────────────────────────────────────────
+
+
+def sync_run_non_sym_side(
+    bind_ip: str,
+    known_port: int,
+    peer_ext_ip: str,
+    nonce: bytes,
+    probe_count: int = DEFAULT_PROBE_COUNT,
+    listen_timeout: float = PROBE_LISTEN_TIMEOUT,
+    rng: Optional[random.Random] = None,
+    sock: Optional[socket.socket] = None,
+    own_ext_ip: Optional[str] = None,
+    interface: Optional[Any] = None,
+    require_alignment: bool = True,
+) -> Optional[Dict[str, Any]]:
+    """Sync version of run_non_sym_side.
+
+    No asyncio.add_reader / remove_reader cycling -- uses
+    select() for the wait + plain recvfrom for delivery.  Run
+    from a thread executor.  The sock is therefore *never*
+    registered with the asyncio loop's selector during the
+    algorithm phase, so when the plugin hands it to
+    create_datagram_endpoint afterwards the transport's
+    _read_ready installs cleanly and fires reliably on inbound.
+    """
+    import select as select_mod
+    if sock is None:
+        sock = make_udp_socket(bind_ip, known_port, interface=interface)
+    sock.setblocking(False)
+
+    ports = random_probe_ports(probe_count, rng=rng)
+    expected_src_ports = set(ports)
+    for idx, dst_port in enumerate(ports):
+        try:
+            sock.sendto(
+                encode_probe(nonce, ROLE_CONE, idx),
+                (peer_ext_ip, dst_port),
+            )
+        except OSError:
+            continue
+
+    deadline = time.time() + listen_timeout
+    while True:
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            return None
+        try:
+            ready, _, _ = select_mod.select([sock], [], [], remaining)
+        except (OSError, select_mod.error):
+            return None
+        if not ready:
+            return None
+        try:
+            data, peer = sock.recvfrom(2048, socket.MSG_PEEK)
+        except (BlockingIOError, InterruptedError):
+            continue
+        except OSError:
+            return None
+
+        # Probe-only consumption: non-probes stay in the queue
+        # for the application Pipe.
+        parsed = decode_probe(data, nonce)
+        if parsed is None:
+            # Not our probe -- leave in the queue.  Yield via a
+            # tiny sleep so we don't spin if there's persistent
+            # non-probe data.
+            time.sleep(0.02)
+            continue
+        # Consume the probe.
+        try:
+            sock.recvfrom(2048)
+        except (BlockingIOError, OSError):
+            continue
+        if parsed["role"] != ROLE_SYM:
+            continue
+        if own_ext_ip and peer[0] == own_ext_ip:
+            continue
+        if require_alignment and peer[1] not in expected_src_ports:
+            continue
+        try:
+            sock.sendto(
+                encode_probe(nonce, ROLE_CONE, PROBE_IDX_CONFIRM),
+                peer,
+            )
+        except OSError:
+            pass
+        return {"sock": sock, "peer": peer, "role": "non_sym"}
+
+
+def sync_run_symmetric_side(
+    bind_ip: str,
+    cone_ext_ip: str,
+    cone_ext_port: int,
+    nonce: bytes,
+    probe_count: int = DEFAULT_PROBE_COUNT,
+    listen_timeout: float = PROBE_LISTEN_TIMEOUT,
+    rng: Optional[random.Random] = None,
+    interface: Optional[Any] = None,
+) -> Optional[Dict[str, Any]]:
+    """Sync version of run_symmetric_side.
+
+    Opens N sockets, each on a distinct local source port, fires
+    one probe from each, then loops select() across all of them
+    waiting for the first cone CONFIRM.
+    """
+    import select as select_mod
+    src_ports = random_probe_ports(probe_count, rng=rng)
+    socks = []
+    for src_port in src_ports:
+        try:
+            socks.append(make_udp_socket(bind_ip, src_port, interface=interface))
+        except OSError:
+            continue
+    if not socks:
+        return None
+    for s in socks:
+        s.setblocking(False)
+    for idx, s in enumerate(socks):
+        try:
+            s.sendto(
+                encode_probe(nonce, ROLE_SYM, idx),
+                (cone_ext_ip, cone_ext_port),
+            )
+        except OSError:
+            continue
+
+    deadline = time.time() + listen_timeout
+    winner = None
+    while time.time() < deadline:
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            break
+        try:
+            ready, _, _ = select_mod.select(socks, [], [], min(remaining, 1.0))
+        except (OSError, select_mod.error):
+            break
+        if not ready:
+            continue
+        for s in ready:
+            try:
+                data, peer = s.recvfrom(2048, socket.MSG_PEEK)
+            except (BlockingIOError, InterruptedError):
+                continue
+            except OSError:
+                continue
+            parsed = decode_probe(data, nonce)
+            if parsed is None:
+                # Non-probe -- leave for Pipe.  Don't drain this
+                # sock; it might be the winner whose data is
+                # being delivered concurrently with select.
+                continue
+            # Consume the probe.
+            try:
+                s.recvfrom(2048)
+            except (BlockingIOError, OSError):
+                continue
+            if parsed["role"] != ROLE_CONE:
+                continue
+            if cone_ext_ip and peer[0] != cone_ext_ip:
+                continue
+            # Any cone probe (regular or CONFIRM) wins.
+            try:
+                s.sendto(
+                    encode_probe(nonce, ROLE_SYM, PROBE_IDX_CONFIRM),
+                    peer,
+                )
+            except OSError:
+                pass
+            winner = {"sock": s, "peer": peer, "role": "sym"}
+            break
+        if winner is not None:
+            break
+
+    if winner is None:
+        close_all(socks)
+        return None
+
+    # Close losers.
+    for s in socks:
+        if s is not winner["sock"]:
+            try:
+                s.close()
+            except OSError:
+                pass
+    return winner
 
 
 async def run_non_sym_side(
@@ -460,8 +778,8 @@ async def run_non_sym_side(
             close_all([sock])
             return None
         try:
-            data, peer = await asyncio.wait_for(
-                recvfrom_async(loop, sock, 2048),
+            result = await asyncio.wait_for(
+                peek_then_recv_probe(loop, sock, nonce, 2048),
                 timeout=remaining,
             )
         except asyncio.TimeoutError:
@@ -471,8 +789,21 @@ async def run_non_sym_side(
             close_all([sock])
             return None
 
+        recvd, was_probe = result
+        if not was_probe:
+            # Real user data arrived (e.g. peer's pipe.send raced
+            # ahead of our convergence return).  Leave it in the
+            # kernel queue for the Pipe layer to deliver.  Yield
+            # briefly so the kernel can wake another consumer.
+            await asyncio.sleep(0.02)
+            continue
+        data, peer = recvd
         parsed = decode_probe(data, nonce)
         if parsed is None:
+            continue
+        # Reject probes from our own role -- they're either our
+        # own hairpinned outbound (self-loop) or a stray.
+        if parsed["role"] != ROLE_SYM:
             continue
         # Reject self-loops: an "aligned" probe whose source IP is
         # our own external IP isn't from the peer -- it's our own
@@ -582,26 +913,52 @@ async def run_symmetric_side(
             if remaining <= 0:
                 return None
             try:
-                data, peer = await asyncio.wait_for(
-                    recvfrom_async(loop, sock, 2048),
+                result = await asyncio.wait_for(
+                    peek_then_recv_probe(loop, sock, nonce, 2048),
                     timeout=remaining,
                 )
             except asyncio.TimeoutError:
                 return None
             except OSError:
                 return None
+
+            recvd, was_probe = result
+            if not was_probe:
+                # Real user data arrived (cone converged faster
+                # and the application immediately did pipe.send).
+                # Leave it for the Pipe layer; another sym sock
+                # may still see a CONFIRM.
+                await asyncio.sleep(0.02)
+                continue
+            data, peer = recvd
             parsed = decode_probe(data, nonce)
             if parsed is None:
                 continue
-            # Lock only on the cone's CONFIRM (idx=PROBE_IDX_CONFIRM).
-            # The cone's regular probes also arrive at sym sockets
-            # whose bind port matches a cone destination, but the
-            # cone may not be replying to *this* sock -- it picks
-            # whichever aligned source port arrived first and
-            # CONFIRMs there.  Waiting for the CONFIRM specifically
-            # is what guarantees both sides agree on the same pair.
-            if parsed["idx"] != PROBE_IDX_CONFIRM:
+            # Reject probes from our own role (self-loop / stray).
+            if parsed["role"] != ROLE_CONE:
                 continue
+            # Verify peer source IP matches the cone we agreed
+            # on -- defends against a stray packet from a
+            # different service triggering a false convergence
+            # even if it happens to nonce-match.
+            if cone_ext_ip and peer[0] != cone_ext_ip:
+                continue
+            # Accept *any* cone probe (regular or CONFIRM).  The
+            # cone's regular probes prime our NAT mapping for
+            # the inbound flow; treating them as a hit shortens
+            # the round-trip + doubles the effective collision
+            # rate (we no longer need to wait for the cone to
+            # decide which sym source port is "aligned" -- we
+            # send a CONFIRM-back ourselves and lock).  When the
+            # cone DOES send a CONFIRM later, the dup is harmless
+            # (PipeEvents filters probes via add_msg).
+            try:
+                sock.sendto(
+                    encode_probe(nonce, ROLE_SYM, PROBE_IDX_CONFIRM),
+                    peer,
+                )
+            except OSError:
+                pass
             return {"sock": sock, "peer": peer, "role": "sym"}
 
     tasks = [asyncio.ensure_future(watch(s)) for s in socks]

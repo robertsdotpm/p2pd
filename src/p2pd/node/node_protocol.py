@@ -29,6 +29,8 @@ def is_random_probe_datagram(msg: bytes) -> bool:
 
 
 async def node_protocol(node: Any, msg: bytes, client_tup: Tuple[str, int], pipe: Any) -> None:
+    print("Node proto: ", msg)
+
     """Dispatch each newline-delimited message from the pipe to handle_msg and all registered callbacks."""
     # Drop residual random_probe probe datagrams: they're algorithm
     # artefacts, not application data, and dispatching them through
