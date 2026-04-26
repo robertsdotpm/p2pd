@@ -243,6 +243,18 @@ class RandomProbePlugin(TraversalPlugin):
             # land on a different port than the one we advertised,
             # and the symmetric peer would fire all 256 probes at
             # the wrong port.
+            #
+            # own_ext_ip lets the algorithm reject any "aligned"
+            # probe whose source is our own external IP -- on
+            # hosts with NAT loopback / asymmetric routing,
+            # outbound probes can hairpin back to us and look
+            # like a peer probe.  Replying there self-loops and
+            # the real peer never gets a CONFIRM.
+            own_ext_for_filter = (
+                getattr(self, "mapped_ip", None)
+                or self.my_addr_ip
+                or None
+            )
             res = await run_non_sym_side(
                 bind_ip=bind_ip,
                 known_port=self.our_known_port(),
@@ -251,6 +263,7 @@ class RandomProbePlugin(TraversalPlugin):
                 probe_count=probe_count,
                 listen_timeout=PROBE_LISTEN_TIMEOUT,
                 sock=getattr(self, "prebound_sock", None),
+                own_ext_ip=own_ext_for_filter,
             )
         else:
             res = await run_symmetric_side(
@@ -277,6 +290,43 @@ class RandomProbePlugin(TraversalPlugin):
         drained = drain_probe_residue(res["sock"], nonce)
         log("RandomProbePlugin: drained {0} residual probe(s) "
             "from winning sock".format(drained))
+
+        # Diagnostic: bypass the Pipe wrap entirely and test the
+        # raw socket round-trip.  Send a literal ECHO directly on
+        # the winning sock to res["peer"] and try to read back any
+        # reply.  If this works we know the 4-tuple is good and
+        # the bug is in the Pipe wrap; if it doesn't, the 4-tuple
+        # itself is broken (e.g. converged on a self-loop).
+        try:
+            test_msg = b"RPDIAG-ECHO probe from non_sym side\n" if my_role == "non_sym" else b"RPDIAG-ECHO probe from sym side\n"
+            res["sock"].sendto(test_msg, res["peer"])
+            print("[RP-RAW-SEND] role={0} sent {1}b to {2}".format(
+                my_role, len(test_msg), res["peer"],
+            ))
+        except OSError as exc:
+            print("[RP-RAW-SEND] role={0} send to {1} failed: {2!r}".format(
+                my_role, res["peer"], exc,
+            ))
+
+        # Try a non-blocking read for ~3s to catch the peer's raw
+        # diagnostic if it gets there before the Pipe is built.
+        loop = asyncio.get_event_loop()
+        raw_deadline = loop.time() + 3.0
+        res["sock"].setblocking(False)
+        while loop.time() < raw_deadline:
+            try:
+                data, addr = res["sock"].recvfrom(4096)
+            except (BlockingIOError, InterruptedError):
+                await asyncio.sleep(0.1)
+                continue
+            except OSError:
+                break
+            print("[RP-RAW-RECV] role={0} got {1}b from {2}: {3!r}".format(
+                my_role, len(data), addr, data[:64],
+            ))
+            break
+        else:
+            print("[RP-RAW-RECV] role={0} no data after 3s (timeout)".format(my_role))
 
         # Wrap the winning UDP socket in a Pipe directly, *without*
         # calling sock.connect(peer) first.  Connecting a UDP socket

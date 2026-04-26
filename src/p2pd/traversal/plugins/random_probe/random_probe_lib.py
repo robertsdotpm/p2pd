@@ -307,6 +307,7 @@ async def run_non_sym_side(
     listen_timeout: float = PROBE_LISTEN_TIMEOUT,
     rng: Optional[random.Random] = None,
     sock: Optional[socket.socket] = None,
+    own_ext_ip: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Run the non-symmetric half of the random-probe rendezvous.
@@ -372,6 +373,16 @@ async def run_non_sym_side(
 
         parsed = decode_probe(data, nonce)
         if parsed is None:
+            continue
+        # Reject self-loops: an "aligned" probe whose source IP is
+        # our own external IP isn't from the peer -- it's our own
+        # outbound that got hairpinned back to us by something in
+        # the path (router NAT loopback, asymmetric routing on a
+        # multi-NIC host with default-gw imbalance, etc).
+        # Replying here would just keep echoing into the loop, and
+        # the actual peer never sees us.  Keep listening for a real
+        # peer probe.
+        if own_ext_ip and peer[0] == own_ext_ip:
             continue
         if peer[1] not in expected_src_ports:
             # Symmetric peer's NAT mapped this flow to an ext port
