@@ -255,26 +255,28 @@ def first_routable_ip(nic, af):
 def split_two_node_setups(probe_ifs, af):
     """Each node gets its own real interface from load_interfaces().
 
-    probe_ifs[0] -> alice, probe_ifs[1] -> bob. No cloning, no loopback
-    aliases -- just hand each node a real NIC. apply_listen_ips finds
-    the IP because the NIC really owns it.
+    First two NICs that actually carry a routable `af` IP -> alice, bob.
+    No cloning, no loopback aliases -- just hand each node a real NIC.
+    apply_listen_ips finds the IP because the NIC really owns it.
 
     Falls back to "single NIC with two distinct IPs" only when only one
-    NIC is available (covers single-NIC + IPv6-with-link-local-and-global
-    scenarios).
+    NIC has any `af` IP (covers single-NIC + IPv6-with-link-local-and-global
+    scenarios). If a machine has interfaces but none of them have a routable
+    `af` IP, returns None and the caller skips / fails.
 
     Returns ((ifs_a, ip_a), (ifs_b, ip_b)) or None.
     """
-    # Two real NICs: alice on probe_ifs[0], bob on probe_ifs[1].
-    if len(probe_ifs) >= 2:
-        ip_a = first_routable_ip(probe_ifs[0], af)
-        ip_b = first_routable_ip(probe_ifs[1], af)
-        if ip_a and ip_b:
-            return (([probe_ifs[0]], ip_a), ([probe_ifs[1]], ip_b))
-
-    # Fallback: single NIC with multiple distinct IPs (rare for IPv4,
-    # common for IPv6 link-local + global). Share the NIC reference.
+    # Filter probe_ifs to only NICs that have at least one routable `af` IP,
+    # then take the first two. Skipping interfaces that lack the AF (e.g.
+    # an unconfigured second NIC, or an IPv6-only adapter when we want IPv4)
+    # is what makes the strict path actually tractable on real hardware.
     per_nic = routable_ips_per_nic(probe_ifs, af)
+
+    if len(per_nic) >= 2:
+        nic_a, ips_a = per_nic[0]
+        nic_b, ips_b = per_nic[1]
+        return (([nic_a], ips_a[0]), ([nic_b], ips_b[0]))
+
     if len(per_nic) == 1:
         nic, ips = per_nic[0]
         if len(ips) >= 2:
@@ -286,22 +288,31 @@ def split_two_node_setups(probe_ifs, af):
 def require_split_or_fail(test_self, probe_ifs, af, label="connectivity"):
     """Return (ifs_a, ip_a, ifs_b, ip_b) or skipTest / fail.
 
-    Strict: if 2+ NICs are present, the connectivity test MUST run. None
-    in that case is treated as a real bug (the test should fail, not
-    skip silently). Skip cleanly only when the machine truly lacks the
-    interfaces a connectivity test needs.
+    Strict: if 2+ NICs in the requested AF (or one NIC with 2+ AF IPs)
+    are present, the connectivity test MUST run. None in that case is
+    treated as a real fixture bug (the test should fail, not skip
+    silently). Skip cleanly when the machine truly lacks the interfaces
+    a connectivity test needs.
+
+    The strictness gate counts NICs that *carry* the AF, not all
+    interfaces -- a machine with 2 NICs where one is unconfigured /
+    AF-less would otherwise fail tests it cannot meaningfully run.
     """
+    per_nic = routable_ips_per_nic(probe_ifs, af)
+    total_ips = sum(len(ips) for _, ips in per_nic)
     setups = split_two_node_setups(probe_ifs, af)
     if setups is None:
-        if len(probe_ifs) >= 2:
+        if total_ips >= 2:
             test_self.fail(
-                "Test environment has {0} interfaces but split_two_node_setups "
-                "produced no viable {1} setup for {2}".format(
-                    len(probe_ifs), af, label,
+                "Test environment has {0} routable {1} IPs across {2} NICs "
+                "but split_two_node_setups produced no viable setup for {3}".format(
+                    total_ips, af, len(per_nic), label,
                 )
             )
         test_self.skipTest(
-            "Need >=2 NICs (have {0}) for {1}".format(len(probe_ifs), label)
+            "Need 2 routable {0} IPs (have {1} on {2} NICs of {3} total) for {4}".format(
+                af, total_ips, len(per_nic), len(probe_ifs), label,
+            )
         )
     (ifs_a, ip_a), (ifs_b, ip_b) = setups
     return ifs_a, ip_a, ifs_b, ip_b
