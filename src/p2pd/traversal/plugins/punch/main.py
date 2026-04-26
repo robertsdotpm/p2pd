@@ -62,6 +62,27 @@ class PunchPlugin(TraversalPlugin):
 
         # Determine IP addresses via routing.
         dest_ip = self.dest_info["ip"]
+
+        # Defensive: punching to our own NIC IP is a malformed
+        # configuration -- the rendezvous would loop back through the
+        # local stack and the port-prediction state machine has
+        # historically crashed the whole node when it tries it. The
+        # combo generator should drop this via pair_distinct, but if
+        # it slips through (signaled-from-peer plugin instances bypass
+        # the local generator), bail cleanly with a logged message
+        # rather than tearing down the loop.
+        try:
+            src_nic_ip = self.src_info.get("nic")
+        except AttributeError:
+            src_nic_ip = None
+        if src_nic_ip is not None:
+            try:
+                if str(src_nic_ip) == str(dest_ip):
+                    log("PunchPlugin: dest matches own NIC IP ({0}); aborting".format(dest_ip))
+                    return None, None
+            except (TypeError, ValueError):
+                pass
+
         is_v4_lo = (self.af == IP4) and dest_ip[:4] == "127."
         is_v6_lo = (self.af == IP6) and (dest_ip == "::1" or dest_ip.startswith("::1"))
         if is_v4_lo or is_v6_lo:
