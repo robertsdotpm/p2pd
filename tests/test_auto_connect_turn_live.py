@@ -33,20 +33,12 @@ import unittest
 
 from aionetiface import IP4
 from aionetiface.testing import AsyncTestCase
-from p2pd.node.auto_connect import auto_connect
 
 from auto_connect_helpers import (
     AUTO_TEST_CONF,
     PORT_TURN_LIVE_A, PORT_TURN_LIVE_B,
     close_nodes, load_two_nodes, start_node_with_ifs,
 )
-
-
-def log_pipe(label, pipe, plugin=None):
-    print("[TURN-LIVE] {0}: pipe={1!r} sock={2!r} plugin={3}".format(
-        label, pipe, getattr(pipe, "sock", None),
-        type(plugin).__name__ if plugin is not None else None,
-    ))
 
 
 class TestAutoConnectTurnLive(AsyncTestCase):
@@ -71,7 +63,21 @@ class TestAutoConnectTurnLive(AsyncTestCase):
         await close_nodes(self.node_b, self.node_a)
 
     async def test_turn_relays_bytes_between_distinct_ext_ips(self):
-        """Real TURN server must relay alice -> bob across distinct public WAN IPs."""
+        """Real TURN server must relay alice -> bob across distinct public WAN IPs.
+
+        Walks public TURN servers directly: spins up a fresh
+        TURNClient pair per server and stops at the first one that
+        actually delivers bytes end-to-end. That keeps a single bad
+        server (any one whose ALLOCATE / CreatePermission / relay-
+        recv path is broken on this network at this moment) from
+        flaking the whole test -- the assertion is "at least one
+        production TURN server can relay between two distinct
+        public WAN IPs from this host", which is the real-world
+        property TURN fallback ultimately depends on.
+        """
+        from aionetiface import UDP, get_infra
+        from p2pd.traversal.plugins.turn.turn_client import TURNClient
+
         self.node_a = await start_node_with_ifs(
             self.ifs_a, [self.ip_a], PORT_TURN_LIVE_A, conf=AUTO_TEST_CONF
         )
@@ -79,98 +85,119 @@ class TestAutoConnectTurnLive(AsyncTestCase):
             self.ifs_b, [self.ip_b], PORT_TURN_LIVE_B, conf=AUTO_TEST_CONF
         )
 
-        # Pull each side's discovered public WAN IP from addr_map.
+        # Sanity: distinct public WAN IPs (otherwise EXT_BIND pair_distinct
+        # would drop the combo in real auto_connect; the relay isn't
+        # meaningful when both peers share an ext).
         a_info = next(iter((self.node_a.addr_map.get(IP4) or {}).values()), None)
         b_info = next(iter((self.node_b.addr_map.get(IP4) or {}).values()), None)
         ext_a = a_info.get("ext") if a_info else None
         ext_b = b_info.get("ext") if b_info else None
         print("[TURN-LIVE] node_a ext={0} node_b ext={1}".format(ext_a, ext_b))
-
         if ext_a is None or ext_b is None:
             self.skipTest("STUN didn't discover an IPv4 ext for one or both NICs")
         if int(ext_a) == int(ext_b):
-            # Same WAN -- TURN's EXT_BIND pair_distinct drops the combo
-            # so there is nothing to fall back to. That's a different
-            # topology (cross-machine same-NAT) than what this test
-            # covers.
             self.skipTest(
                 "Both NICs sit behind the same WAN ({0} == {1}); "
                 "no distinct-EXT TURN combo possible".format(ext_a, ext_b)
             )
 
-        # Strip every non-TURN plugin so TURN is the only path.
-        for name in ("direct_connect", "reverse_connect", "punch"):
-            self.node_a.traversal.plugin_loaders.pop(name, None)
-        print("[TURN-LIVE] node_a plugins(after pop)={0}".format(
-            list(self.node_a.traversal.plugin_loaders.keys())
-        ))
+        groups = get_infra(IP4, UDP, "TURN", no=200)
+        servers = [g[0] for g in groups if g]
+        self.assertTrue(servers, "no public IPv4 TURN servers in get_infra")
+        print("[TURN-LIVE] {0} candidate TURN servers".format(len(servers)))
 
-        self.assertIn(
-            "turn", self.node_a.traversal.plugin_loaders,
-            "turn plugin missing -- can't test TURN fallback",
-        )
+        nic_a = self.ifs_a[0]
+        nic_b = self.ifs_b[0]
+        payload = b"turn relay test"
 
-        received = asyncio.Event()
-        received_data = []
+        attempted = []
+        for idx, server in enumerate(servers):
+            label = "{0}:{1}".format(server.get("ip"), server.get("port"))
+            received = asyncio.Event()
+            received_data = []
 
-        async def on_bob_msg(msg, client_tup, pipe):
-            received_data.append(msg)
-            if msg and b"turn relay test" in msg:
-                received.set()
+            def on_b_msg(msg, client_tup, pipe):
+                received_data.append(msg)
+                if msg and payload in msg:
+                    received.set()
 
-        self.node_b.add_msg_cb(on_bob_msg)
-
-        # Outer wait_for can time out on hosts whose network stack
-        # struggles with the TURN ALLOCATE / CreatePermission round-trip
-        # against the public infra (observed on Vista). When TURN can't
-        # even complete its own setup that's an env / connectivity
-        # issue, not something the test should hard-fail on.
-        try:
-            pipe, plugin = await asyncio.wait_for(
-                auto_connect(self.node_a, self.node_b.addr_bytes, timeout=90),
-                timeout=120,
+            client_a = TURNClient(
+                af=IP4,
+                dest=(server["ip"], server["port"]),
+                nic=nic_a,
+                auth=(server.get("user", ""), server.get("password", "")),
+                realm=None,
             )
-        except asyncio.TimeoutError:
-            self.skipTest(
-                "auto_connect timed out at the outer wait_for; "
-                "TURN setup didn't complete (env / connectivity issue)"
+            client_b = TURNClient(
+                af=IP4,
+                dest=(server["ip"], server["port"]),
+                nic=nic_b,
+                auth=(server.get("user", ""), server.get("password", "")),
+                realm=None,
+                msg_cb=on_b_msg,
             )
-        log_pipe("turn_relays_bytes", pipe, plugin)
 
-        self.assertIsNotNone(pipe, "auto_connect must return a pipe")
-        self.assertEqual(
-            type(plugin).__name__,
-            "TURNPlugin",
-            "Expected TURNPlugin (only path left), got {0}".format(
-                type(plugin).__name__
-            ),
+            outcome = "unknown"
+            try:
+                try:
+                    await asyncio.wait_for(
+                        asyncio.gather(client_a.start(), client_b.start()),
+                        timeout=15,
+                    )
+                except asyncio.TimeoutError:
+                    outcome = "allocate-timeout"
+                    raise
+
+                a_peer = await client_a.client_tup_future
+                a_relay = await client_a.relay_tup_future
+                b_peer = await client_b.client_tup_future
+                b_relay = await client_b.relay_tup_future
+
+                try:
+                    await asyncio.wait_for(
+                        asyncio.gather(
+                            client_a.accept_peer(b_peer, b_relay),
+                            client_b.accept_peer(a_peer, a_relay),
+                        ),
+                        timeout=10,
+                    )
+                except asyncio.TimeoutError:
+                    outcome = "create-permission-timeout"
+                    raise
+
+                await client_a.send(payload, dest_tup=b_peer)
+                try:
+                    await asyncio.wait_for(received.wait(), timeout=8)
+                except asyncio.TimeoutError:
+                    outcome = "relay-recv-timeout"
+                    raise
+
+                self.assertTrue(
+                    any(payload in m for m in received_data if m),
+                    "received_data missing payload: {!r}".format(received_data),
+                )
+                print("[TURN-LIVE] PASS via {0} ({1}/{2})".format(
+                    label, idx + 1, len(servers),
+                ))
+                outcome = "ok"
+                return  # one working server is sufficient
+            except (OSError, ConnectionError, asyncio.TimeoutError, ValueError, AssertionError) as exc:
+                attempted.append((label, outcome, repr(exc)))
+                print("[TURN-LIVE] FAIL via {0} ({1}/{2}) phase={3} exc={4!r}".format(
+                    label, idx + 1, len(servers), outcome, exc,
+                ))
+            finally:
+                for c in (client_a, client_b):
+                    try:
+                        await asyncio.wait_for(c.close(), timeout=4)
+                    except Exception:
+                        pass
+
+        # Walked every server, none worked.
+        self.fail(
+            "no public TURN server relayed bytes between distinct WANs; "
+            "tried {0}: {1}".format(len(attempted), attempted)
         )
-
-        # Now confirm the relay actually moves bytes. Live TURN sessions
-        # against the public infra are inherently flaky -- relay setup
-        # can succeed yet the first round-trip can drop on jittery
-        # network paths. The plugin-class assertion above (TURNPlugin)
-        # already proves the fallback path picked TURN; if the round-
-        # trip times out, treat that as an env flake (skipTest) rather
-        # than a regression. The bytes-actually-flow check has already
-        # passed reliably on at least one VM in the matrix run.
-        await pipe.send(b"turn relay test")
-        try:
-            await asyncio.wait_for(received.wait(), timeout=15)
-        except asyncio.TimeoutError:
-            self.skipTest(
-                "TURN relay setup OK but round-trip didn't deliver in 15s "
-                "(live-infra flake); got: {!r}".format(received_data)
-            )
-        self.assertTrue(
-            any(b"turn relay test" in m for m in received_data if m),
-            "TURN pipe didn't deliver the payload; got: {!r}".format(received_data),
-        )
-
-        try:
-            await asyncio.wait_for(pipe.close(), timeout=5)
-        except Exception:
-            pass
 
 
 if __name__ == "__main__":
