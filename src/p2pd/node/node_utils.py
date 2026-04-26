@@ -401,44 +401,21 @@ async def listen_on_ifs(node: Any) -> None:
             if await soft_bind_and_listen(node, v6_route, fstr("v6 ext nic={0}", (nic.id,))):
                 successes += 1
 
-    # Per-node loopback alias: lets same-machine peers reach this node via
-    # 127.X.Y.Z without depending on cross-subnet kernel routing. Only
-    # makes sense when at least one NIC supports IP4 -- 127.0.0.0/8 is
-    # IPv4-only, and on a v6-only host the alias would be unreachable
-    # anyway. Failure is non-fatal: if the OS rejects the bind (firewall,
-    # weird loopback config), the node still has its NIC binds.
-    v4_route = None
-    for nic in node.ifs:
-        try:
-            supported = nic.supported()
-        except (AttributeError, TypeError):
-            continue
-        if IP4 not in supported:
-            continue
-        try:
-            v4_route = nic.route(IP4)
-        except (KeyError, ValueError, AttributeError):
-            v4_route = None
-        if v4_route is not None:
-            break
-    if v4_route is not None:
-        try:
-            pub = node.kp.public_key_hex
-        except AttributeError:
-            pub = None
-        if pub:
-            lo_ip = loopback_ip_for_node(pub)
-            try:
-                await v4_route.bind(ips=lo_ip, port=node.listen_port)
-                await node.add_listener(TCP, v4_route)
-                successes += 1
-            except (OSError, ValueError, AssertionError) as exc:
-                log(fstr(
-                    "listen_on_ifs: loopback alias {0} bind failed: {1}",
-                    (lo_ip, exc),
-                ))
-            except asyncio.CancelledError:  # pylint: disable=try-except-raise
-                raise
+    # Per-node loopback alias: try to bind 127.X.Y.Z (derived from the
+    # node's pub_key) regardless of NIC v4 reachability. Every supported
+    # OS has an IPv4 loopback iface, so the bind almost always succeeds
+    # even when STUN couldn't find a public IPv4 ext for any NIC. If
+    # something exotic rejects it, the soft-bind path logs and moves on.
+    try:
+        lo_ip = loopback_ip_for_node(node.kp.public_key_hex)
+        v4_route = node.ifs[0].route(IP4)
+        await v4_route.bind(ips=lo_ip, port=node.listen_port)
+        await node.add_listener(TCP, v4_route)
+        successes += 1
+    except asyncio.CancelledError:  # pylint: disable=try-except-raise
+        raise
+    except Exception as exc:
+        log(fstr("listen_on_ifs: loopback alias bind failed: {0}", (exc,)))
 
     if successes == 0:
         raise AssertionError(
