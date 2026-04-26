@@ -199,18 +199,27 @@ async def run_non_sym_side(
     probe_count: int = DEFAULT_PROBE_COUNT,
     listen_timeout: float = PROBE_LISTEN_TIMEOUT,
     rng: Optional[random.Random] = None,
+    sock: Optional[socket.socket] = None,
 ) -> Optional[Dict[str, Any]]:
     """
-    Run the cone-side half of the random-probe rendezvous.
+    Run the non-symmetric half of the random-probe rendezvous.
 
-    Returns {"sock": socket, "peer": (ip, port), "role": "non_sym"} on
-    a successful collision, or None on timeout.
+    *sock* is an already-bound UDP socket -- the plugin pre-binds
+    one before the signal exchange so the chosen source port can be
+    advertised in the RandomProbeMsg as `known_port`, otherwise the
+    symmetric peer fires 256 probes at port 0 and the round can
+    never converge.  Pass *sock* to use the pre-bound one; if None,
+    fall back to creating one via *bind_ip* + *known_port*.
+
+    Returns {"sock": socket, "peer": (ip, port), "role": "non_sym"}
+    on a successful collision, or None on timeout.
 
     The caller is responsible for closing the returned socket when
     the resulting connection is no longer needed.
     """
     loop = asyncio.get_event_loop()
-    sock = make_udp_socket(bind_ip, known_port)
+    if sock is None:
+        sock = make_udp_socket(bind_ip, known_port)
 
     # Fire N probes at random destination ports on the peer's ext IP.
     # We don't sleep between sends -- the symmetric NAT at the other

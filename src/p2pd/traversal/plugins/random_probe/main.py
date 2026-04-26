@@ -34,6 +34,7 @@ from ..punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 
 from .random_probe_defs import DEFAULT_PROBE_COUNT, PROBE_LISTEN_TIMEOUT
 from .random_probe_lib import (
+    make_udp_socket,
     run_non_sym_side,
     run_symmetric_side,
     wait_until,
@@ -156,6 +157,14 @@ class RandomProbePlugin(TraversalPlugin):
             )
             self.punch_time = punch_time
 
+            # If we're the non-sym side, pre-bind our UDP socket
+            # right now so the port it ends up on can travel to the
+            # peer in the message we're about to send.  Without
+            # this, known_port = 0 and the symmetric side fires its
+            # 256 probes at port 0 -- guaranteed no convergence.
+            if my_role == "non_sym":
+                await self.prebind_non_sym_sock()
+
             outgoing = self.build_msg(my_role, punch_time, to_s(self.session_nonce.hex()))
             outgoing.meta.plugin_name = "random_probe"
             await self.send_signal_msg(outgoing)
@@ -187,6 +196,11 @@ class RandomProbePlugin(TraversalPlugin):
             self.session_nonce = nonce
             self.session_role = my_role
             self.punch_time = punch_time
+            # Same pre-bind requirement as the initiator path: the
+            # non-sym side has to commit to a port BEFORE building
+            # the response, otherwise the peer fires at port 0.
+            if my_role == "non_sym":
+                await self.prebind_non_sym_sock()
             our_msg = self.build_msg(my_role, punch_time, reply.payload.magic)
             our_msg.meta.plugin_name = "random_probe"
             await self.send_signal_msg(our_msg)
@@ -204,14 +218,19 @@ class RandomProbePlugin(TraversalPlugin):
         bind_ip = str(route.nic())
 
         if my_role == "non_sym":
-            our_known_port = self.our_known_port()
+            # Reuse the socket we pre-bound before sending the
+            # signal message.  Falling back to a fresh bind would
+            # land on a different port than the one we advertised,
+            # and the symmetric peer would fire all 256 probes at
+            # the wrong port.
             res = await run_non_sym_side(
                 bind_ip=bind_ip,
-                known_port=our_known_port,
+                known_port=self.our_known_port(),
                 peer_ext_ip=peer_ext_ip,
                 nonce=nonce,
                 probe_count=probe_count,
                 listen_timeout=PROBE_LISTEN_TIMEOUT,
+                sock=getattr(self, "prebound_sock", None),
             )
         else:
             res = await run_symmetric_side(
@@ -273,10 +292,38 @@ class RandomProbePlugin(TraversalPlugin):
             },
         })
 
+    async def prebind_non_sym_sock(self) -> None:
+        """Bind the non-sym side's UDP socket *before* signaling.
+
+        Stashed on self.prebound_sock and reused by run_non_sym_side
+        at fire time.  We need to commit to a local source port now
+        so the symmetric peer knows where to aim its 256 probes --
+        sending it the post-bind ephemeral port is too late, the
+        signal exchange has already finished by then.
+        """
+        try:
+            route = await self.nic.route(self.af).bind()
+        except (OSError, ValueError):
+            log("RandomProbePlugin: pre-bind route bind failed")
+            return
+        try:
+            self.prebound_sock = make_udp_socket(str(route.nic()), 0)
+            self.prebound_port = self.prebound_sock.getsockname()[1]
+        except OSError:
+            log("RandomProbePlugin: pre-bind UDP socket failed")
+            self.prebound_sock = None
+            self.prebound_port = 0
+
     def our_known_port(self) -> int:
         """Non-symmetric side's known external port; 0 if we're sym."""
         if is_symmetric_nat(self.src_info.get("nat") or {}):
             return 0
+        # If we pre-bound a socket for the non-sym fire phase, that's
+        # the port we advertised to the peer -- always prefer it over
+        # any stale src_info["bind_port"].
+        prebound = getattr(self, "prebound_port", 0)
+        if prebound:
+            return int(prebound)
         # On a cone NAT the external port equals the local source port
         # we bind, so we just publish whatever bind_port the route
         # ended up with.  Fall back to 0 if the route hasn't bound yet
