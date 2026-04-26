@@ -264,6 +264,7 @@ class RandomProbePlugin(TraversalPlugin):
                 listen_timeout=PROBE_LISTEN_TIMEOUT,
                 sock=getattr(self, "prebound_sock", None),
                 own_ext_ip=own_ext_for_filter,
+                interface=self.nic,
             )
         else:
             res = await run_symmetric_side(
@@ -273,6 +274,7 @@ class RandomProbePlugin(TraversalPlugin):
                 nonce=nonce,
                 probe_count=probe_count,
                 listen_timeout=PROBE_LISTEN_TIMEOUT,
+                interface=self.nic,
             )
 
         if res is None:
@@ -472,7 +474,9 @@ class RandomProbePlugin(TraversalPlugin):
             log("RandomProbePlugin: pre-bind route bind failed")
             return
         try:
-            self.prebound_sock = make_udp_socket(str(route.nic()), 0)
+            self.prebound_sock = make_udp_socket(
+                str(route.nic()), 0, interface=self.nic,
+            )
             self.prebound_port = self.prebound_sock.getsockname()[1]
         except OSError:
             log("RandomProbePlugin: pre-bind UDP socket failed")

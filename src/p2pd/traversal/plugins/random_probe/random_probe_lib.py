@@ -122,9 +122,22 @@ def random_probe_ports(count: int, rng: Optional[random.Random] = None) -> List[
 # ─────────────────────────────────────────────────────────────────
 
 
-def make_udp_socket(bind_ip: str, bind_port: int = 0) -> socket.socket:
+def make_udp_socket(
+    bind_ip: str,
+    bind_port: int = 0,
+    interface: Optional[Any] = None,
+) -> socket.socket:
     """
     Create a non-blocking UDP socket bound to (bind_ip, bind_port).
+
+    On a multi-NIC host plain ``bind((ip, port))`` is *not* enough
+    to force packets to egress through the right interface --
+    Linux routes by destination IP, not source bind, so packets
+    sourced from NIC2's IP can still leave via NIC1's gateway and
+    hairpin.  When *interface* is provided and isn't the default
+    NIC, this also sets SO_BINDTODEVICE (sockopt 25) which pins
+    egress to that interface regardless of the routing table.
+    Mirrors aionetiface's socket_factory.
 
     Uses SO_REUSEADDR (and SO_REUSEPORT where available) so the
     symmetric side can bind many sockets in close succession even
@@ -139,9 +152,45 @@ def make_udp_socket(bind_ip: str, bind_port: int = 0) -> socket.socket:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         except (OSError, AttributeError):
             pass
+
+    # Force interface egress.  Skipped on Windows (no
+    # SO_BINDTODEVICE) and when the NIC is the default route (no
+    # need to override + may need root on Linux for non-default).
+    if interface is not None and not _IS_WINDOWS:
+        try:
+            af = socket.AF_INET6 if ":" in bind_ip else socket.AF_INET
+            is_default = interface.is_default(af)
+        except (OSError, AttributeError):
+            is_default = True
+        if not is_default:
+            try:
+                # Encode the interface id (string for real NICs,
+                # int for synthetic loopback FakeInterfaces -- the
+                # latter just won't trigger this path because
+                # is_default is True for them).
+                iface_bytes = (
+                    interface.id
+                    if isinstance(interface.id, bytes)
+                    else str(interface.id).encode("ascii", "ignore")
+                )
+                if iface_bytes:
+                    s.setsockopt(socket.SOL_SOCKET, 25, iface_bytes)
+            except OSError:
+                # Some platforms / non-root users can't set this.
+                # The bind still happens; egress just isn't pinned.
+                pass
+
     s.setblocking(False)
     s.bind((bind_ip, bind_port))
     return s
+
+
+_IS_WINDOWS = False
+try:
+    import sys as _sys
+    _IS_WINDOWS = _sys.platform == "win32"
+except ImportError:
+    pass
 
 
 def close_all(socks: List[socket.socket]) -> None:
@@ -308,6 +357,7 @@ async def run_non_sym_side(
     rng: Optional[random.Random] = None,
     sock: Optional[socket.socket] = None,
     own_ext_ip: Optional[str] = None,
+    interface: Optional[Any] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Run the non-symmetric half of the random-probe rendezvous.
@@ -319,6 +369,11 @@ async def run_non_sym_side(
     never converge.  Pass *sock* to use the pre-bound one; if None,
     fall back to creating one via *bind_ip* + *known_port*.
 
+    *interface* (when given) is forwarded to make_udp_socket so the
+    fallback path also gets SO_BINDTODEVICE pinning -- without
+    that, packets sourced from a non-default NIC's IP can still
+    egress through the default route's NIC.
+
     Returns {"sock": socket, "peer": (ip, port), "role": "non_sym"}
     on a successful collision, or None on timeout.
 
@@ -327,7 +382,7 @@ async def run_non_sym_side(
     """
     loop = asyncio.get_event_loop()
     if sock is None:
-        sock = make_udp_socket(bind_ip, known_port)
+        sock = make_udp_socket(bind_ip, known_port, interface=interface)
 
     # Fire N probes at random destination ports on the peer's ext IP.
     # We don't sleep between sends -- the symmetric NAT at the other
@@ -417,6 +472,7 @@ async def run_symmetric_side(
     probe_count: int = DEFAULT_PROBE_COUNT,
     listen_timeout: float = PROBE_LISTEN_TIMEOUT,
     rng: Optional[random.Random] = None,
+    interface: Optional[Any] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Run the symmetric-side half of the random-probe rendezvous.
@@ -427,6 +483,11 @@ async def run_symmetric_side(
     {"sock": winner, "peer": (ip, port), "role": "sym"} on success,
     or None on timeout.
 
+    *interface* (when given) is forwarded to make_udp_socket so
+    each socket gets SO_BINDTODEVICE pinning -- without this,
+    packets from a non-default NIC's IP egress through the
+    default-route NIC instead of the bound interface.
+
     All non-winning sockets are closed before the function returns.
     """
     loop = asyncio.get_event_loop()
@@ -435,7 +496,7 @@ async def run_symmetric_side(
     socks = []
     for src_port in src_ports:
         try:
-            socks.append(make_udp_socket(bind_ip, src_port))
+            socks.append(make_udp_socket(bind_ip, src_port, interface=interface))
         except OSError:
             # Port collision with another local listener -- skip.
             continue
