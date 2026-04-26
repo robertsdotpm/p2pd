@@ -139,8 +139,9 @@ async def start_node(ip, port, conf=None):
 
 
 async def start_node_with_ifs(ifs, ip_list, port, conf=None):
-    """Start a node with a pre-built ifs list and explicit listen-IP list."""
-    node = Node(ifs=ifs, ip=ip_list, port=port, conf=conf or AUTO_TEST_CONF)
+    """Start a node with a pre-built ifs list. ip_list is ignored; the node
+    derives its listen IPs from the NICs themselves, matching the demo node."""
+    node = Node(ifs=ifs, ip=None, port=port, conf=conf or AUTO_TEST_CONF)
     await asyncio.wait_for(node.start(), timeout=35)
     return node
 
