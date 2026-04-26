@@ -8,7 +8,7 @@ python3 run_pnp_serv.py
 from typing import Any, List, Optional, Tuple
 import asyncio
 from aionetiface import (
-    to_s, fstr, log_exception, h_to_b,
+    to_s, fstr, log, log_exception, h_to_b,
     DUEL_STACK, IP4, IP6, PNP_SERVERS, VALID_AFS,
     strip_none, async_wrap_errors, SigningKey,
 )
@@ -69,6 +69,14 @@ def pnp_name_has_tld(name: Any) -> bool:
 
 
 NAMING_TIMEOUT = 10
+
+# Per-server retry. namebump.Client itself has no retries -- a single hung
+# server response would otherwise eat the whole NAMING_TIMEOUT and fail
+# the operation. Three attempts with a short pause between them gives a
+# transient slow server a chance without inflating a healthy call's
+# best-case latency.
+NAMING_RETRIES = 3
+NAMING_RETRY_PAUSE = 0.5
 
 
 class PartialNameSuccess(Exception):
@@ -161,22 +169,48 @@ class Nickname:
         if not self.started:
             raise AssertionError("Nickname client not started. Call start() first.")
         name = pnp_strip_tlds(name)
+        log(fstr(
+            "Nickname.put: name={0} timeout={1} retries={2}",
+            (name, timeout, NAMING_RETRIES),
+        ))
 
-        # Single coro for storing at one server.
+        # Single coro for storing at one server. Retries each attempt
+        # NAMING_RETRIES times with NAMING_RETRY_PAUSE between, since
+        # namebump itself has no retry layer.
         async def worker(offset: int) -> Optional[int]:
             """Attempt to store the name on the PNP server at offset and return offset on success."""
-            for af in VALID_AFS:
-                try:
-                    client = self.clients[af][offset]
-                    if client is None:
-                        continue
-                    ret = await client.put(name, value, client.kp, behavior)
-                    if ret is None:
-                        continue
-                    if ret.value is not None:
-                        return offset
-                except (OSError, ConnectionError, asyncio.TimeoutError):
-                    log_exception()
+            for attempt in range(NAMING_RETRIES):
+                for af in VALID_AFS:
+                    try:
+                        client = self.clients[af][offset]
+                        if client is None:
+                            continue
+                        log(fstr(
+                            "Nickname.put: offset={0} af={1} attempt={2} -> client.put",
+                            (offset, af, attempt),
+                        ))
+                        ret = await client.put(name, value, client.kp, behavior)
+                        if ret is None:
+                            log(fstr(
+                                "Nickname.put: offset={0} af={1} attempt={2} ret=None (continue)",
+                                (offset, af, attempt),
+                            ))
+                            continue
+                        if ret.value is not None:
+                            log(fstr(
+                                "Nickname.put: offset={0} af={1} attempt={2} success",
+                                (offset, af, attempt),
+                            ))
+                            return offset
+                    except (OSError, ConnectionError, asyncio.TimeoutError):
+                        log_exception()
+                if attempt + 1 < NAMING_RETRIES:
+                    await asyncio.sleep(NAMING_RETRY_PAUSE)
+            log(fstr(
+                "Nickname.put: offset={0} exhausted {1} attempts",
+                (offset, NAMING_RETRIES),
+            ))
+            return None
 
         # Schedule store tasks at all PNP servers.
         tasks = []
@@ -189,7 +223,9 @@ class Nickname:
             )
 
         # Attempt storage at all PNP servers.
+        log(fstr("Nickname.put: gathering {0} workers", (len(tasks),)))
         results = await asyncio.gather(*tasks)
+        log(fstr("Nickname.put: gather done, results={0}", (results,)))
         offsets = strip_none(results)
         if not offsets:
             raise FullNameFailure("All name servers failed.")
