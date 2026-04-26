@@ -447,15 +447,16 @@ class RandomProbePlugin(TraversalPlugin):
         except (AttributeError, TypeError):
             pass
 
-        # Reset pipe subscription queues + drop any in-flight
-        # probe residue from the live socket.  Between the sock
-        # being handed to create_datagram_endpoint and this point
-        # asyncio may have already dispatched a few late sym
-        # probes via datagram_received -> handle_data ->
-        # stream.add_msg -> queued.  Drop the existing
-        # subscriptions entirely and re-subscribe SUB_ALL fresh
-        # so the application-facing recv() starts on a clean
-        # asyncio.Queue with no stale refs.
+        # Reset pipe subscription queues + install a probe-dropping
+        # add_msg wrapper so late-arriving probes never land in
+        # any subscription queue.
+        #
+        # node_protocol's filter handles the msg_cb dispatch side
+        # but PipeEvents.route_msg also calls stream.add_msg
+        # which queues data for subscription-based recv() -- those
+        # are independent paths.  Without filtering at add_msg,
+        # pipe.recv(SUB_ALL) returns probe bytes ahead of the
+        # actual application reply.
         try:
             from aionetiface import SUB_ALL
             stream = pipe.pipe_events.stream
@@ -465,6 +466,18 @@ class RandomProbePlugin(TraversalPlugin):
             )
             stream.subs = {}
             pipe.subscribe(SUB_ALL)
+
+            # Wrap stream.add_msg with a probe-filtering version
+            # so probe-format datagrams never reach any sub queue.
+            from .random_probe_defs import PROBE_LEN, PROBE_MAGIC
+            original_add_msg = stream.add_msg
+
+            def filtered_add_msg(data, client_tup):
+                if len(data) == PROBE_LEN and bytes(data[:4]) == PROBE_MAGIC:
+                    return
+                return original_add_msg(data, client_tup)
+
+            stream.add_msg = filtered_add_msg
         except (AttributeError, TypeError):
             cleared = 0
         if cleared:
