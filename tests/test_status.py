@@ -423,11 +423,20 @@ class TestStatus(AsyncTestCase):
             print(fstr("Encryption works"))
 
     async def test_start_node_server(self):
-        n = await Node(conf=NODE_TEST_CONF)
-        print(n.ifs)
-        print(n.addr_bytes)
-        print(n.listen_port)
-        await n.close()
+        # Use Node(...).start() rather than the bare-Node __await__
+        # path so XP's Python 3.5.0 doesn't trip on the awaitable
+        # vs coroutine distinction inside ensure_future. Wrapping
+        # close in try/finally ensures the listening socket is
+        # torn down even when the body raises -- otherwise the
+        # next test in this file inherits a port still in
+        # LISTEN/TIME_WAIT.
+        n = await Node(conf=NODE_TEST_CONF).start()
+        try:
+            print(n.ifs)
+            print(n.addr_bytes)
+            print(n.listen_port)
+        finally:
+            await n.close()
 
 
 if __name__ == "__main__":

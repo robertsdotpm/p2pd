@@ -47,8 +47,8 @@ from auto_connect_helpers import (
 )
 
 
-PORT_UDP_PUNCH_A = NODE_PORT + 2750
-PORT_UDP_PUNCH_B = NODE_PORT + 2751
+PORT_UDP_PUNCH_A = NODE_PORT + 2800
+PORT_UDP_PUNCH_B = NODE_PORT + 2801
 
 
 def force_nat_type(node, nat_type):
