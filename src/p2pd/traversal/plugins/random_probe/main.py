@@ -451,6 +451,28 @@ class RandomProbePlugin(TraversalPlugin):
         if not self.result.done():
             self.result.set_result(pipe)
 
+        # Diagnostic: send a literal RAW-SOCK probe directly on
+        # the underlying sock (bypassing the Pipe entirely) to
+        # test whether the issue is the sock or the Pipe wrap.
+        # If sym's [RP-INBOUND] shows this msg, the sock works
+        # post-Pipe-wrap and the bug is in pipe.send.  If it
+        # doesn't, the sock itself stopped working after wrap.
+        if my_role == "non_sym":
+            async def raw_sock_probe():
+                # Wait a moment for the responder's Pipe to wire up.
+                await asyncio.sleep(2)
+                try:
+                    res["sock"].sendto(
+                        b"RAWSOCK-TEST from non_sym\n",
+                        res["peer"],
+                    )
+                    print("[RP-RAWSEND-POST] non_sym sent test on raw sock to {0}".format(
+                        res["peer"],
+                    ))
+                except OSError as exc:
+                    print("[RP-RAWSEND-POST] non_sym raw sendto failed: {0!r}".format(exc))
+            asyncio.ensure_future(raw_sock_probe())
+
     # ── helpers ─────────────────────────────────────────────────
 
     def set_failed_result(self) -> None:
