@@ -66,6 +66,14 @@ class TraversalPlugin:
             set_bind,
         )
         self.dest_info["ip"] = str(selected) if selected is not None else ""
+        print("[CTX-DBG] route_type={0} af={1} same_machine={2} src_loopback={3} dest_loopback={4} dest_nic={5} dest_ext={6} -> dest_ip={7!r}".format(
+            route_type, self.af, same_machine,
+            self.src_info.get("loopback"),
+            self.dest_info.get("loopback"),
+            self.dest_info.get("nic"),
+            self.dest_info.get("ext"),
+            self.dest_info["ip"],
+        ))
 
         # Need a destination address.
         # Possibly a different address type will work.

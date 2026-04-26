@@ -32,6 +32,16 @@ class ProtoMsg:
         # Validate src address.
         addr = parse_node_addr(addr_buf)
 
+        # Attach the per-node 127.X.Y.Z loopback alias (computed from the
+        # peer's pub_key_hex) onto every if_info so select_dest_ipr /
+        # plugin set_routing can reach it as info["loopback"]. The
+        # parsed-from-wire addr_map otherwise lacks this field, which
+        # would force same-machine traversal off the loopback fast path.
+        # Imported locally to keep proto_msg free of a top-level
+        # dependency on the node package.
+        from ..node.node_utils import enrich_addr_map_with_loopback
+        enrich_addr_map_with_loopback(addr)
+
         # Parse af for punching.
         af = to_n(af)
         af = i_to_af(af)
