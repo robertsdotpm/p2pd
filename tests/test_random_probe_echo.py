@@ -53,11 +53,36 @@ async def echo_handler(msg, client_tup, pipe):
     interactive cout/shutdown plumbing -- just the protocol bit
     we want to assert against.
     """
+    print("[RP-ECHO-HANDLER] msg={0!r} client_tup={1!r}".format(msg, client_tup))
     if msg[:4] == b"ECHO":
         try:
-            await pipe.send(msg[4:], client_tup)
-        except (OSError, ConnectionError):
-            pass
+            await pipe.send(msg[4:] + b"\r\n", client_tup)
+            print("[RP-ECHO-HANDLER] replied")
+        except (OSError, ConnectionError) as exc:
+            print("[RP-ECHO-HANDLER] send failed: {0!r}".format(exc))
+
+
+def collapse_ext_to_nic(node):
+    """Rewrite this node's addr_map so each if_info's ext == nic.
+
+    On a single host where both nodes share a router (the common
+    dev-box case), routing each node's "ext" IP through the home
+    router does NAT hairpinning -- the cone receives src = own
+    WAN IP, the symmetric peer never reaches it, and echo can't
+    round-trip.  Collapsing ext to nic side-steps the router
+    entirely: probes destined for the peer's nic IP route via
+    the kernel's lo shortcut (Linux delivers locally when the
+    dst IP is bound on the host) so the algorithm converges over
+    a real local 4-tuple with no NAT in the path.
+    """
+    addr_map = node.addr_map or {}
+    for af in (IP4,):
+        ifs = addr_map.get(af) or {}
+        for if_info in ifs.values():
+            nic_ip = if_info.get("nic")
+            if nic_ip is None:
+                continue
+            if_info["ext"] = nic_ip
 
 
 class TestRandomProbeEcho(AsyncTestCase):
@@ -91,6 +116,16 @@ class TestRandomProbeEcho(AsyncTestCase):
         """Cone fires probe, sym replies, returned Pipe carries an echo."""
         self.node_a = await start_node_with_ifs(self.ifs_a, [self.ip_a], PORT_RP_ECHO_A)
         self.node_b = await start_node_with_ifs(self.ifs_b, [self.ip_b], PORT_RP_ECHO_B)
+
+        # Side-step whatever NAT / routing path the host has between
+        # the two NICs.  By rewriting each node's "ext" IP to be its
+        # NIC IP, the algorithm fires probes between the two LAN
+        # IPs, which the kernel delivers locally via lo since both
+        # are bound on this host.  No router, no NAT, no hairpin --
+        # the algorithm exercises its protocol + sock_to_pipe + msg_cb
+        # path over a clean local 4-tuple.
+        collapse_ext_to_nic(self.node_a)
+        collapse_ext_to_nic(self.node_b)
 
         # Both sides need an echo handler.  When the responder's
         # plugin resolves with a Pipe, on_plugin_done attaches

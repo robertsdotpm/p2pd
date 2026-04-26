@@ -19,12 +19,12 @@ from typing import Any, Dict, Optional, Tuple
 
 from aionetiface import (
     EXT_BIND,
+    Pipe,
     SysClock,
+    UDP,
     log,
     rand_b,
-    to_b,
     to_s,
-    sock_to_pipe
 )
 from aionetiface.nic.nat.nat_defs import SYMMETRIC_NAT
 
@@ -102,6 +102,19 @@ class RandomProbePlugin(TraversalPlugin):
         my_is_sym = is_symmetric_nat(my_nat)
         peer_is_sym = is_symmetric_nat(peer_nat)
 
+        # Pick the addresses each side will fire probes at /from.
+        # When the peer is on the same physical machine (machine_id
+        # match) we use the NIC IPs -- the kernel delivers locally
+        # via lo when the dst IP is bound on this host, which gives
+        # a clean local 4-tuple without any router / NAT in the path.
+        # Cross-machine: use ext IPs (the algorithm's normal mode).
+        if self.same_machine:
+            self.my_addr_ip = str(self.src_info.get("nic") or self.src_info.get("ext") or "")
+            self.peer_addr_ip = str(self.dest_info.get("nic") or self.dest_info.get("ext") or "")
+        else:
+            self.my_addr_ip = str(self.src_info.get("ext") or "")
+            self.peer_addr_ip = str(self.dest_info.get("ext") or "")
+
         # Role assignment.  Two regimes:
         #
         # 1) Exactly one side is symmetric -- the symmetric side
@@ -116,21 +129,24 @@ class RandomProbePlugin(TraversalPlugin):
         #    and produces a usable Pipe on hosts where you'd just
         #    like to exercise the code path (e.g. dev / test on
         #    boxes with no real symmetric NAT).  Both sides need to
-        #    agree on roles deterministically; use the *sorted ext
-        #    IP order* -- the side with the lexicographically smaller
-        #    external IP is "non_sym", the other is "sym".  Both
-        #    peers see the same pair of strings so they always pick
-        #    opposite roles.
+        #    agree on roles deterministically; use the *sorted
+        #    addr-IP order* -- the side with the lexicographically
+        #    smaller IP is "non_sym", the other is "sym".  Both
+        #    peers compare the same pair of strings (each computes
+        #    my vs peer with own perspective) so roles always come
+        #    out opposite.
         if my_is_sym != peer_is_sym:
             my_role = "sym" if my_is_sym else "non_sym"
         else:
-            my_ext = str(self.src_info.get("ext") or "")
-            peer_ext = str(self.dest_info.get("ext") or "")
-            # Tie-breaker on missing / equal ext: fall back to who
+            # Tie-breaker on missing / equal addr: fall back to who
             # initiated (initiator = non_sym, responder = sym).
-            if my_ext == peer_ext or not my_ext or not peer_ext:
+            if (
+                self.my_addr_ip == self.peer_addr_ip
+                or not self.my_addr_ip
+                or not self.peer_addr_ip
+            ):
                 my_role = "non_sym" if reply is None else "sym"
-            elif my_ext < peer_ext:
+            elif self.my_addr_ip < self.peer_addr_ip:
                 my_role = "non_sym"
             else:
                 my_role = "sym"
@@ -184,7 +200,13 @@ class RandomProbePlugin(TraversalPlugin):
             log("RandomProbePlugin: bad nonce length in peer reply")
             return
 
-        peer_ext_ip = reply.payload.ext_ip
+        # Trust the peer's advertised addr if it's a usable string;
+        # otherwise fall back to whatever we computed locally for
+        # peer_addr_ip (NIC if same_machine, ext otherwise).  This
+        # matters because the responder side may have computed its
+        # own ext from a fresher set of fields than the initiator
+        # parsed out of the on-wire addr_bytes.
+        peer_addr_ip = reply.payload.ext_ip or self.peer_addr_ip
         peer_known_port = reply.payload.known_port
         probe_count = reply.payload.probe_count or DEFAULT_PROBE_COUNT
         punch_time = reply.payload.punch_time
@@ -226,7 +248,7 @@ class RandomProbePlugin(TraversalPlugin):
             res = await run_non_sym_side(
                 bind_ip=bind_ip,
                 known_port=self.our_known_port(),
-                peer_ext_ip=peer_ext_ip,
+                peer_ext_ip=peer_addr_ip,
                 nonce=nonce,
                 probe_count=probe_count,
                 listen_timeout=PROBE_LISTEN_TIMEOUT,
@@ -235,7 +257,7 @@ class RandomProbePlugin(TraversalPlugin):
         else:
             res = await run_symmetric_side(
                 bind_ip=bind_ip,
-                cone_ext_ip=peer_ext_ip,
+                cone_ext_ip=peer_addr_ip,
                 cone_ext_port=peer_known_port,
                 nonce=nonce,
                 probe_count=probe_count,
@@ -248,26 +270,59 @@ class RandomProbePlugin(TraversalPlugin):
                 self.result.set_result(None)
             return
 
-        # Connect the winning UDP socket to its peer so sock_to_pipe
-        # can read the peer tuple via getpeername() and wire up the
-        # pipe correctly.  UDP connect() just sets the default dest
-        # and filters inbound to that source -- it doesn't change
-        # any NAT mapping that's already in place.
+        # Wrap the winning UDP socket in a Pipe directly, *without*
+        # calling sock.connect(peer) first.  Connecting a UDP socket
+        # has two side-effects we don't want here:
+        #   1. Inbound is filtered to the connected peer only.  If
+        #      the peer's NAT remaps the source for any subsequent
+        #      datagram (common on symmetric / port-restricted
+        #      NATs), recvfrom returns nothing -- no echo reply.
+        #   2. Outbound sendto(data, addr) fails when addr != the
+        #      connected peer.  The echo handler (and any other
+        #      msg_cb that replies with an explicit client_tup)
+        #      breaks.
+        # An unconnected socket wrapped in a Pipe accepts inbound
+        # from any source and lets sendto target the actual reply
+        # address pulled from datagram_received's addr arg.
+        #
+        # We don't go through sock_to_pipe because that helper
+        # calls getpeername() on the sock to derive the dest tuple,
+        # which only works on connected sockets.  We already have
+        # res["peer"] from the convergence step, so build the Pipe
+        # by hand.
         try:
-            res["sock"].connect(res["peer"])
-        except OSError:
-            log("RandomProbePlugin: UDP connect() to peer failed")
+            route = await self.nic.route(self.af).bind()
+        except (OSError, ValueError):
+            log("RandomProbePlugin: route bind failed for pipe wrap")
             if not self.result.done():
                 self.result.set_result(None)
             return
 
-        if not self.result.done():
-            try:
-                pipe = await sock_to_pipe(res["sock"], self.nic)
-            except (LookupError, OSError, ValueError):
-                log("RandomProbePlugin: sock_to_pipe failed")
+        # Reuse the bind port the winning socket is on so the route
+        # carries the right local port info downstream.
+        try:
+            local_port = res["sock"].getsockname()[1]
+            await route.bind(port=local_port)
+        except (OSError, AttributeError):
+            pass
+
+        try:
+            from aionetiface import Pipe, UDP
+            pipe = await Pipe(
+                UDP,
+                dest=res["peer"],
+                route=route,
+                sock=res["sock"],
+            ).connect()
+        except (OSError, ConnectionError, ValueError):
+            log("RandomProbePlugin: Pipe wrap failed")
+            if not self.result.done():
                 self.result.set_result(None)
-                return
+            return
+
+        log("RandomProbePlugin: returning pipe role={0} sock={1!r} peer={2}".format(
+            my_role, res["sock"], res["peer"]))
+        if not self.result.done():
             self.result.set_result(pipe)
 
     # ── helpers ─────────────────────────────────────────────────
@@ -279,14 +334,20 @@ class RandomProbePlugin(TraversalPlugin):
             self.result.set_result(None)
 
     def build_msg(self, role: str, punch_time: int, magic: str) -> RandomProbeMsg:
-        """Build the RandomProbeMsg this side sends to its peer."""
-        ext_ip = str(self.src_info.get("ext") or "")
+        """Build the RandomProbeMsg this side sends to its peer.
+
+        ext_ip in the payload carries whichever address the algorithm
+        will actually fire at -- self.my_addr_ip, populated in run()
+        based on same_machine.  Cross-machine: ext IP.  Same-machine:
+        NIC IP so the kernel routes via lo and there's no NAT in
+        the path.
+        """
         return RandomProbeMsg({
             "payload": {
                 "role": role,
                 "punch_time": int(punch_time),
                 "magic": magic,
-                "ext_ip": ext_ip,
+                "ext_ip": str(getattr(self, "my_addr_ip", "") or ""),
                 "known_port": self.our_known_port(),
                 "probe_count": DEFAULT_PROBE_COUNT,
             },
