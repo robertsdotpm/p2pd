@@ -17,6 +17,10 @@ from ..traversal.plugins.random_probe.random_probe_defs import (
     PROBE_LEN,
     PROBE_MAGIC,
 )
+from ..traversal.plugins.udp_punch.udp_punch_defs import (
+    UDP_PUNCH_FRAME_LEN,
+    UDP_PUNCH_MAGIC,
+)
 
 
 def is_random_probe_datagram(msg: bytes) -> bool:
@@ -32,16 +36,29 @@ def is_random_probe_datagram(msg: bytes) -> bool:
     return len(msg) == PROBE_LEN and msg[:4] == PROBE_MAGIC
 
 
+def is_udp_punch_datagram(msg: bytes) -> bool:
+    """True iff *msg* looks like a stray udp_punch PROBE / CONFIRM frame.
+
+    Same shape problem as random_probe: after convergence the engine's
+    spray keeps arriving on the winning socket for hundreds of ms;
+    those frames get queued on the wrapped Pipe and dispatched to
+    application msg_cbs unless we filter them out here. Cheap predicate
+    (fixed length + 4-byte magic) so it's safe to run on every inbound.
+    """
+    return len(msg) == UDP_PUNCH_FRAME_LEN and msg[:4] == UDP_PUNCH_MAGIC
+
+
 async def node_protocol(node: Any, msg: bytes, client_tup: Tuple[str, int], pipe: Any) -> None:
     """Dispatch each newline-delimited message from the pipe to all registered msg_cbs."""
     print("Node proto: ", msg)
 
-    # Drop residual random_probe probe datagrams: they're algorithm
-    # artefacts, not application data, and dispatching them through
-    # node_protocol just hands probe bytes up to the user's
-    # msg_cbs.  Cheap predicate (length + 4-byte magic) so this is
-    # safe to run unconditionally on every inbound.
+    # Drop residual algorithm frames (random_probe probes, udp_punch
+    # PROBE/CONFIRM): both protocols keep spraying for hundreds of ms
+    # past convergence; without these filters the post-wrap Pipe
+    # delivers raw frame bytes to the user's msg_cbs.
     if is_random_probe_datagram(msg):
+        return
+    if is_udp_punch_datagram(msg):
         return
 
     # Track idle pipe recv time.

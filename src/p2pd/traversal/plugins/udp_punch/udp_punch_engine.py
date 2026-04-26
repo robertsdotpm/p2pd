@@ -166,6 +166,34 @@ def watch_for_winner(
     return None
 
 
+def drain_punch_residue(sock: Any, nonce: bytes) -> int:
+    """Synchronously drain queued PROBE/CONFIRM frames sitting in the kernel
+    buffer for *sock* before it's wrapped in a Pipe.
+
+    Same shape as random_probe.drain_probe_residue: peek at each
+    pending datagram via MSG_PEEK; when the leading bytes match a
+    punch frame with our session nonce, consume it; otherwise stop
+    so non-frame application data passes through to the wrapping
+    Pipe untouched.
+    """
+    sock.setblocking(False)
+    drained = 0
+    while True:
+        try:
+            buf, _ = sock.recvfrom(UDP_PUNCH_FRAME_LEN, socket.MSG_PEEK)
+        except (BlockingIOError, OSError):
+            break
+        kind, recv_nonce = parse_frame(buf)
+        if kind is None or recv_nonce != nonce:
+            break
+        try:
+            sock.recvfrom(UDP_PUNCH_FRAME_LEN)
+        except OSError:
+            break
+        drained += 1
+    return drained
+
+
 def udp_punch_engine(
     af: Any,
     nic_id: Optional[str],

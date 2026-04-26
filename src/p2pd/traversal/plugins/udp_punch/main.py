@@ -26,8 +26,8 @@ from ..tcp_punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 from ..tcp_punch.nat_predict import NATMapping
 from ..tcp_punch.nat_predict_alloc import NATPredictAlloc
 from ..tcp_punch.punch_client import PunchClient
-from .udp_punch_defs import UDP_PUNCH_NONCE_LEN
-from .udp_punch_engine import udp_punch_engine
+from .udp_punch_defs import UDP_PUNCH_FRAME_LEN, UDP_PUNCH_MAGIC, UDP_PUNCH_NONCE_LEN
+from .udp_punch_engine import drain_punch_residue, udp_punch_engine
 
 
 class UdpPunchPlugin(TraversalPlugin):
@@ -219,6 +219,12 @@ class UdpPunchPlugin(TraversalPlugin):
 
             winner_sock, peer_addr = result
 
+            # Drain queued PROBE/CONFIRM frames before the Pipe wrap;
+            # the peer's spray keeps arriving for hundreds of ms past
+            # convergence and those frames would otherwise be the
+            # first thing pipe.recv() returns to the application.
+            drain_punch_residue(winner_sock, puncher.udp_nonce)
+
             # Wrap the winning socket in a Pipe so the caller has the
             # same interface as the other plugins return. UDP Pipe
             # accepts an existing sock=... and uses it directly.
@@ -233,6 +239,31 @@ class UdpPunchPlugin(TraversalPlugin):
                 try:
                     winner_sock.close()
                 except OSError:
+                    pass
+
+            if pipe is not None:
+                # Late-arriving PROBE/CONFIRM frames also need to be
+                # filtered at the pipe-stream layer: PipeEvents queues
+                # data via stream.add_msg before node_protocol fires,
+                # so without this hook pipe.recv(SUB_ALL) returns
+                # frame bytes ahead of the actual application reply.
+                # Mirrors random_probe's stream.add_msg monkey-patch.
+                try:
+                    stream = pipe.pipe_events.stream
+                    original_add_msg = stream.add_msg
+                    nonce_bytes = puncher.udp_nonce
+
+                    def filtered_add_msg(data, client_tup):
+                        if (
+                            len(data) == UDP_PUNCH_FRAME_LEN
+                            and bytes(data[:4]) == UDP_PUNCH_MAGIC
+                            and bytes(data[5:5 + len(nonce_bytes)]) == nonce_bytes
+                        ):
+                            return
+                        return original_add_msg(data, client_tup)
+
+                    stream.add_msg = filtered_add_msg
+                except (AttributeError, TypeError):
                     pass
 
             if not self.result.done():
