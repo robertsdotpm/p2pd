@@ -15,7 +15,6 @@ for random-probe; see the design note at the bottom of this file.
 """
 
 import asyncio
-import os
 from typing import Any, Dict, Optional, Tuple
 
 from aionetiface import (
@@ -27,24 +26,6 @@ from aionetiface import (
     to_s,
     sock_to_pipe
 )
-
-
-# Dev/test escape hatch: when this env var is set to a truthy value
-# (1 / true / yes), random_probe skips the NAT-pair check and
-# assigns roles deterministically -- the *initiator* (the side
-# whose run() is called without a reply) becomes "non_sym", the
-# *responder* (the side that gets the inbound RandomProbeMsg)
-# becomes "sym".  Lets you exercise the algorithm on a host that
-# has no real symmetric NAT in the path (single dev box, two
-# loopback aliases, two normal NICs, etc.).  Production left
-# untouched -- the env var is opt-in, never read at module load.
-FORCE_ENV = "P2PD_RANDOM_PROBE_FORCE"
-
-
-def is_force_enabled() -> bool:
-    """True iff the random_probe force-mode env var is set truthy."""
-    val = os.environ.get(FORCE_ENV, "")
-    return val.strip().lower() in ("1", "true", "yes", "on")
 from aionetiface.nic.nat.nat_defs import SYMMETRIC_NAT
 
 from ....protocol.proto_msg import RandomProbeMsg
@@ -115,48 +96,43 @@ class RandomProbePlugin(TraversalPlugin):
                 "not LAN."
             )
 
-        forced = is_force_enabled()
-        if forced:
-            # Dev/test mode: skip the NAT-pair check and decide
-            # roles by who initiated.  Initiator (run() called with
-            # reply=None) takes "non_sym"; responder takes "sym".
-            # Lets the algorithm fire on hosts that don't have a
-            # real (sym, non-sym) NAT pair in the path.
-            my_role = "non_sym" if reply is None else "sym"
-            log("RandomProbePlugin: force mode active (role={0})".format(my_role))
-        else:
-            # Decide which side we are based on our own NAT type.
-            # nat_info defaults to {} for clean attribute access.
-            my_nat = self.src_info.get("nat") or {}
-            peer_nat = self.dest_info.get("nat") or {}
+        my_nat = self.src_info.get("nat") or {}
+        peer_nat = self.dest_info.get("nat") or {}
+        my_is_sym = is_symmetric_nat(my_nat)
+        peer_is_sym = is_symmetric_nat(peer_nat)
 
-            my_is_sym = is_symmetric_nat(my_nat)
-            peer_is_sym = is_symmetric_nat(peer_nat)
-            if my_is_sym == peer_is_sym:
-                # Both symmetric (algorithm can't help; needs a relay)
-                # OR both non-symmetric (regular punch / direct should
-                # have worked first).  Either way random_probe isn't
-                # the right tool for this pair.
-                self.set_failed_result()
-                both = "" if my_is_sym else "non-"
-                raise ValueError(
-                    "random_probe needs one symmetric NAT and one non-"
-                    "symmetric NAT.  This pair is both-{0}symmetric "
-                    "(my={1}, peer={2}).  Set {3}=1 to bypass for "
-                    "dev/test on hosts without a real symmetric "
-                    "NAT.".format(
-                        both, my_nat.get("type"), peer_nat.get("type"),
-                        FORCE_ENV,
-                    )
-                )
-
-            # Role assignment is purely "am I the symmetric one or not".
-            # We use "sym" / "non_sym" rather than "sym" / "cone"
-            # because the non-symmetric set is "everything else" --
-            # open internet (no NAT), full cone, restricted, and
-            # port-restricted -- not just full cone.  Calling it
-            # "cone" was technically wrong for those NAT shapes.
+        # Role assignment.  Two regimes:
+        #
+        # 1) Exactly one side is symmetric -- the symmetric side
+        #    plays "sym" (opens N source-port-distinct sockets,
+        #    burns N NAT mappings) and the other plays "non_sym"
+        #    (opens one socket on a known port, fires N random
+        #    destination-port datagrams).  This is the case the
+        #    algorithm was designed for.
+        #
+        # 2) Neither / both are symmetric -- the algorithm doesn't
+        #    fundamentally apply, but the protocol still runs fine
+        #    and produces a usable Pipe on hosts where you'd just
+        #    like to exercise the code path (e.g. dev / test on
+        #    boxes with no real symmetric NAT).  Both sides need to
+        #    agree on roles deterministically; use the *sorted ext
+        #    IP order* -- the side with the lexicographically smaller
+        #    external IP is "non_sym", the other is "sym".  Both
+        #    peers see the same pair of strings so they always pick
+        #    opposite roles.
+        if my_is_sym != peer_is_sym:
             my_role = "sym" if my_is_sym else "non_sym"
+        else:
+            my_ext = str(self.src_info.get("ext") or "")
+            peer_ext = str(self.dest_info.get("ext") or "")
+            # Tie-breaker on missing / equal ext: fall back to who
+            # initiated (initiator = non_sym, responder = sym).
+            if my_ext == peer_ext or not my_ext or not peer_ext:
+                my_role = "non_sym" if reply is None else "sym"
+            elif my_ext < peer_ext:
+                my_role = "non_sym"
+            else:
+                my_role = "sym"
 
         if reply is None:
             # Initiator: pick a session nonce + rendezvous time and
