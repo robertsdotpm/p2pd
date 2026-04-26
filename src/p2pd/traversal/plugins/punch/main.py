@@ -61,14 +61,27 @@ class PunchPlugin(TraversalPlugin):
             return None, None
 
         # Determine IP addresses via routing.
-        route = await self.nic.route(self.af).bind()
         dest_ip = self.dest_info["ip"]
-        if "fe80" == dest_ip[:4]:
-            # Use link-local source for link-local destination
-            src_ip = str(route.link_locals[0])
+        # Same-machine cross-subnet: when dest is the peer's 127.X.Y.Z
+        # loopback alias, the source must also live on loopback or
+        # Windows refuses to short-circuit cross-subnet src->loopback
+        # via lo. Bind the route on alice's own loopback alias before
+        # taking route.nic() as src_ip so the rest of the punch
+        # exchange uses consistent loopback addressing.
+        if dest_ip[:4] == "127.":
+            src_lo = self.src_info.get("loopback")
+            src_str = str(src_lo) if src_lo is not None else "127.0.0.1"
+            route = self.nic.route(self.af)
+            await route.bind(ips=src_str)
+            src_ip = src_str
         else:
-            # Use the interface's local IP
-            src_ip = route.nic()
+            route = await self.nic.route(self.af).bind()
+            if "fe80" == dest_ip[:4]:
+                # Use link-local source for link-local destination
+                src_ip = str(route.link_locals[0])
+            else:
+                # Use the interface's local IP
+                src_ip = route.nic()
 
         # Determine the decider IP for master/slave role selection.
         if self.route_type == NIC_BIND:
