@@ -405,7 +405,16 @@ class TestNodeStart(AsyncTestCase):
 
     async def test_node_starts_and_closes(self):
         try:
-            node = await asyncio.wait_for(Node(port=NODE_PORT + 5000, conf=NODE_TEST_CONF), timeout=20)
+            # Node.__await__ returns Node(...).start().__await__(), so an
+            # explicit .start() lets asyncio.wait_for see a coroutine
+            # rather than a bare Node instance.  Python 3.5.0's
+            # ensure_future doesn't unwrap awaitables -- only coroutines
+            # and futures -- so passing the bare Node would raise
+            # "A Future or coroutine is required".
+            node = await asyncio.wait_for(
+                Node(port=NODE_PORT + 5000, conf=NODE_TEST_CONF).start(),
+                timeout=20,
+            )
         except Exception as e:
             self.skipTest("Node startup failed (network issue?): {}".format(e))
 
@@ -421,7 +430,10 @@ class TestNodeStart(AsyncTestCase):
         from aionetiface import parse_node_addr
 
         try:
-            node = await asyncio.wait_for(Node(port=NODE_PORT + 5001, conf=NODE_TEST_CONF), timeout=20)
+            node = await asyncio.wait_for(
+                Node(port=NODE_PORT + 5001, conf=NODE_TEST_CONF).start(),
+                timeout=20,
+            )
         except Exception as e:
             self.skipTest("Node startup failed: {}".format(e))
 
@@ -438,7 +450,10 @@ class TestNodeStart(AsyncTestCase):
     async def test_node_has_traversal_wired(self):
         """TraversalManager must be wired to the node after startup."""
         try:
-            node = await asyncio.wait_for(Node(port=NODE_PORT + 5002, conf=NODE_TEST_CONF), timeout=20)
+            node = await asyncio.wait_for(
+                Node(port=NODE_PORT + 5002, conf=NODE_TEST_CONF).start(),
+                timeout=20,
+            )
         except Exception as e:
             self.skipTest("Node startup failed: {}".format(e))
 
@@ -457,7 +472,10 @@ class TestNodeStart(AsyncTestCase):
     async def test_node_id_is_derived_from_pub_key(self):
         """node_id == sha256(compressed_vk)[:25] — verified against live startup."""
         try:
-            node = await asyncio.wait_for(Node(port=NODE_PORT + 5003, conf=NODE_TEST_CONF), timeout=20)
+            node = await asyncio.wait_for(
+                Node(port=NODE_PORT + 5003, conf=NODE_TEST_CONF).start(),
+                timeout=20,
+            )
         except Exception as e:
             self.skipTest("Node startup failed: {}".format(e))
 

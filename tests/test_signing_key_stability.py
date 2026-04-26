@@ -11,10 +11,7 @@ tests pin that behaviour:
 
   * Same (NICs, port), different listen_ips -> same key returned.
   * Different listen_port -> different on-disk file, fresh key.
-  * Migration: when a legacy listen_ips-namespaced key file is
-    present and the new path is empty, the legacy key is adopted
-    (most-recently-modified wins) instead of forcing a fresh
-    generation.
+  * Different NIC set -> different on-disk file, fresh key.
 """
 
 import os
@@ -23,7 +20,7 @@ import tempfile
 import time
 import unittest
 
-from p2pd.node.node_utils import adopt_legacy_signing_key, load_signing_key
+from p2pd.node.node_utils import load_signing_key
 
 
 class FakeNIC:
@@ -85,13 +82,35 @@ class TestSigningKeyStability(unittest.TestCase):
             "different listen_port should still produce a different key",
         )
 
-    def test_legacy_key_file_is_adopted(self):
-        """When a stale listen_ips-keyed file is the only one on disk,
-        load_signing_key should adopt it instead of minting a fresh key."""
+    def test_different_nic_sets_yield_different_keys(self):
+        """Two nodes loading distinct NIC sets from the same install_path
+        must NOT collide on the same key -- regression for the migration
+        bug where legacy file adoption put two distinct configs onto the
+        same key."""
+        nics_a = [FakeNIC("ens34")]
+        nics_b = [FakeNIC("ens37")]
+        port = 12345
+
+        sk_a = load_signing_key(nics_a, ["10.0.1.76"], port, self.install_path)
+        sk_b = load_signing_key(nics_b, ["10.0.1.76"], port, self.install_path)
+
+        self.assertNotEqual(
+            sk_a.to_string(), sk_b.to_string(),
+            "two nodes on different NICs must have distinct keys -- "
+            "the migration regression let them collide on a shared "
+            "legacy file",
+        )
+
+    def test_legacy_files_left_alone(self):
+        """Legacy listen_ips-namespaced files MUST NOT be auto-adopted
+        across distinct (NIC, port) loads -- doing so cross-pollutes
+        identities. The fix generates a fresh key per new-scheme path
+        and leaves legacy files untouched on disk for the user to
+        clean up manually."""
         nics = [FakeNIC("ens34")]
         port = 12345
 
-        # Plant a legacy key file with arbitrary contents.
+        # Plant a legacy file with arbitrary contents.
         legacy_hex = "ab" * 32
         legacy_path = os.path.join(
             self.install_path,
@@ -100,36 +119,22 @@ class TestSigningKeyStability(unittest.TestCase):
         with open(legacy_path, "w", encoding="utf-8") as fp:
             fp.write(legacy_hex)
 
-        # Confirm adopt_legacy_signing_key picks it up.
-        adopted = adopt_legacy_signing_key(self.install_path)
-        self.assertEqual(adopted, legacy_hex)
-
-        # Now load_signing_key should adopt + write to the new path
-        # (a fresh load with different bytes would not equal legacy_hex).
         sk = load_signing_key(nics, ["10.0.1.76"], port, self.install_path)
         from binascii import hexlify
-        self.assertEqual(hexlify(sk.to_string()).decode(), legacy_hex)
+        sk_hex = hexlify(sk.to_string()).decode()
 
-    def test_legacy_picks_most_recently_modified(self):
-        """When several legacy files exist, the newest mtime wins."""
-        older_path = os.path.join(
-            self.install_path, "PRIV_KEY_DONT_SHARE_old.hex",
+        # The new-scheme key must NOT match the legacy file -- a
+        # fresh key was generated.
+        self.assertNotEqual(
+            sk_hex, legacy_hex,
+            "load_signing_key auto-adopted a legacy file -- this "
+            "causes pubkey collisions when two distinct (NIC, port) "
+            "configs share an install_path",
         )
-        newer_path = os.path.join(
-            self.install_path, "PRIV_KEY_DONT_SHARE_new.hex",
-        )
-        with open(older_path, "w", encoding="utf-8") as fp:
-            fp.write("aa" * 32)
-        # Set older mtime explicitly so the test isn't subject to fs
-        # timestamp resolution flakes.
-        old_time = time.time() - 3600
-        os.utime(older_path, (old_time, old_time))
 
-        with open(newer_path, "w", encoding="utf-8") as fp:
-            fp.write("bb" * 32)
-
-        adopted = adopt_legacy_signing_key(self.install_path)
-        self.assertEqual(adopted, "bb" * 32)
+        # Legacy file remains intact -- we don't delete crypto material.
+        with open(legacy_path, "r", encoding="utf-8") as fp:
+            self.assertEqual(fp.read(), legacy_hex)
 
 
 if __name__ == "__main__":

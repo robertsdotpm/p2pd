@@ -60,9 +60,17 @@ async def step_stun():
     from p2pd.node.node_utils import load_stun_clients
     nic = await Interface()
     stun_clients = await load_stun_clients([nic])
+    # load_stun_clients returns {af: {if_index: [client, ...]}}.
     out = {}
     for af, by_index in stun_clients.items():
-        out[str(af)] = sum(len(v) for v in by_index)
+        total = 0
+        if isinstance(by_index, dict):
+            for clients in by_index.values():
+                try:
+                    total += len(clients)
+                except TypeError:
+                    pass
+        out[str(af)] = total
     return out
 
 
@@ -75,11 +83,10 @@ async def step_nickname():
     """
     from aionetiface import Interface, SysClock
     from p2pd.node.nickname import Nickname
-    from aionetiface.utility.crypto_utils import Signing
-    import secrets
 
     nic = await Interface()
-    sk_bytes = secrets.token_bytes(32)
+    # XP doesn't have `secrets` (3.6+); pull random bytes via os.urandom.
+    sk_bytes = os.urandom(32)
     from ecdsa import SigningKey, SECP256k1
     sk = SigningKey.from_string(sk_bytes, curve=SECP256k1)
     sys_clock = SysClock(nic, ntp=time.time())
@@ -102,7 +109,10 @@ async def step_node():
     """
     from p2pd.node.node import Node, NODE_PORT
     port = NODE_PORT + 6000 + (int(time.time() * 1000) % 5000)
-    node = await asyncio.wait_for(Node(port=port), timeout=30)
+    # Explicit .start() returns a coroutine -- Node() alone is awaitable
+    # via __await__ but Python 3.5.0's asyncio.ensure_future only
+    # accepts coroutines/futures, not arbitrary awaitables.
+    node = await asyncio.wait_for(Node(port=port).start(), timeout=30)
     try:
         addr = node.addr_bytes
         return {"addr_len": len(addr) if addr else 0}

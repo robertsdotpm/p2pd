@@ -221,74 +221,30 @@ def load_signing_key(nics: List[Any], listen_ips: List[str], listen_port: int, i
         os.path.join(install_path, fstr("PRIV_KEY_DONT_SHARE_v2_{0}.hex", (listen_hash,)))
     )
 
-    # Read existing key, or migrate forward from any older
-    # listen_ips-namespaced key, or generate fresh.
+    # Read existing key or generate fresh. We do NOT migrate forward
+    # from old listen_ips-namespaced files: such migration can't tell
+    # which (NIC, port) config a legacy file originated from, so two
+    # nodes loading from the same install_path with distinct (NIC,
+    # port) tuples would both adopt the same legacy key and end up
+    # with identical pubkeys -- the exact regression the IPv6 churn
+    # fix was meant to avoid in spirit. Users upgrading from the
+    # legacy scheme get one fresh identity per (NIC, port); the old
+    # files stay on disk untouched (the user can delete them once
+    # the new identity is registered).
     if os.path.exists(sk_path):
         with open(sk_path, mode="r", encoding="utf-8") as fp:
             sk_hex = fp.read()
     else:
-        legacy_sk_hex = adopt_legacy_signing_key(install_path)
-        if legacy_sk_hex is not None:
-            sk_hex = legacy_sk_hex
-            with open(sk_path, "w", encoding="utf-8") as file:
-                file.write(sk_hex)
-        else:
-            sk = SigningKey.generate(curve=SECP256k1)
-            sk_buf = sk.to_string()
-            sk_hex = to_h(sk_buf)
-            with open(sk_path, "w", encoding="utf-8") as file:
-                file.write(sk_hex)
+        sk = SigningKey.generate(curve=SECP256k1)
+        sk_buf = sk.to_string()
+        sk_hex = to_h(sk_buf)
+        with open(sk_path, "w", encoding="utf-8") as file:
+            file.write(sk_hex)
 
     # Convert secret key to a singing key.
     sk_buf = h_to_b(sk_hex)
     sk = SigningKey.from_string(sk_buf, curve=SECP256k1)
     return sk
-
-
-def adopt_legacy_signing_key(install_path: str) -> Optional[str]:
-    """Pick up an old listen_ips-namespaced key file when migrating to the
-    stable key path; returns the hex contents, or None when nothing fits.
-
-    Strategy: among all PRIV_KEY_DONT_SHARE_*.hex files in install_path,
-    use the most-recently-modified one (the user's last active identity).
-    Older churn-generated files are ignored.  We do NOT delete them --
-    silent deletion of crypto material is the wrong default; the user
-    can clean them up manually once they confirm the new pinned identity
-    works.
-    """
-    try:
-        entries = os.listdir(install_path)
-    except OSError:
-        return None
-
-    candidates = []
-    for name in entries:
-        if not name.startswith("PRIV_KEY_DONT_SHARE_"):
-            continue
-        if not name.endswith(".hex"):
-            continue
-        # Skip the v2 scheme -- those are already in the new format
-        # and shouldn't be cross-adopted between distinct (NIC, port)
-        # configs that happen to share an install_path.
-        if name.startswith("PRIV_KEY_DONT_SHARE_v2_"):
-            continue
-        full = os.path.join(install_path, name)
-        try:
-            mtime = os.path.getmtime(full)
-        except OSError:
-            continue
-        candidates.append((mtime, full))
-
-    if not candidates:
-        return None
-
-    candidates.sort(reverse=True)
-    newest = candidates[0][1]
-    try:
-        with open(newest, mode="r", encoding="utf-8") as fp:
-            return fp.read()
-    except OSError:
-        return None
 
 
 async def fallback_machine_id(netifaces: Any, app_id: str = "p2pd") -> str:
