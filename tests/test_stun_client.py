@@ -48,6 +48,13 @@ class TestSTUNClientIPv4(AsyncTestCase):
             self.skipTest("IPv4 not available")
         self.server = STUNServer(self.nic, mode=RFC5389)
         await self.server.start()
+        # STUNServer.start swallows per-AF bind exceptions and only logs
+        # them. Confirm the protocols this class needs actually bound;
+        # otherwise self.server.port stays 0 and the test method connects
+        # to 127.0.0.1:0 with a confusing OS error instead of skipping
+        # cleanly.
+        if (IP4, UDP) not in self.server.control_pipes:
+            self.skipTest("STUN server failed to bind IPv4 UDP on loopback")
 
     async def asyncTearDown(self):
         try:
@@ -204,6 +211,12 @@ class TestSTUNClientTCPIPv4(AsyncTestCase):
             self.skipTest("IPv4 not available")
         self.server = STUNServer(self.nic, mode=RFC5389)
         await self.server.start()
+        # STUNServer.start swallows per-AF bind exceptions and only logs
+        # them. The TCP path can fail independently of UDP (e.g. transient
+        # SO_REUSEADDR contention on Windows). Skip cleanly rather than
+        # connecting to 127.0.0.1:0.
+        if (IP4, TCP) not in self.server.control_pipes:
+            self.skipTest("STUN server failed to bind IPv4 TCP on loopback")
 
     async def asyncTearDown(self):
         try:
