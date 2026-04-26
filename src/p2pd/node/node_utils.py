@@ -412,9 +412,11 @@ async def listen_on_ifs(node: Any) -> None:
         await v4_route.bind(ips=lo_ip, port=node.listen_port)
         await node.add_listener(TCP, v4_route)
         successes += 1
+        print("[LISTEN-DBG] loopback alias bound: {0}:{1}".format(lo_ip, node.listen_port))
     except asyncio.CancelledError:  # pylint: disable=try-except-raise
         raise
     except Exception as exc:
+        print("[LISTEN-DBG] loopback alias bind failed: {0!r}".format(exc))
         log(fstr("listen_on_ifs: loopback alias bind failed: {0}", (exc,)))
 
     if successes == 0:

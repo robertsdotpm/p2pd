@@ -20,6 +20,11 @@ class DirectConnect(TraversalPlugin):
             "direct_connect[{0}]: af={1} dest={2} nic.id={3} reply={4}",
             (self.plugin_id, self.af, dest, getattr(self.nic, "id", "?"), reply is not None),
         ))
+        print("[DIRECT-DBG] plugin_id={0} af={1} dest_ip={2} dest_port={3} src_loopback={4} nic_id={5}".format(
+            self.plugin_id, self.af, dest[0], dest[1],
+            self.src_info.get("loopback") if self.src_info else None,
+            getattr(self.nic, "id", "?"),
+        ))
 
         # (1) Get first interface for AF.
         # (2) Build a 'route' from it with it's main NIC IP.
@@ -34,9 +39,11 @@ class DirectConnect(TraversalPlugin):
             if dest[0].startswith("127."):
                 src_lo = self.src_info.get("loopback")
                 src_ip = str(src_lo) if src_lo is not None else "127.0.0.1"
+                print("[DIRECT-DBG] picking loopback src_ip={0} for dest={1}".format(src_ip, dest))
                 route = self.nic.route(self.af)
                 await route.bind(ips=src_ip)
             else:
+                print("[DIRECT-DBG] non-loopback dest, default route bind for dest={0}".format(dest))
                 route = await self.nic.route(self.af).bind()
         if self.af == IP6:
             if "fe80" == dest[0][:4]:
@@ -53,16 +60,19 @@ class DirectConnect(TraversalPlugin):
         # Connect to destination.
         try:
             pipe = await Pipe(TCP, dest, route).connect()
-        except (OSError, ConnectionError, asyncio.TimeoutError):
+        except (OSError, ConnectionError, asyncio.TimeoutError) as exc:
+            print("[DIRECT-DBG] TCP connect to {0} raised: {1!r}".format(dest, exc))
             log_exception()
             pipe = None
 
         if pipe is None:
+            print("[DIRECT-DBG] TCP connect to {0} returned None".format(dest))
             log(fstr(
                 "direct_connect[{0}]: TCP connect to {1} returned None",
                 (self.plugin_id, dest),
             ))
             return
+        print("[DIRECT-DBG] TCP connect to {0} OK, pipe={1!r}".format(dest, pipe))
 
         if pipe.sock is None:
             log(fstr(
