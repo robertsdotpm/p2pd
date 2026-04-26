@@ -319,54 +319,16 @@ class RandomProbePlugin(TraversalPlugin):
         log("RandomProbePlugin: drained {0}+{1} residual probe(s) "
             "from winning sock".format(drained, late))
 
-        # Diagnostic: prove BOTH directions work at the raw socket
-        # level before the Pipe wrap.  Each side sends a literal
-        # ECHO with its own role name, then loops recv for 5 s
-        # looking specifically for the *opposite* role's marker.
-        # Clear pass/fail per side, no ambiguity about which
-        # direction was actually validated.
-        my_marker = ("RPDIAG-FROM-" + my_role).encode("ascii")
-        peer_role = "sym" if my_role == "non_sym" else "non_sym"
-        peer_marker = ("RPDIAG-FROM-" + peer_role).encode("ascii")
-        try:
-            res["sock"].sendto(my_marker + b"\n", res["peer"])
-            print("[RP-RAW-SEND] role={0} sent {1!r} to {2}".format(
-                my_role, my_marker, res["peer"],
-            ))
-        except OSError as exc:
-            print("[RP-RAW-SEND] role={0} send to {1} failed: {2!r}".format(
-                my_role, res["peer"], exc,
-            ))
-
-        # Look for the peer's marker specifically.  Skip anything
-        # that doesn't match -- probes, late stragglers, etc -- so
-        # the result tells us only "did the peer's send reach me".
-        loop = asyncio.get_event_loop()
-        raw_deadline = loop.time() + 5.0
-        res["sock"].setblocking(False)
-        peer_seen = False
-        while loop.time() < raw_deadline:
-            try:
-                data, addr = res["sock"].recvfrom(4096)
-            except (BlockingIOError, InterruptedError):
-                await asyncio.sleep(0.1)
-                continue
-            except OSError:
-                break
-            if peer_marker in data:
-                print("[RP-RAW-RECV] role={0} GOT PEER ({1}) marker from "
-                      "{2}: {3!r}".format(my_role, peer_role, addr, data[:64]))
-                peer_seen = True
-                break
-            else:
-                # Note but keep listening.
-                print("[RP-RAW-RECV] role={0} discarded {1}b from {2} "
-                      "(not peer marker): {3!r}".format(
-                          my_role, len(data), addr, data[:32]))
-        if not peer_seen:
-            print("[RP-RAW-RECV] role={0} did NOT receive peer ({1}) "
-                  "marker after 5s -- {2}->{0} direction is broken".format(
-                      my_role, peer_role, peer_role))
+        # NOTE: the raw-socket RPDIAG round-trip diagnostic that
+        # used to live here was eating real application data.
+        # On the sym side it sat in a 5-second recv loop *before*
+        # the Pipe was built, and any ECHO the user typed during
+        # that window was consumed by the loop and discarded as
+        # "not the marker", never reaching the Pipe / echo
+        # handler.  The diagnostic served its purpose -- both
+        # directions are now validated end-to-end -- so it's
+        # gone.  Going straight from drain to Pipe wrap means
+        # the application's first send lands cleanly.
 
         # Wrap the winning UDP socket in a Pipe directly, *without*
         # calling sock.connect(peer) first.  Connecting a UDP socket
