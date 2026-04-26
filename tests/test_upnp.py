@@ -1,16 +1,20 @@
 """
-Tests for UPnP port forwarding (IPv4) and IPv6 pin hole rules.
+Network-free UPnP unit tests + a few wiring checks.
 
 Unit tests (no network):
   TestBuildDiscoverBuf       -- SSDP M-SEARCH packet structure for IPv4 / IPv6.
   TestFindUpnpService        -- XML service-tree search.
   TestSortRepliesByLocation  -- M-SEARCH reply deduplication.
+  TestRemoteReachabilityCb   -- forward() reachability callback wiring.
+  TestForwardWiring          -- forward() future / success-list wiring.
 
-Integration tests (require a UPnP-enabled router on the LAN):
-  TestUPnPDiscoverIPv4       -- multicast M-SEARCH discovers at least one device.
-  TestUPnPForwardIPv4        -- AddPortMapping succeeds on the router.
-  TestUPnPDiscoverIPv6       -- IPv6 M-SEARCH (skipped when no IPv6 UPnP device found).
-  TestUPnPForwardIPv6        -- AddPinhole succeeds (skipped when unsupported).
+Heavy integration tests live in their own files for subprocess
+isolation (see CLAUDE.md "Heavy tests live in their own file"):
+
+  test_upnp_ipv4.py          -- IPv4 SSDP discover + AddPortMapping.
+  test_upnp_ipv6.py          -- IPv6 M-SEARCH + AddPinhole.
+
+Shared helpers (UPNP_TEST_PORT, get_test_nic) live in upnp_helpers.py.
 """
 
 import asyncio
@@ -30,53 +34,22 @@ else:
         mock.side_effect = coro
         return mock
 
-from aionetiface import IP4, IP6, Interface, IPR
-from aionetiface.errors import InterfaceNotFound
+from aionetiface import IP4, IP6
 from aionetiface.testing import AsyncTestCase
 
-
-async def get_test_nic(test_self):
-    """Build a default Interface, skipping the test on InterfaceNotFound.
-
-    Repeated `await Interface()` calls across many tests in one
-    subprocess have flaked on XP -- the singular load_interface
-    path classifies the NIC's stack via STUN, and after a string
-    of prior tests in test_upnp have churned through SSDP /
-    UPnP / port-forward sockets, a STUN probe occasionally comes
-    back with no usable routes for any AF and the loader raises
-    InterfaceNotFound. Standalone runs of `await Interface()`
-    succeed 20+ times in a row, so this is in-process state
-    accumulation, not a real "no network" failure. skipTest
-    rather than ERROR so the flake doesn't halt the matrix gate.
-    """
-    try:
-        return await Interface()
-    except InterfaceNotFound:
-        test_self.skipTest(
-            "Interface() couldn't classify a default NIC -- transient "
-            "STUN flake, common on XP after many prior tests in one "
-            "subprocess have churned through sockets"
-        )
+# IPv4 / IPv6 integration classes live in test_upnp_ipv4.py /
+# test_upnp_ipv6.py for subprocess isolation -- prior shape ran all
+# four classes' SSDP / port-forward socket churn in one subprocess
+# and flaked the singular Interface() loader on XP. Helpers
+# (UPNP_TEST_PORT, get_test_nic) live in upnp_helpers.py.
 
 from p2pd.traversal.plugins.upnp.upnp_utils import (
     UPNP_IP,
-    UPNP_PORT,
     build_upnp_discover_buf,
     find_upnp_service_by_type,
     sort_upnp_replies_by_unique_location,
 )
-from p2pd.traversal.plugins.upnp.main import (
-    discover_upnp_devices,
-    port_forward,
-)
-from p2pd.node.node_utils import forward, remote_reachability_cb
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Shared test port — high enough to avoid conflicts with real services.
-# ─────────────────────────────────────────────────────────────────────────────
-
-UPNP_TEST_PORT = 59871
+from p2pd.node.node_utils import remote_reachability_cb
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -266,172 +239,6 @@ class TestSortRepliesByLocation(unittest.TestCase):
         result = sort_upnp_replies_by_unique_location([r1, r2])
         self.assertEqual(len(result), 1)
         self.assertIn("location", result[0].hdrs)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Integration tests — IPv4 discovery
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class TestUPnPDiscoverIPv4(AsyncTestCase):
-    """Discover UPnP devices via IPv4 multicast M-SEARCH."""
-
-    async def asyncSetUp(self):
-        self.nic = await get_test_nic(self)
-        if IP4 not in self.nic.supported():
-            self.skipTest("IPv4 not available")
-
-    async def test_discover_returns_list(self):
-        replies = await asyncio.wait_for(
-            discover_upnp_devices(IP4, self.nic), timeout=10
-        )
-        self.assertIsInstance(replies, list)
-
-    async def test_discover_finds_device(self):
-        replies = await asyncio.wait_for(
-            discover_upnp_devices(IP4, self.nic), timeout=10
-        )
-        if not replies:
-            self.skipTest("No UPnP devices found on this network")
-        self.assertGreater(len(replies), 0)
-
-    async def test_discover_replies_have_location_header(self):
-        replies = await asyncio.wait_for(
-            discover_upnp_devices(IP4, self.nic), timeout=10
-        )
-        if not replies:
-            self.skipTest("No UPnP devices found on this network")
-        unique = sort_upnp_replies_by_unique_location(replies)
-        self.assertGreater(len(unique), 0)
-        for r in unique:
-            self.assertIn("location", r.hdrs)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Integration tests — IPv4 port forwarding
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class TestUPnPForwardIPv4(AsyncTestCase):
-    """Attempt AddPortMapping via a real router.
-
-    Skipped when no UPnP device is reachable.  The mapping persists on the
-    router until it reboots or the entry is manually removed.
-    """
-
-    async def asyncSetUp(self):
-        self.nic = await get_test_nic(self)
-        if IP4 not in self.nic.supported():
-            self.skipTest("IPv4 not available")
-        replies = await asyncio.wait_for(
-            discover_upnp_devices(IP4, self.nic), timeout=10
-        )
-        if not replies:
-            self.skipTest("No UPnP devices found — skipping port-forward test")
-
-    async def test_port_forward_returns_success(self):
-        route = self.nic.route(IP4)
-        src_ip = str(route.nic())
-        src_tup = (src_ip, UPNP_TEST_PORT)
-        result = await asyncio.wait_for(
-            port_forward(IP4, self.nic, UPNP_TEST_PORT, src_tup, "p2pd-test"),
-            timeout=30,
-        )
-        if result != 1:
-            self.skipTest("UPnP device found but AddPortMapping returned {} (router refused mapping)".format(result))
-        self.assertEqual(result, 1, "IPv4 AddPortMapping should succeed on a UPnP-enabled router")
-
-    async def test_port_forward_returns_int(self):
-        route = self.nic.route(IP4)
-        src_ip = str(route.nic())
-        src_tup = (src_ip, UPNP_TEST_PORT)
-        result = await asyncio.wait_for(
-            port_forward(IP4, self.nic, UPNP_TEST_PORT, src_tup, "p2pd-test"),
-            timeout=30,
-        )
-        self.assertIsInstance(result, int)
-        self.assertIn(result, (0, 1))
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Integration tests — IPv6 discovery
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class TestUPnPDiscoverIPv6(AsyncTestCase):
-    """Discover UPnP devices via IPv6 multicast M-SEARCH.
-
-    Skipped when IPv6 is not available or when no IPv6 UPnP devices reply.
-    Many routers support UPnP only over IPv4, so this commonly skips.
-    """
-
-    async def asyncSetUp(self):
-        self.nic = await get_test_nic(self)
-        if IP6 not in self.nic.supported():
-            self.skipTest("IPv6 not available")
-
-    async def test_discover_returns_list(self):
-        replies = await asyncio.wait_for(
-            discover_upnp_devices(IP6, self.nic), timeout=10
-        )
-        self.assertIsInstance(replies, list)
-
-    async def test_discover_replies_have_location_if_any(self):
-        replies = await asyncio.wait_for(
-            discover_upnp_devices(IP6, self.nic), timeout=10
-        )
-        if not replies:
-            self.skipTest("No IPv6 UPnP devices found")
-        unique = sort_upnp_replies_by_unique_location(replies)
-        for r in unique:
-            self.assertIn("location", r.hdrs)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Integration tests — IPv6 pin hole
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class TestUPnPForwardIPv6(AsyncTestCase):
-    """Attempt AddPinhole via a real router.
-
-    Skipped when IPv6 is unavailable, when no IPv6 UPnP device is found, or
-    when the router doesn't support WANIPv6FirewallControl.  Routers that do
-    not implement RFC 6970 return an error here and the test skips gracefully.
-    """
-
-    async def asyncSetUp(self):
-        self.nic = await get_test_nic(self)
-        if IP6 not in self.nic.supported():
-            self.skipTest("IPv6 not available")
-        replies = await asyncio.wait_for(
-            discover_upnp_devices(IP6, self.nic), timeout=10
-        )
-        if not replies:
-            self.skipTest("No IPv6 UPnP devices found — skipping pin-hole test")
-
-    async def test_port_forward_returns_int(self):
-        route = self.nic.route(IP6)
-        src_ip = str(route.ext())
-        src_tup = (src_ip, UPNP_TEST_PORT)
-        result = await asyncio.wait_for(
-            port_forward(IP6, self.nic, UPNP_TEST_PORT, src_tup, "p2pd-test"),
-            timeout=30,
-        )
-        self.assertIsInstance(result, int)
-        self.assertIn(result, (0, 1))
-
-    async def test_port_forward_succeeds_or_skips(self):
-        route = self.nic.route(IP6)
-        src_ip = str(route.ext())
-        src_tup = (src_ip, UPNP_TEST_PORT)
-        result = await asyncio.wait_for(
-            port_forward(IP6, self.nic, UPNP_TEST_PORT, src_tup, "p2pd-test"),
-            timeout=30,
-        )
-        if result == 0:
-            self.skipTest("Router does not support WANIPv6FirewallControl (AddPinhole)")
-        self.assertEqual(result, 1)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
