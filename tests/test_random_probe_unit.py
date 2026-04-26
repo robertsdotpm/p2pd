@@ -35,10 +35,7 @@ from p2pd.traversal.plugins.random_probe.random_probe_lib import (
     encode_probe,
     random_probe_ports,
 )
-from p2pd.traversal.plugins.random_probe.main import (
-    is_cone_nat,
-    is_symmetric_nat,
-)
+from p2pd.traversal.plugins.random_probe.main import is_symmetric_nat
 from p2pd.protocol.proto_msg import RandomProbeMsg
 
 
@@ -127,36 +124,16 @@ class TestRandomProbePorts(unittest.TestCase):
             random_probe_ports(PROBE_PORT_HI - PROBE_PORT_LO + 2)
 
 
-class TestRoleDecision(unittest.TestCase):
-    """is_cone_nat / is_symmetric_nat classify NAT info dicts correctly.
+class TestSymmetricNatPredicate(unittest.TestCase):
+    """is_symmetric_nat is the single source of truth for role-decision.
 
-    The plugin's role-decision is intentionally loose: anything
-    that isn't symmetric plays the "cone" role.  Symmetric is the
-    only special case the algorithm is designed to traverse.
+    The plugin assigns "sym" role to symmetric NATs and "non_sym"
+    to everything else (open internet, full cone, restricted,
+    port-restricted, missing classifier).  We don't expose a
+    positively-worded counterpart -- every potential name (cone /
+    predictable / fixed-port) was misleading because the set is
+    "everything except symmetric", not any one shape.
     """
-
-    def test_full_cone_is_cone(self):
-        self.assertTrue(is_cone_nat({"type": FULL_CONE}))
-
-    def test_open_internet_is_cone(self):
-        self.assertTrue(is_cone_nat({"type": OPEN_INTERNET}))
-
-    def test_restrict_is_cone(self):
-        self.assertTrue(is_cone_nat({"type": RESTRICT_NAT}))
-
-    def test_restrict_port_is_cone(self):
-        self.assertTrue(is_cone_nat({"type": RESTRICT_PORT_NAT}))
-
-    def test_symmetric_is_not_cone(self):
-        self.assertFalse(is_cone_nat({"type": SYMMETRIC_NAT}))
-
-    def test_empty_dict_is_cone(self):
-        # No NAT info -> assume cone.  Lets the algorithm run on
-        # boxes where the classifier hasn't finished or skipped.
-        self.assertTrue(is_cone_nat({}))
-
-    def test_none_is_cone(self):
-        self.assertTrue(is_cone_nat(None))
 
     def test_symmetric_is_symmetric(self):
         self.assertTrue(is_symmetric_nat({"type": SYMMETRIC_NAT}))
@@ -164,11 +141,18 @@ class TestRoleDecision(unittest.TestCase):
     def test_full_cone_is_not_symmetric(self):
         self.assertFalse(is_symmetric_nat({"type": FULL_CONE}))
 
+    def test_open_internet_is_not_symmetric(self):
+        self.assertFalse(is_symmetric_nat({"type": OPEN_INTERNET}))
+
     def test_restrict_is_not_symmetric(self):
         self.assertFalse(is_symmetric_nat({"type": RESTRICT_NAT}))
+
+    def test_restrict_port_is_not_symmetric(self):
         self.assertFalse(is_symmetric_nat({"type": RESTRICT_PORT_NAT}))
 
     def test_empty_dict_is_not_symmetric(self):
+        # No NAT info -> assume non-symmetric.  Lets the algorithm
+        # run on boxes where the classifier hasn't finished.
         self.assertFalse(is_symmetric_nat({}))
 
     def test_none_is_not_symmetric(self):
@@ -181,7 +165,7 @@ class TestRandomProbeMsg(unittest.TestCase):
     def test_payload_round_trip(self):
         m = RandomProbeMsg({
             "payload": {
-                "role": "cone",
+                "role": "non_sym",
                 "punch_time": 1700000000,
                 "magic": "ab" * 16,
                 "ext_ip": "203.0.113.5",
@@ -190,7 +174,7 @@ class TestRandomProbeMsg(unittest.TestCase):
             },
         })
         d = m.payload.to_dict()
-        self.assertEqual(d["role"], "cone")
+        self.assertEqual(d["role"], "non_sym")
         self.assertEqual(d["punch_time"], 1700000000)
         self.assertEqual(d["magic"], "ab" * 16)
         self.assertEqual(d["ext_ip"], "203.0.113.5")

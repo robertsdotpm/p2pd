@@ -29,7 +29,7 @@ from aionetiface.testing import AsyncTestCase, probe_loopback_ips
 
 from p2pd.traversal.plugins.random_probe.random_probe_lib import (
     recvfrom_async,
-    run_cone_side,
+    run_non_sym_side,
     run_symmetric_side,
 )
 
@@ -71,7 +71,7 @@ class TestRandomProbeLocal(AsyncTestCase):
         # probe-port range, but the cone needs to bind it.
         cone_known_port = 49213
 
-        cone_task = asyncio.ensure_future(run_cone_side(
+        cone_task = asyncio.ensure_future(run_non_sym_side(
             bind_ip=self.cone_ip,
             known_port=cone_known_port,
             peer_ext_ip=self.sym_ip,
@@ -108,7 +108,7 @@ class TestRandomProbeLocal(AsyncTestCase):
                 sym_res, "symmetric side received no probe from cone side",
             )
 
-            self.assertEqual(cone_res["role"], "cone")
+            self.assertEqual(cone_res["role"], "non_sym")
             self.assertEqual(sym_res["role"], "sym")
 
             # The cone side saw the symmetric peer at *some* (ip, port)
@@ -121,18 +121,58 @@ class TestRandomProbeLocal(AsyncTestCase):
             # being endpoint-independent.
             self.assertEqual(sym_res["peer"], (self.cone_ip, cone_known_port))
 
-            # Note: in real (cone, sym) traversal the symmetric NAT
-            # translates outbound source ports, and the cone's reply
-            # to the perceived peer port routes back to the winning
-            # socket via that mapping.  In this no-NAT local test the
-            # cone's perceived peer port is just the sym socket's
-            # local bind port, which is usually NOT the winning
-            # socket (the winning socket is determined by which sym
-            # bind port the cone happened to fire at).  Asserting a
-            # bidirectional payload round-trip would therefore test
-            # something different from what the algorithm guarantees
-            # on a real wire.  The convergence assertions above are
-            # sufficient: both sides produce a valid 4-tuple.
+            # The CONFIRM-based handshake guarantees both sides
+            # agree on the same 4-tuple: the cone only replies to
+            # an aligned (src in dst-set) inbound, the sym only
+            # locks on the cone's CONFIRM probe.  That means
+            # cone_peer == sym_sock.getsockname() and
+            # sym_peer == cone_sock.getsockname() -- so a real
+            # bidirectional payload exchange should work even in
+            # this no-NAT local model.
+            cone_sock = cone_res["sock"]
+            sym_sock = sym_res["sock"]
+
+            self.assertEqual(
+                cone_res["peer"], sym_sock.getsockname(),
+                "cone's perceived peer must equal sym winner's bind addr",
+            )
+            self.assertEqual(
+                sym_res["peer"], cone_sock.getsockname(),
+                "sym's perceived peer must equal cone winner's bind addr",
+            )
+
+            async def poll_recv(sock, want_payload, timeout=3):
+                """Poll for a non-probe payload on *sock*.
+
+                Drain any residual probe datagrams (kernel might
+                still have late-arriving cone probes queued at
+                this sock) and return the first datagram that
+                matches *want_payload*.
+                """
+                deadline = asyncio.get_event_loop().time() + timeout
+                while True:
+                    try:
+                        data, addr = sock.recvfrom(2048)
+                    except BlockingIOError:
+                        if asyncio.get_event_loop().time() > deadline:
+                            return None, None
+                        await asyncio.sleep(0.02)
+                        continue
+                    if data == want_payload:
+                        return data, addr
+
+            payload = b"hello-from-cone"
+            cone_sock.sendto(payload, cone_res["peer"])
+            data, addr = await poll_recv(sym_sock, payload)
+            self.assertEqual(data, payload, "sym never received payload from cone")
+            self.assertEqual(addr, sym_res["peer"])
+
+            # Reverse direction.
+            payload_b = b"hello-from-sym"
+            sym_sock.sendto(payload_b, sym_res["peer"])
+            data, addr = await poll_recv(cone_sock, payload_b)
+            self.assertEqual(data, payload_b, "cone never received payload from sym")
+            self.assertEqual(addr, cone_res["peer"])
         finally:
             try:
                 cone_res["sock"].close()

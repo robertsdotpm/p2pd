@@ -3,7 +3,10 @@ Random-probe UDP machinery (Tailscale-style symmetric NAT traversal).
 
 Two halves:
 
-  run_cone_side(...)  -- the endpoint-independent ("full cone") peer.
+  run_non_sym_side(...)  -- the non-symmetric peer.  Could be open
+                         internet, full cone, restricted, or
+                         port-restricted -- anything where outbound
+                         port mapping is predictable per source.
                          Opens *one* UDP socket bound to a known
                          local port; fires N probes at random
                          destination ports on the symmetric peer's
@@ -40,6 +43,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .random_probe_defs import (
     DEFAULT_PROBE_COUNT,
+    PROBE_IDX_CONFIRM,
     PROBE_LEN,
     PROBE_LISTEN_TIMEOUT,
     PROBE_MAGIC,
@@ -187,7 +191,7 @@ async def recvfrom_async(loop: Any, sock: socket.socket, bufsize: int = 2048) ->
 # ─────────────────────────────────────────────────────────────────
 
 
-async def run_cone_side(
+async def run_non_sym_side(
     bind_ip: str,
     known_port: int,
     peer_ext_ip: str,
@@ -199,7 +203,7 @@ async def run_cone_side(
     """
     Run the cone-side half of the random-probe rendezvous.
 
-    Returns {"sock": socket, "peer": (ip, port), "role": "cone"} on
+    Returns {"sock": socket, "peer": (ip, port), "role": "non_sym"} on
     a successful collision, or None on timeout.
 
     The caller is responsible for closing the returned socket when
@@ -213,6 +217,7 @@ async def run_cone_side(
     # end either has a matching mapping installed by now (the timing
     # barrier handled that) or it doesn't.
     ports = random_probe_ports(probe_count, rng=rng)
+    expected_src_ports = set(ports)
     for idx, dst_port in enumerate(ports):
         try:
             sock.sendto(
@@ -224,6 +229,13 @@ async def run_cone_side(
             # keep going.  One bad probe doesn't fail the round.
             continue
 
+    # Listen for the first inbound probe whose *source port* is one
+    # we also fired at.  In real (cone, sym) NAT, that's the case
+    # where the symmetric NAT will translate our reply on this
+    # 4-tuple back to the same local sym socket -- the only useful
+    # collisions.  Inbound from sym ext ports outside our dst set
+    # represents non-aligned mappings the cone can't reliably
+    # route a reply through, so we skip them.
     deadline = loop.time() + listen_timeout
     while True:
         remaining = deadline - loop.time()
@@ -245,15 +257,24 @@ async def run_cone_side(
         parsed = decode_probe(data, nonce)
         if parsed is None:
             continue
-        # Found a peer probe.  Reply on the same 4-tuple so the
-        # symmetric side's receiving socket sees us back.  The reply
-        # is just another probe with our role flipped on so the
-        # peer can sanity-check it.
+        if peer[1] not in expected_src_ports:
+            # Symmetric peer's NAT mapped this flow to an ext port
+            # outside our dst set -- replying here probably won't
+            # land anywhere useful.  Keep listening for an aligned
+            # one.
+            continue
+        # Aligned 4-tuple.  Send the CONFIRM probe so the symmetric
+        # side's watcher locks onto *this* socket pair, not whichever
+        # of its sockets happened to receive a regular cone probe
+        # first.
         try:
-            sock.sendto(encode_probe(nonce, ROLE_CONE, 0xFFFF), peer)
+            sock.sendto(
+                encode_probe(nonce, ROLE_CONE, PROBE_IDX_CONFIRM),
+                peer,
+            )
         except OSError:
             pass
-        return {"sock": sock, "peer": peer, "role": "cone"}
+        return {"sock": sock, "peer": peer, "role": "non_sym"}
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -328,6 +349,15 @@ async def run_symmetric_side(
             parsed = decode_probe(data, nonce)
             if parsed is None:
                 continue
+            # Lock only on the cone's CONFIRM (idx=PROBE_IDX_CONFIRM).
+            # The cone's regular probes also arrive at sym sockets
+            # whose bind port matches a cone destination, but the
+            # cone may not be replying to *this* sock -- it picks
+            # whichever aligned source port arrived first and
+            # CONFIRMs there.  Waiting for the CONFIRM specifically
+            # is what guarantees both sides agree on the same pair.
+            if parsed["idx"] != PROBE_IDX_CONFIRM:
+                continue
             return {"sock": sock, "peer": peer, "role": "sym"}
 
     tasks = [asyncio.ensure_future(watch(s)) for s in socks]
@@ -357,11 +387,13 @@ async def run_symmetric_side(
         close_all(socks)
         return None
 
-    # Reply to the cone on the same 4-tuple so it sees an inbound
-    # too (symmetric here, in case the cone reply was lost).
+    # Reply on the same 4-tuple so the cone sees an inbound too
+    # (it already received an earlier probe from us, but a fresh
+    # one over the now-locked 4-tuple confirms the channel is
+    # fully bidirectional from sym -> cone).
     try:
         winner["sock"].sendto(
-            encode_probe(nonce, ROLE_SYM, 0xFFFF),
+            encode_probe(nonce, ROLE_SYM, PROBE_IDX_CONFIRM),
             winner["peer"],
         )
     except OSError:

@@ -43,11 +43,12 @@ delta_txt = {
 }
 
 method_txt = {
-    "d": "direct_connect",
-    "r": "reverse_connect",
-    "p": "punch",
-    "t": "relay",
-    "a": "auto_connect",
+    "0": "direct_connect",
+    "1": "reverse_connect",
+    "2": "punch",
+    "3": "relay",
+    "4": "random_probe",
+    "5": "auto_connect",
 }
 
 PROGRAM_BANNER = """Universal reachability demo

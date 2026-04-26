@@ -356,7 +356,10 @@ class RandomProbeMsg(ProtoMsg):
     advertises only its external IP -- its outbound port mappings are
     random per-flow and have to be discovered via the probe collision.
 
-    role: "cone" or "sym"
+    role: "sym" if my own NAT is symmetric, "non_sym" otherwise
+          (covers open internet, full cone, restricted, port-
+          restricted -- the algorithm only really cares whether
+          my outbound port is predictable per flow).
     """
 
     class Payload:
@@ -393,7 +396,7 @@ class RandomProbeMsg(ProtoMsg):
         def from_dict(d: Dict[str, Any]) -> "RandomProbeMsg.Payload":
             """Deserialise a dict into a RandomProbeMsg.Payload."""
             return RandomProbeMsg.Payload(
-                d.get("role", "cone"),
+                d.get("role", "non_sym"),
                 d.get("punch_time", 0),
                 d.get("magic", ""),
                 d.get("ext_ip", ""),

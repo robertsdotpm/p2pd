@@ -30,3 +30,12 @@ PROBE_LISTEN_TIMEOUT = 8
 # Roles.  Encoded as a single byte in the probe datagram.
 ROLE_CONE = b"\x01"
 ROLE_SYM = b"\x02"
+
+# Special probe index used as a "CONFIRM": after the cone receives
+# a probe whose source port is in its own destination set (i.e. an
+# aligned 4-tuple where the symmetric NAT will route a reply back),
+# it sends one final probe with idx=PROBE_IDX_CONFIRM on that
+# 4-tuple.  The symmetric side's watcher only locks onto this
+# CONFIRM, which is what guarantees both sides agree on the
+# winning socket pair without needing to compare extra metadata.
+PROBE_IDX_CONFIRM = 0xFFFF

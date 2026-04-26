@@ -24,6 +24,7 @@ from aionetiface import (
     rand_b,
     to_b,
     to_s,
+    sock_to_pipe
 )
 from aionetiface.nic.nat.nat_defs import SYMMETRIC_NAT
 
@@ -33,40 +34,37 @@ from ..punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 
 from .random_probe_defs import DEFAULT_PROBE_COUNT, PROBE_LISTEN_TIMEOUT
 from .random_probe_lib import (
-    run_cone_side,
+    run_non_sym_side,
     run_symmetric_side,
     wait_until,
 )
 
 
 def is_symmetric_nat(nat_info: Dict[str, Any]) -> bool:
-    """True when *nat_info* describes a symmetric NAT."""
+    """
+    True iff *nat_info* describes a symmetric NAT.
+
+    The random-probe algorithm only cares about this single bit:
+    is the peer's external port predictable per outbound flow?
+    Symmetric NATs randomise it (the case the algorithm is
+    designed to fix); everything else -- open internet (no NAT),
+    full cone, restricted, port-restricted -- preserves enough
+    structure that the peer can play the "fixed-port" role and
+    publish a single (ip, port) the symmetric peer can aim at.
+
+    A missing / empty nat_info is treated as non-symmetric: when
+    the classifier didn't run (or hasn't finished), assume the
+    permissive case so the algorithm gets to try.
+
+    All non-symmetric callers in the plugin use ``not is_symmetric_nat()``
+    directly; we don't expose a positively-worded counterpart
+    because every potential name ("is_cone_nat",
+    "is_predictable_nat") would be misleading -- the set is
+    "everything except symmetric", not any specific NAT shape.
+    """
     if not nat_info:
         return False
     return nat_info.get("type") == SYMMETRIC_NAT
-
-
-def is_cone_nat(nat_info: Dict[str, Any]) -> bool:
-    """
-    True when *nat_info* describes anything *but* a symmetric NAT.
-
-    The random-probe algorithm only fundamentally cares whether
-    the peer's external port is predictable per outbound flow.
-    Symmetric NATs randomise it (the case the algorithm is
-    designed to fix); everything else -- open internet, full cone,
-    restricted, port-restricted -- preserves enough structure that
-    the peer can play the "cone" role.  For port-restricted NATs
-    the cone's pre-firing of 256 destination ports also primes
-    the inbound filter so the symmetric's reply gets through.
-
-    A None / empty nat_info is treated as cone-ish too: when the
-    NAT classifier didn't run (or hasn't finished), assume the
-    permissive case and let the wire decide.  is_symmetric_nat()
-    is the strict check; this is the loose complement.
-    """
-    if not nat_info:
-        return True
-    return nat_info.get("type") != SYMMETRIC_NAT
 
 
 class RandomProbePlugin(TraversalPlugin):
@@ -90,18 +88,29 @@ class RandomProbePlugin(TraversalPlugin):
         my_nat = self.src_info.get("nat") or {}
         peer_nat = self.dest_info.get("nat") or {}
 
-        if is_cone_nat(my_nat) and is_symmetric_nat(peer_nat):
-            my_role = "cone"
-        elif is_symmetric_nat(my_nat) and is_cone_nat(peer_nat):
-            my_role = "sym"
-        else:
+        my_is_sym = is_symmetric_nat(my_nat)
+        peer_is_sym = is_symmetric_nat(peer_nat)
+        if my_is_sym == peer_is_sym:
+            # Both symmetric (algorithm can't help; needs a relay)
+            # OR both non-symmetric (regular punch / direct should
+            # have worked first).  Either way random_probe isn't
+            # the right tool for this pair.
             log(
-                "RandomProbePlugin: pair is not (cone, sym) "
-                "(my={0}, peer={1}); aborting".format(
+                "RandomProbePlugin: pair both-{0}-symmetric "
+                "(my={1}, peer={2}); aborting".format(
+                    "" if my_is_sym else "non-",
                     my_nat.get("type"), peer_nat.get("type"),
                 )
             )
             return
+
+        # Role assignment is purely "am I the symmetric one or not".
+        # We use "sym" / "non_sym" rather than "sym" / "cone"
+        # because the non-symmetric set is "everything else" --
+        # open internet (no NAT), full cone, restricted, and
+        # port-restricted -- not just full cone.  Calling it
+        # "cone" was technically wrong for those NAT shapes.
+        my_role = "sym" if my_is_sym else "non_sym"
 
         if reply is None:
             # Initiator: pick a session nonce + rendezvous time and
@@ -166,9 +175,9 @@ class RandomProbePlugin(TraversalPlugin):
             return
         bind_ip = str(route.nic())
 
-        if my_role == "cone":
+        if my_role == "non_sym":
             our_known_port = self.our_known_port()
-            res = await run_cone_side(
+            res = await run_non_sym_side(
                 bind_ip=bind_ip,
                 known_port=our_known_port,
                 peer_ext_ip=peer_ext_ip,
@@ -186,8 +195,33 @@ class RandomProbePlugin(TraversalPlugin):
                 listen_timeout=PROBE_LISTEN_TIMEOUT,
             )
 
+        if res is None:
+            log("RandomProbePlugin: round did not converge; aborting")
+            if not self.result.done():
+                self.result.set_result(None)
+            return
+
+        # Connect the winning UDP socket to its peer so sock_to_pipe
+        # can read the peer tuple via getpeername() and wire up the
+        # pipe correctly.  UDP connect() just sets the default dest
+        # and filters inbound to that source -- it doesn't change
+        # any NAT mapping that's already in place.
+        try:
+            res["sock"].connect(res["peer"])
+        except OSError:
+            log("RandomProbePlugin: UDP connect() to peer failed")
+            if not self.result.done():
+                self.result.set_result(None)
+            return
+
         if not self.result.done():
-            self.result.set_result(res)
+            try:
+                pipe = await sock_to_pipe(res["sock"], self.nic)
+            except (LookupError, OSError, ValueError):
+                log("RandomProbePlugin: sock_to_pipe failed")
+                self.result.set_result(None)
+                return
+            self.result.set_result(pipe)
 
     # ── helpers ─────────────────────────────────────────────────
 

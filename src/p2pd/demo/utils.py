@@ -262,12 +262,17 @@ async def choose_connection_methods(con_method: Optional[str]) -> str:
     Select a connection method segment.
     """
     cout()
-    cout("Connection methods (in order):")
-    cout("TCP: (d)irect, (r)everse, (p)unch; UDP: (t)urn; (a)uto.")
+    cout("Connection methods:")
+    cout("  0) direct        (TCP)")
+    cout("  1) reverse       (TCP)")
+    cout("  2) punch         (TCP, predictable NAT)")
+    cout("  3) turn relay    (UDP)")
+    cout("  4) random probe  (UDP, symmetric NAT)")
+    cout("  5) auto          (try each in order)")
     cout("Type menu to return.")
     while True:
-        # If pressing enter then use the default list of methods in order.
-        con_method = con_method or (await ainput("Enter for default (d): "))
+        # If pressing enter then use the default first method.
+        con_method = con_method or (await ainput("Enter for default (0): "))
         if not con_method:
             return "direct_connect"
 
