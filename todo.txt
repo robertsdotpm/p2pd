@@ -176,5 +176,3 @@ otherwise they will just build up.
    - 1 second update is that bad? lets add a comment somewhere
     - going to have to edit schema on remote and local 
 
-
-- temp ipv6s constantly change and get loaded into the peer addr -- pub key might be based on that = constantly new node id we need to fix this
