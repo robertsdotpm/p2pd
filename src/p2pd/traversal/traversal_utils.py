@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 from aionetiface import (
     IP4, IP6,
-    NIC_BIND, EXT_BIND, NIC_FAIL, EXT_FAIL,
+    NIC_BIND, EXT_BIND, LOOPBACK_BIND,
     to_s, to_b, to_h, h_to_b, rand_plain,
     fstr, log, log_p2p, log_exception,
     async_wrap_errors, decrypt, encrypt,
@@ -51,48 +51,39 @@ def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info:
     same_if_on_host = same_pc and same_if
 
     # There may be multiple compatible addresses per info.
+    # Caller controls priority via the order of addr_types.
     for addr_type in addr_types:
-        # Prefer using remote addresses.
+        # Per-node 127.X.Y.Z (or ::1) loopback alias. Only meaningful
+        # for same-machine peers and only when both sides have a
+        # loopback IP attached (set by enrich_addr_map_with_loopback).
+        if addr_type == LOOPBACK_BIND:
+            if not same_pc:
+                continue
+            lo = dest_info.get("loopback")
+            if lo is None:
+                continue
+            return lo
+
+        # Public WAN address. Skip when both nodes share the same
+        # external address (same NAT / same machine with the same
+        # global IP) -- the connection would loop back through the
+        # router or fail. When ext IPs differ (different ISPs etc.)
+        # it's the natural cross-machine path.
         if addr_type == EXT_BIND:
-            # Skip when both nodes share the same external address (same NAT /
-            # same machine with the same global IP) — the connection would loop
-            # back through the router or fail.  When ext IPs differ (e.g. two
-            # nodes on the same machine with different global IPv6 addresses),
-            # EXT_BIND is valid and we try it.
             if src_info["ext"] == dest_info["ext"]:
                 continue
-
-            # Different reachable address.
             return dest_info["ext"]
 
-        # Prefer using local addresses.
+        # Local NIC address. Different NICs on the same machine but
+        # different L3 subnets won't generally interact (kernel
+        # doesn't auto-loopback cross-subnet on Windows; LOOPBACK_BIND
+        # covers that case). Same-NIC same-port works via the kernel's
+        # local-route shortcut on every supported OS.
         if addr_type == NIC_BIND:
-            # When reaching a server it's bound to a specific
-            # interface and you choose that NIC to reach it.
-            # But TCP punching has no defined server. However,
-            # if they're not on the same NIC, on the same host,
-            # different NICs can't interact (maybe unless
-            # they're bridged.) Keep this edge-case here.
             if not has_set_bind:
                 pass
-
-            # Only if LAN or same machine.
             if not (same_pc or same_lan):
                 continue
-
-            # Same-machine peers: prefer the per-node 127.X.Y.Z loopback
-            # alias over the NIC IP. The kernel always loopback-shortcuts
-            # 127.0.0.0/8 reliably, while a cross-subnet src->NIC TCP
-            # connect on the same host can be silently dropped on Windows
-            # (no in-kernel route between two NICs in different subnets).
-            # The loopback IP is added by enrich_addr_map_with_loopback at
-            # parse time and the peer binds it in listen_on_ifs.
-            if same_pc:
-                lo = dest_info.get("loopback")
-                if lo is not None:
-                    return lo
-
-            # Otherwise the NIC IP is fine to use.
             return dest_info["nic"]
 
     # No compatible addresses.
@@ -155,15 +146,6 @@ strat: str,
                 if reply.routing.dest_index != if_index:
                     return
 
-            # Support testing addr type failures.
-            # This is for test harnesses.
-            if addr_type in [NIC_FAIL, EXT_FAIL]:
-                use_addr_type = addr_type - 2
-                do_fail = True
-            else:
-                use_addr_type = addr_type
-                do_fail = False
-
             # Determine the best destination IP to use
             # for the connectivity technique based on
             # addressing and relationships between the
@@ -173,7 +155,7 @@ strat: str,
                 pp.same_machine,
                 src_info,
                 dest_info,
-                [use_addr_type],
+                [addr_type],
                 has_set_bind,
             )
 
@@ -246,10 +228,6 @@ strat: str,
                 vk = to_h(pp.node.vk.to_string("compressed"))
                 pp.node.sig_msg_queue.put_nowait([msg, vk, 0])
 
-            # Support testing failures for an addr type.
-            if do_fail:
-                result = None
-
             # Success result from function.
             if result is not None:
                 return result
@@ -263,7 +241,7 @@ strat: str,
                     src_info,
                     dest_info,
                     interface,
-                    use_addr_type,
+                    addr_type,
                     reply,
                 )
 
@@ -357,6 +335,13 @@ def get_if_infos_order(af: Any, route_type: Any, src_map: Dict[Any, Any], dest_m
     # For local addresses you want to do the opposite.
     # So you're on the same LAN or NIC if on the same machine.
     if route_type == NIC_BIND:
+        pair_order = overlap + unique
+
+    # LOOPBACK_BIND is a same-machine path (both sides have a
+    # loopback alias attached). Same priority as NIC_BIND --
+    # overlap first since same-machine pairs typically share the
+    # ext too.
+    if route_type == LOOPBACK_BIND:
         pair_order = overlap + unique
 
     return pair_order

@@ -2,11 +2,17 @@
 from typing import Any, Callable, Dict, Optional
 import asyncio
 from .traversal_utils import select_dest_ipr
-from aionetiface import to_s, rand_plain, log
+from aionetiface import to_s, rand_plain, log, NIC_BIND, EXT_BIND, LOOPBACK_BIND
 
 
 class TraversalPlugin:
     """Abstract base class for P2P connection traversal strategy plugins."""
+
+    # Route types this plugin will accept combos for. auto_combos /
+    # auto_combo_batches consult this to skip combos a plugin would
+    # just no-op on. Default: every route_type is fair game; plugins
+    # override the tuple to opt out of specific paths.
+    SUPPORTED_ROUTE_TYPES = (NIC_BIND, LOOPBACK_BIND, EXT_BIND)
 
     def __init__(self) -> None:
         self.result = asyncio.Future()

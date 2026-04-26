@@ -1,7 +1,7 @@
 """Traversal plugin for TCP/UDP hole punching."""
 from typing import Any, Dict, Optional, Tuple
 import asyncio
-from aionetiface import log, NIC_BIND, SysClock, async_wrap_errors, cancel_task, shutdown_proc_pool
+from aionetiface import log, NIC_BIND, EXT_BIND, SysClock, async_wrap_errors, cancel_task, shutdown_proc_pool
 from ....protocol.proto_msg import PunchMsg
 from .boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 from .punch_client import PunchClient
@@ -16,25 +16,14 @@ from ....node.node_utils import get_pp_executors
 class PunchPlugin(TraversalPlugin):
     """Traversal plugin implementing TCP hole-punching via coordinated port prediction."""
 
-    def set_context(self, route_type: Any, same_machine: bool, set_bind: bool, timeout: int) -> None:
-        """Override the base set_context to keep punch off the loopback path.
-
-        The base class (via select_dest_ipr) substitutes the
-        per-node 127.X.Y.Z loopback alias for dest when same_pc=True
-        -- great for direct_connect / reverse_connect, wrong for
-        punch. Punch's predict_alloc / rendezvous machinery assumes
-        a NAT in the path; routing it through loopback produces no
-        useful work and historically wedged the proc-pool worker.
-
-        Strip the loopback field off dest_info before delegating so
-        select_dest_ipr falls through to dest_info["nic"]. Pair
-        selection upstream already used the loopback to relax
-        pair_distinct's same-NIC check, so the pair is still valid
-        -- we're only changing what dest_ip select_dest_ipr returns.
-        """
-        if self.dest_info is not None:
-            self.dest_info.pop("loopback", None)
-        return super().set_context(route_type, same_machine, set_bind, timeout)
+    # Punch is a NAT-traversal mechanism. NIC_BIND covers the same-LAN
+    # case (kernel handles local routing for same-subnet peers); EXT_BIND
+    # covers the cross-WAN case via predicted NAT mappings. LOOPBACK_BIND
+    # has no NAT in the path and the predict_alloc / rendezvous machinery
+    # produces no useful work over loopback, so we opt out of it
+    # declaratively here -- auto_combos won't generate punch+LOOPBACK_BIND
+    # combos for us.
+    SUPPORTED_ROUTE_TYPES = (NIC_BIND, EXT_BIND)
 
     async def run(self, reply: Optional[Any] = None) -> None:
         """Coordinate the hole-punch exchange and launch the background punching process."""

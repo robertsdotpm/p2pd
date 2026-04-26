@@ -2,7 +2,7 @@
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 import asyncio
 from aionetiface import (
-    IP4, IP6, NIC_BIND, EXT_BIND,
+    IP4, IP6, NIC_BIND, EXT_BIND, LOOPBACK_BIND,
     fstr, log, log_exception, parse_node_addr,
 )
 from .node_connect import resolve_pnp_addr
@@ -23,24 +23,21 @@ def af_compatible(src_map: Dict[str, Any], dest_map: Dict[str, Any], af: Any) ->
 
 
 def pair_distinct(route_type: Any, src_info: Dict[str, Any], dest_info: Dict[str, Any]) -> bool:
-    """Per-pair validity: NIC_BIND wants different NIC IPs, EXT_BIND different ext IPs.
+    """Per-pair validity by route_type.
 
-    NIC_BIND with matching NIC IPs would mean two nodes claim the same local
-    address; the bind/connect will collide. EXT_BIND with matching ext IPs
-    means both nodes are behind the same WAN address — connecting to that
-    external address loops back to the local stack.
-
-    Same-machine exception: when both infos carry a "loopback" field (set
-    by enrich_addr_map_with_loopback when machine_id matches), the
-    NIC_BIND combo can always succeed via the per-node 127.X.Y.Z alias
-    or one of the fallback candidates -- even when the NIC IPs collide
-    (e.g. two same-machine peers on the same NIC). Treat such pairs as
-    distinct so the loopback path gets a chance.
+    NIC_BIND      different NIC IPs (otherwise bind/connect collide)
+    LOOPBACK_BIND both sides advertise a loopback alias (different by
+                  construction since alias is per-pubkey)
+    EXT_BIND      different external IPs (otherwise connect loops
+                  through the router back to the local stack)
     """
     if route_type == NIC_BIND:
-        if src_info.get("loopback") is not None and dest_info.get("loopback") is not None:
-            return True
         return int(src_info["nic"]) != int(dest_info["nic"])
+    if route_type == LOOPBACK_BIND:
+        return (
+            src_info.get("loopback") is not None
+            and dest_info.get("loopback") is not None
+        )
     if route_type == EXT_BIND:
         return int(src_info["ext"]) != int(dest_info["ext"])
     return True
@@ -171,22 +168,49 @@ def auto_combos(
       - both nodes have addresses for the AF
       - the (src_info, dest_info) pair survives pair_distinct for the route_type
 
-    NIC_BIND combos come before EXT_BIND combos (local paths tried first).
-    Within each route_type, get_if_infos_order's priority is preserved.
+    Route-type priority: NIC_BIND -> LOOPBACK_BIND -> EXT_BIND.
+    LOOPBACK_BIND combos are only generated for same-machine peers
+    (pair_distinct requires both sides advertise a loopback alias,
+    which only enrich_addr_map_with_loopback populates when same
+    machine_id). Plugins can opt out via SUPPORTED_ROUTE_TYPES on
+    the loader/class -- punch and turn don't drive the loopback
+    fast-path so they don't get LOOPBACK_BIND combos.
 
     Kept for direct callers / unit tests; auto_connect itself uses the
     batched generator below.
     """
-    names = [n for n in node.traversal.plugin_loaders if n not in SKIP_IN_AUTO]
+    loaders = node.traversal.plugin_loaders
+    names = [n for n in loaders if n not in SKIP_IN_AUTO]
     combos = []
     for af in (IP4, IP6):
         if not af_compatible(src_map, dest_map, af):
             continue
-        for route_type in (NIC_BIND, EXT_BIND):
+        for route_type in (NIC_BIND, LOOPBACK_BIND, EXT_BIND):
             for src_info, dest_info in viable_pairs_for_arc(af, route_type, src_map, dest_map):
                 for name in names:
+                    if not _plugin_supports_route_type(loaders.get(name), route_type):
+                        continue
                     combos.append((name, af, route_type, src_info, dest_info))
     return combos
+
+
+def _plugin_supports_route_type(loader: Any, route_type: Any) -> bool:
+    """True if the plugin loader's class accepts this route_type.
+
+    Reads ``SUPPORTED_ROUTE_TYPES`` off the loader's plugin class
+    (default: every route_type allowed). Used by auto_combos to
+    skip combos a plugin would just no-op on -- e.g. PunchPlugin
+    declines LOOPBACK_BIND, TURNPlugin declines NIC_BIND/LOOPBACK_BIND.
+    """
+    if loader is None:
+        return True
+    cls = loader.get("class") if isinstance(loader, dict) else None
+    if cls is None:
+        return True
+    supported = getattr(cls, "SUPPORTED_ROUTE_TYPES", None)
+    if supported is None:
+        return True
+    return route_type in supported
 
 
 def auto_combo_batches(
@@ -211,11 +235,13 @@ def auto_combo_batches(
     if not names:
         return
 
+    loaders = node.traversal.plugin_loaders
+
     pairs_by_arc = {}
     for af in (IP4, IP6):
         if not af_compatible(src_map, dest_map, af):
             continue
-        for route_type in (NIC_BIND, EXT_BIND):
+        for route_type in (NIC_BIND, LOOPBACK_BIND, EXT_BIND):
             viable = viable_pairs_for_arc(af, route_type, src_map, dest_map)
             if viable:
                 pairs_by_arc[(af, route_type)] = viable
@@ -226,11 +252,14 @@ def auto_combo_batches(
     max_avail = max(len(v) for v in pairs_by_arc.values())
     rounds = min(max_rounds, max_avail)
 
-    # Walk arcs in NIC_BIND-before-EXT_BIND order so each batch keeps the
-    # local-paths-first ordering inside it.
+    # Route-type priority within each batch: NIC_BIND first (literal
+    # local addresses, fastest when the kernel can route them),
+    # LOOPBACK_BIND second (same-machine fast-path for cross-subnet
+    # cases the kernel won't shortcut), EXT_BIND last (public WAN,
+    # always last because it round-trips outside the host).
     arc_order = []
     for af in (IP4, IP6):
-        for route_type in (NIC_BIND, EXT_BIND):
+        for route_type in (NIC_BIND, LOOPBACK_BIND, EXT_BIND):
             if (af, route_type) in pairs_by_arc:
                 arc_order.append((af, route_type))
 
@@ -242,6 +271,8 @@ def auto_combo_batches(
                 continue
             src_info, dest_info = viable[k]
             for name in names:
+                if not _plugin_supports_route_type(loaders.get(name), route_type):
+                    continue
                 batch.append((name, af, route_type, src_info, dest_info))
         if batch:
             yield batch

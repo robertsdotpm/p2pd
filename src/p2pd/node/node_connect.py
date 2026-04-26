@@ -3,7 +3,7 @@ from typing import Any, Optional, Tuple
 import asyncio
 from aionetiface import (
     sort_ips_by_nic, route_pool_from_ips, fstr, log, parse_node_addr,
-    IP4, IP6, NIC_BIND, EXT_BIND,
+    IP4, IP6, NIC_BIND, EXT_BIND, LOOPBACK_BIND,
 )
 from .node_utils import enrich_addr_map_with_loopback
 from ..traversal.traversal_address import get_updated_addr_from_mqtt, pnp_name_has_tld
@@ -64,11 +64,10 @@ def select_first_viable_pair(
     (src_info, dest_info) pair whose addresses are distinct enough to be
     useful for the given route_type.
 
-    NIC_BIND wants different NIC IPs (matching local IPs would collide on
-    the same machine). EXT_BIND wants different external IPs (matching ext
-    IPs would loop back through the WAN to the local stack). For other
-    route_types or `None`, the first pair in priority order is returned
-    without further filtering.
+    NIC_BIND      different NIC IPs
+    LOOPBACK_BIND both sides advertise a loopback alias
+    EXT_BIND      different external IPs
+    Other / None  first pair in priority order, no filter
     """
     # Local import keeps node_connect free of a hard import on the
     # traversal package at module load time.
@@ -77,6 +76,9 @@ def select_first_viable_pair(
     for src_info, dest_info in get_if_infos_order(af, route_type, src_map, dest_map):
         if route_type == NIC_BIND:
             if int(src_info["nic"]) == int(dest_info["nic"]):
+                continue
+        elif route_type == LOOPBACK_BIND:
+            if src_info.get("loopback") is None or dest_info.get("loopback") is None:
                 continue
         elif route_type == EXT_BIND:
             if int(src_info["ext"]) == int(dest_info["ext"]):
@@ -147,20 +149,6 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
             )
         )
     src_info, dest_info = pair
-
-    # User-driven entry point: stay literal to what the caller asked
-    # for. select_dest_ipr substitutes the same-machine 127.X.Y.Z
-    # loopback alias when same_pc=True and dest_info["loopback"] is
-    # set; great for auto_connect's "fastest path", wrong for the
-    # interactive demo where the user explicitly picked NIC_BIND
-    # because they want the peer's literal NIC IP. Pop the loopback
-    # field on the chosen dest_info so the substitution falls through
-    # to dest_info["nic"]. pair_distinct already used the loopback
-    # for the same-machine same-NIC relax during pair_selection, so
-    # the pair is already valid -- we're only changing what
-    # select_dest_ipr picks at attempt time.
-    dest_info = dict(dest_info)
-    dest_info.pop("loopback", None)
 
     return await node.traversal.attempt_plugin(
         src_map=src_map,

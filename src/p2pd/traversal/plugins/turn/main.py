@@ -1,7 +1,7 @@
 """Traversal plugin that relays connections through a TURN server."""
 from typing import Any, Optional
 import asyncio
-from aionetiface import NIC_BIND, UDP, get_infra, fstr, log_p2p
+from aionetiface import EXT_BIND, UDP, get_infra, fstr, log_p2p
 from ...traversal_plugin import TraversalPlugin
 from ....protocol.proto_msg import TURNMsg
 from .turn_utils import get_first_working_turn_client, rendezvous_rank
@@ -9,6 +9,12 @@ from .turn_utils import get_first_working_turn_client, rendezvous_rank
 
 class TURNPlugin(TraversalPlugin):
     """Traversal plugin that establishes a P2P connection via a TURN relay server."""
+
+    # TURN is a public-relay mechanism only; only EXT_BIND combos make
+    # sense. auto_combos won't generate NIC_BIND / LOOPBACK_BIND combos
+    # for us. The historical "if route_type == NIC_BIND: return"
+    # guard at the top of run() is no longer needed.
+    SUPPORTED_ROUTE_TYPES = (EXT_BIND,)
 
     def __init__(self) -> None:
         super().__init__()
@@ -22,9 +28,6 @@ class TURNPlugin(TraversalPlugin):
 
     async def run(self, reply: Optional[Any] = None) -> None:
         """Allocate a TURN relay, exchange addresses with the peer, and establish the channel."""
-        # TURN relay requires a public relay server; skip for direct NIC binds.
-        if self.route_type == NIC_BIND:
-            return
 
         # --- Allocate a TURN relay for this session ---
         # Both peers independently derive the same server ranking from the shared
