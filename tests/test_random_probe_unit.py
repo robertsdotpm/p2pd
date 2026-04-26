@@ -128,7 +128,12 @@ class TestRandomProbePorts(unittest.TestCase):
 
 
 class TestRoleDecision(unittest.TestCase):
-    """is_cone_nat / is_symmetric_nat classify NAT info dicts correctly."""
+    """is_cone_nat / is_symmetric_nat classify NAT info dicts correctly.
+
+    The plugin's role-decision is intentionally loose: anything
+    that isn't symmetric plays the "cone" role.  Symmetric is the
+    only special case the algorithm is designed to traverse.
+    """
 
     def test_full_cone_is_cone(self):
         self.assertTrue(is_cone_nat({"type": FULL_CONE}))
@@ -136,12 +141,22 @@ class TestRoleDecision(unittest.TestCase):
     def test_open_internet_is_cone(self):
         self.assertTrue(is_cone_nat({"type": OPEN_INTERNET}))
 
+    def test_restrict_is_cone(self):
+        self.assertTrue(is_cone_nat({"type": RESTRICT_NAT}))
+
+    def test_restrict_port_is_cone(self):
+        self.assertTrue(is_cone_nat({"type": RESTRICT_PORT_NAT}))
+
     def test_symmetric_is_not_cone(self):
         self.assertFalse(is_cone_nat({"type": SYMMETRIC_NAT}))
 
-    def test_restrict_is_not_cone(self):
-        self.assertFalse(is_cone_nat({"type": RESTRICT_NAT}))
-        self.assertFalse(is_cone_nat({"type": RESTRICT_PORT_NAT}))
+    def test_empty_dict_is_cone(self):
+        # No NAT info -> assume cone.  Lets the algorithm run on
+        # boxes where the classifier hasn't finished or skipped.
+        self.assertTrue(is_cone_nat({}))
+
+    def test_none_is_cone(self):
+        self.assertTrue(is_cone_nat(None))
 
     def test_symmetric_is_symmetric(self):
         self.assertTrue(is_symmetric_nat({"type": SYMMETRIC_NAT}))
@@ -149,12 +164,14 @@ class TestRoleDecision(unittest.TestCase):
     def test_full_cone_is_not_symmetric(self):
         self.assertFalse(is_symmetric_nat({"type": FULL_CONE}))
 
-    def test_empty_dict(self):
-        self.assertFalse(is_cone_nat({}))
+    def test_restrict_is_not_symmetric(self):
+        self.assertFalse(is_symmetric_nat({"type": RESTRICT_NAT}))
+        self.assertFalse(is_symmetric_nat({"type": RESTRICT_PORT_NAT}))
+
+    def test_empty_dict_is_not_symmetric(self):
         self.assertFalse(is_symmetric_nat({}))
 
-    def test_none(self):
-        self.assertFalse(is_cone_nat(None))
+    def test_none_is_not_symmetric(self):
         self.assertFalse(is_symmetric_nat(None))
 
 

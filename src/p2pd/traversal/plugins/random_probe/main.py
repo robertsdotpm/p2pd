@@ -25,7 +25,7 @@ from aionetiface import (
     to_b,
     to_s,
 )
-from aionetiface.nic.nat.nat_defs import FULL_CONE, OPEN_INTERNET, SYMMETRIC_NAT
+from aionetiface.nic.nat.nat_defs import SYMMETRIC_NAT
 
 from ....protocol.proto_msg import RandomProbeMsg
 from ...traversal_plugin import TraversalPlugin
@@ -39,23 +39,34 @@ from .random_probe_lib import (
 )
 
 
-# Cone-side NAT types: endpoint-independent mapping.  The peer can
-# guess the external (ip, port) without help.
-CONE_NATS = (OPEN_INTERNET, FULL_CONE)
-
-
-def is_cone_nat(nat_info: Dict[str, Any]) -> bool:
-    """True when *nat_info* describes an endpoint-independent NAT."""
-    if not nat_info:
-        return False
-    return nat_info.get("type") in CONE_NATS
-
-
 def is_symmetric_nat(nat_info: Dict[str, Any]) -> bool:
     """True when *nat_info* describes a symmetric NAT."""
     if not nat_info:
         return False
     return nat_info.get("type") == SYMMETRIC_NAT
+
+
+def is_cone_nat(nat_info: Dict[str, Any]) -> bool:
+    """
+    True when *nat_info* describes anything *but* a symmetric NAT.
+
+    The random-probe algorithm only fundamentally cares whether
+    the peer's external port is predictable per outbound flow.
+    Symmetric NATs randomise it (the case the algorithm is
+    designed to fix); everything else -- open internet, full cone,
+    restricted, port-restricted -- preserves enough structure that
+    the peer can play the "cone" role.  For port-restricted NATs
+    the cone's pre-firing of 256 destination ports also primes
+    the inbound filter so the symmetric's reply gets through.
+
+    A None / empty nat_info is treated as cone-ish too: when the
+    NAT classifier didn't run (or hasn't finished), assume the
+    permissive case and let the wire decide.  is_symmetric_nat()
+    is the strict check; this is the loose complement.
+    """
+    if not nat_info:
+        return True
+    return nat_info.get("type") != SYMMETRIC_NAT
 
 
 class RandomProbePlugin(TraversalPlugin):
