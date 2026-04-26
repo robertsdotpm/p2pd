@@ -328,6 +328,35 @@ class RandomProbePlugin(TraversalPlugin):
                 self.result.set_result(None)
             return
 
+        # Verify wire-up: which sock, which dest_tup will pipe.send
+        # default to, and is anyone receiving inbound on this pipe.
+        try:
+            stream_dest = pipe.pipe_events.stream.dest_tup
+        except AttributeError:
+            stream_dest = "<not set>"
+        print("[RP-WIRE] role={0} my_addr={1} sock={2} stream.dest_tup={3} "
+              "res_peer={4}".format(
+                  my_role,
+                  res["sock"].getsockname(),
+                  res["sock"].fileno(),
+                  stream_dest,
+                  res["peer"],
+              ))
+
+        # Debug: print every inbound datagram that lands on this
+        # pipe so we can see whether the responder's pipe is
+        # actually dispatching after sock_to_pipe wrap.  Stays in
+        # for now so real-NAT echo runs are diagnosable; can drop
+        # later once the path is reliable.
+        async def debug_inbound(msg, client_tup, p):
+            print("[RP-INBOUND] role={0} from={1} {2}b: {3!r}".format(
+                my_role, client_tup, len(msg), msg[:48]))
+
+        try:
+            pipe.add_msg_cb(debug_inbound)
+        except (AttributeError, TypeError):
+            pass
+
         log("RandomProbePlugin: returning pipe role={0} sock={1!r} peer={2}".format(
             my_role, res["sock"], res["peer"]))
         if not self.result.done():
