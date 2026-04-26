@@ -10,7 +10,7 @@ on assertion errors; that masked real bugs and is gone now.
 import asyncio
 import unittest
 
-from aionetiface import IP4, parse_node_addr  # noqa: F401  IP4 used in print()s
+from aionetiface import IP4, SYMMETRIC_NAT, parse_node_addr  # noqa: F401  IP4 used in print()s
 from aionetiface.testing import AsyncTestCase
 from p2pd.node.auto_connect import auto_connect, auto_combos
 
@@ -19,6 +19,25 @@ from auto_connect_helpers import (
     PUNCH_TEST_CONF,
     close_nodes, load_two_nodes, start_node_with_ifs,
 )
+
+
+def has_symmetric_nat(node) -> bool:
+    """True iff any IP4 if_info on the node is classified as symmetric / hard NAT.
+
+    The current punch algorithm cannot predict per-destination port
+    mappings under symmetric NAT, so when either side has one the test
+    can't expect punch to win. A separate symmetric-aware plugin is
+    planned; until then, skip the assertion when this is the env.
+    """
+    for af in (IP4,):
+        af_dict = node.addr_map.get(af) or {}
+        for info in af_dict.values():
+            nat = info.get("nat") or {}
+            if nat.get("type") == SYMMETRIC_NAT:
+                return True
+            if nat.get("is_hard"):
+                return True
+    return False
 
 
 class TestAutoConnectPunch(AsyncTestCase):
@@ -56,6 +75,20 @@ class TestAutoConnectPunch(AsyncTestCase):
         print("[PUNCH-TEST] node_b addr_map IP4={0} listen_ips={1}".format(
             self.node_b.addr_map.get(IP4), self.node_b.listen_ips,
         ))
+
+        # Skip when either side reports symmetric / hard NAT. The current
+        # punch algorithm relies on predictable per-destination port
+        # allocation; symmetric NAT defeats that. TURN ends up winning
+        # in that env, which is the right behaviour but not what this
+        # test asserts on.
+        if has_symmetric_nat(self.node_a) or has_symmetric_nat(self.node_b):
+            self.skipTest(
+                "punch can't traverse symmetric NAT; "
+                "node_a sym={0} node_b sym={1}".format(
+                    has_symmetric_nat(self.node_a),
+                    has_symmetric_nat(self.node_b),
+                )
+            )
 
         self.assertIn(
             "punch", self.node_a.traversal.plugin_loaders,
