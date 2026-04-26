@@ -233,7 +233,7 @@ def routable_ips_per_nic(ifs, af):
     return result
 
 
-def first_routable_ip(nic, af):
+def pick_listen_ip(nic, af):
     """Return the first non-loopback `af` IP on nic, or None."""
     if af not in nic.supported():
         return None
@@ -252,67 +252,33 @@ def first_routable_ip(nic, af):
     return None
 
 
-def split_two_node_setups(probe_ifs, af):
-    """Each node gets its own real interface from load_interfaces().
+async def load_two_nodes(test_self, af, label="connectivity"):
+    """Load real interfaces and return (nic_a, ip_a, nic_b, ip_b).
 
-    First two NICs that actually carry a routable `af` IP -> alice, bob.
-    No cloning, no loopback aliases -- just hand each node a real NIC.
-    apply_listen_ips finds the IP because the NIC really owns it.
-
-    Falls back to "single NIC with two distinct IPs" only when only one
-    NIC has any `af` IP (covers single-NIC + IPv6-with-link-local-and-global
-    scenarios). If a machine has interfaces but none of them have a routable
-    `af` IP, returns None and the caller skips / fails.
-
-    Returns ((ifs_a, ip_a), (ifs_b, ip_b)) or None.
+    Strictly: probe_ifs[0] -> alice, probe_ifs[1] -> bob. No filtering,
+    no reordering. If the machine has fewer than 2 interfaces, or the
+    first two interfaces don't both carry an `af` IP, fail (multi-iface
+    machine but bad fixture state) or skipTest (single-iface machine).
     """
-    # Filter probe_ifs to only NICs that have at least one routable `af` IP,
-    # then take the first two. Skipping interfaces that lack the AF (e.g.
-    # an unconfigured second NIC, or an IPv6-only adapter when we want IPv4)
-    # is what makes the strict path actually tractable on real hardware.
-    per_nic = routable_ips_per_nic(probe_ifs, af)
+    if_names = await list_interfaces()
+    probe_ifs = await load_interfaces(
+        if_names, Interface, min_agree=1, max_agree=2, timeout=4,
+    )
 
-    if len(per_nic) >= 2:
-        nic_a, ips_a = per_nic[0]
-        nic_b, ips_b = per_nic[1]
-        return (([nic_a], ips_a[0]), ([nic_b], ips_b[0]))
-
-    if len(per_nic) == 1:
-        nic, ips = per_nic[0]
-        if len(ips) >= 2:
-            return (([nic], ips[0]), ([nic], ips[1]))
-
-    return None
-
-
-def require_split_or_fail(test_self, probe_ifs, af, label="connectivity"):
-    """Return (ifs_a, ip_a, ifs_b, ip_b) or skipTest / fail.
-
-    Strict: if 2+ NICs in the requested AF (or one NIC with 2+ AF IPs)
-    are present, the connectivity test MUST run. None in that case is
-    treated as a real fixture bug (the test should fail, not skip
-    silently). Skip cleanly when the machine truly lacks the interfaces
-    a connectivity test needs.
-
-    The strictness gate counts NICs that *carry* the AF, not all
-    interfaces -- a machine with 2 NICs where one is unconfigured /
-    AF-less would otherwise fail tests it cannot meaningfully run.
-    """
-    per_nic = routable_ips_per_nic(probe_ifs, af)
-    total_ips = sum(len(ips) for _, ips in per_nic)
-    setups = split_two_node_setups(probe_ifs, af)
-    if setups is None:
-        if total_ips >= 2:
-            test_self.fail(
-                "Test environment has {0} routable {1} IPs across {2} NICs "
-                "but split_two_node_setups produced no viable setup for {3}".format(
-                    total_ips, af, len(per_nic), label,
-                )
-            )
+    if len(probe_ifs) < 2:
         test_self.skipTest(
-            "Need 2 routable {0} IPs (have {1} on {2} NICs of {3} total) for {4}".format(
-                af, total_ips, len(per_nic), len(probe_ifs), label,
+            "Need >=2 interfaces (have {0}) for {1}".format(len(probe_ifs), label)
+        )
+
+    ip_a = pick_listen_ip(probe_ifs[0], af)
+    ip_b = pick_listen_ip(probe_ifs[1], af)
+    if not ip_a or not ip_b:
+        test_self.fail(
+            "Multi-interface machine ({0} NICs) but probe_ifs[0/1] don't both "
+            "carry a routable {1} IP (a={2!r} b={3!r}) for {4}".format(
+                len(probe_ifs), af, ip_a, ip_b, label,
             )
         )
-    (ifs_a, ip_a), (ifs_b, ip_b) = setups
-    return ifs_a, ip_a, ifs_b, ip_b
+    # Wrap each NIC in a list so callers can pass directly to
+    # start_node_with_ifs(ifs=[...], ...).
+    return [probe_ifs[0]], ip_a, [probe_ifs[1]], ip_b

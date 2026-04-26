@@ -17,7 +17,7 @@ from p2pd.node.auto_connect import auto_connect, auto_combos
 from auto_connect_helpers import (
     PORT_PUNCH_A_T1, PORT_PUNCH_B_T1, PORT_PUNCH_A_T2, PORT_PUNCH_B_T2,
     PUNCH_TEST_CONF,
-    close_nodes, fresh_ifs, require_split_or_fail, start_node_with_ifs,
+    close_nodes, load_two_nodes, start_node_with_ifs,
 )
 
 
@@ -29,9 +29,8 @@ class TestAutoConnectPunch(AsyncTestCase):
     async_test_timeout = 120
 
     async def asyncSetUp(self):
-        probe_ifs = await fresh_ifs()
-        self.ifs_a, self.ip_a, self.ifs_b, self.ip_b = require_split_or_fail(
-            self, probe_ifs, IP4, label="punch",
+        self.ifs_a, self.ip_a, self.ifs_b, self.ip_b = await load_two_nodes(
+            self, IP4, label="punch",
         )
         print("[PUNCH-TEST] setup ip_a={0} ip_b={1} ifs_a={2} ifs_b={3}".format(
             self.ip_a, self.ip_b,

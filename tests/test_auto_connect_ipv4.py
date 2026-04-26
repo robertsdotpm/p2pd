@@ -16,7 +16,7 @@ from p2pd.node.auto_connect import auto_connect, auto_combos
 
 from auto_connect_helpers import (
     PORT_A_T1, PORT_B_T1, PORT_A_T2, PORT_B_T2, PORT_A_T3, PORT_B_T3,
-    close_nodes, fresh_ifs, require_split_or_fail, start_node_with_ifs,
+    close_nodes, load_two_nodes, start_node_with_ifs,
 )
 
 
@@ -37,9 +37,8 @@ class TestAutoConnectIPv4(AsyncTestCase):
     """auto_connect over IPv4 NIC_BIND between two nodes on the same host."""
 
     async def asyncSetUp(self):
-        probe_ifs = await fresh_ifs()
-        self.ifs_a, self.ip_a, self.ifs_b, self.ip_b = require_split_or_fail(
-            self, probe_ifs, IP4, label="auto_connect IPv4",
+        self.ifs_a, self.ip_a, self.ifs_b, self.ip_b = await load_two_nodes(
+            self, IP4, label="auto_connect IPv4",
         )
         print("[IPV4-TEST] setup ip_a={0} ip_b={1} ifs_a={2} ifs_b={3}".format(
             self.ip_a, self.ip_b,
