@@ -252,18 +252,6 @@ class DirectConnect(TraversalPlugin):
 
 PLUGIN_CLASS = DirectConnect
 
-# Default plugin timeout (10s) is too tight for slower stacks (Windows XP
-# loopback + dual-NIC under heavy plugin-race traffic). The total budget
-# spans:
-#   * non-loopback connect attempt(s) at 2.5s each
-#   * loopback candidate walk (up to ~3 candidates x 4s if the slow
-#     candidate has to time out before 127.0.0.1 / ::1 succeeds)
-#   * the post-connect await send_signal_msg(ConIdMsg) MQTT round-trip,
-#     which on busy signal channels has been observed at 5-10s on XP
-# 25s gives comfortable headroom on slow stacks while still well under
-# the auto_connect outer timeout (default 60s).
-PLUGIN_CONF = {"timeout": 25}
-
 # direct_connect owns two signal types:
 #   * core ConMsg (initiator-side connection request, plugin-independent
 #     so registered centrally by build_core_sig_proto)
