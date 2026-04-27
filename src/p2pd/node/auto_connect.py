@@ -453,6 +453,47 @@ def batch_timeout(node: Any, batch: List[Any]) -> float:
     return 25.0
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Concurrent-socket budget (Windows in particular)
+#
+# Worst-case socket footprint during a single auto_connect run, while every
+# plugin is racing in parallel:
+#
+#   direct_connect   ~24 TCP   (up to 6 plugins x 3-4 loopback candidates)
+#   reverse_connect    0       (initiator only awaits a future)
+#   random_probe    ~256 UDP   per AF, in symmetric-NAT 256-pack mode
+#   udp_punch        ~4-8 UDP  per AF (recv_mappings x prediction window)
+#   tcp_punch       ~6-12 TCP  per AF (NAT-prediction binds + connects)
+#   turn             1-3 UDP   only on fallback
+#
+# Peak ~400-600 sockets in flight for a few seconds, dominated by
+# random_probe's 256-pack against a symmetric peer.
+#
+# Headroom on common Windows budgets:
+#   * Win7+ WinSock per-process default: ~16K sockets -- comfortable
+#   * Ephemeral port range default: 49152-65535 (~16K) -- comfortable
+#   * XP / Vista per-process: closer to 1K-2K, varies by SKU/registry --
+#     a single auto_connect fits, but back-to-back runs can chew the
+#     ephemeral pool because TIME_WAIT defaults to 4 minutes
+#
+# Most likely real-world failure mode is NOT WSAEMFILE (10024, "too many
+# open files"); it's WSAEADDRINUSE (10048) from TIME_WAIT exhausting the
+# ephemeral pool when a script loops auto_connect 20+ times in a row on
+# XP. Fix is `reuse_addr=True` (NODE_TEST_CONF already does this; prod
+# NODE_CONF deliberately doesn't, so a double-started node fails fast).
+#
+# Tightening levers we deliberately have NOT pulled yet, since the matrix
+# hasn't surfaced FD pressure:
+#   - random_probe pack 256 -> 128 (still effective on most symmetric NATs)
+#   - global socket-allocation semaphore at the traversal manager
+#   - SO_REUSEADDR on probe/punch sockets in production
+#   - audit close_plugin() to ensure synchronous socket close, not GC-deferred
+#
+# Worth revisiting if a real-world demo or stress test starts hitting
+# WSAEMFILE / WSAEADDRINUSE on the slower VMs.
+# ──────────────────────────────────────────────────────────────────────────────
+
+
 async def auto_connect(
     node: Any,
     dest_addr: Any,
