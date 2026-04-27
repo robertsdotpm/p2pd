@@ -57,14 +57,45 @@ def handle_con_id(manager: Any, msg: Any) -> None:
     plugin_id = msg.meta.pipe_id
     src_tup = (msg.payload.src_ip, int(msg.payload.src_port))
 
+    print("[CON-ID-RX] handle_con_id plugin_id={0!r} src_tup={1!r}".format(
+        plugin_id, src_tup,
+    ))
+    print("[CON-ID-RX]   inbound_pipes_by_tup keys: {0!r}".format(
+        list(manager.inbound_pipes_by_tup.keys()),
+    ))
+    print("[CON-ID-RX]   inbound_pipes (futures by plugin_id) keys: {0!r}".format(
+        list(manager.inbound_pipes.keys()),
+    ))
+    print("[CON-ID-RX]   pending_con_id_by_tup keys: {0!r}".format(
+        list(manager.pending_con_id_by_tup.keys()),
+    ))
+
     pipe = manager.inbound_pipes_by_tup.pop(src_tup, None)
     if pipe is None:
+        print(
+            "[CON-ID-RX]   no pipe yet at src_tup={0!r} -- registering "
+            "pending claim under plugin_id={1!r}".format(src_tup, plugin_id)
+        )
         manager.pending_con_id_by_tup[src_tup] = plugin_id
         return
 
+    print("[CON-ID-RX]   matched pipe={0!r} for plugin_id={1!r}".format(
+        pipe, plugin_id,
+    ))
     fut = manager.inbound_pipes.get(plugin_id)
     if fut is None:
+        print(
+            "[CON-ID-RX]   NO future registered under plugin_id={0!r} -- "
+            "reverse_connect plugin probably timed out before this signal "
+            "arrived; dropping pipe match".format(plugin_id)
+        )
         return
     if fut.done():
+        print(
+            "[CON-ID-RX]   future for plugin_id={0!r} already done(); "
+            "skipping set_result".format(plugin_id)
+        )
         return
     fut.set_result(pipe)
+    print("[CON-ID-RX]   resolved future for plugin_id={0!r} -- "
+          "reverse_connect should now wake up".format(plugin_id))

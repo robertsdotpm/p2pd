@@ -73,7 +73,11 @@ class Node(Daemon):
         the plugin_id the reverse_connect plugin is awaiting on -- without
         needing an in-band first-message handshake on every inbound.
         """
+        print("[NODE-UP-CB] up_cb fired pipe={0!r} client_tup={1!r}".format(
+            pipe, _client_tup,
+        ))
         if self.traversal is None:
+            print("[NODE-UP-CB]   self.traversal is None -- skipping")
             return
         self.traversal.register_inbound_pipe(pipe)
 

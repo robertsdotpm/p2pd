@@ -267,6 +267,9 @@ class TraversalManager:
     # Use signal router to send a message to the destination.
     async def send_signal_msg(self, msg: Any, plugin: TraversalPlugin, relay_no: int = 2) -> None:
         """Encrypt and deliver a signalling message to the peer via the MQTT router."""
+        print("[SIG-TX] send_signal_msg plugin_id={0!r} wire_name={1!r}".format(
+            plugin.plugin_id, getattr(msg, "wire_name", "?"),
+        ))
         try:
             # Specify the plugin to use in the destination.
             msg.meta = ProtoMsg.Meta.from_dict(
@@ -295,18 +298,37 @@ class TraversalManager:
 
             # Convert to bytes and send via MQTT.
             buf = to_s(sig_msg_to_buf(msg, h_to_b(plugin.dest_map["pub_key_hex"])))
+            print("[SIG-TX]   buf len={0} ttl={1} pipe_id={2!r} dest_pub={3}...".format(
+                len(buf), msg.meta.ttl, plugin.plugin_id,
+                plugin.dest_map["pub_key_hex"][:12],
+            ))
+            print("[SIG-TX]   awaiting plugin.sig_pipe.send(...)")
             await plugin.sig_pipe.send(buf)
-        except (OSError, ConnectionError, asyncio.TimeoutError):
+            print("[SIG-TX]   plugin.sig_pipe.send returned (sent OK)")
+        except (OSError, ConnectionError, asyncio.TimeoutError) as exc:
+            print("[SIG-TX]   send_signal_msg raised: {0!r}".format(exc))
             log_exception()
 
     # Receive a signal message from the router and pass it to a plugin.
     # Called by the MQTT client as: handler(msg, src_pk, queue_id, client)
     async def recv_signal_msg(self, msg: Any, src_pk_hex: str, pipe_id_hex: str, client: Any) -> None:
         """Decrypt an incoming signal message and dispatch it to the matching or new plugin."""
+        print("[SIG-RX] recv_signal_msg src_pk_hex={0}... pipe_id_hex={1}...".format(
+            (src_pk_hex or "?")[:12], (pipe_id_hex or "?")[:12],
+        ))
         msg = try_unpack_msg(to_b(msg), self.kp.private_key, self.sig_proto)
+        print("[SIG-RX]   unpacked: type={0} wire_name={1!r} pipe_id={2!r} ttl={3}".format(
+            type(msg).__name__,
+            getattr(msg, "wire_name", "?"),
+            getattr(msg.meta, "pipe_id", "?"),
+            getattr(msg.meta, "ttl", "?"),
+        ))
 
         # Message has expired.
         if int(self.router.get_time()) >= msg.meta.ttl:
+            print("[SIG-RX]   EXPIRED ttl={0} now={1}; dropping".format(
+                msg.meta.ttl, int(self.router.get_time()),
+            ))
             raise ValueError("Discarding expired msg.")
 
         # Update routing destination with our current address.
@@ -320,10 +342,19 @@ class TraversalManager:
         # example: the initiator already opened the TCP from src_tup
         # and this signal ties the accepted pipe to the plugin_id the
         # reverse_connect plugin is awaiting on.
-        handler = self.proto_handlers.get(msg.wire_name)
+        wire_name = getattr(msg, "wire_name", None)
+        handler = self.proto_handlers.get(wire_name)
+        print("[SIG-RX]   proto_handlers keys={0!r}".format(
+            list(self.proto_handlers.keys()),
+        ))
         if handler is not None:
+            print("[SIG-RX]   dispatching to PROTO_HANDLER for {0!r}".format(wire_name))
             handler(self, msg)
+            print("[SIG-RX]   PROTO_HANDLER returned for {0!r}".format(wire_name))
             return
+        print("[SIG-RX]   no PROTO_HANDLER for {0!r}; plugin-creation fallthrough".format(
+            wire_name,
+        ))
 
         # If plugin exists check sender is authorized to reach plugin.
         if msg.meta.pipe_id in self.plugins:
@@ -365,20 +396,34 @@ class TraversalManager:
     def register_inbound_pipe(self, pipe: Any) -> None:
         """Bind a fresh inbound pipe to its source tuple for ConIdMsg-based rendezvous."""
         client_tup = getattr(pipe, "client_tup", None)
+        print("[UP-CB] register_inbound_pipe pipe={0!r} client_tup={1!r}".format(
+            pipe, client_tup,
+        ))
         if client_tup is None:
+            print("[UP-CB]   client_tup is None -- skipping registration")
             return
         # Normalise IPv6 (ip, port, flowinfo, scope_id) to (ip, port) so the
         # match key is the same shape the initiator's payload sends.
         tup = (client_tup[0], int(client_tup[1]))
+        print("[UP-CB]   normalised tup={0!r}".format(tup))
+        print("[UP-CB]   pending_con_id_by_tup has keys={0!r}".format(
+            list(self.pending_con_id_by_tup.keys()),
+        ))
 
         plugin_id = self.pending_con_id_by_tup.pop(tup, None)
         if plugin_id is not None:
+            print("[UP-CB]   matched pending claim plugin_id={0!r}".format(plugin_id))
             fut = self.inbound_pipes.get(plugin_id)
             if fut is not None and not fut.done():
+                print("[UP-CB]   resolving inbound_pipes[{0!r}] with pipe".format(plugin_id))
                 fut.set_result(pipe)
                 return
+            else:
+                print("[UP-CB]   future for plugin_id={0!r} missing or done -- "
+                      "registering pipe under tup".format(plugin_id))
 
         self.inbound_pipes_by_tup[tup] = pipe
+        print("[UP-CB]   stored pipe in inbound_pipes_by_tup[{0!r}]".format(tup))
 
     async def close(self) -> None:
         """Cancel all pending plugins and background tasks, releasing their resources."""

@@ -133,23 +133,55 @@ class DirectConnect(TraversalPlugin):
         # blob -- node_protocol no longer parses any per-plugin framing.
         try:
             local_tup = pipe.sock.getsockname()
-        except (OSError, AttributeError):
+        except (OSError, AttributeError) as exc:
+            print("[CON-ID-DBG] {0} getsockname failed: {1!r}".format(
+                self.plugin_id, exc,
+            ))
             local_tup = ("", 0)
+        try:
+            peer_tup = pipe.sock.getpeername()
+        except (OSError, AttributeError):
+            peer_tup = ("?", 0)
+        # Belt-and-braces print: every single step from "we have a TCP
+        # pipe" through "we set the plugin result" gets a log line so
+        # matrix runs that fail to rendezvous show us EXACTLY which
+        # step didn't fire. Verbose by design.
+        print("[CON-ID-DBG] {0} pipe.sock.getsockname()={1!r} getpeername()={2!r}".format(
+            self.plugin_id, local_tup, peer_tup,
+        ))
         con_id_msg = ConIdMsg({
             "payload": {
                 "src_ip": str(local_tup[0]) if local_tup else "",
                 "src_port": int(local_tup[1]) if local_tup else 0,
             },
         })
+        print("[CON-ID-DBG] {0} ConIdMsg payload src_ip={1!r} src_port={2!r}".format(
+            self.plugin_id, con_id_msg.payload.src_ip, con_id_msg.payload.src_port,
+        ))
         try:
+            print("[CON-ID-DBG] {0} sending SIG_CON_ID via signal pipe...".format(
+                self.plugin_id,
+            ))
             await self.send_signal_msg(con_id_msg)
-        except (OSError, ConnectionError, asyncio.TimeoutError):
+            print("[CON-ID-DBG] {0} send_signal_msg returned cleanly".format(
+                self.plugin_id,
+            ))
+        except (OSError, ConnectionError, asyncio.TimeoutError) as exc:
+            print("[CON-ID-DBG] {0} send_signal_msg raised: {1!r}".format(
+                self.plugin_id, exc,
+            ))
             log_exception()
         log(fstr(
             "direct_connect[{0}]: sent SIG_CON_ID over signal, setting result",
             (self.plugin_id,),
         ))
+        print("[CON-ID-DBG] {0} setting plugin.result with pipe={1!r}".format(
+            self.plugin_id, pipe,
+        ))
         self.result.set_result(pipe)
+        print("[CON-ID-DBG] {0} plugin.result.done()={1}".format(
+            self.plugin_id, self.result.done(),
+        ))
 
     async def try_loopback_candidates(self, candidates: List[Tuple[str, int]]) -> Optional[Any]:
         """Walk the loopback (ip, port) candidate list, returning the first

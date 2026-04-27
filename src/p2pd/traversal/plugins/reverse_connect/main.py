@@ -10,6 +10,9 @@ class ReverseConnectPlugin(TraversalPlugin):
 
     async def run(self, reply: Optional[Any] = None) -> None:
         """Signal the remote peer to connect back to us and await the inbound pipe."""
+        print("[REV-CON] reverse_connect.run plugin_id={0!r} af={1}".format(
+            self.plugin_id, self.af,
+        ))
         log(fstr(
             "reverse_connect[{0}]: af={1} src_info={2} dest_info={3}",
             (self.plugin_id, self.af, self.src_info, self.dest_info),
@@ -17,16 +20,26 @@ class ReverseConnectPlugin(TraversalPlugin):
         msg = ConMsg()
         msg.meta.plugin_name = "direct_connect"
         self.register_inbound()
+        print("[REV-CON]   registered inbound future under plugin_id={0!r}".format(
+            self.plugin_id,
+        ))
         log(fstr(
             "reverse_connect[{0}]: registered inbound, sending signal",
             (self.plugin_id,),
         ))
+        print("[REV-CON]   sending ConMsg signal to peer...")
         await self.send_signal_msg(msg)
+        print("[REV-CON]   ConMsg sent; awaiting inbound future for plugin_id={0!r}".format(
+            self.plugin_id,
+        ))
         log(fstr(
             "reverse_connect[{0}]: signal sent, awaiting inbound",
             (self.plugin_id,),
         ))
         con = await self.wait_for_inbound()
+        print("[REV-CON]   inbound future RESOLVED for plugin_id={0!r} pipe={1!r}".format(
+            self.plugin_id, con,
+        ))
         log(fstr(
             "reverse_connect[{0}]: inbound arrived, setting result",
             (self.plugin_id,),
