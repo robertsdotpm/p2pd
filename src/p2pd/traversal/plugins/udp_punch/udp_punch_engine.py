@@ -28,6 +28,8 @@ import select
 import socket
 import time
 
+from aionetiface import sock_has_data
+
 from ..tcp_punch.tcp_punch_utils import bind_punch_sockets
 from .udp_punch_defs import (
     UDP_PUNCH_FRAME_LEN,
@@ -51,6 +53,7 @@ def fire_probes(
     nonce: bytes,
     spray_duration: float,
     spray_interval: float = SPRAY_INTERVAL,
+    stop_reader: Optional[Any] = None,
 ) -> None:
     """Spray PROBE frames at the destination for spray_duration seconds.
 
@@ -58,10 +61,19 @@ def fire_probes(
     cross-product covers every predicted (src_port, dst_port) tuple
     the NAT could have allocated. spray_interval throttles to avoid
     thundering-herd on the local NAT and the peer's NIC.
+
+    stop_reader is the project-wide stop socket (TraversalPlugin's
+    self.stop_reader / Node.stop_rw[0]). When node_stop fires,
+    sock_has_data flips True and the spray loop bails on the next
+    iteration so the executor thread exits before the asyncio loop
+    closes, killing the 'Event loop is closed' callback noise at
+    teardown.
     """
     frame = build_frame(UDP_PUNCH_KIND_PROBE, nonce)
     end = time.monotonic() + spray_duration
     while time.monotonic() < end:
+        if stop_reader is not None and sock_has_data(stop_reader):
+            return
         for alloc, s in bound_socks:
             try:
                 s.sendto(frame, (dest_ip, alloc.dest_port))
@@ -77,6 +89,7 @@ def watch_for_winner(
     nonce: bytes,
     listen_duration: float,
     retry_interval: float = RETRY_INTERVAL,
+    stop_reader: Optional[Any] = None,
 ) -> Optional[Tuple[Any, Tuple[str, int]]]:
     """Watch every bound socket for inbound; return (winner_sock, peer_addr) or None.
 
@@ -101,6 +114,8 @@ def watch_for_winner(
     end = time.monotonic() + listen_duration
 
     while time.monotonic() < end:
+        if stop_reader is not None and sock_has_data(stop_reader):
+            return None
         timeout = min(retry_interval, end - time.monotonic())
         if timeout < 0:
             break
@@ -204,6 +219,7 @@ def udp_punch_engine(
     nonce: bytes,
     same_machine: bool = False,
     params: Optional[Dict[str, Any]] = None,
+    stop_reader: Optional[Any] = None,
 ) -> Optional[Tuple[Any, Tuple[str, int]]]:
     """Drive a full UDP punch: bind, barrier-sleep, fire, watch, return winner.
 
@@ -232,9 +248,13 @@ def udp_punch_engine(
     # sides spray in the same window.
     f_sleep_until()
 
-    fire_probes(bound_socks, dest_ip, nonce, spray_duration=spray_duration)
+    fire_probes(
+        bound_socks, dest_ip, nonce,
+        spray_duration=spray_duration, stop_reader=stop_reader,
+    )
     winner = watch_for_winner(
-        bound_socks, nonce, listen_duration, retry_interval=retry_interval,
+        bound_socks, nonce, listen_duration,
+        retry_interval=retry_interval, stop_reader=stop_reader,
     )
 
     if winner is None:

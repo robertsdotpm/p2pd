@@ -197,6 +197,12 @@ class UdpPunchPlugin(TraversalPlugin):
             params = puncher.params
             nonce = puncher.udp_nonce
             f_sleep_until = puncher.sleep_until
+            # Carry the project-wide stop socket into the engine so
+            # node_stop fires early-exit on the spray/watch loops --
+            # otherwise the executor thread keeps running past the
+            # asyncio loop close and emits 'Event loop is closed'
+            # callback noise on test teardown.
+            stop_reader = self.stop_reader
 
             def run_sync():
                 return udp_punch_engine(
@@ -209,6 +215,7 @@ class UdpPunchPlugin(TraversalPlugin):
                     nonce=nonce,
                     same_machine=same_machine,
                     params=params,
+                    stop_reader=stop_reader,
                 )
 
             result = await loop.run_in_executor(None, run_sync)
