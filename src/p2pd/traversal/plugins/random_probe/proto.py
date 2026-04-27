@@ -1,13 +1,11 @@
-"""random_probe protocol message + signal enum.
+"""random_probe protocol message.
 
-Plugin-owned so plugin_loader auto-registers via PROTO_MESSAGES.
+Plugin-owned. plugin_loader registers RandomProbeMsg under wire
+name "random_probe.RandomProbeMsg" via PROTO_MESSAGES.
 """
 from typing import Any, Dict
 
 from ....protocol.proto_msg import ProtoMsg
-
-
-SIG_RANDOM_PROBE = 8
 
 
 class RandomProbeMsg(ProtoMsg):
@@ -64,5 +62,5 @@ class RandomProbeMsg(ProtoMsg):
                 d.get("probe_count", 256),
             )
 
-    def __init__(self, data: Dict[str, Any], enum: int = SIG_RANDOM_PROBE) -> None:
-        super().__init__(data, enum)
+    def __init__(self, data: Dict[str, Any]) -> None:
+        super().__init__(data)

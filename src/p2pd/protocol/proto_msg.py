@@ -13,14 +13,7 @@ from aionetiface import (
     to_s, to_b, to_n, i_to_af, fstr, parse_node_addr, log, IP4, EXT_BIND,
     af_from_ip_s, IPRange,
 )
-from .proto_defs import (
-    SIG_CON,
-    SIG_GET_ADDR,
-    SIG_RETURN_ADDR,
-    SIG_DONE,
-    SIG_RETRY,
-    P2P_DIRECT,
-)
+from .proto_defs import P2P_DIRECT
 
 # Backwards compat: a couple of legacy callers still reference these
 # from this module. Defining them here as plain ints means we don't
@@ -197,14 +190,24 @@ class ProtoMsg:
             """Construct an empty Payload; subclasses override to deserialise their fields."""
             return ProtoMsg.Payload()
 
-    def __init__(self, data: Dict[str, Any], enum: int) -> None:
+    # Default WIRE_NAME -- subclasses override with their qualified name
+    # (e.g. "tcp_punch.PunchMsg"). The plugin loader auto-derives the
+    # qualified form from plugin_name + class.__name__ at install time
+    # and patches it onto the class so subclasses don't have to set it
+    # by hand. Core messages bake "core.<ClassName>" in directly.
+    WIRE_NAME = ""  # type: str
+
+    def __init__(self, data: Dict[str, Any], wire_name: Optional[str] = None) -> None:
         self.meta = ProtoMsg.Meta.from_dict(data.get("meta", {}))
 
         self.routing = ProtoMsg.Routing.from_dict(data.get("routing", {}))
 
         self.payload = self.Payload.from_dict(data.get("payload", {}))
 
-        self.enum = enum
+        # Per-instance wire_name lets one-off subclasses (UdpPunchMsg
+        # over PunchMsg with a different name) override; otherwise the
+        # class-level WIRE_NAME is the source of truth.
+        self.wire_name = wire_name or self.WIRE_NAME
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialise the full message (meta, routing, payload) to a JSON-compatible dict."""
@@ -217,8 +220,28 @@ class ProtoMsg:
         return d
 
     def pack(self, sk: Optional[Any] = None) -> bytes:
-        """Serialise this message to bytes with the enum prefix followed by JSON payload."""
-        return bytes([self.enum]) + to_b(json.dumps(self.to_dict()))
+        """Serialise this message to bytes with a length-prefixed wire_name + JSON payload.
+
+        Wire layout (after optional encryption framing handled in
+        sig_msg_to_buf):
+
+            [name_len: 1 byte][wire_name: ASCII bytes][JSON payload]
+
+        The name is the lookup key for sig_proto_map on the receive
+        side -- replacing the old single-byte enum -- so plugins
+        never have to coordinate enum allocation: the qualified
+        plugin.ClassName is naturally unique by Python's own naming.
+        """
+        if not self.wire_name:
+            raise ValueError(
+                "ProtoMsg.pack: wire_name unset -- did the plugin loader run?"
+            )
+        name_bytes = to_b(self.wire_name)
+        if len(name_bytes) > 255:
+            raise ValueError(
+                "wire_name too long ({0} bytes); max 255".format(len(name_bytes))
+            )
+        return bytes([len(name_bytes)]) + name_bytes + to_b(json.dumps(self.to_dict()))
 
     @classmethod
     def unpack(cls, buf: Any) -> "ProtoMsg":
@@ -246,55 +269,73 @@ class ProtoMsg:
             self.meta.same_machine = True
 
 
+# Each core message declares its wire name as a class attribute so the
+# unpacker's class-by-name lookup hits a stable identifier. Plugin
+# messages get their WIRE_NAME patched in by the plugin loader after
+# import, derived from the plugin folder name.
+
+
 class DoneMsg(ProtoMsg):
     """Signals that traversal is complete and no further messages are needed."""
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_DONE) -> None:
-        super().__init__({}, SIG_DONE)
+    WIRE_NAME = "core.DoneMsg"
+
+    def __init__(self, data: Optional[Dict[str, Any]] = None) -> None:
+        super().__init__({})
 
 
 class RetryMsg(ProtoMsg):
     """Requests the peer to retry the traversal exchange."""
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_RETRY) -> None:
-        super().__init__({}, SIG_RETRY)
+    WIRE_NAME = "core.RetryMsg"
+
+    def __init__(self, data: Optional[Dict[str, Any]] = None) -> None:
+        super().__init__({})
 
 
 class ConMsg(ProtoMsg):
     """Initiates a direct connection attempt between two peers."""
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_CON) -> None:
-        super().__init__(data or {}, enum)
+    WIRE_NAME = "core.ConMsg"
+
+    def __init__(self, data: Optional[Dict[str, Any]] = None) -> None:
+        super().__init__(data or {})
 
 
 class GetAddr(ProtoMsg):
     """Requests the current address of the peer node."""
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_GET_ADDR) -> None:
-        super().__init__(data or {}, enum)
+    WIRE_NAME = "core.GetAddr"
+
+    def __init__(self, data: Optional[Dict[str, Any]] = None) -> None:
+        super().__init__(data or {})
 
 
 class ReturnAddr(ProtoMsg):
     """Returns the sender's address in response to a GetAddr request."""
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_RETURN_ADDR) -> None:
-        super().__init__(data or {}, enum)
+    WIRE_NAME = "core.ReturnAddr"
+
+    def __init__(self, data: Optional[Dict[str, Any]] = None) -> None:
+        super().__init__(data or {})
 
 
-def build_core_sig_proto() -> Dict[int, list]:
+def build_core_sig_proto() -> Dict[str, list]:
     """Return a fresh dict of CORE (plugin-independent) signal types.
 
-    Each value is [msg_class, strategy_enum, ttl_seconds] -- same shape
-    plugins use in their PROTO_MESSAGES tuples. The traversal manager
-    seeds self.sig_proto with this and plugin_loader merges
-    PROTO_MESSAGES from each plugin's main.py on top, producing the
-    runtime sig_proto dispatch table.
+    Keys are wire names ("core.ConMsg", etc.) -- the same name the
+    sender writes into the length-prefixed wire framing. Values are
+    [msg_class, strategy_enum, ttl_seconds] same as plugin
+    PROTO_MESSAGES tuples. plugin_loader merges plugin entries
+    (keyed by "<plugin_name>.<MsgClassName>") on top.
 
     Returning a fresh dict per call (not a module-level constant) keeps
     multiple Routers in the same process from sharing mutable state.
     """
     return {
-        SIG_CON: [ConMsg, P2P_DIRECT, 5],
-        SIG_GET_ADDR: [GetAddr, 0, 5],
-        SIG_RETURN_ADDR: [ReturnAddr, 0, 6],
+        ConMsg.WIRE_NAME: [ConMsg, P2P_DIRECT, 5],
+        GetAddr.WIRE_NAME: [GetAddr, 0, 5],
+        ReturnAddr.WIRE_NAME: [ReturnAddr, 0, 6],
+        DoneMsg.WIRE_NAME: [DoneMsg, 0, 5],
+        RetryMsg.WIRE_NAME: [RetryMsg, 0, 5],
     }

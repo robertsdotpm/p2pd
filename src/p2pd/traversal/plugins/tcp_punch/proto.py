@@ -1,26 +1,22 @@
-"""tcp_punch protocol message + signal enum.
+"""tcp_punch protocol message.
 
 Owned by the plugin so the central protocol layer doesn't need to
 import / register tcp_punch-specific types. plugin_loader picks up
-the PROTO_MESSAGES tuple in main.py and merges it into the running
-TraversalManager.sig_proto dict.
+PROTO_MESSAGES from main.py and merges PunchMsg into the running
+TraversalManager.sig_proto under the wire name "tcp_punch.PunchMsg".
 
-Wire enum lives here as the authoritative source -- proto_defs.py
-re-exports a flat allocation table for collision detection at
-load time, but the plugin owns the actual constant.
+No more SIG enum number to coordinate -- the plugin folder name +
+class name uniquely identifies the type on the wire. The plugin
+loader patches WIRE_NAME onto the class at install time.
 """
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from ....protocol.proto_msg import ProtoMsg
 
 
-# tcp_punch claims signal slot 2 historically. Keep the literal here
-# so the plugin folder is self-contained; proto_defs.py re-exports it
-# for the cross-plugin collision check the loader does.
-SIG_TCP_PUNCH = 2
-
-# Punch-mode discriminators. Local to the protocol since they only
-# apply to the punch exchange, but referenced from the engine.
+# Punch-mode discriminators -- application-level, NOT wire-level.
+# Stay here because they only apply to the punch exchange but are
+# referenced from the engine.
 TCP_PUNCH_LAN = 1
 TCP_PUNCH_REMOTE = 2
 TCP_PUNCH_SELF = 3
@@ -60,6 +56,3 @@ class PunchMsg(ProtoMsg):
                 d["mappings"],
                 d.get("nonce", ""),
             )
-
-    def __init__(self, data: Dict[str, Any], enum: int = SIG_TCP_PUNCH) -> None:
-        super().__init__(data, enum)

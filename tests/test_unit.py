@@ -38,13 +38,15 @@ from p2pd.protocol.proto_msg import (
     ReturnAddr,
     ProtoMsg,
     build_core_sig_proto,
-    SIG_CON,
-    SIG_GET_ADDR,
-    SIG_RETURN_ADDR,
 )
-# Plugin-owned message types now live in their plugin folders.
-from p2pd.traversal.plugins.tcp_punch.proto import SIG_TCP_PUNCH, PunchMsg
+# Plugin-owned message types now live in their plugin folders. Wire
+# names are derived at plugin-load time from "<plugin>.<class>" so the
+# class doesn't carry one until plugin_loader patches it -- patch in
+# the test fixture so direct unit tests see what runtime sees.
+from p2pd.traversal.plugins.tcp_punch.proto import PunchMsg
 from p2pd.traversal.plugins.turn.proto import TURNMsg
+PunchMsg.WIRE_NAME = "tcp_punch.PunchMsg"
+TURNMsg.WIRE_NAME = "turn.TURNMsg"
 from p2pd.traversal.traversal_utils import try_unpack_msg, sig_msg_to_buf
 
 
@@ -190,30 +192,37 @@ class TestNicknameNotStarted(AsyncTestCase):
 # ===========================================================================
 class TestProtoMessages(unittest.TestCase):
     def _roundtrip(self, msg_class, enum, data=None):
-        """Pack a message and unpack it; return both."""
+        """Pack a message and unpack it; return both.
+
+        Wire layout post-Cut-3:
+            [name_len: 1 byte][wire_name: ASCII][JSON]
+        The first byte is the length of the wire_name; we strip
+        1 + name_len before handing the JSON to msg_class.unpack.
+        """
         msg = msg_class(data or {})
         buf = msg.pack()
-        # buf = bytes([enum]) + json-body
-        self.assertEqual(buf[0], enum)
-        unpacked = msg_class.unpack(buf[1:])
+        name_len = buf[0]
+        # buf = [name_len][wire_name][json] -- skip the framing prefix
+        # before re-parsing the JSON portion.
+        unpacked = msg_class.unpack(buf[1 + name_len:])
         return msg, unpacked
 
     def test_conmsg_plugin_name_preserved(self):
         msg = ConMsg({"meta": {"plugin_name": "direct_connect"}})
         _, up = self._roundtrip(
-            ConMsg, SIG_CON, {"meta": {"plugin_name": "direct_connect"}}
+            ConMsg, None, {"meta": {"plugin_name": "direct_connect"}}
         )
         self.assertEqual(up.meta.plugin_name, "direct_connect")
 
     def test_getaddr_plugin_name(self):
         _, up = self._roundtrip(
-            GetAddr, SIG_GET_ADDR, {"meta": {"plugin_name": "return_addr"}}
+            GetAddr, None, {"meta": {"plugin_name": "return_addr"}}
         )
         self.assertEqual(up.meta.plugin_name, "return_addr")
 
     def test_returnaddr_plugin_name(self):
         _, up = self._roundtrip(
-            ReturnAddr, SIG_RETURN_ADDR, {"meta": {"plugin_name": "get_addr"}}
+            ReturnAddr, None, {"meta": {"plugin_name": "get_addr"}}
         )
         self.assertEqual(up.meta.plugin_name, "get_addr")
 
@@ -227,21 +236,25 @@ class TestProtoMessages(unittest.TestCase):
         }
         msg = PunchMsg(data)
         buf = msg.pack()
-        up = PunchMsg.unpack(buf[1:])
+        # Strip the [name_len][wire_name] framing before unpacking.
+        name_len = buf[0]
+        up = PunchMsg.unpack(buf[1 + name_len:])
         self.assertEqual(up.payload.punch_mode, 1)
         self.assertEqual(up.payload.ntp, 1234567890.0)
         self.assertEqual(up.payload.mappings, [[10000, 10001]])
 
     def test_sig_proto_contains_expected_types(self):
         # Core sig_proto only carries plugin-independent messages now.
-        # Plugin-owned types (SIG_TCP_PUNCH, SIG_TURN, ...) are merged in
+        # Plugin-owned types (PunchMsg, TURNMsg, ...) are merged in
         # by plugin_loader at runtime via PROTO_MESSAGES.
         core = build_core_sig_proto()
-        self.assertIn(SIG_CON, core)
-        self.assertIn(SIG_GET_ADDR, core)
-        self.assertIn(SIG_RETURN_ADDR, core)
-        for enum, info in core.items():
-            self.assertIsNotNone(info[0], "No class for sig_proto[{}]".format(enum))
+        self.assertIn("core.ConMsg", core)
+        self.assertIn("core.GetAddr", core)
+        self.assertIn("core.ReturnAddr", core)
+        for wire_name, info in core.items():
+            self.assertIsNotNone(
+                info[0], "No class for sig_proto[{}]".format(wire_name),
+            )
 
     def test_sig_msg_to_buf_and_try_unpack_roundtrip(self):
         """Wire sig_msg_to_buf -> try_unpack_msg with a live ConMsg."""

@@ -37,6 +37,9 @@ from p2pd.traversal.plugins.random_probe.random_probe_lib import (
 )
 from p2pd.traversal.plugins.random_probe.main import is_symmetric_nat
 from p2pd.traversal.plugins.random_probe.proto import RandomProbeMsg
+# Plugin loader patches WIRE_NAME at install; unit tests bypass the
+# loader so we set it here so pack() doesn't trip on the unset guard.
+RandomProbeMsg.WIRE_NAME = "random_probe.RandomProbeMsg"
 
 
 class TestProbeWireFormat(unittest.TestCase):
@@ -193,8 +196,10 @@ class TestRandomProbeMsg(unittest.TestCase):
             },
         })
         buf = m.pack()
-        # First byte is the enum; the rest is JSON.
-        m2 = RandomProbeMsg.unpack(buf[1:])
+        # Wire = [name_len: 1][wire_name: ASCII][JSON].
+        # Strip the framing prefix before re-parsing the JSON.
+        name_len = buf[0]
+        m2 = RandomProbeMsg.unpack(buf[1 + name_len:])
         self.assertEqual(m2.payload.role, "sym")
         self.assertEqual(m2.payload.known_port, 0)
         self.assertEqual(m2.payload.probe_count, 320)

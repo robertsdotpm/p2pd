@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional, Tuple
 import asyncio
 from aionetiface import log, NIC_BIND, EXT_BIND, SysClock, async_wrap_errors, cancel_task, shutdown_proc_pool
 from ....protocol.proto_defs import P2P_PUNCH
-from .proto import SIG_TCP_PUNCH, PunchMsg
+from .proto import PunchMsg
 from .boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 from .punch_client import PunchClient
 from .boundary_alloc import boundary_port_alloc
@@ -292,8 +292,10 @@ PLUGIN_CONF = {"timeout": 40}
 # TraversalManager.sig_proto so PunchMsg dispatches without core
 # proto_msg.py edits.
 PROTO_MESSAGES = (
-    # (sig_enum, msg_class, strategy_enum, ttl_seconds)
-    (SIG_TCP_PUNCH, PunchMsg, P2P_PUNCH, 20),
+    # (msg_class, strategy_enum, ttl_seconds)
+    # plugin_loader derives the wire name as "<plugin_name>.<class>"
+    # and patches it onto the class -- no enum allocation needed.
+    (PunchMsg, P2P_PUNCH, 20),
 )
 
 

@@ -1,28 +1,13 @@
-"""direct_connect protocol message + signal enum + pure-rendezvous handler.
+"""direct_connect protocol message + pure-rendezvous handler.
 
-ConIdMsg is a rendezvous notification, not a connection request --
-the initiator's already opened the TCP and uses this signal to tell
-the responder "the pipe at src_tup belongs to plugin_id X".  The
-responder rendezvouses pipe (matched by Node.up_cb in
-TraversalManager.inbound_pipes_by_tup) with the plugin_id and
-resolves the existing inbound_pipes future the reverse_connect
-plugin set up before sending its ConMsg.
-
-Cut-2 of the auto-registration redesign: this used to live as an
-isinstance() branch in TraversalManager.recv_signal_msg.  The
-plugin loader now picks up PROTO_HANDLERS from main.py and merges
-into manager.proto_handlers -- recv_signal_msg looks up by enum
-and calls the handler before falling through to plugin-creation,
-so non-plugin signals (rendezvous, control frames) don't need
-core-protocol changes.
+Plugin-owned. plugin_loader registers ConIdMsg as
+"direct_connect.ConIdMsg" via PROTO_MESSAGES, and handle_con_id as
+the inline handler for that wire name via PROTO_HANDLERS.
 """
 from typing import Any, Dict, Optional
 
 from ....protocol.proto_msg import ProtoMsg
 from aionetiface import to_n, to_s
-
-
-SIG_CON_ID = 9
 
 
 class ConIdMsg(ProtoMsg):
@@ -56,8 +41,8 @@ class ConIdMsg(ProtoMsg):
                 d.get("src_port", 0),
             )
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_CON_ID) -> None:
-        super().__init__(data or {}, enum)
+    def __init__(self, data: Optional[Dict[str, Any]] = None) -> None:
+        super().__init__(data or {})
 
 
 def handle_con_id(manager: Any, msg: Any) -> None:

@@ -32,7 +32,7 @@ from aionetiface import (
 from aionetiface.nic.nat.nat_defs import SYMMETRIC_NAT
 
 from ....protocol.proto_defs import P2P_RANDOM_PROBE
-from .proto import SIG_RANDOM_PROBE, RandomProbeMsg
+from .proto import RandomProbeMsg
 from ...traversal_plugin import TraversalPlugin
 from ..tcp_punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 
@@ -714,7 +714,7 @@ class RandomProbePluginFactory:
 PLUGIN_CONF = {"timeout": 30}
 
 PROTO_MESSAGES = (
-    (SIG_RANDOM_PROBE, RandomProbeMsg, P2P_RANDOM_PROBE, 18),
+    (RandomProbeMsg, P2P_RANDOM_PROBE, 18),
 )
 
 

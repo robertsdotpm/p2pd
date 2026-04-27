@@ -4,7 +4,7 @@ import asyncio
 from aionetiface import EXT_BIND, UDP, get_infra, fstr, log_p2p
 from ...traversal_plugin import TraversalPlugin
 from ....protocol.proto_defs import P2P_RELAY
-from .proto import SIG_TURN, TURNMsg
+from .proto import TURNMsg
 from .turn_utils import get_first_working_turn_client, rendezvous_rank
 
 
@@ -172,7 +172,7 @@ class TURNPluginFactory:
 PLUGIN_CONF = {"timeout": 60}
 
 PROTO_MESSAGES = (
-    (SIG_TURN, TURNMsg, P2P_RELAY, 10),
+    (TURNMsg, P2P_RELAY, 10),
 )
 
 

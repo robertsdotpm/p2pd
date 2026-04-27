@@ -26,7 +26,7 @@ from ..tcp_punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 from ..tcp_punch.nat_predict import NATMapping
 from ..tcp_punch.nat_predict_alloc import NATPredictAlloc
 from ..tcp_punch.punch_client import PunchClient
-from .proto import SIG_UDP_PUNCH, UdpPunchMsg
+from .proto import UdpPunchMsg
 from .udp_punch_defs import UDP_PUNCH_FRAME_LEN, UDP_PUNCH_MAGIC, UDP_PUNCH_NONCE_LEN
 from .udp_punch_engine import drain_punch_residue, udp_punch_engine
 
@@ -331,7 +331,7 @@ class UdpPunchPluginFactory:
 PLUGIN_CONF = {"timeout": 30}
 
 PROTO_MESSAGES = (
-    (SIG_UDP_PUNCH, UdpPunchMsg, P2P_PUNCH, 20),
+    (UdpPunchMsg, P2P_PUNCH, 20),
 )
 
 

@@ -320,7 +320,7 @@ class TraversalManager:
         # example: the initiator already opened the TCP from src_tup
         # and this signal ties the accepted pipe to the plugin_id the
         # reverse_connect plugin is awaiting on.
-        handler = self.proto_handlers.get(msg.enum)
+        handler = self.proto_handlers.get(msg.wire_name)
         if handler is not None:
             handler(self, msg)
             return

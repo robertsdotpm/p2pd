@@ -348,7 +348,17 @@ def get_if_infos_order(af: Any, route_type: Any, src_map: Dict[Any, Any], dest_m
 
 
 def try_unpack_msg(buf: Any, sk: Any, sig_proto_map: Dict[Any, Any]) -> Any:
-    """Decrypt (if needed) and deserialise an incoming signal buffer into a protocol message."""
+    """Decrypt (if needed) and deserialise an incoming signal buffer into a protocol message.
+
+    Wire layout (after stripping the encryption framing):
+
+        [name_len: 1 byte][wire_name: ASCII][JSON payload]
+
+    The wire_name is looked up against sig_proto_map (keys are the
+    same strings plugins register via PROTO_MESSAGES) to find the
+    receiver-side msg_class. Replaces the old single-byte enum so
+    plugins never have to coordinate enum allocation.
+    """
     buf = h_to_b(buf)
 
     # Try to decrypt message if its encrypted.
@@ -366,10 +376,24 @@ def try_unpack_msg(buf: Any, sk: Any, sig_proto_map: Dict[Any, Any]) -> Any:
     if not is_enc:
         buf = buf[1:]
 
-    # Unpack message into fields.
-    msg_info = sig_proto_map[buf[0]]
+    # Read length-prefixed wire_name + look up the class.
+    if len(buf) < 1:
+        raise ValueError("try_unpack_msg: empty payload")
+    name_len = buf[0]
+    if len(buf) < 1 + name_len:
+        raise ValueError(
+            "try_unpack_msg: truncated wire_name (len={0}, buf={1})".format(
+                name_len, len(buf),
+            )
+        )
+    wire_name = bytes(buf[1:1 + name_len]).decode("ascii", errors="replace")
+    msg_info = sig_proto_map.get(wire_name)
+    if msg_info is None:
+        raise ValueError(
+            "try_unpack_msg: unknown wire_name {0!r}".format(wire_name)
+        )
     msg_class = msg_info[0]
-    msg = msg_class.unpack(buf[1:])
+    msg = msg_class.unpack(buf[1 + name_len:])
     return msg
 
 

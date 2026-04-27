@@ -3,15 +3,13 @@ from aionetiface import dict_child, NET_CONF, IP4, IP6, EXT_BIND, NIC_BIND
 
 MQTT_CONF = dict_child({"con_timeout": 4, "recv_timeout": 4}, NET_CONF)
 
-# Core, plugin-independent signal slots. Plugin-owned signals
-# (SIG_TCP_PUNCH, SIG_TURN, SIG_RANDOM_PROBE, SIG_CON_ID, SIG_UDP_PUNCH,
-# ...) live in each plugin's own proto.py and get auto-registered into
-# the runtime sig_proto via plugin_loader's PROTO_MESSAGES merge.
-SIG_CON = 1
-SIG_GET_ADDR = 4
-SIG_RETURN_ADDR = 5
-SIG_DONE = 6
-SIG_RETRY = 7
+# Wire-level message identification is now done by string names
+# ("core.ConMsg", "tcp_punch.PunchMsg", "udp_punch.UdpPunchMsg", ...).
+# Each ProtoMsg subclass carries a WIRE_NAME class attribute and the
+# pack/unpack framing reads/writes a length-prefixed name. Plugins
+# auto-register their messages via PROTO_MESSAGES on plugin load with
+# names derived from "<plugin_name>.<MsgClassName>" -- no integer
+# enum allocation needed.
 P2P_PIPE_CONF = {
     "addr_families": [IP4, IP6],
     "addr_types": [EXT_BIND, NIC_BIND],

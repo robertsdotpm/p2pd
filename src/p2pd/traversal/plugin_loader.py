@@ -15,18 +15,26 @@ PLUGIN_CLASS     (class or factory)     use directly -- for plugins with no
 setup_plugin     (async callable)       async(node) -> factory-or-class, or
                                         None to skip; used when async init is
                                         needed (e.g. process-pool creation)
-PROTO_MESSAGES   (iterable, optional)   tuple/list of (sig_enum, msg_class,
+PROTO_MESSAGES   (iterable, optional)   tuple/list of (msg_class,
                                         strategy_enum, ttl_seconds) entries.
-                                        Loader merges these into
+                                        Loader derives the wire name as
+                                        "<plugin_name>.<class.__name__>",
+                                        patches it onto the class as
+                                        WIRE_NAME, and registers it under
                                         TraversalManager.sig_proto so the
                                         plugin's protocol message dispatches
                                         without core proto_msg.py edits.
-PROTO_HANDLERS   (dict, optional)       sig_enum -> handler(manager, msg).
-                                        For pure-rendezvous signals that have
-                                        no plugin to run (e.g. SIG_CON_ID).
+                                        No SIG enum allocation needed --
+                                        the qualified name is unique by
+                                        Python's own naming.
+PROTO_HANDLERS   (dict, optional)       msg_class -> handler(manager, msg).
+                                        For pure-rendezvous signals with
+                                        no plugin to run (e.g. ConIdMsg).
                                         Manager calls these BEFORE falling
                                         through to plugin-creation in
-                                        recv_signal_msg.
+                                        recv_signal_msg. Loader resolves
+                                        the class to its wire_name at
+                                        install time.
 
 A directory is skipped when its main.py defines neither PLUGIN_CLASS nor
 setup_plugin (e.g. the upnp/ helper module).
@@ -79,31 +87,44 @@ async def load_plugins(node: Any) -> None:
         node.traversal.install_plugin(plugin_name, plugin_conf)
 
         # Auto-register the plugin's protocol messages + rendezvous
-        # handlers into the manager's runtime registries. Collisions
-        # (two plugins claiming the same sig enum) raise loudly --
-        # surfaces typos in plugin proto.py during dev rather than
-        # silently overwriting a valid registration.
+        # handlers into the manager's runtime registries. Wire names
+        # are derived as "<plugin_name>.<MsgClassName>" -- patched onto
+        # the class as WIRE_NAME so instances pick it up at pack() time.
+        # Collisions raise loudly (a typo in plugin proto.py shouldn't
+        # silently overwrite a valid registration).
         proto_messages = getattr(mod, "PROTO_MESSAGES", None) or ()
         for entry in proto_messages:
-            sig_enum, msg_class, strategy_enum, ttl = entry
-            existing = node.traversal.sig_proto.get(sig_enum)
+            msg_class, strategy_enum, ttl = entry
+            wire_name = "{0}.{1}".format(plugin_name, msg_class.__name__)
+            # Patch class attribute so freshly-constructed instances
+            # report the qualified name without explicit args.
+            msg_class.WIRE_NAME = wire_name
+            existing = node.traversal.sig_proto.get(wire_name)
             if existing is not None and existing[0] is not msg_class:
                 raise ValueError(
-                    "PROTO_MESSAGES collision on sig {0}: {1!r} vs {2!r}".format(
-                        sig_enum, existing[0].__name__, msg_class.__name__,
+                    "PROTO_MESSAGES collision on {0}: {1!r} vs {2!r}".format(
+                        wire_name, existing[0].__name__, msg_class.__name__,
                     )
                 )
-            node.traversal.sig_proto[sig_enum] = [msg_class, strategy_enum, ttl]
+            node.traversal.sig_proto[wire_name] = [msg_class, strategy_enum, ttl]
 
         proto_handlers = getattr(mod, "PROTO_HANDLERS", None) or {}
-        for sig_enum, handler in proto_handlers.items():
-            existing = node.traversal.proto_handlers.get(sig_enum)
+        for msg_class, handler in proto_handlers.items():
+            # PROTO_HANDLERS is keyed by class; resolve to wire name
+            # via WIRE_NAME (set above when proto_messages registered
+            # the class). If a plugin lists a handler for a class it
+            # didn't register in PROTO_MESSAGES, fall back to the
+            # qualified-name derivation so the registration still
+            # works -- avoids a chicken-and-egg ordering bug.
+            wire_name = getattr(msg_class, "WIRE_NAME", "") or \
+                "{0}.{1}".format(plugin_name, msg_class.__name__)
+            existing = node.traversal.proto_handlers.get(wire_name)
             if existing is not None and existing is not handler:
                 raise ValueError(
-                    "PROTO_HANDLERS collision on sig {0}: {1!r} vs {2!r}".format(
-                        sig_enum, existing, handler,
+                    "PROTO_HANDLERS collision on {0}: {1!r} vs {2!r}".format(
+                        wire_name, existing, handler,
                     )
                 )
-            node.traversal.proto_handlers[sig_enum] = handler
+            node.traversal.proto_handlers[wire_name] = handler
 
     node.traversal.install_plugin_done_callback(node.on_plugin_done)

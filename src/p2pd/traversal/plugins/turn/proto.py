@@ -1,14 +1,11 @@
-"""turn protocol message + signal enum.
+"""turn protocol message.
 
-Owned by the plugin so plugin_loader can register it via
-PROTO_MESSAGES rather than central proto_msg.py edits.
+Plugin-owned. plugin_loader registers TURNMsg under wire name
+"turn.TURNMsg" via PROTO_MESSAGES.
 """
 from typing import Any, Dict
 
 from ....protocol.proto_msg import ProtoMsg
-
-
-SIG_TURN = 3
 
 
 class TURNMsg(ProtoMsg):
@@ -33,6 +30,3 @@ class TURNMsg(ProtoMsg):
                 d["peer_tup"],
                 d["relay_tup"],
             )
-
-    def __init__(self, data: Dict[str, Any], enum: int = SIG_TURN) -> None:
-        super().__init__(data, enum)
