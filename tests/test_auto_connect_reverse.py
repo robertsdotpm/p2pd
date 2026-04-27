@@ -16,7 +16,7 @@ from p2pd.node.auto_connect import auto_connect
 
 from auto_connect_helpers import (
     PORT_REV_A, PORT_REV_B,
-    close_nodes, load_two_nodes, start_node_with_ifs,
+    close_nodes, load_two_nodes, start_node_with_ifs, isolate_plugins,
 )
 
 
@@ -47,12 +47,11 @@ class TestAutoConnectReverseConnect(AsyncTestCase):
         print("[REVERSE-TEST] node_b addr_map IP4={0} listen_ips={1}".format(
             self.node_b.addr_map.get(IP4), self.node_b.listen_ips,
         ))
-        print("[REVERSE-TEST] node_a plugins(before pop)={}".format(
+        print("[REVERSE-TEST] node_a plugins(before isolate)={}".format(
             list(self.node_a.traversal.plugin_loaders.keys())
         ))
-        # Remove direct_connect from the initiator only.
-        self.node_a.traversal.plugin_loaders.pop("direct_connect", None)
-        print("[REVERSE-TEST] node_a plugins(after pop)={}".format(
+        isolate_plugins(self.node_a, "reverse_connect")
+        print("[REVERSE-TEST] node_a plugins(after isolate)={}".format(
             list(self.node_a.traversal.plugin_loaders.keys())
         ))
 

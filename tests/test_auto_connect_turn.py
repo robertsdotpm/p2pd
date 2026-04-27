@@ -19,7 +19,7 @@ from p2pd.node.auto_connect import auto_connect
 from auto_connect_helpers import (
     PORT_TURN_A_T1, PORT_TURN_B_T1, PORT_TURN_A_T2,
     PORT_TURN_A_T3, PORT_TURN_B_T3,
-    close_nodes, load_two_nodes, start_node_with_ifs,
+    close_nodes, load_two_nodes, start_node_with_ifs, isolate_plugins,
 )
 
 
@@ -94,10 +94,7 @@ class TestAutoConnectTurnFallback(AsyncTestCase):
         )
         await self._start_local_turn()
 
-        # Remove all concurrent (non-TURN) plugins from the initiator so
-        # auto_combos returns [] and falls through to TURN.
-        for name in ("direct_connect", "reverse_connect", "tcp_punch"):
-            self.node_a.traversal.plugin_loaders.pop(name, None)
+        isolate_plugins(self.node_a, "turn")
 
         pipe, plugin = await asyncio.wait_for(
             auto_connect(self.node_a, self.node_b.addr_bytes, timeout=25),

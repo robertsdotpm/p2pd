@@ -17,7 +17,7 @@ from p2pd.node.auto_connect import auto_connect, auto_combos, is_same_machine
 from auto_connect_helpers import (
     PORT_PUNCH_A_T1, PORT_PUNCH_B_T1, PORT_PUNCH_A_T2, PORT_PUNCH_B_T2,
     PUNCH_TEST_CONF,
-    close_nodes, load_two_nodes, start_node_with_ifs,
+    close_nodes, load_two_nodes, start_node_with_ifs, isolate_plugins,
 )
 
 
@@ -162,10 +162,8 @@ class TestAutoConnectPunch(AsyncTestCase):
             "punch plugin not installed (enable_punching=False?)",
         )
 
-        # Leave punch as the only non-skip plugin on the initiator.
-        self.node_a.traversal.plugin_loaders.pop("direct_connect", None)
-        self.node_a.traversal.plugin_loaders.pop("reverse_connect", None)
-        print("[PUNCH-TEST] node_a plugins(after pop)={}".format(
+        isolate_plugins(self.node_a, "tcp_punch")
+        print("[PUNCH-TEST] node_a plugins(after isolate)={}".format(
             list(self.node_a.traversal.plugin_loaders.keys())
         ))
 

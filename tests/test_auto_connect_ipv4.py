@@ -16,7 +16,7 @@ from p2pd.node.auto_connect import auto_connect, auto_combos
 
 from auto_connect_helpers import (
     PORT_A_T1, PORT_B_T1, PORT_A_T2, PORT_B_T2, PORT_A_T3, PORT_B_T3,
-    close_nodes, load_two_nodes, start_node_with_ifs,
+    close_nodes, load_two_nodes, start_node_with_ifs, isolate_plugins,
 )
 
 
@@ -81,6 +81,9 @@ class TestAutoConnectIPv4(AsyncTestCase):
         self.node_b = await start_node_with_ifs(self.ifs_b, [self.ip_b], PORT_B_T2)
         log_node("node_a", self.node_a)
         log_node("node_b", self.node_b)
+        # The assertion accepts DirectConnect or ReverseConnectPlugin, so
+        # whitelist both same-LAN paths and pop everything else.
+        isolate_plugins(self.node_a, "direct_connect", "reverse_connect")
         print("[IPV4-TEST] node_a plugins={}".format(
             list(self.node_a.traversal.plugin_loaders.keys())
         ))

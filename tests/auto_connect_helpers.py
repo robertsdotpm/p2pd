@@ -150,6 +150,22 @@ async def start_node_with_ifs(ifs, ip_list, port, conf=None):
     return node
 
 
+def isolate_plugins(node, *keep):
+    """Pop every plugin from node.traversal.plugin_loaders except keep.
+
+    Tests that assert "plugin X must win the auto_connect race" become
+    flaky when any other connection-returning plugin (TURN, random_probe,
+    udp_punch, tcp_punch, ...) happens to land its pipe first on a slow
+    stack. Whitelisting the plugins under test keeps the assertion
+    deterministic and survives new plugins joining the loader without
+    requiring every test to update its pop list.
+    """
+    keep_set = set(keep)
+    for name in list(node.traversal.plugin_loaders.keys()):
+        if name not in keep_set:
+            node.traversal.plugin_loaders.pop(name, None)
+
+
 def ifs_have_ip(ifs, ip_str):
     """Return True if ip_str appears in any NIC's route pool (primary or secondary)."""
     by_nic = sort_ips_by_nic([ip_str], ifs)
