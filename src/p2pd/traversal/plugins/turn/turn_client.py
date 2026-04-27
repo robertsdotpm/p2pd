@@ -567,9 +567,37 @@ self,
         # reply.txn_id = self.txid
         return reply
 
+    # Build a Refresh message with lifetime=0 -- the RFC 5766 §7 way
+    # to ask the server to retract this allocation right now instead of
+    # waiting for the lifetime timer to GC it server-side.
+    async def retract_msg(self) -> Any:
+        """Build a TURN Refresh request with LIFETIME=0 (clean retraction)."""
+        reply = STUNMsg(msg_type=STUNMsgTypes.Refresh, mode=RFC5389)
+        reply.write_attr(STUNAttrs.Lifetime, pack("!I", 0))
+        return reply
+
     # Close the client socket and move state to done.
     async def do_cleanup(self) -> None:
         """Close the UDP pipe and resolve all pending futures so background tasks can exit."""
+        # Best-effort clean retraction (RFC 5766 §7): send Refresh with
+        # LIFETIME=0 BEFORE closing the local pipe so the server frees
+        # the allocation, the relay port, and any installed permissions
+        # immediately rather than holding them until lifetime expiry
+        # (default ~10 min). Skipping this is rude on shared / rate-
+        # limited servers and can cause "437 Allocation Mismatch" on a
+        # quick re-allocate from the same client 5-tuple. We're
+        # shutting down anyway, so any send error here is non-fatal --
+        # the worst case if this fails is the server GCs us on its own
+        # timer.
+        if self.turn_pipe is not None and self.state != TURN_ERROR_STOPPED:
+            try:
+                msg = await self.retract_msg()
+                await asyncio.wait_for(
+                    self.send_turn_msg(msg, do_sign=True), timeout=2,
+                )
+            except (OSError, ConnectionError, asyncio.TimeoutError):
+                log_exception()
+
         if self.turn_pipe is not None:
             await self.turn_pipe.close()
 
