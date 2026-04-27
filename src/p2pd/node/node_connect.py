@@ -117,10 +117,16 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
     if not af:
         raise ValueError("No supported shared AF.")
 
-    # Sanity check: running multiple node instances with the same IP on
-    # the same interface is not supported. The check is keyed on if_index
-    # so that two nodes can legitimately share an IP on *different*
-    # interfaces (e.g. both have fe80::2 but on separate NICs).
+    # Diagnostic only: warn when a (src, dest) pair share their NIC/EXT
+    # IP for the same if_index -- that pair won't be usable. Used to
+    # be a hard `raise ValueError` here, but that bailed the whole
+    # connect even when OTHER pairs were viable. Two nodes with two
+    # NICs each can have ONE pair share an IP (e.g. both on the same
+    # LAN router so both report the same external WAN IP) while a
+    # *different* pairing of NICs is reachable. iter_viable_pairs
+    # below already filters out the bad pair on its own (lines 75-85
+    # of this file), so we just log here and let the per-pair walk
+    # try the alternatives.
     if plugin_name == "get_addr":
         pass
     elif route_type == NIC_BIND:
@@ -129,24 +135,24 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
             if src_info is None:
                 continue
             if int(dest_info["nic"]) == int(src_info["nic"]):
-                raise ValueError(
-                    "Local route selected but dest if_index {} shares "
-                    "NIC IP {} with this node for AF {} — "
-                    "punch will fail.".format(if_idx, dest_info["nic"].ip, af)
-                )
+                log(fstr(
+                    "node.connect: dest if_index {0} shares NIC IP {1} "
+                    "with this node for AF {2} -- this pair will be "
+                    "skipped; trying other pairs.",
+                    (if_idx, dest_info["nic"].ip, af),
+                ))
     elif route_type in (EXT_BIND, None):
         for if_idx, dest_info in dest_map[af].items():
             src_info = src_map[af].get(if_idx)
             if src_info is None:
                 continue
             if int(dest_info["ext"]) == int(src_info["ext"]):
-                raise ValueError(
-                    "External route selected but dest if_index {} shares "
-                    "external IP {} with this node for AF {} — "
-                    "cannot connect to yourself via WAN addresses.".format(
-                        if_idx, dest_info["ext"].ip, af
-                    )
-                )
+                log(fstr(
+                    "node.connect: dest if_index {0} shares external IP "
+                    "{1} with this node for AF {2} -- this pair will be "
+                    "skipped; trying other pairs.",
+                    (if_idx, dest_info["ext"].ip, af),
+                ))
 
     # Walk every viable (src_info, dest_info) pair in priority order.
     # If the plugin raises ValueError on a pair (e.g. random_probe on
