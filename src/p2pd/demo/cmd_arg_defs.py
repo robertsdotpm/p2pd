@@ -1,6 +1,5 @@
 """CLI argument definitions for the p2pd demo."""
 import argparse
-import sys
 from ..node.node_defs import NODE_PORT
 
 # parser.add_argument("--stun_server", type=str, required=False,
@@ -89,22 +88,7 @@ parser.add_argument(
     required=False,
     help="Close automatically after this amount of seconds.",
 )
-# A bare `python -m p2pd.demo` with zero CLI args prints help and exits
-# so first-time users see the available flags instead of getting dropped
-# straight into an interactive menu they didn't ask for. If you actually
-# want the no-flag interactive default, pass --menu (a no-op flag whose
-# only purpose is to satisfy "got at least one argument").
-parser.add_argument(
-    "--menu",
-    action="store_true",
-    default=False,
-    required=False,
-    help=(
-        "Skip the help-on-no-args check and run the interactive menu "
-        "with defaults. Equivalent to passing any other flag."
-    ),
-)
-if len(sys.argv) == 1:
-    parser.print_help()
-    sys.exit(0)
+# Bare `python -m p2pd.demo` with no flags runs the interactive menu
+# with default settings. argparse handles -h / --help on its own (prints
+# help and exits 0), so users who want to discover flags still can.
 args = parser.parse_args()
