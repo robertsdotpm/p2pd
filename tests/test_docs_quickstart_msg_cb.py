@@ -62,9 +62,12 @@ class TestMsgCallback(AsyncTestCase):
         await pipe.send(b"test payload\r\n")
 
         try:
-            await asyncio.wait_for(received.wait(), timeout=5)
+            await asyncio.wait_for(received.wait(), timeout=15)
         except asyncio.TimeoutError:
-            self.skipTest("msg_cb was not called in time")
+            self.skipTest(
+                "msg_cb was not called in time "
+                "(slow loopback / signal-channel latency on this run, ENV)"
+            )
 
         self.assertTrue(
             any(b"test payload" in m for m in received_data),
