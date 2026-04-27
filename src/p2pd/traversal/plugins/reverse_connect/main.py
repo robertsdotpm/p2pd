@@ -47,3 +47,13 @@ class ReverseConnectPlugin(TraversalPlugin):
         self.result.set_result(con)
 
 PLUGIN_CLASS = ReverseConnectPlugin
+
+# Default plugin timeout (10s) is too tight: reverse_connect waits for
+# the *partner's* direct_connect plugin to finish (its TCP connect +
+# its post-connect await send_signal_msg(ConIdMsg) round-trip) plus the
+# signal-channel hop back to alice's handle_con_id. The XP trace
+# explicitly showed "reverse_connect plugin probably timed out before
+# this signal arrived" because the rendezvous arrived after the 10s
+# wall. 30s leaves room for the partner's bumped 25s direct_connect
+# budget plus signal jitter.
+PLUGIN_CONF = {"timeout": 30}
