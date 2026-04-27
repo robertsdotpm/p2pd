@@ -359,6 +359,12 @@ async def echo_client(pipe: Any, echo_data: Optional[bytes]) -> str:
 
             return "menu"
 
+        # Empty input -- just re-prompt. Don't send a bare ECHO frame
+        # to the peer; that wastes a round-trip and on slow stacks the
+        # 4s recv timeout makes the prompt feel laggy.
+        if not send_buf:
+            continue
+
         await pipe.send(b"ECHO " + send_buf + b"\n")
         buf = await pipe.recv(timeout=4)
         cout(b"recv = ", buf, b"\n")
