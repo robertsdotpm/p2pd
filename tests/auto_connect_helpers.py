@@ -83,6 +83,23 @@ PORT_TURN_A_T3 = NODE_PORT + 2520; PORT_TURN_B_T3 = NODE_PORT + 2521
 PORT_TURN_LIVE_A = NODE_PORT + 2600
 PORT_TURN_LIVE_B = NODE_PORT + 2601
 
+# Loop tests (run a plugin's happy path 3x against the same node pair) —
+# 2700–2799. One block per plugin so each test_loop_<plugin>.py file
+# uses its own port pair and they can run in parallel without colliding.
+PORT_LOOP_DIRECT_A   = NODE_PORT + 2700; PORT_LOOP_DIRECT_B   = NODE_PORT + 2701
+PORT_LOOP_REVERSE_A  = NODE_PORT + 2710; PORT_LOOP_REVERSE_B  = NODE_PORT + 2711
+PORT_LOOP_TCP_PUNCH_A = NODE_PORT + 2720; PORT_LOOP_TCP_PUNCH_B = NODE_PORT + 2721
+PORT_LOOP_UDP_PUNCH_A = NODE_PORT + 2730; PORT_LOOP_UDP_PUNCH_B = NODE_PORT + 2731
+PORT_LOOP_RAND_A     = NODE_PORT + 2740; PORT_LOOP_RAND_B     = NODE_PORT + 2741
+PORT_LOOP_TURN_A     = NODE_PORT + 2750; PORT_LOOP_TURN_B     = NODE_PORT + 2751
+
+# How many successive auto_connect runs each loop test fires against the
+# same node pair. Bumped from a single-shot to 3 to surface state-leak
+# bugs (sockets not closed, plugin slots not freed, MQTT subs not torn
+# down, inbound pipe registry not cleared, ...). 3 is enough to expose
+# accumulation without making a clean run too slow on slow VMs.
+LOOP_COUNT = 3
+
 
 def clone_nic(real_nic, new_id, ip_list):
     """Return a shallow copy of real_nic with a different id and a filtered route pool.
