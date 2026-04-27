@@ -65,21 +65,18 @@ class Node(Daemon):
         await node_protocol(self, msg, client_tup, pipe)
 
     def up_cb(self, _data: Any, _client_tup: Any, pipe: Any) -> None:
-        """Register every newly-accepted inbound TCP pipe by its remote tuple.
+        """Notify on every newly-accepted inbound TCP pipe.
 
-        Called by aionetiface's PipeEvents.connection_made before any data
-        arrives. The TraversalManager keeps a tup -> pipe map so a later
-        ConIdMsg over the signal channel can rendezvous the data pipe with
-        the plugin_id the reverse_connect plugin is awaiting on -- without
-        needing an in-band first-message handshake on every inbound.
+        Rendezvous is in-band now: the initiator writes a
+        b"P2P-CID:<plugin_id>\\n" frame as the first bytes on the new TCP
+        pipe and node_protocol peels it off on first inbound message.
+        Nothing to do here beyond observability -- the daemon already
+        wires self.msg_cb to the pipe so node_protocol receives the
+        frame as part of normal data flow.
         """
         print("[NODE-UP-CB] up_cb fired pipe={0!r} client_tup={1!r}".format(
             pipe, _client_tup,
         ))
-        if self.traversal is None:
-            print("[NODE-UP-CB]   self.traversal is None -- skipping")
-            return
-        self.traversal.register_inbound_pipe(pipe)
 
     async def start(self, sys_clock: Optional[Any] = None, out: bool = False, cout: Callable = print) -> "Node":
         """Run the full node startup sequence and return self when the node is ready."""

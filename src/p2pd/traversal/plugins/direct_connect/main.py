@@ -1,10 +1,9 @@
 """Traversal plugin for direct (non-NATed) connections."""
 from typing import Any, List, Optional, Tuple
 import asyncio
-from aionetiface import IP4, IP6, Interface, TCP, Pipe, log, log_exception, fstr
-from ....protocol.proto_defs import P2P_DIRECT
-from .proto import ConIdMsg, handle_con_id
+from aionetiface import IP4, IP6, Interface, TCP, Pipe, log, log_exception, fstr, to_b
 from ...traversal_plugin import TraversalPlugin
+from .con_id_frame import CON_ID_PREFIX
 
 
 def is_loopback_dest_str(s: str, af: Any) -> bool:
@@ -124,59 +123,29 @@ class DirectConnect(TraversalPlugin):
             ))
             return
 
-        # Tell the responder over MQTT signal which plugin_id this
-        # already-open TCP pipe corresponds to. The responder's
-        # TraversalManager.handle_con_id rendezvouses pipe (matched by
-        # client_tup in inbound_pipes_by_tup) with the plugin_id, and
-        # resolves the inbound_pipes future the reverse_connect plugin
-        # was awaiting on. Replaces the legacy in-band CON_ID_MSG byte
-        # blob -- node_protocol no longer parses any per-plugin framing.
-        try:
-            local_tup = pipe.sock.getsockname()
-        except (OSError, AttributeError) as exc:
-            print("[CON-ID-DBG] {0} getsockname failed: {1!r}".format(
-                self.plugin_id, exc,
-            ))
-            local_tup = ("", 0)
-        try:
-            peer_tup = pipe.sock.getpeername()
-        except (OSError, AttributeError):
-            peer_tup = ("?", 0)
-        # Belt-and-braces print: every single step from "we have a TCP
-        # pipe" through "we set the plugin result" gets a log line so
-        # matrix runs that fail to rendezvous show us EXACTLY which
-        # step didn't fire. Verbose by design.
-        print("[CON-ID-DBG] {0} pipe.sock.getsockname()={1!r} getpeername()={2!r}".format(
-            self.plugin_id, local_tup, peer_tup,
-        ))
-        con_id_msg = ConIdMsg({
-            "payload": {
-                "src_ip": str(local_tup[0]) if local_tup else "",
-                "src_port": int(local_tup[1]) if local_tup else 0,
-            },
-        })
-        print("[CON-ID-DBG] {0} ConIdMsg payload src_ip={1!r} src_port={2!r}".format(
-            self.plugin_id, con_id_msg.payload.src_ip, con_id_msg.payload.src_port,
+        # In-band ConId frame: write b"P2P-CID:<plugin_id>\n" as the
+        # very first bytes on the new TCP pipe. Same channel as the
+        # data pipe means no cross-channel race with a separate signal
+        # round-trip -- the responder's node_protocol peels off this
+        # frame on the first inbound message and resolves the
+        # reverse_connect inbound future for plugin_id directly.
+        con_id_frame = CON_ID_PREFIX + to_b(self.plugin_id) + b"\n"
+        print("[CON-ID-DBG] {0} sending in-band ConId frame ({1} bytes) on pipe...".format(
+            self.plugin_id, len(con_id_frame),
         ))
         try:
-            print("[CON-ID-DBG] {0} sending SIG_CON_ID via signal pipe...".format(
-                self.plugin_id,
-            ))
-            await self.send_signal_msg(con_id_msg)
-            print("[CON-ID-DBG] {0} send_signal_msg returned cleanly".format(
+            await pipe.send(con_id_frame)
+            print("[CON-ID-DBG] {0} in-band ConId send returned cleanly".format(
                 self.plugin_id,
             ))
         except (OSError, ConnectionError, asyncio.TimeoutError) as exc:
-            print("[CON-ID-DBG] {0} send_signal_msg raised: {1!r}".format(
+            print("[CON-ID-DBG] {0} in-band ConId send raised: {1!r}".format(
                 self.plugin_id, exc,
             ))
             log_exception()
         log(fstr(
-            "direct_connect[{0}]: sent SIG_CON_ID over signal, setting result",
+            "direct_connect[{0}]: in-band ConId frame sent, setting result",
             (self.plugin_id,),
-        ))
-        print("[CON-ID-DBG] {0} setting plugin.result with pipe={1!r}".format(
-            self.plugin_id, pipe,
         ))
         self.result.set_result(pipe)
         print("[CON-ID-DBG] {0} plugin.result.done()={1}".format(
@@ -252,22 +221,9 @@ class DirectConnect(TraversalPlugin):
 
 PLUGIN_CLASS = DirectConnect
 
-# direct_connect owns two signal types:
-#   * core ConMsg (initiator-side connection request, plugin-independent
-#     so registered centrally by build_core_sig_proto)
-#   * direct_connect.ConIdMsg (rendezvous notification carrying src_tup
-#     back to the receiver after the TCP is up). Plugin-owned; loader
-#     auto-registers via PROTO_MESSAGES under wire name
-#     "direct_connect.ConIdMsg".
-PROTO_MESSAGES = (
-    (ConIdMsg, P2P_DIRECT, 5),
-)
-
-# Pure-rendezvous signal handlers. The traversal manager invokes these
-# from recv_signal_msg BEFORE falling through to the plugin-creation
-# path -- ConIdMsg has no plugin to run, it just resolves an existing
-# inbound future. Keys are msg classes; loader resolves to the
-# wire_name at install time.
-PROTO_HANDLERS = {
-    ConIdMsg: handle_con_id,
-}
+# direct_connect no longer owns any signal-channel messages.
+# The connection-request side stays at the core layer (ConMsg, registered
+# centrally by build_core_sig_proto). The follow-up rendezvous that used
+# to be a signal-channel ConIdMsg now travels in-band as the very first
+# bytes on the new TCP pipe (see con_id_frame.CON_ID_PREFIX). One channel,
+# no cross-channel race.

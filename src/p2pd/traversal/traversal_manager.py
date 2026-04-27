@@ -55,22 +55,9 @@ class TraversalManager:
         self.nics = nics if nics else []
 
         # Inbound connections from the node server.
-        # Futures by con id -> pipe.
+        # Futures by con id -> pipe; resolved in-band by node_protocol's
+        # ConId-frame peeler on the first message of each new TCP pipe.
         self.inbound_pipes = inbound_pipes if inbound_pipes is not None else {}
-
-        # Newly-accepted inbound pipes, keyed by (src_ip, src_port).
-        # Populated by Node.up_cb on accept; consumed by handle_con_id when
-        # a ConIdMsg arrives over the signal channel.  Lets the rendezvous
-        # between "TCP arrived" and "signal said this TCP belongs to plugin
-        # X" happen out of band, so node_protocol no longer needs to peek
-        # at the first datagram on every inbound pipe.
-        self.inbound_pipes_by_tup = {}
-
-        # ConIdMsg claims that arrived BEFORE the matching TCP accept fired.
-        # Up_cb checks this on each accept and dispatches if a match is
-        # already pending.  Bounded in practice by the number of in-flight
-        # reverse_connect attempts.
-        self.pending_con_id_by_tup = {}
 
         # Runtime protocol-message registry. Seeded with core (plugin-
         # independent) messages; plugin_loader merges PROTO_MESSAGES
@@ -384,46 +371,25 @@ class TraversalManager:
         # Prune completed tasks to avoid unbounded growth.
         self.tasks = [t for t in self.tasks if not t.done()]
 
-    # ConIdMsg rendezvous logic now lives in plugins/direct_connect/proto.py
-    # and registers as a PROTO_HANDLERS entry. recv_signal_msg above
-    # invokes it via self.proto_handlers lookup. The manager just owns
-    # the inbound_pipes_by_tup + pending_con_id_by_tup dicts the
-    # handler operates on.
-
-    # Called by Node.up_cb on every newly-accepted inbound TCP pipe.
-    # If a ConIdMsg already arrived for this tup, resolve immediately;
-    # otherwise stash the pipe so the next ConIdMsg can find it.
-    def register_inbound_pipe(self, pipe: Any) -> None:
-        """Bind a fresh inbound pipe to its source tuple for ConIdMsg-based rendezvous."""
-        client_tup = getattr(pipe, "client_tup", None)
-        print("[UP-CB] register_inbound_pipe pipe={0!r} client_tup={1!r}".format(
-            pipe, client_tup,
-        ))
-        if client_tup is None:
-            print("[UP-CB]   client_tup is None -- skipping registration")
+    # In-band ConId rendezvous: node_protocol peels the b"P2P-CID:<id>"
+    # frame off the first message on each new inbound TCP pipe and calls
+    # this method to resolve the reverse_connect inbound future for the
+    # plugin_id with the live pipe.
+    def resolve_inbound_by_plugin_id(self, plugin_id: str, pipe: Any) -> None:
+        """Resolve the reverse_connect inbound future for plugin_id with pipe."""
+        fut = self.inbound_pipes.get(plugin_id)
+        if fut is None:
+            print("[CON-ID-RX]   no inbound future registered under plugin_id={0!r} "
+                  "-- reverse_connect probably timed out before this frame "
+                  "arrived; dropping pipe".format(plugin_id))
             return
-        # Normalise IPv6 (ip, port, flowinfo, scope_id) to (ip, port) so the
-        # match key is the same shape the initiator's payload sends.
-        tup = (client_tup[0], int(client_tup[1]))
-        print("[UP-CB]   normalised tup={0!r}".format(tup))
-        print("[UP-CB]   pending_con_id_by_tup has keys={0!r}".format(
-            list(self.pending_con_id_by_tup.keys()),
-        ))
-
-        plugin_id = self.pending_con_id_by_tup.pop(tup, None)
-        if plugin_id is not None:
-            print("[UP-CB]   matched pending claim plugin_id={0!r}".format(plugin_id))
-            fut = self.inbound_pipes.get(plugin_id)
-            if fut is not None and not fut.done():
-                print("[UP-CB]   resolving inbound_pipes[{0!r}] with pipe".format(plugin_id))
-                fut.set_result(pipe)
-                return
-            else:
-                print("[UP-CB]   future for plugin_id={0!r} missing or done -- "
-                      "registering pipe under tup".format(plugin_id))
-
-        self.inbound_pipes_by_tup[tup] = pipe
-        print("[UP-CB]   stored pipe in inbound_pipes_by_tup[{0!r}]".format(tup))
+        if fut.done():
+            print("[CON-ID-RX]   inbound future for plugin_id={0!r} already done; "
+                  "skipping set_result".format(plugin_id))
+            return
+        fut.set_result(pipe)
+        print("[CON-ID-RX]   resolved inbound future for plugin_id={0!r} -- "
+              "reverse_connect should now wake up".format(plugin_id))
 
     async def close(self) -> None:
         """Cancel all pending plugins and background tasks, releasing their resources."""

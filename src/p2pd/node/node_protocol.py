@@ -1,18 +1,20 @@
 """
-node_protocol is a dumb proxy.
+node_protocol is a dumb proxy + a one-shot ConId rendezvous peeler.
 
-The historical CON_ID_MSG in-band handshake (the responder's "this TCP
-pipe belongs to plugin X" announcement) has moved to a SIG_CON_ID
-signal over the MQTT router. With that out of the way, node_protocol
-no longer needs to peek at the first datagram on every inbound pipe;
-it just splits TCP frames on newline and fans out to whichever msg_cbs
-the application has registered.
+Each inbound TCP pipe's first message is expected to be a
+b"P2P-CID:<plugin_id>\\n" frame written by the initiator's
+direct_connect right after the TCP connect succeeds. We peel it off
+here, resolve the reverse_connect inbound future for plugin_id, and
+let everything after that flow through the registered msg_cbs as
+normal data. One channel for connect + rendezvous, no cross-channel
+race.
 """
 
 from typing import Any, Tuple
 import asyncio
 import time
-from aionetiface import log
+from aionetiface import log, to_s
+from ..traversal.plugins.direct_connect.con_id_frame import CON_ID_PREFIX
 from ..traversal.plugins.random_probe.random_probe_defs import (
     PROBE_LEN,
     PROBE_MAGIC,
@@ -68,6 +70,21 @@ async def node_protocol(node: Any, msg: bytes, client_tup: Tuple[str, int], pipe
     # TCP may buffer multiple messages — split and dispatch each.
     coros = []
     for m in msg.split(b"\n"):
+        # In-band ConId rendezvous: the very first frame on every
+        # direct_connect inbound pipe is b"P2P-CID:<plugin_id>".
+        # Peel it off, resolve the reverse_connect future, and keep
+        # walking the remaining frames in this batch. One-shot per
+        # pipe (con_id_seen guards against repeat rendezvous on the
+        # rare chance a payload happens to start with the prefix).
+        if not getattr(pipe, "con_id_seen", False) and m.startswith(CON_ID_PREFIX):
+            plugin_id = to_s(m[len(CON_ID_PREFIX):])
+            pipe.con_id_seen = True
+            print("[CON-ID-RX] in-band ConId pipe={0!r} plugin_id={1!r}".format(
+                pipe, plugin_id,
+            ))
+            if node.traversal is not None:
+                node.traversal.resolve_inbound_by_plugin_id(plugin_id, pipe)
+            continue
         if m == b"long_p2pd_test_string_abcd123":
             # Reachability probe used by remote_reachability_cb / matrix
             # smoke checks. Echo back and skip msg_cbs -- it isn't
