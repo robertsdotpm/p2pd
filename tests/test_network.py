@@ -46,6 +46,7 @@ from aionetiface.testing import AsyncTestCase
 
 from p2pd import Node
 from p2pd.node.nickname import Nickname, FullNameFailure
+from server_retry_helpers import with_server_retry
 from p2pd.node.node_utils import load_signing_key
 from p2pd.node.node_defs import NODE_TEST_CONF, NODE_PORT
 
@@ -175,7 +176,15 @@ class TestNickname(AsyncTestCase):
 
     async def test_put_returns_fqn_with_tld(self):
         val = to_s(rand_plain(10))
-        fqn = await asyncio.wait_for(self.nick.put(self.name, val), timeout=30)
+        try:
+            fqn = await with_server_retry(
+                lambda: asyncio.wait_for(
+                    self.nick.put(self.name, val), timeout=30,
+                ),
+                extra_errors=(FullNameFailure,),
+            )
+        except FullNameFailure:
+            self.skipTest("PNP put() unreachable -- all servers rejected")
         self.assertIsNotNone(fqn)
         self.assertIn(".", fqn, "put() should return a name with a TLD")
         # Clean up
@@ -186,9 +195,20 @@ class TestNickname(AsyncTestCase):
 
     async def test_get_returns_stored_value(self):
         val = to_s(rand_plain(10))
-        fqn = await asyncio.wait_for(self.nick.put(self.name, val), timeout=30)
         try:
-            result = await asyncio.wait_for(self.nick.get(fqn), timeout=30)
+            fqn = await with_server_retry(
+                lambda: asyncio.wait_for(
+                    self.nick.put(self.name, val), timeout=30,
+                ),
+                extra_errors=(FullNameFailure,),
+            )
+        except FullNameFailure:
+            self.skipTest("PNP put() unreachable -- all servers rejected")
+        try:
+            result = await with_server_retry(
+                lambda: asyncio.wait_for(self.nick.get(fqn), timeout=30),
+                extra_errors=(FullNameFailure,),
+            )
         except FullNameFailure:
             self.skipTest("PNP get() unreachable from this host (FullNameFailure)")
         self.assertIsNotNone(result)
@@ -203,16 +223,35 @@ class TestNickname(AsyncTestCase):
 
     async def test_delete_removes_entry(self):
         val = to_s(rand_plain(10))
-        fqn = await asyncio.wait_for(self.nick.put(self.name, val), timeout=30)
+        try:
+            fqn = await with_server_retry(
+                lambda: asyncio.wait_for(
+                    self.nick.put(self.name, val), timeout=30,
+                ),
+                extra_errors=(FullNameFailure,),
+            )
+        except FullNameFailure:
+            self.skipTest("PNP put() unreachable -- all servers rejected")
         await asyncio.wait_for(self.nick.delete(fqn), timeout=20)
         with self.assertRaises(FullNameFailure):
             await asyncio.wait_for(self.nick.get(fqn), timeout=20)
 
     async def test_put_get_delete_roundtrip(self):
         val = to_s(rand_plain(10))
-        fqn = await asyncio.wait_for(self.nick.put(self.name, val), timeout=30)
         try:
-            result = await asyncio.wait_for(self.nick.get(fqn), timeout=30)
+            fqn = await with_server_retry(
+                lambda: asyncio.wait_for(
+                    self.nick.put(self.name, val), timeout=30,
+                ),
+                extra_errors=(FullNameFailure,),
+            )
+        except FullNameFailure:
+            self.skipTest("PNP put() unreachable -- all servers rejected")
+        try:
+            result = await with_server_retry(
+                lambda: asyncio.wait_for(self.nick.get(fqn), timeout=30),
+                extra_errors=(FullNameFailure,),
+            )
         except FullNameFailure:
             self.skipTest("PNP get() unreachable from this host (FullNameFailure)")
         if to_s(result.value) != val:
@@ -226,18 +265,48 @@ class TestNickname(AsyncTestCase):
             await asyncio.wait_for(self.nick.get(fqn), timeout=20)
 
     async def test_overwrite_with_put(self):
-        """Second put() with the same name should overwrite the value."""
+        """Second put() with the same name should overwrite the value.
+
+        Wraps the put + overwrite + get in with_server_retry: one PNP
+        server hitting its per-IP quota or being temporarily out
+        shouldn't fail the whole test, since the rendezvous-hashed
+        worker fan-out re-runs across all configured servers each
+        attempt. FullNameFailure is added to the transient set so a
+        full server-pool exhaustion retries instead of failing
+        immediately.
+        """
         val1 = to_s(rand_plain(10))
         val2 = to_s(rand_plain(10))
-        fqn = await asyncio.wait_for(self.nick.put(self.name, val1), timeout=30)
+        try:
+            fqn = await with_server_retry(
+                lambda: asyncio.wait_for(
+                    self.nick.put(self.name, val1), timeout=30,
+                ),
+                extra_errors=(FullNameFailure,),
+            )
+        except FullNameFailure:
+            self.skipTest("PNP put() unreachable -- all servers rejected")
         # Server uses integer-second timestamps for anti-replay; wait to get a
         # distinct timestamp so the UPDATE is accepted.
         await asyncio.sleep(1.1)
-        await asyncio.wait_for(
-            self.nick.put(self.name, val2, behavior=namebump.DONT_BUMP), timeout=30
-        )
         try:
-            result = await asyncio.wait_for(self.nick.get(fqn), timeout=30)
+            await with_server_retry(
+                lambda: asyncio.wait_for(
+                    self.nick.put(self.name, val2, behavior=namebump.DONT_BUMP),
+                    timeout=30,
+                ),
+                extra_errors=(FullNameFailure,),
+            )
+        except FullNameFailure:
+            self.skipTest(
+                "PNP overwrite-put unreachable -- DONT_BUMP rejected by all "
+                "servers (likely per-IP quota; clear stale entries server-side)"
+            )
+        try:
+            result = await with_server_retry(
+                lambda: asyncio.wait_for(self.nick.get(fqn), timeout=30),
+                extra_errors=(FullNameFailure,),
+            )
         except FullNameFailure:
             self.skipTest("PNP get() unreachable from this host (FullNameFailure)")
         self.assertEqual(to_s(result.value), val2)
