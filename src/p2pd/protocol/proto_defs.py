@@ -3,16 +3,15 @@ from aionetiface import dict_child, NET_CONF, IP4, IP6, EXT_BIND, NIC_BIND
 
 MQTT_CONF = dict_child({"con_timeout": 4, "recv_timeout": 4}, NET_CONF)
 
+# Core, plugin-independent signal slots. Plugin-owned signals
+# (SIG_TCP_PUNCH, SIG_TURN, SIG_RANDOM_PROBE, SIG_CON_ID, SIG_UDP_PUNCH,
+# ...) live in each plugin's own proto.py and get auto-registered into
+# the runtime sig_proto via plugin_loader's PROTO_MESSAGES merge.
 SIG_CON = 1
-SIG_TCP_PUNCH = 2
-SIG_TURN = 3
 SIG_GET_ADDR = 4
 SIG_RETURN_ADDR = 5
 SIG_DONE = 6
 SIG_RETRY = 7
-SIG_RANDOM_PROBE = 8
-SIG_CON_ID = 9
-SIG_UDP_PUNCH = 10
 P2P_PIPE_CONF = {
     "addr_families": [IP4, IP6],
     "addr_types": [EXT_BIND, NIC_BIND],

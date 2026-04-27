@@ -19,13 +19,14 @@ from aionetiface import (
     rand_b,
 )
 
-from ....protocol.proto_msg import UdpPunchMsg
+from ....protocol.proto_defs import P2P_PUNCH
 from ...traversal_plugin import TraversalPlugin
 from ..tcp_punch.boundary_alloc import boundary_port_alloc
 from ..tcp_punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 from ..tcp_punch.nat_predict import NATMapping
 from ..tcp_punch.nat_predict_alloc import NATPredictAlloc
 from ..tcp_punch.punch_client import PunchClient
+from .proto import SIG_UDP_PUNCH, UdpPunchMsg
 from .udp_punch_defs import UDP_PUNCH_FRAME_LEN, UDP_PUNCH_MAGIC, UDP_PUNCH_NONCE_LEN
 from .udp_punch_engine import drain_punch_residue, udp_punch_engine
 
@@ -328,6 +329,10 @@ class UdpPunchPluginFactory:
 
 
 PLUGIN_CONF = {"timeout": 30}
+
+PROTO_MESSAGES = (
+    (SIG_UDP_PUNCH, UdpPunchMsg, P2P_PUNCH, 20),
+)
 
 
 async def setup_plugin(node):

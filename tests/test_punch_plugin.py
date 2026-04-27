@@ -71,7 +71,7 @@ from aionetiface import (
 from p2pd.traversal.plugins.tcp_punch.punch_defs import PUNCH_MAX_SLEEP
 from p2pd.traversal.plugins.tcp_punch.nat_predict import NATMapping
 from p2pd.traversal.plugins.tcp_punch.main import PunchPluginFactory
-from p2pd.protocol.proto_msg import PunchMsg
+from p2pd.traversal.plugins.tcp_punch.proto import PunchMsg
 
 from aionetiface.testing import make_fake_nic
 

@@ -36,7 +36,7 @@ from p2pd.traversal.plugins.random_probe.random_probe_lib import (
     random_probe_ports,
 )
 from p2pd.traversal.plugins.random_probe.main import is_symmetric_nat
-from p2pd.protocol.proto_msg import RandomProbeMsg
+from p2pd.traversal.plugins.random_probe.proto import RandomProbeMsg
 
 
 class TestProbeWireFormat(unittest.TestCase):

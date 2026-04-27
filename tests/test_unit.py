@@ -36,15 +36,15 @@ from p2pd.protocol.proto_msg import (
     ConMsg,
     GetAddr,
     ReturnAddr,
-    PunchMsg,
-    TURNMsg,
     ProtoMsg,
-    SIG_PROTO,
+    build_core_sig_proto,
     SIG_CON,
-    SIG_TCP_PUNCH,
     SIG_GET_ADDR,
     SIG_RETURN_ADDR,
 )
+# Plugin-owned message types now live in their plugin folders.
+from p2pd.traversal.plugins.tcp_punch.proto import SIG_TCP_PUNCH, PunchMsg
+from p2pd.traversal.plugins.turn.proto import TURNMsg
 from p2pd.traversal.traversal_utils import try_unpack_msg, sig_msg_to_buf
 
 
@@ -233,12 +233,15 @@ class TestProtoMessages(unittest.TestCase):
         self.assertEqual(up.payload.mappings, [[10000, 10001]])
 
     def test_sig_proto_contains_expected_types(self):
-        self.assertIn(SIG_CON, SIG_PROTO)
-        self.assertIn(SIG_TCP_PUNCH, SIG_PROTO)
-        self.assertIn(SIG_GET_ADDR, SIG_PROTO)
-        self.assertIn(SIG_RETURN_ADDR, SIG_PROTO)
-        for enum, info in SIG_PROTO.items():
-            self.assertIsNotNone(info[0], "No class for SIG_PROTO[{}]".format(enum))
+        # Core sig_proto only carries plugin-independent messages now.
+        # Plugin-owned types (SIG_TCP_PUNCH, SIG_TURN, ...) are merged in
+        # by plugin_loader at runtime via PROTO_MESSAGES.
+        core = build_core_sig_proto()
+        self.assertIn(SIG_CON, core)
+        self.assertIn(SIG_GET_ADDR, core)
+        self.assertIn(SIG_RETURN_ADDR, core)
+        for enum, info in core.items():
+            self.assertIsNotNone(info[0], "No class for sig_proto[{}]".format(enum))
 
     def test_sig_msg_to_buf_and_try_unpack_roundtrip(self):
         """Wire sig_msg_to_buf -> try_unpack_msg with a live ConMsg."""
@@ -253,7 +256,7 @@ class TestProtoMessages(unittest.TestCase):
         )
 
         buf = sig_msg_to_buf(msg, None)
-        unpacked = try_unpack_msg(buf, None, SIG_PROTO)
+        unpacked = try_unpack_msg(buf, None, build_core_sig_proto())
         self.assertIsInstance(unpacked, ConMsg)
         self.assertEqual(unpacked.meta.plugin_name, "direct_connect")
 

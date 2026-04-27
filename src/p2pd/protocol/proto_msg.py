@@ -1,4 +1,12 @@
-"""Traversal signalling protocol message serialisation."""
+"""Traversal signalling protocol message serialisation.
+
+Core, plugin-independent message types (ConMsg, GetAddr, ReturnAddr,
+DoneMsg, RetryMsg) and the abstract ProtoMsg + Meta + Routing + Payload
+base classes live here. Plugin-owned message types (PunchMsg, TURNMsg,
+RandomProbeMsg, ConIdMsg, UdpPunchMsg) live in each plugin's own
+proto.py and auto-register via PROTO_MESSAGES on plugin load -- see
+plugin_loader.py and TraversalManager.sig_proto.
+"""
 import json
 from typing import Any, Dict, List, Optional, Tuple
 from aionetiface import (
@@ -7,21 +15,18 @@ from aionetiface import (
 )
 from .proto_defs import (
     SIG_CON,
-    SIG_TCP_PUNCH,
-    SIG_TURN,
     SIG_GET_ADDR,
     SIG_RETURN_ADDR,
     SIG_DONE,
     SIG_RETRY,
-    SIG_RANDOM_PROBE,
-    SIG_CON_ID,
-    SIG_UDP_PUNCH,
     P2P_DIRECT,
-    P2P_PUNCH,
-    P2P_RELAY,
-    P2P_RANDOM_PROBE,
 )
 
+# Backwards compat: a couple of legacy callers still reference these
+# from this module. Defining them here as plain ints means we don't
+# break the import while the migration to plugin-owned proto.py
+# completes. Once those callers are updated to import from the
+# tcp_punch.proto module these can be deleted.
 TCP_PUNCH_LAN = 1
 TCP_PUNCH_REMOTE = 2
 TCP_PUNCH_SELF = 3
@@ -255,254 +260,10 @@ class RetryMsg(ProtoMsg):
         super().__init__({}, SIG_RETRY)
 
 
-class PunchMsg(ProtoMsg):
-    """Carries port mapping predictions for TCP hole-punching coordination."""
-
-    # The main contents of this message.
-    class Payload:
-        """Contains punch mode, NTP timestamp, and port mappings for the punch exchange.
-
-        nonce is optional and only set by udp_punch (where the engine
-        needs an app-level token to distinguish real arrivals from
-        random scanner traffic on the predicted port). tcp_punch leaves
-        it empty; the receiver tolerates either case.
-        """
-
-        def __init__(self, punch_mode: int, ntp: Any, mappings: List[Any], nonce: str = "") -> None:
-            self.ntp = ntp
-            self.mappings = mappings
-            self.punch_mode = int(punch_mode)
-            self.nonce = nonce
-
-        def to_dict(self) -> Dict[str, Any]:
-            """Serialise the payload to a JSON-compatible dict."""
-            return {
-                "punch_mode": self.punch_mode,
-                "ntp": self.ntp,
-                "mappings": self.mappings,
-                "nonce": self.nonce,
-            }
-
-        @staticmethod
-        def from_dict(d: Dict[str, Any]) -> "PunchMsg.Payload":
-            """Deserialise a dict into a PunchMsg.Payload."""
-            return PunchMsg.Payload(
-                d.get("punch_mode", TCP_PUNCH_REMOTE),
-                d.get("ntp", 0),
-                d["mappings"],
-                d.get("nonce", ""),
-            )
-
-    # Note: having the dest the same as an if in our ifs is not
-    # necessarily an error if two nodes are on the same
-    # computer using the same interfaces. But these
-    # checks are left in if they're needed.
-
-    def validate_dest(self, af: Any, punch_mode: int, dest_s: str) -> None:
-        """Validate that af, punch_mode, and dest_s are mutually consistent with this message's routing."""
-        # Do we support this af?
-        interface = self.routing.interface
-        if af not in interface.supported():
-            raise ValueError("bad af 2 in punch")
-
-        # Does af match dest_s af.
-        if af_from_ip_s(dest_s) != af:
-            raise ValueError("bad af in punch.")
-
-        # Check valid punch mode.
-        nic = interface.route(af).nic()
-        if punch_mode not in [1, 2, 3]:
-            raise ValueError("Invalid punch mode")
-
-        # Punch mode matches message.
-        if punch_mode != self.payload.punch_mode:
-            raise ValueError("bad punch mode.")
-
-        # Remote address checks.
-        host_limit = 0
-        ipr = IPRange(dest_s, bitlen=host_limit)
-        if punch_mode == TCP_PUNCH_REMOTE:
-            # Private address indicate for remote punching?
-            if ipr.is_private:
-                raise ValueError(fstr("{0} is priv in punch remote", (dest_s,)))
-
-            # Punching our own external address?
-            # if dest_s == ext:
-            #     raise ValueError(fstr("{0} == ext in punch remote", (dest_s,)))
-
-        # Private address sanity checks.
-        if punch_mode in [TCP_PUNCH_SELF, TCP_PUNCH_LAN]:
-            # Public address indicate for private?
-            if ipr.is_public:
-                raise ValueError(fstr("{0} is pub for punch $priv", (dest_s,)))
-
-        # Should be another computer's IP.
-        # if punch_mode == TCP_PUNCH_LAN:
-        #     if dest_s == nic:
-        #         raise ValueError(fstr("{0} is ourself for lan punch", (dest_s,)))
-
-        # Should be ourself.
-        if punch_mode == TCP_PUNCH_SELF:
-            # May be another nic ip.
-            if dest_s != nic:
-                log(
-                    fstr(
-                        "{0} !ourself {1} in punch self",
-                        (
-                            dest_s,
-                            nic,
-                        ),
-                    )
-                )
-
-    def __init__(self, data: Dict[str, Any], enum: int = SIG_TCP_PUNCH) -> None:
-        super().__init__(data, enum)
-
-
-class RandomProbeMsg(ProtoMsg):
-    """Carries random-probe rendezvous parameters for symmetric NAT traversal.
-
-    Both sides exchange one of these.  The cone (endpoint-independent)
-    side advertises its known external (ip, port).  The symmetric side
-    advertises only its external IP -- its outbound port mappings are
-    random per-flow and have to be discovered via the probe collision.
-
-    role: "sym" if my own NAT is symmetric, "non_sym" otherwise
-          (covers open internet, full cone, restricted, port-
-          restricted -- the algorithm only really cares whether
-          my outbound port is predictable per flow).
-    """
-
-    class Payload:
-        """Random-probe payload: rendezvous time, both ext IPs, cone known port, magic."""
-
-        def __init__(
-            self,
-            role: str,
-            punch_time: int,
-            magic: str,
-            ext_ip: str,
-            known_port: int = 0,
-            probe_count: int = 256,
-        ) -> None:
-            self.role = to_s(role)
-            self.punch_time = int(punch_time)
-            self.magic = to_s(magic)
-            self.ext_ip = to_s(ext_ip)
-            self.known_port = int(known_port)
-            self.probe_count = int(probe_count)
-
-        def to_dict(self) -> Dict[str, Any]:
-            """Serialise the payload to a JSON-compatible dict."""
-            return {
-                "role": self.role,
-                "punch_time": self.punch_time,
-                "magic": self.magic,
-                "ext_ip": self.ext_ip,
-                "known_port": self.known_port,
-                "probe_count": self.probe_count,
-            }
-
-        @staticmethod
-        def from_dict(d: Dict[str, Any]) -> "RandomProbeMsg.Payload":
-            """Deserialise a dict into a RandomProbeMsg.Payload."""
-            return RandomProbeMsg.Payload(
-                d.get("role", "non_sym"),
-                d.get("punch_time", 0),
-                d.get("magic", ""),
-                d.get("ext_ip", ""),
-                d.get("known_port", 0),
-                d.get("probe_count", 256),
-            )
-
-    def __init__(self, data: Dict[str, Any], enum: int = SIG_RANDOM_PROBE) -> None:
-        super().__init__(data, enum)
-
-
-class TURNMsg(ProtoMsg):
-    """Carries TURN relay and peer address tuples for TURN-based connections."""
-
-    class Payload:
-        """Contains peer and relay address tuples for a TURN session."""
-
-        def __init__(self, peer_tup: Any, relay_tup: Any) -> None:
-            self.peer_tup = peer_tup
-            self.relay_tup = relay_tup
-
-        def to_dict(self) -> Dict[str, Any]:
-            """Serialise the payload to a JSON-compatible dict."""
-            return {
-                "peer_tup": self.peer_tup,
-                "relay_tup": self.relay_tup,
-            }
-
-        @staticmethod
-        def from_dict(d: Dict[str, Any]) -> "TURNMsg.Payload":
-            """Deserialise a dict into a TURNMsg.Payload."""
-            return TURNMsg.Payload(
-                d["peer_tup"],
-                d["relay_tup"],
-            )
-
-    def __init__(self, data: Dict[str, Any], enum: int = SIG_TURN) -> None:
-        super().__init__(data, enum)
-
-
-class UdpPunchMsg(PunchMsg):
-    """PunchMsg variant that wires SIG_UDP_PUNCH on the wire so the receiver
-    routes the message to the udp_punch plugin instead of tcp_punch.
-
-    The payload schema is identical (mappings, ntp, punch_mode), so all the
-    nat_predict / boundary_alloc machinery is reused unchanged.  Only the
-    leading enum byte differs.
-    """
-
-    def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_UDP_PUNCH) -> None:
-        super().__init__(data or {}, enum)
-
-
 class ConMsg(ProtoMsg):
     """Initiates a direct connection attempt between two peers."""
 
     def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_CON) -> None:
-        super().__init__(data or {}, enum)
-
-
-class ConIdMsg(ProtoMsg):
-    """Out-of-band claim from the initiator that an already-open TCP connection
-    (identified by the initiator's local socket tuple) belongs to a particular
-    plugin_id.  Replaces the legacy in-band CON_ID_MSG handshake so node_protocol
-    no longer needs to special-case the first datagram on every inbound pipe.
-    """
-
-    class Payload(ProtoMsg.Payload):
-        """Carries the initiator's view of its own (src_ip, src_port).
-
-        The receiver matches this against client_tup of the recently-accepted
-        TCP pipe; same-LAN/loopback paths see identical tuples on both sides
-        so the lookup is exact.  When the initiator is behind NAT, the
-        receiver's matcher falls back to the peer-pubkey known-IP set
-        carried by meta.src_buf.
-        """
-
-        def __init__(self, src_ip: str = "", src_port: int = 0) -> None:
-            self.src_ip = to_s(src_ip)
-            self.src_port = to_n(src_port)
-
-        def to_dict(self) -> Dict[str, Any]:
-            return {
-                "src_ip": self.src_ip,
-                "src_port": self.src_port,
-            }
-
-        @staticmethod
-        def from_dict(d: Dict[str, Any]) -> "ConIdMsg.Payload":
-            return ConIdMsg.Payload(
-                d.get("src_ip", ""),
-                d.get("src_port", 0),
-            )
-
-    def __init__(self, data: Optional[Dict[str, Any]] = None, enum: int = SIG_CON_ID) -> None:
         super().__init__(data or {}, enum)
 
 
@@ -520,14 +281,20 @@ class ReturnAddr(ProtoMsg):
         super().__init__(data or {}, enum)
 
 
-SIG_PROTO = {
-    SIG_CON: [ConMsg, P2P_DIRECT, 5],
-    SIG_TCP_PUNCH: [PunchMsg, P2P_PUNCH, 20],
-    SIG_TURN: [TURNMsg, P2P_RELAY, 10],
-    SIG_GET_ADDR: [GetAddr, 0, 5],
-    SIG_RETURN_ADDR: [ReturnAddr, 0, 6],
-    SIG_RANDOM_PROBE: [RandomProbeMsg, P2P_RANDOM_PROBE, 18],
-    SIG_CON_ID: [ConIdMsg, P2P_DIRECT, 5],
-    SIG_UDP_PUNCH: [UdpPunchMsg, P2P_PUNCH, 20],
-    # SIG_ADDR: [AddrMsg, 0, 5],
-}
+def build_core_sig_proto() -> Dict[int, list]:
+    """Return a fresh dict of CORE (plugin-independent) signal types.
+
+    Each value is [msg_class, strategy_enum, ttl_seconds] -- same shape
+    plugins use in their PROTO_MESSAGES tuples. The traversal manager
+    seeds self.sig_proto with this and plugin_loader merges
+    PROTO_MESSAGES from each plugin's main.py on top, producing the
+    runtime sig_proto dispatch table.
+
+    Returning a fresh dict per call (not a module-level constant) keeps
+    multiple Routers in the same process from sharing mutable state.
+    """
+    return {
+        SIG_CON: [ConMsg, P2P_DIRECT, 5],
+        SIG_GET_ADDR: [GetAddr, 0, 5],
+        SIG_RETURN_ADDR: [ReturnAddr, 0, 6],
+    }

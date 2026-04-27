@@ -2,7 +2,8 @@
 from typing import Any, List, Optional, Tuple
 import asyncio
 from aionetiface import IP4, IP6, Interface, TCP, Pipe, log, log_exception, fstr
-from ....protocol.proto_msg import ConIdMsg
+from ....protocol.proto_defs import P2P_DIRECT
+from .proto import SIG_CON_ID, ConIdMsg, handle_con_id
 from ...traversal_plugin import TraversalPlugin
 
 
@@ -218,3 +219,22 @@ class DirectConnect(TraversalPlugin):
 
 
 PLUGIN_CLASS = DirectConnect
+
+# direct_connect owns two signal types:
+#   * SIG_CON (initiator-side connection request) -- the core ConMsg.
+#     Registered by the central protocol module since it predates the
+#     plugin auto-loader and isn't plugin-specific in shape.
+#   * SIG_CON_ID (rendezvous notification carrying src_tup back to
+#     the receiver after the TCP is up). Plugin-owned; declared here
+#     so the loader auto-registers it without core-protocol edits.
+PROTO_MESSAGES = (
+    (SIG_CON_ID, ConIdMsg, P2P_DIRECT, 5),
+)
+
+# Pure-rendezvous signal handlers. The traversal manager invokes these
+# from recv_signal_msg BEFORE falling through to the plugin-creation
+# path -- ConIdMsg has no plugin to run, it just resolves an existing
+# inbound future. Loader merges into manager.proto_handlers.
+PROTO_HANDLERS = {
+    SIG_CON_ID: handle_con_id,
+}

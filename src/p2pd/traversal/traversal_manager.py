@@ -28,7 +28,7 @@ from .traversal_utils import (
     to_s,
     try_unpack_msg,
 )
-from ..protocol.proto_msg import ConIdMsg, ConMsg, ProtoMsg, SIG_PROTO
+from ..protocol.proto_msg import ConMsg, ProtoMsg, build_core_sig_proto
 
 
 class TraversalManager:
@@ -71,6 +71,20 @@ class TraversalManager:
         # already pending.  Bounded in practice by the number of in-flight
         # reverse_connect attempts.
         self.pending_con_id_by_tup = {}
+
+        # Runtime protocol-message registry. Seeded with core (plugin-
+        # independent) messages; plugin_loader merges PROTO_MESSAGES
+        # from each plugin's main.py into this dict at startup so the
+        # central proto_msg.py never has to know about plugin-owned
+        # message types.
+        self.sig_proto = build_core_sig_proto()
+
+        # Pure-rendezvous handler registry. Maps sig_enum to a callable
+        # `handler(manager, msg)` that gets invoked from recv_signal_msg
+        # BEFORE the plugin-creation fall-through. Used for signals that
+        # carry no plugin (e.g. SIG_CON_ID, which just ties an inbound
+        # pipe to an existing plugin_id future).
+        self.proto_handlers = {}
 
         # Long-lived background tasks spawned by signal handling.
         self.tasks = []
@@ -289,7 +303,7 @@ class TraversalManager:
     # Called by the MQTT client as: handler(msg, src_pk, queue_id, client)
     async def recv_signal_msg(self, msg: Any, src_pk_hex: str, pipe_id_hex: str, client: Any) -> None:
         """Decrypt an incoming signal message and dispatch it to the matching or new plugin."""
-        msg = try_unpack_msg(to_b(msg), self.kp.private_key, SIG_PROTO)
+        msg = try_unpack_msg(to_b(msg), self.kp.private_key, self.sig_proto)
 
         # Message has expired.
         if int(self.router.get_time()) >= msg.meta.ttl:
@@ -298,14 +312,17 @@ class TraversalManager:
         # Update routing destination with our current address.
         msg.set_cur_addr(self.addr_bytes)
 
-        # ConIdMsg is a pure rendezvous notification, not a plugin request.
-        # The initiator already opened the TCP from src_tup; we look up the
-        # accepted pipe by tup and resolve the existing inbound_pipes future
-        # under meta.pipe_id (the reverse_connect plugin pre-registered it
-        # before sending the ConMsg that triggered this connection).  No
-        # plugin instance to run -- handle it inline and return.
-        if isinstance(msg, ConIdMsg):
-            self.handle_con_id(msg)
+        # Pure-rendezvous handler dispatch (plugin-owned, registered via
+        # PROTO_HANDLERS at load time). These signals carry no plugin --
+        # they just resolve an existing future, validate inbound pipe
+        # tuples, etc. -- so we handle them inline and skip the
+        # plugin-creation fall-through. SIG_CON_ID is the canonical
+        # example: the initiator already opened the TCP from src_tup
+        # and this signal ties the accepted pipe to the plugin_id the
+        # reverse_connect plugin is awaiting on.
+        handler = self.proto_handlers.get(msg.enum)
+        if handler is not None:
+            handler(self, msg)
             return
 
         # If plugin exists check sender is authorized to reach plugin.
@@ -336,32 +353,11 @@ class TraversalManager:
         # Prune completed tasks to avoid unbounded growth.
         self.tasks = [t for t in self.tasks if not t.done()]
 
-    # ConIdMsg rendezvous: the initiator's already-open TCP pipe is in
-    # inbound_pipes_by_tup (registered by Node.up_cb on accept).  Match it
-    # to the plugin_id carried in meta.pipe_id and resolve the existing
-    # inbound_pipes[plugin_id] future the reverse_connect plugin is
-    # awaiting.  When the signal beats the accept, register a pending
-    # claim and let up_cb dispatch when the pipe arrives.
-    def handle_con_id(self, msg: Any) -> None:
-        """Match an incoming ConIdMsg to its accepted TCP pipe and resolve the plugin future."""
-        plugin_id = msg.meta.pipe_id
-        src_tup = (msg.payload.src_ip, int(msg.payload.src_port))
-
-        pipe = self.inbound_pipes_by_tup.pop(src_tup, None)
-        if pipe is None:
-            # Up_cb hasn't fired yet -- record the claim so the next
-            # accept on this tup can resolve it directly.
-            self.pending_con_id_by_tup[src_tup] = plugin_id
-            return
-
-        fut = self.inbound_pipes.get(plugin_id)
-        if fut is None:
-            # No reverse_connect plugin awaiting this id.  Silently drop;
-            # nothing to wire the pipe up to.
-            return
-        if fut.done():
-            return
-        fut.set_result(pipe)
+    # ConIdMsg rendezvous logic now lives in plugins/direct_connect/proto.py
+    # and registers as a PROTO_HANDLERS entry. recv_signal_msg above
+    # invokes it via self.proto_handlers lookup. The manager just owns
+    # the inbound_pipes_by_tup + pending_con_id_by_tup dicts the
+    # handler operates on.
 
     # Called by Node.up_cb on every newly-accepted inbound TCP pipe.
     # If a ConIdMsg already arrived for this tup, resolve immediately;

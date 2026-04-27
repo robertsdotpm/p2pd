@@ -3,7 +3,8 @@ from typing import Any, Optional
 import asyncio
 from aionetiface import EXT_BIND, UDP, get_infra, fstr, log_p2p
 from ...traversal_plugin import TraversalPlugin
-from ....protocol.proto_msg import TURNMsg
+from ....protocol.proto_defs import P2P_RELAY
+from .proto import SIG_TURN, TURNMsg
 from .turn_utils import get_first_working_turn_client, rendezvous_rank
 
 
@@ -169,6 +170,10 @@ class TURNPluginFactory:
 # the post-allocate signaling exchange and tail latency on slower
 # OSes / network paths.
 PLUGIN_CONF = {"timeout": 60}
+
+PROTO_MESSAGES = (
+    (SIG_TURN, TURNMsg, P2P_RELAY, 10),
+)
 
 
 async def setup_plugin(node):
