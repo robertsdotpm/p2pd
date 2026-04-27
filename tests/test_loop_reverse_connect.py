@@ -71,7 +71,17 @@ class TestLoopReverseConnect(AsyncTestCase):
                 await asyncio.wait_for(pipe.close(), timeout=5)
             except Exception:
                 pass
-            await asyncio.sleep(0.3)
+            # Vista (NT 6.0) needs more breathing room between reverse_connect
+            # iterations -- iter 1's MQTT signal-pipe state takes longer to
+            # settle on Vista than on later Windows kernels, and iter 2's first
+            # publish gets queued behind the unfinished close-side work,
+            # blocking the asyncio loop long enough that bob's spawned
+            # direct_connect plugins never reach their first run() statement
+            # within the test's 25s wait_for budget. 2s is empirically enough
+            # to confirm whether the failure is environmental signal-pipe lag
+            # or a real cleanup leak; a passing run with this delay points to
+            # the former.
+            await asyncio.sleep(2.0)
 
 
 if __name__ == "__main__":
