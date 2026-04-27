@@ -343,7 +343,12 @@ self,
                 )
             )
 
-        assert isinstance(dest_tup, tuple)
+        if not isinstance(dest_tup, tuple):
+            raise TypeError(
+                "TURN.send: dest_tup must be a tuple, got {0}".format(
+                    type(dest_tup).__name__,
+                )
+            )
 
         # Sanity checking on the dest IP.
         # If dest IP doesn't match this TURN server IP
@@ -379,7 +384,11 @@ self,
                 sub = (b"", peer_tup)
                 break
 
-        assert sub is not None
+        if sub is None:
+            raise ValueError(
+                "TURN.recv: no sub provided and no accepted peers; "
+                "call accept_peer first or pass an explicit sub"
+            )
         return await super().recv(sub, timeout)
 
     # Handles writing TURN messages to self.udp_stream.
