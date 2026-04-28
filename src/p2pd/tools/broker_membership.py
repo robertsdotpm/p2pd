@@ -89,6 +89,23 @@ async def main_async(peer_pub_hexes: List[str]) -> int:
                 continue
             out["publish_for"][tgt] = [fmt_client(c) for c in clients]
 
+    # Post-query stay-alive window: slow VMs finish their
+    # publish_for queries sooner than fast ones, then immediately
+    # call node.close() which tears down MQTT subscriptions. Other
+    # peers' probes still in flight then arrive at brokers where
+    # this VM is no longer subscribed and silently drop -- which
+    # produced asymmetric matrix results in earlier diagnostic
+    # runs (vista finished early, modern peers' probes never
+    # reached vista's now-dead subscription). Stay alive 60s so
+    # every peer's probe round-trip has a chance to complete
+    # before we tear down.
+    if peer_pub_hexes:
+        stay_alive = 60
+        print("post-query stay-alive {0}s before shutdown...".format(
+            stay_alive,
+        ), file=sys.stderr)
+        await asyncio.sleep(stay_alive)
+
     print(json.dumps(out, indent=2))
 
     try:
