@@ -25,10 +25,18 @@ from aionetiface.net.selector_proxy import selector_proxy
 
 
 def punching_process(puncher: Any, reverse_server_dest: Any, stop_reader: Any) -> None:
-    """Run the blocking punch engine and proxy the result back through a reverse connection."""
+    """Run the blocking punch engine and proxy the result back through a reverse connection.
+
+    Despite the name, this currently runs in a ThreadPoolExecutor
+    worker thread (the previous ProcessPoolExecutor was unstable on
+    Windows Python 3.8 -- see node_utils.get_pp_executors). Catch
+    ValueError too because signal.signal() raises that when called
+    outside the main thread, and the SIGINT handler is pointless
+    in a worker thread anyway (signals route to the main thread).
+    """
     try:
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-    except (OSError, AttributeError):
+    except (OSError, AttributeError, ValueError):
         pass
     try:
         # New punched TCP sock to destination.
@@ -46,6 +54,10 @@ def punching_process(puncher: Any, reverse_server_dest: Any, stop_reader: Any) -
         pass
     except (OSError, ConnectionError):
         log_exception()
+    except Exception as e:
+        # Prevent thread or process blow up.
+        log_exception()
+        raise e
 
 
 async def start_punching_process(nic: Any, puncher: Any, stop_reader: Any, proc_pool: Optional[Any] = None) -> Optional[Any]:

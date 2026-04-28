@@ -7,7 +7,7 @@ import socket
 import signal
 import time
 from ecdsa import SigningKey, SECP256k1
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import pathlib
 from aionetiface import (
     fstr, log, log_exception, ip_norm, get_aionetiface_install_root,
@@ -369,39 +369,36 @@ def worker_init() -> None:
 
 
 async def get_pp_executors(workers: Optional[int] = None) -> Tuple[int, Optional[Any]]:
-    """Create a ProcessPoolExecutor with worker_init, returning (worker_count, executor_or_None)."""
+    """Create a ThreadPoolExecutor for tcp_punch's burst-send worker.
+
+    Was ProcessPoolExecutor for "more accurate timing and isolating
+    busy connection spam from main app." In practice the precision
+    benefit was marginal -- punch's sub-second timing precision
+    comes from socket-call latency, not from process isolation,
+    and the GIL releases on every socket op anyway. The cost was
+    real though: on Python 3.8 + Windows, ProcessPoolExecutor's
+    queue-management thread routinely crashes with
+    OSError [WinError 6] ("invalid handle") and BrokenPipeError
+    [WinError 109] mid-poll, killing the punch task even though
+    the worker subprocess is fine. Documented CPython bug
+    (issue 39104, 41588). Switching to ThreadPoolExecutor
+    sidesteps that entire mess. Same Executor interface so callers
+    don't change.
+
+    Future: if punch precision in production turns out to need
+    process isolation after all, replace with one-shot
+    multiprocessing.Process per call (no pool, no queue manager).
+    """
     workers = workers or min(32, os.cpu_count() + 4)
     pp_executor = None
-    # return 0, None
     try:
-        import sys
-        if sys.version_info >= (3, 7):
-            pp_executor = ProcessPoolExecutor(max_workers=workers, initializer=worker_init)
-        else:
-            # Python < 3.7 has no initializer= on ProcessPoolExecutor.
-            # Workers are spawned lazily on first submit(), not at __init__,
-            # so we must keep SIG_IGN active through the warm-up submit() call
-            # that actually forks the worker processes.
-            old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
-            try:
-                pp_executor = ProcessPoolExecutor(max_workers=workers)
-                # Force all workers to spawn now while SIG_IGN is still set,
-                # so they inherit it before the parent restores its handler.
-                futs = [pp_executor.submit(int) for _ in range(workers)]
-                for f in futs:
-                    try:
-                        f.result(timeout=5)
-                    except Exception:
-                        pass
-            finally:
-                signal.signal(signal.SIGINT, old_sigint)
+        # ThreadPoolExecutor doesn't need worker_init's SIGINT handler:
+        # signals are delivered to the main thread only, so worker
+        # threads don't see them. Skip the initializer entirely.
+        pp_executor = ThreadPoolExecutor(max_workers=workers)
     except asyncio.CancelledError:  # pylint: disable=try-except-raise
         raise
     except (OSError, RuntimeError):
-        # Not all platforms have a working implementation of sem_open / semaphores.
-        # Android is one such platform. It does support multiprocessing but
-        # this semaphore feature is missing and will throw an error here.
-        # In this case -- log the error and revert to using a single event loop.
         log_exception()
 
     return workers, pp_executor
