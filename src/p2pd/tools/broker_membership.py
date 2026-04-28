@@ -59,11 +59,13 @@ async def main_async(peer_pub_hexes: List[str]) -> int:
     # diagnostic races against the slowest peer's Node().start() --
     # if we start probing for peer B's pubkey before B has finished
     # subscribing at its protected brokers, our probes hit brokers
-    # where B isn't yet registered and silently drop. Sleep here
-    # so even slow VMs (XP/Vista, 60-120s startup) finish their
-    # subscription work before we begin the publish_for queries.
+    # where B isn't yet registered and silently drop. 240s gives
+    # even slow VMs (XP/Vista, 60-120s startup) plenty of headroom
+    # AND lets each peer's MQTT keepalive cycle settle so transient
+    # broker-side disconnects (Invalid CONNACK b'') have stabilised
+    # before we begin probing.
     if peer_pub_hexes:
-        sync_wait = 90
+        sync_wait = 240
         print("sync wait {0}s for matrix peers to finish subscribing...".format(
             sync_wait,
         ), file=sys.stderr)
