@@ -285,10 +285,15 @@ def build_node_address(node: Any, out: bool) -> None:
     # peers resolving our addr will prefer publishing via these
     # before falling back to their own rendezvous-derived
     # candidate set, sidestepping the broker-set non-convergence
-    # bug. We only know our own protected set here; TURN servers
-    # are picked at allocation time so the hint list there is
-    # currently empty (placeholder for future plugin-side hint
-    # population).
+    # bug.
+    #
+    # MAX_BROKER_HINTS caps the count to keep the addr under
+    # namebump's NB_VAL_LEN ceiling. Each hint is ~30-50 bytes
+    # encoded; 3 hints with 4 base sections fits comfortably
+    # under 500B. Two hints would give some redundancy but only
+    # one mutually-reachable broker is needed for delivery, so
+    # 3 is plenty in practice.
+    MAX_BROKER_HINTS = 3
     mqtt_brokers = []
     try:
         for client in getattr(node.router, "protected_clients", set()) or []:
@@ -296,6 +301,8 @@ def build_node_address(node: Any, out: bool) -> None:
             host, port = getattr(client, "dest", (None, None))
             if af is not None and host and port:
                 mqtt_brokers.append({"af": int(af), "host": host, "port": int(port)})
+            if len(mqtt_brokers) >= MAX_BROKER_HINTS:
+                break
     except (AttributeError, TypeError):
         # If the router didn't finish setting up protected_clients
         # we just emit no hints; legacy 4-part addr behaviour.
