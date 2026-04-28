@@ -98,7 +98,15 @@ def select_first_viable_pair(
 
 
 async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_name: Optional[str] = None) -> Any:
-    """Resolve the destination address and run the traversal plugin to establish a P2P connection."""
+    """Resolve the destination address and run the traversal plugin to establish a P2P connection.
+
+    reverse_connect is special-cased: per the any-pathway design the
+    initiator does not pin a (src, dest) interface pair -- the
+    responder is free to pick whichever combo works at its end. The
+    initiator only optionally constrains (af, route_type). When either
+    of those is None the constraint is left as the any-pathway sentinel
+    so the responder iterates compatible options.
+    """
     addr_bytes, dest_vk, _ = await resolve_pnp_addr(node, pnp_addr)
     dest_map = parse_node_addr(addr_bytes)
     enrich_addr_map_with_loopback(dest_map)
@@ -107,6 +115,20 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
     src_map = node.addr_map
     if dest_vk:
         dest_map["vk"] = dest_vk
+
+    if plugin_name == "reverse_connect":
+        # Sparse path: don't iterate pairs, fire one attempt with
+        # whatever (af, route_type) the user gave (None = any).
+        return await node.traversal.attempt_plugin(
+            src_map=src_map,
+            dest_map=dest_map,
+            sig_pipe=sig_pipe,
+            plugin_name=plugin_name,
+            src_info=None,
+            dest_info=None,
+            af=af,
+            route_type=route_type,
+        )
 
     if not af:
         for try_af in (IP4, IP6):

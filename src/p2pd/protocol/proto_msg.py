@@ -29,8 +29,15 @@ class ProtoMsg:
     """Base class for all P2P traversal protocol messages."""
 
     @staticmethod
-    def load_addr(af: Any, addr_buf: Any, if_index: int) -> Tuple[Any, Dict[str, Any]]:
-        """Parse addr_buf into (af, addr_dict), validating that if_index is present."""
+    def load_addr(af: Any, addr_buf: Any, if_index: Any) -> Tuple[Any, Dict[str, Any]]:
+        """Parse addr_buf into (af, addr_dict), validating that if_index is present.
+
+        af or if_index may be None when the sender left the field
+        unconstrained (the "any" sentinel used by reverse_connect to
+        let the responder pick its own (af, route_type, pair)). In
+        that case we skip the if_index range check; it is the caller's
+        job to handle the unconstrained case.
+        """
         # Validate src address.
         addr = parse_node_addr(addr_buf)
 
@@ -44,13 +51,15 @@ class ProtoMsg:
         from ..node.node_utils import enrich_addr_map_with_loopback
         enrich_addr_map_with_loopback(addr)
 
-        # Parse af for punching.
-        af = to_n(af)
-        af = i_to_af(af)
+        # Parse af for punching. None passes straight through (any-AF
+        # mode); the responder will iterate compatible AFs itself.
+        if af is not None:
+            af = to_n(af)
+            af = i_to_af(af)
 
-        # Validate src if index.
-        if if_index not in addr[af]:
-            raise ValueError(fstr("bad if_i {0}", (if_index,)))
+            # Validate src if index when both are pinned.
+            if if_index is not None and if_index not in addr[af]:
+                raise ValueError(fstr("bad if_i {0}", (if_index,)))
 
         return af, addr
 
@@ -64,7 +73,7 @@ class ProtoMsg:
             pipe_id: Any = b"",
             af: Any = IP4,
             src_buf: Any = b"",
-            src_index: int = 0,
+            src_index: Any = 0,
             route_type: Any = EXT_BIND,
             same_machine: bool = False,
             plugin_name: Optional[str] = None,
@@ -73,16 +82,26 @@ class ProtoMsg:
             self.ttl = to_n(ttl)
             self.pipe_id = to_s(pipe_id)
             self.src_buf = to_s(src_buf)
-            self.src_index = to_n(src_index)
+            # src_index may be None when the sender wants the responder
+            # to pick its own pair (any-pathway mode); preserve that.
+            self.src_index = src_index if src_index is None else to_n(src_index)
             self.af = af
             self.same_machine = False
             self.route_type = route_type
             self.plugin_name = plugin_name
+            self.src = None
+            self.src_info = None
             if src_buf:
                 self.load_src_addr()
 
         def load_src_addr(self) -> None:
-            """Parse src_buf and populate af, src, and src_info on this Meta instance."""
+            """Parse src_buf and populate af, src, and src_info on this Meta instance.
+
+            When af or src_index is None the sender has left the pair
+            unpinned -- src is still parsed (peer addresses are always
+            useful) but src_info stays None so the responder knows it
+            is free to pick its own interface.
+            """
             # Parse src_buf to addr.
             self.af, self.src = ProtoMsg.load_addr(
                 self.af,
@@ -90,33 +109,49 @@ class ProtoMsg:
                 self.src_index,
             )
 
+            if self.af is None or self.src_index is None:
+                self.src_info = None
+                return
+
             # Reference to the network info.
             info = self.src[self.af]
             self.src_info = info[self.src_index]
 
         def to_dict(self) -> Dict[str, Any]:
             """Serialise this Meta to a plain dict suitable for JSON encoding."""
-            return {
+            d = {
                 "ttl": self.ttl,
                 "pipe_id": self.pipe_id,
-                "af": int(self.af),
                 "src_buf": self.src_buf,
-                "src_index": self.src_index,
-                "route_type": self.route_type,
                 "same_machine": self.same_machine,
                 "plugin_name": self.plugin_name,
             }
+            # Optional pinning fields -- omitted when None so the wire
+            # format reflects the "any" semantic explicitly. Receivers
+            # default missing keys back to None in from_dict.
+            if self.af is not None:
+                d["af"] = int(self.af)
+            if self.src_index is not None:
+                d["src_index"] = self.src_index
+            if self.route_type is not None:
+                d["route_type"] = self.route_type
+            return d
 
         @staticmethod
         def from_dict(d: Dict[str, Any]) -> "ProtoMsg.Meta":
-            """Construct a Meta instance from a plain dict, using safe defaults for missing keys."""
+            """Construct a Meta instance from a plain dict, using safe defaults for missing keys.
+
+            Missing af / src_index / route_type keys default to None
+            (the any-pathway sentinel); old senders that explicitly
+            populate those fields still round-trip identically.
+            """
             return ProtoMsg.Meta(
                 d.get("ttl", 0),
                 d.get("pipe_id", b""),
-                d.get("af", IP4),
+                d.get("af", None),
                 d.get("src_buf", b""),
-                d.get("src_index", 0),
-                d.get("route_type", EXT_BIND),
+                d.get("src_index", None),
+                d.get("route_type", None),
                 d.get("same_machine", False),
                 d.get("plugin_name", None),
             )
@@ -125,10 +160,13 @@ class ProtoMsg:
     class Routing:
         """Encapsulates destination routing information for a protocol message."""
 
-        def __init__(self, af: Any = IP4, dest_buf: Any = b"", dest_index: int = 0) -> None:
+        def __init__(self, af: Any = IP4, dest_buf: Any = b"", dest_index: Any = 0) -> None:
             self.dest_buf = to_s(dest_buf)
-            self.dest_index = to_n(dest_index)
+            # dest_index may be None for any-pathway mode; preserve that.
+            self.dest_index = dest_index if dest_index is None else to_n(dest_index)
             self.af = af
+            self.dest = None
+            self.dest_info = None
             if dest_buf:
                 self.set_cur_dest(dest_buf)
                 self.cur_dest_buf = None  # set later.
@@ -145,7 +183,13 @@ class ProtoMsg:
         """
 
         def set_cur_dest(self, cur_dest_buf: Any) -> None:
-            """Update the destination address from a fresh address buffer and reparse routing info."""
+            """Update the destination address from a fresh address buffer and reparse routing info.
+
+            When af or dest_index is None the sender has left the pair
+            unpinned (any-pathway mode); dest is still parsed but
+            dest_info stays None so the responder knows it is free
+            to pick its own interface.
+            """
             self.cur_dest_buf = to_s(cur_dest_buf)
             self.af, self.dest = ProtoMsg.load_addr(
                 self.af,
@@ -153,25 +197,35 @@ class ProtoMsg:
                 self.dest_index,
             )
 
+            if self.af is None or self.dest_index is None:
+                self.dest_info = None
+                return
+
             # Reference to the network info.
             info = self.dest[self.af]
             self.dest_info = info[self.dest_index]
 
         def to_dict(self) -> Dict[str, Any]:
             """Serialise this Routing to a plain dict suitable for JSON encoding."""
-            return {
-                "af": int(self.af),
-                "dest_buf": self.dest_buf,
-                "dest_index": self.dest_index,
-            }
+            d = {"dest_buf": self.dest_buf}
+            # af / dest_index are optional in any-pathway mode.
+            if self.af is not None:
+                d["af"] = int(self.af)
+            if self.dest_index is not None:
+                d["dest_index"] = self.dest_index
+            return d
 
         @staticmethod
         def from_dict(d: Dict[str, Any]) -> "ProtoMsg.Routing":
-            """Construct a Routing instance from a plain dict, using safe defaults for missing keys."""
+            """Construct a Routing instance from a plain dict, using safe defaults for missing keys.
+
+            Missing af / dest_index keys default to None (the
+            any-pathway sentinel).
+            """
             return ProtoMsg.Routing(
-                d.get("af", IP4),
+                d.get("af", None),
                 d.get("dest_buf", b""),
-                d.get("dest_index", 0),
+                d.get("dest_index", None),
             )
 
     # Abstract kinda feel.

@@ -295,10 +295,15 @@ async def choose_pathways(pathway: Optional[str]) -> Any:
     """
     Choose the routing pathway to try (this controls IP selection!)
     This is why having accurate interface info is so important.
+
+    The (a)ny option returns None, which downstream is interpreted as
+    "leave the route_type unconstrained" -- for plugins like
+    reverse_connect, that means the responder is free to pick any
+    route_type at its end.
     """
     cout()
     cout("Choose connection pathway:")
-    cout("WAN: (e)xternal, LAN: (l)ocal")
+    cout("WAN: (e)xternal, LAN: (l)ocal, (a)ny")
     cout("Type menu to return.")
     while not sock_has_data(stop_rw[0]):
         pathway = pathway or (await ainput("Enter for default (e): "))
@@ -314,6 +319,8 @@ async def choose_pathways(pathway: Optional[str]) -> Any:
                 return EXT_BIND
             if c == "l":
                 return NIC_BIND
+            if c == "a":
+                return None
         pathway = None
 
 
@@ -321,10 +328,15 @@ async def choose_address_families(addr_type: Optional[str]) -> Any:
     """
     Allows the code to specifically use one or more address families.
     Applicable / useful for dual-stack environments.
+
+    The (a)ny option returns None, which downstream is interpreted as
+    "leave the address family unconstrained" -- for plugins like
+    reverse_connect, that means the responder is free to pick whichever
+    AF works at its end.
     """
     cout()
     cout("Address family priority:")
-    cout("(4) IPv4, (6) IPv6")
+    cout("(4) IPv4, (6) IPv6, (a)ny")
     cout("Type menu to return.")
     while not sock_has_data(stop_rw[0]):
         addr_type = addr_type or (await ainput("Enter for default (4): "))
@@ -340,6 +352,8 @@ async def choose_address_families(addr_type: Optional[str]) -> Any:
                 return IP4
             if c == "6":
                 return IP6
+            if c == "a":
+                return None
         addr_type = None
 
 

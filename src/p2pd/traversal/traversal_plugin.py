@@ -45,15 +45,23 @@ class TraversalPlugin:
         self.nic = nic
 
     def set_context(self, route_type: Any, same_machine: bool, set_bind: bool, timeout: int) -> None:
-        """Set the route type, same-machine flag, bind preference, and timeout for this plugin."""
+        """Set the route type, same-machine flag, bind preference, and timeout for this plugin.
+
+        When route_type / af / src_info / dest_info are unconstrained
+        (any-pathway mode -- used by reverse_connect when the responder
+        is free to pick), we skip dest IP selection entirely. The
+        plugin (e.g. reverse_connect) is responsible for handling the
+        unconstrained case in its run() method.
+        """
         self.route_type = route_type
         self.same_machine = same_machine
         self.set_bind = set_bind
         self.timeout = timeout
 
         # Skip route determination -- not relevant.
-        if not route_type:
-            self.dest_info["ip"] = ""
+        if not route_type or self.dest_info is None or self.src_info is None or self.af is None:
+            if self.dest_info is not None:
+                self.dest_info["ip"] = ""
             return
 
         # Determine the best destination IP to use
