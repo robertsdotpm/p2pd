@@ -274,7 +274,16 @@ class TraversalManager:
             # Specify the plugin to use in the destination.
             msg.meta = ProtoMsg.Meta.from_dict(
                 {
-                    "ttl": int(self.router.get_time()) + 30,
+                    # ConMsg lifetime: 120s gives generous headroom for
+                    # MQTT publish jitter, broker forwarding hops, slow-VM
+                    # async loop scheduling, and any slight clock drift
+                    # between sender and receiver. The previous 30s budget
+                    # was tight enough that fan_out's parallel-send pattern
+                    # routinely raced the receiver's clock past expiry,
+                    # producing the [SIG-RX] EXPIRED drops we kept seeing.
+                    # 120s matches handle_publish's max_age window so the
+                    # two timestamp checks share the same envelope.
+                    "ttl": int(self.router.get_time()) + 120,
                     "pipe_id": plugin.plugin_id,
                     "af": plugin.af,
                     # Our node address with interface details.
