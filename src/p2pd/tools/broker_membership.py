@@ -55,6 +55,20 @@ async def main_async(peer_pub_hexes: List[str]) -> int:
         "publish_for": {},
     }
 
+    # Sync window: when invoked in parallel across the matrix the
+    # diagnostic races against the slowest peer's Node().start() --
+    # if we start probing for peer B's pubkey before B has finished
+    # subscribing at its protected brokers, our probes hit brokers
+    # where B isn't yet registered and silently drop. Sleep here
+    # so even slow VMs (XP/Vista, 60-120s startup) finish their
+    # subscription work before we begin the publish_for queries.
+    if peer_pub_hexes:
+        sync_wait = 90
+        print("sync wait {0}s for matrix peers to finish subscribing...".format(
+            sync_wait,
+        ), file=sys.stderr)
+        await asyncio.sleep(sync_wait)
+
     # Phase 2: for each provided peer pubkey, run get_dest_clients
     # and dump the resulting client set. Local import keeps phase 1
     # cheap (no extra module load) when no peers are given.
