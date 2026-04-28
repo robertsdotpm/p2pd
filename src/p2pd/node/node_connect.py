@@ -110,7 +110,15 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
     addr_bytes, dest_vk, _ = await resolve_pnp_addr(node, pnp_addr)
     dest_map = parse_node_addr(addr_bytes)
     enrich_addr_map_with_loopback(dest_map)
-    sig_pipe = await node.router.pipe(dest_map["pub_key_hex"], use_cache=True)
+    # Pass dest's advertised broker hints so SmartPipe prefers them
+    # over rendezvous discovery -- the dest GUARANTEED subscribed
+    # at those brokers when it published the addr, sidestepping
+    # cross-peer broker-set non-convergence.
+    sig_pipe = await node.router.pipe(
+        dest_map["pub_key_hex"],
+        use_cache=True,
+        hint_brokers=dest_map.get("mqtt_brokers") or [],
+    )
 
     src_map = node.addr_map
     if dest_vk:

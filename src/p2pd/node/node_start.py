@@ -280,11 +280,33 @@ def build_node_address(node: Any, out: bool) -> None:
     if node.node_id is None:
         raise AssertionError("node_id was not set before building node address.")
 
+    # Collect MQTT broker hints from router.protected_clients --
+    # the brokers we successfully connected to at startup. Remote
+    # peers resolving our addr will prefer publishing via these
+    # before falling back to their own rendezvous-derived
+    # candidate set, sidestepping the broker-set non-convergence
+    # bug. We only know our own protected set here; TURN servers
+    # are picked at allocation time so the hint list there is
+    # currently empty (placeholder for future plugin-side hint
+    # population).
+    mqtt_brokers = []
+    try:
+        for client in getattr(node.router, "protected_clients", set()) or []:
+            af = getattr(client, "af", None)
+            host, port = getattr(client, "dest", (None, None))
+            if af is not None and host and port:
+                mqtt_brokers.append({"af": int(af), "host": host, "port": int(port)})
+    except (AttributeError, TypeError):
+        # If the router didn't finish setting up protected_clients
+        # we just emit no hints; legacy 4-part addr behaviour.
+        mqtt_brokers = []
+
     node.addr_bytes = make_node_addr(
         node.kp.public_key_hex,
         node.machine_id,
         node.ifs,
         port=node.listen_port,
+        mqtt_brokers=mqtt_brokers,
     )
     node.traversal.addr_bytes = node.addr_bytes
 

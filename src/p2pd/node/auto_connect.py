@@ -536,7 +536,11 @@ async def auto_connect(
     enrich_addr_map_with_loopback(dest_map)
 
     try:
-        sig_pipe = await node.router.pipe(dest_map["pub_key_hex"], use_cache=True)
+        sig_pipe = await node.router.pipe(
+            dest_map["pub_key_hex"],
+            use_cache=True,
+            hint_brokers=dest_map.get("mqtt_brokers") or [],
+        )
     except (OSError, ConnectionError, asyncio.TimeoutError):
         log_exception()
         return None, None
