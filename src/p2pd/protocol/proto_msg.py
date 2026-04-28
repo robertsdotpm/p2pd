@@ -249,8 +249,9 @@ class ProtoMsg:
         try:
             d = json.loads(to_s(buf))
         except (ValueError, UnicodeDecodeError) as e:
+            # fstr() doesn't support {n!r}; pre-render the buf head.
             raise ValueError(
-                fstr("SigMsg.unpack: malformed payload ({0}): {1!r}", (e, buf[:80]))
+                fstr("SigMsg.unpack: malformed payload ({0}): {1}", (e, repr(buf[:80])))
             ) from e
 
         # Sig checks if set.
