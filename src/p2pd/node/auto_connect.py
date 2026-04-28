@@ -10,8 +10,11 @@ from .node_utils import enrich_addr_map_with_loopback
 from ..traversal.traversal_utils import close_plugin
 
 
-# Plugins that should never be tried in auto-mode: signaling-only or relay
-SKIP_IN_AUTO = frozenset({"turn", "get_addr", "return_addr"})
+# Plugins that should never be tried in auto-mode: signaling-only,
+# relay, or meta-plugins. fan_out is excluded because auto_connect
+# already does its own per-pair combo enumeration -- racing fan_out
+# inside auto_connect would duplicate that work.
+SKIP_IN_AUTO = frozenset({"turn", "get_addr", "return_addr", "fan_out"})
 
 # Default batching knob. auto_connect kwarg overrides this.
 DEFAULT_MAX_ROUNDS = 3

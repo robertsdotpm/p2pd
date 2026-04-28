@@ -153,6 +153,9 @@ class TraversalManager:
         # Socket signal for stopping cross-process.
         plugin.stop_reader = self.stop_reader
 
+        # Manager back-ref (used by fan_out to spawn / run children).
+        plugin.manager = self
+
         # Record new plugin in dict.
         self.plugins[plugin.plugin_id] = plugin
 

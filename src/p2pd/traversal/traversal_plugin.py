@@ -30,6 +30,10 @@ class TraversalPlugin:
         self.set_bind = None
         self.timeout = None
         self.inbound_pipes = None
+        # Back-reference to the TraversalManager that owns this plugin.
+        # Set by manager.create_plugin so meta-plugins (fan_out) can
+        # spawn and run children. Regular plugins ignore it.
+        self.manager = None
         self._send_signal_msg = None
 
     def set_addrs(self, src_map: Dict[str, Any], dest_map: Dict[str, Any]) -> None:

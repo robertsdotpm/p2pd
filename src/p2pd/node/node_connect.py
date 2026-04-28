@@ -117,18 +117,28 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
         dest_map["vk"] = dest_vk
 
     if plugin_name == "reverse_connect":
-        # Sparse path: don't iterate pairs, fire one attempt with
-        # whatever (af, route_type) the user gave (None = any).
-        return await node.traversal.attempt_plugin(
-            src_map=src_map,
-            dest_map=dest_map,
-            sig_pipe=sig_pipe,
-            plugin_name=plugin_name,
+        # Per the any-pathway design the initiator does not pin a
+        # (src, dest) pair: it only optionally constrains (af,
+        # route_type). Race every viable combo within those
+        # constraints by routing through the fan_out meta-plugin --
+        # one pinned reverse_connect child per combo, first non-None
+        # pipe wins.
+        same_machine = (
+            src_map.get("machine_id") == dest_map.get("machine_id")
+        )
+        plugin = node.traversal.create_plugin(
+            af=None,
+            route_type=None,
             src_info=None,
             dest_info=None,
-            af=af,
-            route_type=route_type,
+            same_machine=same_machine,
+            plugin_name="fan_out",
         )
+        plugin.set_addrs(src_map, dest_map)
+        plugin.sig_pipe = sig_pipe
+        plugin.configure_target("reverse_connect", af=af, route_type=route_type)
+        await node.traversal.run_plugin(plugin)
+        return plugin
 
     if not af:
         for try_af in (IP4, IP6):
