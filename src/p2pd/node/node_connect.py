@@ -116,13 +116,17 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
     if dest_vk:
         dest_map["vk"] = dest_vk
 
-    if plugin_name == "reverse_connect":
-        # Per the any-pathway design the initiator does not pin a
-        # (src, dest) pair: it only optionally constrains (af,
-        # route_type). Race every viable combo within those
-        # constraints by routing through the fan_out meta-plugin --
-        # one pinned reverse_connect child per combo, first non-None
-        # pipe wins.
+    # Plugins routed through the fan_out meta-plugin: the initiator
+    # only optionally constrains (af, route_type); pair selection is
+    # done per-combo by fan_out, racing every viable pair concurrently
+    # and returning the first non-None pipe. reverse_connect needs
+    # this because by design the initiator never pins the pair (the
+    # responder is free to pick); direct_connect benefits because
+    # racing pairs catches multi-NIC mesh/mobile setups where the
+    # first iter_viable_pairs entry may be reachable from us but not
+    # from them.
+    FAN_OUT_PLUGINS = ("reverse_connect", "direct_connect")
+    if plugin_name in FAN_OUT_PLUGINS:
         same_machine = (
             src_map.get("machine_id") == dest_map.get("machine_id")
         )
@@ -136,7 +140,7 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
         )
         plugin.set_addrs(src_map, dest_map)
         plugin.sig_pipe = sig_pipe
-        plugin.configure_target("reverse_connect", af=af, route_type=route_type)
+        plugin.configure_target(plugin_name, af=af, route_type=route_type)
         await node.traversal.run_plugin(plugin)
         return plugin
 
