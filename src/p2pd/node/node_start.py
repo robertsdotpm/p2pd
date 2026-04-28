@@ -43,17 +43,23 @@ async def node_start(node: Any, sys_clock: Optional[Any] = None, out: bool = Fal
     await load_machine_identity(node)
     kp = load_cryptography_and_auth(node)
 
-    # Time & Synchronization [concurrent Phase A]
-    # Clock initialization, STUN client loading, and router startup all do network I/O;
-    # run them concurrently for faster startup.
+    # Time & Synchronization
+    # Must complete BEFORE the Router (and its MQTTClient instances) is
+    # constructed: each MQTTClient takes get_time at __init__ and uses
+    # it to stamp app-packet timestamps. Patching get_time on the
+    # Router post-hoc doesn't propagate to already-constructed
+    # MQTTClients, which silently kept using time.time -- the silent
+    # fallback that hid a multi-hour clock-skew bug between
+    # XP/Vista (BIOS clock drift) and modern VMs (NTP-synced).
+    await initialize_system_clock(node, sys_clock, out, cout)
+
+    # STUN clients + Router can run concurrently now that sys_clock
+    # is established and can be passed into Router at construction.
     await asyncio.gather(
-        initialize_system_clock(node, sys_clock, out, cout),
         load_p2p_stun_clients(node, out, cout),
         setup_router_and_signal(node, kp, out, cout),
     )
 
-    # Connectivity Clients
-    node.router.get_time = node.sys_clock.time
     await initialize_punch_coordination(node, out, cout)
 
     # Start Servers
@@ -205,7 +211,16 @@ async def load_p2p_stun_clients(node: Any, out: bool, cout: Callable) -> None:
 
 async def setup_router_and_signal(node: Any, kp: Any, out: bool, cout: Callable) -> None:
     """Instantiate the MQTT router, install default traversal plugins, and start the signal channel."""
-    router = Router(kp, nic=Interface("default"))
+    # node.sys_clock is established by initialize_system_clock which
+    # runs before this in node_start. Threading get_time at Router
+    # construction means every MQTTClient stamps app-packet timestamps
+    # off the same NTP-synced clock, instead of falling back to
+    # wall-clock time.time (which on XP/Vista can be hours off).
+    router = Router(
+        kp,
+        nic=Interface("default"),
+        get_time=node.sys_clock.time,
+    )
     node.traversal = TraversalManager(
         router, node.stop_reader, node.inbound_pipes, node.ifs
     )
