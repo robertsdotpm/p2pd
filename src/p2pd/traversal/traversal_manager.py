@@ -14,7 +14,7 @@ running instance.
 import asyncio
 from collections import OrderedDict
 from typing import Any, Callable, Dict, List, Optional
-from aionetiface import IP4, IP6, NIC_BIND, EXT_BIND, LOOPBACK_BIND, get_running_loop
+from aionetiface import IP4, NIC_BIND, get_running_loop
 from .traversal_plugin import TraversalPlugin
 from .traversal_utils import (
     async_wrap_errors,
@@ -209,24 +209,15 @@ class TraversalManager:
         dest_map: Dict[str, Any],
         sig_pipe: Any,
         plugin_name: str,
-        src_info: Optional[Dict[str, Any]],
-        dest_info: Optional[Dict[str, Any]],
+        src_info: Dict[str, Any],
+        dest_info: Dict[str, Any],
         af: Any = IP4,
         route_type: Any = NIC_BIND,
     ) -> Optional[TraversalPlugin]:
-        """Run the named traversal plugin for one explicit src_info/dest_info pair.
-
-        af / route_type / src_info / dest_info may be None for plugins
-        that defer pair selection to the responder (any-pathway mode,
-        used by reverse_connect). The AF-compatibility check is only
-        applied when af is pinned -- a sparse plugin sends a sparse
-        ConMsg and the responder validates AF availability per combo.
-        """
-        # Need AF supported by both -- only when the caller pinned a
-        # specific AF. None means "any AF", responder picks.
-        if af is not None:
-            if not src_map[af] or not dest_map[af]:
-                raise ValueError("AF not supported between hosts.")
+        """Run the named traversal plugin for one explicit src_info/dest_info pair."""
+        # Need AF supported by both.
+        if not src_map[af] or not dest_map[af]:
+            raise ValueError("AF not supported between hosts.")
 
         same_machine = dest_map["machine_id"] == src_map["machine_id"]
 
@@ -244,42 +235,6 @@ class TraversalManager:
         await self.run_plugin(plugin)
         return plugin
 
-    def expand_inbound_combos(
-        self,
-        msg: Any,
-    ) -> List[Any]:
-        """Enumerate (af, route_type, src_info, dest_info) tuples for a sparse ConMsg.
-
-        Used by create_inbound_plugin when the initiator left any of
-        af / route_type / src_index / dest_index unset (the
-        any-pathway sentinels). The responder iterates every viable
-        combo within the constraints the initiator did pin and the
-        caller spawns one plugin per combo -- each writes the same
-        in-band ConId frame so whichever TCP succeeds first resolves
-        the initiator's reverse_connect future.
-        """
-        # Local import keeps traversal_manager free of a hard import
-        # on the node package at module load time.
-        from ..node.node_connect import iter_viable_pairs
-
-        src_map = msg.routing.dest  # their dest = our src
-        dest_map = msg.meta.src     # their src = our dest
-
-        afs = [msg.meta.af] if msg.meta.af is not None else [IP4, IP6]
-        if msg.meta.route_type is not None:
-            route_types = [msg.meta.route_type]
-        else:
-            route_types = [NIC_BIND, LOOPBACK_BIND, EXT_BIND]
-
-        combos = []
-        for af in afs:
-            if not src_map.get(af) or not dest_map.get(af):
-                continue
-            for rt in route_types:
-                for src_info, dest_info in iter_viable_pairs(af, rt, src_map, dest_map):
-                    combos.append((af, rt, src_info, dest_info))
-        return combos
-
     # create_plugin builds a plugin from explicit parameters — used when we are
     # the initiator and already know our src/dest addresses and route type.
     #
@@ -287,15 +242,8 @@ class TraversalManager:
     # parameters from an incoming signal message, swapping src and dest so that
     # "their dest" becomes our src and "their src" becomes our dest. It also
     # reuses the pipe_id from the message so both sides share the same session.
-    #
-    # Returns a list to support sparse ConMsg expansion: when the
-    # initiator pinned a full (af, route_type, src, dest) tuple the
-    # list has exactly one element (existing behaviour); when any of
-    # those is the any-pathway sentinel the list contains one plugin
-    # per viable combo, all sharing msg.meta.pipe_id so any of them
-    # can resolve the initiator's reverse_connect inbound future.
-    def create_inbound_plugin(self, msg: Any) -> List[TraversalPlugin]:
-        """Create one or more traversal plugins for an inbound connection request."""
+    def create_inbound_plugin(self, msg: Any) -> TraversalPlugin:
+        """Create a traversal plugin for an inbound connection request, inverting src/dest."""
         # TODO: map GetAddr messages to the return_addr plugin handler.
         if isinstance(msg, ConMsg):
             msg.meta.plugin_name = "direct_connect"
@@ -303,96 +251,50 @@ class TraversalManager:
         if msg.meta.plugin_name not in self.plugin_loaders:
             raise ValueError("Plugin not installed.")
 
-        sparse = (
-            msg.meta.af is None
-            or msg.meta.route_type is None
-            or msg.meta.src_info is None
-            or msg.routing.dest_info is None
+        # Creates a new plugin to handle a new incoming message from router.
+        plugin = self.create_plugin(
+            msg.meta.af,
+            msg.meta.route_type,
+            src_info=msg.routing.dest_info,  # their dest = our src
+            dest_info=msg.meta.src_info,  # their src = our dest
+            same_machine=msg.meta.same_machine,
+            plugin_name=msg.meta.plugin_name,
         )
-
-        plugins = []  # type: List[TraversalPlugin]
-
-        if not sparse:
-            # Fully pinned -- single plugin (legacy direct_connect path).
-            plugin = self.create_plugin(
-                msg.meta.af,
-                msg.meta.route_type,
-                src_info=msg.routing.dest_info,  # their dest = our src
-                dest_info=msg.meta.src_info,  # their src = our dest
-                same_machine=msg.meta.same_machine,
-                plugin_name=msg.meta.plugin_name,
-            )
-            plugin.set_addrs(msg.routing.dest, msg.meta.src)
-            plugin.set_inbound_pipes(self.inbound_pipes, msg.meta.pipe_id)
-            plugins.append(plugin)
-        else:
-            combos = self.expand_inbound_combos(msg)
-            print("[SIG-RX]   sparse ConMsg: expanded to {0} combo(s)".format(
-                len(combos),
-            ))
-            for af, route_type, src_info, dest_info in combos:
-                try:
-                    plugin = self.create_plugin(
-                        af,
-                        route_type,
-                        src_info=src_info,
-                        dest_info=dest_info,
-                        same_machine=msg.meta.same_machine,
-                        plugin_name=msg.meta.plugin_name,
-                    )
-                except (ValueError, KeyError, OSError):
-                    log_exception()
-                    continue
-                plugin.set_addrs(msg.routing.dest, msg.meta.src)
-                plugin.set_inbound_pipes(self.inbound_pipes, msg.meta.pipe_id)
-                plugins.append(plugin)
-
-        if not plugins:
-            raise ValueError(
-                "create_inbound_plugin: no viable combo produced for sparse ConMsg"
-            )
-
-        return plugins
+        plugin.set_addrs(msg.routing.dest, msg.meta.src)
+        plugin.set_inbound_pipes(self.inbound_pipes, msg.meta.pipe_id)
+        return plugin
 
     # Use signal router to send a message to the destination.
     async def send_signal_msg(self, msg: Any, plugin: TraversalPlugin, relay_no: int = 2) -> None:
-        """Encrypt and deliver a signalling message to the peer via the MQTT router.
-
-        af / route_type / src_index / dest_index are emitted to the
-        peer only when the plugin pinned them. Sparse plugins (any-
-        pathway reverse_connect) leave any of those four unset, which
-        the responder reads as "iterate viable combos and spawn one
-        plugin per combo" -- see create_inbound_plugin.
-        """
+        """Encrypt and deliver a signalling message to the peer via the MQTT router."""
         print("[SIG-TX] send_signal_msg plugin_id={0!r} wire_name={1!r}".format(
             plugin.plugin_id, getattr(msg, "wire_name", "?"),
         ))
         try:
             # Specify the plugin to use in the destination.
-            meta_dict = {
-                "ttl": int(self.router.get_time()) + 30,
-                "pipe_id": plugin.plugin_id,
-                # Our node address with interface details.
-                "src_buf": plugin.src_map["bytes"],
-                "same_machine": plugin.same_machine,
-                "plugin_name": msg.meta.plugin_name,
-            }
-            if plugin.af is not None:
-                meta_dict["af"] = plugin.af
-            if plugin.src_info is not None and "if_index" in plugin.src_info:
-                meta_dict["src_index"] = plugin.src_info["if_index"]
-            if plugin.route_type is not None:
-                meta_dict["route_type"] = plugin.route_type
-            msg.meta = ProtoMsg.Meta.from_dict(meta_dict)
+            msg.meta = ProtoMsg.Meta.from_dict(
+                {
+                    "ttl": int(self.router.get_time()) + 30,
+                    "pipe_id": plugin.plugin_id,
+                    "af": plugin.af,
+                    # Our node address with interface details.
+                    "src_buf": plugin.src_map["bytes"],
+                    "src_index": plugin.src_info["if_index"],
+                    "route_type": plugin.route_type,
+                    "same_machine": plugin.same_machine,
+                    "plugin_name": msg.meta.plugin_name,
+                }
+            )
 
             # Specify details of the destination address.
-            # Also includes their interface (when pinned).
-            routing_dict = {"dest_buf": plugin.dest_map["bytes"]}
-            if plugin.af is not None:
-                routing_dict["af"] = plugin.af
-            if plugin.dest_info is not None and "if_index" in plugin.dest_info:
-                routing_dict["dest_index"] = plugin.dest_info["if_index"]
-            msg.routing = ProtoMsg.Routing.from_dict(routing_dict)
+            # Also includes their interface.
+            msg.routing = ProtoMsg.Routing.from_dict(
+                {
+                    "af": plugin.af,
+                    "dest_buf": plugin.dest_map["bytes"],
+                    "dest_index": plugin.dest_info["if_index"],
+                }
+            )
 
             # Convert to bytes and send via MQTT.
             buf = to_s(sig_msg_to_buf(msg, h_to_b(plugin.dest_map["pub_key_hex"])))
@@ -456,32 +358,28 @@ class TraversalManager:
 
         # If plugin exists check sender is authorized to reach plugin.
         if msg.meta.pipe_id in self.plugins:
-            existing = self.plugins[msg.meta.pipe_id]
-            if src_pk_hex != existing.dest_map["pub_key_hex"]:
+            plugin = self.plugins[msg.meta.pipe_id]
+            if src_pk_hex != plugin.dest_map["pub_key_hex"]:
                 raise ValueError("src_pk_hex mismatch for existing plugin.")
-            plugins = [existing]
-        else:
-            # Plugin doesn't exist so create it. May expand to multiple
-            # plugins for sparse ConMsg (any-pathway reverse_connect),
-            # in which case every spawned plugin shares msg.meta.pipe_id
-            # for the in-band ConId rendezvous on the initiator side.
-            plugins = self.create_inbound_plugin(msg)
 
-        for plugin in plugins:
-            # Route to destination via MQTT.
-            if plugin.sig_pipe is None:
-                plugin.sig_pipe = await self.router.pipe(
-                    plugin.dest_map["pub_key_hex"], use_cache=True
-                )
+        # Plugin doesn't exist so create it.
+        if msg.meta.pipe_id not in self.plugins:
+            plugin = self.create_inbound_plugin(msg)
 
-            # Schedule the plugin run as a background task.
-            # Keep a reference so the task isn't garbage-collected mid-run.
-            task = asyncio.create_task(
-                async_wrap_errors(self.run_plugin(plugin, reply=msg))
+        # Route to destination via MQTT.
+        if plugin.sig_pipe is None:
+            plugin.sig_pipe = await self.router.pipe(
+                plugin.dest_map["pub_key_hex"], use_cache=True
             )
 
-            # Record task ref to avoid garbage collection.
-            self.tasks.append(task)
+        # Schedule the plugin run as a background task.
+        # Keep a reference so the task isn't garbage-collected mid-run.
+        task = asyncio.create_task(
+            async_wrap_errors(self.run_plugin(plugin, reply=msg))
+        )
+
+        # Record task ref to avoid garbage collection.
+        self.tasks.append(task)
 
         # Prune completed tasks to avoid unbounded growth.
         self.tasks = [t for t in self.tasks if not t.done()]
