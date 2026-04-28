@@ -326,8 +326,24 @@ class TraversalManager:
 
         # Message has expired.
         if int(self.router.get_time()) >= msg.meta.ttl:
-            print("[SIG-RX]   EXPIRED ttl={0} now={1}; dropping".format(
-                msg.meta.ttl, int(self.router.get_time()),
+            now = int(self.router.get_time())
+            skew = now - msg.meta.ttl
+            print("[SIG-RX]   EXPIRED ttl={0} now={1} skew={2}s; dropping".format(
+                msg.meta.ttl, now, skew,
+            ))
+            # log() so this also lands in aionetiface logs -- when this
+            # fires it's almost always a sender/receiver clock-skew bug
+            # rather than a genuinely-stale message, and stdout output
+            # is easy to miss across a 6-VM matrix run.
+            from aionetiface import log, fstr
+            log(fstr(
+                "[SIG-RX] ConMsg EXPIRED: ttl={0} now={1} skew={2}s "
+                "wire_name={3!r} pipe_id={4!r}; dropping. If skew is large "
+                "the sender's sys_clock is probably drifted vs ours -- check "
+                "NTP sync on both peers.",
+                (msg.meta.ttl, now, skew,
+                 getattr(msg, "wire_name", "?"),
+                 getattr(msg.meta, "pipe_id", "?")),
             ))
             raise ValueError("Discarding expired msg.")
 
