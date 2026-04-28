@@ -28,18 +28,61 @@ class TURNPlugin(TraversalPlugin):
         self.node_id = ""
 
     async def run(self, reply: Optional[Any] = None) -> None:
-        """Allocate a TURN relay, exchange addresses with the peer, and establish the channel."""
+        """Allocate a TURN relay, exchange addresses with the peer, and establish the channel.
+
+        Server selection is initiator-decides (mirroring reverse_connect's
+        "I tell you what to do" pattern):
+          * Initiator (reply is None): walks rendezvous-ranked TURN
+            servers via get_first_working_turn_client, allocates, then
+            sends TURNMsg with server_host/server_port embedded so the
+            responder allocates on the SAME server.
+          * Responder (reply is not None): reads server_host/server_port
+            from the incoming TURNMsg.payload and allocates on that
+            specific server. Falls back to rendezvous walk only when
+            the payload has no server hint (legacy peers running
+            pre-handoff code).
+
+        Previously both peers walked the rendezvous-ranked list
+        independently and hoped to converge -- works most of the time
+        because the ranking is deterministic, but identical to the MQTT
+        broker-set non-convergence pattern we removed today: when one
+        peer's first-working server is briefly unreachable to the
+        other, they pick different servers and the relay session
+        can't establish.
+        """
 
         # --- Allocate a TURN relay for this session ---
-        # Both peers independently derive the same server ranking from the shared
-        # plugin_id via rendezvous hashing, so no server-id exchange is needed.
         client = self.turn_clients.get(self.plugin_id)
         if client is None:
             groups = get_infra(self.af, UDP, "TURN", no=100)
-            servers = rendezvous_rank(self.plugin_id, [g[0] for g in groups])
+            all_servers = [g[0] for g in groups]
+
+            # Responder path: if the incoming TURNMsg specified a server
+            # the initiator already allocated on, use it directly so we
+            # land on the SAME server. We still let get_first_working_turn_client
+            # do the actual connect (it handles auth and timeouts), just with
+            # a single-element list so it cannot fall through to a
+            # different server.
+            chosen_servers = None
+            if reply is not None and getattr(reply.payload, "server_host", None):
+                target_host = reply.payload.server_host
+                target_port = reply.payload.server_port
+                for s in all_servers:
+                    if s.get("ip") == target_host and int(s.get("port", 0)) == int(target_port or 0):
+                        chosen_servers = [s]
+                        break
+                # If the initiator advertised a server we don't have in
+                # our INFRA database (rare -- both sides should share the
+                # same shipped infra), fall through to rendezvous. The
+                # session probably won't converge but at least we don't
+                # crash.
+
+            if chosen_servers is None:
+                chosen_servers = rendezvous_rank(self.plugin_id, all_servers)
+
             client = await get_first_working_turn_client(
                 self.af,
-                servers,
+                chosen_servers,
                 self.nic,
                 self.msg_cb,
             )
@@ -87,12 +130,20 @@ class TURNPlugin(TraversalPlugin):
                 self.node_id[:8],
             )
 
-        # --- Advertise our relay address to the peer ---
+        # --- Advertise our relay address (and server choice) to the peer ---
+        # Embed the chosen server's host/port so the peer allocates on the
+        # SAME server. On the responder path (reply is not None) we pass
+        # the same server back through, which is harmless -- the initiator
+        # already used it. On the initiator path (reply is None) this is
+        # how the responder learns which server to use.
+        server_host, server_port = client.dest
         msg = TURNMsg(
             {
                 "payload": {
                     "peer_tup": await client.client_tup_future,
                     "relay_tup": await client.relay_tup_future,
+                    "server_host": server_host,
+                    "server_port": server_port,
                 },
             }
         )
