@@ -70,8 +70,8 @@ FAST_PUNCH_PARAMS = {
     # MQTT broker churn + plugin coordination chatter. 3 s gives ~50%
     # headroom on both directions, still well below DEFAULT_PUNCH_PARAMS's
     # 5.0 s and well within plugin's 30/40 s timeout.
-    "connect_timeout": 5.0,  # 5.0 s spray window (total ~10s with monitor)
-    "monitor_timeout": 5.0,  # 5.0 s monitor window
+    "connect_timeout": 3.0,  # 3.0 s spray window (5.0 broke rendezvous)
+    "monitor_timeout": 3.0,  # 3.0 s monitor window
     "retry_interval": 0.05,  # 0.05 s selector poll interval (unchanged)
     # PunchClient / plugin timing
     "max_sleep": 8,  # 8 s cap — above worst-case (window + min_run_window)
