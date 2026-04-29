@@ -293,7 +293,7 @@ self,
         self.proc_pool = None
 
 
-PLUGIN_CONF = {"timeout": 40}
+PLUGIN_CONF = {"timeout": 80}
 
 # Protocol auto-registration: plugin_loader merges these into
 # TraversalManager.sig_proto so PunchMsg dispatches without core

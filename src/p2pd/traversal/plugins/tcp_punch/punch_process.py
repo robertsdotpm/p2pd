@@ -85,7 +85,7 @@ async def start_punching_process(nic: Any, puncher: Any, stop_reader: Any, proc_
         # The punch process makes a new connection to the
         # reverse connect server which we accept to connect the processes.
         punch_process_connection = await asyncio.wait_for(
-            reverse_server.accept(), timeout=20
+            reverse_server.accept(), timeout=60
         )
 
         return punch_process_connection
