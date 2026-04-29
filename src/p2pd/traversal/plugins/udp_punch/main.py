@@ -302,16 +302,20 @@ class UdpPunchPlugin(TraversalPlugin):
             self.result.cancel()
 
 
-# Process-level registry of which NIC IDs already have udp_punch
-# active. Two p2pd Nodes running in the same process on the same NIC
-# would collide on udp_punch -- both compute the same time-based port
-# predictions via boundary_port_alloc, both try to bind those ports
-# on the same source IP, the second bind hits EADDRINUSE, and (per
-# our existing silent-skip-on-bind-failure path) the engine quietly
-# proceeds with fewer sockets. The resulting failure looks identical
-# to a NAT-prediction miss but is actually a self-collision -- very
-# painful to diagnose without this guard. Raising at plugin setup
-# is cheap insurance for the test matrix.
+# Process-level registry keyed by (nic_id, primary_route_ip, af).
+# Two p2pd Nodes binding udp_punch sockets on the same (NIC, source
+# IP, address family) tuple collide: both compute identical time-
+# based port predictions via boundary_port_alloc, both try to bind
+# those ports on the same source IP, the second bind hits
+# EADDRINUSE, and (per our silent-skip-on-bind-failure path) the
+# engine quietly proceeds with fewer sockets. The resulting failure
+# looks identical to a NAT-prediction miss but is actually a self-
+# collision.
+#
+# Different IPs on the same NIC don't collide (different bind
+# tuples), and different AFs don't collide (separate v4/v6 socket
+# tables in the kernel) -- so the key is the full tuple, not just
+# the nic_id.
 PUNCH_NIC_OWNERS = {}
 
 
@@ -335,20 +339,22 @@ class UdpPunchPluginFactory:
         """Async factory; UDP punch needs no process pool so this is a thin wrapper."""
         return cls(stun_clients, sys_clock)
 
-    def claim_nics(self, nic_ids: Any) -> None:
-        """Register this factory as the udp_punch owner for each nic_id; raise on collision."""
-        for nic_id in nic_ids:
-            if nic_id in PUNCH_NIC_OWNERS:
-                raise RuntimeError(
-                    "udp_punch is already active on NIC {0!r} in this "
-                    "process. Two p2pd Nodes cannot run udp_punch on the "
-                    "same NIC -- their port-prediction allocations would "
-                    "collide. If this is a test, ensure only one Node "
-                    "per NIC; if production, run the second Node in its "
-                    "own process or on a separate NIC.".format(nic_id)
+    def claim_nics(self, claims: Any) -> None:
+        """Register this factory as the udp_punch owner for each (nic_id, ip, af) tuple; raise ValueError on collision."""
+        for key in claims:
+            if key in PUNCH_NIC_OWNERS:
+                nic_id, ip_str, af = key
+                raise ValueError(
+                    "udp_punch is already active on (nic={0!r}, ip={1!r}, "
+                    "af={2}) in this process. Two p2pd Nodes cannot run "
+                    "udp_punch with the same source IP and address family "
+                    "on the same NIC -- their port-prediction allocations "
+                    "would collide on bind(). Run the second Node on a "
+                    "different NIC, a different IP on this NIC, or in a "
+                    "separate process.".format(nic_id, ip_str, af)
                 )
-            PUNCH_NIC_OWNERS[nic_id] = self
-            self.nic_ids_owned.append(nic_id)
+            PUNCH_NIC_OWNERS[key] = self
+            self.nic_ids_owned.append(key)
 
     def build_plugin(self) -> UdpPunchPlugin:
         """Create a fresh UdpPunchPlugin wired to this factory's shared state."""
@@ -379,10 +385,25 @@ async def setup_plugin(node):
     if not node.conf.get("enable_punching", True):
         return None
     factory = await UdpPunchPluginFactory.create(node.stun_clients, node.sys_clock)
-    # Claim each NIC this Node owns; raises on collision so a test
-    # accidentally spinning up a second Node on the same NIC fails
-    # immediately at startup with a clear error message rather than
-    # silently producing broken punch attempts.
-    nic_ids = [getattr(nic, "id", None) for nic in node.ifs if getattr(nic, "id", None)]
-    factory.claim_nics(nic_ids)
+    # Build (nic_id, primary_ip, af) claims for every NIC x AF combo
+    # this Node owns. Raises ValueError on collision so a test
+    # accidentally spinning up a second Node on the same source-bind
+    # tuple fails fast with a clear message rather than silently
+    # producing broken punch attempts. ValueError because it's an
+    # API-boundary input check -- callers can catch it upstream
+    # (e.g. node startup) and decide whether to continue without
+    # udp_punch instead of crashing the whole Node.
+    claims = []
+    for nic in node.ifs:
+        nic_id = getattr(nic, "id", None)
+        if not nic_id:
+            continue
+        for af in nic.supported():
+            try:
+                primary_ip = nic.nic(af)
+            except (ValueError, LookupError, AttributeError):
+                primary_ip = None
+            if primary_ip:
+                claims.append((nic_id, str(primary_ip), af))
+    factory.claim_nics(claims)
     return factory
