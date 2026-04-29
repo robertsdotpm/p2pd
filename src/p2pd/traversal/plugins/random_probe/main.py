@@ -516,17 +516,25 @@ class RandomProbePlugin(TraversalPlugin):
 
         ext_ip in the payload carries whichever address the algorithm
         will actually fire at:
-          * STUN-discovered mapped IP (highest priority -- this is
-            the real external address on a NAT'd host).
-          * self.my_addr_ip (NIC if same_machine, ext otherwise) as
-            the fallback when STUN didn't run (sym side) or didn't
-            return a mapping.
+          * NIC_BIND (LAN test path): always use my_addr_ip (the
+            local NIC IP). Skipping the STUN-derived mapped_ip
+            here is essential -- on a NAT'd host STUN returns the
+            WAN address, but for LAN testing both peers fire at
+            each other's LAN IPs and the WAN advertisement would
+            cause the peer to spray packets out their NIC instead
+            of locally.
+          * Otherwise (EXT_BIND production): STUN-discovered mapped
+            IP first, falling back to my_addr_ip when STUN didn't
+            run (sym side) or didn't return a mapping.
         """
-        ext_ip = (
-            getattr(self, "mapped_ip", None)
-            or getattr(self, "my_addr_ip", "")
-            or ""
-        )
+        if self.route_type == NIC_BIND:
+            ext_ip = getattr(self, "my_addr_ip", "") or ""
+        else:
+            ext_ip = (
+                getattr(self, "mapped_ip", None)
+                or getattr(self, "my_addr_ip", "")
+                or ""
+            )
         return RandomProbeMsg({
             "payload": {
                 "role": role,
