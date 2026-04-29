@@ -228,17 +228,33 @@ class UdpPunchPlugin(TraversalPlugin):
 
             result = await loop.run_in_executor(None, run_sync)
             if result is None:
+                log(fstr(
+                    "udp_punch.delayed_run_engine: engine returned None for plugin_id={0}",
+                    (self.plugin_id,),
+                ))
                 if not self.result.done():
                     self.result.set_result(None)
                 return
 
             winner_sock, peer_addr = result
+            try:
+                local_addr = winner_sock.getsockname()
+            except OSError:
+                local_addr = None
+            log(fstr(
+                "udp_punch.delayed_run_engine: engine returned WINNER local={0} peer={1} fd={2}",
+                (local_addr, peer_addr, winner_sock.fileno()),
+            ))
 
             # Drain queued PROBE/CONFIRM frames before the Pipe wrap;
             # the peer's spray keeps arriving for hundreds of ms past
             # convergence and those frames would otherwise be the
             # first thing pipe.recv() returns to the application.
-            drain_punch_residue(winner_sock, puncher.udp_nonce)
+            drained = drain_punch_residue(winner_sock, puncher.udp_nonce)
+            log(fstr(
+                "udp_punch.delayed_run_engine: drained {0} residual frames before wrap",
+                (drained,),
+            ))
 
             # Wrap the winning socket in a Pipe so the caller has the
             # same interface as the other plugins return. UDP Pipe
@@ -248,6 +264,17 @@ class UdpPunchPlugin(TraversalPlugin):
                 pipe = await Pipe(
                     UDP, dest=peer_addr, route=route, sock=winner_sock,
                 ).connect()
+                if pipe is not None:
+                    try:
+                        wrapped_addr = pipe.sock.getsockname()
+                    except (OSError, AttributeError):
+                        wrapped_addr = None
+                    log(fstr(
+                        "udp_punch.delayed_run_engine: wrapped Pipe local={0} dest={1}",
+                        (wrapped_addr, peer_addr),
+                    ))
+                else:
+                    log("udp_punch.delayed_run_engine: Pipe.connect() returned None")
             except (OSError, ConnectionError, asyncio.TimeoutError):
                 log_exception()
                 pipe = None
@@ -263,6 +290,8 @@ class UdpPunchPlugin(TraversalPlugin):
                 # so without this hook pipe.recv(SUB_ALL) returns
                 # frame bytes ahead of the actual application reply.
                 # Mirrors random_probe's stream.add_msg monkey-patch.
+                drop_count = [0]
+                pass_count = [0]
                 try:
                     stream = pipe.pipe_events.stream
                     original_add_msg = stream.add_msg
@@ -274,12 +303,29 @@ class UdpPunchPlugin(TraversalPlugin):
                             and bytes(data[:4]) == UDP_PUNCH_MAGIC
                             and bytes(data[5:5 + len(nonce_bytes)]) == nonce_bytes
                         ):
+                            drop_count[0] += 1
+                            if drop_count[0] <= 3 or drop_count[0] % 50 == 0:
+                                log(fstr(
+                                    "udp_punch.filter: dropped punch frame #{0} from {1}",
+                                    (drop_count[0], client_tup),
+                                ))
                             return
+                        pass_count[0] += 1
+                        if pass_count[0] <= 3 or pass_count[0] % 50 == 0:
+                            preview = bytes(data[:8]) if len(data) >= 8 else bytes(data)
+                            log(fstr(
+                                "udp_punch.filter: PASSING msg #{0} from {1} len={2} preview={3!r}",
+                                (pass_count[0], client_tup, len(data), preview),
+                            ))
                         return original_add_msg(data, client_tup)
 
                     stream.add_msg = filtered_add_msg
-                except (AttributeError, TypeError):
-                    pass
+                    log("udp_punch.delayed_run_engine: stream filter installed")
+                except (AttributeError, TypeError) as exc:
+                    log(fstr(
+                        "udp_punch.delayed_run_engine: filter install FAILED: {0!r}",
+                        (exc,),
+                    ))
 
             if not self.result.done():
                 self.result.set_result(pipe)

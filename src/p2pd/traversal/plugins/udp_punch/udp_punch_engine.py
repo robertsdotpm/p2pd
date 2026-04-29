@@ -28,7 +28,7 @@ import select
 import socket
 import time
 
-from aionetiface import sock_has_data
+from aionetiface import fstr, log, sock_has_data
 
 from ..tcp_punch.tcp_punch_utils import bind_punch_sockets
 from .udp_punch_defs import (
@@ -71,8 +71,16 @@ def fire_probes(
     """
     frame = build_frame(UDP_PUNCH_KIND_PROBE, nonce)
     end = time.monotonic() + spray_duration
+    log(fstr(
+        "udp_punch.fire_probes: starting spray dest_ip={0} sockets={1} dest_ports={2} duration={3}s nonce={4}",
+        (dest_ip, len(bound_socks),
+         [a.dest_port for a, _ in bound_socks],
+         spray_duration, nonce.hex()),
+    ))
+    rounds = 0
     while time.monotonic() < end:
         if stop_reader is not None and sock_has_data(stop_reader):
+            log("udp_punch.fire_probes: stop_reader signalled; aborting spray")
             return
         for alloc, s in bound_socks:
             try:
@@ -81,7 +89,21 @@ def fire_probes(
                 # ICMP-unreachable on some NATs surfaces as ECONNREFUSED
                 # the NEXT sendto. Ignore -- next round will retry.
                 pass
+        rounds += 1
         time.sleep(spray_interval)
+    log(fstr(
+        "udp_punch.fire_probes: spray ended after {0} rounds dest_ip={1}",
+        (rounds, dest_ip),
+    ))
+
+
+def log_sock_addr(sock: Any) -> str:
+    """Format a socket's bound address as host:port for logs (best-effort)."""
+    try:
+        addr = sock.getsockname()
+        return "{0}:{1}".format(addr[0], addr[1])
+    except OSError:
+        return "<closed>"
 
 
 def watch_for_winner(
@@ -108,13 +130,22 @@ def watch_for_winner(
     """
     socks = [s for _, s in bound_socks]
     if not socks:
+        log("udp_punch.watch_for_winner: no bound sockets; nothing to watch")
         return None
 
     confirm_frame = build_frame(UDP_PUNCH_KIND_CONFIRM, nonce)
     end = time.monotonic() + listen_duration
+    log(fstr(
+        "udp_punch.watch_for_winner: watching {0} sockets at {1} duration={2}s nonce={3}",
+        (len(socks), [log_sock_addr(s) for s in socks], listen_duration, nonce.hex()),
+    ))
+    probes_seen = 0
+    confirms_seen = 0
+    foreign_seen = 0
 
     while time.monotonic() < end:
         if stop_reader is not None and sock_has_data(stop_reader):
+            log("udp_punch.watch_for_winner: stop_reader signalled; aborting")
             return None
         timeout = min(retry_interval, end - time.monotonic())
         if timeout < 0:
@@ -134,6 +165,7 @@ def watch_for_winner(
             kind, recv_nonce = parse_frame(buf)
             if kind is None or recv_nonce != nonce:
                 # Not a punch frame; leave it for the Pipe layer.
+                foreign_seen += 1
                 continue
 
             # It IS a punch frame -- consume the bytes off the queue.
@@ -143,11 +175,19 @@ def watch_for_winner(
                 continue
 
             if kind == UDP_PUNCH_KIND_PROBE:
+                probes_seen += 1
+                log(fstr(
+                    "udp_punch.watch_for_winner: PROBE on {0} from {1} (probes={2}); replying CONFIRM",
+                    (log_sock_addr(s), addr, probes_seen),
+                ))
                 # Peer's mapping reached us; tell them we saw it.
                 try:
                     s.sendto(confirm_frame, addr)
-                except OSError:
-                    pass
+                except OSError as exc:
+                    log(fstr(
+                        "udp_punch.watch_for_winner: CONFIRM sendto failed on {0} to {1}: {2!r}",
+                        (log_sock_addr(s), addr, exc),
+                    ))
                 # Don't lock yet: peer might still be in spray phase
                 # and not listening. Continue watching for their
                 # CONFIRM (or another PROBE arrival -- we'll accept
@@ -156,7 +196,17 @@ def watch_for_winner(
                 continue
 
             if kind == UDP_PUNCH_KIND_CONFIRM:
+                confirms_seen += 1
+                log(fstr(
+                    "udp_punch.watch_for_winner: CONFIRM on {0} from {1} -- WINNER",
+                    (log_sock_addr(s), addr),
+                ))
                 return (s, addr)
+
+    log(fstr(
+        "udp_punch.watch_for_winner: listen_duration ended -- probes={0} confirms={1} foreign={2}",
+        (probes_seen, confirms_seen, foreign_seen),
+    ))
 
     # Fallback: no CONFIRM arrived but we may have replied to a PROBE.
     # Walk sockets once more peeking for any pending CONFIRM that
@@ -243,7 +293,12 @@ def udp_punch_engine(
         af, nic_id, port_allocs, src_ip,
         sock_type=socket.SOCK_DGRAM, route=route,
     )
+    log(fstr(
+        "udp_punch_engine: af={0} src_ip={1} dest_ip={2} bound={3}/{4}",
+        (af, src_ip, dest_ip, len(bound_socks), len(port_allocs)),
+    ))
     if not bound_socks:
+        log("udp_punch_engine: NO sockets bound; aborting")
         return None
 
     # Synchronised barrier: wait for the agreed punch_time so both
@@ -260,6 +315,7 @@ def udp_punch_engine(
     )
 
     if winner is None:
+        log("udp_punch_engine: no convergence; returning None")
         # No converge; close every socket so we don't leak FDs.
         for _, s in bound_socks:
             try:
@@ -269,6 +325,10 @@ def udp_punch_engine(
         return None
 
     winner_sock, peer_addr = winner
+    log(fstr(
+        "udp_punch_engine: WINNER local={0} peer={1}",
+        (log_sock_addr(winner_sock), peer_addr),
+    ))
     # Close all OTHER sockets; the caller only needs the winner.
     for _, s in bound_socks:
         if s is winner_sock:
