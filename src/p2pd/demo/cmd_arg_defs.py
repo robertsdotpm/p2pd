@@ -88,6 +88,18 @@ parser.add_argument(
     required=False,
     help="Close automatically after this amount of seconds.",
 )
+parser.add_argument(
+    "--verify_install",
+    action="store_true",
+    help=(
+        "Strictly verify all four sibling repos (aionetiface, p2pd, "
+        "sidewire, namebump) imported from a consistent install root "
+        "and not from site-packages. Aborts with a clear error if any "
+        "sibling diverges -- catches stale wheel shadows and partial "
+        "path divergences that otherwise produce silent KeyError on "
+        "plugin lookup."
+    ),
+)
 # Bare `python -m p2pd.demo` with no flags runs the interactive menu
 # with default settings. argparse handles -h / --help on its own (prints
 # help and exits 0), so users who want to discover flags still can.

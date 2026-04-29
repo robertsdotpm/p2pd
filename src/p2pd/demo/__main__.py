@@ -160,6 +160,16 @@ async def run_node_loop(nodes: List[Any], ifs: List[Any], nick: Optional[str]) -
 
 async def main() -> None:
     """Entry point: set up signal handlers, start the node, and run the menu loop."""
+    # Strict install verification when --verify_install is passed.
+    # Runs before any sibling-touching logic so a stale aionetiface
+    # (or any other repo) imported from outside the expected layout
+    # surfaces immediately with a clear error, instead of producing a
+    # silent KeyError on plugin lookup later. The non-strict logging
+    # version runs unconditionally inside node_start.
+    if args.verify_install:
+        from ..install_check import verify_sibling_installs
+        verify_sibling_installs(strict=True)
+
     # Catch process exit signals (not supported on win32.)
     nodes = []
     if sys.platform != "win32":

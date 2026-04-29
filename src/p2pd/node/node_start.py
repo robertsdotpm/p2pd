@@ -29,6 +29,7 @@ from .node_utils import (
 from .nickname import Nickname
 from ..traversal.traversal_manager import TraversalManager
 from ..traversal.plugin_loader import load_plugins
+from ..install_check import verify_sibling_installs
 
 
 # ==========================================
@@ -36,6 +37,13 @@ from ..traversal.plugin_loader import load_plugins
 # ==========================================
 async def node_start(node: Any, sys_clock: Optional[Any] = None, out: bool = False, cout: Callable = print) -> Any:
     """Execute the full ordered startup sequence for a P2P node and return it when ready."""
+    # Print where each sibling repo's package resolved from. Cheap
+    # (4 imports, ms-scale) and gives every node log a header that
+    # makes stale-install bugs (e.g. aionetiface imported from a
+    # checkout outside ~/projects/) instantly diagnosable. Non-strict
+    # so library / PyPI users aren't forced into the dev layout.
+    verify_sibling_installs(strict=False)
+
     # Hardware & Network Setup
     await load_network_interfaces(node)
 
