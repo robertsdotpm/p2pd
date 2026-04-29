@@ -64,7 +64,14 @@ class PunchPlugin(TraversalPlugin):
         creates a new PunchClient, and sets the coordinated time references.
         """
         if_index = self.src_info["if_index"]
-        stuns = self.stun_clients[self.af][if_index]
+        # Safe two-level lookup: load_stun_clients populates entries
+        # only for the (af, if_index) combinations that successfully
+        # resolved a STUN server during node startup. On hosts where
+        # v6 STUN never came up (XP / Vista without a working v6
+        # path) the inner dict is missing the if_index entirely, and
+        # bare self.stun_clients[af][if_index] raises KeyError before
+        # the "no STUN clients loaded" guard below ever runs.
+        stuns = self.stun_clients.get(self.af, {}).get(if_index, [])
 
         # Skip if no STUN clients loaded.
         if not stuns:

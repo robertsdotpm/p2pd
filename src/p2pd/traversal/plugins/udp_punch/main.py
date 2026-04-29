@@ -74,7 +74,12 @@ class UdpPunchPlugin(TraversalPlugin):
     async def setup_puncher_client(self, reply: Optional[Any]) -> Tuple[Optional[Any], Optional[Any]]:
         """Build a fresh PunchClient + decide on a session nonce for this attempt."""
         if_index = self.src_info["if_index"]
-        stuns = self.stun_clients[self.af][if_index]
+        # Safe two-level lookup; same rationale as tcp_punch's
+        # setup_puncher_client: hosts without working v6 STUN
+        # (XP / Vista) never populate the inner dict for
+        # (af=AF_INET6, if_index), and bare indexing raises KeyError
+        # before the "no STUN clients loaded" guard runs.
+        stuns = self.stun_clients.get(self.af, {}).get(if_index, [])
         if not stuns:
             return None, None
 
