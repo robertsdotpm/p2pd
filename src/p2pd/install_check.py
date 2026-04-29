@@ -46,20 +46,25 @@ def package_path(module_name: str) -> Optional[str]:
 
 
 def install_root(pkg_path: str) -> Optional[str]:
-    """Walk up from <root>/src/<pkg> or site-packages/<pkg> to the install root.
+    """Walk up to the directory that's shared by all four siblings.
 
-    Editable layout: <root>/src/<pkg>/__init__.py  -> root = <root>
-    Wheel layout:    <site-packages>/<pkg>/__init__.py -> root = <site-packages>
+    Editable layout: <projects>/<repo>/src/<pkg>/__init__.py
+        -> install_root = <projects>   (parent of the per-repo dir)
+
+    Wheel layout: <site-packages>/<pkg>/__init__.py
+        -> install_root = <site-packages>
 
     The root is what we cross-check across siblings -- if all four
-    share a root, the install is consistent.
+    share a root, the install is consistent.  Going only as far as
+    the per-repo dir would always disagree across the four repos.
     """
     if not pkg_path:
         return None
     parent = os.path.dirname(pkg_path)
-    # If parent is named "src" we go one level higher to the repo root.
+    # Editable layout has a 'src' wrapper; skip it AND the repo dir
+    # to land on the parent that's the same across siblings.
     if os.path.basename(parent) == "src":
-        return os.path.dirname(parent)
+        return os.path.dirname(os.path.dirname(parent))
     return parent
 
 
