@@ -383,5 +383,14 @@ async def echo_client(pipe: Any, echo_data: Optional[bytes]) -> str:
         buf = await pipe.recv(timeout=4)
         cout(b"recv = ", buf, b"\n")
         if echo_data:
-            print(buf + b"\n", flush=True)
+            # buf is None when pipe.recv() times out -- e.g. the
+            # punched pipe wrapped the wrong socket and the echo
+            # reply landed on a different fd. Print a diagnostic
+            # marker instead of crashing on None + bytes so the
+            # log shows the recv timeout cleanly and the test
+            # harness records NO_ECHO rather than a TypeError.
+            if buf is None:
+                print(b"recv-timeout (None)\n", flush=True)
+            else:
+                print(buf + b"\n", flush=True)
             return "exit"

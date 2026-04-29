@@ -2,6 +2,7 @@
 from typing import Any, List, Optional, Tuple
 import socket
 import time
+from aionetiface import fstr, log, log_exception
 from aionetiface.net.bind.bind_rules import binder_sync
 from aionetiface.net.net_utils import ip_strip_if
 from aionetiface.net.socket import apply_nic_pin_sockopts
@@ -65,6 +66,7 @@ def bind_punch_sockets(
         bind_ip = "0.0.0.0" if af == socket.AF_INET else "::"
 
     bound_socks = []
+    bind_failures = []
     for p in port_allocs:
         s = socket.socket(af, sock_type)
         sock_opt_voodoo(s)
@@ -73,9 +75,29 @@ def bind_punch_sockets(
         try:
             s.bind(bind_tup)
             bound_socks.append((p, s))
-        except OSError:
-            # Port collision -- close + skip.
+        except OSError as exc:
+            # Port collision (typically with the demo's main listener
+            # at 10001 / the OS-picked secondary port) means the engine
+            # silently loses that allocation. Log it so a "punch
+            # converged but echo never came back" failure can be
+            # traced to the actual bind that failed -- otherwise the
+            # engine just runs with fewer sockets and no diagnostic.
+            bind_failures.append((bind_tup, repr(exc)))
             s.close()
+
+    if bind_failures:
+        log(fstr(
+            "bind_punch_sockets: {0}/{1} bind(s) FAILED on {2} (af={3} type={4})",
+            (len(bind_failures), len(port_allocs), bind_ip, af,
+             "DGRAM" if sock_type == socket.SOCK_DGRAM else "STREAM"),
+        ))
+        for bt, err in bind_failures:
+            log(fstr("  bind {0} -> {1}", (bt, err)))
+    log(fstr(
+        "bind_punch_sockets: {0}/{1} bound on {2} (af={3} type={4})",
+        (len(bound_socks), len(port_allocs), bind_ip, af,
+         "DGRAM" if sock_type == socket.SOCK_DGRAM else "STREAM"),
+    ))
 
     return bound_socks
 
