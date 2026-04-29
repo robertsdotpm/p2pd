@@ -5,6 +5,7 @@ import time
 from aionetiface import fstr, log, log_exception
 from aionetiface.net.bind.bind_rules import binder_sync
 from aionetiface.net.net_utils import ip_strip_if
+from aionetiface.net.socket import apply_nic_pin_sockopts
 
 """
 These magic sock options are required for TCP hole punching on
@@ -41,6 +42,7 @@ def bind_punch_sockets(
     port_allocs: List[Any],
     src_ip: Optional[str] = None,
     sock_type: int = socket.SOCK_STREAM,
+    route: Optional[Any] = None,
 ) -> List[Tuple[Any, Any]]:
     """Create and bind one socket per port allocation; returns (alloc, sock) pairs.
 
@@ -48,6 +50,15 @@ def bind_punch_sockets(
     (sock_type=SOCK_DGRAM). The socket-opt voodoo, binder_sync call,
     and per-alloc collision handling are identical for both protocols
     so we have one implementation, not two.
+
+    When route is provided, apply_nic_pin_sockopts pins each socket to
+    route.interface so egress and bound source agree on multi-NIC
+    hosts (LAN + cellular, multi-homed corporate). Without it the
+    kernel may pick a different NIC than the one whose IP we bound
+    to, the peer sees punch packets from an unexpected external IP,
+    and CONFIRMs land on whichever socket happens to have a NAT
+    mapping -- typically the demo's main listener, not the engine's
+    bound socket.
     """
     if src_ip:
         bind_ip = src_ip
@@ -59,10 +70,14 @@ def bind_punch_sockets(
     for p in port_allocs:
         s = socket.socket(af, sock_type)
         sock_opt_voodoo(s)
+        apply_nic_pin_sockopts(s, route)
         # Bump the receive buffer for UDP punch sockets so back-to-back
         # PROBE arrival across N spray rounds doesn't overflow the
-        # default 64 KB Windows socket buffer. Best-effort: the
-        # kernel may cap below what we ask for and that's fine.
+        # default 64 KB Windows socket buffer. Matrix data showed the
+        # connector receiving only 1 of ~18 expected PROBEs under
+        # load; a fatter buffer absorbs the burst even when the
+        # asyncio executor thread is briefly starved. Best-effort:
+        # the kernel may cap below what we ask for and that's fine.
         if sock_type == socket.SOCK_DGRAM:
             try:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 256 * 1024)
@@ -73,11 +88,12 @@ def bind_punch_sockets(
             s.bind(bind_tup)
             bound_socks.append((p, s))
         except OSError as exc:
-            # Port collision means the engine silently loses that
-            # allocation. Log it so a "punch converged but echo never
-            # came back" failure can be traced to the actual bind
-            # that failed -- otherwise the engine just runs with
-            # fewer sockets and no diagnostic.
+            # Port collision (typically with the demo's main listener
+            # at 10001 / the OS-picked secondary port) means the engine
+            # silently loses that allocation. Log it so a "punch
+            # converged but echo never came back" failure can be
+            # traced to the actual bind that failed -- otherwise the
+            # engine just runs with fewer sockets and no diagnostic.
             bind_failures.append((bind_tup, repr(exc)))
             s.close()
 
@@ -98,9 +114,18 @@ def bind_punch_sockets(
     return bound_socks
 
 
-def bind_tcp_sockets(af: Any, nic_id: Optional[str], port_allocs: List[Any], src_ip: Optional[str] = None) -> List[Tuple[Any, Any]]:
+def bind_tcp_sockets(
+    af: Any,
+    nic_id: Optional[str],
+    port_allocs: List[Any],
+    src_ip: Optional[str] = None,
+    route: Optional[Any] = None,
+) -> List[Tuple[Any, Any]]:
     """Create and bind one TCP socket per port allocation, returning successful (alloc, socket) pairs."""
-    return bind_punch_sockets(af, nic_id, port_allocs, src_ip, sock_type=socket.SOCK_STREAM)
+    return bind_punch_sockets(
+        af, nic_id, port_allocs, src_ip,
+        sock_type=socket.SOCK_STREAM, route=route,
+    )
 
 
 def listen_on_tcp_sockets(bound_infos: List[Tuple[Any, Any]]) -> List[Tuple[Any, Any]]:
