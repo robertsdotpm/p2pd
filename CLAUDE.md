@@ -120,3 +120,11 @@ On Python 3.5.0 specifically:
 ```sh
 pip install "pathlib2==2.2.1" "pytest==4.6.11"
 ```
+
+## PNP/MQTT propagation race after node startup
+
+When `node_start` returns (or `setup_node` in `demo/__main__.py`), the node has put its PNP record on the configured PNP servers and subscribed to its MQTT signaling topic. Those operations may not yet be visible to every server in the pool. A peer that resolves this node's nickname, or routes signaling via its MQTT topic, in the immediate window after node startup completes can race a server that hasn't yet seen the put / accepted the subscribe, and will silently hang in the resolve or dispatch step.
+
+**This affects every cross-node test in the matrix** — anything with a listener-then-connector flow. The connector side MUST allow a settling window of ~8 seconds before it starts resolving the listener's nickname. `demo/__main__.py:setup_node` enforces this with `await asyncio.sleep(8)` after `Nickname.put` completes; tests or callers that bypass `setup_node` must insert an equivalent sleep themselves before any cross-node lookup.
+
+The full warning lives in the `node_start` docstring at `node/node_start.py`.

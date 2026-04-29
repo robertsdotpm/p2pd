@@ -36,7 +36,28 @@ from ..install_check import verify_sibling_installs
 # Orchestrates the startup sequence for a P2P node.
 # ==========================================
 async def node_start(node: Any, sys_clock: Optional[Any] = None, out: bool = False, cout: Callable = print) -> Any:
-    """Execute the full ordered startup sequence for a P2P node and return it when ready."""
+    """Execute the full ordered startup sequence for a P2P node and return it when ready.
+
+    WARNING -- propagation race after node_start returns
+    ====================================================
+
+    On return, the node has put its PNP record on the configured PNP
+    servers and subscribed to its MQTT signaling topic. Those operations
+    may not yet be visible to every server in the pool. A peer that
+    resolves this node's nickname, or routes signaling via its MQTT
+    topic, in the immediate window after node_start returns can race a
+    server that hasn't yet seen the put / accepted the subscribe, and
+    will silently hang in the resolve or dispatch step.
+
+    This affects EVERY caller whose flow is listener-then-connector --
+    which is every cross-node test in the matrix. The connector side
+    MUST allow a settling window before it starts resolving the
+    listener's nickname; ~8 seconds is sufficient in practice. The
+    demo entry point enforces this with `await asyncio.sleep(8)` after
+    Nickname.put completes (see demo/__main__.py:setup_node). Tests
+    or callers that bypass setup_node must insert an equivalent sleep
+    themselves before any cross-node lookup.
+    """
     # Print where each sibling repo's package resolved from. Cheap
     # (4 imports, ms-scale) and gives every node log a header that
     # makes stale-install bugs (e.g. aionetiface imported from a
