@@ -302,6 +302,19 @@ class UdpPunchPlugin(TraversalPlugin):
             self.result.cancel()
 
 
+# Process-level registry of which NIC IDs already have udp_punch
+# active. Two p2pd Nodes running in the same process on the same NIC
+# would collide on udp_punch -- both compute the same time-based port
+# predictions via boundary_port_alloc, both try to bind those ports
+# on the same source IP, the second bind hits EADDRINUSE, and (per
+# our existing silent-skip-on-bind-failure path) the engine quietly
+# proceeds with fewer sockets. The resulting failure looks identical
+# to a NAT-prediction miss but is actually a self-collision -- very
+# painful to diagnose without this guard. Raising at plugin setup
+# is cheap insurance for the test matrix.
+PUNCH_NIC_OWNERS = {}
+
+
 class UdpPunchPluginFactory:
     """Creates UdpPunchPlugin instances sharing STUN clients + per-plugin state."""
 
@@ -315,11 +328,27 @@ class UdpPunchPluginFactory:
         self.sys_clock = sys_clock or SysClock(None, 0.1)
         self.punch_clients = punch_clients if punch_clients is not None else {}
         self.punch_proc = {}
+        self.nic_ids_owned = []
 
     @classmethod
     async def create(cls, stun_clients: Any, sys_clock: Any) -> "UdpPunchPluginFactory":
         """Async factory; UDP punch needs no process pool so this is a thin wrapper."""
         return cls(stun_clients, sys_clock)
+
+    def claim_nics(self, nic_ids: Any) -> None:
+        """Register this factory as the udp_punch owner for each nic_id; raise on collision."""
+        for nic_id in nic_ids:
+            if nic_id in PUNCH_NIC_OWNERS:
+                raise RuntimeError(
+                    "udp_punch is already active on NIC {0!r} in this "
+                    "process. Two p2pd Nodes cannot run udp_punch on the "
+                    "same NIC -- their port-prediction allocations would "
+                    "collide. If this is a test, ensure only one Node "
+                    "per NIC; if production, run the second Node in its "
+                    "own process or on a separate NIC.".format(nic_id)
+                )
+            PUNCH_NIC_OWNERS[nic_id] = self
+            self.nic_ids_owned.append(nic_id)
 
     def build_plugin(self) -> UdpPunchPlugin:
         """Create a fresh UdpPunchPlugin wired to this factory's shared state."""
@@ -331,8 +360,11 @@ class UdpPunchPluginFactory:
         return plugin
 
     async def close(self) -> None:
-        """No-op; UDP punch holds no process pool."""
-        return None
+        """Release the NIC ownership claims so a fresh Node can re-create the factory."""
+        for nic_id in self.nic_ids_owned:
+            if PUNCH_NIC_OWNERS.get(nic_id) is self:
+                del PUNCH_NIC_OWNERS[nic_id]
+        self.nic_ids_owned = []
 
 
 PLUGIN_CONF = {"timeout": 30}
@@ -347,4 +379,10 @@ async def setup_plugin(node):
     if not node.conf.get("enable_punching", True):
         return None
     factory = await UdpPunchPluginFactory.create(node.stun_clients, node.sys_clock)
+    # Claim each NIC this Node owns; raises on collision so a test
+    # accidentally spinning up a second Node on the same NIC fails
+    # immediately at startup with a clear error message rather than
+    # silently producing broken punch attempts.
+    nic_ids = [getattr(nic, "id", None) for nic in node.ifs if getattr(nic, "id", None)]
+    factory.claim_nics(nic_ids)
     return factory
