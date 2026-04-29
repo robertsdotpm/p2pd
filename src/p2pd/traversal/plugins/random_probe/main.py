@@ -21,6 +21,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from aionetiface import (
     EXT_BIND,
+    LOOPBACK_BIND,
+    NIC_BIND,
     Pipe,
     SysClock,
     UDP,
@@ -92,33 +94,34 @@ class RandomProbePlugin(TraversalPlugin):
     public-IP punching has failed.
     """
 
-    SUPPORTED_ROUTE_TYPES = (EXT_BIND,)
+    # EXT_BIND is the production path; NIC_BIND is allowed so the
+    # matrix sweep can exercise the algorithm on LAN where the IP
+    # selection just collapses to NIC addresses (no NAT involved).
+    # LOOPBACK_BIND stays out -- random_probe over loopback is
+    # degenerate (kernel short-circuit, nothing to verify).
+    SUPPORTED_ROUTE_TYPES = (EXT_BIND, NIC_BIND)
 
     async def run(self, reply: Optional[RandomProbeMsg] = None) -> None:
         """Drive the random-probe rendezvous from initiator or responder side."""
-        # When user-driven (demo / explicit node.connect), route_type
-        # may be NIC_BIND or LOOPBACK_BIND -- random_probe is an
-        # EXT-only algorithm by design.  Bail loudly with a
-        # ValueError so the demo prints something actionable rather
-        # than a generic "Connection failed".
-        if self.route_type is not None and self.route_type != EXT_BIND:
+        # Loopback is excluded above; any other route_type passes
+        # through. The IP-selection block below picks NIC vs EXT
+        # addresses so the algorithm runs correctly on either path.
+        if self.route_type == LOOPBACK_BIND:
             self.set_failed_result()
             raise ValueError(
-                "random_probe is for the WAN path only "
-                "(needs both peers' external IP).  Pick (e)xternal, "
-                "not LAN."
+                "random_probe over loopback is degenerate "
+                "(kernel short-circuit, no probes needed)."
             )
 
         my_nat = self.src_info.get("nat") or {}
         peer_nat = self.dest_info.get("nat") or {}
 
         # Pick the addresses each side will fire probes at /from.
-        # When the peer is on the same physical machine (machine_id
-        # match) we use the NIC IPs -- the kernel delivers locally
-        # via lo when the dst IP is bound on this host, which gives
-        # a clean local 4-tuple without any router / NAT in the path.
-        # Cross-machine: use ext IPs (the algorithm's normal mode).
-        if self.same_machine:
+        # NIC_BIND or same-machine: use the NIC IPs (no NAT in the
+        # path, kernel delivers directly when dst is bound locally).
+        # EXT_BIND cross-machine: use ext IPs (the production path
+        # the algorithm was designed for).
+        if self.route_type == NIC_BIND or self.same_machine:
             self.my_addr_ip = str(self.src_info.get("nic") or self.src_info.get("ext") or "")
             self.peer_addr_ip = str(self.dest_info.get("nic") or self.dest_info.get("ext") or "")
         else:
