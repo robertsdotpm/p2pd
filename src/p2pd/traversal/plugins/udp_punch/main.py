@@ -113,6 +113,11 @@ class UdpPunchPlugin(TraversalPlugin):
             same_machine=self.same_machine,
             params=FAST_PUNCH_PARAMS,
         )
+        # Attach the bound route so delayed_run_engine can forward it
+        # to bind_punch_sockets for NIC pinning. PunchClient itself is
+        # tcp_punch's API and stays unaware of route -- udp_punch
+        # alone needs this for multi-NIC correctness.
+        puncher.route = route
 
         # Session nonce: pulled from the peer's first message if we're
         # the responder, otherwise generated locally and sent on our
@@ -198,6 +203,7 @@ class UdpPunchPlugin(TraversalPlugin):
             params = puncher.params
             nonce = puncher.udp_nonce
             f_sleep_until = puncher.sleep_until
+            route = puncher.route
             # Carry the project-wide stop socket into the engine so
             # node_stop fires early-exit on the spray/watch loops --
             # otherwise the executor thread keeps running past the
@@ -217,6 +223,7 @@ class UdpPunchPlugin(TraversalPlugin):
                     same_machine=same_machine,
                     params=params,
                     stop_reader=stop_reader,
+                    route=route,
                 )
 
             result = await loop.run_in_executor(None, run_sync)
