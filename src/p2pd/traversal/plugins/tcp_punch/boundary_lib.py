@@ -63,9 +63,15 @@ FAST_PUNCH_PARAMS = {
     "window": 6,  # 6 s  (> 2 * 2 s max_clock_error)
     "max_clock_error": 2,  # 2 s  (NTP is typically < 0.5 s; 2 s is conservative)
     "min_run_window": 2,  # 2 s  (enough for protocol exchange + process startup)
-    # Engine timing — shorter for LAN / in-protocol usage
-    "connect_timeout": 2.0,  # 2.0 s spray window
-    "monitor_timeout": 2.0,  # 2.0 s monitor window
+    # Engine timing — bumped from 2.0 to 3.0 each after the matrix sweep
+    # showed udp_punch flaking on busy hosts. With 18 sockets each spraying
+    # at 50 Hz the connector saw only 1/18 of expected PROBEs back -- the
+    # asyncio executor thread couldn't keep up with the 2 s window under
+    # MQTT broker churn + plugin coordination chatter. 3 s gives ~50%
+    # headroom on both directions, still well below DEFAULT_PUNCH_PARAMS's
+    # 5.0 s and well within plugin's 30/40 s timeout.
+    "connect_timeout": 3.0,  # 3.0 s spray window
+    "monitor_timeout": 3.0,  # 3.0 s monitor window
     "retry_interval": 0.05,  # 0.05 s selector poll interval (unchanged)
     # PunchClient / plugin timing
     "max_sleep": 8,  # 8 s cap — above worst-case (window + min_run_window)

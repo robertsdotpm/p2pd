@@ -71,6 +71,18 @@ def bind_punch_sockets(
         s = socket.socket(af, sock_type)
         sock_opt_voodoo(s)
         apply_nic_pin_sockopts(s, route)
+        # Bump the receive buffer for UDP punch sockets so back-to-back
+        # PROBE arrival across N spray rounds doesn't overflow the
+        # default 64 KB Windows socket buffer. Matrix data showed the
+        # connector receiving only 1 of ~18 expected PROBEs under
+        # load; a fatter buffer absorbs the burst even when the
+        # asyncio executor thread is briefly starved. Best-effort:
+        # the kernel may cap below what we ask for and that's fine.
+        if sock_type == socket.SOCK_DGRAM:
+            try:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 256 * 1024)
+            except OSError:
+                pass
         bind_tup = binder_sync(af, ip_strip_if(bind_ip), p.src_port, nic_id)
         try:
             s.bind(bind_tup)
