@@ -13,6 +13,18 @@ from .nat_predict import NATMapping
 from ...traversal_plugin import TraversalPlugin
 from ....node.node_utils import get_pp_executors
 
+PLUGIN_CONF = {"timeout": 80}
+
+# Protocol auto-registration: plugin_loader merges these into
+# TraversalManager.sig_proto so PunchMsg dispatches without core
+# proto_msg.py edits.
+PROTO_MESSAGES = (
+    # (msg_class, strategy_enum, ttl_seconds)
+    # plugin_loader derives the wire name as "<plugin_name>.<class>"
+    # and patches it onto the class -- no enum allocation needed.
+    (PunchMsg, P2P_PUNCH, 20),
+)
+
 
 class PunchPlugin(TraversalPlugin):
     """Traversal plugin implementing TCP hole-punching via coordinated port prediction."""
@@ -291,19 +303,6 @@ self,
             return
         await shutdown_proc_pool(self.proc_pool)
         self.proc_pool = None
-
-
-PLUGIN_CONF = {"timeout": 80}
-
-# Protocol auto-registration: plugin_loader merges these into
-# TraversalManager.sig_proto so PunchMsg dispatches without core
-# proto_msg.py edits.
-PROTO_MESSAGES = (
-    # (msg_class, strategy_enum, ttl_seconds)
-    # plugin_loader derives the wire name as "<plugin_name>.<class>"
-    # and patches it onto the class -- no enum allocation needed.
-    (PunchMsg, P2P_PUNCH, 20),
-)
 
 
 async def setup_plugin(node):

@@ -1,6 +1,7 @@
 """Utilities for the simple TCP selector punch engine."""
 from typing import Any, List, Optional, Tuple
 import socket
+import sys
 import time
 from aionetiface import fstr, log, log_exception
 from aionetiface.net.bind.bind_rules import binder_sync
@@ -14,19 +15,45 @@ different operating systems.
 
 
 def sock_opt_voodoo(s: Any) -> None:
-    """Apply non-blocking mode and SO_REUSEADDR/SO_REUSEPORT socket options for hole punching."""
+    """Apply non-blocking mode and the platform-correct address-reuse sockopt for hole punching.
+
+    Windows: SO_REUSEADDR has the *opposite* semantics of POSIX -- it
+    permits two sockets to share an exact 4-tuple, which lets a stray
+    listener hijack our bound port and confuses the TCP state machine
+    during simultaneous-open. SO_EXCLUSIVEADDRUSE is the Windows-correct
+    flag: it tells the kernel "no other socket may steal this binding"
+    so the simul-open SYN/SYN match converges unambiguously on our
+    socket.
+
+    POSIX: SO_REUSEADDR + SO_REUSEPORT (where available) are required
+    so the engine can re-bind the predicted port across retries
+    without hitting TIME_WAIT, and so multiple punch sockets can share
+    the local port if needed.
+    """
     s.setblocking(False)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    # Windows' Python socket module has no SO_REUSEPORT attribute at all
-    # (raising AttributeError before setsockopt is even called), while some
-    # Unixes have the attribute but reject it at runtime (OSError). Both
-    # cases are non-fatal here -- punch works without REUSEPORT on platforms
-    # that don't support it.
-    if hasattr(socket, "SO_REUSEPORT"):
+    if sys.platform == "win32" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
         try:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         except OSError:
-            pass
+            # Older Windows / restricted contexts may reject the flag.
+            # Fall back to REUSEADDR so the bind still succeeds rather
+            # than tearing down the engine.
+            try:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            except OSError:
+                pass
+    else:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # Windows' Python socket module has no SO_REUSEPORT attribute at all
+        # (raising AttributeError before setsockopt is even called), while some
+        # Unixes have the attribute but reject it at runtime (OSError). Both
+        # cases are non-fatal here -- punch works without REUSEPORT on platforms
+        # that don't support it.
+        if hasattr(socket, "SO_REUSEPORT"):
+            try:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            except OSError:
+                pass
 
     """
     try:
