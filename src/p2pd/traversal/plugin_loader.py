@@ -44,6 +44,8 @@ import asyncio
 import importlib
 import os
 
+from aionetiface import log, log_exception
+
 
 PLUGINS_DIR = os.path.join(os.path.dirname(__file__), "plugins")
 
@@ -76,14 +78,31 @@ async def load_plugins(node: Any) -> None:
                 factory = await mod.setup_plugin(node)
             except asyncio.CancelledError:
                 raise
-            except (OSError, ValueError, RuntimeError):
+            except (OSError, ValueError, RuntimeError) as exc:
+                # Without this log, an intermittent setup failure
+                # (ThreadPoolExecutor pressure, STUN init flake,
+                # resource registration race) silently de-registers
+                # the plugin and the next connect attempt gets
+                # KeyError on plugin_name lookup with no forensics.
+                log("plugin_loader: {0}.setup_plugin raised {1!r}; skipping".format(
+                    plugin_name, exc,
+                ))
+                log_exception()
                 continue
             if factory is None:
+                # enable_punching=False is the legitimate None path,
+                # but logging it costs nothing and disambiguates
+                # "configured off" from "tried to load and failed
+                # silently somewhere upstream".
+                log("plugin_loader: {0}.setup_plugin returned None; skipping".format(
+                    plugin_name,
+                ))
                 continue
             plugin_conf["class"] = factory
         else:
             plugin_conf["class"] = mod.PLUGIN_CLASS
 
+        log("plugin_loader: registered {0}".format(plugin_name))
         node.traversal.install_plugin(plugin_name, plugin_conf)
 
         # Auto-register the plugin's protocol messages + rendezvous
