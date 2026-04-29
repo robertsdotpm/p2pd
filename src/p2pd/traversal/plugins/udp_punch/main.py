@@ -384,6 +384,10 @@ class UdpPunchPluginFactory:
         self.punch_clients = punch_clients if punch_clients is not None else {}
         self.punch_proc = {}
         self.nic_ids_owned = []
+        # Populated by setup_plugin with (nic_id, ip, af) tuples this
+        # factory wants to claim. Actual claim happens lazily on
+        # first build_plugin so registration never fails on collision.
+        self.pending_claims = []
 
     @classmethod
     async def create(cls, stun_clients: Any, sys_clock: Any) -> "UdpPunchPluginFactory":
@@ -409,6 +413,16 @@ class UdpPunchPluginFactory:
 
     def build_plugin(self) -> UdpPunchPlugin:
         """Create a fresh UdpPunchPlugin wired to this factory's shared state."""
+        # Claim the (nic, ip, af) tuples lazily on first plugin
+        # build. Raises ValueError if another factory in this process
+        # already owns one of them -- caller (traversal manager) can
+        # decide to skip / log / propagate. After the first claim
+        # succeeds, pending_claims is cleared so re-builds don't
+        # re-raise spuriously.
+        if self.pending_claims:
+            claims = self.pending_claims
+            self.pending_claims = []
+            self.claim_nics(claims)
         plugin = UdpPunchPlugin()
         plugin.stun_clients = self.stun_clients
         plugin.sys_clock = self.sys_clock
@@ -436,14 +450,14 @@ async def setup_plugin(node):
     if not node.conf.get("enable_punching", True):
         return None
     factory = await UdpPunchPluginFactory.create(node.stun_clients, node.sys_clock)
-    # Build (nic_id, primary_ip, af) claims for every NIC x AF combo
-    # this Node owns. Raises ValueError on collision so a test
-    # accidentally spinning up a second Node on the same source-bind
-    # tuple fails fast with a clear message rather than silently
-    # producing broken punch attempts. ValueError because it's an
-    # API-boundary input check -- callers can catch it upstream
-    # (e.g. node startup) and decide whether to continue without
-    # udp_punch instead of crashing the whole Node.
+    # Stash the (nic_id, primary_ip, af) claims on the factory so the
+    # first plugin run can claim them at engine-start time. Doing the
+    # claim eagerly here would raise ValueError on collision, which
+    # plugin_loader's broad except swallows -- udp_punch then silently
+    # drops out of plugin_loaders and breaks tests that assert it
+    # registered. Late-claim keeps registration unconditional and
+    # surfaces collisions only when an actual punch attempt would
+    # have been doomed anyway.
     claims = []
     for nic in node.ifs:
         nic_id = getattr(nic, "id", None)
@@ -456,5 +470,5 @@ async def setup_plugin(node):
                 primary_ip = None
             if primary_ip:
                 claims.append((nic_id, str(primary_ip), af))
-    factory.claim_nics(claims)
+    factory.pending_claims = claims
     return factory
