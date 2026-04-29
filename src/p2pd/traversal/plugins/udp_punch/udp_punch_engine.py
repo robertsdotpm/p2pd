@@ -280,7 +280,6 @@ def udp_punch_engine(
     same_machine: bool = False,
     params: Optional[Dict[str, Any]] = None,
     stop_reader: Optional[Any] = None,
-    route: Optional[Any] = None,
 ) -> Optional[Tuple[Any, Tuple[str, int]]]:
     """Drive a full UDP punch: bind, barrier-sleep, fire, watch, return winner.
 
@@ -301,7 +300,7 @@ def udp_punch_engine(
 
     bound_socks = bind_punch_sockets(
         af, nic_id, port_allocs, src_ip,
-        sock_type=socket.SOCK_DGRAM, route=route,
+        sock_type=socket.SOCK_DGRAM,
     )
     log(fstr(
         "udp_punch_engine: af={0} src_ip={1} dest_ip={2} bound={3}/{4}",
