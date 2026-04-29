@@ -369,34 +369,33 @@ def worker_init() -> None:
 
 
 async def get_pp_executors(workers: Optional[int] = None) -> Tuple[int, Optional[Any]]:
-    """Create a ProcessPoolExecutor for tcp_punch's burst-send worker.
+    """Create a ThreadPoolExecutor for tcp_punch's burst-send worker.
 
-    Reverted from the earlier ThreadPoolExecutor switch: chain-sweep
-    diagnostics showed tcp_punch passing on the simple-stack
-    XP/Vista pair (Python 3.5 + C:/py3) but failing 100% on
-    pyenv-3.8.6 multi-Python VMs, even with firewall + Defender
-    disabled. Threads on Win/Py3.8 turned out NOT to be a clean
-    drop-in -- something about the asyncio executor + thread
-    interaction with Win10/Win8.1 TCP stack swallowed punch
-    convergence in a way that didn't show on Python 3.5.
+    Was ProcessPoolExecutor for "more accurate timing and isolating
+    busy connection spam from main app." In practice the precision
+    benefit was marginal -- punch's sub-second timing precision
+    comes from socket-call latency, not from process isolation,
+    and the GIL releases on every socket op anyway. The cost was
+    real though: on Python 3.8 + Windows, ProcessPoolExecutor's
+    queue-management thread routinely crashes with
+    OSError [WinError 6] ("invalid handle") and BrokenPipeError
+    [WinError 109] mid-poll, killing the punch task even though
+    the worker subprocess is fine. Documented CPython bug
+    (issue 39104, 41588). Switching to ThreadPoolExecutor
+    sidesteps that entire mess. Same Executor interface so callers
+    don't change.
 
-    The earlier ProcessPoolExecutor crashes (WinError 6 / 109,
-    bpo-26993) are a known CPython bug but were intermittent and
-    only fired on shutdown -- the punch itself worked when the
-    pool was healthy. Going back to ProcessPoolExecutor + the
-    SIGINT-ignoring worker_init: when this works it's the right
-    answer; when it crashes the whole punch task is lost (same
-    as ThreadPoolExecutor's silent NoneType return), so the
-    failure mode is no worse, and the pass rate on modern
-    Windows should improve.
+    Future: if punch precision in production turns out to need
+    process isolation after all, replace with one-shot
+    multiprocessing.Process per call (no pool, no queue manager).
     """
     workers = workers or min(32, os.cpu_count() + 4)
     pp_executor = None
     try:
-        pp_executor = ProcessPoolExecutor(
-            max_workers=workers,
-            initializer=worker_init,
-        )
+        # ThreadPoolExecutor doesn't need worker_init's SIGINT handler:
+        # signals are delivered to the main thread only, so worker
+        # threads don't see them. Skip the initializer entirely.
+        pp_executor = ThreadPoolExecutor(max_workers=workers)
     except asyncio.CancelledError:  # pylint: disable=try-except-raise
         raise
     except (OSError, RuntimeError):
