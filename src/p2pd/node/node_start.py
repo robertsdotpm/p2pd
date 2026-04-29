@@ -10,7 +10,7 @@ import hashlib
 import time
 from aionetiface import (
     fstr, log, log_exception, log_p2p, async_wrap_errors,
-    IP4, IP6, OPEN_INTERNET, Interface, SysClock,
+    IP4, IP6, OPEN_INTERNET, AFGroup, Interface, SysClock,
     list_interfaces, load_interfaces, parse_node_addr, make_node_addr,
     field_wrap, dhash, create_task, Signing,
 )
@@ -224,9 +224,20 @@ async def setup_router_and_signal(node: Any, kp: Any, out: bool, cout: Callable)
     # construction means every MQTTClient stamps app-packet timestamps
     # off the same NTP-synced clock, instead of falling back to
     # wall-clock time.time (which on XP/Vista can be hours off).
+    # Build the AFGroup from the Node's loaded interfaces so the Router
+    # picks per-AF brokers correctly on hosts where v4 and v6 live on
+    # different NICs (mobile CGNAT for v4, primary for v6, etc).
+    # AFGroup.from_interfaces walks node.ifs in order and assigns the
+    # first AF-supporting Interface to each AF -- pure NIC-ordering
+    # policy, no extra config. Falls back to the default Interface if
+    # node.ifs is empty for any reason.
+    if node.ifs:
+        af_group = AFGroup.from_interfaces(node.ifs)
+    else:
+        af_group = AFGroup(Interface("default"))
     router = Router(
         kp,
-        nic=Interface("default"),
+        nic=af_group,
         get_time=node.sys_clock.time,
     )
     node.traversal = TraversalManager(
