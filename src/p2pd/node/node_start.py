@@ -224,20 +224,19 @@ async def setup_router_and_signal(node: Any, kp: Any, out: bool, cout: Callable)
     # construction means every MQTTClient stamps app-packet timestamps
     # off the same NTP-synced clock, instead of falling back to
     # wall-clock time.time (which on XP/Vista can be hours off).
-    # Build the AFGroup from the Node's loaded interfaces so the Router
-    # picks per-AF brokers correctly on hosts where v4 and v6 live on
-    # different NICs (mobile CGNAT for v4, primary for v6, etc).
-    # AFGroup.from_interfaces walks node.ifs in order and assigns the
-    # first AF-supporting Interface to each AF -- pure NIC-ordering
-    # policy, no extra config. Falls back to the default Interface if
-    # node.ifs is empty for any reason.
-    if node.ifs:
-        af_group = AFGroup.from_interfaces(node.ifs)
-    else:
-        af_group = AFGroup(Interface("default"))
+    # Use Interface("default") for Router so MQTT brokers go via the
+    # OS default route (the proven primary-NIC path that 8.8.8.8 probe
+    # picks at startup). Building AFGroup.from_interfaces(node.ifs)
+    # here was tempting -- it would let multi-homed hosts express
+    # per-AF NIC preference automatically -- but on VMs with a
+    # secondary mobile/CGNAT NIC, node.ifs[0] is sometimes the slow
+    # one, which silently routed every broker connection through CGNAT
+    # and broke convergence. Multi-homed callers who genuinely want a
+    # per-AF split should construct an AFGroup explicitly and pass it
+    # to Router; default stays "do what the OS does."
     router = Router(
         kp,
-        nic=af_group,
+        nic=Interface("default"),
         get_time=node.sys_clock.time,
     )
     node.traversal = TraversalManager(
