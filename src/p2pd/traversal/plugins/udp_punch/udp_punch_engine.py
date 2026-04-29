@@ -29,6 +29,7 @@ import socket
 import time
 
 from aionetiface import fstr, log, sock_has_data
+from aionetiface.net.address import resolve_dest_tup
 
 from ..tcp_punch.tcp_punch_utils import bind_punch_sockets
 from .udp_punch_defs import (
@@ -71,20 +72,27 @@ def fire_probes(
     """
     frame = build_frame(UDP_PUNCH_KIND_PROBE, nonce)
     end = time.monotonic() + spray_duration
+    # Resolve the v6-link-local 4-tuple ONCE per dest_port and reuse
+    # it every spray round. getaddrinfo is synchronous + IP-literal
+    # so it costs ~microseconds, but doing it inside the inner loop
+    # would still be wasteful at spray rates.
+    af = bound_socks[0][1].family if bound_socks else socket.AF_INET
+    dest_tups = [
+        resolve_dest_tup(af, dest_ip, a.dest_port, socket.SOCK_DGRAM)
+        for a, _ in bound_socks
+    ]
     log(fstr(
-        "udp_punch.fire_probes: starting spray dest_ip={0} sockets={1} dest_ports={2} duration={3}s nonce={4}",
-        (dest_ip, len(bound_socks),
-         [a.dest_port for a, _ in bound_socks],
-         spray_duration, nonce.hex()),
+        "udp_punch.fire_probes: starting spray dest_ip={0} sockets={1} dest_tups={2} duration={3}s nonce={4}",
+        (dest_ip, len(bound_socks), dest_tups, spray_duration, nonce.hex()),
     ))
     rounds = 0
     while time.monotonic() < end:
         if stop_reader is not None and sock_has_data(stop_reader):
             log("udp_punch.fire_probes: stop_reader signalled; aborting spray")
             return
-        for alloc, s in bound_socks:
+        for (_, s), tup in zip(bound_socks, dest_tups):
             try:
-                s.sendto(frame, (dest_ip, alloc.dest_port))
+                s.sendto(frame, tup)
             except OSError:
                 # ICMP-unreachable on some NATs surfaces as ECONNREFUSED
                 # the NEXT sendto. Ignore -- next round will retry.
@@ -104,6 +112,8 @@ def log_sock_addr(sock: Any) -> str:
         return "{0}:{1}".format(addr[0], addr[1])
     except OSError:
         return "<closed>"
+
+
 
 
 def watch_for_winner(

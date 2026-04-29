@@ -41,6 +41,8 @@ import struct
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+from aionetiface.net.address import resolve_dest_tup
+
 from .random_probe_defs import (
     DEFAULT_PROBE_COUNT,
     PROBE_IDX_CONFIRM,
@@ -558,7 +560,7 @@ def sync_run_non_sym_side(
         try:
             sock.sendto(
                 encode_probe(nonce, ROLE_CONE, idx),
-                (peer_ext_ip, dst_port),
+                resolve_dest_tup(sock.family, peer_ext_ip, dst_port, socket.SOCK_DGRAM),
             )
         except OSError:
             continue
@@ -643,7 +645,7 @@ def sync_run_symmetric_side(
         try:
             s.sendto(
                 encode_probe(nonce, ROLE_SYM, idx),
-                (cone_ext_ip, cone_ext_port),
+                resolve_dest_tup(s.family, cone_ext_ip, cone_ext_port, socket.SOCK_DGRAM),
             )
         except OSError:
             continue
@@ -757,7 +759,7 @@ async def run_non_sym_side(
         try:
             sock.sendto(
                 encode_probe(nonce, ROLE_CONE, idx),
-                (peer_ext_ip, dst_port),
+                resolve_dest_tup(sock.family, peer_ext_ip, dst_port, socket.SOCK_DGRAM),
             )
         except OSError:
             # ENETUNREACH / EHOSTUNREACH while firing -- skip and
@@ -897,7 +899,7 @@ async def run_symmetric_side(
         try:
             s.sendto(
                 encode_probe(nonce, ROLE_SYM, idx),
-                (cone_ext_ip, cone_ext_port),
+                resolve_dest_tup(s.family, cone_ext_ip, cone_ext_port, socket.SOCK_DGRAM),
             )
         except OSError:
             continue
