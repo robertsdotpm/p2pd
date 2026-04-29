@@ -103,6 +103,14 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
         cout("might have been taken over or all servers down.")
         cout("")
 
+    # Allow the freshly-put PNP record + MQTT subscription to propagate
+    # across the configured PNP/MQTT servers before we advertise this
+    # node as ready. Without this gap, a peer that resolves the nick
+    # immediately after seeing the "Listen on PNP" line can race a
+    # server that hasn't yet observed the put and silently hang in the
+    # resolve step.
+    await asyncio.sleep(8)
+
     nodes = [node]
     return nodes, ifs, nick
 
