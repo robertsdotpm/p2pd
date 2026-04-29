@@ -347,6 +347,11 @@ def build_node_address(node: Any, out: bool) -> None:
         # we just emit no hints; legacy 4-part addr behaviour.
         mqtt_brokers = []
 
+    log_p2p(fstr(
+        "[NODE-ADDR] packing {0}/{1} broker hints: {2}",
+        (len(mqtt_brokers), MAX_BROKER_HINTS, mqtt_brokers),
+    ), node.node_id[:8])
+
     node.addr_bytes = make_node_addr(
         node.kp.public_key_hex,
         node.machine_id,
