@@ -150,22 +150,14 @@ duplicate messages are occuring through router
 tasks are only processed after input finishes -- how to do this with async?
 
 
-
+- basic testing on different oses
+- interface cache needs to work before relaunch
 - update docs
-- delete old unused tests
 - move to new repos
 - push to pypi
-- basic testing on different oses
-
-- do we want to disconnect from mqtt for additional cons made
-after our minimum for our own client when a plugin is done?
-otherwise they will just build up.
-  - how to avoid closing other plugins cons
-- errors dont really propogate from plugins
-- does same machine get set?
-  - maybe if same macine use time.time in sys.clock
-- if node server cant listen on an ip in node does it crash?
-- put not overwriting same name
-   - 1 second update is that bad? lets add a comment somewhere
-    - going to have to edit schema on remote and local 
-
+- todo: test successive use for new plugins
+  - prob need chained successive use tests for same plugin against the same node so you can test whether state gets contaminated and cleaned up properly
+- test demo interactions
+- make sure to also test ipv6 for new plugins
+- demo with no args should print help text
+- optional project website

@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import selectors
 import socket
 import time
+from aionetiface import log
 from .tcp_punch_utils import bind_tcp_sockets, connect_on_tcp_sockets
 from .punch_utils import choose_winning_tcp_sock
 
@@ -123,12 +124,24 @@ af: Any,
         monitor_duration = CONNECT_TIMEOUT
         retry_interval = RETRY_INTERVAL
 
+    log("[ENGINE] tcp_selector_punch_engine af={0} src_ip={1} dest_ip={2} "
+        "ports={3} spray={4}s monitor={5}s same_machine={6}".format(
+            af, src_ip, dest_ip, len(port_allocs),
+            spray_duration, monitor_duration, same_machine,
+        ))
     pre_connect_infos, sel = setup_engine(af, port_allocs, src_ip, nic_id)
+    log("[ENGINE] setup_engine bound {0}/{1} sockets".format(
+        len(pre_connect_infos), len(port_allocs),
+    ))
 
     # Wait for synchronized punch time frame
+    log("[ENGINE] entering sleep_until -> punch rendezvous")
     f_sleep_until()
 
     # Initiate simultaneous open
+    log("[ENGINE] sleep_until done; spraying {0} connects for {1}s".format(
+        len(pre_connect_infos), spray_duration,
+    ))
     connect_on_tcp_sockets(
         same_machine, pre_connect_infos, dest_ip, spray_duration=spray_duration
     )
@@ -139,8 +152,14 @@ af: Any,
     )
 
     sock_list = list(successful)
+    log("[ENGINE] monitor done; successful={0}/{1}".format(
+        len(sock_list), len(pre_connect_infos),
+    ))
 
     # Application-level validation should still be done after this
     sock = choose_winning_tcp_sock(dest_ip, sock_list, our_ip)
+    log("[ENGINE] choose_winning_tcp_sock -> {0}".format(
+        "selected" if sock else "no winner",
+    ))
 
     return sock

@@ -47,7 +47,7 @@ import time
 import argparse
 import socket
 import asyncio
-from aionetiface import IP6, ip_norm, patch_connect_ip
+from aionetiface import IP6, ip_norm, patch_connect_ip, log
 from .boundary_alloc import boundary_port_alloc
 from .tcp_punch_engine import tcp_selector_punch_engine
 from .punch_utils import timestamp_from_ntp
@@ -131,12 +131,20 @@ self,
     # Timestamp is a unix timestamp.
     def set_timestamp(self, timestamp: int) -> None:
         """Record the NTP-synchronised Unix timestamp as the clock reference for this punch."""
+        wall = int(time.time())
+        log("[PUNCH-CLIENT] set_timestamp ntp={0} wall={1} delta={2}s".format(
+            timestamp, wall, wall - timestamp,
+        ))
         self.timestamp = timestamp
         self.start_time = time.monotonic()
 
     # Punch time is a future unix timestamp to start punching.
     def set_punch_time(self, punch_time: int) -> None:
         """Set the future Unix timestamp at which both peers will simultaneously send SYNs."""
+        wait = punch_time - getattr(self, "timestamp", punch_time)
+        log("[PUNCH-CLIENT] set_punch_time={0} wait_from_ts={1}s".format(
+            punch_time, wait,
+        ))
         self.punch_time = punch_time
 
     def sleep_until(self) -> None:

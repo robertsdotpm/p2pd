@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 import random
 from aionetiface import (
-    fstr, log_exception, TCP, STUN_PORT, MAX_PORT,
+    fstr, log, log_exception, TCP, STUN_PORT, MAX_PORT,
     get_high_port_socket, socket_factory, from_range,
     OPEN_INTERNET, delta_info, NA_DELTA, nat_info, RESTRICT_PORT_NAT,
     nats_can_predict, nats_intersect, field_wrap, in_range, port_wrap,
@@ -290,6 +290,11 @@ mode: int,
 
 async def nat_prediction(mode: int, src_nat: Dict[str, Any], dest_nat: Dict[str, Any], stuns: List[Any], recv_mappings: Optional[List[NATMapping]] = None, test_no: int = 2) -> Tuple[List[NATMapping], List[NATMapping]]:
     """Compute predicted send and preloaded mappings for a hole-punch session."""
+    log("[NAT-PREDICT] mode={0} src_nat_type={1} dest_nat_type={2} "
+        "stuns={3} recv_mappings={4}".format(
+            mode, src_nat.get("type"), dest_nat.get("type"),
+            len(stuns), len(recv_mappings) if recv_mappings else 0,
+        ))
     # Setup nats and initial mapping templates.
     # The mappings will be filled in with details.
     use_range, src_nat, dest_nat, recv_mappings = init_predictions(

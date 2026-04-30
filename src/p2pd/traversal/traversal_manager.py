@@ -14,7 +14,7 @@ running instance.
 import asyncio
 from collections import OrderedDict
 from typing import Any, Callable, Dict, List, Optional
-from aionetiface import IP4, NIC_BIND, get_running_loop
+from aionetiface import IP4, NIC_BIND, get_running_loop, log
 from .traversal_plugin import TraversalPlugin
 from .traversal_utils import (
     async_wrap_errors,
@@ -102,6 +102,10 @@ class TraversalManager:
         """Run a single traversal plugin, optionally providing a reply message."""
         # Don't run if result is set.
         if plugin.result.done():
+            log("[TM] run_plugin skip (already done) plugin={0} id={1}".format(
+                getattr(plugin, "PLUGIN_NAME", type(plugin).__name__),
+                getattr(plugin, "plugin_id", "?"),
+            ))
             return
 
         # Set nic fields.
@@ -113,13 +117,29 @@ class TraversalManager:
             # Sets self.interface based on if_index for dest.
             reply.routing.load_if_extra(self.nics)
 
+        log("[TM] run_plugin enter plugin={0} id={1} reply={2} timeout={3}s".format(
+            getattr(plugin, "PLUGIN_NAME", type(plugin).__name__),
+            getattr(plugin, "plugin_id", "?"),
+            reply is not None,
+            plugin.timeout,
+        ))
+
         # Each plugin has a run method.
         try:
             await asyncio.wait_for(plugin.run(reply), timeout=plugin.timeout)
         except asyncio.CancelledError:  # pylint: disable=try-except-raise
             raise
-        except (asyncio.TimeoutError, OSError, ConnectionError):
+        except (asyncio.TimeoutError, OSError, ConnectionError) as exc:
+            log("[TM] run_plugin caught {0}: {1}".format(
+                type(exc).__name__, repr(exc),
+            ))
             log_exception()
+
+        log("[TM] run_plugin exit plugin={0} id={1} result_done={2}".format(
+            getattr(plugin, "PLUGIN_NAME", type(plugin).__name__),
+            getattr(plugin, "plugin_id", "?"),
+            plugin.result.done(),
+        ))
 
         if plugin.result.done():
             await close_plugin(plugin, self.plugins, self.inbound_pipes)

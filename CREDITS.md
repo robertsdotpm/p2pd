@@ -9,6 +9,9 @@ blob/devel/src/core/clock.c
 - set interface IP script for powershell from: https://www.pdq.com/blog/using-powershell-to-set-static-and-dhcp-ip-addresses-part-1/
 - sip_client: https://github.com/SythilTech/Python-SIP/blob/master/scripts/sip.py adapted to be async.
 - turn_client: https://github.com/trichimtrich/turnproxy original code was for TCP proxying. I heavily modified it and changed it to use the UDP data channels feature of TURN.
+- chatgpt -- high level algorithm design, bug fixes, advice
+- gemini -- bug fixes to code
+- claude -- functional agentic testing
 - All the amazing open source authors whose modules I have used! Their respective works are listed in the requirements.txt file where more information can be found on Pypy.
 
 Additionally, there were countless technical references I consulted throughout this project. It isn't possible to list all of them - but this project wouldn't exist without everyone who openly shared knowledge and source code.

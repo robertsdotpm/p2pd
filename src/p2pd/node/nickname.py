@@ -173,30 +173,45 @@ class Nickname:
         # only needs to walk the AFs and surface any non-network failure.
         async def worker(offset: int) -> Optional[int]:
             """Attempt to store the name on the PNP server at offset and return offset on success."""
+            import time as _time
             for af in VALID_AFS:
+                t0 = _time.time()
                 try:
                     client = self.clients[af][offset]
                     if client is None:
+                        log(fstr(
+                            "Nickname.put: offset={0} af={1} client=None (skip)",
+                            (offset, af),
+                        ))
                         continue
                     log(fstr(
                         "Nickname.put: offset={0} af={1} -> client.put",
                         (offset, af),
                     ))
                     ret = await client.put(name, value, client.kp, behavior)
+                    dt = int((_time.time() - t0) * 1000)
                     if ret is None:
                         log(fstr(
-                            "Nickname.put: offset={0} af={1} ret=None (continue)",
-                            (offset, af),
+                            "Nickname.put: offset={0} af={1} ret=None elapsed_ms={2} (continue)",
+                            (offset, af, dt),
                         ))
                         continue
                     if ret.value is not None:
                         log(fstr(
-                            "Nickname.put: offset={0} af={1} success",
-                            (offset, af),
+                            "Nickname.put: offset={0} af={1} success elapsed_ms={2}",
+                            (offset, af, dt),
                         ))
                         return offset
+                    log(fstr(
+                        "Nickname.put: offset={0} af={1} value=None elapsed_ms={2} (server rejected)",
+                        (offset, af, dt),
+                    ))
                 except (OSError, ConnectionError, asyncio.TimeoutError):
                     log_exception()
+                    log(fstr(
+                        "Nickname.put: offset={0} af={1} network error elapsed_ms={2}",
+                        (offset, af, int((_time.time() - t0) * 1000)),
+                    ))
             return None
 
         # Schedule store tasks at all PNP servers.
@@ -234,18 +249,38 @@ class Nickname:
 
         async def worker(offset: int, name: Any) -> Optional[Any]:
             """Query the PNP server at offset for name and return the first non-None record."""
+            import time as _time
             for af in VALID_AFS:
+                t0 = _time.time()
                 try:
                     client = self.clients[af][offset]
                     if client is None:
+                        log(fstr(
+                            "Nickname.get: offset={0} af={1} client=None (skip)",
+                            (offset, af),
+                        ))
                         continue
+                    log(fstr(
+                        "Nickname.get: offset={0} af={1} -> client.get",
+                        (offset, af),
+                    ))
                     ret = await client.get(name)
+                    dt = _time.time() - t0
+                    has_val = ret is not None and ret.value is not None
+                    log(fstr(
+                        "Nickname.get: offset={0} af={1} ret_value_present={2} elapsed_ms={3}",
+                        (offset, af, has_val, int(dt * 1000)),
+                    ))
                     if ret is not None:
                         return ret
                 except asyncio.CancelledError:  # pylint: disable=try-except-raise
                     raise
                 except (OSError, ConnectionError, asyncio.TimeoutError):
                     log_exception()
+                    log(fstr(
+                        "Nickname.get: offset={0} af={1} network error elapsed_ms={2}",
+                        (offset, af, int((_time.time() - t0) * 1000)),
+                    ))
 
         # Convert TLD to client offset list.
         tld = "." + name.split(".")[-1]

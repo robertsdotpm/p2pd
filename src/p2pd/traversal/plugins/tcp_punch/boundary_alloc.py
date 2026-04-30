@@ -21,9 +21,19 @@ def boundary_port_alloc(timestamp: int, n: int = NUM_PORTS, params: Optional[Dic
         max_error=p["max_clock_error"],
     )
     boundary = stable_boundary(bucket)
-    if "P2PD_DEBUG" in os.environ:
-        print("bucket = ", bucket)
-        print("boundary = ", boundary)
+    # Always log -- single line per punch attempt, not hot. The
+    # timestamp is the SysClock-resolved Unix time the puncher saw
+    # at compute time, which lets cross-host log diffs catch
+    # bucket-boundary failures (peers in adjacent buckets) without
+    # having to back-derive `now` from the bucket.
+    print(
+        "boundary_port_alloc: timestamp={0} bucket={1} boundary={2} "
+        "window={3} max_clock_error={4} num_ports={5}".format(
+            timestamp, bucket, boundary,
+            p["window"], p["max_clock_error"], n,
+        ),
+        flush=True,
+    )
 
     # Same src and dest port for this allocation type.
     ret = []

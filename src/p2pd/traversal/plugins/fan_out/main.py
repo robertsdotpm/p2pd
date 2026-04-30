@@ -159,7 +159,17 @@ class FanOutPlugin(TraversalPlugin):
             for c in children
         ]
 
+        log(fstr(
+            "fan_out[{0}]: racing {1} children timeout={2}s",
+            (self.plugin_id, len(children), self.timeout),
+        ))
         pipe, winner = await race_plugin_results(children, timeout=self.timeout)
+        log(fstr(
+            "fan_out[{0}]: winner={1} pipe={2}",
+            (self.plugin_id,
+             type(winner).__name__ if winner else "None",
+             pipe is not None),
+        ))
 
         # Cancel still-running child tasks and close every loser. The
         # winner stays in manager.plugins so the caller can use the
