@@ -57,6 +57,9 @@ class PunchPlugin(TraversalPlugin):
 
     async def run(self, reply: Optional[Any] = None) -> None:
         """Coordinate the hole-punch exchange and launch the background punching process."""
+        if self.plugin_id in self.completed_pipe_ids:
+            return
+
         # --- Get or create the PunchClient for this session ---
         puncher = self.punch_clients.get(self.plugin_id)
         if puncher is None:
@@ -263,6 +266,7 @@ class PunchPlugin(TraversalPlugin):
             # This runs on normal completion, cancellation, and exceptions.
             self.punch_proc.pop(self.plugin_id, None)
             self.punch_clients.pop(self.plugin_id, None)
+            self.completed_pipe_ids.add(self.plugin_id)
 
     async def close(self) -> None:
         """Cancel any in-flight punch task and remove this plugin's shared state.
@@ -277,6 +281,7 @@ class PunchPlugin(TraversalPlugin):
         # Cancel the result future if nobody resolved it (e.g. outer timeout).
         if not self.result.done():
             self.result.cancel()
+        self.completed_pipe_ids.add(self.plugin_id)
 
 
 class PunchPluginFactory:
@@ -295,6 +300,7 @@ self,
         self.max_workers = 0
         self.punch_clients = punch_clients if punch_clients is not None else {}
         self.punch_proc = {}
+        self.completed_pipe_ids = set()
 
     @classmethod
     async def create(cls, stun_clients: Any, sys_clock: Any) -> "PunchPluginFactory":
@@ -312,6 +318,7 @@ self,
         plugin.proc_pool = self.proc_pool
         plugin.punch_clients = self.punch_clients
         plugin.punch_proc = self.punch_proc
+        plugin.completed_pipe_ids = self.completed_pipe_ids
         return plugin
 
     async def close(self) -> None:

@@ -194,7 +194,7 @@ def connect_on_tcp_sockets(same_machine: bool, bound_infos: List[Tuple[Any, Any]
             x -- based on rtt?
             ?
             """
-            time.sleep(0.01)  # 10ms is typical sweet spot
+            time.sleep(0.001)
 
 
 def sleep_until(punch_time: float, f_timer: Any, max_sleep: int = 10) -> None:
