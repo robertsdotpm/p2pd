@@ -59,16 +59,20 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
             # NIC list used as names -- disable for mac filtering.
             args.nic = []
 
-    ifs = await load_interfaces(
-        if_names, Interface, min_agree=1, max_agree=2, timeout=4
-    )
-
-    # If the NICs flag has been set then filter the interface list
-    # to match only the MAC addresses indicated.
-    if args.nic:
-        ifs = filter_nics_by_mac(args.nic, ifs)
-
-    if not ifs:
+    ifs = []
+    for attempt in range(3):
+        ifs = await load_interfaces(
+            if_names, Interface, min_agree=1, max_agree=2, timeout=4
+        )
+        candidate = filter_nics_by_mac(args.nic, ifs) if args.nic else ifs
+        if candidate:
+            ifs = candidate
+            args.nic = []
+            break
+        if attempt < 2:
+            cout("No interfaces found (attempt {0}/3); retrying in 5 s...".format(attempt + 1))
+            await asyncio.sleep(5)
+    else:
         raise ValueError("Failed to load interfaces.")
 
     # Show the ifs loaded.
