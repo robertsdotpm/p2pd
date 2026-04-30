@@ -34,6 +34,7 @@ class Node(Daemon):
         port: int = NODE_PORT,
         stop_rw: Optional[Any] = None,
         conf: Optional[Any] = None,
+        node_name: Optional[str] = None,
     ) -> None:
         if conf is None:
             conf = NODE_CONF
@@ -41,6 +42,13 @@ class Node(Daemon):
         self.conf = dict_child(conf, NET_CONF)
         self.install_path = resolve_install_path(self.conf)
         self.stop_reader, self.stop_writer = make_stop_pair(stop_rw)
+
+        # Stable on-disk identity tag. node_name selects which signing-key
+        # file is loaded ("PRIV_KEY_DONT_SHARE_v3_<name>.hex"); None falls
+        # back to a single shared "default" file at install_path. Two nodes
+        # sharing a node_name share a private key -- intentional, but the
+        # caller is responsible for not booting two such nodes on one box.
+        self.node_name = node_name
 
         # network identity.
         self.ifs = ifs if ifs is not None else []

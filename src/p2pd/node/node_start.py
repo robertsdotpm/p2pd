@@ -177,7 +177,8 @@ def load_cryptography_and_auth(node: Any) -> Any:
     """Load or generate the node's ECDSA signing key, derive the node ID, and return the keypair."""
     install_path = resolve_install_path(node.conf)
     node.sk = load_signing_key(
-        node.ifs, node.listen_ips, node.listen_port, install_path
+        node.ifs, node.listen_ips, node.listen_port, install_path,
+        node_name=getattr(node, "node_name", None),
     )
     node.vk = node.sk.verifying_key
 

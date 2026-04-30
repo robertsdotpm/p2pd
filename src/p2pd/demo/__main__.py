@@ -91,7 +91,8 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
     node = None
     for start_attempt in range(3):
         node = Node(
-            ifs=ifs, ip=args.ip, port=args.port, stop_rw=stop_rw, conf=demo_node_conf
+            ifs=ifs, ip=args.ip, port=args.port, stop_rw=stop_rw,
+            conf=demo_node_conf, node_name=args.node_id,
         )
 
         # Start the node and install echo protocol handler.

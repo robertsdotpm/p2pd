@@ -68,6 +68,23 @@ parser.add_argument(
     help="Command to run",
 )
 parser.add_argument(
+    "--id",
+    dest="node_id",
+    type=str,
+    required=False,
+    default=None,
+    help=(
+        "Stable node identity. The signing-key file on disk is keyed by "
+        "this name -- so the same --id always loads the same keypair, "
+        "regardless of NIC / IP / port. Two nodes that pass the same --id "
+        "(even on different hosts) will share a private key and clash on "
+        "the PNP slot, so use distinct names per node. When omitted, "
+        "falls back to a single shared 'default' identity at the install "
+        "path -- fine for single-node hosts, will collide between two "
+        "instances on one box without --id."
+    ),
+)
+parser.add_argument(
     "--install_path",
     type=str,
     required=False,

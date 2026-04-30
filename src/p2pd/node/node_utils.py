@@ -189,36 +189,31 @@ def norm_listen_ips(listen_ips: List[str]) -> List[str]:
     return listen_ips
 
 
-def load_signing_key(nics: List[Any], listen_ips: List[str], listen_port: int, install_path: str) -> SigningKey:
+def load_signing_key(nics: List[Any], listen_ips: List[str], listen_port: int, install_path: str, node_name: Optional[str] = None) -> SigningKey:
     """Load the node's ECDSA signing key from disk, generating and persisting a new one if absent.
 
-    Identity stability rule: the on-disk path is keyed by (sorted NIC
-    names, listen_port) ONLY -- listen_ips is intentionally excluded.
+    Identity is keyed by node_name. When node_name is None the file
+    falls back to the single shared "default" path at install_path --
+    suitable for single-node hosts and the common no-flag case. Two
+    nodes that pass the same node_name share a private key: that's the
+    contract, the caller is responsible for not booting two such nodes
+    on the same box.
 
-    Why: on IPv6-enabled hosts the kernel rotates privacy / temporary
-    addresses every few hours.  Mixing those into the hash made every
-    rotation generate a brand-new key, brand-new pub_key, brand-new
-    node_id, and brand-new nickname registration with PNP -- the
-    user's identity churned with every IPv6 address swap.
-
-    Two p2pd instances with the same NIC set + same listen_port can't
-    coexist anyway (port collision), so collapsing them onto the same
-    key file is fine -- the original disambiguation purpose still
-    holds for distinct (NIC, port) configs.
-
-    listen_ips is kept in the function signature for backwards
-    compatibility with older callers but is no longer hashed.
+    nics / listen_ips / listen_port are kept in the function signature
+    for backwards compatibility; they are no longer hashed into the path.
+    Earlier schemes derived the path from (NIC names + listen_port) which
+    churned every time the host's interfaces or DHCP-assigned addresses
+    moved -- explicit node_name gives the caller stable, predictable
+    identity instead.
     """
     # Make install dir if needed.
     pathlib.Path(install_path).mkdir(parents=True, exist_ok=True)
 
-    nic_str = ";".join([n.name for n in nics])
-    listen_hash = hash160(nic_str + ":" + str(listen_port))  # hex
-    # v2_ prefix distinguishes the listen_ips-free hashing scheme from
-    # the legacy listen_ips-namespaced files.  adopt_legacy_signing_key
-    # uses the absence of v2_ to identify pre-fix files for migration.
+    name_tag = node_name if node_name else "default"
+    # v3_ prefix distinguishes the explicit-node-name scheme from the
+    # earlier (NIC, port)-hash and listen_ips-namespaced files.
     sk_path = os.path.realpath(
-        os.path.join(install_path, fstr("PRIV_KEY_DONT_SHARE_v2_{0}.hex", (listen_hash,)))
+        os.path.join(install_path, fstr("PRIV_KEY_DONT_SHARE_v3_{0}.hex", (name_tag,)))
     )
 
     # Read existing key or generate fresh. We do NOT migrate forward
