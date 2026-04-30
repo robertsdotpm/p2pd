@@ -346,6 +346,10 @@ def self_punch_patch(mode: int, mappings: List[NATMapping], step: int = 1000) ->
     if mode != TCP_PUNCH_SELF:
         return
 
+    log("[NAT-PREDICT] self_punch_patch: shifting {0} mappings by step={1} "
+        "(TCP_PUNCH_SELF same-machine port-collision avoidance)".format(
+            len(mappings), step,
+        ))
     for m in mappings:
         m.local = port_wrap(m.local + step)
         m.remote = m.local

@@ -125,6 +125,14 @@ class FanOutPlugin(TraversalPlugin):
         same_machine = (
             self.src_map.get("machine_id") == self.dest_map.get("machine_id")
         )
+        log(fstr(
+            "fan_out[{0}]: same_machine={1} (src_mid={2} dest_mid={3})",
+            (
+                self.plugin_id, same_machine,
+                str(self.src_map.get("machine_id"))[:10],
+                str(self.dest_map.get("machine_id"))[:10],
+            ),
+        ))
 
         children = []  # type: List[TraversalPlugin]
         for af, rt, src_info, dest_info in combos:

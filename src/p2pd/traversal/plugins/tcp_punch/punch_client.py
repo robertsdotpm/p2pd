@@ -158,13 +158,35 @@ self,
         # The sleep time is the remaining time to sleep for
         sleep_time = max(0, self.punch_time - elapsed_abs)
 
+        capped = False
         # Limit max sleep if current host is far behind.
         if sleep_time > self.max_sleep:
+            log("[PUNCH-CLIENT] sleep_until cap fired: requested={0}s "
+                "max_sleep={1}s -- punch may fire before peer is ready".format(
+                    sleep_time, self.max_sleep,
+                ))
             sleep_time = self.max_sleep
+            capped = True
+
+        log("[PUNCH-CLIENT] sleep_until: ts={0} punch_time={1} sleep={2}s "
+            "capped={3}".format(
+                self.timestamp, self.punch_time, sleep_time, capped,
+            ))
 
         # No sleep needed if far behind.
         if sleep_time > 0:
-            time.sleep(sleep_time)
+            # Heartbeat every 10 s for long waits so a stuck-here case
+            # is distinguishable from a normal long wait. The actual
+            # wall-clock fire still happens at the requested sleep_time.
+            remaining = sleep_time
+            while remaining > 0:
+                step = min(10, remaining)
+                time.sleep(step)
+                remaining -= step
+                if remaining > 0:
+                    log("[PUNCH-CLIENT] sleep_until heartbeat: {0}s left".format(
+                        int(remaining),
+                    ))
 
     def add_port_allocator(self, f_port_alloc: Any, n: int = 16) -> None:
         """Run a port-allocation function and append unique PortAlloc entries to the list."""

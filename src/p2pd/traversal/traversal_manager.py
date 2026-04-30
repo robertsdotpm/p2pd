@@ -240,6 +240,12 @@ class TraversalManager:
             raise ValueError("AF not supported between hosts.")
 
         same_machine = dest_map["machine_id"] == src_map["machine_id"]
+        log("[TM] attempt_plugin: plugin={0} af={1} route_type={2} "
+            "same_machine={3} (src_mid={4} dest_mid={5})".format(
+                plugin_name, af, route_type, same_machine,
+                str(src_map.get("machine_id"))[:10],
+                str(dest_map.get("machine_id"))[:10],
+            ))
 
         plugin = self.create_plugin(
             af, route_type, src_info, dest_info, same_machine, plugin_name

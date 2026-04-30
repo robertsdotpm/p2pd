@@ -396,6 +396,11 @@ async def get_pp_executors(workers: Optional[int] = None) -> Tuple[int, Optional
     except (OSError, RuntimeError):
         log_exception()
 
+    log("get_pp_executors: type={0} workers={1} executor={2}".format(
+        type(pp_executor).__name__ if pp_executor else "None",
+        workers,
+        "OK" if pp_executor is not None else "FAILED",
+    ))
     return workers, pp_executor
 
 

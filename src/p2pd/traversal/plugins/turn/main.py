@@ -1,7 +1,7 @@
 """Traversal plugin that relays connections through a TURN server."""
 from typing import Any, Optional
 import asyncio
-from aionetiface import EXT_BIND, UDP, get_infra, fstr, log_p2p
+from aionetiface import EXT_BIND, UDP, get_infra, fstr, log, log_p2p
 from ...traversal_plugin import TraversalPlugin
 from ....protocol.proto_defs import P2P_RELAY
 from .proto import TURNMsg
@@ -50,6 +50,13 @@ class TURNPlugin(TraversalPlugin):
         other, they pick different servers and the relay session
         can't establish.
         """
+        log(fstr(
+            "turn[{0}]: run af={1} reply={2} role={3}",
+            (
+                self.plugin_id, self.af, reply is not None,
+                "responder" if reply is not None else "initiator",
+            ),
+        ))
 
         # --- Allocate a TURN relay for this session ---
         client = self.turn_clients.get(self.plugin_id)
@@ -80,6 +87,10 @@ class TURNPlugin(TraversalPlugin):
             if chosen_servers is None:
                 chosen_servers = rendezvous_rank(self.plugin_id, all_servers)
 
+            log(fstr(
+                "turn[{0}]: trying {1} candidate server(s)",
+                (self.plugin_id, len(chosen_servers)),
+            ))
             client = await get_first_working_turn_client(
                 self.af,
                 chosen_servers,
@@ -88,7 +99,15 @@ class TURNPlugin(TraversalPlugin):
             )
 
             if client is None:
+                log(fstr(
+                    "turn[{0}]: no working TURN server -- aborting",
+                    (self.plugin_id,),
+                ))
                 return
+            log(fstr(
+                "turn[{0}]: allocated relay on {1}",
+                (self.plugin_id, getattr(client, "dest", "?")),
+            ))
 
             # A concurrent run() may have raced through the await above and
             # already stored a client — reuse it and discard ours.
