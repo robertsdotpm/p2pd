@@ -1,6 +1,5 @@
 """Utilities for the simple TCP selector punch engine."""
 from typing import Any, List, Optional, Tuple
-import asyncio
 import socket
 import struct
 import sys
@@ -9,6 +8,7 @@ from aionetiface import fstr, log, log_exception
 from aionetiface.net.bind.bind_rules import binder_sync
 from aionetiface.net.net_utils import ip_strip_if
 from aionetiface.net.socket import apply_nic_pin_sockopts
+from aionetiface.utility.cmd_tools import cmd as run_shell_cmd
 
 
 async def log_time_wait_residue(src_ip: Optional[str]) -> None:
@@ -19,34 +19,24 @@ async def log_time_wait_residue(src_ip: Optional[str]) -> None:
     code path is closing one of our 4-tuples without the linger sockopt
     or that another socket on the same NIC/port leaked residue.
 
-    Cross-platform: `netstat -an` is available on Windows, Linux, and
-    macOS with similar enough output to substring-match on src_ip.
+    Uses aionetiface.utility.cmd_tools.cmd which wraps
+    create_subprocess_shell and falls back to a blocking
+    subprocess.run in a thread-pool executor on event loops that
+    don't support subprocess (SelectorEventLoop on Windows). That
+    way the diag works on every platform we run on.
     """
     if not src_ip:
         return
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "netstat", "-an",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
-    except NotImplementedError as exc:
-        # asyncio.create_subprocess_exec on SelectorEventLoop (Windows
-        # XP path; we install CustomEventLoop everywhere) raises
-        # NotImplementedError. Skip the diag rather than letting that
-        # propagate up through the punch task's finally block.
-        log("[POST-PUNCH-DIAG] subprocess unsupported on this loop: " + repr(exc))
-        return
-    except (OSError, asyncio.TimeoutError) as exc:
-        log("[POST-PUNCH-DIAG] netstat failed: " + repr(exc))
-        return
+        text = await run_shell_cmd("netstat -an", timeout=10)
     except Exception as exc:  # pylint: disable=broad-except
         # Diag is best-effort. Never let it kill the punch finally.
-        log("[POST-PUNCH-DIAG] unexpected error: " + repr(exc))
+        log("[POST-PUNCH-DIAG] netstat failed: " + repr(exc))
         return
 
-    text = out.decode("utf-8", errors="replace")
+    if not text:
+        log("[POST-PUNCH-DIAG] netstat returned empty output")
+        return
     matches = []
     for ln in text.splitlines():
         if "TIME_WAIT" not in ln:
