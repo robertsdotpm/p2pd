@@ -80,14 +80,25 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
 
     # Main node class with chosen ifs and conf.
     # print(stop_rw)
-    node = Node(
-        ifs=ifs, ip=args.ip, port=args.port, stop_rw=stop_rw, conf=demo_node_conf
-    )
+    node = None
+    for start_attempt in range(3):
+        node = Node(
+            ifs=ifs, ip=args.ip, port=args.port, stop_rw=stop_rw, conf=demo_node_conf
+        )
 
-    # Start the node and install echo protocol handler.
-    cout(fstr("Starting node on {0}...", (node.listen_port,)))
-    node.add_msg_cb(add_echo_support)
-    await node.start(out=True, cout=cout)
+        # Start the node and install echo protocol handler.
+        cout(fstr("Starting node on {0}...", (node.listen_port,)))
+        node.add_msg_cb(add_echo_support)
+        try:
+            await node.start(out=True, cout=cout)
+            break
+        except StartNodeNicknameFailed:
+            await async_wrap_errors(node.close())
+            if start_attempt < 2:
+                cout("PNP servers unreachable (attempt {0}/3); retrying in 5 s...".format(start_attempt + 1))
+                await asyncio.sleep(5)
+    else:
+        raise StartNodeNicknameFailed()
     # print(node.pp_executor)
 
     # Show the nodes address and listen port.
