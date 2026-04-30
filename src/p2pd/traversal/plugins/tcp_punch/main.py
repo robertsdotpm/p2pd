@@ -15,7 +15,18 @@ from .nat_predict import NATMapping
 from ...traversal_plugin import TraversalPlugin
 from ....node.node_utils import get_pp_executors
 
-PLUGIN_CONF = {"timeout": 80}
+PLUGIN_CONF = {"timeout": 150}
+# 150s = max-rendezvous-wait (window=42 + max_clock_error=20 ≈ 62 s)
+#      + spray (~3 s) + monitor (~3 s) + worker dispatch / engine
+#        setup overhead (varies by host, ~5-15 s on slow stacks)
+#      + the post-punch reverse-bridge accept (typically <1 s)
+#      + a safety margin for slow stacks (XP/Vista) so the run_plugin
+#        wait_for doesn't cancel the awaiting reverse_server.accept
+#        before the worker has had a chance to connect back. The
+#        previous 80 s left only ~10 s margin which v13's vista-from-xp
+#        ate, manifesting as WinError 10061 on the worker's connect-
+#        back to a listener that had just been torn down by the
+#        cancellation propagating from the timeout firing.
 
 # Protocol auto-registration: plugin_loader merges these into
 # TraversalManager.sig_proto so PunchMsg dispatches without core

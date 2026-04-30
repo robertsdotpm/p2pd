@@ -19,7 +19,8 @@ punched sock <---> reverse sock <-----> punch proc connection
 from typing import Any, Optional
 import asyncio
 import signal
-from aionetiface import Pipe, TCP, log, log_exception, async_wrap_errors, patch_connect_ip
+import socket
+from aionetiface import Pipe, TCP, log, log_exception, async_wrap_errors
 from .tcp_punch_engine import tcp_selector_punch_engine
 from aionetiface.net.selector_proxy import selector_proxy
 
@@ -85,14 +86,42 @@ async def start_punching_process(nic: Any, puncher: Any, stop_reader: Any, proc_
     ))
     reverse_server = None
     try:
-        # Create a listen server for receiving a connection
-        # back from the punching process.
+        # Create a listen server for receiving a connection back from
+        # the punching process. The bridge from the punch worker to
+        # the main process is ALWAYS same-host -- there is no reason
+        # for it to traverse the NIC, and on Windows XP a TCP connect
+        # from the NIC IP back to the SAME NIC IP gets refused with
+        # WinError 10061 ("connection refused") because XP defaults to
+        # the strong host model. Vista+ silently routes same-NIC-to-
+        # same-NIC connects through loopback so the bug never showed
+        # there. Bind the listener to INADDR_ANY (0.0.0.0 / ::) so the
+        # OS accepts connections via loopback regardless of host model;
+        # the worker then connects to 127.0.0.1 / ::1 and the bridge
+        # works on every Windows version.
         reverse_route = nic.route(puncher.af)
-        log("[PUNCH-PROC] binding reverse server to src_ip={0}".format(puncher.src_ip))
         reverse_route = await reverse_route.bind(ips=puncher.src_ip)
-        reverse_server = await Pipe(TCP, None, reverse_route).connect()
+
+        if puncher.af == 2:  # IP4
+            any_addr = "0.0.0.0"
+            sock_family = socket.AF_INET
+        else:
+            any_addr = "::"
+            sock_family = socket.AF_INET6
+
+        log("[PUNCH-PROC] creating reverse_server on {0} (loopback bridge)".format(any_addr))
+        listener_sock = socket.socket(sock_family, socket.SOCK_STREAM)
+        listener_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener_sock.bind((any_addr, 0))
+        listener_sock.setblocking(False)
+        reverse_server = await Pipe(
+            TCP, None, reverse_route, sock=listener_sock,
+        ).connect()
         if reverse_server is None:
             log("[PUNCH-PROC] reverse_server bind/connect returned None; aborting")
+            try:
+                listener_sock.close()
+            except OSError:
+                pass
             return None
 
         # Pre-populate the reverse_server's pipe_events.msg_cbs with the
@@ -112,14 +141,24 @@ async def start_punching_process(nic: Any, puncher: Any, stop_reader: Any, proc_
                 log("[PUNCH-PROC] pre-populated reverse_server.pipe_events.msg_cbs "
                     "with node_msg_cb (count={0})".format(len(pe.msg_cbs)))
 
-        # Get the address of the reverse connect server.
-        # Applies rules to make different kinds of IPs work.
-        reverse_ip = patch_connect_ip(puncher.af, puncher.src_ip, puncher.nic_id)
+        # The bridge from the punch worker to the main process is
+        # ALWAYS same-host. We saw a flaky `WinError 10061 (connection
+        # refused)` on XP when the worker connected to its own NIC IP;
+        # other XP-as-connector pairs in the same sweep didn't trip
+        # it, so it's not a deterministic strict-host-model issue,
+        # but routing the bridge through loopback removes that whole
+        # class of host-model / NIC-routing risk regardless. The
+        # listener above is bound to INADDR_ANY so loopback connects
+        # land on it; the worker connects to 127.0.0.1 / ::1.
         reverse_port = reverse_server.sock.getsockname()[1]
-        reverse_server_dest = (reverse_ip, reverse_port)
-        log("[PUNCH-PROC] reverse_server listening at {0}:{1}".format(
-            reverse_ip, reverse_port,
-        ))
+        if puncher.af == 2:  # IP4
+            reverse_server_dest = ("127.0.0.1", reverse_port)
+        else:
+            reverse_server_dest = ("::1", reverse_port)
+        log("[PUNCH-PROC] reverse_server listening on {0}:{1}; "
+            "worker will bridge via loopback {2}:{1}".format(
+                any_addr, reverse_port, reverse_server_dest[0],
+            ))
 
         # Start the punching in a new process.
         # Store the future so the caller can inspect / cancel it if needed.
