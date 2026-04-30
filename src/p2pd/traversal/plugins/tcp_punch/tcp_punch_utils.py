@@ -1,5 +1,6 @@
 """Utilities for the simple TCP selector punch engine."""
 from typing import Any, List, Optional, Tuple
+import asyncio
 import socket
 import struct
 import sys
@@ -8,6 +9,47 @@ from aionetiface import fstr, log, log_exception
 from aionetiface.net.bind.bind_rules import binder_sync
 from aionetiface.net.net_utils import ip_strip_if
 from aionetiface.net.socket import apply_nic_pin_sockopts
+
+
+async def log_time_wait_residue(src_ip: Optional[str]) -> None:
+    """Run `netstat -an` and log TIME_WAIT entries whose local IP matches src_ip.
+
+    Best-effort post-mortem after a punch attempt. SO_LINGER {1,0} on
+    punch sockets should make this count 0; anything else means some
+    code path is closing one of our 4-tuples without the linger sockopt
+    or that another socket on the same NIC/port leaked residue.
+
+    Cross-platform: `netstat -an` is available on Windows, Linux, and
+    macOS with similar enough output to substring-match on src_ip.
+    """
+    if not src_ip:
+        return
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "netstat", "-an",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+    except (OSError, asyncio.TimeoutError) as exc:
+        log("[POST-PUNCH-DIAG] netstat failed: " + repr(exc))
+        return
+
+    text = out.decode("utf-8", errors="replace")
+    matches = []
+    for ln in text.splitlines():
+        if "TIME_WAIT" not in ln:
+            continue
+        # netstat shows the local endpoint in the second whitespace
+        # column on Windows and (after the proto column) on Linux.
+        # Cheap substring filter: just look for our src_ip as ip:port.
+        if (src_ip + ":") in ln or (src_ip + ".") in ln:
+            matches.append(ln.strip())
+    log("[POST-PUNCH-DIAG] TIME_WAIT entries for src_ip={0}: count={1}".format(
+        src_ip, len(matches),
+    ))
+    for m in matches[:16]:
+        log("[POST-PUNCH-DIAG]   " + m)
 
 """
 These magic sock options are required for TCP hole punching on

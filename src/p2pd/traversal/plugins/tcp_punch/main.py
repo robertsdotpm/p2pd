@@ -10,6 +10,7 @@ from .boundary_alloc import boundary_port_alloc
 from .nat_predict_alloc import NATPredictAlloc
 from .punch_defs import TCP_PUNCH_LAN
 from .punch_process import start_punching_process
+from .tcp_punch_utils import log_time_wait_residue
 from .nat_predict import NATMapping
 from ...traversal_plugin import TraversalPlugin
 from ....node.node_utils import get_pp_executors
@@ -58,23 +59,41 @@ class PunchPlugin(TraversalPlugin):
 
     async def run(self, reply: Optional[Any] = None) -> None:
         """Coordinate the hole-punch exchange and launch the background punching process."""
+        log("[PUNCH-RUN] enter plugin_id={0} reply={1} completed={2}".format(
+            self.plugin_id,
+            reply is not None,
+            self.plugin_id in self.completed_pipe_ids,
+        ))
         if self.plugin_id in self.completed_pipe_ids:
+            log("[PUNCH-RUN] already completed; returning early plugin_id={0}".format(
+                self.plugin_id,
+            ))
             return
 
         # --- Get or create the PunchClient for this session ---
         puncher = self.punch_clients.get(self.plugin_id)
         if puncher is None:
             # First call: build a PunchClient with routing, timing, and port allocators.
+            log("[PUNCH-RUN] first call; setup_puncher_client plugin_id={0}".format(
+                self.plugin_id,
+            ))
             puncher, stuns = await self.setup_puncher_client(reply)
             if puncher is None:
-                log("PunchPlugin: no STUN clients available; aborting punch.")
+                log("[PUNCH-RUN] PunchPlugin: no STUN clients available; aborting punch.")
                 return
 
             # A concurrent run() may have raced through the await above and already
             # registered a client.  Reuse it to avoid a duplicate punching process.
             puncher = self.punch_clients.get(self.plugin_id) or puncher
             if self.plugin_id not in self.punch_clients:
+                log("[PUNCH-RUN] configure_puncher_process plugin_id={0}".format(
+                    self.plugin_id,
+                ))
                 puncher = await self.configure_puncher_process(puncher, stuns)
+        else:
+            log("[PUNCH-RUN] reusing existing puncher plugin_id={0}".format(
+                self.plugin_id,
+            ))
 
         # --- Advance the NAT traversal exchange ---
         # Each call computes the next round of port predictions and checks
@@ -86,9 +105,13 @@ class PunchPlugin(TraversalPlugin):
         # None signals the exchange is complete; the background punch process
         # takes it from here.
         if outgoing_msg is None:
+            log("[PUNCH-RUN] advance returned None; exchange done plugin_id={0}".format(
+                self.plugin_id,
+            ))
             return
 
         # --- Send our port predictions to the peer ---
+        log("[PUNCH-RUN] sending outgoing PunchMsg plugin_id={0}".format(self.plugin_id))
         await self.send_signal_msg(outgoing_msg)
 
     async def setup_puncher_client(self, reply: Optional[Any]) -> Tuple[Optional[Any], Optional[Any]]:
@@ -267,25 +290,48 @@ class PunchPlugin(TraversalPlugin):
         # The delay is kept short when using FAST_PUNCH_PARAMS because the
         # rendezvous window is small and synchronised via sleep_until().
         coordinator_delay = puncher.params.get("coordinator_delay", 2.0)
+        log("[PUNCH-DELAY] enter plugin_id={0} delay={1}s".format(
+            self.plugin_id, coordinator_delay,
+        ))
         try:
             await asyncio.sleep(coordinator_delay)
+            log("[PUNCH-DELAY] sleep done; calling start_punching_process plugin_id={0}".format(
+                self.plugin_id,
+            ))
             pipe = await start_punching_process(
                 nic,
                 puncher,
                 self.stop_reader,
                 self.proc_pool,
             )
+            log("[PUNCH-DELAY] start_punching_process returned plugin_id={0} pipe={1}".format(
+                self.plugin_id, pipe is not None,
+            ))
 
             # Guard against a second concurrent call resolving the same future,
             # which would raise asyncio.InvalidStateError.
             if not self.result.done():
                 self.result.set_result(pipe)
+        except asyncio.CancelledError:
+            log("[PUNCH-DELAY] CANCELLED plugin_id={0}".format(self.plugin_id))
+            raise
+        except Exception as exc:  # pylint: disable=broad-except
+            log("[PUNCH-DELAY] EXCEPTION plugin_id={0} {1}: {2}".format(
+                self.plugin_id, type(exc).__name__, repr(exc),
+            ))
+            raise
         finally:
             # Always remove shared state so subsequent attempts start clean.
             # This runs on normal completion, cancellation, and exceptions.
+            log("[PUNCH-DELAY] finally plugin_id={0}".format(self.plugin_id))
             self.punch_proc.pop(self.plugin_id, None)
             self.punch_clients.pop(self.plugin_id, None)
             self.completed_pipe_ids.add(self.plugin_id)
+            # Post-mortem: are any of our boundary 4-tuples still in
+            # TIME_WAIT? With SO_LINGER {1,0} on punch sockets the
+            # answer should always be 0. Any non-zero count points at
+            # a code path that closed without the linger sockopt.
+            await log_time_wait_residue(getattr(puncher, "src_ip", None))
 
     async def close(self) -> None:
         """Cancel any in-flight punch task and remove this plugin's shared state.
@@ -295,6 +341,10 @@ class PunchPlugin(TraversalPlugin):
         """
         task = self.punch_proc.pop(self.plugin_id, None)
         self.punch_clients.pop(self.plugin_id, None)
+        log("[PUNCH-CLOSE] plugin_id={0} task_was_pending={1}".format(
+            self.plugin_id,
+            task is not None and not task.done() if task else False,
+        ))
         await cancel_task(task)
 
         # Cancel the result future if nobody resolved it (e.g. outer timeout).
