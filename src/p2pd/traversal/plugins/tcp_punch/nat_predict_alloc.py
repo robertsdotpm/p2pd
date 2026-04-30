@@ -97,16 +97,6 @@ class NATPredictAlloc:
         fetch_states = [INITIATED_PREDICTIONS]
         fetch_states += [RECEIVED_PREDICTIONS]
         if self.state in fetch_states:
-            # LAN punch: boundary ports (already in the allocator) are
-            # perfectly aligned between peers via shared NTP bucket.
-            # STUN returns each side's own high port — different values,
-            # misaligned, useless for LAN simultaneous-open. Skip it.
-            if self.punch_mode == TCP_PUNCH_LAN:
-                self.send_mappings = []
-                self.preloaded_mappings = []
-                self.recv_mappings = []
-                return ([], 0)
-
             self.send_mappings, self.preloaded_mappings = await nat_prediction(
                 self.punch_mode,
                 self.src_nat,

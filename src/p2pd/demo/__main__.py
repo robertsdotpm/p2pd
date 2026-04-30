@@ -51,13 +51,14 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
     # Load interfaces on machine.
     cout("Loading networking interfaces...")
     if_names = await list_interfaces()
+    nic_arg = list(args.nic) if args.nic else []
+    name_matched = False
     if args.nic:
         filtered_nics = list(find_intersect(if_names, args.nic))
         if filtered_nics:
             if_names = filtered_nics
-
-            # NIC list used as names -- disable for mac filtering.
             args.nic = []
+            name_matched = True
 
     ifs = []
     for attempt in range(3):
@@ -69,11 +70,26 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
             ifs = candidate
             args.nic = []
             break
+        if name_matched:
+            raise RuntimeError(
+                "NIC '{0}' was found by name but failed to load. "
+                "Check the interface is up and has a valid IP.".format(
+                    ", ".join(str(n) for n in nic_arg)
+                )
+            )
         if attempt < 2:
             cout("No interfaces found (attempt {0}/3); retrying in 5 s...".format(attempt + 1))
             await asyncio.sleep(5)
     else:
         raise ValueError("Failed to load interfaces.")
+
+    # Check each loaded NIC has a reachable default gateway.
+    for nic in ifs:
+        if nic.supported() and not any(nic.is_default(af) for af in nic.supported()):
+            raise ValueError(
+                "NIC '{0}' loaded but no default gateway detected for any "
+                "address family. Check the routing table.".format(nic.name)
+            )
 
     # Show the ifs loaded.
     display_ifs_loaded(ifs)

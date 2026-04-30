@@ -8,6 +8,7 @@ from .boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 from .punch_client import PunchClient
 from .boundary_alloc import boundary_port_alloc
 from .nat_predict_alloc import NATPredictAlloc
+from .punch_defs import TCP_PUNCH_LAN
 from .punch_process import start_punching_process
 from .nat_predict import NATMapping
 from ...traversal_plugin import TraversalPlugin
@@ -212,6 +213,24 @@ class PunchPlugin(TraversalPlugin):
 
     async def advance_punching_protocol(self, puncher: Any, reply: Optional[Any], punch_time: int) -> Optional[Any]:
         """Compute the next round of port predictions and return an outgoing PunchMsg, or None when done."""
+        # For LAN, STUN is useless (returns each side's own port).
+        # Boundary ports from setup_puncher_client already align both sides.
+        # Send one empty PunchMsg to trigger the recipient; return None on reply.
+        if self.nat_alloc.punch_mode == TCP_PUNCH_LAN:
+            if reply is not None:
+                return None
+            msg = PunchMsg(
+                {
+                    "payload": {
+                        "punch_mode": self.nat_alloc.punch_mode,
+                        "mappings": [],
+                        "ntp": punch_time,
+                    },
+                }
+            )
+            msg.meta.plugin_name = "tcp_punch"
+            return msg
+
         # Convert raw mappings from the peer into internal objects.
         recv_mappings = None
         if reply is not None:
