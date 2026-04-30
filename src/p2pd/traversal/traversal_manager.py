@@ -40,6 +40,7 @@ class TraversalManager:
         stop_reader: Any,
         inbound_pipes: Optional[Dict[str, Any]] = None,
         nics: Optional[List[Any]] = None,
+        node_msg_cb: Optional[Callable] = None,
     ) -> None:
         # by plugin_id
         self.plugins = {}
@@ -50,6 +51,14 @@ class TraversalManager:
 
         # Socket stop signals.
         self.stop_reader = stop_reader
+
+        # Node-level message dispatcher. Plugins (and any pipes they
+        # spawn internally, e.g. tcp_punch's reverse_server) need it
+        # to pre-populate msg_cbs BEFORE the first inbound byte
+        # arrives -- the on_plugin_done path attaches it AFTER
+        # set_result, which races a fast-arriving ECHO and drops
+        # data on the "No msg cbs registered" path.
+        self.node_msg_cb = node_msg_cb
 
         # Interfaces that can be used for plugins.
         self.nics = nics if nics else []
@@ -172,6 +181,11 @@ class TraversalManager:
 
         # Socket signal for stopping cross-process.
         plugin.stop_reader = self.stop_reader
+
+        # Node-level msg dispatcher; plugins propagate it into any
+        # pipes they create internally so msg_cbs is non-empty before
+        # the first inbound byte arrives.
+        plugin.node_msg_cb = self.node_msg_cb
 
         # Manager back-ref (used by fan_out to spawn / run children).
         plugin.manager = self

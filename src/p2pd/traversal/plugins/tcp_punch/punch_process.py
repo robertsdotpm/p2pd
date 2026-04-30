@@ -74,13 +74,14 @@ def punching_process(puncher: Any, reverse_server_dest: Any, stop_reader: Any) -
         raise e
 
 
-async def start_punching_process(nic: Any, puncher: Any, stop_reader: Any, proc_pool: Optional[Any] = None) -> Optional[Any]:
+async def start_punching_process(nic: Any, puncher: Any, stop_reader: Any, proc_pool: Optional[Any] = None, node_msg_cb: Optional[Any] = None) -> Optional[Any]:
     """Start the out-of-process punch worker and accept the reverse connection it makes back."""
-    log("[PUNCH-PROC] start_punching_process enter af={0} src_ip={1} dest_ip={2} nic={3}".format(
+    log("[PUNCH-PROC] start_punching_process enter af={0} src_ip={1} dest_ip={2} nic={3} node_msg_cb={4}".format(
         getattr(puncher, "af", None),
         getattr(puncher, "src_ip", None),
         getattr(puncher, "dest_ip", None),
         getattr(nic, "name", None),
+        node_msg_cb is not None,
     ))
     reverse_server = None
     try:
@@ -93,6 +94,22 @@ async def start_punching_process(nic: Any, puncher: Any, stop_reader: Any, proc_
         if reverse_server is None:
             log("[PUNCH-PROC] reverse_server bind/connect returned None; aborting")
             return None
+
+        # Pre-populate the reverse_server's pipe_events.msg_cbs with the
+        # node-level dispatcher BEFORE awaiting accept. Without this, the
+        # punch worker's bridged connection arrives at TCPClientProtocol,
+        # which copies pipe_events.msg_cbs (empty) into the new
+        # client_events.msg_cbs, then immediately receives the peer's
+        # ECHO bytes and drops them with "No msg cbs registered". The
+        # on_plugin_done attach happens AFTER set_result fires, well
+        # after the first inbound byte. Pre-populating means the
+        # inheritance copies a non-empty list at connection_made time.
+        if node_msg_cb is not None and getattr(reverse_server, "pipe_events", None) is not None:
+            pe = reverse_server.pipe_events
+            if node_msg_cb not in pe.msg_cbs:
+                pe.msg_cbs.append(node_msg_cb)
+                log("[PUNCH-PROC] pre-populated reverse_server.pipe_events.msg_cbs "
+                    "with node_msg_cb (count={0})".format(len(pe.msg_cbs)))
 
         # Get the address of the reverse connect server.
         # Applies rules to make different kinds of IPs work.

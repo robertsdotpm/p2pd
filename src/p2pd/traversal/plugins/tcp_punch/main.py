@@ -303,6 +303,7 @@ class PunchPlugin(TraversalPlugin):
                 puncher,
                 self.stop_reader,
                 self.proc_pool,
+                node_msg_cb=getattr(self, "node_msg_cb", None),
             )
             log("[PUNCH-DELAY] start_punching_process returned plugin_id={0} pipe={1}".format(
                 self.plugin_id, pipe is not None,

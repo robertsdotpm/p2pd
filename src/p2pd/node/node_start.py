@@ -262,7 +262,11 @@ async def setup_router_and_signal(node: Any, kp: Any, out: bool, cout: Callable)
         get_time=node.sys_clock.time,
     )
     node.traversal = TraversalManager(
-        router, node.stop_reader, node.inbound_pipes, node.ifs
+        router, node.stop_reader, node.inbound_pipes, node.ifs,
+        # Pass node.msg_cb so any pipe created inside a plugin
+        # (e.g. tcp_punch's reverse_server) can pre-populate
+        # pipe_events.msg_cbs before the first inbound byte arrives.
+        node_msg_cb=node.msg_cb,
     )
     router.add_msg_handler(node.traversal.recv_signal_msg)
 
