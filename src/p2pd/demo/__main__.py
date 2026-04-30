@@ -181,6 +181,15 @@ async def run_node_loop(nodes: List[Any], ifs: List[Any], nick: Optional[str]) -
             if outcome == "exit":
                 return
 
+            # When invoked non-interactively via --cmd, run the requested
+            # action exactly once. Looping the menu makes sense for the
+            # interactive REPL but a scripted --cmd run was just three
+            # connect attempts on a 120s budget in the matrix because
+            # connect_option always returns "menu" -- not what anyone
+            # who passes --cmd expects.
+            if args.cmd:
+                return
+
         # Watch for connection errors.
         except TunnelFailed:
             cout("Tunnel connection failed!")
