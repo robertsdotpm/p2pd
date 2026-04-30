@@ -61,12 +61,18 @@ DEFAULT_PUNCH_PARAMS = {
 }
 
 FAST_PUNCH_PARAMS = {
-    # Time rendezvous — much tighter window for protocol-coordinated punching.
-    # punch_time is communicated via PunchMsg so independent NTP alignment is
-    # not required; we just need window > 2 * max_clock_error for bucket safety.
-    "window": 6,  # 6 s  (> 2 * 2 s max_clock_error)
-    "max_clock_error": 2,  # 2 s  (NTP is typically < 0.5 s; 2 s is conservative)
-    "min_run_window": 2,  # 2 s  (enough for protocol exchange + process startup)
+    # Time rendezvous — wider window than the original 6 s so cross-host
+    # NTP residual drift doesn't push peers into adjacent buckets. The
+    # matrix sweep showed XP-after-reboot pairs missing alignment by
+    # exactly 1 bucket: NTP-corrected times still drift 4-8 s between
+    # XP's slow stack and modern Windows, which is more than the old
+    # 2 s max_clock_error tolerance allowed.  Settling on the same
+    # values as DEFAULT_PUNCH_PARAMS (40 s of peer-clock tolerance,
+    # window > 2 * max_clock_error preserved) accepts a longer
+    # rendezvous wait in exchange for far fewer flake failures.
+    "window": 42,  # 42 s  (> 2 * 20 s max_clock_error)
+    "max_clock_error": 20,  # 20 s  (covers XP NTP residuals + boot drift)
+    "min_run_window": 10,  # 10 s  (enough for setup + signaling)
     # Engine timing — bumped from 2.0 to 3.0 each after the matrix sweep
     # showed udp_punch flaking on busy hosts. With 18 sockets each spraying
     # at 50 Hz the connector saw only 1/18 of expected PROBEs back -- the
@@ -78,8 +84,9 @@ FAST_PUNCH_PARAMS = {
     "monitor_timeout": 3.0,  # 3.0 s monitor window
     "retry_interval": 0.05,  # 0.05 s selector poll interval (unchanged)
     # PunchClient / plugin timing
-    "max_sleep": 8,  # 8 s cap — above worst-case (window + min_run_window)
-    # so sleep_until reaches the actual rendezvous time.
+    "max_sleep": 65,  # 65 s cap — above worst-case wait of ~62 s
+    # (window + max_clock_error) so sleep_until reaches the actual
+    # rendezvous time without the cap firing early.
     "coordinator_delay": 0.5,  # 0.5 s delay (reduced from 2 s)
 }
 
