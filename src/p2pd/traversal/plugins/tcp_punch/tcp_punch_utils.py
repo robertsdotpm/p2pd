@@ -1,6 +1,7 @@
 """Utilities for the simple TCP selector punch engine."""
 from typing import Any, List, Optional, Tuple
 import socket
+import struct
 import sys
 import time
 from aionetiface import fstr, log, log_exception
@@ -110,6 +111,20 @@ def bind_punch_sockets(
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 256 * 1024)
             except OSError:
                 pass
+        # SO_LINGER {l_onoff=1, l_linger=0} on TCP punch sockets so close()
+        # sends RST instead of FIN -- bypasses TIME_WAIT entirely. Without
+        # this, Windows refuses to reuse the same 4-tuple for ~240 s and
+        # logs Event 4227 ("selected local endpoint was recently used");
+        # back-to-back punches in the same NTP bucket get blocked at the
+        # kernel before the SYN ever leaves. Best-effort: ignore failures.
+        if sock_type == socket.SOCK_STREAM:
+            try:
+                s.setsockopt(
+                    socket.SOL_SOCKET, socket.SO_LINGER,
+                    struct.pack("ii", 1, 0),
+                )
+            except OSError:
+                pass
         bind_tup = binder_sync(af, ip_strip_if(bind_ip), p.src_port, nic_id)
         try:
             s.bind(bind_tup)
@@ -185,16 +200,16 @@ def connect_on_tcp_sockets(same_machine: bool, bound_infos: List[Tuple[Any, Any]
             except OSError:
                 pass
 
-        # High-frequency pressure keeps NAT mapping and races peer
+        # Pace the spray. 1 ms was effectively "fire as fast as the loop can"
+        # which on Windows XP trips the half-open SYN cap (Tcpip Event 4226 --
+        # default 10 concurrent half-opens). 50 ms gives the kernel time to
+        # actually push each SYN out and drain the half-open queue between
+        # rounds; with NUM_PORTS=2 that's still ~10 retries/sec/port across
+        # the spray window, well above the per-port success rate needed for
+        # simultaneous-open. Keep same_machine=True at the previous tight
+        # cadence since loopback has no NAT mapping to keep alive.
         if not same_machine:
-            # TODO -- what works best for WAN
-            """
-            0 -- yield to kernel
-            n -- another micro value?
-            x -- based on rtt?
-            ?
-            """
-            time.sleep(0.001)
+            time.sleep(0.05)
 
 
 def sleep_until(punch_time: float, f_timer: Any, max_sleep: int = 10) -> None:

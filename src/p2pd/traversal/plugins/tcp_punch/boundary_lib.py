@@ -18,9 +18,13 @@ NTP_TIMEOUT = 1.0
 WINDOW = 42
 MAX_CLOCK_ERROR = 20  # The known max clock difference (1-20s)
 MIN_RUN_WINDOW = 10  # Minimum time required to run setup before the rendezvous
-NUM_PORTS = 16
-BASE_PORT = 30000
-PORT_RANGE = 20000
+NUM_PORTS = 2
+BASE_PORT = 2024
+# Wider sample space than the original 20000 -- combined with the lower
+# BASE_PORT this gives the allocator the full user-port range (~2k-52k),
+# which makes collisions across back-to-back runs in the same NTP bucket
+# significantly less likely.
+PORT_RANGE = 50000
 CONNECT_TIMEOUT = 5.0
 RETRY_INTERVAL = 0.05
 MAX_SLEEP = 10
