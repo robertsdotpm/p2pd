@@ -119,11 +119,20 @@ class Node(Daemon):
         self.msg_cbs.append(msg_cb)
 
     def on_plugin_done(self, future: Any) -> None:
-        """Attach the node message callback to any pipe-like result from a finished plugin."""
+        """Attach the node message callback to any pipe-like result from a finished plugin.
+
+        Idempotent: a plugin whose internal pipe (e.g. tcp_punch's reverse_server)
+        was pre-populated with self.msg_cb to win the connection_made race must
+        not get a SECOND copy here -- otherwise every inbound message dispatches
+        twice. Check the existing msg_cbs list before appending.
+        """
         try:
             result = future.result()
             pipe_like = (Pipe, PipeClient, TCPClientProtocol, PipeEvents)
             if isinstance(result, pipe_like):
+                existing = getattr(result, "msg_cbs", None)
+                if existing is not None and self.msg_cb in existing:
+                    return
                 result.add_msg_cb(self.msg_cb)
         except BaseException:
             log_exception()
