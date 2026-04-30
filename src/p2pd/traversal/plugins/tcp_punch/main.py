@@ -27,7 +27,24 @@ PROTO_MESSAGES = (
 
 
 class PunchPlugin(TraversalPlugin):
-    """Traversal plugin implementing TCP hole-punching via coordinated port prediction."""
+    """Traversal plugin implementing TCP hole-punching via coordinated port prediction.
+
+    Platform gotchas
+    ----------------
+    Windows Firewall and Windows Defender Real-Time Protection can silently
+    block or delay the punched TCP connections even after the hole-punch
+    exchange completes successfully.  Symptoms: PunchMsg exchange finishes
+    normally (both sides log the rendezvous), the punch process runs, but
+    the TCP connect never completes or the first data packet is dropped.
+
+    During development / testing, disable both:
+      - Windows Defender Firewall (all profiles: Domain, Private, Public)
+      - Windows Security > Virus & threat protection > Real-time protection
+
+    On production machines the right fix is an explicit inbound/outbound
+    allow rule for the Python executable (or the specific port range used
+    by the punch allocator).
+    """
 
     # Punch is a NAT-traversal mechanism. NIC_BIND covers the same-LAN
     # case (kernel handles local routing for same-subnet peers); EXT_BIND
