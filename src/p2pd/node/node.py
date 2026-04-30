@@ -57,8 +57,11 @@ class Node(Daemon):
         if self.listen_ips:
             apply_listen_ips(self)
 
-        # Resource state.
-        self.msg_cbs = []
+        # Resource state. msg_cbs is a set so add_msg_cb is idempotent --
+        # callers (and on_plugin_done after a plugin pre-populates an
+        # internal pipe) can register the same callback multiple times
+        # without it firing twice per inbound msg.
+        self.msg_cbs = set()
         self.inbound_pipes = {}
         self.resources = NodeResources()
 
@@ -115,24 +118,21 @@ class Node(Daemon):
         return sorted(tuple(afs))
 
     def add_msg_cb(self, msg_cb: Callable) -> None:
-        """Register a message callback to receive all inbound pipe messages."""
-        self.msg_cbs.append(msg_cb)
+        """Register a message callback to receive all inbound pipe messages (idempotent)."""
+        self.msg_cbs.add(msg_cb)
 
     def on_plugin_done(self, future: Any) -> None:
         """Attach the node message callback to any pipe-like result from a finished plugin.
 
-        Idempotent: a plugin whose internal pipe (e.g. tcp_punch's reverse_server)
-        was pre-populated with self.msg_cb to win the connection_made race must
-        not get a SECOND copy here -- otherwise every inbound message dispatches
-        twice. Check the existing msg_cbs list before appending.
+        Idempotent at every layer: result.add_msg_cb backs onto a set,
+        so a plugin that pre-populates its internal pipe (tcp_punch's
+        reverse_server, in practice) can call add here too without
+        producing a double-dispatch.
         """
         try:
             result = future.result()
             pipe_like = (Pipe, PipeClient, TCPClientProtocol, PipeEvents)
             if isinstance(result, pipe_like):
-                existing = getattr(result, "msg_cbs", None)
-                if existing is not None and self.msg_cb in existing:
-                    return
                 result.add_msg_cb(self.msg_cb)
         except BaseException:
             log_exception()

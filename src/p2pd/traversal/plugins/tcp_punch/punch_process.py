@@ -106,8 +106,9 @@ async def start_punching_process(nic: Any, puncher: Any, stop_reader: Any, proc_
         # inheritance copies a non-empty list at connection_made time.
         if node_msg_cb is not None and getattr(reverse_server, "pipe_events", None) is not None:
             pe = reverse_server.pipe_events
-            if node_msg_cb not in pe.msg_cbs:
-                pe.msg_cbs.append(node_msg_cb)
+            before = len(pe.msg_cbs)
+            pe.msg_cbs.add(node_msg_cb)
+            if len(pe.msg_cbs) != before:
                 log("[PUNCH-PROC] pre-populated reverse_server.pipe_events.msg_cbs "
                     "with node_msg_cb (count={0})".format(len(pe.msg_cbs)))
 
