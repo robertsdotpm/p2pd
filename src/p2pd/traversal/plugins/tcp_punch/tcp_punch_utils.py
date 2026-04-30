@@ -31,8 +31,19 @@ async def log_time_wait_residue(src_ip: Optional[str]) -> None:
             stderr=asyncio.subprocess.DEVNULL,
         )
         out, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+    except NotImplementedError as exc:
+        # asyncio.create_subprocess_exec on SelectorEventLoop (Windows
+        # XP path; we install CustomEventLoop everywhere) raises
+        # NotImplementedError. Skip the diag rather than letting that
+        # propagate up through the punch task's finally block.
+        log("[POST-PUNCH-DIAG] subprocess unsupported on this loop: " + repr(exc))
+        return
     except (OSError, asyncio.TimeoutError) as exc:
         log("[POST-PUNCH-DIAG] netstat failed: " + repr(exc))
+        return
+    except Exception as exc:  # pylint: disable=broad-except
+        # Diag is best-effort. Never let it kill the punch finally.
+        log("[POST-PUNCH-DIAG] unexpected error: " + repr(exc))
         return
 
     text = out.decode("utf-8", errors="replace")
