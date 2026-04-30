@@ -83,14 +83,6 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
     else:
         raise ValueError("Failed to load interfaces.")
 
-    # Check each loaded NIC has a reachable default gateway.
-    for nic in ifs:
-        if nic.supported() and not any(nic.is_default(af) for af in nic.supported()):
-            raise ValueError(
-                "NIC '{0}' loaded but no default gateway detected for any "
-                "address family. Check the routing table.".format(nic.name)
-            )
-
     # Show the ifs loaded.
     display_ifs_loaded(ifs)
 
