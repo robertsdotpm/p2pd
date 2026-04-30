@@ -89,7 +89,19 @@ async def connect_option(node: Any, con_opts: Tuple[Any, Optional[bytes], Option
         return "menu"
 
     plugin_holder = [plugin]
-    pipe = await async_wrap_errors(plugin.result, timeout=40)
+    # Worst-case rendezvous wait when the connector lands at the *start*
+    # of a bucket: WINDOW (42) + MAX_CLOCK_ERROR (20) before set_punch_time
+    # fires, plus MIN_RUN_WINDOW (10) of engine, plus coordinator_delay
+    # and the loopback bridge accept -- ~75s before plugin.result can
+    # resolve. The original 40 s here was sized for WINDOW=8 and silently
+    # cancelled punches that landed early in the new wider window
+    # (e.g. xp-from-win7 in the v15 sweep: wait_from_ts=37.8 s + 10 s
+    # engine = ~48 s, missed the 40 s cutoff by 8 s and tore down the
+    # reverse_server bridge before the worker could connect back). Bump
+    # to 120 to cover the worst case with margin while staying under
+    # PLUGIN_CONF["timeout"]=150 so the plugin's own lifecycle wait
+    # remains the dominant safety net.
+    pipe = await async_wrap_errors(plugin.result, timeout=120)
 
     # Unconditional cleanup: cancels any still-running punch task and removes
     # the plugin from the traversal manager's registry.  On success the punch
