@@ -24,6 +24,7 @@ import os
 from aionetiface import (
     Interface,
     StartNodeNicknameFailed, TunnelFailed,
+    allow_windows_firewall,
     async_run, async_wrap_errors, find_intersect, fstr,
     list_interfaces, load_interfaces, log, log_exception,
     sock_has_data, sys, to_b, to_s,
@@ -44,6 +45,8 @@ from .menu import run_menu_program, stop_nodes_option
 
 async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
     """Load network interfaces, start the P2P node, and register a default nickname."""
+    allow_windows_firewall("p2pd-demo")
+
     # Display program banner.
     cout(PROGRAM_BANNER)
     cout("pid = " + str(os.getpid()))
