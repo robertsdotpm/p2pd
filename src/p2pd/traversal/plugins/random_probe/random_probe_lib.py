@@ -622,6 +622,17 @@ def sync_run_non_sym_side(
         if parsed["role"] != ROLE_SYM:
             print("[RP-NONSYM] skip: role={0} not SYM".format(parsed["role"]))
             continue
+        # Only accept the CONFIRM (idx=PROBE_IDX_CONFIRM) from sym,
+        # not the 256 regular probes sym fires as part of its burst.
+        # Sym sends the CONFIRM from whichever socket won the birthday-
+        # paradox collision; that is the same socket sym uses as
+        # punched_sock.  Converging on a regular probe (which can be
+        # from any of sym's 256 sockets) leads to a 4-tuple mismatch:
+        # non_sym connects to a different sym port than sym's punched_sock,
+        # and the kernel filter on sym's connected socket silently drops
+        # every datagram non_sym sends.
+        if parsed["idx"] != PROBE_IDX_CONFIRM:
+            continue
         if own_ext_ip and peer[0] == own_ext_ip:
             print("[RP-NONSYM] skip: peer IP == own_ext_ip {0}".format(own_ext_ip))
             continue
@@ -841,6 +852,10 @@ async def run_non_sym_side(
         # Reject probes from our own role -- they're either our
         # own hairpinned outbound (self-loop) or a stray.
         if parsed["role"] != ROLE_SYM:
+            continue
+        # Only accept sym's CONFIRM, not its 256 regular burst probes.
+        # See the equivalent check in sync_run_non_sym_side for details.
+        if parsed["idx"] != PROBE_IDX_CONFIRM:
             continue
         # Reject self-loops: an "aligned" probe whose source IP is
         # our own external IP isn't from the peer -- it's our own
