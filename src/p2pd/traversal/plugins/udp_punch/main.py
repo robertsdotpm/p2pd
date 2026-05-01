@@ -262,8 +262,8 @@ class UdpPunchPlugin(TraversalPlugin):
                 worker_sock.connect(listener_addr)
             except OSError as exc:
                 log(fstr(
-                    "udp_punch.delayed_run_engine: bridge setup failed: {0!r}",
-                    (exc,),
+                    "udp_punch.delayed_run_engine: bridge setup failed: {0}",
+                    (repr(exc),),
                 ))
                 log_exception()
                 if not self.result.done():
@@ -338,8 +338,26 @@ class UdpPunchPlugin(TraversalPlugin):
             puncher_route = puncher.route
             stop_reader = self.stop_reader
 
+            loop = asyncio.get_event_loop()
+            # convergence is resolved by the worker via call_soon_threadsafe
+            # the moment the engine returns a winner and selector_proxy is
+            # ready to read worker_sock. Until that happens, ECHO bytes the
+            # demo writes to listener_sock just queue in worker_sock's recv
+            # buffer with nobody draining them. Resolving plugin.result
+            # before the bridge is alive caused the matrix to hit
+            # echo-recv timeout 100% of the time -- demo's 1 s pre-sleep
+            # + 4 s recv timeout < spray (3 s) + listen (3 s) = 6 s engine
+            # window, so the demo always gave up before selector_proxy
+            # started forwarding. Mirrors tcp_punch's start_punching_process
+            # which only returns the pipe after the worker has converged.
+            convergence = asyncio.Future()
+
+            def signal_convergence(success):
+                if not convergence.done():
+                    convergence.set_result(success)
+
             def punch_and_bridge():
-                """Worker: run UDP engine, then bridge punched_sock <-> worker_sock."""
+                """Worker: run UDP engine, signal main, then bridge."""
                 try:
                     result = udp_punch_engine(
                         af=af,
@@ -356,9 +374,11 @@ class UdpPunchPlugin(TraversalPlugin):
                     )
                 except Exception:  # pylint: disable=broad-except
                     log_exception()
+                    loop.call_soon_threadsafe(signal_convergence, False)
                     return
                 if result is None:
                     log("[UDP-WORKER] engine returned None")
+                    loop.call_soon_threadsafe(signal_convergence, False)
                     return
 
                 punched_sock, peer_addr = result
@@ -387,20 +407,26 @@ class UdpPunchPlugin(TraversalPlugin):
                     punched_sock.connect(peer_addr)
                 except OSError as exc:
                     log(fstr(
-                        "[UDP-WORKER] punched_sock.connect failed: {0!r}",
-                        (exc,),
+                        "[UDP-WORKER] punched_sock.connect failed: {0}",
+                        (repr(exc),),
                     ))
                     log_exception()
                     try:
                         punched_sock.close()
                     except OSError:
                         pass
+                    loop.call_soon_threadsafe(signal_convergence, False)
                     return
 
+                # Bridge is wired; let main resolve plugin.result so
+                # the demo can start sending ECHO and have it actually
+                # land on punched_sock.
                 log(fstr(
                     "[UDP-WORKER] bridging punched <-> worker_sock {0}",
                     (worker_addr,),
                 ))
+                loop.call_soon_threadsafe(signal_convergence, True)
+
                 try:
                     selector_proxy(
                         punched_sock,
@@ -413,7 +439,6 @@ class UdpPunchPlugin(TraversalPlugin):
                     log_exception()
                 log("[UDP-WORKER] selector_proxy returned; worker exiting")
 
-            loop = asyncio.get_event_loop()
             worker_fut = loop.run_in_executor(None, punch_and_bridge)
 
             def worker_done(fut):
@@ -428,6 +453,11 @@ class UdpPunchPlugin(TraversalPlugin):
                     ))
                 else:
                     log("[UDP-WORKER] future completed cleanly")
+                # Belt-and-braces: if the worker crashed before
+                # signalling convergence, unblock main so plugin.result
+                # gets a None instead of hanging on plugin timeout.
+                if not convergence.done():
+                    convergence.set_result(False)
             worker_fut.add_done_callback(worker_done)
 
             if pipe is not None:
@@ -461,8 +491,8 @@ class UdpPunchPlugin(TraversalPlugin):
                         if pass_count[0] <= 3 or pass_count[0] % 50 == 0:
                             preview = bytes(data[:8]) if len(data) >= 8 else bytes(data)
                             log(fstr(
-                                "udp_punch.filter: PASSING msg #{0} from {1} len={2} preview={3!r}",
-                                (pass_count[0], client_tup, len(data), preview),
+                                "udp_punch.filter: PASSING msg #{0} from {1} len={2} preview={3}",
+                                (pass_count[0], client_tup, len(data), repr(preview)),
                             ))
                         return original_add_msg(data, client_tup)
 
@@ -470,12 +500,39 @@ class UdpPunchPlugin(TraversalPlugin):
                     log("udp_punch.delayed_run_engine: stream filter installed")
                 except (AttributeError, TypeError) as exc:
                     log(fstr(
-                        "udp_punch.delayed_run_engine: filter install FAILED: {0!r}",
-                        (exc,),
+                        "udp_punch.delayed_run_engine: filter install FAILED: {0}",
+                        (repr(exc),),
                     ))
 
+            # Block until the worker either converges (engine winner +
+            # selector_proxy ready) or fails. Bounded by the plugin's
+            # own timeout via run_plugin's asyncio.wait_for, and
+            # additionally by an explicit ceiling to surface worker
+            # hangs as None instead of waiting the full plugin timeout.
+            engine_ceiling = (
+                params.get("connect_timeout", 3.0)
+                + params.get("monitor_timeout", 3.0)
+                + 5.0
+            )
+            try:
+                converged = await asyncio.wait_for(
+                    convergence, timeout=engine_ceiling,
+                )
+            except asyncio.TimeoutError:
+                log(fstr(
+                    "udp_punch.delayed_run_engine: convergence wait timed "
+                    "out after {0}s; treating as no-convergence",
+                    (engine_ceiling,),
+                ))
+                converged = False
+
+            log(fstr(
+                "udp_punch.delayed_run_engine: convergence={0}",
+                (converged,),
+            ))
+
             if not self.result.done():
-                self.result.set_result(pipe)
+                self.result.set_result(pipe if converged else None)
         except Exception:  # pylint: disable=broad-except
             log_exception()
             if not self.result.done():

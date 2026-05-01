@@ -87,6 +87,7 @@ def fire_probes(
     ))
     rounds = 0
     sendto_errors = 0
+    sock_has_data_errors = 0
     last_heartbeat = time.monotonic()
     try:
         while time.monotonic() < end:
@@ -94,11 +95,15 @@ def fire_probes(
                 stop_signalled = (
                     stop_reader is not None and sock_has_data(stop_reader)
                 )
-            except Exception as exc:  # pylint: disable=broad-except
-                log(fstr(
-                    "udp_punch.fire_probes: sock_has_data raised {0!r}; treating as no-stop",
-                    (exc,),
-                ))
+            except (OSError, ValueError):
+                # stop_reader can be closed by node_stop while the
+                # spray is still running (worker thread outlives the
+                # demo's natural exit). Treat as "no stop signal" so
+                # the spray completes its window rather than dying.
+                sock_has_data_errors += 1
+                if sock_has_data_errors <= 3:
+                    log("udp_punch.fire_probes: sock_has_data on stop_reader "
+                        "raised an OSError/ValueError; treating as no-stop")
                 stop_signalled = False
             if stop_signalled:
                 log("udp_punch.fire_probes: stop_reader signalled; aborting spray")
@@ -111,10 +116,9 @@ def fire_probes(
                     # the NEXT sendto. Ignore -- next round will retry.
                     sendto_errors += 1
                     if sendto_errors <= 3 or sendto_errors % 50 == 0:
-                        log(fstr(
-                            "udp_punch.fire_probes: sendto err #{0} on tup={1}: {2!r}",
-                            (sendto_errors, tup, exc),
-                        ))
+                        log("udp_punch.fire_probes: sendto err #" +
+                            str(sendto_errors) + " on tup=" + str(tup) +
+                            ": " + repr(exc))
             rounds += 1
             now = time.monotonic()
             if now - last_heartbeat >= 0.5:
@@ -127,14 +131,12 @@ def fire_probes(
                 last_heartbeat = now
             time.sleep(spray_interval)
     except Exception as exc:  # pylint: disable=broad-except
-        log(fstr(
-            "udp_punch.fire_probes: LOOP RAISED {0!r} at round={1}",
-            (exc, rounds),
-        ))
+        log("udp_punch.fire_probes: LOOP RAISED " + repr(exc) +
+            " at round=" + str(rounds))
         raise
     log(fstr(
-        "udp_punch.fire_probes: spray ended after {0} rounds dest_ip={1} sendto_errs={2}",
-        (rounds, dest_ip, sendto_errors),
+        "udp_punch.fire_probes: spray ended after {0} rounds dest_ip={1} sendto_errs={2} stop_errs={3}",
+        (rounds, dest_ip, sendto_errors, sock_has_data_errors),
     ))
 
 
@@ -228,8 +230,8 @@ def watch_for_winner(
                     s.sendto(confirm_frame, addr)
                 except OSError as exc:
                     log(fstr(
-                        "udp_punch.watch_for_winner: CONFIRM sendto failed on {0} to {1}: {2!r}",
-                        (log_sock_addr(s), addr, exc),
+                        "udp_punch.watch_for_winner: CONFIRM sendto failed on {0} to {1}: {2}",
+                        (log_sock_addr(s), addr, repr(exc)),
                     ))
                 # Don't lock yet: peer might still be in spray phase
                 # and not listening. Continue watching for their
