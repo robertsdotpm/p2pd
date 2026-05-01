@@ -384,6 +384,54 @@ async def echo_client(pipe: Any, echo_data: Optional[bytes]) -> str:
     cout()
     cout("Basic echo protocol.")
     cout("Enter menu to return to menu.")
+
+    # Scripted-echo mode (matrix runs): the punch / wrap path
+    # can have several brief race windows where the connector's
+    # first ECHO byte arrives at the listener before the listener
+    # is ready to dispatch it to a msg_cb. Sleeping 1 s here is a
+    # cheap belt-and-braces guard that covers all of them in one
+    # place, regardless of which plugin established the pipe.
+    #
+    # Specific races covered:
+    #
+    #  1. msg_cb wireup race -- plugin.result.set_result(pipe)
+    #     fires on_plugin_done synchronously, which attaches
+    #     node.msg_cb to pipe.pipe_events.msg_cbs. But the
+    #     LISTENER's plugin instance might still be mid-await on
+    #     its result coroutine when the connector's first ECHO
+    #     hits the wire. Pre-population on tcp_punch's
+    #     reverse_server (commit 7fda794) addresses the bridged
+    #     case, but punches that wrap an existing socket have no
+    #     equivalent guard.
+    #
+    #  2. UDP "post-convergence spray" race -- udp_punch /
+    #     random_probe keep firing PROBE / CONFIRM frames for
+    #     hundreds of ms past the engine's convergence point. The
+    #     stream filter that drops these is installed AFTER the
+    #     wrap; if ECHO arrives interleaved with stray frames
+    #     before the filter is in place, it can be misparsed or
+    #     queued behind frame bytes the application then sees.
+    #
+    #  3. Pipe transport register race -- create_datagram_endpoint
+    #     on a UDP socket goes through PolledDatagramTransport on
+    #     Windows; the polling loop has a one-tick startup lag.
+    #     A datagram arriving in that lag is buffered by the
+    #     kernel but not yet dispatched.
+    #
+    #  4. Listener-side menu re-entry -- under --cmd 1 the
+    #     listener's accept_option re-enters the menu loop after
+    #     the plugin resolves; on slow stacks (XP) the loop's
+    #     await asyncio.sleep(1) hasn't yielded yet when the
+    #     first ECHO lands.
+    #
+    # All four are sub-second windows. 1 s of grace is plenty for
+    # every one of them and adds nothing measurable to test wall-
+    # clock vs the ~120 s per-pair budget. Interactive mode skips
+    # the sleep -- a human typing the first echo is orders of
+    # magnitude slower than any of these races.
+    if echo_data is not None:
+        await asyncio.sleep(1.0)
+
     while not sock_has_data(stop_rw[0]):
         send_buf = echo_data or to_b(await ainput("Echo: "))
         if send_buf in (b"menu"):

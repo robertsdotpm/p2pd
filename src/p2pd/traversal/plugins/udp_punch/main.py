@@ -19,6 +19,7 @@ from aionetiface import (
     EXT_BIND, NIC_BIND, Pipe, SysClock, UDP, fstr, log, log_exception,
     rand_b,
 )
+from aionetiface.net.selector_proxy import selector_proxy
 
 from ....protocol.proto_defs import P2P_PUNCH
 from ...traversal_plugin import TraversalPlugin
@@ -191,15 +192,140 @@ class UdpPunchPlugin(TraversalPlugin):
         return msg
 
     async def delayed_run_engine(self, puncher: Any) -> None:
-        """Wait for coordinator delay, run the UDP engine in an executor, wrap winner in Pipe."""
+        """Wait for coordinator delay, set up bridge, dispatch worker that runs engine + bridge."""
         coordinator_delay = puncher.params.get("coordinator_delay", 2.0)
         try:
             await asyncio.sleep(coordinator_delay)
 
-            loop = asyncio.get_event_loop()
-            # The engine is pure-sync (select-based) so run it in a
-            # thread; concurrent UDP sprays on multiple plugins won't
-            # collide (each has its own bound sockets).
+            # ---- Bridge setup (main side) ----
+            #
+            # Architecture (mirrors tcp_punch's reverse_server pattern,
+            # adapted for UDP's connectionless model):
+            #
+            #   worker thread             |     main asyncio loop
+            #   ------------------------- |     ----------------------
+            #   punched_sock (peer-       |     listener_sock (Pipe)
+            #     facing UDP, bound to    |       on (loopback, 0)
+            #     puncher.src_ip:port)    |
+            #          ^                  |          ^
+            #          | selector_proxy   |          | datagrams via
+            #          | bridge (DGRAM)   |          | asyncio loop
+            #          v                  |          v
+            #   worker_sock (loopback,    | --->  recvfrom -> msg_cbs
+            #     UDP-connected to        | <---  pipe.send -> sendto
+            #     listener_sock)          |
+            #
+            # Why both sockets are pre-built in main:
+            # - Pre-creating both sockets lets us know the worker's
+            #   bridge addr BEFORE the worker starts. Without this,
+            #   the connector side's pipe.send(ECHO) -- which fires
+            #   immediately after plugin.result resolves -- would
+            #   have no dest_tup until the first inbound datagram
+            #   from the worker, which never comes if the connector
+            #   is the one with data to send first.
+            # - The wrapped Pipe is built on listener_sock which has
+            #   never been touched by select() in a worker thread,
+            #   so asyncio's selector sees a clean fd. Avoids the
+            #   "deaf wrap" failure that the rebind workaround was
+            #   trying (and only partially succeeding) to dodge.
+            # - Pre-populating msg_cbs on the wrapped Pipe before
+            #   dispatching the worker covers the wireup race the
+            #   same way tcp_punch's reverse_server does.
+
+            if puncher.af == 2:
+                loopback_host = "127.0.0.1"
+                family = _socket.AF_INET
+            else:
+                loopback_host = "::1"
+                family = _socket.AF_INET6
+
+            try:
+                listener_sock = _socket.socket(family, _socket.SOCK_DGRAM)
+                listener_sock.setsockopt(
+                    _socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1,
+                )
+                listener_sock.setblocking(False)
+                listener_sock.bind((loopback_host, 0))
+
+                worker_sock = _socket.socket(family, _socket.SOCK_DGRAM)
+                worker_sock.setsockopt(
+                    _socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1,
+                )
+                worker_sock.setblocking(False)
+                worker_sock.bind((loopback_host, 0))
+
+                listener_addr = listener_sock.getsockname()
+                worker_addr = worker_sock.getsockname()
+                # UDP-connect both ends so recv/send default to the
+                # known peer and the kernel filters incoming.
+                listener_sock.connect(worker_addr)
+                worker_sock.connect(listener_addr)
+            except OSError as exc:
+                log(fstr(
+                    "udp_punch.delayed_run_engine: bridge setup failed: {0!r}",
+                    (exc,),
+                ))
+                log_exception()
+                if not self.result.done():
+                    self.result.set_result(None)
+                return
+
+            log(fstr(
+                "udp_punch.delayed_run_engine: bridge listener={0} worker={1}",
+                (listener_addr, worker_addr),
+            ))
+
+            # Wrap listener_sock as a UDP Pipe -- main owns it from
+            # creation, asyncio sees a fresh fd, dest_tup is set to
+            # worker_addr so pipe.send works immediately.
+            try:
+                route = self.nic.route(self.af)
+                pipe = await Pipe(
+                    UDP, dest=worker_addr, route=route, sock=listener_sock,
+                ).connect()
+            except (OSError, ConnectionError, asyncio.TimeoutError):
+                log_exception()
+                pipe = None
+                for s in (listener_sock, worker_sock):
+                    try:
+                        s.close()
+                    except OSError:
+                        pass
+
+            if pipe is None:
+                log("udp_punch.delayed_run_engine: Pipe.connect() returned None")
+                if not self.result.done():
+                    self.result.set_result(None)
+                return
+
+            try:
+                wrapped_addr = pipe.sock.getsockname()
+            except (OSError, AttributeError):
+                wrapped_addr = None
+            log(fstr(
+                "udp_punch.delayed_run_engine: wrapped Pipe local={0} dest={1}",
+                (wrapped_addr, worker_addr),
+            ))
+
+            # Pre-populate msg_cbs with the node-level dispatcher
+            # BEFORE dispatching the worker. Mirrors the wireup-race
+            # fix in tcp_punch's start_punching_process.
+            node_msg_cb = getattr(self, "node_msg_cb", None)
+            if (
+                node_msg_cb is not None
+                and getattr(pipe, "pipe_events", None) is not None
+            ):
+                pe = pipe.pipe_events
+                before = len(pe.msg_cbs)
+                pe.msg_cbs.add(node_msg_cb)
+                if len(pe.msg_cbs) != before:
+                    log(fstr(
+                        "udp_punch.delayed_run_engine: pre-populated "
+                        "pipe.msg_cbs (count={0})",
+                        (len(pe.msg_cbs),),
+                    ))
+
+            # Snapshot puncher state for the worker thread.
             af = puncher.af
             nic_id = puncher.nic_id
             port_allocs = list(puncher.port_allocs)
@@ -209,138 +335,100 @@ class UdpPunchPlugin(TraversalPlugin):
             params = puncher.params
             nonce = puncher.udp_nonce
             f_sleep_until = puncher.sleep_until
-            route = puncher.route
-            # Carry the project-wide stop socket into the engine so
-            # node_stop fires early-exit on the spray/watch loops --
-            # otherwise the executor thread keeps running past the
-            # asyncio loop close and emits 'Event loop is closed'
-            # callback noise on test teardown.
+            puncher_route = puncher.route
             stop_reader = self.stop_reader
 
-            def run_sync():
-                return udp_punch_engine(
-                    af=af,
-                    nic_id=nic_id,
-                    port_allocs=port_allocs,
-                    src_ip=src_ip,
-                    dest_ip=dest_ip,
-                    f_sleep_until=f_sleep_until,
-                    nonce=nonce,
-                    same_machine=same_machine,
-                    params=params,
-                    stop_reader=stop_reader,
-                    route=route,
-                )
-
-            result = await loop.run_in_executor(None, run_sync)
-            if result is None:
-                log(fstr(
-                    "udp_punch.delayed_run_engine: engine returned None for plugin_id={0}",
-                    (self.plugin_id,),
-                ))
-                if not self.result.done():
-                    self.result.set_result(None)
-                return
-
-            winner_sock, peer_addr = result
-            try:
-                local_addr = winner_sock.getsockname()
-            except OSError:
-                local_addr = None
-            log(fstr(
-                "udp_punch.delayed_run_engine: engine returned WINNER local={0} peer={1} fd={2}",
-                (local_addr, peer_addr, winner_sock.fileno()),
-            ))
-
-            # Drain queued PROBE/CONFIRM frames before the Pipe wrap;
-            # the peer's spray keeps arriving for hundreds of ms past
-            # convergence and those frames would otherwise be the
-            # first thing pipe.recv() returns to the application.
-            drained = drain_punch_residue(winner_sock, puncher.udp_nonce)
-            log(fstr(
-                "udp_punch.delayed_run_engine: drained {0} residual frames before wrap",
-                (drained,),
-            ))
-
-            # Re-bind a fresh asyncio-managed socket on the same local
-            # 4-tuple before the wrap. The engine's winner_sock was
-            # hammered by select() in a worker thread for the full
-            # spray + listen window; once that count gets high (94
-            # residual frames on the listener side in our v25 trace)
-            # asyncio's selector silently fails to fire _read_ready
-            # on the socket and the wrapped Pipe goes deaf -- ECHO
-            # arrives at the kernel but never reaches the
-            # application msg_cb. The engine docstring already
-            # warns about this ("never register on asyncio
-            # selectors during the algorithm phase").
-            #
-            # Closing the engine's socket and re-binding the same
-            # local addr+port gives asyncio a fresh fd to register;
-            # SO_REUSEADDR on the new socket prevents the brief
-            # close-then-bind race from refusing the port. UDP has
-            # no TIME_WAIT so the port is immediately reusable. Any
-            # in-flight PROBE/CONFIRM datagrams arriving in the
-            # close-then-bind microsecond gap are lost, but the
-            # engine has already converged so they aren't needed.
-            wrap_sock = winner_sock
-            if local_addr is not None:
+            def punch_and_bridge():
+                """Worker: run UDP engine, then bridge punched_sock <-> worker_sock."""
                 try:
-                    fresh_sock = _socket.socket(
-                        winner_sock.family, _socket.SOCK_DGRAM,
+                    result = udp_punch_engine(
+                        af=af,
+                        nic_id=nic_id,
+                        port_allocs=port_allocs,
+                        src_ip=src_ip,
+                        dest_ip=dest_ip,
+                        f_sleep_until=f_sleep_until,
+                        nonce=nonce,
+                        same_machine=same_machine,
+                        params=params,
+                        stop_reader=stop_reader,
+                        route=puncher_route,
                     )
-                    fresh_sock.setsockopt(
-                        _socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1,
-                    )
-                    fresh_sock.setblocking(False)
-                    try:
-                        winner_sock.close()
-                    except OSError:
-                        pass
-                    fresh_sock.bind(local_addr)
-                    wrap_sock = fresh_sock
-                    log(fstr(
-                        "udp_punch.delayed_run_engine: rebound fresh sock "
-                        "fd={0} local={1}",
-                        (fresh_sock.fileno(), local_addr),
-                    ))
+                except Exception:  # pylint: disable=broad-except
+                    log_exception()
+                    return
+                if result is None:
+                    log("[UDP-WORKER] engine returned None")
+                    return
+
+                punched_sock, peer_addr = result
+                try:
+                    local_addr = punched_sock.getsockname()
+                except OSError:
+                    local_addr = None
+                log(fstr(
+                    "[UDP-WORKER] engine WINNER local={0} peer={1} fd={2}",
+                    (local_addr, peer_addr, punched_sock.fileno()),
+                ))
+
+                # Drain residual PROBE/CONFIRM still buffered on the
+                # punched sock from the spray window; otherwise the
+                # bridge would forward them to main where the stream
+                # filter would have to drop each.
+                drained = drain_punch_residue(punched_sock, nonce)
+                log(fstr(
+                    "[UDP-WORKER] drained {0} residual frames",
+                    (drained,),
+                ))
+
+                # UDP-connect punched_sock to peer so recv() filters
+                # to the peer and send() targets the peer.
+                try:
+                    punched_sock.connect(peer_addr)
                 except OSError as exc:
                     log(fstr(
-                        "udp_punch.delayed_run_engine: rebind FAILED ({0!r}); "
-                        "falling back to engine sock",
+                        "[UDP-WORKER] punched_sock.connect failed: {0!r}",
                         (exc,),
                     ))
                     log_exception()
-                    # Fall back to wrapping the original socket -- the
-                    # deaf-asyncio risk applies but we'd otherwise
-                    # have nothing.
-                    wrap_sock = winner_sock
-
-            # Wrap the winning socket in a Pipe so the caller has the
-            # same interface as the other plugins return. UDP Pipe
-            # accepts an existing sock=... and uses it directly.
-            try:
-                route = self.nic.route(self.af)
-                pipe = await Pipe(
-                    UDP, dest=peer_addr, route=route, sock=wrap_sock,
-                ).connect()
-                if pipe is not None:
                     try:
-                        wrapped_addr = pipe.sock.getsockname()
-                    except (OSError, AttributeError):
-                        wrapped_addr = None
+                        punched_sock.close()
+                    except OSError:
+                        pass
+                    return
+
+                log(fstr(
+                    "[UDP-WORKER] bridging punched <-> worker_sock {0}",
+                    (worker_addr,),
+                ))
+                try:
+                    selector_proxy(
+                        punched_sock,
+                        listener_addr,
+                        stop_reader,
+                        sock_proto=_socket.SOCK_DGRAM,
+                        socket_r=worker_sock,
+                    )
+                except Exception:  # pylint: disable=broad-except
+                    log_exception()
+                log("[UDP-WORKER] selector_proxy returned; worker exiting")
+
+            loop = asyncio.get_event_loop()
+            worker_fut = loop.run_in_executor(None, punch_and_bridge)
+
+            def worker_done(fut):
+                try:
+                    exc = fut.exception()
+                except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
+                    exc = None
+                if exc is not None:
                     log(fstr(
-                        "udp_punch.delayed_run_engine: wrapped Pipe local={0} dest={1}",
-                        (wrapped_addr, peer_addr),
+                        "[UDP-WORKER] future raised {0}: {1}",
+                        (type(exc).__name__, repr(exc)),
                     ))
                 else:
-                    log("udp_punch.delayed_run_engine: Pipe.connect() returned None")
-            except (OSError, ConnectionError, asyncio.TimeoutError):
-                log_exception()
-                pipe = None
-                try:
-                    wrap_sock.close()
-                except OSError:
-                    pass
+                    log("[UDP-WORKER] future completed cleanly")
+            worker_fut.add_done_callback(worker_done)
 
             if pipe is not None:
                 # Late-arriving PROBE/CONFIRM frames also need to be
