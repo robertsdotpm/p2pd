@@ -259,6 +259,20 @@ class RandomProbePlugin(TraversalPlugin):
             our_msg.meta.plugin_name = "random_probe"
             await self.send_signal_msg(our_msg)
 
+        # Guard against MQTT redelivery: the peer's RandomProbeMsg
+        # gets fanned out across multiple brokers, so this run() can
+        # be called several times in quick succession with reply set.
+        # Without a guard each call awaits wait_until + spawns its own
+        # 256-socket algorithm instance; the first converges, the rest
+        # race for the same prebound port and self-loop on each
+        # other's probes -- log evidence: many [RP-FIRE-DONE]
+        # res=None (timeout) immediately after one res=<converged>.
+        # Same shape udp_punch dodges via configure_puncher_process's
+        # "if plugin_id not in punch_proc" check.
+        if getattr(self, "algorithm_started", False):
+            return
+        self.algorithm_started = True
+
         # Synchronise to the rendezvous time then fire.
         await wait_until(punch_time, max_sleep=p_or_default("max_sleep"))
 
