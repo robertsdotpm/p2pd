@@ -169,8 +169,21 @@ class PunchPlugin(TraversalPlugin):
 
         route = await self.nic.route(self.af).bind()
         if "fe80" == dest_ip[:4]:
-            # Use link-local source for link-local destination
+            # Use link-local source for link-local destination.
             src_ip = str(route.link_locals[0])
+            # Append the local NIC scope_id to both addresses so the
+            # Windows connect_ex / bind paths know which interface to
+            # use. Linux's getaddrinfo accepts bare fe80:: and falls
+            # back to the routing table; Windows does not -- without
+            # the %ifindex the SYN never leaves and the listener log
+            # stays silent. On the bind side resolve_bind_ip already
+            # patches src_ip via ip6_patch_bind_ip, but the engine's
+            # raw connect_ex(dest_ip, port) gets no such treatment, so
+            # we have to bake the scope into dest_ip here. Strips any
+            # existing % first to keep the patch idempotent.
+            from aionetiface.net.bind.bind_utils import ip6_patch_bind_ip
+            dest_ip = ip6_patch_bind_ip(dest_ip.split("%", 1)[0], self.nic.id)
+            src_ip = ip6_patch_bind_ip(src_ip.split("%", 1)[0], self.nic.id)
         else:
             # Use the interface's local IP
             src_ip = route.nic()
