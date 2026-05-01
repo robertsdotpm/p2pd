@@ -188,9 +188,20 @@ self,
                         int(remaining),
                     ))
 
-    def add_port_allocator(self, f_port_alloc: Any, n: int = 16) -> None:
-        """Run a port-allocation function and append unique PortAlloc entries to the list."""
-        port_allocs, reserved = f_port_alloc(self.timestamp, n=n, params=self.params)
+    def add_port_allocator(self, f_port_alloc: Any, n: Optional[int] = None) -> None:
+        """Run a port-allocation function and append unique PortAlloc entries to the list.
+
+        n=None defers to the allocator's own default (boundary_port_alloc
+        uses NUM_PORTS, which db0c676 lowered from 16 to 2 for the
+        "smaller / wider port pool" tcp_punch tuning). The previous
+        hard-coded default of 16 was overriding that intent on every
+        call site -- the matrix had been running with 16-port sprays
+        since db0c676 landed.
+        """
+        if n is None:
+            port_allocs, reserved = f_port_alloc(self.timestamp, params=self.params)
+        else:
+            port_allocs, reserved = f_port_alloc(self.timestamp, n=n, params=self.params)
         for port_alloc in port_allocs:
             is_unique = True
             for stored_port_alloc in self.port_allocs:
