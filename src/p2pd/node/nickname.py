@@ -299,6 +299,9 @@ class Nickname:
         name: Any,
         timeout: int = NAMING_TIMEOUT,
         min_fresh_secs: int = 0,
+        wait_for_fresh: bool = False,
+        max_wait_secs: int = 30,
+        retry_interval: float = 2.0,
     ) -> Optional[Any]:
         """Look up name on the authoritative PNP servers and return the first successful result.
 
@@ -309,6 +312,17 @@ class Nickname:
         Records written without the freshness envelope (legacy data
         that pre-dates pnp_wrap_with_ts) report ts=0 and pass through
         the filter only when min_fresh_secs == 0.
+
+        wait_for_fresh=True changes the behaviour when min_fresh_secs > 0
+        and no fresh-enough record is found on the first sweep: instead
+        of raising FullNameFailure immediately, sleep retry_interval
+        seconds and try again, repeating until either a fresh record
+        is observed or max_wait_secs has elapsed. This is useful for
+        peers waiting on a node-rotation / publication-propagation
+        race where the writer's put() may not yet have reached every
+        PNP server. The PNP timestamp envelope makes the freshness
+        check authoritative across servers (no clock-of-the-reader
+        confusion).
 
         On a successful return, ret.value is the unwrapped payload
         (envelope stripped) and ret.pnp_ts is set to the record's
@@ -377,24 +391,67 @@ class Nickname:
         offsets = pnp_get_offsets(tld)
         name = name[: -len(tld)]
 
-        # Build concurrent fetch tasks.
-        tasks = []
-        for offset in offsets:
-            tasks.append(async_wrap_errors(worker(offset, name), timeout))
+        async def one_sweep() -> Optional[Any]:
+            """Fan out one round of PNP queries and return the first
+            non-None result, or None if no server responded with a
+            record that passed the freshness filter."""
+            tasks = []
+            for offset in offsets:
+                tasks.append(async_wrap_errors(worker(offset, name), timeout))
+            t = timeout + 1
+            first_in = asyncio.as_completed(tasks, timeout=t)
+            try:
+                for task in first_in:
+                    ret = await task
+                    if ret is not None and ret.value is not None:
+                        return ret
+            except asyncio.TimeoutError:
+                pass
+            return None
 
-        # Return first success. Outer timeout is a safety net in case
-        # async_wrap_errors doesn't catch a hanging task.
-        t = timeout + 1
-        first_in = asyncio.as_completed(tasks, timeout=t)
-        try:
-            for task in first_in:
-                ret = await task
-                if ret is not None and ret.value is not None:
-                    return ret
-        except asyncio.TimeoutError:
-            pass
+        # Single-sweep fast path: legacy behaviour. Either no
+        # freshness filter at all, or a filter that should fail-fast
+        # so the caller decides what to do (retry, fall back, abort).
+        if not wait_for_fresh:
+            ret = await one_sweep()
+            if ret is not None:
+                return ret
+            raise FullNameFailure(fstr("Could not fetch {0}", (name,)))
 
-        raise FullNameFailure(fstr("Could not fetch {0}", (name,)))
+        # Retry loop: keep asking the PNP pool until a fresh-enough
+        # record is observed or max_wait_secs elapses. The retry
+        # cadence is intentionally coarse (retry_interval seconds
+        # between sweeps) because PNP propagation is on the order of
+        # seconds and tighter polling just hammers the servers
+        # without changing the answer.
+        import time as _time
+        deadline = _time.time() + max_wait_secs
+        attempt = 0
+        while True:
+            attempt += 1
+            ret = await one_sweep()
+            if ret is not None:
+                log(fstr(
+                    "Nickname.get: wait_for_fresh succeeded attempt={0} ts={1}",
+                    (attempt, getattr(ret, "pnp_ts", 0)),
+                ))
+                return ret
+            if _time.time() >= deadline:
+                log(fstr(
+                    "Nickname.get: wait_for_fresh exhausted attempts={0} "
+                    "max_wait={1}s name={2}",
+                    (attempt, max_wait_secs, name),
+                ))
+                raise FullNameFailure(fstr(
+                    "Could not fetch {0} fresh within {1}s",
+                    (name, max_wait_secs),
+                ))
+            log(fstr(
+                "Nickname.get: wait_for_fresh attempt={0} no fresh record yet, "
+                "sleeping {1}s",
+                (attempt, retry_interval),
+            ))
+            await asyncio.sleep(retry_interval)
 
     async def delete(self, name: Any, timeout: int = NAMING_TIMEOUT) -> None:
         """Delete the record for name from all reachable PNP servers concurrently."""
