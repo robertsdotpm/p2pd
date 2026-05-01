@@ -476,9 +476,21 @@ class UdpPunchPlugin(TraversalPlugin):
 
             if not self.result.done():
                 self.result.set_result(pipe)
-        finally:
+        except Exception:  # pylint: disable=broad-except
+            log_exception()
             self.punch_proc.pop(self.plugin_id, None)
             self.punch_clients.pop(self.plugin_id, None)
+            if not self.result.done():
+                self.result.set_result(None)
+        # NOTE: do NOT pop punch_proc / punch_clients here on the success
+        # path. The asyncio task ends as soon as set_result fires, but
+        # the executor worker keeps running for ~9 s of spray + listen
+        # plus the lifetime of the bridge. If the peer's next signal
+        # arrives during that window and run() is re-entered, a popped
+        # state forces a fresh setup_puncher_client + new engine task
+        # whose bind_punch_sockets collides on the same predicted ports
+        # the first worker still holds (Windows EADDRINUSE 10048). Pop
+        # only in close() when the plugin is genuinely torn down.
 
     async def close(self) -> None:
         """Cancel any in-flight engine task and clear the per-session state."""
