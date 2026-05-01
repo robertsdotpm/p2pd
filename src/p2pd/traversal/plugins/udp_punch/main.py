@@ -13,6 +13,7 @@ udp_punch only handles cone NATs and predictable-symmetric NATs.
 from typing import Any, Dict, Optional, Tuple
 import asyncio
 import os
+import socket as _socket
 
 from aionetiface import (
     EXT_BIND, NIC_BIND, Pipe, SysClock, UDP, fstr, log, log_exception,
@@ -261,13 +262,66 @@ class UdpPunchPlugin(TraversalPlugin):
                 (drained,),
             ))
 
+            # Re-bind a fresh asyncio-managed socket on the same local
+            # 4-tuple before the wrap. The engine's winner_sock was
+            # hammered by select() in a worker thread for the full
+            # spray + listen window; once that count gets high (94
+            # residual frames on the listener side in our v25 trace)
+            # asyncio's selector silently fails to fire _read_ready
+            # on the socket and the wrapped Pipe goes deaf -- ECHO
+            # arrives at the kernel but never reaches the
+            # application msg_cb. The engine docstring already
+            # warns about this ("never register on asyncio
+            # selectors during the algorithm phase").
+            #
+            # Closing the engine's socket and re-binding the same
+            # local addr+port gives asyncio a fresh fd to register;
+            # SO_REUSEADDR on the new socket prevents the brief
+            # close-then-bind race from refusing the port. UDP has
+            # no TIME_WAIT so the port is immediately reusable. Any
+            # in-flight PROBE/CONFIRM datagrams arriving in the
+            # close-then-bind microsecond gap are lost, but the
+            # engine has already converged so they aren't needed.
+            wrap_sock = winner_sock
+            if local_addr is not None:
+                try:
+                    fresh_sock = _socket.socket(
+                        winner_sock.family, _socket.SOCK_DGRAM,
+                    )
+                    fresh_sock.setsockopt(
+                        _socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1,
+                    )
+                    fresh_sock.setblocking(False)
+                    try:
+                        winner_sock.close()
+                    except OSError:
+                        pass
+                    fresh_sock.bind(local_addr)
+                    wrap_sock = fresh_sock
+                    log(fstr(
+                        "udp_punch.delayed_run_engine: rebound fresh sock "
+                        "fd={0} local={1}",
+                        (fresh_sock.fileno(), local_addr),
+                    ))
+                except OSError as exc:
+                    log(fstr(
+                        "udp_punch.delayed_run_engine: rebind FAILED ({0!r}); "
+                        "falling back to engine sock",
+                        (exc,),
+                    ))
+                    log_exception()
+                    # Fall back to wrapping the original socket -- the
+                    # deaf-asyncio risk applies but we'd otherwise
+                    # have nothing.
+                    wrap_sock = winner_sock
+
             # Wrap the winning socket in a Pipe so the caller has the
             # same interface as the other plugins return. UDP Pipe
             # accepts an existing sock=... and uses it directly.
             try:
                 route = self.nic.route(self.af)
                 pipe = await Pipe(
-                    UDP, dest=peer_addr, route=route, sock=winner_sock,
+                    UDP, dest=peer_addr, route=route, sock=wrap_sock,
                 ).connect()
                 if pipe is not None:
                     try:
@@ -284,7 +338,7 @@ class UdpPunchPlugin(TraversalPlugin):
                 log_exception()
                 pipe = None
                 try:
-                    winner_sock.close()
+                    wrap_sock.close()
                 except OSError:
                     pass
 
