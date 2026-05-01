@@ -554,6 +554,11 @@ def sync_run_non_sym_side(
         sock = make_udp_socket(bind_ip, known_port, interface=interface)
     sock.setblocking(False)
 
+    actual_port = sock.getsockname()[1]
+    print("[RP-NONSYM] start port={0} nonce={1}".format(
+        actual_port, nonce.hex()[:8],
+    ))
+
     ports = random_probe_ports(probe_count, rng=rng)
     expected_src_ports = set(ports)
     for idx, dst_port in enumerate(ports):
@@ -565,16 +570,22 @@ def sync_run_non_sym_side(
         except OSError:
             continue
 
+    print("[RP-NONSYM] fired {0} cone probes to {1}, listening".format(
+        len(ports), peer_ext_ip,
+    ))
+    datagrams_seen = 0
     deadline = time.time() + listen_timeout
     while True:
         remaining = deadline - time.time()
         if remaining <= 0:
+            print("[RP-NONSYM] timeout after {0} datagrams".format(datagrams_seen))
             return None
         try:
             ready, _, _ = select_mod.select([sock], [], [], remaining)
         except (OSError, select_mod.error):
             return None
         if not ready:
+            print("[RP-NONSYM] timeout after {0} datagrams".format(datagrams_seen))
             return None
         try:
             data, peer = sock.recvfrom(2048, socket.MSG_PEEK)
@@ -583,6 +594,7 @@ def sync_run_non_sym_side(
         except OSError:
             return None
 
+        datagrams_seen += 1
         # Normalize v6 peer addr -- XP's stack returns garbage in
         # the flowinfo field (>2^20) which makes any subsequent
         # sendto / connect raise OverflowError. Mirrors the fix
@@ -593,6 +605,9 @@ def sync_run_non_sym_side(
         # Probe-only consumption: non-probes stay in the queue
         # for the application Pipe.
         parsed = decode_probe(data, nonce)
+        print("[RP-NONSYM] datagram from {0}:{1} len={2} decode={3}".format(
+            peer[0], peer[1], len(data), parsed,
+        ))
         if parsed is None:
             # Not our probe -- leave in the queue.  Yield via a
             # tiny sleep so we don't spin if there's persistent
@@ -605,10 +620,13 @@ def sync_run_non_sym_side(
         except (BlockingIOError, OSError):
             continue
         if parsed["role"] != ROLE_SYM:
+            print("[RP-NONSYM] skip: role={0} not SYM".format(parsed["role"]))
             continue
         if own_ext_ip and peer[0] == own_ext_ip:
+            print("[RP-NONSYM] skip: peer IP == own_ext_ip {0}".format(own_ext_ip))
             continue
         if require_alignment and peer[1] not in expected_src_ports:
+            print("[RP-NONSYM] skip: alignment check {0} not in expected".format(peer[1]))
             continue
         try:
             sock.sendto(
@@ -617,6 +635,7 @@ def sync_run_non_sym_side(
             )
         except OSError:
             pass
+        print("[RP-NONSYM] converged: peer={0}:{1}".format(peer[0], peer[1]))
         return {"sock": sock, "peer": peer, "role": "non_sym"}
 
 
@@ -648,14 +667,20 @@ def sync_run_symmetric_side(
         return None
     for s in socks:
         s.setblocking(False)
+    print("[RP-SYM] start nonce={0} socks={1} target={2}:{3}".format(
+        nonce.hex()[:8], len(socks), cone_ext_ip, cone_ext_port,
+    ))
+    probes_sent = 0
     for idx, s in enumerate(socks):
         try:
             s.sendto(
                 encode_probe(nonce, ROLE_SYM, idx),
                 resolve_dest_tup(s.family, cone_ext_ip, cone_ext_port, socket.SOCK_DGRAM),
             )
+            probes_sent += 1
         except OSError:
             continue
+    print("[RP-SYM] fired {0} sym probes, listening".format(probes_sent))
 
     deadline = time.time() + listen_timeout
     winner = None
