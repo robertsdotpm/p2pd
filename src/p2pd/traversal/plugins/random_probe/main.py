@@ -491,6 +491,27 @@ class RandomProbePlugin(TraversalPlugin):
             log("RandomProbePlugin: cleared {0} residue items from "
                 "pipe subscription queues".format(cleared))
 
+        # Pre-populate node_msg_cb on the pipe BEFORE set_result. Same
+        # wireup race tcp_punch fixed in 7fda794 and udp_punch mirrors:
+        # plugin.result.set_result schedules on_plugin_done via call_soon,
+        # so there's a window between set_result and on_plugin_done firing
+        # where pipe_events.msg_cbs is empty. A late probe / first ECHO
+        # arriving during that window dispatches to zero callbacks --
+        # including add_echo_support on the listener side, which means
+        # the echo reply is never sent. msg_cbs is a set so the later
+        # on_plugin_done attach is idempotent.
+        node_msg_cb = getattr(self, "node_msg_cb", None)
+        if (
+            node_msg_cb is not None
+            and getattr(pipe, "pipe_events", None) is not None
+        ):
+            pe = pipe.pipe_events
+            before = len(pe.msg_cbs)
+            pe.msg_cbs.add(node_msg_cb)
+            if len(pe.msg_cbs) != before:
+                log("RandomProbePlugin: pre-populated pipe.msg_cbs "
+                    "(count={0})".format(len(pe.msg_cbs)))
+
         log("RandomProbePlugin: returning pipe role={0} sock={1!r} peer={2}".format(
             my_role, res["sock"], res["peer"]))
         if not self.result.done():
