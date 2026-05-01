@@ -1,0 +1,104 @@
+XP test-VM tweaks
+=================
+
+Anything done on the XP VM itself that is NOT in source control. If the
+VM is rebuilt from scratch these have to be re-applied or the matrix
+will silently fail in ways that LOOK like punch / TCP bugs.
+
+
+Code-side fixes (already in git, listed for context)
+----------------------------------------------------
+- SO_LINGER {1,0} on punch sockets        -> avoids TIME_WAIT (Event 4227)
+  src/p2pd/traversal/plugins/tcp_punch/...
+- Slower spray + wider port pool          -> stays under XP's 10-SYN cap
+- Loopback-bridge for the punch worker    -> sidesteps strict-host-model risk
+  src/p2pd/traversal/plugins/tcp_punch/punch_process.py
+- --id <vm> -> per-VM signing-key file    -> stable identity across runs
+
+
+VM-side tweaks (applied manually -- not in source control)
+----------------------------------------------------------
+Firewall + AV
+    - Windows Firewall: DISABLED entirely
+    - Real-time AV protection: DISABLED
+        (without this every spawn of python.exe gets scanned and the
+        per-process startup tax stretches the punch rendezvous past
+        the bucket window)
+
+TCP/IP parameters
+    - "interface detect" turned OFF
+        (almost certainly EnableDeadGWDetect = 0 under
+         HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters
+         -- without this XP probes the GW with extra SYNs while the
+         punch is mid-flight and burns the tiny half-open quota)
+
+Routing / interface metrics
+    - Static default gateway set via `netsh interface ip set address ...`
+        (so the NIC route doesn't drift between DHCP renewals)
+    - Fixed metric on the gateway entry
+        (so the route order is deterministic; matters when XP picks
+         which interface a same-NIC connect should leave from)
+
+Power / display
+    - Sleep / standby           DISABLED
+    - Hibernate                 DISABLED  (`powercfg /hibernate off`)
+    - Screensaver               DISABLED
+    - "Turn off monitor"        Never
+    - "Turn off hard disks"     Never
+        (a VM that suspends mid-test reads as a stalled punch)
+
+Services that MUST stay running
+(set Startup Type = Automatic; verify via `services.msc` or
+ `sc query <name>`. These keep the static gateway / IP stack stable.)
+    - DHCP Client                  (Dhcp)
+        Even with a static IP, XP's IP stack uses this service for
+        adapter state notifications. Disabling it can leave the
+        gateway entry unbound after a network blip.
+    - DNS Client                   (Dnscache)
+    - TCP/IP NetBIOS Helper        (LmHosts)
+    - Network Connections          (Netman)
+        Owns the network-adapter UI / state machine. Required for
+        netsh interface commands to take effect.
+    - Network Location Awareness   (NLA)
+        Tracks "are we still on the same network"; if missing, XP
+        sometimes drops the default route during transient link
+        flaps.
+    - Remote Procedure Call        (RpcSs)             [DO NOT DISABLE]
+    - Plug and Play                (PlugPlay)          [DO NOT DISABLE]
+    - COM+ Event System            (EventSystem)
+    - Workstation                  (lanmanworkstation)
+    - Server                       (lanmanserver)      (for SMB/sshd)
+
+Verification commands after a rebuild
+    netsh firewall show state
+    reg query "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" /v EnableDeadGWDetect
+    netsh interface ip show config
+    route print -4
+    powercfg /list  &  powercfg /query
+    sc query Dhcp Dnscache LmHosts Netman NLA
+
+Python install
+    - C:\py3\python.exe (only Python on this VM; see project_single_version_vms)
+    - sibling repos at C:\Documents and Settings\matthew\projects\
+        aionetiface, p2pd, namebump, sidewire
+
+Account / SSH
+    - matthew@10.0.1.132
+    - OpenSSH server installed (which one? cygwin? bitvise? built-in?)
+
+
+How to verify after a rebuild
+-----------------------------
+1. ssh matthew@10.0.1.132 'C:\py3\python.exe -V'        -> 3.5.x
+2. Run p2pd_test_run/windows_tcpip_diag.py
+   (dumps Tcpip event log, firewall state, arp, netstat -s)
+3. Single-pair smoke from the matrix:
+   bash run_xp_pairs.sh   (just XP pairs first)
+4. If half-open errors -> Event 4226; tune TcpMaxHalfOpen
+   If TIME_WAIT errors -> Event 4227; verify SO_LINGER patches landed
+
+
+Diagnostic playbook
+-------------------
+See aionetiface/CLAUDE.md "Test agents -- obscure TCP/IP event-log
+errors" for queries to pull Tcpip events on XP via cscript / eventquery.

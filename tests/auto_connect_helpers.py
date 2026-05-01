@@ -300,7 +300,7 @@ async def load_two_nodes(test_self, af, label="connectivity"):
     """
     if_names = await list_interfaces()
     probe_ifs = await load_interfaces(
-        if_names, Interface, min_agree=1, max_agree=2, timeout=4,
+        if_names, Interface, min_agree=1, max_agree=4, timeout=4,
     )
 
     if len(probe_ifs) < 2:

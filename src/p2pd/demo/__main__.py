@@ -63,7 +63,7 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
     ifs = []
     for attempt in range(3):
         ifs = await load_interfaces(
-            if_names, Interface, min_agree=1, max_agree=2, timeout=4
+            if_names, Interface, min_agree=1, max_agree=4, timeout=4
         )
         candidate = filter_nics_by_mac(args.nic, ifs) if args.nic else ifs
         if candidate:

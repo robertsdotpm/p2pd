@@ -66,7 +66,7 @@ def is_symmetric(addr_map):
 async def main():
     if_names = await list_interfaces()
     ifs = await load_interfaces(
-        if_names, Interface, min_agree=1, max_agree=2, timeout=4,
+        if_names, Interface, min_agree=1, max_agree=4, timeout=4,
     )
     print("[PUNCH-LIVE] loaded {0} ifs: {1}".format(
         len(ifs), [nic.id for nic in ifs],
