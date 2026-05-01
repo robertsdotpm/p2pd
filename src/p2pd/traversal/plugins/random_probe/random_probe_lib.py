@@ -589,7 +589,11 @@ def sync_run_non_sym_side(
             return None
         try:
             data, peer = sock.recvfrom(2048, socket.MSG_PEEK)
-        except (BlockingIOError, InterruptedError):
+        except (BlockingIOError, InterruptedError, ConnectionResetError):
+            # ConnectionResetError = Windows WSAECONNRESET: the kernel
+            # delivered an ICMP port-unreachable reply for one of our
+            # outbound cone probes (the remote port was unbound).
+            # Skip it and keep waiting for real sym probes.
             continue
         except OSError:
             return None
