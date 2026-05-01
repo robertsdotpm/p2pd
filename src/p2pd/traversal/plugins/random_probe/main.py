@@ -273,8 +273,14 @@ class RandomProbePlugin(TraversalPlugin):
             return
         self.algorithm_started = True
 
-        # Synchronise to the rendezvous time then fire.
-        await wait_until(punch_time, max_sleep=p_or_default("max_sleep"))
+        # Synchronise to the rendezvous time using NTP-corrected clock
+        # (self.sys_clock) so that machines with a skewed OS clock (XP:
+        # ~39 s fast, Vista: ~22 s fast) fire at the agreed rendezvous
+        # instead of too early.  wait_until() uses time.time() which
+        # reflects the raw OS clock and fires immediately on skewed hosts.
+        ntp_delay = punch_time - int(self.sys_clock.time())
+        if 0 < ntp_delay <= p_or_default("max_sleep"):
+            await asyncio.sleep(ntp_delay)
 
         try:
             route = await self.nic.route(self.af).bind()
