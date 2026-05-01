@@ -178,16 +178,15 @@ class PunchPlugin(TraversalPlugin):
             # the %ifindex the SYN never leaves and the listener log
             # stays silent. On the bind side resolve_bind_ip already
             # patches src_ip via ip6_patch_bind_ip, but the engine's
-            # raw connect_ex(dest_ip, port) gets no such treatment, so
-            # we have to bake the scope into dest_ip here. Strips any
-            # existing % first to keep the patch idempotent. Use
-            # scope_id_for(IP6) instead of nic.id directly: XP's TCPIP
-            # and TCPIP6 services have separate index spaces so the
-            # v4 nic.id is wrong for v6 binds; load_interface captures
-            # the v6-side index as nic.v6_scope_id and scope_id_for
-            # surfaces it.
+            # raw connect_ex(dest_ip, port) gets no such treatment,
+            # so we have to bake the scope into dest_ip here. Strips
+            # any existing % first to keep the patch idempotent.
+            # Interface.get_nic_id(af) returns the right ifindex per
+            # AF -- on XP that's the v6-side index from TCPIP6 (vs
+            # the v4 index in nic.id); everywhere else the indices
+            # are unified so it returns the same value.
             from aionetiface.net.bind.bind_utils import ip6_patch_bind_ip
-            v6_scope = self.nic.scope_id_for(self.af)
+            v6_scope = self.nic.get_nic_id(self.af)
             dest_ip = ip6_patch_bind_ip(dest_ip.split("%", 1)[0], v6_scope)
             src_ip = ip6_patch_bind_ip(src_ip.split("%", 1)[0], v6_scope)
         else:
@@ -210,7 +209,7 @@ class PunchPlugin(TraversalPlugin):
             dest_ip,
             src_ip,
             decider_ip,
-            self.nic.scope_id_for(self.af),
+            self.nic.get_nic_id(self.af),
             same_machine=self.same_machine,
             params=FAST_PUNCH_PARAMS,
         )
