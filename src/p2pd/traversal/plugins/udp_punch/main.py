@@ -28,6 +28,7 @@ from ..tcp_punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 from ..tcp_punch.nat_predict import NATMapping
 from ..tcp_punch.nat_predict_alloc import NATPredictAlloc
 from ..tcp_punch.punch_client import PunchClient
+from ..tcp_punch.punch_defs import TCP_PUNCH_LAN
 from .proto import UdpPunchMsg
 from .udp_punch_defs import UDP_PUNCH_FRAME_LEN, UDP_PUNCH_MAGIC, UDP_PUNCH_NONCE_LEN
 from .udp_punch_engine import drain_punch_residue, udp_punch_engine
@@ -179,6 +180,27 @@ class UdpPunchPlugin(TraversalPlugin):
 
     async def advance_punching_protocol(self, puncher: Any, reply: Optional[Any], punch_time: int) -> Optional[Any]:
         """Compute the next round of port predictions; return outgoing UdpPunchMsg or None when done."""
+        # For LAN, STUN is useless (returns each side's own port).
+        # boundary_port_alloc in delayed_run_engine handles port
+        # alignment between peers via NTP-aligned bucket. Send one
+        # empty-mappings UdpPunchMsg to trigger the recipient; return
+        # None on any reply. Mirrors tcp_punch's LAN short-circuit
+        # (commit cb7a765). Nonce stays in payload.nonce so the
+        # responder still sees it without the mappings round-trip.
+        if self.nat_alloc.punch_mode == TCP_PUNCH_LAN:
+            if reply is not None:
+                return None
+            msg = UdpPunchMsg({
+                "payload": {
+                    "punch_mode": self.nat_alloc.punch_mode,
+                    "mappings": [],
+                    "ntp": punch_time,
+                    "nonce": puncher.udp_nonce.hex(),
+                },
+            })
+            msg.meta.plugin_name = "udp_punch"
+            return msg
+
         recv_mappings = None
         if reply is not None:
             recv_mappings = [NATMapping(m) for m in reply.payload.mappings]
