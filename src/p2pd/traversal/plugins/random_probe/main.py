@@ -36,6 +36,7 @@ from aionetiface.nic.nat.nat_defs import SYMMETRIC_NAT
 from ....protocol.proto_defs import P2P_RANDOM_PROBE
 from .proto import RandomProbeMsg
 from ...traversal_plugin import TraversalPlugin
+from aionetiface.net.selector_proxy import selector_proxy
 from ..tcp_punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 
 from .random_probe_defs import (
@@ -344,180 +345,105 @@ class RandomProbePlugin(TraversalPlugin):
                 self.result.set_result(None)
             return
 
-        # Drain any probe datagrams still queued in the kernel
-        # buffer for the winning socket before handing it up to
-        # the user as a Pipe.  Instant pass first, then a short
-        # async pass to catch in-flight late probes (the carrier
-        # has hundreds of ms of buffering between sym's last
-        # probe send and arrival on the cone's NIC).
+        # Drain in-flight probe datagrams that landed during
+        # convergence + the next ~0.8 s window. selector_proxy +
+        # the listener-side stream filter handle anything that
+        # slips through the gap.
         drained = drain_probe_residue(res["sock"], nonce)
         late = await async_drain_probe_residue(res["sock"], nonce, duration=0.8)
-        log("RandomProbePlugin: drained {0}+{1} residual probe(s) "
-            "from winning sock".format(drained, late))
+        log("RandomProbePlugin: drained {0}+{1} residual probe(s)".format(
+            drained, late,
+        ))
 
-        # NOTE: the raw-socket RPDIAG round-trip diagnostic that
-        # used to live here was eating real application data.
-        # On the sym side it sat in a 5-second recv loop *before*
-        # the Pipe was built, and any ECHO the user typed during
-        # that window was consumed by the loop and discarded as
-        # "not the marker", never reaching the Pipe / echo
-        # handler.  The diagnostic served its purpose -- both
-        # directions are now validated end-to-end -- so it's
-        # gone.  Going straight from drain to Pipe wrap means
-        # the application's first send lands cleanly.
-
-        # Wrap the winning UDP socket in a Pipe directly, *without*
-        # calling sock.connect(peer) first.  Connecting a UDP socket
-        # has two side-effects we don't want here:
-        #   1. Inbound is filtered to the connected peer only.  If
-        #      the peer's NAT remaps the source for any subsequent
-        #      datagram (common on symmetric / port-restricted
-        #      NATs), recvfrom returns nothing -- no echo reply.
-        #   2. Outbound sendto(data, addr) fails when addr != the
-        #      connected peer.  The echo handler (and any other
-        #      msg_cb that replies with an explicit client_tup)
-        #      breaks.
-        # An unconnected socket wrapped in a Pipe accepts inbound
-        # from any source and lets sendto target the actual reply
-        # address pulled from datagram_received's addr arg.
+        # ---- Bridge setup (mirrors tcp_punch reverse_server / udp_punch d5ad7fe) ----
         #
-        # We don't go through sock_to_pipe because that helper
-        # calls getpeername() on the sock to derive the dest tuple,
-        # which only works on connected sockets.  We already have
-        # res["peer"] from the convergence step, so build the Pipe
-        # by hand.
+        # Side-step the "deaf wrap" failure by never registering
+        # the punched sock with asyncio. Main owns a fresh
+        # listener_sock on loopback (asyncio sees a never-touched
+        # fd); a worker-thread selector_proxy forwards bytes
+        # between the punched sock and a paired worker_sock that
+        # loops back to the listener.
+        #
+        # Trade-off vs the previous direct-wrap approach: the
+        # punched sock is now connect()ed to res["peer"] so
+        # selector_proxy's connected-DGRAM recv/send work. That
+        # means a peer NAT that remaps the source for follow-up
+        # datagrams will have its replies dropped at the kernel
+        # filter -- acceptable for the matrix (LAN) and for the
+        # cone-NAT path; revisit selector_proxy with an
+        # unconnected-DGRAM mode if symmetric-vs-symmetric ever
+        # needs to traverse this code.
+        if self.af == 2:
+            loopback_host = "127.0.0.1"
+            family = socket_mod.AF_INET
+        else:
+            loopback_host = "::1"
+            family = socket_mod.AF_INET6
+
+        try:
+            listener_sock = socket_mod.socket(family, socket_mod.SOCK_DGRAM)
+            listener_sock.setsockopt(
+                socket_mod.SOL_SOCKET, socket_mod.SO_REUSEADDR, 1,
+            )
+            listener_sock.setblocking(False)
+            listener_sock.bind((loopback_host, 0))
+            worker_sock = socket_mod.socket(family, socket_mod.SOCK_DGRAM)
+            worker_sock.setsockopt(
+                socket_mod.SOL_SOCKET, socket_mod.SO_REUSEADDR, 1,
+            )
+            worker_sock.setblocking(False)
+            worker_sock.bind((loopback_host, 0))
+            listener_addr = listener_sock.getsockname()
+            worker_addr = worker_sock.getsockname()
+            listener_sock.connect(worker_addr)
+            worker_sock.connect(listener_addr)
+        except OSError as exc:
+            log("RandomProbePlugin: bridge setup failed: " + repr(exc))
+            for s in (res["sock"],):
+                try:
+                    s.close()
+                except OSError:
+                    pass
+            if not self.result.done():
+                self.result.set_result(None)
+            return
+
+        log("RandomProbePlugin: bridge listener={0} worker={1}".format(
+            listener_addr, worker_addr,
+        ))
+
         try:
             route = await self.nic.route(self.af).bind()
         except (OSError, ValueError):
-            log("RandomProbePlugin: route bind failed for pipe wrap")
+            log("RandomProbePlugin: route bind failed for bridge wrap")
+            for s in (listener_sock, worker_sock, res["sock"]):
+                try:
+                    s.close()
+                except OSError:
+                    pass
             if not self.result.done():
                 self.result.set_result(None)
             return
 
-        # Reuse the bind port the winning socket is on so the route
-        # carries the right local port info downstream.
+        from aionetiface import Pipe, UDP
         try:
-            local_port = res["sock"].getsockname()[1]
-            await route.bind(port=local_port)
-        except (OSError, AttributeError):
-            pass
-
-        # Use the algorithm's winning sock directly -- earlier
-        # experiment with os.dup turned out to add complexity
-        # without solving the receive issue on real NICs.  The
-        # MSG_PEEK drain change ensures we don't eat user data
-        # before the Pipe gets a chance to consume it.
-        fresh_sock = res["sock"]
-
-        # Defensive: explicitly clear any lingering reader on
-        # this FD before letting create_datagram_endpoint install
-        # its own.  The algorithm phase ran many add_reader /
-        # remove_reader cycles (peek_then_recv_probe).  If the
-        # last cycle's remove_reader didn't fully clean up
-        # selector state -- or if a stale registration from a
-        # closed sibling sock got assigned this FD number --
-        # asyncio's transport reader silently won't fire on
-        # this fd post-Pipe-wrap (kernel queue has data,
-        # _read_ready never gets called).  Clearing first
-        # gives create_datagram_endpoint a clean slate.
-        try:
-            asyncio.get_event_loop().remove_reader(fresh_sock.fileno())
-        except (OSError, ValueError):
-            pass
-
-        try:
-            from aionetiface import Pipe, UDP
             pipe = await Pipe(
-                UDP,
-                dest=res["peer"],
-                route=route,
-                sock=fresh_sock,
+                UDP, dest=worker_addr, route=route, sock=listener_sock,
             ).connect()
         except (OSError, ConnectionError, ValueError):
-            log("RandomProbePlugin: Pipe wrap failed")
-            try:
-                fresh_sock.close()
-            except OSError:
-                pass
+            log("RandomProbePlugin: bridge Pipe wrap failed")
+            for s in (listener_sock, worker_sock, res["sock"]):
+                try:
+                    s.close()
+                except OSError:
+                    pass
             if not self.result.done():
                 self.result.set_result(None)
             return
 
-
-        # Verify wire-up: which sock, which dest_tup will pipe.send
-        # default to, and is anyone receiving inbound on this pipe.
-        try:
-            stream_dest = pipe.pipe_events.stream.dest_tup
-        except AttributeError:
-            stream_dest = "<not set>"
-        print("[RP-WIRE] role={0} my_addr={1} sock={2} stream.dest_tup={3} "
-              "res_peer={4}".format(
-                  my_role,
-                  res["sock"].getsockname(),
-                  res["sock"].fileno(),
-                  stream_dest,
-                  res["peer"],
-              ))
-
-        # Debug: print every inbound datagram that lands on this
-        # pipe so we can see whether the responder's pipe is
-        # actually dispatching after sock_to_pipe wrap.  Stays in
-        # for now so real-NAT echo runs are diagnosable; can drop
-        # later once the path is reliable.
-        async def debug_inbound(msg, client_tup, p):
-            print("[RP-INBOUND] role={0} from={1} {2}b: {3!r}".format(
-                my_role, client_tup, len(msg), msg[:48]))
-
-        try:
-            pipe.add_msg_cb(debug_inbound)
-        except (AttributeError, TypeError):
-            pass
-
-        # Reset pipe subscription queues + install a probe-dropping
-        # add_msg wrapper so late-arriving probes never land in
-        # any subscription queue.
-        #
-        # node_protocol's filter handles the msg_cb dispatch side
-        # but PipeEvents.route_msg also calls stream.add_msg
-        # which queues data for subscription-based recv() -- those
-        # are independent paths.  Without filtering at add_msg,
-        # pipe.recv(SUB_ALL) returns probe bytes ahead of the
-        # actual application reply.
-        try:
-            from aionetiface import SUB_ALL
-            stream = pipe.pipe_events.stream
-            cleared = sum(
-                drain_queue(entry[1]) for entry in stream.subs.values()
-                if isinstance(entry, list) and len(entry) >= 2
-            )
-            stream.subs = {}
-            pipe.subscribe(SUB_ALL)
-
-            # Wrap stream.add_msg with a probe-filtering version
-            # so probe-format datagrams never reach any sub queue.
-            from .random_probe_defs import PROBE_LEN, PROBE_MAGIC
-            original_add_msg = stream.add_msg
-
-            def filtered_add_msg(data, client_tup):
-                if len(data) == PROBE_LEN and bytes(data[:4]) == PROBE_MAGIC:
-                    return
-                return original_add_msg(data, client_tup)
-
-            stream.add_msg = filtered_add_msg
-        except (AttributeError, TypeError):
-            cleared = 0
-        if cleared:
-            log("RandomProbePlugin: cleared {0} residue items from "
-                "pipe subscription queues".format(cleared))
-
-        # Pre-populate node_msg_cb on the pipe BEFORE set_result. Same
-        # wireup race tcp_punch fixed in 7fda794 and udp_punch mirrors:
-        # plugin.result.set_result schedules on_plugin_done via call_soon,
-        # so there's a window between set_result and on_plugin_done firing
-        # where pipe_events.msg_cbs is empty. A late probe / first ECHO
-        # arriving during that window dispatches to zero callbacks --
-        # including add_echo_support on the listener side, which means
-        # the echo reply is never sent. msg_cbs is a set so the later
+        # Pre-populate node_msg_cb on the listener pipe BEFORE
+        # set_result. Same wireup race tcp_punch fixed in 7fda794
+        # and udp_punch mirrors. msg_cbs is a set so the later
         # on_plugin_done attach is idempotent.
         node_msg_cb = getattr(self, "node_msg_cb", None)
         if (
@@ -531,8 +457,68 @@ class RandomProbePlugin(TraversalPlugin):
                 log("RandomProbePlugin: pre-populated pipe.msg_cbs "
                     "(count={0})".format(len(pe.msg_cbs)))
 
-        log("RandomProbePlugin: returning pipe role={0} sock={1!r} peer={2}".format(
-            my_role, res["sock"], res["peer"]))
+        # Probe-dropping filter on the listener pipe stream so any
+        # stray probe forwarded across the bridge gets dropped before
+        # reaching subscription queues / msg_cbs.
+        try:
+            from aionetiface import SUB_ALL
+            stream = pipe.pipe_events.stream
+            stream.subs = {}
+            pipe.subscribe(SUB_ALL)
+            from .random_probe_defs import PROBE_LEN, PROBE_MAGIC
+            original_add_msg = stream.add_msg
+
+            def filtered_add_msg(data, client_tup):
+                if len(data) == PROBE_LEN and bytes(data[:4]) == PROBE_MAGIC:
+                    return
+                return original_add_msg(data, client_tup)
+
+            stream.add_msg = filtered_add_msg
+        except (AttributeError, TypeError):
+            pass
+
+        # Connect the punched sock to the peer so selector_proxy's
+        # connected-DGRAM recv()/send() target it correctly.
+        try:
+            res["sock"].connect(res["peer"])
+        except OSError as exc:
+            log("RandomProbePlugin: punched_sock.connect failed: " + repr(exc))
+            for s in (listener_sock, worker_sock, res["sock"]):
+                try:
+                    s.close()
+                except OSError:
+                    pass
+            if not self.result.done():
+                self.result.set_result(None)
+            return
+
+        # Fire-and-forget bridge worker: forwards bytes between the
+        # punched sock and worker_sock (which is loopback-connected
+        # to listener_sock, the wrapped Pipe). Closes when either
+        # leg disconnects or stop_reader signals.
+        loop_for_bridge = asyncio.get_event_loop()
+        punched_sock_ref = res["sock"]
+        stop_reader = self.stop_reader
+        listener_addr_ref = listener_addr
+        worker_sock_ref = worker_sock
+
+        def bridge_worker():
+            try:
+                selector_proxy(
+                    punched_sock_ref,
+                    listener_addr_ref,
+                    stop_reader,
+                    sock_proto=socket_mod.SOCK_DGRAM,
+                    socket_r=worker_sock_ref,
+                )
+            except Exception:  # pylint: disable=broad-except
+                log_exception()
+            log("RandomProbePlugin: bridge worker exiting")
+
+        loop_for_bridge.run_in_executor(None, bridge_worker)
+
+        log("RandomProbePlugin: returning bridge pipe role={0} listener={1} peer={2}".format(
+            my_role, listener_addr, res["peer"]))
         if not self.result.done():
             self.result.set_result(pipe)
 
