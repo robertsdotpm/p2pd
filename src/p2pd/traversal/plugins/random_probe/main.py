@@ -222,6 +222,25 @@ class RandomProbePlugin(TraversalPlugin):
         probe_count = reply.payload.probe_count or DEFAULT_PROBE_COUNT
         punch_time = reply.payload.punch_time
 
+        # If the peer advertised a v6 link-local IP (fe80::...), bake
+        # OUR local scope_id into it so resolve_dest_tup downstream
+        # produces the (host, port, flowinfo, scope_id) 4-tuple Windows
+        # needs to actually send to the right interface. Same fix
+        # applied to tcp_punch (commits 10f4977 + 87148ae) and
+        # udp_punch -- without it Windows sendto silently lands on the
+        # OS-default NIC and the probes never reach the peer. Use
+        # get_nic_id(af) so XP's split TCPIP/TCPIP6 ifindex spaces
+        # are handled correctly.
+        if peer_addr_ip and peer_addr_ip.lower().startswith("fe80"):
+            try:
+                from aionetiface.net.bind.bind_utils import ip6_patch_bind_ip
+                v6_scope = self.nic.get_nic_id(self.af)
+                peer_addr_ip = ip6_patch_bind_ip(
+                    peer_addr_ip.split("%", 1)[0], v6_scope,
+                )
+            except (ImportError, AttributeError, OSError):
+                pass
+
         # If we're the responder we still owe the peer a reply with
         # our own external IP / known port.  Send it immediately so
         # they have what they need before the rendezvous fires.

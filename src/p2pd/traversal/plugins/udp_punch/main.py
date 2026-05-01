@@ -104,6 +104,17 @@ class UdpPunchPlugin(TraversalPlugin):
         route = await self.nic.route(self.af).bind()
         if "fe80" == dest_ip[:4]:
             src_ip = str(route.link_locals[0])
+            # Bake the AF-correct scope_id into both the dest and src
+            # link-local IPs so Windows sendto / connect_ex reach the
+            # right interface. Without this the engine sprays into the
+            # OS-default NIC and the peer never sees the probes.
+            # Mirrors tcp_punch's setup_puncher_client (commits 10f4977
+            # + 87148ae). XP keeps separate v4/v6 ifindex spaces, so
+            # use get_nic_id(af) instead of nic.id.
+            from aionetiface.net.bind.bind_utils import ip6_patch_bind_ip
+            v6_scope = self.nic.get_nic_id(self.af)
+            dest_ip = ip6_patch_bind_ip(dest_ip.split("%", 1)[0], v6_scope)
+            src_ip = ip6_patch_bind_ip(src_ip.split("%", 1)[0], v6_scope)
         else:
             src_ip = route.nic()
 
@@ -116,7 +127,7 @@ class UdpPunchPlugin(TraversalPlugin):
             dest_ip,
             src_ip,
             decider_ip,
-            self.nic.id,
+            self.nic.get_nic_id(self.af),
             same_machine=self.same_machine,
             params=FAST_PUNCH_PARAMS,
         )
