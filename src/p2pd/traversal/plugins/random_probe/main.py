@@ -393,8 +393,11 @@ class RandomProbePlugin(TraversalPlugin):
             )
             worker_sock.setblocking(False)
             worker_sock.bind((loopback_host, 0))
+            # getsockname() returns 4-tuple for v6; Pipe needs 2-tuple.
+            # See udp_punch main.py for the same issue.
             listener_addr = listener_sock.getsockname()
             worker_addr = worker_sock.getsockname()
+            worker_addr_for_pipe = (worker_addr[0], worker_addr[1])
             listener_sock.connect(worker_addr)
             worker_sock.connect(listener_addr)
         except OSError as exc:
@@ -428,7 +431,8 @@ class RandomProbePlugin(TraversalPlugin):
         from aionetiface import Pipe, UDP
         try:
             pipe = await Pipe(
-                UDP, dest=worker_addr, route=route, sock=listener_sock,
+                UDP, dest=worker_addr_for_pipe,
+                route=route, sock=listener_sock,
             ).connect()
         except (OSError, ConnectionError, ValueError):
             log("RandomProbePlugin: bridge Pipe wrap failed")

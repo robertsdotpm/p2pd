@@ -296,8 +296,15 @@ class UdpPunchPlugin(TraversalPlugin):
                 worker_sock.setblocking(False)
                 worker_sock.bind((loopback_host, 0))
 
+                # getsockname() returns a 2-tuple for v4 and a 4-tuple
+                # for v6 ((host, port, flowinfo, scope_id)). The Pipe
+                # constructor's resolve_dest does `ip, port = dest`
+                # which blows up on the v6 4-tuple. Keep the full
+                # tuple for socket.connect (v6 form is required there)
+                # but pass a flat (ip, port) to Pipe.
                 listener_addr = listener_sock.getsockname()
                 worker_addr = worker_sock.getsockname()
+                worker_addr_for_pipe = (worker_addr[0], worker_addr[1])
                 # UDP-connect both ends so recv/send default to the
                 # known peer and the kernel filters incoming.
                 listener_sock.connect(worker_addr)
@@ -323,7 +330,8 @@ class UdpPunchPlugin(TraversalPlugin):
             try:
                 route = self.nic.route(self.af)
                 pipe = await Pipe(
-                    UDP, dest=worker_addr, route=route, sock=listener_sock,
+                    UDP, dest=worker_addr_for_pipe,
+                    route=route, sock=listener_sock,
                 ).connect()
             except (OSError, ConnectionError, asyncio.TimeoutError):
                 log_exception()
