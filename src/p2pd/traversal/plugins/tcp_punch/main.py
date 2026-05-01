@@ -180,10 +180,16 @@ class PunchPlugin(TraversalPlugin):
             # patches src_ip via ip6_patch_bind_ip, but the engine's
             # raw connect_ex(dest_ip, port) gets no such treatment, so
             # we have to bake the scope into dest_ip here. Strips any
-            # existing % first to keep the patch idempotent.
+            # existing % first to keep the patch idempotent. Use
+            # scope_id_for(IP6) instead of nic.id directly: XP's TCPIP
+            # and TCPIP6 services have separate index spaces so the
+            # v4 nic.id is wrong for v6 binds; load_interface captures
+            # the v6-side index as nic.v6_scope_id and scope_id_for
+            # surfaces it.
             from aionetiface.net.bind.bind_utils import ip6_patch_bind_ip
-            dest_ip = ip6_patch_bind_ip(dest_ip.split("%", 1)[0], self.nic.id)
-            src_ip = ip6_patch_bind_ip(src_ip.split("%", 1)[0], self.nic.id)
+            v6_scope = self.nic.scope_id_for(self.af)
+            dest_ip = ip6_patch_bind_ip(dest_ip.split("%", 1)[0], v6_scope)
+            src_ip = ip6_patch_bind_ip(src_ip.split("%", 1)[0], v6_scope)
         else:
             # Use the interface's local IP
             src_ip = route.nic()
@@ -204,7 +210,7 @@ class PunchPlugin(TraversalPlugin):
             dest_ip,
             src_ip,
             decider_ip,
-            self.nic.id,
+            self.nic.scope_id_for(self.af),
             same_machine=self.same_machine,
             params=FAST_PUNCH_PARAMS,
         )
