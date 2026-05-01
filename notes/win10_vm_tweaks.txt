@@ -1,0 +1,122 @@
+Win10 test-VM tweaks
+====================
+
+Anything done on the Win10 VM (10.0.1.199) itself that is NOT in
+source control. If the VM is rebuilt these have to be re-applied or
+the matrix will silently flake (matrix v16 saw `win7-from-win10` fail
+because Netman was stopped and IPv4 wasn't bound on the test NIC).
+
+
+10 specific settings changed
+----------------------------
+
+  1. Windows Firewall -- all profiles set to OFF
+        netsh advfirewall set allprofiles state off
+     Note: the MpsSvc *service* stays RUNNING (other components depend
+     on it). The diag will flag this as a mismatch; ignore -- the
+     `netsh advfirewall show allprofiles state` output is the truth.
+
+  2. EnableDeadGWDetect -- set to 0 (was: registry key absent)
+        reg add "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" \
+            /v EnableDeadGWDetect /t REG_DWORD /d 0 /f
+     Requires REBOOT to take effect. Without this, Win10 occasionally
+     probes the gateway with extra SYNs while a punch is mid-flight,
+     burning the half-open quota.
+
+  3. LmHosts (TCP/IP NetBIOS Helper) -- DEMAND_START -> AUTO_START
+        sc config LmHosts start= auto
+     Already running, just made the start type sticky across reboots.
+
+  4. Netman (Network Connections) -- DEMAND + STOPPED -> AUTO + RUNNING
+        sc config Netman start= auto
+        sc start   Netman
+     **This is the one that broke `win7-from-win10` in v16.** Netman
+     owns the network-adapter UI / state machine. With it stopped,
+     the test NIC's AF_INET binding was indeterminate -- the demo's
+     LISTEN-DBG could only bind to ::1 (IPv6 loopback) and IPv4 STUN
+     never resolved.
+
+  5. netprofm (Network List Service) -- DEMAND_START -> AUTO_START
+        sc config netprofm start= auto
+     Already running. Tracks "are we still on the same network";
+     pairs with NlaSvc.
+
+  6. PlugPlay -- DEMAND_START -> AUTO_START
+        sc config PlugPlay start= auto
+     Already running. Foundation service; should never be set to
+     manual on a test VM.
+
+  7. W32Time (Windows Time) -- DEMAND + STOPPED -> AUTO + RUNNING
+        sc config W32Time start= auto
+        sc start   W32Time
+     The bucket-rendezvous math is NTP-aligned (WINDOW=42 s,
+     MAX_CLOCK_ERROR=20 s). A drifted clock places the punch in the
+     wrong bucket. With W32Time stopped, the clock will drift on a
+     long-running VM.
+
+  8. Tamper Protection -- ON -> OFF
+     Toggled manually in Settings UI:
+        Settings -> Privacy & Security -> Windows Security ->
+        Virus & threat protection -> Manage settings ->
+        Tamper Protection -> off
+     Required before Set-MpPreference can disable real-time. Cannot be
+     scripted on Win10 1903+ (silently ignored otherwise).
+
+  9. Real-time protection -- ENABLED -> DISABLED
+        powershell Set-MpPreference -DisableRealtimeMonitoring $true
+     Real-time protection on Win10 is *not just* on-access AV scanning.
+     It also includes:
+       - Network Inspection System (NIS): kernel-mode IPS that can
+         drop "unusual" TCP connections like simultaneous-open
+       - Network Protection (EnableNetworkProtection): blocks
+         connections to "suspicious" remote IPs by reputation
+       - SmartScreen network filter
+       - Behavior Monitoring (process behavior heuristics)
+       - Block-at-first-seen (cloud lookup before allowing exec)
+     Disabling real-time turns ALL of these off in one switch on
+     Win10 -- the network-touching ones are what mattered for the
+     matrix; the file-scan latency was a bonus.
+
+ 10. Required services brought to RUNNING + AUTO
+     A 12-service sweep (`set_services.bat`) sets every service the
+     network stack depends on to Automatic and starts it:
+        Dhcp Dnscache LmHosts Netman NlaSvc netprofm RpcSs PlugPlay
+        EventSystem LanmanWorkstation LanmanServer W32Time
+     Most were already running; the meaningful changes on Win10
+     were Netman (item 4), W32Time (item 7), and the AUTO_START
+     stickiness (items 3, 5, 6).
+
+
+Post-condition snapshot (windows_services_diag.py output)
+----------------------------------------------------------
+After the tweaks, Defender section should show:
+
+    -- top-level signals
+    RealTimeProtectionEnabled : False  [OK]
+    IsTamperProtected         : False  [OK]
+    AntivirusEnabled          : True
+    -- file/behavior scanning (latency)
+    OnAccessProtectionEnabled : False
+    BehaviorMonitorEnabled    : False
+    IoavProtectionEnabled     : False
+    -- network-touching (can DROP punch packets)
+    NISEnabled                : False  [OK]
+    EnableNetworkProtection   : 0      [OK]
+    SmartScreenEnabled        :        [OK]
+    CloudBlockLevel           : 0
+
+
+Rebuild verification commands
+-----------------------------
+    python p2pd_test_run\windows_services_diag.py
+    netsh advfirewall show allprofiles state
+    reg query "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" /v EnableDeadGWDetect
+    powershell Get-MpPreference
+    powershell Get-MpComputerStatus
+
+Apply scripts (in p2pd_test_run/, copied to the VM)
+---------------------------------------------------
+    set_services.bat              # services -> AUTO + RUNNING
+    apply_xp_style_tweaks.bat     # firewall off, DeadGW=0, defender disable
+                                  #   (Defender steps no-op without
+                                  #    Tamper Protection off first)
