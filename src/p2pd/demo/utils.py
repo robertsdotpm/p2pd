@@ -76,8 +76,26 @@ async def ainput(prompt: str) -> str:
 
 
 def cout(*fargs) -> None:
-    """Print output to stdout unless running in non-interactive command mode."""
+    """Print to stdout in interactive mode; mirror to log() under --cmd.
+
+    Under `--cmd` (scripted/matrix runs) stdout is muted because the
+    pretty banners and menu prompts are noise the runner doesn't want
+    to scrape. The diagnostic content is still useful when something
+    fails -- v16's `win7-from-vista` left only a bare ValueError in
+    the SSH-captured log because every setup_node cout was suppressed.
+    Routing the same lines through log() preserves them in the
+    per-thread aionetiface_<pid>_<tid>.log so a post-mortem can pull
+    that file off the VM and see the actual progression (banner ->
+    pid -> "Loading interfaces..." -> "No interfaces found (attempt
+    N/3)..." -> the failure).
+    """
     if args.cmd:
+        if fargs:
+            try:
+                msg = " ".join(str(x) for x in fargs)
+            except Exception:  # noqa: BLE001 - never let logging break startup
+                msg = repr(fargs)
+            log("[COUT] " + msg)
         return
     if not fargs:
         print(flush=True)
