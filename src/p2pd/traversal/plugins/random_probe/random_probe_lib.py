@@ -639,8 +639,74 @@ def sync_run_non_sym_side(
             )
         except OSError:
             pass
-        print("[RP-NONSYM] converged: peer={0}:{1}".format(peer[0], peer[1]))
-        return {"sock": sock, "peer": peer, "role": "non_sym"}
+        print("[RP-NONSYM] converged (tentative): peer={0}:{1}".format(peer[0], peer[1]))
+        # Phase 2: wait briefly for SYM_CONFIRM so that when there are
+        # multiple birthday-paradox collisions both sides lock onto the
+        # SAME socket.  SYM sends CONFIRM from its winning socket; if
+        # that differs from our tentative peer we override here.
+        final_peer = peer
+        confirm_deadline = time.time() + 2.0
+        while time.time() < confirm_deadline:
+            conf_remaining = confirm_deadline - time.time()
+            if conf_remaining <= 0:
+                break
+            try:
+                conf_ready, _, _ = select_mod.select([sock], [], [], conf_remaining)
+            except (OSError, select_mod.error):
+                break
+            if not conf_ready:
+                break
+            try:
+                cdata, cpeer = sock.recvfrom(2048, socket.MSG_PEEK)
+            except (BlockingIOError, InterruptedError, ConnectionResetError):
+                continue
+            except OSError:
+                break
+            if len(cpeer) == 4:
+                cpeer = (cpeer[0], cpeer[1], 0, cpeer[3])
+            cparsed = decode_probe(cdata, nonce)
+            if cparsed is None:
+                time.sleep(0.02)
+                continue
+            try:
+                sock.recvfrom(2048)
+            except (BlockingIOError, OSError):
+                continue
+            if cparsed["role"] != ROLE_SYM:
+                continue
+            if own_ext_ip and cpeer[0] == own_ext_ip:
+                continue
+            if require_alignment and cpeer[1] not in expected_src_ports:
+                continue
+            if cparsed["idx"] != PROBE_IDX_CONFIRM:
+                # Regular SYM probe (not the CONFIRM yet); send CONE_CONFIRM
+                # back so SYM can still converge if it hasn't yet.
+                try:
+                    sock.sendto(
+                        encode_probe(nonce, ROLE_CONE, PROBE_IDX_CONFIRM),
+                        cpeer,
+                    )
+                except OSError:
+                    pass
+                continue
+            # SYM_CONFIRM received: SYM has locked onto cpeer[1].
+            if cpeer[1] != final_peer[1]:
+                print("[RP-NONSYM] CONFIRM override: {0} -> {1}".format(
+                    final_peer[1], cpeer[1],
+                ))
+                final_peer = cpeer
+                try:
+                    sock.sendto(
+                        encode_probe(nonce, ROLE_CONE, PROBE_IDX_CONFIRM),
+                        final_peer,
+                    )
+                except OSError:
+                    pass
+            break
+        print("[RP-NONSYM] converged (final): peer={0}:{1}".format(
+            final_peer[0], final_peer[1],
+        ))
+        return {"sock": sock, "peer": final_peer, "role": "non_sym"}
 
 
 def sync_run_symmetric_side(
@@ -723,14 +789,16 @@ def sync_run_symmetric_side(
                 continue
             if cone_ext_ip and peer[0] != cone_ext_ip:
                 continue
-            # Any cone probe (regular or CONFIRM) wins.
-            try:
-                s.sendto(
-                    encode_probe(nonce, ROLE_SYM, PROBE_IDX_CONFIRM),
-                    peer,
-                )
-            except OSError:
-                pass
+            # Any cone probe (regular or CONFIRM) wins.  Send CONFIRM 3x
+            # so NON_SYM's Phase 2 override window receives it reliably.
+            for _ in range(3):
+                try:
+                    s.sendto(
+                        encode_probe(nonce, ROLE_SYM, PROBE_IDX_CONFIRM),
+                        peer,
+                    )
+                except OSError:
+                    pass
             winner = {"sock": s, "peer": peer, "role": "sym"}
             break
         if winner is not None:
