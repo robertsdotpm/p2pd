@@ -207,6 +207,14 @@ def watch_for_winner(
             except OSError:
                 continue
 
+            # Normalize v6 addr: XP's stack stuffs garbage into
+            # flowinfo on recvfrom (observed flowinfo=3824046100,
+            # well over the 20-bit max of 1048575). Any subsequent
+            # sendto / connect with that addr raises OverflowError.
+            # Zero flowinfo here so the addr is reusable downstream.
+            if len(addr) == 4:
+                addr = (addr[0], addr[1], 0, addr[3])
+
             kind, recv_nonce = parse_frame(buf)
             if kind is None or recv_nonce != nonce:
                 # Not a punch frame; leave it for the Pipe layer.
@@ -226,12 +234,24 @@ def watch_for_winner(
                     (log_sock_addr(s), addr, probes_seen),
                 ))
                 # Peer's mapping reached us; tell them we saw it.
+                # XP's v6 stack stuffs garbage into flowinfo on
+                # recvfrom (observed: flowinfo=3824046100 from
+                # fe80:: peers), so reflecting `addr` directly
+                # to sendto blows up with
+                #   OverflowError: getsockaddrarg: flowinfo must
+                #   be 0-1048575.
+                # Zero flowinfo before sending; the kernel only
+                # cares about scope_id for link-local routing.
+                if len(addr) == 4:
+                    sendto_addr = (addr[0], addr[1], 0, addr[3])
+                else:
+                    sendto_addr = addr
                 try:
-                    s.sendto(confirm_frame, addr)
+                    s.sendto(confirm_frame, sendto_addr)
                 except OSError as exc:
                     log(fstr(
                         "udp_punch.watch_for_winner: CONFIRM sendto failed on {0} to {1}: {2}",
-                        (log_sock_addr(s), addr, repr(exc)),
+                        (log_sock_addr(s), sendto_addr, repr(exc)),
                     ))
                 # Don't lock yet: peer might still be in spray phase
                 # and not listening. Continue watching for their
@@ -265,6 +285,11 @@ def watch_for_winner(
             buf, addr = s.recvfrom(UDP_PUNCH_FRAME_LEN, socket.MSG_PEEK)
         except OSError:
             continue
+        # Same flowinfo normalization as the main loop -- XP's
+        # stack returns bogus flowinfo on recvfrom and any
+        # subsequent connect/sendto on that addr raises.
+        if len(addr) == 4:
+            addr = (addr[0], addr[1], 0, addr[3])
         kind, recv_nonce = parse_frame(buf)
         if kind == UDP_PUNCH_KIND_CONFIRM and recv_nonce == nonce:
             try:
