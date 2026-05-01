@@ -14,6 +14,56 @@ remote client <---- punched sock   |  reverse server accept():
 punched sock <---> reverse sock    |
                                    |
 punched sock <---> reverse sock <-----> punch proc connection
+
+
+Why the loopback bridge (listener on 0.0.0.0, worker connects 127.0.0.1)
+=======================================================================
+
+The "punch proc" runs in a ThreadPoolExecutor worker thread (see
+docstring on punching_process below for why we left the
+ProcessPoolExecutor model). Threading does mean the parent and
+worker share an address space, so in principle the worker could
+hand the punched socket directly to the main asyncio loop -- no
+serialisation, no Reduction trick.
+
+In practice we don't, for two reasons:
+
+  1. The asyncio selector is bound to the main thread's event loop.
+     Sockets created or connected on the worker thread can't be
+     registered with the main loop's selector cleanly: cross-thread
+     fd registration races the selector's poll cycle and silently
+     drops events on some platforms (Windows ProactorEventLoop is
+     particularly hostile, but even our SelectorEventLoop has
+     ordering issues when add_reader fires from a non-loop thread).
+     Routing the punched socket through a fresh connect from worker
+     -> listener-in-main-loop sidesteps the whole class of problem:
+     the kernel hands the main loop a freshly-accepted socket that
+     it owns from the start.
+
+  2. We need a one-shot rendezvous between worker and main process
+     anyway, because the worker is firing the simultaneous-open
+     spray on the BLOCKING side (5s in tcp_punch_utils.py:255). The
+     main loop has to keep handling MQTT signaling, plugin lifecycle
+     timeouts, and other plugin attempts during that 5s. A
+     listen-server in the main loop is already the simplest way to
+     synchronise "worker is done, here is the result" without
+     polling shared state.
+
+The listener is bound to 0.0.0.0 / :: (any address) rather than
+the NIC IP, and the worker connects back to 127.0.0.1 / ::1, for
+two more reasons:
+
+  - The bridge is ALWAYS same-host (worker thread to main loop).
+    There's no reason to traverse the NIC. Loopback shaves out one
+    layer of routing and any NIC-driver / firewall interaction.
+
+  - On Windows XP, a TCP connect FROM the NIC IP back to the SAME
+    NIC IP can hit the strong host model and get refused with
+    WinError 10061 ("connection refused"). Vista+ silently routes
+    same-NIC-to-same-NIC through loopback so the bug never showed
+    on later OSes -- but it bit us on XP. Routing the worker's
+    reverse-connect through 127.0.0.1 removes the class of host-
+    model and NIC-routing risk regardless of OS version.
 """
 
 from typing import Any, Optional
