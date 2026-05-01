@@ -86,22 +86,55 @@ def fire_probes(
         (dest_ip, len(bound_socks), dest_tups, spray_duration, nonce.hex()),
     ))
     rounds = 0
-    while time.monotonic() < end:
-        if stop_reader is not None and sock_has_data(stop_reader):
-            log("udp_punch.fire_probes: stop_reader signalled; aborting spray")
-            return
-        for (_, s), tup in zip(bound_socks, dest_tups):
+    sendto_errors = 0
+    last_heartbeat = time.monotonic()
+    try:
+        while time.monotonic() < end:
             try:
-                s.sendto(frame, tup)
-            except OSError:
-                # ICMP-unreachable on some NATs surfaces as ECONNREFUSED
-                # the NEXT sendto. Ignore -- next round will retry.
-                pass
-        rounds += 1
-        time.sleep(spray_interval)
+                stop_signalled = (
+                    stop_reader is not None and sock_has_data(stop_reader)
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                log(fstr(
+                    "udp_punch.fire_probes: sock_has_data raised {0!r}; treating as no-stop",
+                    (exc,),
+                ))
+                stop_signalled = False
+            if stop_signalled:
+                log("udp_punch.fire_probes: stop_reader signalled; aborting spray")
+                return
+            for (_, s), tup in zip(bound_socks, dest_tups):
+                try:
+                    s.sendto(frame, tup)
+                except OSError as exc:
+                    # ICMP-unreachable on some NATs surfaces as ECONNREFUSED
+                    # the NEXT sendto. Ignore -- next round will retry.
+                    sendto_errors += 1
+                    if sendto_errors <= 3 or sendto_errors % 50 == 0:
+                        log(fstr(
+                            "udp_punch.fire_probes: sendto err #{0} on tup={1}: {2!r}",
+                            (sendto_errors, tup, exc),
+                        ))
+            rounds += 1
+            now = time.monotonic()
+            if now - last_heartbeat >= 0.5:
+                elapsed = "{0:.2f}".format(now - (end - spray_duration))
+                remaining = "{0:.2f}".format(end - now)
+                log(fstr(
+                    "udp_punch.fire_probes: heartbeat round={0} elapsed={1}s remaining={2}s",
+                    (rounds, elapsed, remaining),
+                ))
+                last_heartbeat = now
+            time.sleep(spray_interval)
+    except Exception as exc:  # pylint: disable=broad-except
+        log(fstr(
+            "udp_punch.fire_probes: LOOP RAISED {0!r} at round={1}",
+            (exc, rounds),
+        ))
+        raise
     log(fstr(
-        "udp_punch.fire_probes: spray ended after {0} rounds dest_ip={1}",
-        (rounds, dest_ip),
+        "udp_punch.fire_probes: spray ended after {0} rounds dest_ip={1} sendto_errs={2}",
+        (rounds, dest_ip, sendto_errors),
     ))
 
 
@@ -315,14 +348,20 @@ def udp_punch_engine(
     # sides spray in the same window.
     f_sleep_until()
 
+    log("udp_punch_engine: entering fire_probes")
     fire_probes(
         bound_socks, dest_ip, nonce,
         spray_duration=spray_duration, stop_reader=stop_reader,
     )
+    log("udp_punch_engine: fire_probes returned; entering watch_for_winner")
     winner = watch_for_winner(
         bound_socks, nonce, listen_duration,
         retry_interval=retry_interval, stop_reader=stop_reader,
     )
+    log(fstr(
+        "udp_punch_engine: watch_for_winner returned {0}",
+        ("WINNER" if winner else "None",),
+    ))
 
     if winner is None:
         log("udp_punch_engine: no convergence; returning None")
