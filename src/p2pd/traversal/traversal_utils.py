@@ -410,16 +410,12 @@ def sig_msg_to_buf(msg: Any, dest_pk: Optional[Any]) -> bytes:
 
 
 async def close_plugin(plugin: Any, plugins: Dict[str, Any], inbound_pipes: Dict[str, Any]) -> None:
-    """Remove a plugin from the registries and call its close method if present."""
-    if hasattr(plugin, "plugin_id"):
-        plugins.pop(plugin.plugin_id, None)
-        inbound_pipes.pop(plugin.plugin_id, None)
-
-    close_fn = getattr(plugin, "close", None)
-    if callable(close_fn):
-        try:
-            result = close_fn()
-            if asyncio.iscoroutine(result):
-                await result
-        except (OSError, asyncio.TimeoutError):
-            log_exception()
+    """No-op for now. Cleanup semantics across plugins are flawed -- popping
+    the plugin registry the moment result.done() is racing with the executor
+    worker that's still alive (udp_punch's spray + bridge, tcp_punch's reverse
+    server, turn's allocation lifecycle). The follow-up signal then re-enters
+    run() with empty state and spawns a duplicate engine that collides on the
+    same predicted ports (Windows EADDRINUSE 10048). Will be revisited in a
+    dedicated session; for now leave registries populated and the plugin's
+    close() unrun on the per-message path."""
+    return
