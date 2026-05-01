@@ -7,13 +7,48 @@ python3 run_pnp_serv.py
 
 from typing import Any, List, Optional, Tuple
 import asyncio
+import time
 from aionetiface import (
-    to_s, fstr, log, log_exception, h_to_b,
+    to_s, to_b, fstr, log, log_exception, h_to_b,
     DUEL_STACK, IP4, IP6, PNP_SERVERS, VALID_AFS,
     strip_none, async_wrap_errors, SigningKey,
 )
 import namebump
 from ..errors import StartNodeNicknameFailed
+
+
+# Timestamp envelope for PNP record values. Wraps the payload with a
+# magic prefix + 8-byte big-endian unix timestamp so peers can detect
+# stale records (e.g. node that died, public-key got rotated, dest
+# behind a partition that hasn't refreshed its put). Records written
+# before this envelope existed don't have the prefix and are treated
+# as ts=0 ("indefinitely old") so the staleness filter only flags
+# them when a min_fresh_secs is requested.
+PNP_TS_MAGIC = b"PNP1"
+PNP_TS_HEADER_LEN = 12  # 4 magic + 8 timestamp
+
+
+def pnp_wrap_with_ts(value: Any, ts: Optional[int] = None) -> bytes:
+    """Prefix value with a timestamp envelope for staleness detection."""
+    if ts is None:
+        ts = int(time.time())
+    return PNP_TS_MAGIC + ts.to_bytes(8, "big") + to_b(value)
+
+
+def pnp_unwrap_ts(value: Any) -> Tuple[int, Any]:
+    """Split a (possibly wrapped) PNP value into (timestamp, payload).
+
+    Returns (0, value) if the value isn't in the wrapped format -- this
+    keeps callers backwards-compatible with records that pre-date the
+    envelope. ts=0 means "unknown / treat as very old"; only records
+    with a ts > 0 survive a non-zero min_fresh_secs filter.
+    """
+    if not isinstance(value, (bytes, bytearray)):
+        return 0, value
+    if len(value) < PNP_TS_HEADER_LEN or bytes(value[:4]) != PNP_TS_MAGIC:
+        return 0, value
+    ts = int.from_bytes(bytes(value[4:12]), "big")
+    return ts, bytes(value[12:])
 
 PNP_INDEX_TO_TLD = {
     frozenset([0]): ".p2p",
@@ -162,11 +197,28 @@ class Nickname:
         return self
 
     async def put(self, name: Any, value: Any, behavior: Any = namebump.DO_BUMP, timeout: int = NAMING_TIMEOUT) -> str:
-        """Store value under name on all reachable PNP servers and return the resulting name with TLD."""
+        """Store value under name on all reachable PNP servers and return the resulting name with TLD.
+
+        The stored bytes are wrapped with a timestamp envelope (magic
+        prefix + unix ts) so readers can filter by staleness via
+        Nickname.get(min_fresh_secs=...). Callers pass the raw payload
+        (e.g. addr_bytes); the envelope is added here.
+        """
         if not self.started:
             raise AssertionError("Nickname client not started. Call start() first.")
         name = pnp_strip_tlds(name)
         log(fstr("Nickname.put: name={0} timeout={1}", (name, timeout)))
+
+        # Wrap the value with the freshness envelope. The timestamp
+        # written here is what Nickname.get(min_fresh_secs=...) checks
+        # against -- a writer with a wildly skewed clock would produce
+        # records that look "from the future" or "indefinitely old"
+        # depending on direction. The matrix VMs have NTP-aligned
+        # clocks so this isn't a concern in practice; for hosts
+        # without working NTP the staleness filter degrades to "treat
+        # all wrapped records as fresh" which is the same as the
+        # legacy unwrapped behaviour.
+        wrapped_value = pnp_wrap_with_ts(value)
 
         # Single coro for storing at one server. namebump.Client.put
         # retries internally on transient network errors, so this worker
@@ -188,7 +240,7 @@ class Nickname:
                         "Nickname.put: offset={0} af={1} -> client.put",
                         (offset, af),
                     ))
-                    ret = await client.put(name, value, client.kp, behavior)
+                    ret = await client.put(name, wrapped_value, client.kp, behavior)
                     dt = int((_time.time() - t0) * 1000)
                     if ret is None:
                         log(fstr(
@@ -242,8 +294,26 @@ class Nickname:
             ),
         )
 
-    async def get(self, name: Any, timeout: int = NAMING_TIMEOUT) -> Optional[Any]:
-        """Look up name on the authoritative PNP servers and return the first successful result."""
+    async def get(
+        self,
+        name: Any,
+        timeout: int = NAMING_TIMEOUT,
+        min_fresh_secs: int = 0,
+    ) -> Optional[Any]:
+        """Look up name on the authoritative PNP servers and return the first successful result.
+
+        min_fresh_secs > 0 enables staleness filtering. The stored
+        record's timestamp must be within (now - min_fresh_secs)
+        seconds for the result to be returned; older records are
+        skipped and the next server / next iteration is tried.
+        Records written without the freshness envelope (legacy data
+        that pre-dates pnp_wrap_with_ts) report ts=0 and pass through
+        the filter only when min_fresh_secs == 0.
+
+        On a successful return, ret.value is the unwrapped payload
+        (envelope stripped) and ret.pnp_ts is set to the record's
+        timestamp (0 for legacy records).
+        """
         if not self.started:
             raise AssertionError("Nickname client not started. Call start() first.")
 
@@ -272,6 +342,26 @@ class Nickname:
                         (offset, af, has_val, int(dt * 1000)),
                     ))
                     if ret is not None:
+                        # Unwrap freshness envelope. Legacy unwrapped
+                        # records report ts=0; ret.value is replaced
+                        # with the bare payload either way so callers
+                        # don't see the envelope bytes.
+                        if ret.value is not None:
+                            ts, payload = pnp_unwrap_ts(ret.value)
+                            ret.value = payload
+                            ret.pnp_ts = ts
+                            if min_fresh_secs > 0:
+                                age = int(_time.time()) - ts if ts else None
+                                if ts == 0 or age > min_fresh_secs:
+                                    log(fstr(
+                                        "Nickname.get: offset={0} af={1} stale "
+                                        "ts={2} age={3}s threshold={4}s "
+                                        "(skipping)",
+                                        (offset, af, ts, age, min_fresh_secs),
+                                    ))
+                                    continue
+                        else:
+                            ret.pnp_ts = 0
                         return ret
                 except asyncio.CancelledError:  # pylint: disable=try-except-raise
                     raise
