@@ -196,7 +196,12 @@ class TURNPlugin(TraversalPlugin):
             pass
 
         if not connection_succeeded:
-            turn_client = self.turn_clients.pop(self.plugin_id, None)
+            # Per-run cleanup intentionally does NOT pop turn_clients
+            # here. Cleanup semantics across plugins will be revisited
+            # in a dedicated session; for now leave the entry so a
+            # peer's follow-up signal doesn't trigger a duplicate
+            # allocation while the original is still tearing down.
+            turn_client = self.turn_clients.get(self.plugin_id)
             if turn_client is not None:
                 await turn_client.close()
 

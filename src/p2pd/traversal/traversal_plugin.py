@@ -119,11 +119,11 @@ class TraversalPlugin:
 
     async def wait_for_inbound(self) -> Any:
         """Await the Future for this plugin's inbound connection and clean up on failure."""
-        try:
-            return await self.inbound_pipes[self.plugin_id]
-        except BaseException:
-            self.inbound_pipes.pop(self.plugin_id, None)
-            raise
+        # Per-run cleanup intentionally does NOT pop inbound_pipes
+        # here. Cleanup semantics across plugins will be revisited in
+        # a dedicated session; for now leave the entry so a late
+        # inbound connection has somewhere to land.
+        return await self.inbound_pipes[self.plugin_id]
 
     async def run(self, reply: Optional[Any] = None) -> None:
         """Execute the traversal strategy; subclasses must override this method."""

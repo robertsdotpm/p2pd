@@ -351,11 +351,15 @@ class PunchPlugin(TraversalPlugin):
             ))
             raise
         finally:
-            # Always remove shared state so subsequent attempts start clean.
-            # This runs on normal completion, cancellation, and exceptions.
+            # Per-run cleanup intentionally does NOT pop punch_proc /
+            # punch_clients here. Popping mid-run lets a peer's follow-up
+            # signal re-enter run() and spawn a SECOND engine task with
+            # the same predicted ports while the first worker is still
+            # holding them -- bind_punch_sockets then fails 4/4 with
+            # EADDRINUSE 10048 and the bridge is wired to a dead engine.
+            # close() is the only place that pops; cleanup semantics
+            # will be revisited in a dedicated session.
             log("[PUNCH-DELAY] finally plugin_id={0}".format(self.plugin_id))
-            self.punch_proc.pop(self.plugin_id, None)
-            self.punch_clients.pop(self.plugin_id, None)
             self.completed_pipe_ids.add(self.plugin_id)
             # Post-mortem: are any of our boundary 4-tuples still in
             # TIME_WAIT? With SO_LINGER {1,0} on punch sockets the
