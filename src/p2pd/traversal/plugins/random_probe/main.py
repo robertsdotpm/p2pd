@@ -17,6 +17,7 @@ for random-probe; see the design note at the bottom of this file.
 import asyncio
 import os
 import socket as socket_mod
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from aionetiface import (
@@ -345,15 +346,15 @@ class RandomProbePlugin(TraversalPlugin):
                 self.result.set_result(None)
             return
 
-        # Drain in-flight probe datagrams that landed during
-        # convergence + the next ~0.8 s window. selector_proxy +
-        # the listener-side stream filter handle anything that
-        # slips through the gap.
-        drained = drain_probe_residue(res["sock"], nonce)
-        late = await async_drain_probe_residue(res["sock"], nonce, duration=0.8)
-        log("RandomProbePlugin: drained {0}+{1} residual probe(s)".format(
-            drained, late,
-        ))
+        # NOTE: drain + sock.connect(peer) deliberately moved into
+        # the bridge_worker below (match udp_punch's structure).
+        # Doing them in main between algorithm-return and bridge-
+        # start was the prior approach; it left a window where
+        # asyncio could see the punched fd via the running loop's
+        # internal bookkeeping (resolve_route, async_drain_probe_residue's
+        # asyncio.sleep yields), which is exactly the deaf-wrap risk
+        # the bridge is meant to side-step. Keep punched_sock
+        # untouched by main; do all of it in the worker.
 
         # ---- Bridge setup (mirrors tcp_punch reverse_server / udp_punch d5ad7fe) ----
         #
@@ -481,33 +482,63 @@ class RandomProbePlugin(TraversalPlugin):
         except (AttributeError, TypeError):
             pass
 
-        # Connect the punched sock to the peer so selector_proxy's
-        # connected-DGRAM recv()/send() target it correctly.
-        try:
-            res["sock"].connect(res["peer"])
-        except OSError as exc:
-            log("RandomProbePlugin: punched_sock.connect failed: " + repr(exc))
-            for s in (listener_sock, worker_sock, res["sock"]):
-                try:
-                    s.close()
-                except OSError:
-                    pass
-            if not self.result.done():
-                self.result.set_result(None)
-            return
-
-        # Fire-and-forget bridge worker: forwards bytes between the
-        # punched sock and worker_sock (which is loopback-connected
-        # to listener_sock, the wrapped Pipe). Closes when either
-        # leg disconnects or stop_reader signals.
+        # Fire-and-forget bridge worker: drains probe residue,
+        # connects punched_sock to peer, then forwards bytes between
+        # the punched sock and worker_sock (which is loopback-
+        # connected to listener_sock, the wrapped Pipe). Closes when
+        # stop_reader signals.
         loop_for_bridge = asyncio.get_event_loop()
         punched_sock_ref = res["sock"]
+        peer_ref = res["peer"]
+        nonce_ref = nonce
         stop_reader = self.stop_reader
         listener_addr_ref = listener_addr
         worker_sock_ref = worker_sock
 
         def bridge_worker():
             try:
+                # Drain in-flight probe datagrams that landed during
+                # convergence. Sync-only -- mirrors udp_punch's
+                # punch_and_bridge structure where drain runs in the
+                # worker thread, never in main, so asyncio's selector
+                # never sees the punched fd before selector_proxy
+                # takes ownership.
+                drained = drain_probe_residue(punched_sock_ref, nonce_ref)
+                # Short polling window (~0.8s) to absorb late probes
+                # the carrier buffered between sym's last send and
+                # arrival on the cone's NIC. Sync equivalent of the
+                # async_drain_probe_residue we used to call from main.
+                deadline = time.monotonic() + 0.8
+                late = 0
+                while time.monotonic() < deadline:
+                    try:
+                        data, _ = punched_sock_ref.recvfrom(
+                            4096, socket_mod.MSG_PEEK,
+                        )
+                    except (BlockingIOError, OSError):
+                        time.sleep(0.05)
+                        continue
+                    from .random_probe_lib import decode_probe
+                    if decode_probe(data, nonce_ref) is None:
+                        time.sleep(0.05)
+                        continue
+                    try:
+                        punched_sock_ref.recvfrom(4096)
+                        late += 1
+                    except OSError:
+                        break
+                log("RandomProbePlugin: drained {0}+{1} residual "
+                    "probe(s)".format(drained, late))
+
+                # Connect punched_sock to peer so selector_proxy's
+                # connected-DGRAM recv()/send() target it correctly.
+                try:
+                    punched_sock_ref.connect(peer_ref)
+                except OSError as exc:
+                    log("RandomProbePlugin: punched_sock.connect "
+                        "failed: " + repr(exc))
+                    return
+
                 selector_proxy(
                     punched_sock_ref,
                     listener_addr_ref,
