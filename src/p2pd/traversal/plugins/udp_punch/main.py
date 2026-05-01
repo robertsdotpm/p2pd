@@ -505,12 +505,15 @@ class UdpPunchPlugin(TraversalPlugin):
                     ))
 
             # Block until the worker either converges (engine winner +
-            # selector_proxy ready) or fails. Bounded by the plugin's
-            # own timeout via run_plugin's asyncio.wait_for, and
-            # additionally by an explicit ceiling to surface worker
-            # hangs as None instead of waiting the full plugin timeout.
+            # selector_proxy ready) or fails. The ceiling has to cover
+            # the FULL pre-spray sleep_until wait (up to ~max_sleep
+            # seconds while we wait for the next NTP rendezvous bucket)
+            # plus spray + listen + a small slop for residue drain and
+            # connect. Without that the wait fires before sleep_until
+            # even returns and every pair records as no-convergence.
             engine_ceiling = (
-                params.get("connect_timeout", 3.0)
+                params.get("max_sleep", 65)
+                + params.get("connect_timeout", 3.0)
                 + params.get("monitor_timeout", 3.0)
                 + 5.0
             )
@@ -649,7 +652,7 @@ class UdpPunchPluginFactory:
         self.nic_ids_owned = []
 
 
-PLUGIN_CONF = {"timeout": 30}
+PLUGIN_CONF = {"timeout": 150}
 
 PROTO_MESSAGES = (
     (UdpPunchMsg, P2P_PUNCH, 20),
