@@ -496,11 +496,15 @@ class RandomProbePlugin(TraversalPlugin):
         except (AttributeError, TypeError):
             pass
 
-        # Fire-and-forget bridge worker: drains probe residue,
-        # connects punched_sock to peer, then forwards bytes between
-        # the punched sock and worker_sock (which is loopback-
-        # connected to listener_sock, the wrapped Pipe). Closes when
-        # stop_reader signals.
+        # Bridge worker: drains probe residue, connects punched_sock
+        # to peer, signals convergence, then forwards bytes via
+        # selector_proxy. Mirrors udp_punch's punch_and_bridge pattern:
+        # the worker signals bridge_ready BEFORE entering selector_proxy
+        # so main only resolves result AFTER the bridge is live.
+        # Without this, result.set_result fires before bridge_worker
+        # starts; demo echo bytes queue in worker_sock with nobody
+        # reading them and the 4s echo timeout fires before
+        # selector_proxy ever begins forwarding.
         loop_for_bridge = asyncio.get_event_loop()
         punched_sock_ref = res["sock"]
         peer_ref = res["peer"]
@@ -509,19 +513,18 @@ class RandomProbePlugin(TraversalPlugin):
         listener_addr_ref = listener_addr
         worker_sock_ref = worker_sock
 
+        bridge_ready_fut = loop_for_bridge.create_future()
+
+        def signal_bridge_ready(success):
+            if not bridge_ready_fut.done():
+                bridge_ready_fut.set_result(success)
+
         def bridge_worker():
             try:
-                # Drain in-flight probe datagrams that landed during
-                # convergence. Sync-only -- mirrors udp_punch's
-                # punch_and_bridge structure where drain runs in the
-                # worker thread, never in main, so asyncio's selector
-                # never sees the punched fd before selector_proxy
-                # takes ownership.
                 drained = drain_probe_residue(punched_sock_ref, nonce_ref)
                 # Short polling window (~0.8s) to absorb late probes
                 # the carrier buffered between sym's last send and
-                # arrival on the cone's NIC. Sync equivalent of the
-                # async_drain_probe_residue we used to call from main.
+                # arrival on the cone's NIC.
                 deadline = time.monotonic() + 0.8
                 late = 0
                 while time.monotonic() < deadline:
@@ -541,18 +544,27 @@ class RandomProbePlugin(TraversalPlugin):
                         late += 1
                     except OSError:
                         break
-                log("RandomProbePlugin: drained {0}+{1} residual "
-                    "probe(s)".format(drained, late))
+                print("[RP-BRIDGE] drain done: {0}+{1} probes".format(drained, late))
 
-                # Connect punched_sock to peer so selector_proxy's
-                # connected-DGRAM recv()/send() target it correctly.
                 try:
                     punched_sock_ref.connect(peer_ref)
                 except OSError as exc:
                     log("RandomProbePlugin: punched_sock.connect "
                         "failed: " + repr(exc))
+                    loop_for_bridge.call_soon_threadsafe(
+                        signal_bridge_ready, False,
+                    )
                     return
 
+                # Signal convergence BEFORE entering selector_proxy so
+                # main can resolve result and the demo can start sending.
+                # selector_proxy starts on the very next line -- by the
+                # time asyncio processes the call_soon_threadsafe the
+                # proxy is already in its select() loop.
+                print("[RP-BRIDGE] connect OK, signaling, entering selector_proxy")
+                loop_for_bridge.call_soon_threadsafe(
+                    signal_bridge_ready, True,
+                )
                 selector_proxy(
                     punched_sock_ref,
                     listener_addr_ref,
@@ -562,14 +574,34 @@ class RandomProbePlugin(TraversalPlugin):
                 )
             except Exception:  # pylint: disable=broad-except
                 log_exception()
-            log("RandomProbePlugin: bridge worker exiting")
+                loop_for_bridge.call_soon_threadsafe(
+                    signal_bridge_ready, False,
+                )
+            print("[RP-BRIDGE] worker exiting")
 
-        loop_for_bridge.run_in_executor(None, bridge_worker)
+        worker_fut = loop_for_bridge.run_in_executor(None, bridge_worker)
 
-        log("RandomProbePlugin: returning bridge pipe role={0} listener={1} peer={2}".format(
-            my_role, listener_addr, res["peer"]))
+        def worker_done(fut):
+            if not bridge_ready_fut.done():
+                bridge_ready_fut.set_result(False)
+        worker_fut.add_done_callback(worker_done)
+
+        # Wait until the bridge is live (drain + connect done) before
+        # handing the pipe to the caller. Ceiling covers drain (~0.8s)
+        # + connect + small slop.
+        bridge_ceiling = 5.0
+        try:
+            bridge_ready = await asyncio.wait_for(
+                bridge_ready_fut, timeout=bridge_ceiling,
+            )
+        except asyncio.TimeoutError:
+            bridge_ready = False
+
+        print("[RP-BRIDGE] bridge_ready={0} role={1} listener={2} peer={3}".format(
+            bridge_ready, my_role, listener_addr, res["peer"],
+        ))
         if not self.result.done():
-            self.result.set_result(pipe)
+            self.result.set_result(pipe if bridge_ready else None)
 
         # Diagnostic: send a literal RAW-SOCK probe directly on
         # the underlying sock (bypassing the Pipe entirely) to
