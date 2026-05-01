@@ -70,7 +70,16 @@ class UdpPunchPlugin(TraversalPlugin):
         # peer knows what magic to look for in inbound probes. We attach
         # it on every outbound -- repeated copies cost nothing and let
         # late-arriving peers join.
-        outgoing_msg.payload.mappings = [m.to_json() for m in self.nat_alloc.send_mappings]
+        # send_mappings is only populated after nat_alloc.port_alloc()
+        # runs; the TCP_PUNCH_LAN short-circuit in
+        # advance_punching_protocol returns before that call so the
+        # attribute may not exist. Default to whatever the LAN path
+        # already put on payload.mappings (empty list).
+        send_mappings = getattr(self.nat_alloc, "send_mappings", None)
+        if send_mappings:
+            outgoing_msg.payload.mappings = [
+                m.to_json() for m in send_mappings
+            ]
 
         await self.send_signal_msg(outgoing_msg)
 
