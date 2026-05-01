@@ -583,6 +583,13 @@ def sync_run_non_sym_side(
         except OSError:
             return None
 
+        # Normalize v6 peer addr -- XP's stack returns garbage in
+        # the flowinfo field (>2^20) which makes any subsequent
+        # sendto / connect raise OverflowError. Mirrors the fix
+        # in udp_punch_engine.watch_for_winner.
+        if len(peer) == 4:
+            peer = (peer[0], peer[1], 0, peer[3])
+
         # Probe-only consumption: non-probes stay in the queue
         # for the application Pipe.
         parsed = decode_probe(data, nonce)
@@ -669,6 +676,9 @@ def sync_run_symmetric_side(
                 continue
             except OSError:
                 continue
+            # Normalize v6 peer addr (XP flowinfo workaround).
+            if len(peer) == 4:
+                peer = (peer[0], peer[1], 0, peer[3])
             parsed = decode_probe(data, nonce)
             if parsed is None:
                 # Non-probe -- leave for Pipe.  Don't drain this
