@@ -8,11 +8,11 @@ PROBE_MAGIC = b"P2RP"
 # Total probe payload length: magic(4) + nonce(16) + role(1) + idx(2)
 PROBE_LEN = 4 + 16 + 1 + 2
 
-# Default per-side probe count.  Birthday paradox: with N=256 probes
-# each, P(collision somewhere in 65 535 ports) ~= 1 - exp(-N^2/65535)
-# ~= 0.63.  N=350 gets you ~0.85.  Tailscale uses 256 in their blog
-# write-up and that's what we default to.
-DEFAULT_PROBE_COUNT = 256
+# Default per-side probe count.  Birthday paradox: both sides draw N
+# ports from [PROBE_PORT_LO, PROBE_PORT_HI] = 32768 ports.
+# P(at least one match) ~= 1 - exp(-N^2/32768).
+# N=256 -> ~86.5%  N=512 -> ~99.97%  N=1024 -> ~100%
+DEFAULT_PROBE_COUNT = 512
 
 # Lowest destination port we'll fire at / bind from.  Below 1024 is
 # privileged on POSIX and below 32 768 is in many OSes' static-service
