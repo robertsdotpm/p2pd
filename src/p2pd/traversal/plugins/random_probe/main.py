@@ -722,7 +722,7 @@ class RandomProbePluginFactory:
         return None
 
 
-PLUGIN_CONF = {"timeout": 30}
+PLUGIN_CONF = {"timeout": 150}
 
 PROTO_MESSAGES = (
     (RandomProbeMsg, P2P_RANDOM_PROBE, 18),
