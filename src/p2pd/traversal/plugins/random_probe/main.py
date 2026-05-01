@@ -309,14 +309,8 @@ class RandomProbePlugin(TraversalPlugin):
                 or self.my_addr_ip
                 or None
             )
-            from aionetiface.nic.nat.nat_defs import (
-                FULL_CONE,
-                OPEN_INTERNET,
-                SYMMETRIC_UDP_FIREWALL,
-            )
             our_nat_type = int((my_nat or {}).get("type") or 0)
-            permissive_nats = (FULL_CONE, OPEN_INTERNET, SYMMETRIC_UDP_FIREWALL)
-            require_alignment = our_nat_type not in permissive_nats
+            require_alignment = True
             print("[RP-FILTER] our_nat={0} require_alignment={1}".format(
                 our_nat_type, require_alignment,
             ))
