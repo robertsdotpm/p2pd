@@ -203,6 +203,22 @@ except ImportError:
     pass
 
 
+def normalize_ip6(addr):
+    """Return canonical (compressed, no leading zeros) IPv6 address string.
+
+    Strips any %scope suffix before normalising so the result is safe
+    to pass to sendto 2-tuples and string comparisons alike.  IPv4
+    addresses are returned unchanged.
+    """
+    if ":" not in addr:
+        return addr
+    try:
+        import ipaddress
+        return str(ipaddress.ip_address(addr.split("%")[0]))
+    except (ValueError, AttributeError):
+        return addr
+
+
 def close_all(socks: List[socket.socket]) -> None:
     """Close every socket; never raises (best-effort cleanup)."""
     for s in socks:
@@ -550,6 +566,8 @@ def sync_run_non_sym_side(
     _read_ready installs cleanly and fires reliably on inbound.
     """
     import select as select_mod
+    own_ext_ip = normalize_ip6(own_ext_ip) if own_ext_ip else own_ext_ip
+    peer_ext_ip = normalize_ip6(peer_ext_ip)
     if sock is None:
         sock = make_udp_socket(bind_ip, known_port, interface=interface)
     sock.setblocking(False)
@@ -611,7 +629,7 @@ def sync_run_non_sym_side(
         # in udp_punch_engine.watch_for_winner.
         if len(peer) == 4:
             scope_id = peer[3] if str(peer[0]).lower().startswith("fe80") else 0
-            peer = (peer[0], peer[1], 0, scope_id)
+            peer = (normalize_ip6(peer[0]), peer[1], 0, scope_id)
 
         # Probe-only consumption: non-probes stay in the queue
         # for the application Pipe.
@@ -676,7 +694,8 @@ def sync_run_non_sym_side(
             except OSError:
                 break
             if len(cpeer) == 4:
-                cpeer = (cpeer[0], cpeer[1], 0, cpeer[3])
+                scope_id = cpeer[3] if str(cpeer[0]).lower().startswith("fe80") else 0
+                cpeer = (normalize_ip6(cpeer[0]), cpeer[1], 0, scope_id)
             cparsed = decode_probe(cdata, nonce)
             if cparsed is None:
                 time.sleep(0.02)
@@ -739,6 +758,7 @@ def sync_run_symmetric_side(
     waiting for the first cone CONFIRM.
     """
     import select as select_mod
+    cone_ext_ip = normalize_ip6(cone_ext_ip)
     src_ports = random_probe_ports(probe_count, rng=rng)
     socks = []
     for src_port in src_ports:
@@ -787,7 +807,7 @@ def sync_run_symmetric_side(
             # Normalize v6 peer addr (XP flowinfo workaround).
             if len(peer) == 4:
                 scope_id = peer[3] if str(peer[0]).lower().startswith("fe80") else 0
-                peer = (peer[0], peer[1], 0, scope_id)
+                peer = (normalize_ip6(peer[0]), peer[1], 0, scope_id)
             parsed = decode_probe(data, nonce)
             if parsed is None:
                 # Non-probe -- leave for Pipe.  Don't drain this
