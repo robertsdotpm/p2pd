@@ -610,7 +610,8 @@ def sync_run_non_sym_side(
         # sendto / connect raise OverflowError. Mirrors the fix
         # in udp_punch_engine.watch_for_winner.
         if len(peer) == 4:
-            peer = (peer[0], peer[1], 0, peer[3])
+            scope_id = peer[3] if str(peer[0]).lower().startswith("fe80") else 0
+            peer = (peer[0], peer[1], 0, scope_id)
 
         # Probe-only consumption: non-probes stay in the queue
         # for the application Pipe.
@@ -785,7 +786,8 @@ def sync_run_symmetric_side(
                 continue
             # Normalize v6 peer addr (XP flowinfo workaround).
             if len(peer) == 4:
-                peer = (peer[0], peer[1], 0, peer[3])
+                scope_id = peer[3] if str(peer[0]).lower().startswith("fe80") else 0
+                peer = (peer[0], peer[1], 0, scope_id)
             parsed = decode_probe(data, nonce)
             if parsed is None:
                 # Non-probe -- leave for Pipe.  Don't drain this
