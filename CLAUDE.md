@@ -17,6 +17,18 @@ Never use f-string literals (`f"..."`). They require Python 3.6+ and break the 3
 fstr("value is {0}", (val,))
 ```
 
+`fstr()` is a regex-based formatter and **only supports `{N}` positional placeholders**. Format-spec syntax (`{N!r}`, `{N!s}`, `{N:>5}`, `{N:.3f}`, etc.) raises `ValueError` because the regex captures the whole `1!r` and tries `int("1!r")`. If you want repr/str/formatted output, pre-format the value and pass the resulting string:
+
+```python
+# WRONG -- raises ValueError inside fstr at call time
+log(fstr("name={0!r} count={1:>5}", (name, count)))
+
+# RIGHT
+log(fstr("name={0} count={1}", (repr(name), "%5d" % count)))
+```
+
+This bug bites silently because the `ValueError` from fstr in a logging call (e.g. inside an `except` handler that itself uses fstr with `!r`) cascades and can swallow the original exception — making the failure look like a hang or silent drop rather than a logging issue. Stick to plain `{N}` in every fstr template.
+
 ## Naming
 
 Never use leading-underscore names for variables, attributes, methods, or functions (e.g. no `_foo`, `_cancel_tasks`, `_private`). Use plain names. The single exception is dunder names (`__init__`, `__all__`, etc.) which are required by Python itself.
