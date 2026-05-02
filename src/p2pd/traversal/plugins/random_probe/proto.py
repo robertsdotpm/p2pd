@@ -32,7 +32,7 @@ class RandomProbeMsg(ProtoMsg):
             magic: str,
             ext_ip: str,
             known_port: int = 0,
-            probe_count: int = 512,
+            probe_count: int = 256,
         ) -> None:
             self.role = role
             self.punch_time = int(punch_time)
@@ -59,7 +59,7 @@ class RandomProbeMsg(ProtoMsg):
                 d.get("magic", ""),
                 d.get("ext_ip", ""),
                 d.get("known_port", 0),
-                d.get("probe_count", 512),
+                d.get("probe_count", 256),
             )
 
     def __init__(self, data: Dict[str, Any]) -> None:

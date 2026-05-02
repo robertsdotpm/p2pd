@@ -11,8 +11,9 @@ PROBE_LEN = 4 + 16 + 1 + 2
 # Default per-side probe count.  Birthday paradox: both sides draw N
 # ports from [PROBE_PORT_LO, PROBE_PORT_HI] = 32768 ports.
 # P(at least one match) ~= 1 - exp(-N^2/32768).
-# N=256 -> ~86.5%  N=512 -> ~99.97%  N=1024 -> ~100%
-DEFAULT_PROBE_COUNT = 512
+# N=256 -> ~86.5%.  Higher N causes CONE->SYM socket hits (a CONE
+# probe landing on a SYM-bound port) that overwhelm Phase-2 override.
+DEFAULT_PROBE_COUNT = 256
 
 # Lowest destination port we'll fire at / bind from.  Below 1024 is
 # privileged on POSIX and below 32 768 is in many OSes' static-service
