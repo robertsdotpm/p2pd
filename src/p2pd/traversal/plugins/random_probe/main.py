@@ -124,8 +124,20 @@ class RandomProbePlugin(TraversalPlugin):
         # EXT_BIND cross-machine: use ext IPs (the production path
         # the algorithm was designed for).
         if self.route_type == NIC_BIND or self.same_machine:
-            self.my_addr_ip = str(self.src_info.get("nic") or self.src_info.get("ext") or "")
-            self.peer_addr_ip = str(self.dest_info.get("nic") or self.dest_info.get("ext") or "")
+            my_nic = self.src_info.get("nic") or self.src_info.get("ext") or ""
+            peer_nic = self.dest_info.get("nic") or self.dest_info.get("ext") or ""
+            # IPv6 link-local (fe80::) addresses require a per-host scope ID
+            # that cannot be exchanged meaningfully between machines.
+            # route.nic() returns the global address, so if the NIC address
+            # is link-local, fall back to the global (ext) address so that
+            # bind_ip and peer_addr_ip agree on address type and probes
+            # actually arrive at the listening socket.
+            if str(my_nic).lower().startswith("fe80"):
+                my_nic = self.src_info.get("ext") or my_nic
+            if str(peer_nic).lower().startswith("fe80"):
+                peer_nic = self.dest_info.get("ext") or peer_nic
+            self.my_addr_ip = str(my_nic)
+            self.peer_addr_ip = str(peer_nic)
         else:
             self.my_addr_ip = str(self.src_info.get("ext") or "")
             self.peer_addr_ip = str(self.dest_info.get("ext") or "")
