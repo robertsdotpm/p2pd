@@ -50,6 +50,7 @@ from .random_probe_lib import (
     async_drain_probe_residue,
     drain_probe_residue,
     make_udp_socket,
+    sync_run_bidirectional_spray,
     sync_run_non_sym_side,
     sync_run_symmetric_side,
     sync_stun_discover_mapping,
@@ -320,46 +321,33 @@ class RandomProbePlugin(TraversalPlugin):
         # Keeping the algorithm sync side-steps the bug
         # entirely: when the plugin hands the winning sock to
         # Pipe.connect, asyncio's selector sees a fresh fd.
+        # Direction-agnostic spray: both sides always run the same
+        # algorithm regardless of role / NAT-detection result.
+        # Symmetric mobile NAT + endpoint-independent home NAT used to
+        # only converge in one direction (LAN connector dialing mobile
+        # listener) because the asymmetric algorithm hard-coded which
+        # side did spray vs single-known-port. Bidirectional spray
+        # gives up the "one side can use a single port" optimisation
+        # in exchange for working in either direction; the bandwidth
+        # is the same (probe_count probes each way) and the expected
+        # collision count is probe_count^2 / 65000 ~= 1 with N=256.
+        # See investigation in 2026-05-03 commit history for the full
+        # case.
         loop_for_algo = asyncio.get_event_loop()
-        if my_role == "non_sym":
-            own_ext_for_filter = (
-                getattr(self, "mapped_ip", None)
-                or self.my_addr_ip
-                or None
-            )
-            our_nat_type = int((my_nat or {}).get("type") or 0)
-            require_alignment = True
-            print("[RP-FILTER] our_nat={0} require_alignment={1}".format(
-                our_nat_type, require_alignment,
-            ))
-            res = await loop_for_algo.run_in_executor(
-                None,
-                lambda: sync_run_non_sym_side(
-                    bind_ip=bind_ip,
-                    known_port=self.our_known_port(),
-                    peer_ext_ip=peer_addr_ip,
-                    nonce=nonce,
-                    probe_count=probe_count,
-                    listen_timeout=PROBE_LISTEN_TIMEOUT,
-                    sock=getattr(self, "prebound_sock", None),
-                    own_ext_ip=own_ext_for_filter,
-                    interface=self.nic,
-                    require_alignment=require_alignment,
-                ),
-            )
-        else:
-            res = await loop_for_algo.run_in_executor(
-                None,
-                lambda: sync_run_symmetric_side(
-                    bind_ip=bind_ip,
-                    cone_ext_ip=peer_addr_ip,
-                    cone_ext_port=peer_known_port,
-                    nonce=nonce,
-                    probe_count=probe_count,
-                    listen_timeout=PROBE_LISTEN_TIMEOUT,
-                    interface=self.nic,
-                ),
-            )
+        print("[RP-SPRAY-DISPATCH] role-label={0} (ignored) bind={1} peer={2}".format(
+            my_role, bind_ip, peer_addr_ip,
+        ))
+        res = await loop_for_algo.run_in_executor(
+            None,
+            lambda: sync_run_bidirectional_spray(
+                bind_ip=bind_ip,
+                peer_ext_ip=peer_addr_ip,
+                nonce=nonce,
+                probe_count=probe_count,
+                listen_timeout=PROBE_LISTEN_TIMEOUT,
+                interface=self.nic,
+            ),
+        )
 
         print("[RP-FIRE-DONE] role={0} res={1}".format(
             my_role,

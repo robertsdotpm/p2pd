@@ -1154,6 +1154,157 @@ async def run_symmetric_side(
 
 
 # ─────────────────────────────────────────────────────────────────
+# Bidirectional spray: direction-agnostic NAT punch
+# ─────────────────────────────────────────────────────────────────
+
+
+def sync_run_bidirectional_spray(
+    bind_ip: str,
+    peer_ext_ip: str,
+    nonce: bytes,
+    probe_count: int = DEFAULT_PROBE_COUNT,
+    listen_timeout: float = PROBE_LISTEN_TIMEOUT,
+    rng: Optional[random.Random] = None,
+    interface: Optional[Any] = None,
+) -> Optional[Dict[str, Any]]:
+    """Direction-agnostic random-probe punch: both sides run this same
+    code regardless of which is initiator/responder or what NAT type
+    detection said.
+
+    Algorithm: open `probe_count` UDP sockets on random local source
+    ports, fire one probe from each to a random destination port on
+    `peer_ext_ip`, then `select()` across all sockets for the first
+    incoming probe carrying the matching nonce.
+
+    Why this works for any NAT pair:
+      - Each fired probe creates an outbound NAT mapping for that
+        (local_src_port, peer_ext_ip, peer_dst_port) tuple.
+      - For a peer probe to land here, the peer must dst-match an
+        outbound mapping we have open. Since we hold `probe_count`
+        mappings (one per local socket) and the peer fires
+        `probe_count` probes at random destination ports, the
+        expected number of collisions is roughly
+        `probe_count^2 / 65000` -- with 256 each side that's ~1.
+      - No assumption about NAT type on either end. Symmetric NAT
+        (mobile carriers), full-cone, address-restricted, port-
+        restricted -- all work the same way: enough mappings open
+        on each side that some random probe pair lines up.
+
+    Trade-off vs the asymmetric algorithm: gives up the optimisation
+    where one side can use a single known port; uses 256 sockets on
+    both sides instead of 256+1. Bandwidth is the same (256 probes
+    each direction). Direction asymmetry is gone, which is what we
+    want for the matrix where NAT-type detection is unreliable.
+
+    Returns {"sock": winning_socket, "peer": (ip,port), "role": "spray"}
+    on success, or None on timeout. Caller closes the returned sock.
+    """
+    import select as select_mod
+    peer_ext_ip = normalize_ip6(peer_ext_ip)
+    src_ports = random_probe_ports(probe_count, rng=rng)
+    dst_ports = random_probe_ports(probe_count, rng=rng)
+    socks = []
+    for sp in src_ports:
+        try:
+            socks.append(make_udp_socket(bind_ip, sp, interface=interface))
+        except OSError:
+            continue
+    if not socks:
+        return None
+    for s in socks:
+        s.setblocking(False)
+
+    print("[RP-SPRAY] start nonce={0} socks={1} target_ip={2}".format(
+        nonce.hex()[:8], len(socks), peer_ext_ip,
+    ))
+
+    # Fire one probe from each socket to a random destination port.
+    # Use ROLE_SYM as the marker; the receive side accepts any role
+    # so long as the nonce matches, so it doesn't matter which label
+    # we send -- we keep ROLE_SYM purely for backward-compatibility
+    # with peers still running the old asymmetric NON_SYM code path
+    # (they look for ROLE_SYM and will still treat us as the sym
+    # peer they expect).
+    probes_sent = 0
+    for s, dp in zip(socks, dst_ports):
+        try:
+            s.sendto(
+                encode_probe(nonce, ROLE_SYM, probes_sent),
+                resolve_dest_tup(s.family, peer_ext_ip, dp, socket.SOCK_DGRAM),
+            )
+            probes_sent += 1
+        except OSError:
+            continue
+    print("[RP-SPRAY] fired {0} probes, listening".format(probes_sent))
+
+    deadline = time.time() + listen_timeout
+    winner = None
+    while time.time() < deadline:
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            break
+        try:
+            ready, _, _ = select_mod.select(socks, [], [], min(remaining, 1.0))
+        except (OSError, select_mod.error):
+            break
+        if not ready:
+            continue
+        for s in ready:
+            try:
+                data, peer = s.recvfrom(2048, socket.MSG_PEEK)
+            except (BlockingIOError, InterruptedError, OSError):
+                continue
+            # Normalize v6 peer addr (XP flowinfo workaround).
+            if len(peer) == 4:
+                scope_id = peer[3] if str(peer[0]).lower().startswith("fe80") else 0
+                peer = (normalize_ip6(peer[0]), peer[1], 0, scope_id)
+            parsed = decode_probe(data, nonce)
+            if parsed is None:
+                # Non-probe -- leave for Pipe; could be the winner
+                # whose data is being delivered concurrently with select.
+                continue
+            # Consume the probe.
+            try:
+                s.recvfrom(2048)
+            except (BlockingIOError, OSError):
+                continue
+            # Accept ANY role -- we are role-agnostic. Just need the nonce
+            # check (already done by decode_probe) and a valid peer addr.
+            if peer_ext_ip and peer[0] != peer_ext_ip:
+                continue
+            # Send CONFIRM 3x so the peer locks onto this same socket
+            # even if their first inbound was on a different one.
+            for _ in range(3):
+                try:
+                    s.sendto(
+                        encode_probe(nonce, ROLE_SYM, PROBE_IDX_CONFIRM),
+                        peer,
+                    )
+                except OSError:
+                    pass
+            winner = {"sock": s, "peer": peer, "role": "spray"}
+            break
+        if winner is not None:
+            break
+
+    if winner is None:
+        close_all(socks)
+        return None
+
+    # Close losers.
+    for s in socks:
+        if s is not winner["sock"]:
+            try:
+                s.close()
+            except OSError:
+                pass
+    print("[RP-SPRAY] converged peer={0}:{1}".format(
+        winner["peer"][0], winner["peer"][1],
+    ))
+    return winner
+
+
+# ─────────────────────────────────────────────────────────────────
 # Coordination: wait until the shared rendezvous time
 # ─────────────────────────────────────────────────────────────────
 
