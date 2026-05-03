@@ -17,6 +17,12 @@ class TURNPlugin(TraversalPlugin):
     # guard at the top of run() is no longer needed.
     SUPPORTED_ROUTE_TYPES = (EXT_BIND,)
 
+    # Maximum number of server-renegotiation round trips before giving up.
+    # Each round trip is one (initiator picks server, responder fails to
+    # reach it, signals back) cycle. With a typical INFRA TURN list of 10
+    # candidates this is generous -- 5 cycles can exclude up to 5 servers.
+    MAX_RENEGOTIATIONS = 5
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -27,62 +33,145 @@ class TURNPlugin(TraversalPlugin):
         self.msg_cb = None
         self.node_id = ""
 
+        # Set of (host, port) tuples that have been attempted and failed
+        # (or that the peer has excluded) for this plugin instance.
+        # Renegotiation excludes these from candidate pools so we never
+        # reattempt a known-bad server.
+        self.tried_servers = set()
+        self.renego_count = 0
+
     async def run(self, reply: Optional[Any] = None) -> None:
         """Allocate a TURN relay, exchange addresses with the peer, and establish the channel.
 
-        Server selection is initiator-decides (mirroring reverse_connect's
-        "I tell you what to do" pattern):
+        Server selection is initiator-decides with renegotiation. Mirrors
+        reverse_connect's "I tell you what to do" pattern but adds a back
+        channel so the responder can refuse a server and ask the initiator
+        to pick again.
+
           * Initiator (reply is None): walks rendezvous-ranked TURN
             servers via get_first_working_turn_client, allocates, then
             sends TURNMsg with server_host/server_port embedded so the
-            responder allocates on the SAME server.
-          * Responder (reply is not None): reads server_host/server_port
-            from the incoming TURNMsg.payload and allocates on that
-            specific server. Falls back to rendezvous walk only when
-            the payload has no server hint (legacy peers running
-            pre-handoff code).
+            responder allocates on the SAME server. tried_servers
+            carries every server the initiator has already attempted
+            (just the one chosen, on the first round).
+          * Responder receives TURNMsg with a server_host: tries to
+            allocate on that server. If reachable -> normal flow. If
+            unreachable -> sends back a TURNMsg with reject_reason set
+            and tried_servers including the rejected server. relay_tup
+            in the rejection is None.
+          * Initiator receives a rejection: merges tried_servers into
+            its local set, drops the cached client, picks the next
+            best server from rendezvous excluding the tried set,
+            allocates fresh, and sends a new TURNMsg.
 
-        Previously both peers walked the rendezvous-ranked list
-        independently and hoped to converge -- works most of the time
-        because the ranking is deterministic, but identical to the MQTT
-        broker-set non-convergence pattern we removed today: when one
-        peer's first-working server is briefly unreachable to the
-        other, they pick different servers and the relay session
-        can't establish.
+        The renegotiation is bounded by MAX_RENEGOTIATIONS to keep a
+        broken pair from looping forever; after that budget is spent the
+        session aborts cleanly. The previous behaviour -- one server
+        choice, no recourse -- meant any case where the initiator's
+        chosen server was reachable to it but not to the responder
+        (e.g. initiator on a mobile carrier reaching a Chinese coturn
+        the responder's home ISP can't) silently NO_ECHO'd.
         """
+        is_initial_initiator = reply is None
+        is_responder = reply is not None and not (
+            getattr(reply.payload, "reject_reason", None)
+        )
+        is_renegotiating_initiator = (
+            reply is not None and getattr(reply.payload, "reject_reason", None) is not None
+        )
+        role_label = (
+            "responder" if is_responder
+            else ("renego-initiator" if is_renegotiating_initiator else "initiator")
+        )
         log(fstr(
-            "turn[{0}]: run af={1} reply={2} role={3}",
+            "turn[{0}]: run af={1} reply={2} role={3} renego_count={4}",
             (
                 self.plugin_id, self.af, reply is not None,
-                "responder" if reply is not None else "initiator",
+                role_label, self.renego_count,
             ),
         ))
+
+        # Merge any peer-supplied tried_servers into our local set so
+        # neither side reattempts a server the other has already failed
+        # on. Both rejection messages and normal TURNMsgs may carry
+        # tried_servers; absorb either.
+        if reply is not None:
+            for s in (getattr(reply.payload, "tried_servers", None) or []):
+                try:
+                    self.tried_servers.add((s[0], int(s[1])))
+                except (IndexError, TypeError, ValueError):
+                    continue
+
+        # --- Renegotiation initiator path ----------------------------------
+        # The peer rejected our last server choice. Drop our cached client
+        # (it was good for us but useless for them) and reallocate on a
+        # different server. After MAX_RENEGOTIATIONS we give up.
+        if is_renegotiating_initiator:
+            self.renego_count += 1
+            if self.renego_count > self.MAX_RENEGOTIATIONS:
+                log(fstr(
+                    "turn[{0}]: exceeded MAX_RENEGOTIATIONS ({1}); aborting",
+                    (self.plugin_id, self.MAX_RENEGOTIATIONS),
+                ))
+                return
+            log(fstr(
+                "turn[{0}]: peer rejected our server with reason={1!r}; "
+                "renegotiating (round {2}/{3}, tried_servers={4})",
+                (
+                    self.plugin_id,
+                    getattr(reply.payload, "reject_reason", None),
+                    self.renego_count, self.MAX_RENEGOTIATIONS,
+                    sorted(self.tried_servers),
+                ),
+            ))
+            # Drop the cached client so the allocate path below picks a new one.
+            existing = self.turn_clients.get(self.plugin_id)
+            if existing is not None:
+                try:
+                    await existing.close()
+                except Exception:
+                    log_p2p("turn[{0}]: error closing rejected client".format(self.plugin_id),
+                            self.node_id[:8])
+                del self.turn_clients[self.plugin_id]
+            # From here on this branch behaves as a fresh initiator.
+            reply = None
 
         # --- Allocate a TURN relay for this session ---
         client = self.turn_clients.get(self.plugin_id)
         if client is None:
             groups = get_infra(self.af, UDP, "TURN", no=100)
             all_servers = [g[0] for g in groups]
+            # Filter out any server already in the joint tried set.
+            all_servers = [
+                s for s in all_servers
+                if (s.get("ip"), int(s.get("port", 0))) not in self.tried_servers
+            ]
 
             # Responder path: if the incoming TURNMsg specified a server
             # the initiator already allocated on, use it directly so we
-            # land on the SAME server. We still let get_first_working_turn_client
-            # do the actual connect (it handles auth and timeouts), just with
-            # a single-element list so it cannot fall through to a
-            # different server.
+            # land on the SAME server. If we cannot reach it, send a
+            # rejection back instead of silently failing.
             chosen_servers = None
+            initiator_choice = None
             if reply is not None and getattr(reply.payload, "server_host", None):
                 target_host = reply.payload.server_host
-                target_port = reply.payload.server_port
+                target_port = int(reply.payload.server_port or 0)
+                initiator_choice = (target_host, target_port)
                 for s in all_servers:
-                    if s.get("ip") == target_host and int(s.get("port", 0)) == int(target_port or 0):
+                    if s.get("ip") == target_host and int(s.get("port", 0)) == target_port:
                         chosen_servers = [s]
                         break
-                # If the initiator advertised a server we don't have in
-                # our INFRA database (rare -- both sides should share the
-                # same shipped infra), fall through to rendezvous. The
-                # session probably won't converge but at least we don't
-                # crash.
+                # If we don't have it in INFRA, treat as unreachable too --
+                # send rejection so the initiator picks something we share.
+                if chosen_servers is None:
+                    log(fstr(
+                        "turn[{0}]: initiator chose {1}:{2} but it's not in our "
+                        "INFRA / already-tried; rejecting",
+                        (self.plugin_id, target_host, target_port),
+                    ))
+                    self.tried_servers.add(initiator_choice)
+                    await self._send_rejection("not_in_infra")
+                    return
 
             if chosen_servers is None:
                 chosen_servers = rendezvous_rank(self.plugin_id, all_servers)
@@ -99,6 +188,19 @@ class TURNPlugin(TraversalPlugin):
             )
 
             if client is None:
+                # If we are the responder and the initiator picked a
+                # specific server, send a rejection so they retry. If
+                # we're the initiator (or renego-initiator) and have no
+                # working server left, abort.
+                if initiator_choice is not None:
+                    log(fstr(
+                        "turn[{0}]: failed to allocate on initiator's server "
+                        "{1}:{2}; sending rejection",
+                        (self.plugin_id, initiator_choice[0], initiator_choice[1]),
+                    ))
+                    self.tried_servers.add(initiator_choice)
+                    await self._send_rejection("unreachable")
+                    return
                 log(fstr(
                     "turn[{0}]: no working TURN server -- aborting",
                     (self.plugin_id,),
@@ -108,6 +210,12 @@ class TURNPlugin(TraversalPlugin):
                 "turn[{0}]: allocated relay on {1}",
                 (self.plugin_id, getattr(client, "dest", "?")),
             ))
+            # Record the chosen server so a later rejection round trip
+            # never re-picks it.
+            try:
+                self.tried_servers.add((client.dest[0], int(client.dest[1])))
+            except (IndexError, TypeError, ValueError):
+                pass
 
             # A concurrent run() may have raced through the await above and
             # already stored a client — reuse it and discard ours.
@@ -151,7 +259,10 @@ class TURNPlugin(TraversalPlugin):
 
         # --- Advertise our relay address (and server choice) to the peer ---
         # Embed the chosen server's host/port so the peer allocates on the
-        # SAME server. On the responder path (reply is not None) we pass
+        # SAME server. tried_servers carries our local exclusion set so
+        # the peer (whether responder, or initiator receiving our own
+        # rejection-driven rechoice) never picks something we've already
+        # ruled out. On the responder path (reply is not None) we pass
         # the same server back through, which is harmless -- the initiator
         # already used it. On the initiator path (reply is None) this is
         # how the responder learns which server to use.
@@ -163,6 +274,7 @@ class TURNPlugin(TraversalPlugin):
                     "relay_tup": await client.relay_tup_future,
                     "server_host": server_host,
                     "server_port": server_port,
+                    "tried_servers": [list(t) for t in sorted(self.tried_servers)],
                 },
             }
         )
@@ -174,6 +286,30 @@ class TURNPlugin(TraversalPlugin):
         pipe = await self.ready
         if not self.result.done():
             self.result.set_result(pipe)
+
+    async def _send_rejection(self, reason: str) -> None:
+        """Tell the peer we cannot allocate on the server they just asked us
+        to use. Carries our full tried_servers set so the peer's next pick
+        excludes everything we've ruled out, not just the one server we
+        rejected this round. relay_tup / peer_tup are filled with sentinel
+        empty tuples because the on-wire schema requires them but the
+        receiver ignores them when reject_reason is set."""
+        msg = TURNMsg(
+            {
+                "payload": {
+                    "peer_tup": ("", 0),
+                    "relay_tup": ("", 0),
+                    "tried_servers": [list(t) for t in sorted(self.tried_servers)],
+                    "reject_reason": reason,
+                },
+            }
+        )
+        msg.meta.plugin_name = "turn"
+        log(fstr(
+            "turn[{0}]: sending rejection reason={1} tried={2}",
+            (self.plugin_id, reason, sorted(self.tried_servers)),
+        ))
+        await self.send_signal_msg(msg)
 
     async def close(self) -> None:
         """Clean up after a TURN connection attempt.

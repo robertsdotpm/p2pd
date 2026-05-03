@@ -32,11 +32,29 @@ class TURNMsg(ProtoMsg):
             relay_tup: Any,
             server_host: Any = None,
             server_port: Any = None,
+            tried_servers: Any = None,
+            reject_reason: Any = None,
         ) -> None:
             self.peer_tup = peer_tup
             self.relay_tup = relay_tup
             self.server_host = server_host
             self.server_port = server_port
+            # tried_servers carries every (host, port) the SENDER has
+            # already attempted (including ones that succeeded). Receiver
+            # merges this into its own local set so neither side picks a
+            # server the peer has already excluded -- this is what lets
+            # asymmetric-reachability cases (e.g. initiator's mobile
+            # carrier reaches a Chinese coturn that the responder's home
+            # ISP can't) converge on a mutually-reachable server instead
+            # of looping forever.
+            self.tried_servers = tried_servers or []
+            # reject_reason is set when the SENDER could not allocate on
+            # the server it was asked to use. Receiver of a rejection
+            # treats it as "pick again, excluding what's now in
+            # tried_servers, send me a fresh server choice". Receiver
+            # that sees None proceeds with the normal accept-the-relay
+            # flow.
+            self.reject_reason = reject_reason
 
         def to_dict(self) -> Dict[str, Any]:
             d = {
@@ -47,6 +65,10 @@ class TURNMsg(ProtoMsg):
                 d["server_host"] = self.server_host
             if self.server_port is not None:
                 d["server_port"] = self.server_port
+            if self.tried_servers:
+                d["tried_servers"] = self.tried_servers
+            if self.reject_reason is not None:
+                d["reject_reason"] = self.reject_reason
             return d
 
         @staticmethod
@@ -56,4 +78,6 @@ class TURNMsg(ProtoMsg):
                 d["relay_tup"],
                 d.get("server_host"),
                 d.get("server_port"),
+                d.get("tried_servers") or [],
+                d.get("reject_reason"),
             )
