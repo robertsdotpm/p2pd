@@ -52,8 +52,6 @@ def is_udp_punch_datagram(msg: bytes) -> bool:
 
 async def node_protocol(node: Any, msg: bytes, client_tup: Tuple[str, int], pipe: Any) -> None:
     """Dispatch each newline-delimited message from the pipe to all registered msg_cbs."""
-    print("Node proto: ", msg)
-
     # Drop residual algorithm frames (random_probe probes, udp_punch
     # PROBE/CONFIRM): both protocols keep spraying for hundreds of ms
     # past convergence; without these filters the post-wrap Pipe
@@ -62,6 +60,8 @@ async def node_protocol(node: Any, msg: bytes, client_tup: Tuple[str, int], pipe
         return
     if is_udp_punch_datagram(msg):
         return
+
+    print("Node proto: ", msg)
 
     # Track idle pipe recv time.
     if pipe in node.resources.last_recv_queue:
