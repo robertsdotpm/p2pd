@@ -84,6 +84,21 @@ def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info:
                 pass
             if not (same_pc or same_lan):
                 continue
+            # IPv6 sanity: reject link-local destinations for cross-
+            # machine pairings. dest_info["nic"] on macOS / *BSD often
+            # comes back as the fe80::/10 link-local address because
+            # that's what the OS lists first; sending TCP to a link-
+            # local address from a different host can never work
+            # (link-local needs a scope id valid only on the same
+            # link, and routing tables won't route fe80::). For same-
+            # machine same-host the OS's local-routing shortcut still
+            # works, so we only filter when same_pc=False. Falling
+            # through here lets the caller's fallback addr_types (e.g.
+            # EXT_BIND) be tried.
+            if af == IP6 and not same_pc:
+                nic_str = str(dest_info["nic"])
+                if nic_str.lower().startswith("fe80"):
+                    continue
             return dest_info["nic"]
 
     # No compatible addresses.

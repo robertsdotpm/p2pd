@@ -72,12 +72,20 @@ class TraversalPlugin:
         # for the connectivity technique based on
         # addressing and relationships between the
         # two machines (deep networking specific.)
+        # Pass [route_type, EXT_BIND] as the fallback chain so that
+        # when the chosen route_type can't be honoured (e.g. NIC_BIND
+        # over IPv6 to a different host whose dest_info["nic"] is the
+        # link-local fe80::/10 address), select_dest_ipr can fall
+        # through to the host's globally-routable EXT address. Drops
+        # to a single-item list when route_type is already EXT_BIND
+        # to avoid double-trying the same fallback.
+        addr_types = [route_type] if route_type == EXT_BIND else [route_type, EXT_BIND]
         selected = select_dest_ipr(
             self.af,
             same_machine,
             self.src_info,
             self.dest_info,
-            [route_type],
+            addr_types,
             # can you make this case
             # run for all
             # try it
