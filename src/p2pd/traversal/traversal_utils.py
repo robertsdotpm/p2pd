@@ -30,21 +30,15 @@ def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info:
     src_nid = src_info["netiface_index"]
     dest_nid = dest_info["netiface_index"]
 
-    # Very simplified -- another external address could
-    # be routable for the same LAN. There must
-    # be a better way to do this.
+    # Two peers sharing the same external IP are behind the same NAT /
+    # on the same LAN.  For v4 this is accurate.  For v6 the ext IS the
+    # global NIC IP (no NAT), so equal ext means literally the same host;
+    # different ext means different networks -- but global v6 NIC addresses
+    # are publicly routable and handled separately in the NIC_BIND branch.
     if af == IP4:
-        # Compares external v4 default route.
         same_lan = src_info["ext"] == dest_info["ext"]
     if af == IP6:
-        # Compares the first n bits for typical v6 subnet.
-        # Todo: need to know the subnet bits for this.
         same_lan = src_info["ext"] == dest_info["ext"]
-        same_lan = 1
-
-    # Try any local address for now.
-    # Todo: write a better algorithm for this.
-    same_lan = 1
 
     # Makes long conditions slightly more readable.
     same_if = src_nid == dest_nid
@@ -74,14 +68,23 @@ def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info:
                 continue
             return dest_info["ext"]
 
-        # Local NIC address. Different NICs on the same machine but
-        # different L3 subnets won't generally interact (kernel
-        # doesn't auto-loopback cross-subnet on Windows; LOOPBACK_BIND
-        # covers that case). Same-NIC same-port works via the kernel's
-        # local-route shortcut on every supported OS.
+        # Local NIC address.
+        #
+        # v6 global NIC addresses are publicly routable (no NAT for v6),
+        # so they are valid for any pairing -- skip the same_lan gate.
+        #
+        # v6 link-local (fe80::/10) addresses are only valid on the same
+        # L2 segment; skip them when the peers are not on the same LAN.
+        #
+        # v4 private NIC addresses are only reachable within the same LAN
+        # (same NAT router = same external IP); skip otherwise.
         if addr_type == NIC_BIND:
             if not has_set_bind:
                 pass
+            if af == IP6:
+                nic_str = str(dest_info["nic"]).lower().split("%")[0]
+                if not nic_str.startswith("fe80:"):
+                    return dest_info["nic"]
             if not (same_pc or same_lan):
                 continue
             return dest_info["nic"]
