@@ -133,9 +133,17 @@ class TURNPlugin(TraversalPlugin):
                     sorted(self.tried_servers),
                 ),
             ))
-            # Drop the cached client so the allocate path below picks a new one.
+            # The previous pick is now known-bad (peer couldn't reach it),
+            # so add it to the failed set BEFORE re-picking. This is the
+            # only place a successful-allocation server gets marked tried,
+            # so the on-wire tried_servers list always means "rejected by
+            # at least one peer", not "currently in use".
             existing = self.turn_clients.get(self.plugin_id)
             if existing is not None:
+                try:
+                    self.tried_servers.add((existing.dest[0], int(existing.dest[1])))
+                except (IndexError, TypeError, ValueError):
+                    pass
                 try:
                     await existing.close()
                 except Exception:
@@ -242,12 +250,14 @@ class TURNPlugin(TraversalPlugin):
                 "turn[{0}]: allocated relay on {1}",
                 (self.plugin_id, getattr(client, "dest", "?")),
             ))
-            # Record the chosen server so a later rejection round trip
-            # never re-picks it.
-            try:
-                self.tried_servers.add((client.dest[0], int(client.dest[1])))
-            except (IndexError, TypeError, ValueError):
-                pass
+            # NB: do NOT add the freshly-allocated server to self.tried_servers.
+            # tried_servers means "rejected by at least one peer" -- it is shipped
+            # to the peer so the peer's candidate filter excludes those entries.
+            # Adding our successful pick here would cause the responder to
+            # filter it out and reply "not_in_infra", looping until both
+            # sides exhaust the list. The renego-initiator branch above is
+            # the only place a successful pick gets marked tried, and only
+            # AFTER we know the peer actually rejected it.
 
             # A concurrent run() may have raced through the await above and
             # already stored a client — reuse it and discard ours.
