@@ -445,11 +445,20 @@ async def listen_on_ifs(node: Any) -> None:
     """Bind TCP listeners across every NIC IP, plus the per-node loopback alias.
 
     Each individual bind is best-effort — a failed loopback or fe80 link-
-    local doesn't prevent the rest from coming up. The function only
-    raises (AssertionError) when ZERO listeners ended up attached, which
-    means there is genuinely no inbound path the node could accept.
+    local doesn't prevent the rest from coming up. NIC binds and loopback
+    aliases are tracked separately: the function raises OSError when ZERO
+    NIC binds succeeded but the caller supplied NIC routes / listen_ips,
+    because that means the node has no real inbound path even if a
+    127.X.Y.Z loopback alias bound. Loopback aliases are useful for
+    same-machine tests but cannot serve real peers, so they don't satisfy
+    the "must have a listener" invariant. Raising loudly here surfaces
+    bind races (e.g. an inter-rep teardown still holding the NIC port)
+    instead of silently downgrading to a node that never accepts inbound.
     """
-    successes = 0
+    nic_attempts = 0
+    nic_successes = 0
+    loopback_successes = 0
+    nic_failures = []
 
     for nic in node.ifs:
         if node.listen_ips:
@@ -457,28 +466,46 @@ async def listen_on_ifs(node: Any) -> None:
             for nic_ipr in nic:
                 if nic_ipr not in listen_iprs:
                     continue
-                if await soft_bind_and_listen(
-                    node, nic_ipr.route, fstr("listen_ip {0}", (nic_ipr,))
-                ):
-                    successes += 1
+                nic_attempts += 1
+                label = fstr("listen_ip {0}", (nic_ipr,))
+                if await soft_bind_and_listen(node, nic_ipr.route, label):
+                    nic_successes += 1
+                else:
+                    nic_failures.append(label)
             continue
 
         # listen_local handles its own internal failures via async_wrap_errors;
         # we count by counting back the listeners it returned. The wrap below
         # also covers any unhandled exception path so this can't kill startup.
         listed = []
+        nic_attempts += 1
         try:
             listed = await node.listen_local(TCP, node.listen_port, nic) or []
         except (OSError, ValueError, AssertionError) as exc:
             log(fstr("listen_on_ifs: listen_local failed for {0}: {1}", (nic.id, exc)))
         except asyncio.CancelledError:  # pylint: disable=try-except-raise
             raise
-        successes += sum(1 for x in listed if x is not None)
+        # Port-0 readback: when the OS assigned the port, latch the real
+        # port into node.listen_port so that all subsequent binds (v6 ext
+        # via soft_bind_and_listen, loopback candidates) and make_node_addr
+        # all use the same consistent port number.
+        if node.listen_port == 0 and listed:
+            first = next((x for x in listed if isinstance(x, tuple) and x[0]), None)
+            if first:
+                node.listen_port = first[0]
+        nic_local_successes = sum(1 for x in listed if x is not None)
+        nic_successes += nic_local_successes
+        if nic_local_successes == 0:
+            nic_failures.append(fstr("listen_local nic={0}", (nic.id,)))
 
         if IP6 in nic.supported():
+            nic_attempts += 1
             v6_route = nic.route(IP6)
-            if await soft_bind_and_listen(node, v6_route, fstr("v6 ext nic={0}", (nic.id,))):
-                successes += 1
+            v6_label = fstr("v6 ext nic={0}", (nic.id,))
+            if await soft_bind_and_listen(node, v6_route, v6_label):
+                nic_successes += 1
+            else:
+                nic_failures.append(v6_label)
 
     # Per-node loopback alias: try to bind 127.X.Y.Z (derived from the
     # node's pub_key) regardless of NIC v4 reachability. Every supported
@@ -493,7 +520,7 @@ async def listen_on_ifs(node: Any) -> None:
         candidates = []
         print("[LISTEN-DBG] couldn't compute loopback candidates: {0!r}".format(exc))
 
-    import copy as _copy
+    import copy as copy_mod
     for cand_af, cand_ip, cand_port in candidates:
         try:
             nic = node.ifs[0]
@@ -502,10 +529,10 @@ async def listen_on_ifs(node: Any) -> None:
             # Route in the resulting Pipe. Without a copy, the next
             # iteration's bind(ips=...) would mutate the previous
             # listener's route in place and silently corrupt the pipe.
-            cand_route = _copy.deepcopy(nic.route(cand_af))
+            cand_route = copy_mod.deepcopy(nic.route(cand_af))
             await cand_route.bind(ips=cand_ip, port=cand_port)
             await node.add_listener(TCP, cand_route)
-            successes += 1
+            loopback_successes += 1
             print("[LISTEN-DBG] loopback candidate bound: af={0} {1}:{2}".format(cand_af, cand_ip, cand_port))
         except asyncio.CancelledError:  # pylint: disable=try-except-raise
             raise
@@ -516,13 +543,22 @@ async def listen_on_ifs(node: Any) -> None:
                 (cand_ip, cand_port, exc),
             ))
 
-    if successes == 0:
-        # Real production setups will hit this only if every NIC bind, the
-        # IPv6 link-local, and the loopback alias all rejected the port --
-        # genuinely unreachable. Tests sometimes hand us synthetic NICs
-        # whose route pools are empty by design, so log loudly rather than
-        # raising; downstream code will surface the real symptom (no pipe,
-        # no add_listener target) where the test can assert on it.
+    # Fail loudly when the node has no real inbound path. NIC binds are
+    # the only listeners that can serve real peers; loopback aliases are
+    # same-machine convenience and don't satisfy the invariant. We only
+    # raise when a NIC bind WAS actually attempted -- synthetic test
+    # nodes with empty NIC route pools (nic_attempts==0) still degrade
+    # to log-and-continue so unit tests can assert their own way.
+    if nic_attempts > 0 and nic_successes == 0:
+        msg = fstr(
+            "listen_on_ifs: every NIC bind failed ({0}/{0} attempts); "
+            "node has no real inbound path. Failures: {1}",
+            (nic_attempts, "; ".join(nic_failures) or "(no labels)"),
+        )
+        log(msg)
+        print("[LISTEN-DBG] " + msg)
+        raise OSError(msg)
+    if (nic_successes + loopback_successes) == 0:
         log("listen_on_ifs: no listeners attached -- no inbound path is possible")
 
 
