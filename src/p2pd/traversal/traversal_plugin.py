@@ -93,6 +93,12 @@ class TraversalPlugin:
             self.dest_info["ip"],
         ))
 
+        # Select the port that matches the bind side chosen above.
+        if route_type == NIC_BIND:
+            self.dest_info["port"] = self.dest_info.get("nic_port", self.dest_info["port"])
+        elif route_type == EXT_BIND:
+            self.dest_info["port"] = self.dest_info.get("ext_port", self.dest_info["port"])
+
         # Need a destination address.
         # Possibly a different address type will work.
         if self.dest_info["ip"] == "":

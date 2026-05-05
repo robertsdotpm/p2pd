@@ -418,24 +418,15 @@ async def soft_bind_and_listen(node: Any, route: Any, label: str) -> int:
     """Bind and add_listener for one route; log on failure, never raise.
 
     Returns the actual bound port on success, 0 on failure.
-    If node.listen_port is taken, falls back to port=0 (OS-assigned) so
-    multi-AF nodes can always get a listener even when the preferred port
-    is unavailable for that socket family.
+    When node.listen_port is non-zero (user-specified), a bind failure is
+    a hard miss — no silent port=0 fallback — so the caller's nic_successes
+    counter stays at zero and listen_on_ifs can raise loudly.
     """
     try:
         await route.bind(port=node.listen_port)
     except (OSError, ValueError, AssertionError) as exc:
-        if node.listen_port != 0:
-            try:
-                await route.bind(port=0)
-            except (OSError, ValueError, AssertionError) as exc2:
-                log(fstr("listen_on_ifs: bind failed for {0}: {1}", (label, exc2)))
-                return 0
-            except asyncio.CancelledError:  # pylint: disable=try-except-raise
-                raise
-        else:
-            log(fstr("listen_on_ifs: bind failed for {0}: {1}", (label, exc)))
-            return 0
+        log(fstr("listen_on_ifs: bind failed for {0}: {1}", (label, exc)))
+        return 0
     except asyncio.CancelledError:  # pylint: disable=try-except-raise
         raise
 
