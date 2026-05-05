@@ -76,8 +76,12 @@ sel: Any,
                         sock.getpeername()
                         successful.add(sock)
                         sel.modify(sock, selectors.EVENT_READ)
-                except OSError:
-                    pass
+                    else:
+                        log("[ENGINE-DBG] WRITE SO_ERROR={0} on {1}".format(
+                            err, sock.getsockname(),
+                        ))
+                except OSError as exc:
+                    log("[ENGINE-DBG] WRITE getsockopt/getpeername failed: {0}".format(repr(exc)))
 
             # READ means either data or simultaneous-open completion traffic
             if mask & selectors.EVENT_READ:
@@ -89,8 +93,8 @@ sel: Any,
                 except BlockingIOError:
                     # No payload yet, but socket alive
                     successful.add(sock)
-                except OSError:
-                    pass
+                except OSError as exc:
+                    log("[ENGINE-DBG] READ recv failed: {0}".format(repr(exc)))
 
     return successful
 

@@ -236,12 +236,21 @@ def connect_on_tcp_sockets(same_machine: bool, bound_infos: List[Tuple[Any, Any]
     """
     start = time.monotonic()
     end = start + spray_duration
+    first_iter = True
     while time.monotonic() < end:
         for p, s in bound_infos:
             try:
-                s.connect_ex((dest_ip, p.dest_port))
-            except OSError:
-                pass
+                err = s.connect_ex((dest_ip, p.dest_port))
+                if first_iter and err not in (0, 36, 115):
+                    # 36=EINPROGRESS(BSD), 115=EINPROGRESS(Linux), 0=connected
+                    # Anything else on first attempt is worth logging.
+                    log("[ENGINE-DBG] connect_ex({0}:{1}) from {2} -> errno={3}".format(
+                        dest_ip, p.dest_port, s.getsockname(), err,
+                    ))
+            except OSError as exc:
+                if first_iter:
+                    log("[ENGINE-DBG] connect_ex raised: {0}".format(repr(exc)))
+        first_iter = False
 
         # Pace the spray. 1 ms was effectively "fire as fast as the loop can"
         # which on Windows XP trips the half-open SYN cap (Tcpip Event 4226 --
