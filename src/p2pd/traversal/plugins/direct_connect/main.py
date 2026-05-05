@@ -2,6 +2,7 @@
 from typing import Any, List, Optional, Tuple
 import asyncio
 from aionetiface import IP4, IP6, Interface, TCP, Pipe, log, log_exception, fstr, to_b
+from aionetiface.net.bind.bind_utils import patch_connect_ip
 from ...traversal_plugin import TraversalPlugin
 from .con_id_frame import CON_ID_PREFIX
 
@@ -52,11 +53,18 @@ class DirectConnect(TraversalPlugin):
 
     async def run(self, reply: Optional[Any] = None) -> None:
         """Open a direct TCP connection to the peer and store the resulting pipe."""
-        # Connect to this address.
-        dest = (
-            str(self.dest_info["ip"]),
-            self.dest_info["port"],
-        )
+        # Connect to this address. For v6 link-local destinations the
+        # connect needs OUR local outgoing interface's scope_id appended
+        # (the remote's scope_id is meaningless on our side -- scope_id
+        # tells our kernel which physical NIC to send the SYN out of).
+        # patch_connect_ip detects fe80/fd00 and appends the right
+        # platform-specific index (Linux ifname / Windows v6 ifIndex);
+        # for v4 and v6 globals it returns the address unchanged.
+        dest_ip = str(self.dest_info["ip"])
+        if self.af == IP6:
+            nic_id = self.nic.get_nic_id(IP6) if self.nic is not None else None
+            dest_ip = patch_connect_ip(self.af, dest_ip, nic_id)
+        dest = (dest_ip, self.dest_info["port"])
         log(fstr(
             "direct_connect[{0}]: af={1} dest={2} nic.id={3} reply={4}",
             (self.plugin_id, self.af, dest, getattr(self.nic, "id", "?"), reply is not None),
