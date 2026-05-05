@@ -2,7 +2,7 @@
 from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 from aionetiface import (
-    IP4, IP6,
+    IP4, IP6, IPRange, af_bitlen,
     NIC_BIND, EXT_BIND, LOOPBACK_BIND,
     to_s, to_b, to_h, h_to_b, rand_plain,
     fstr, log, log_p2p, log_exception,
@@ -30,14 +30,29 @@ def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info:
     src_nid = src_info["netiface_index"]
     dest_nid = dest_info["netiface_index"]
 
-    # Two peers sharing the same external IP are behind the same NAT /
-    # on the same LAN.  For v4 this is accurate.  For v6 the ext IS the
-    # global NIC IP (no NAT), so equal ext means literally the same host;
-    # different ext means different networks -- but global v6 NIC addresses
-    # are publicly routable and handled separately in the NIC_BIND branch.
-    if af == IP4:
-        same_lan = src_info["ext"] == dest_info["ext"]
-    if af == IP6:
+    # Same-LAN detection. The right question for the NIC_BIND path is
+    # "is dest reachable via my directly-connected interface, with no
+    # router hop?" -- i.e. is dest's IP within MY nic's directly-
+    # connected subnet. When the wire format ships our peer's NIC
+    # subnet (9-field addr), use it; otherwise fall back to the v4
+    # ext-equality heuristic.
+    same_lan = False
+    src_nic_subnet = getattr(src_info["nic"], "subnet", None)
+    if src_nic_subnet is not None and src_nic_subnet > 0:
+        host_bits = af_bitlen(af) - src_nic_subnet
+        try:
+            src_net = IPRange(str(src_info["nic"]), bitlen=host_bits)
+            same_lan = (
+                dest_info["nic"] in src_net or dest_info["ext"] in src_net
+            )
+        except (ValueError, TypeError):
+            same_lan = False
+    else:
+        # Legacy fallback: shared ext IP means shared NAT (v4).
+        # For v6 with no subnet info we can't reliably detect same-LAN,
+        # so fall through to the same v4-style check (accepting that
+        # cross-machine v6 'l' will skip in this branch unless the
+        # addr was emitted with subnet).
         same_lan = src_info["ext"] == dest_info["ext"]
 
     # Makes long conditions slightly more readable.
