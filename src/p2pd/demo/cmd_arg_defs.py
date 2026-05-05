@@ -116,6 +116,21 @@ parser.add_argument(
     help="Close automatically after this amount of seconds.",
 )
 parser.add_argument(
+    "--ntp",
+    type=str,
+    required=False,
+    default=None,
+    help=(
+        "Override the NTP server pool used by SysClock with a single "
+        "address (host or host:port; default port 123).  When set, only "
+        "this server is probed during SysClock.start, and its result is "
+        "used as the NTP-corrected seed.  Use a LAN NTP source (e.g. "
+        "10.0.1.204) for tight cross-machine sync -- internet pool RTT "
+        "of 50-100ms caps cross-host agreement at +/-50ms which is too "
+        "loose for tcp_punch simultaneous-open on the LAN bench."
+    ),
+)
+parser.add_argument(
     "--verify_install",
     action="store_true",
     help=(

@@ -12,6 +12,31 @@
 - Testing the punchers need different NIC IPs for binding for LAN punch and different WANs for punching over the Internet
 - Worst NAT should ideally initiate first so the better NAT can use its received mapping with fewer messages, though this optimization isn't implemented and may not justify added complexity
 - Edge case: multiple punches may cause STUN connections from same local endpoint
+
+- LAN-only NIC-bind tests on BSD (FreeBSD/OpenBSD/NetBSD) hit a timing
+  artefact that does NOT manifest in real cross-NAT use:
+
+    * Both peers wait until punch_time and then call connect_ex() to send
+      a SYN.  On BSD a socket that receives RST during SYN_SENT is dead
+      forever -- subsequent connect_ex() returns the cached ECONNREFUSED
+      and emits no further SYN.
+    * If the two peers' NTP-synced wake-ups are more than ~10ms apart,
+      the faster side's SYN arrives at the slower side's port BEFORE
+      that port is in SYN_SENT.  The slower side's kernel has only a
+      bound socket (no LISTEN, by design here) so it RSTs.  That kills
+      the faster side's socket, then the slower side's eventual SYN
+      hits the dead port and gets RST'd in return.  Both fail.
+    * Internet NTP RTT of 50-100ms means SysClock can only sync peers
+      to ~+/-50ms.  Local LAN NTP (chrony at 10.0.1.204 in our test
+      bench) brings RTT to <1ms and the LAN tests pass.  The --ntp
+      flag on demo/__main__.py points the node at a chosen NTP server
+      explicitly for this reason.
+    * Cross-NAT (real-world) tests are immune: the NAT's port-mapping
+      timing absorbs the wake-up jitter.  EXT pathway tests against
+      p2pd.net pass even when LAN simultaneous-open tests of the same
+      pair fail.  So this is a test-bench tightness issue, not a
+      production bug -- but if you regress NIC-bind LAN BSD tests,
+      check NTP sync first before chasing punch code.
 """
 
 from typing import Any, Dict, List, Optional, Tuple

@@ -23,7 +23,7 @@ import signal
 import os
 from aionetiface import (
     Interface,
-    StartNodeNicknameFailed, TunnelFailed,
+    StartNodeNicknameFailed, SysClock, TunnelFailed,
     allow_windows_firewall,
     async_run, async_wrap_errors, find_intersect, fstr,
     list_interfaces, load_interfaces, log, log_exception,
@@ -101,8 +101,15 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
         # Start the node and install echo protocol handler.
         cout(fstr("Starting node on {0}...", (node.listen_port,)))
         node.add_msg_cb(add_echo_support)
+        # When --ntp is supplied, build the SysClock against that single
+        # source so cross-machine sync is bounded by LAN RTT (sub-ms)
+        # rather than internet pool RTT (50-100 ms).
+        sys_clock_arg = None
+        if args.ntp:
+            sys_clock_arg = SysClock(interface=ifs[0], ntp_addr=args.ntp)
+            cout(fstr("Using --ntp source: {0}", (args.ntp,)))
         try:
-            await node.start(out=True, cout=cout)
+            await node.start(sys_clock=sys_clock_arg, out=True, cout=cout)
             break
         except StartNodeNicknameFailed:
             await async_wrap_errors(node.close())
