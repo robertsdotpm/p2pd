@@ -502,11 +502,12 @@ async def listen_on_ifs(node: Any) -> None:
             nic_failures.append(fstr("listen_local nic={0}", (nic.id,)))
 
         # Track per-NIC per-AF ports for make_node_addr.
+        # Key format matches make_node_addr's lookup: (af, nic_index).
         if listed:
-            node.if_ports[(nic_i, IP4)] = {"ext": node.listen_port, "nic": node.listen_port}
+            node.if_ports[(IP4, nic_i)] = {"ext": node.listen_port, "nic": node.listen_port}
             # v6 link-local uses same port (effective_port in listen_local).
-            if IP6 not in node.if_ports.get((nic_i, IP6), {}):
-                node.if_ports.setdefault((nic_i, IP6), {})["nic"] = node.listen_port
+            if "nic" not in node.if_ports.get((IP6, nic_i), {}):
+                node.if_ports.setdefault((IP6, nic_i), {})["nic"] = node.listen_port
 
         if IP6 in nic.supported():
             nic_attempts += 1
@@ -515,7 +516,7 @@ async def listen_on_ifs(node: Any) -> None:
             v6_ext_port = await soft_bind_and_listen(node, v6_route, v6_label)
             if v6_ext_port > 0:
                 nic_successes += 1
-                node.if_ports.setdefault((nic_i, IP6), {})["ext"] = v6_ext_port
+                node.if_ports.setdefault((IP6, nic_i), {})["ext"] = v6_ext_port
             else:
                 nic_failures.append(v6_label)
 
