@@ -1,5 +1,7 @@
 """Utilities for the simple TCP selector punch engine."""
 from typing import Any, List, Optional, Tuple
+import errno
+import selectors
 import socket
 import struct
 import sys
@@ -97,8 +99,9 @@ def sock_opt_voodoo(s: Any) -> None:
             try:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
             except OSError:
-                pass
-
+                # If we are on FreeBSD, this failure is likely fatal for TCP punching
+                if sys.platform.startswith("freebsd"):
+                    log("Warning: Failed to set SO_REUSEPORT on FreeBSD. Punching will likely fail.")
     """
     try:
         s.setsockopt(socket.IPPROTO_TCP, socket.TCP_SYNCNT, 2)
@@ -227,21 +230,113 @@ def listen_on_tcp_sockets(bound_infos: List[Tuple[Any, Any]]) -> List[Tuple[Any,
     return listen_infos
 
 
-def connect_on_tcp_sockets(same_machine: bool, bound_infos: List[Tuple[Any, Any]], dest_ip: str, spray_duration: float = 5.0) -> None:
+# FreeBSD/OpenBSD/NetBSD: connect_ex returns ECONNREFUSED (RST) and the socket
+# permanently dies -- subsequent connect_ex calls return the cached error without
+# sending any packet.  macOS (Darwin XNU) ignores RSTs during SYN_SENT and
+# returns EALREADY instead, so it retries automatically.  Linux also works
+# without recreation.  This flag gates the BSD-only socket recreation path.
+BSD_ECONNREFUSED_KILLS_SOCKET = sys.platform.startswith(("freebsd", "openbsd", "netbsd"))
+
+
+def recreate_punch_socket(
+    af: Any,
+    nic_id: Optional[str],
+    src_ip: Optional[str],
+    src_port: int,
+    old_sock: Any,
+    sel: Optional[Any],
+) -> Optional[Any]:
+    """Close old_sock and return a fresh socket bound to the same local port.
+
+    Called on FreeBSD/OpenBSD/NetBSD when connect_ex returns ECONNREFUSED: the
+    socket received RST during SYN_SENT and is now in permanent error state.
+    We strip SO_LINGER before closing so the close() itself does not fire an
+    outbound RST (the connection is already dead from the peer's RST; sending
+    another RST would just confuse the peer if it has since entered SYN_SENT).
+
+    Returns the new socket on success, or None if rebind fails.
+    """
+    if sel is not None:
+        try:
+            sel.unregister(old_sock)
+        except Exception:
+            pass
+    # Strip SO_LINGER {1,0} before closing -- that setting makes close() send
+    # RST, but the connection is already dead (peer's RST was received).
+    # Sending a second RST serves no purpose and could disturb the peer.
+    try:
+        old_sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 0, 0))
+    except Exception:
+        pass
+    try:
+        old_sock.close()
+    except Exception:
+        pass
+
+    bind_ip = src_ip if src_ip else ("0.0.0.0" if af == socket.AF_INET else "::")
+    try:
+        new_s = socket.socket(af, socket.SOCK_STREAM)
+        sock_opt_voodoo(new_s)
+        apply_nic_pin_sockopts(new_s, None)
+        bind_tup = binder_sync(af, ip_strip_if(bind_ip), src_port, nic_id)
+        new_s.bind(bind_tup)
+        if sel is not None:
+            sel.register(new_s, selectors.EVENT_WRITE | selectors.EVENT_READ)
+        return new_s
+    except OSError as exc:
+        log(fstr("recreate_punch_socket: rebind failed port={0}: {1}", (src_port, repr(exc))))
+        try:
+            new_s.close()
+        except Exception:
+            pass
+        return None
+
+
+def connect_on_tcp_sockets(
+    same_machine: bool,
+    bound_infos: List[Tuple[Any, Any]],
+    dest_ip: str,
+    spray_duration: float = 5.0,
+    sel: Optional[Any] = None,
+    af: Optional[Any] = None,
+    nic_id: Optional[str] = None,
+    src_ip: Optional[str] = None,
+) -> None:
     """
     Spray SYN packets at the destination for `spray_duration` seconds.
 
     spray_duration: how long to keep spraying (seconds).  The CLI default is
     5.0 s; FAST_PUNCH_PARAMS uses 2.0 s for LAN/protocol usage.
+
+    sel/af/nic_id/src_ip: when provided on BSD, ECONNREFUSED (RST received
+    during SYN_SENT) triggers socket recreation so the spray can re-enter
+    SYN_SENT on the next iteration.  Not applied on Linux or macOS.
     """
     start = time.monotonic()
     end = start + spray_duration
     first_iter = True
+    econnrefused = errno.ECONNREFUSED
     while time.monotonic() < end:
-        for p, s in bound_infos:
+        for i, (p, s) in enumerate(bound_infos):
             try:
                 err = s.connect_ex((dest_ip, p.dest_port))
-                if first_iter and err not in (0, 36, 115):
+                if (
+                    BSD_ECONNREFUSED_KILLS_SOCKET
+                    and err == econnrefused
+                    and sel is not None
+                    and af is not None
+                ):
+                    # Socket received RST and is permanently dead on this BSD.
+                    # Recreate it so subsequent iterations can re-enter SYN_SENT.
+                    log(fstr(
+                        "[ENGINE-DBG] ECONNREFUSED on port {0}; recreating BSD socket",
+                        (p.src_port,),
+                    ))
+                    new_s = recreate_punch_socket(af, nic_id, src_ip, p.src_port, s, sel)
+                    if new_s is not None:
+                        bound_infos[i] = (p, new_s)
+                        new_s.connect_ex((dest_ip, p.dest_port))
+                elif first_iter and err not in (0, 36, 115):
                     # 36=EINPROGRESS(BSD), 115=EINPROGRESS(Linux), 0=connected
                     # Anything else on first attempt is worth logging.
                     log("[ENGINE-DBG] connect_ex({0}:{1}) from {2} -> errno={3}".format(
