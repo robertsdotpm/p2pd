@@ -184,6 +184,13 @@ strat: str,
 
             dest_info["ip"] = str(dest_ip)
 
+            # Use per-bind port when advertised (10-field wire format). Fall back to
+            # the section's single port for peers on the old 8/9-field format.
+            if addr_type == NIC_BIND:
+                dest_info["port"] = dest_info.get("nic_port", dest_info["port"])
+            elif addr_type == EXT_BIND:
+                dest_info["port"] = dest_info.get("ext_port", dest_info["port"])
+
             # Detailed logging details.
             path_txt = f_path_txt(addr_type)
             src_ip = src_info["nic"] if addr_type == NIC_BIND else src_info["ext"]

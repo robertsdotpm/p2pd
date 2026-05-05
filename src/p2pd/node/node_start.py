@@ -363,6 +363,7 @@ def build_node_address(node: Any, out: bool) -> None:
         node.ifs,
         port=node.listen_port,
         mqtt_brokers=mqtt_brokers,
+        if_ports=getattr(node, "if_ports", None),
     )
     node.traversal.addr_bytes = node.addr_bytes
 

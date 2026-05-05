@@ -414,31 +414,42 @@ async def load_machine_id(app_id: str, netifaces: Any) -> str:
         return await fallback_machine_id(netifaces, app_id)
 
 
-async def soft_bind_and_listen(node: Any, route: Any, label: str) -> bool:
+async def soft_bind_and_listen(node: Any, route: Any, label: str) -> int:
     """Bind and add_listener for one route; log on failure, never raise.
 
-    Returns True if a listener was attached, False if either step failed.
-    Used by listen_on_ifs so a single bad bind (e.g. a fe80 address whose
-    scope-id the OS rejects, or a loopback alias the firewall blocks)
-    doesn't take the whole node down — node_start only fails if EVERY
-    candidate path fails (no possible inbound route).
+    Returns the actual bound port on success, 0 on failure.
+    If node.listen_port is taken, falls back to port=0 (OS-assigned) so
+    multi-AF nodes can always get a listener even when the preferred port
+    is unavailable for that socket family.
     """
     try:
         await route.bind(port=node.listen_port)
     except (OSError, ValueError, AssertionError) as exc:
-        log(fstr("listen_on_ifs: bind failed for {0}: {1}", (label, exc)))
-        return False
+        if node.listen_port != 0:
+            try:
+                await route.bind(port=0)
+            except (OSError, ValueError, AssertionError) as exc2:
+                log(fstr("listen_on_ifs: bind failed for {0}: {1}", (label, exc2)))
+                return 0
+            except asyncio.CancelledError:  # pylint: disable=try-except-raise
+                raise
+        else:
+            log(fstr("listen_on_ifs: bind failed for {0}: {1}", (label, exc)))
+            return 0
     except asyncio.CancelledError:  # pylint: disable=try-except-raise
         raise
 
     try:
-        await node.add_listener(TCP, route)
+        result = await node.add_listener(TCP, route)
     except (OSError, ValueError, AssertionError) as exc:
         log(fstr("listen_on_ifs: add_listener failed for {0}: {1}", (label, exc)))
-        return False
+        return 0
     except asyncio.CancelledError:  # pylint: disable=try-except-raise
         raise
-    return True
+
+    if result is None:
+        return 0
+    return result[0]
 
 
 async def listen_on_ifs(node: Any) -> None:
@@ -459,8 +470,9 @@ async def listen_on_ifs(node: Any) -> None:
     nic_successes = 0
     loopback_successes = 0
     nic_failures = []
+    node.if_ports = {}
 
-    for nic in node.ifs:
+    for nic_i, nic in enumerate(node.ifs):
         if node.listen_ips:
             listen_iprs = [IPR(ip) for ip in node.listen_ips]
             for nic_ipr in nic:
@@ -498,12 +510,21 @@ async def listen_on_ifs(node: Any) -> None:
         if nic_local_successes == 0:
             nic_failures.append(fstr("listen_local nic={0}", (nic.id,)))
 
+        # Track per-NIC per-AF ports for make_node_addr.
+        if listed:
+            node.if_ports[(nic_i, IP4)] = {"ext": node.listen_port, "nic": node.listen_port}
+            # v6 link-local uses same port (effective_port in listen_local).
+            if IP6 not in node.if_ports.get((nic_i, IP6), {}):
+                node.if_ports.setdefault((nic_i, IP6), {})["nic"] = node.listen_port
+
         if IP6 in nic.supported():
             nic_attempts += 1
             v6_route = nic.route(IP6)
             v6_label = fstr("v6 ext nic={0}", (nic.id,))
-            if await soft_bind_and_listen(node, v6_route, v6_label):
+            v6_ext_port = await soft_bind_and_listen(node, v6_route, v6_label)
+            if v6_ext_port > 0:
                 nic_successes += 1
+                node.if_ports.setdefault((nic_i, IP6), {})["ext"] = v6_ext_port
             else:
                 nic_failures.append(v6_label)
 

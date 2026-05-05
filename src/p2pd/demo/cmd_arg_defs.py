@@ -26,7 +26,17 @@ parser.add_argument(
     "--ip",
     action="append",
     default=[],
-    help="IP address(es) to listen on",
+    help=(
+        "IP address(es) to listen on. Restricts the bind set to exactly "
+        "these IPs (per AF). The published node address still advertises "
+        "the full per-NIC surface from make_node_addr -- including v6 "
+        "link-locals -- so passing a v6 global here without also passing "
+        "the link-local leaves peers unable to reach the link-local NIC "
+        "slot (TCP RST). Prefer --nic alone unless you need the strict "
+        "bind narrowing; --nic alone leaves listen_ips empty and lets "
+        "listen_on_ifs bind the full per-NIC surface that the addr "
+        "advertises."
+    ),
 )
 parser.add_argument(
     "--pnp",
