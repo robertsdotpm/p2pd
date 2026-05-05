@@ -39,14 +39,26 @@ def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info:
     same_lan = False
     src_nic_subnet = getattr(src_info["nic"], "subnet", None)
     if src_nic_subnet is not None and src_nic_subnet > 0:
-        host_bits = af_bitlen(af) - src_nic_subnet
-        try:
-            src_net = IPRange(str(src_info["nic"]), bitlen=host_bits)
-            same_lan = (
-                dest_info["nic"] in src_net or dest_info["ext"] in src_net
-            )
-        except (ValueError, TypeError):
+        # For IPv6, src_info["nic"] is the link-local (fe80::/10).
+        # All link-locals share the top 64 bits (fe80::), so
+        # IPRange("fe80::x", bitlen=64) contains every link-local address
+        # on every host -- same_lan would always be True. Use the global
+        # IPv6 (src_info["ext"]) for the subnet check instead, which
+        # correctly distinguishes hosts on different /64 prefixes.
+        src_for_subnet = src_info["nic"]
+        if af == IP6 and str(src_for_subnet).lower().startswith("fe80:"):
+            src_for_subnet = src_info.get("ext")
+        if src_for_subnet is None:
             same_lan = False
+        else:
+            host_bits = af_bitlen(af) - src_nic_subnet
+            try:
+                src_net = IPRange(str(src_for_subnet), bitlen=host_bits)
+                same_lan = (
+                    dest_info["nic"] in src_net or dest_info["ext"] in src_net
+                )
+            except (ValueError, TypeError):
+                same_lan = False
     else:
         # Legacy fallback: shared ext IP means shared NAT (v4).
         # For v6 with no subnet info we can't reliably detect same-LAN,
