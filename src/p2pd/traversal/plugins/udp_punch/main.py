@@ -169,7 +169,18 @@ class UdpPunchPlugin(TraversalPlugin):
             max_error=p["max_clock_error"],
         )
         puncher.set_punch_time(punch_time)
-        puncher.add_port_allocator(boundary_port_alloc)
+        # n=1: UDP punch must use exactly ONE socket per side.
+        # With n=2, watch_for_winner returns the socket that first
+        # receives a CONFIRM -- but each side races independently,
+        # so A's winner can be socket 1 (connected to peer port Q1)
+        # while B's winner is socket 2 (connected to peer port P2).
+        # Both sides then send into each other's CLOSED socket →
+        # NO_ECHO every time. tcp_punch is immune because TCP
+        # connect() fails explicitly on the wrong port; UDP silently
+        # drops into the void. Passing n=1 here leaves tcp_punch
+        # untouched (it calls add_port_allocator separately with its
+        # own default of NUM_PORTS=2).
+        puncher.add_port_allocator(boundary_port_alloc, n=1)
 
         return puncher, stuns
 
