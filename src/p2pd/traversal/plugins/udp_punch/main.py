@@ -468,6 +468,35 @@ class UdpPunchPlugin(TraversalPlugin):
                     loop.call_soon_threadsafe(signal_convergence, False)
                     return
 
+                # Drain residual punch probes that arrived after
+                # drain_punch_residue ran and flush stale ICMP errors.
+                # fire_probes sends to ALL predicted dest_ports; probes
+                # that hit closed ports on the peer generate ICMP port-
+                # unreachable responses queued on the winner socket as
+                # async errors.  connect(peer_addr) does NOT clear
+                # that error queue, so the first recv() in
+                # selector_proxy returns ECONNREFUSED even though
+                # peer_addr is reachable -- on Linux the streak counter
+                # hits 8 and closes the pair; on BSD each ICMP fires
+                # once then clears, leaving the proxy idle.
+                # recv() consumes one datagram or one queued error per
+                # call on all platforms; loop until clean.
+                stale_drained = 0
+                stale_errors = 0
+                for _ in range(256):
+                    try:
+                        punched_sock.recv(UDP_PUNCH_FRAME_LEN + 64)
+                        stale_drained += 1
+                    except BlockingIOError:
+                        break
+                    except (ConnectionRefusedError, OSError):
+                        stale_errors += 1
+                if stale_drained or stale_errors:
+                    log(fstr(
+                        "[UDP-WORKER] post-connect stale drain: {0} frames {1} errors",
+                        (stale_drained, stale_errors),
+                    ))
+
                 # Bridge is wired; let main resolve plugin.result so
                 # the demo can start sending ECHO and have it actually
                 # land on punched_sock.
