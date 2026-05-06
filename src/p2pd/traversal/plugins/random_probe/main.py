@@ -556,6 +556,28 @@ class RandomProbePlugin(TraversalPlugin):
                     )
                     return
 
+                # Drain stale ICMP errors queued on the winner socket
+                # from the probe spray phase (same as udp_punch's
+                # post-connect drain). Probes to wrong predicted ports
+                # generate ICMP unreachable which queue as async errors;
+                # connect() does not clear them and the first recv() in
+                # selector_proxy returns ECONNREFUSED, tripping the
+                # streak counter. recv() consumes one item per call.
+                rp_stale_drained = 0
+                rp_stale_errors = 0
+                for _ in range(256):
+                    try:
+                        punched_sock_ref.recv(4096)
+                        rp_stale_drained += 1
+                    except BlockingIOError:
+                        break
+                    except (ConnectionRefusedError, OSError):
+                        rp_stale_errors += 1
+                if rp_stale_drained or rp_stale_errors:
+                    print("[RP-BRIDGE] post-connect stale drain: {0} frames {1} errors".format(
+                        rp_stale_drained, rp_stale_errors,
+                    ))
+
                 # Signal convergence BEFORE entering selector_proxy so
                 # main can resolve result and the demo can start sending.
                 # selector_proxy starts on the very next line -- by the
