@@ -157,16 +157,31 @@ def watch_for_winner(
     listen_duration: float,
     retry_interval: float = RETRY_INTERVAL,
     stop_reader: Optional[Any] = None,
+    is_master: bool = False,
 ) -> Optional[Tuple[Any, Tuple[str, int]]]:
     """Watch every bound socket for inbound; return (winner_sock, peer_addr) or None.
 
-    Two-phase rendezvous:
-      * If we receive a PROBE (kind=0x01) with matching nonce, reply
-        with CONFIRM (0x02) on the same socket+peer_addr.  Don't
-        return yet -- our peer also needs to see CONFIRM to lock.
-      * If we receive a CONFIRM (kind=0x02) with matching nonce,
-        the peer has acknowledged our PROBE -- this is our winner.
-        Return immediately so the caller can wrap the socket.
+    Master/slave protocol (modelled on tcp_punch's choose_winning_tcp_sock):
+
+      * Master locks on the FIRST matching frame to land on any of its
+        bound sockets (PROBE or CONFIRM).  Sends a 5x CONFIRM burst
+        from that socket so the slave's listener picks up the marker
+        even under packet loss.
+
+      * Slave refuses to lock on PROBEs -- those race each side's
+        independent first-arrival, which is the bug we're fixing.
+        Reflects a CONFIRM back on each PROBE arrival so the master
+        has paths to choose from and master's NAT pinhole stays warm,
+        but only commits to a socket once a CONFIRM lands -- by
+        construction that CONFIRM came from master AFTER master
+        picked, so both sides agree on the path.
+
+    With n=1 (single boundary port) is_master is irrelevant -- there
+    is only one socket on each side, no race to break.  Multi-socket
+    cases (boundary + STUN-derived ports for NAT prediction) are where
+    the master/slave election bites: without it, A's first CONFIRM
+    arrival could land on a different socket than B's first CONFIRM,
+    leaving each side connected to a closed peer port.
 
     Non-frame datagrams are LEFT in the kernel queue (we use
     MSG_PEEK). Real application traffic arriving on a bound port
@@ -227,37 +242,40 @@ def watch_for_winner(
             except OSError:
                 continue
 
+            # Normalise the peer addr for sendto (XP flowinfo workaround
+            # already applied above when len(addr) == 4).
+            if len(addr) == 4:
+                sendto_addr = (addr[0], addr[1], 0, addr[3])
+            else:
+                sendto_addr = addr
+
             if kind == UDP_PUNCH_KIND_PROBE:
                 probes_seen += 1
                 log(fstr(
                     "udp_punch.watch_for_winner: PROBE on {0} from {1} (probes={2}); replying CONFIRM",
                     (log_sock_addr(s), addr, probes_seen),
                 ))
-                # Peer's mapping reached us; tell them we saw it.
-                # XP's v6 stack stuffs garbage into flowinfo on
-                # recvfrom (observed: flowinfo=3824046100 from
-                # fe80:: peers), so reflecting `addr` directly
-                # to sendto blows up with
-                #   OverflowError: getsockaddrarg: flowinfo must
-                #   be 0-1048575.
-                # Zero flowinfo before sending; the kernel only
-                # cares about scope_id for link-local routing.
-                if len(addr) == 4:
-                    sendto_addr = (addr[0], addr[1], 0, addr[3])
-                else:
-                    sendto_addr = addr
-                try:
-                    s.sendto(confirm_frame, sendto_addr)
-                except OSError as exc:
+                # Reflect a CONFIRM so the peer sees this path.  Slave
+                # only sends one (master-driven path is enough); master
+                # blasts 5x as the "I picked this path" marker for the
+                # slave to lock onto.
+                burst = 5 if is_master else 1
+                for _ in range(burst):
+                    try:
+                        s.sendto(confirm_frame, sendto_addr)
+                    except OSError as exc:
+                        log(fstr(
+                            "udp_punch.watch_for_winner: CONFIRM sendto failed on {0} to {1}: {2}",
+                            (log_sock_addr(s), sendto_addr, repr(exc)),
+                        ))
+                        break
+                if is_master:
                     log(fstr(
-                        "udp_punch.watch_for_winner: CONFIRM sendto failed on {0} to {1}: {2}",
-                        (log_sock_addr(s), sendto_addr, repr(exc)),
+                        "udp_punch.watch_for_winner: MASTER locking on PROBE arrival; sock={0} peer={1}",
+                        (log_sock_addr(s), addr),
                     ))
-                # Don't lock yet: peer might still be in spray phase
-                # and not listening. Continue watching for their
-                # CONFIRM (or another PROBE arrival -- we'll accept
-                # the first PROBE as a winner if no CONFIRM lands
-                # within listen_duration; see end-of-loop fallback).
+                    return (s, addr)
+                # Slave keeps listening for the master's CONFIRM marker.
                 continue
 
             if kind == UDP_PUNCH_KIND_CONFIRM:
@@ -380,10 +398,41 @@ def udp_punch_engine(
         bound_socks, dest_ip, nonce,
         spray_duration=spray_duration, stop_reader=stop_reader,
     )
-    log("udp_punch_engine: fire_probes returned; entering watch_for_winner")
+    # Master/slave election by external-IP comparison.  Same trick
+    # tcp_punch's choose_winning_tcp_sock uses (`our_ip > their_ip`).
+    # Master locks on first PROBE/CONFIRM arrival and signals via a
+    # 5x CONFIRM burst from that socket; slave waits for the master's
+    # CONFIRM to commit.  Without the election, multi-socket cases
+    # (boundary + STUN-derived ports) raced on first-arrival and ended
+    # up with mismatched winner sockets on each side -- caller's
+    # selector_proxy then sent into a closed peer port and ECONNREFUSED
+    # killed the bridge.  External IP (route.ext()) is what the peer
+    # actually observes and is the only quantity that gives a
+    # symmetric-decidable answer when one side is behind NAT.  Falls
+    # back to src_ip when route.ext() is unavailable -- works for
+    # public-public pairs (where src_ip == ext_ip) but degrades to a
+    # coin flip when one side is NAT'd.
+    own_ip_for_election = None
+    if route is not None:
+        try:
+            own_ip_for_election = str(route.ext())
+        except (AttributeError, OSError, ValueError):
+            own_ip_for_election = None
+    if not own_ip_for_election:
+        own_ip_for_election = src_ip
+    is_master = bool(
+        own_ip_for_election and dest_ip
+        and str(own_ip_for_election) > str(dest_ip)
+    )
+
+    log(fstr(
+        "udp_punch_engine: fire_probes returned; entering watch_for_winner role={0} own={1} peer={2}",
+        ("MASTER" if is_master else "SLAVE", own_ip_for_election, dest_ip),
+    ))
     winner = watch_for_winner(
         bound_socks, nonce, listen_duration,
         retry_interval=retry_interval, stop_reader=stop_reader,
+        is_master=is_master,
     )
     log(fstr(
         "udp_punch_engine: watch_for_winner returned {0}",

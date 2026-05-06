@@ -303,6 +303,19 @@ class RandomProbePlugin(TraversalPlugin):
                 self.result.set_result(None)
             return
         bind_ip = str(route.nic())
+        # External IP for master/slave election in
+        # sync_run_bidirectional_spray. tcp_punch's choose_winning_tcp_sock
+        # uses the same value (route.ext()) for the same reason: bind_ip
+        # on a NAT'd host is the LAN-side address which the peer never
+        # sees, so comparing bind_ips wouldn't give a consistent symmetric
+        # answer on both ends. The external IP is what the peer actually
+        # observes, so own_ext_ip > peer_ext_ip is symmetric-decidable on
+        # both sides without coordination.  Fall back to bind_ip when
+        # route.ext() is unavailable (single-NIC LAN-only setups).
+        try:
+            own_ext_ip = str(route.ext())
+        except (AttributeError, OSError, ValueError):
+            own_ext_ip = bind_ip
 
         print("[RP-FIRE] role={0} bind_ip={1} peer_addr={2} peer_known_port={3} "
               "punch_time={4} now={5}".format(
@@ -346,6 +359,7 @@ class RandomProbePlugin(TraversalPlugin):
                 probe_count=probe_count,
                 listen_timeout=PROBE_LISTEN_TIMEOUT,
                 interface=self.nic,
+                own_ext_ip=own_ext_ip,
             ),
         )
 

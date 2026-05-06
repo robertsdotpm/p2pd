@@ -1166,6 +1166,7 @@ def sync_run_bidirectional_spray(
     listen_timeout: float = PROBE_LISTEN_TIMEOUT,
     rng: Optional[random.Random] = None,
     interface: Optional[Any] = None,
+    own_ext_ip: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Direction-agnostic random-probe punch: both sides run this same
     code regardless of which is initiator/responder or what NAT type
@@ -1201,18 +1202,24 @@ def sync_run_bidirectional_spray(
     """
     import select as select_mod
     peer_ext_ip = normalize_ip6(peer_ext_ip)
-    bind_ip_norm = normalize_ip6(bind_ip)
 
     # Master/slave election by IP comparison: same symmetry-breaker
     # tcp_punch's choose_winning_tcp_sock uses (`our_ip > their_ip`).
     # Both sides compute the same winner without coordination because
-    # the math is symmetric.  Required because a deterministic
-    # port-pair label cannot work here -- the local getsockname() port
-    # is the *internal* bound port, but the peer sees us through NAT
-    # at a different external port, so neither side can compute a
-    # label that matches the other's view.  Master picks unilaterally;
-    # slave waits to be told.
-    is_master = bind_ip_norm > peer_ext_ip
+    # the math is symmetric -- but ONLY if both sides compare the
+    # same pair of IPs.  bind_ip on a NAT'd host is the LAN-side
+    # address which the peer never sees, so comparing bind_ips would
+    # give an inconsistent answer when one side is behind NAT.  The
+    # external IP (what the peer actually observes) is the right
+    # quantity; tcp_punch passes route.ext() as decider_ip for the
+    # same reason.  Caller is responsible for passing own_ext_ip;
+    # falls back to bind_ip when own_ext_ip is unset (e.g. LAN-only
+    # callers that haven't done STUN).  This fallback works as long
+    # as both sides are NOT behind NAT (then bind_ip == ext_ip);
+    # mixing a NAT'd and non-NAT'd peer needs own_ext_ip to be
+    # populated.
+    own_ip_for_election = normalize_ip6(own_ext_ip) if own_ext_ip else normalize_ip6(bind_ip)
+    is_master = own_ip_for_election > peer_ext_ip
 
     src_ports = random_probe_ports(probe_count, rng=rng)
     dst_ports = random_probe_ports(probe_count, rng=rng)
