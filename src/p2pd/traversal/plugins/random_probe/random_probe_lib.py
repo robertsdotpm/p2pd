@@ -1201,6 +1201,19 @@ def sync_run_bidirectional_spray(
     """
     import select as select_mod
     peer_ext_ip = normalize_ip6(peer_ext_ip)
+    bind_ip_norm = normalize_ip6(bind_ip)
+
+    # Master/slave election by IP comparison: same symmetry-breaker
+    # tcp_punch's choose_winning_tcp_sock uses (`our_ip > their_ip`).
+    # Both sides compute the same winner without coordination because
+    # the math is symmetric.  Required because a deterministic
+    # port-pair label cannot work here -- the local getsockname() port
+    # is the *internal* bound port, but the peer sees us through NAT
+    # at a different external port, so neither side can compute a
+    # label that matches the other's view.  Master picks unilaterally;
+    # slave waits to be told.
+    is_master = bind_ip_norm > peer_ext_ip
+
     src_ports = random_probe_ports(probe_count, rng=rng)
     dst_ports = random_probe_ports(probe_count, rng=rng)
     socks = []
@@ -1214,8 +1227,9 @@ def sync_run_bidirectional_spray(
     for s in socks:
         s.setblocking(False)
 
-    print("[RP-SPRAY] start nonce={0} socks={1} target_ip={2}".format(
+    print("[RP-SPRAY] start nonce={0} socks={1} target_ip={2} role={3}".format(
         nonce.hex()[:8], len(socks), peer_ext_ip,
+        "MASTER" if is_master else "SLAVE",
     ))
 
     # Fire one probe from each socket to a random destination port.
@@ -1237,6 +1251,21 @@ def sync_run_bidirectional_spray(
             continue
     print("[RP-SPRAY] fired {0} probes, listening".format(probes_sent))
 
+    # Convergence protocol (master/slave, modelled on tcp_punch):
+    #
+    #   master: locks on the FIRST matching frame to land (PROBE or
+    #     CONFIRM) on any of its sockets, then sends a 5x CONFIRM
+    #     burst from THAT socket back to peer.  The burst is the
+    #     "I picked this path" marker the slave is waiting for; the
+    #     redundancy hides single-packet loss on the return leg.
+    #
+    #   slave: refuses to lock on PROBEs (those races each side's
+    #     independent first-arrival, which is what broke the previous
+    #     algorithm).  Reflects a CONFIRM back on each PROBE arrival
+    #     so the master has paths to choose from and so master's NAT
+    #     pinhole stays warm, but only commits to a socket once a
+    #     CONFIRM arrives -- by construction that CONFIRM came from
+    #     master AFTER master picked, so both sides agree on the path.
     deadline = time.time() + listen_timeout
     winner = None
     while time.time() < deadline:
@@ -1260,21 +1289,42 @@ def sync_run_bidirectional_spray(
                 peer = (normalize_ip6(peer[0]), peer[1], 0, scope_id)
             parsed = decode_probe(data, nonce)
             if parsed is None:
-                # Non-probe -- leave for Pipe; could be the winner
-                # whose data is being delivered concurrently with select.
+                # Non-probe -- leave for Pipe; could be early data.
                 continue
             # Consume the probe.
             try:
                 s.recvfrom(2048)
             except (BlockingIOError, OSError):
                 continue
-            # Accept ANY role -- we are role-agnostic. Just need the nonce
-            # check (already done by decode_probe) and a valid peer addr.
             if peer_ext_ip and peer[0] != peer_ext_ip:
                 continue
-            # Send CONFIRM 3x so the peer locks onto this same socket
-            # even if their first inbound was on a different one.
-            for _ in range(3):
+
+            is_confirm = parsed["idx"] == PROBE_IDX_CONFIRM
+
+            if is_master:
+                # Master commits on first arrival.  Send a CONFIRM
+                # burst from this socket so the slave's listener
+                # picks up the marker even under packet loss; then
+                # break out and let the caller wrap this socket.
+                for _ in range(5):
+                    try:
+                        s.sendto(
+                            encode_probe(nonce, ROLE_SYM, PROBE_IDX_CONFIRM),
+                            peer,
+                        )
+                    except OSError:
+                        pass
+                winner = {"sock": s, "peer": peer, "role": "spray-master"}
+                break
+
+            # Slave path: only CONFIRMs lock us in.  A plain PROBE
+            # gets a CONFIRM-back so master's NAT pinhole on this
+            # 4-tuple stays warm and master has at least one path
+            # to choose from.
+            if is_confirm:
+                winner = {"sock": s, "peer": peer, "role": "spray-slave"}
+                break
+            for _ in range(2):
                 try:
                     s.sendto(
                         encode_probe(nonce, ROLE_SYM, PROBE_IDX_CONFIRM),
@@ -1282,8 +1332,6 @@ def sync_run_bidirectional_spray(
                     )
                 except OSError:
                     pass
-            winner = {"sock": s, "peer": peer, "role": "spray"}
-            break
         if winner is not None:
             break
 
@@ -1298,8 +1346,8 @@ def sync_run_bidirectional_spray(
                 s.close()
             except OSError:
                 pass
-    print("[RP-SPRAY] converged peer={0}:{1}".format(
-        winner["peer"][0], winner["peer"][1],
+    print("[RP-SPRAY] converged peer={0}:{1} role={2}".format(
+        winner["peer"][0], winner["peer"][1], winner["role"],
     ))
     return winner
 
