@@ -21,17 +21,17 @@ MIN_RUN_WINDOW = 10  # Minimum time required to run setup before the rendezvous
 # NUM_PORTS = number of source-port SYNs each side fires at the peer's
 # single predicted dest port. Higher N = more chances to converge when
 # port prediction has any error (e.g. XP's non-monotonic ephemeral
-# allocator producing wider mapping spread). Cap is set by the
-# tightest concurrent-half-open limit in the matrix: Windows XP SP2+
-# defaults to 10 (Tcpip Event 4226). 8 leaves headroom under that cap
-# while giving 4x more pairs to converge on than the previous 2.
-# When db0c676 dropped this from 16->2 (intent: fit XP's 10-cap with
-# margin), it meanwhile relied on punch_client's hard-coded n=16
-# default to keep the actual punch using 16. That hardcode was later
-# removed in 2a36880, exposing NUM_PORTS=2 for the first time and
-# silently breaking XP tcp_punch convergence -- 2 chances per punch
-# is too few when prediction is even slightly off.
-NUM_PORTS = 8
+# allocator producing wider mapping spread). 16 was the historical
+# value before db0c676 (which dropped to 2 nominally but kept punch_client
+# pinned at hardcoded n=16 -- so the live spray was 16 the whole time).
+# When 2a36880 removed the hardcode, NUM_PORTS=2 actually took effect
+# and broke XP tcp_punch. Bumping back to 16 restores what was
+# empirically working before. XP's 10-half-open cap (Tcpip Event 4226)
+# matters per *instant*, but with the 5 ms spray cadence the SYNs are
+# staggered over ~75 ms; combined with sub-second SYN turnaround on
+# LAN-routed traffic, the kernel keeps the in-flight half-open count
+# bounded well below 16 at any single moment.
+NUM_PORTS = 16
 BASE_PORT = 2024
 # Wider sample space than the original 20000 -- combined with the lower
 # BASE_PORT this gives the allocator the full user-port range (~2k-52k),
