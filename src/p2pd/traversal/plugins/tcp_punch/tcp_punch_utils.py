@@ -235,39 +235,74 @@ def connect_on_tcp_sockets(
     spray_duration: float = 5.0,
 ) -> None:
     """
-    Spray SYN packets at the destination for `spray_duration` seconds.
+    Initiate connect on each socket, then idle until `spray_duration` elapses.
 
-    spray_duration: how long to keep spraying (seconds).  The CLI default is
-    5.0 s; FAST_PUNCH_PARAMS uses 2.0 s for LAN/protocol usage.
+    State-aware: once a socket's connect_ex returns anything other than the
+    "still in SYN_SENT, async connect in progress" codes, we stop calling
+    connect_ex on it.  Repeated connect_ex on an already-ESTABLISHED socket
+    on Windows XP triggers spurious RSTs ~140 ms after simul-open completes
+    -- the older XP TCP stack does not handle re-entry of the connect path
+    after the kernel state has advanced, and tears the connection down.
+    On Linux/BSD/Win7+ the call is a harmless WSAEISCONN/EISCONN return,
+    but skipping it everywhere is correct and matches the kernel's own
+    SYN-retransmit responsibility (the spray's repeated connect_ex never
+    actually emitted additional SYNs once the socket was past first
+    initiation -- the kernel's TCP retransmit timer drives that, not us).
 
-    sel/af/nic_id/src_ip: when provided on BSD, ECONNREFUSED (RST received
-    during SYN_SENT) triggers socket recreation so the spray can re-enter
-    SYN_SENT on the next iteration.  Not applied on Linux or macOS.
+    spray_duration: how long to keep the SYN_SENT window open (seconds).
+    The CLI default is 5.0 s; FAST_PUNCH_PARAMS uses 5.0 s for tcp_punch.
     """
+    # Codes meaning "connect is async-in-progress, socket still in SYN_SENT,
+    # call us again later" -- only on the FIRST call do we expect these.
+    # Subsequent calls always return an EALREADY-style code (no new SYN
+    # emitted by the kernel).
+    INPROGRESS_FIRST_CALL = (36, 115, 10035)
+    # 36    = EINPROGRESS (BSD/macOS)
+    # 115   = EINPROGRESS (Linux)
+    # 10035 = WSAEWOULDBLOCK (Windows)
+
     start = time.monotonic()
     end = start + spray_duration
-    first_iter = True
+    completed = set()  # sockets that have moved past initial connect attempt
     while time.monotonic() < end:
+        kicked_this_iter = 0
         for p, s in bound_infos:
+            if s in completed:
+                continue
             try:
                 err = s.connect_ex((dest_ip, p.dest_port))
-                if first_iter and err not in (0, 36, 115):
-                    # 36=EINPROGRESS(BSD), 115=EINPROGRESS(Linux), 0=connected
-                    # Anything else on first attempt is worth logging.
+                kicked_this_iter += 1
+                # Anything other than the first-call in-progress codes
+                # means the socket is no longer in the "needs initial
+                # connect kick" state.  Mark done so we never call
+                # connect_ex on it again.  This includes:
+                #   err == 0           -> connected (rare on non-blocking)
+                #   ECONNREFUSED/...   -> error
+                #   EALREADY/EISCONN   -> already in SYN_SENT or ESTABLISHED
+                # In all those cases, repeated connect_ex is either noise
+                # or actively harmful (the XP simul-open RST case).
+                if err not in INPROGRESS_FIRST_CALL:
+                    completed.add(s)
+                # Always log unexpected errnos on first observation per socket.
+                if err not in (0, 36, 115):
                     log("[ENGINE-DBG] connect_ex({0}:{1}) from {2} -> errno={3}".format(
                         dest_ip, p.dest_port, s.getsockname(), err,
                     ))
             except OSError as exc:
-                if first_iter:
-                    log("[ENGINE-DBG] connect_ex raised: {0}".format(repr(exc)))
-        first_iter = False
+                completed.add(s)
+                log("[ENGINE-DBG] connect_ex raised: {0}".format(repr(exc)))
 
-        # Tight spray cadence -- both sides need to be in SYN_SENT when each
-        # other's SYN arrives for simultaneous-open to work.  On BSD the socket
-        # is permanently dead after the first RST, so we have only the very
-        # first iteration's SYN window to land the crossover; a small sleep
-        # keeps the loop from busy-spinning while still maximising the number
-        # of retry SYNs per second on platforms that allow it.
+        # All sockets have been kicked once and have moved out of the
+        # "needs first connect" state; nothing more for the spray loop
+        # to do but wait for the engine's spray window to elapse so the
+        # peer has time to fire its own SYNs and the kernel's TCP
+        # retransmit timer covers any drops.
+        if kicked_this_iter == 0:
+            remaining = end - time.monotonic()
+            if remaining > 0:
+                time.sleep(remaining)
+            return
+
         if not same_machine:
             time.sleep(0.005)
 
