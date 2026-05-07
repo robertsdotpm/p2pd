@@ -167,6 +167,14 @@ af: Any,
               af, src_ip, dest_ip, len(port_allocs),
               spray_duration, monitor_duration, same_machine,
           ), flush=True)
+    # Dump every port_alloc tuple so we can see exactly what the engine
+    # received -- distinguishing boundary deterministic ports from
+    # STUN-discovered NAT-prediction ports.
+    print("[ENGINE-DBG] port_allocs detail (src_port -> dest_port):", flush=True)
+    for idx, pa in enumerate(port_allocs):
+        print("[ENGINE-DBG]   [{0}] src={1} dest={2}".format(
+            idx, pa.src_port, pa.dest_port,
+        ), flush=True)
     log("[ENGINE] tcp_selector_punch_engine af={0} src_ip={1} dest_ip={2} "
         "ports={3} spray={4}s monitor={5}s same_machine={6}".format(
             af, src_ip, dest_ip, len(port_allocs),
