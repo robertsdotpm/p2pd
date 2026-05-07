@@ -97,13 +97,12 @@ FAST_PUNCH_PARAMS = {
     # the fork window from 10/42=24% of every bucket transition to
     # 3/42=7%; together with the small absolute setup cost (~100 ms
     # for socket binds) this is comfortably enough headroom.
-    # Reverted to 10 (XP-test): the 3 s value made XP tcp_punch (both v4
-    # and v6) stop emitting log output between PunchMsg-receive and the
-    # actual fire, suggesting the bucket-bump path or the rendezvous
-    # wait was getting starved on XP's slow process / clock setup. Keep
-    # 10 until we have a deterministic repro for the bucket-fork issue
-    # on faster hosts; the XP regression is more important.
-    "min_run_window": 10,
+    # Back to 3 s now that NUM_PORTS=8 restores XP convergence margin.
+    # The 3 -> 10 revert earlier was a guess at fixing XP; the real
+    # cause was NUM_PORTS dropping from 16 to 2 (db0c676 + 2a36880).
+    # 3 s wins back the original sweep-flake reduction (bucket-fork
+    # window 3/42 = 7% vs 10/42 = 24% per bucket transition).
+    "min_run_window": 3,
     # Engine timing — bumped from 2.0 to 3.0 each after the matrix sweep
     # showed udp_punch flaking on busy hosts. With 18 sockets each spraying
     # at 50 Hz the connector saw only 1/18 of expected PROBEs back -- the
