@@ -68,6 +68,8 @@ self,
         max_sleep: int = 10,
         same_machine: bool = False,
         params: Optional[Dict[str, Any]] = None,
+        our_os: Optional[str] = None,
+        their_os: Optional[str] = None,
     ) -> None:
         # Fallback to IP4
         self.af = socket.AF_INET
@@ -88,6 +90,13 @@ self,
             # if its found of course.
             if self.af == IP6 and "%" in src_ip:
                 self.nic_id = src_ip.split("%")[1]
+
+        # OS tokens for each peer; passed through to bucket port
+        # allocators so each side picks ports from a pool the other
+        # side's NAT classifier actually validated. None on both
+        # sides == historical default pool.
+        self.our_os = our_os
+        self.their_os = their_os
 
         # Listen bind / dest connect matrixes.
         self.port_allocs = []  # [ src bind, dest port ]
@@ -198,10 +207,11 @@ self,
         call site -- the matrix had been running with 16-port sprays
         since db0c676 landed.
         """
+        kw = {"params": self.params, "our_os": self.our_os, "their_os": self.their_os}
         if n is None:
-            port_allocs, reserved = f_port_alloc(self.timestamp, params=self.params)
+            port_allocs, reserved = f_port_alloc(self.timestamp, **kw)
         else:
-            port_allocs, reserved = f_port_alloc(self.timestamp, n=n, params=self.params)
+            port_allocs, reserved = f_port_alloc(self.timestamp, n=n, **kw)
         for port_alloc in port_allocs:
             is_unique = True
             for stored_port_alloc in self.port_allocs:

@@ -264,6 +264,8 @@ class PunchPlugin(TraversalPlugin):
             self.nic.get_nic_id(self.af),
             same_machine=self.same_machine,
             params=FAST_PUNCH_PARAMS,
+            our_os=(self.src_map.get("os") if self.src_map else None),
+            their_os=(self.dest_map.get("os") if self.dest_map else None),
         )
 
         # Set coordinated time references.

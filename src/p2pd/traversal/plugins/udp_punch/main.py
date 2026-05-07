@@ -140,6 +140,8 @@ class UdpPunchPlugin(TraversalPlugin):
             self.nic.get_nic_id(self.af),
             same_machine=self.same_machine,
             params=FAST_PUNCH_PARAMS,
+            our_os=(self.src_map.get("os") if self.src_map else None),
+            their_os=(self.dest_map.get("os") if self.dest_map else None),
         )
         # Attach the bound route so delayed_run_engine can forward it
         # to bind_punch_sockets for NIC pinning. PunchClient itself is
