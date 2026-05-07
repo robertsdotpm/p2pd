@@ -86,6 +86,9 @@ sel: Any,
     start_time = time.monotonic()
     end = start_time + monitor_duration
 
+    write_evts = 0
+    read_evts = 0
+    write_so_errors = {}
     while time.monotonic() < end:
         events = sel.select(timeout=retry_interval)
 
@@ -94,6 +97,7 @@ sel: Any,
 
             # WRITE means connect() completion path
             if mask & selectors.EVENT_WRITE:
+                write_evts += 1
                 try:
                     err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
                     if err == 0:
@@ -102,6 +106,7 @@ sel: Any,
                         successful.add(sock)
                         sel.modify(sock, selectors.EVENT_READ)
                     else:
+                        write_so_errors[err] = write_so_errors.get(err, 0) + 1
                         log("[ENGINE-DBG] WRITE SO_ERROR={0} on {1}".format(
                             err, sock.getsockname(),
                         ))
@@ -110,6 +115,7 @@ sel: Any,
 
             # READ means either data or simultaneous-open completion traffic
             if mask & selectors.EVENT_READ:
+                read_evts += 1
                 try:
                     # Non-consuming probe
                     data = sock.recv(1, socket.MSG_PEEK)
@@ -121,6 +127,9 @@ sel: Any,
                 except OSError as exc:
                     log("[ENGINE-DBG] READ recv failed: {0}".format(repr(exc)))
 
+    print("[ENGINE-MON] window done write_evts={0} read_evts={1} so_errors={2} successful={3}".format(
+        write_evts, read_evts, write_so_errors, len(successful),
+    ), flush=True)
     return successful
 
 
@@ -153,27 +162,48 @@ af: Any,
         monitor_duration = CONNECT_TIMEOUT
         retry_interval = RETRY_INTERVAL
 
+    print("[ENGINE] enter af={0} src_ip={1} dest_ip={2} ports={3} "
+          "spray={4}s monitor={5}s same_machine={6}".format(
+              af, src_ip, dest_ip, len(port_allocs),
+              spray_duration, monitor_duration, same_machine,
+          ), flush=True)
     log("[ENGINE] tcp_selector_punch_engine af={0} src_ip={1} dest_ip={2} "
         "ports={3} spray={4}s monitor={5}s same_machine={6}".format(
             af, src_ip, dest_ip, len(port_allocs),
             spray_duration, monitor_duration, same_machine,
         ))
     pre_connect_infos, sel = setup_engine(af, port_allocs, src_ip, nic_id)
+    bound_locals = []
+    for pa, s in pre_connect_infos:
+        try:
+            bound_locals.append(s.getsockname())
+        except OSError:
+            bound_locals.append("?")
+    print("[ENGINE] setup_engine bound {0}/{1} sockets locals={2}".format(
+        len(pre_connect_infos), len(port_allocs), bound_locals,
+    ), flush=True)
     log("[ENGINE] setup_engine bound {0}/{1} sockets".format(
         len(pre_connect_infos), len(port_allocs),
     ))
 
     # Wait for synchronized punch time frame
+    print("[ENGINE] sleep_until enter", flush=True)
     log("[ENGINE] entering sleep_until -> punch rendezvous")
     f_sleep_until()
 
     # Initiate simultaneous open
+    print("[ENGINE] sleep_until done; spraying {0} connects for {1}s to {2}".format(
+        len(pre_connect_infos), spray_duration, dest_ip,
+    ), flush=True)
     log("[ENGINE] sleep_until done; spraying {0} connects for {1}s".format(
         len(pre_connect_infos), spray_duration,
     ))
     connect_on_tcp_sockets(
         same_machine, pre_connect_infos, dest_ip, spray_duration=spray_duration,
     )
+    print("[ENGINE] connect_on_tcp_sockets returned; entering monitor for {0}s".format(
+        monitor_duration,
+    ), flush=True)
 
     # Immediately monitor, no blind sleep
     successful = socket_event_monitor(
@@ -181,12 +211,18 @@ af: Any,
     )
 
     sock_list = list(successful)
+    print("[ENGINE] monitor done; successful={0}/{1}".format(
+        len(sock_list), len(pre_connect_infos),
+    ), flush=True)
     log("[ENGINE] monitor done; successful={0}/{1}".format(
         len(sock_list), len(pre_connect_infos),
     ))
 
     # Application-level validation should still be done after this
     sock = choose_winning_tcp_sock(dest_ip, sock_list, our_ip)
+    print("[ENGINE] choose_winning_tcp_sock -> {0}".format(
+        "selected" if sock else "no winner",
+    ), flush=True)
     log("[ENGINE] choose_winning_tcp_sock -> {0}".format(
         "selected" if sock else "no winner",
     ))
