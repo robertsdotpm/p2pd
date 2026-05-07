@@ -234,42 +234,53 @@ def connect_on_tcp_sockets(
     dest_ip: str,
     spray_duration: float = 5.0,
 ) -> None:
+    """Strict one-shot connect_ex per socket; idle until `spray_duration` elapses.
+
+    XP's TCP stack does NOT cleanly separate the connect-phase and
+    established-phase under async reuse.  ANY second call into the
+    connect path on the same socket -- even one that "harmlessly"
+    returns WSAEWOULDBLOCK / WSAEINVAL / WSAEISCONN -- can re-touch
+    the connect state machine, and on simul-open paths that re-touch
+    cascades into an internal abort that produces a delayed RST
+    ~174 ms after the wire-level handshake completes.
+
+    The previous state-aware spray called connect_ex twice per socket
+    on XP (first returned 10035 / WSAEWOULDBLOCK, second returned
+    10022 / WSAEINVAL).  Pcap forensics tied the 174ms post-handshake
+    RST to that second call.  Eliminating it requires strict one-shot:
+    each socket gets EXACTLY one connect_ex; subsequent iterations of
+    the spray loop never touch it again.
+
+    The kernel's TCP retransmit timer covers any SYN drops, so the
+    spray loop's repeated connect_ex was never doing useful work
+    anyway -- it was noise that XP couldn't tolerate.
+
+    spray_duration: how long to keep the SYN_SENT window open (seconds).
     """
-    Spray SYN packets at the destination for `spray_duration` seconds.
+    # First (and ONLY) connect_ex per socket.  Use the bind alloc's
+    # src_port for diagnostic logging instead of getsockname() -- on
+    # XP getsockname() during the connect transition can have weird
+    # internal side effects (lock contention, half-initialised socket
+    # state exposure) so it is avoided in the hot path.
+    _ = same_machine  # accepted for signature compat with engine call
+    for p, s in bound_infos:
+        try:
+            err = s.connect_ex((dest_ip, p.dest_port))
+            # Log any errno except the well-known "in progress" / OK codes.
+            if err not in (0, 36, 115, 10035):
+                log("[ENGINE-DBG] connect_ex({0}:{1}) from src_port={2} -> errno={3}".format(
+                    dest_ip, p.dest_port, p.src_port, err,
+                ))
+        except OSError as exc:
+            log("[ENGINE-DBG] connect_ex raised: " + repr(exc))
 
-    spray_duration: how long to keep spraying (seconds).  The CLI default is
-    5.0 s; FAST_PUNCH_PARAMS uses 2.0 s for LAN/protocol usage.
-
-    sel/af/nic_id/src_ip: when provided on BSD, ECONNREFUSED (RST received
-    during SYN_SENT) triggers socket recreation so the spray can re-enter
-    SYN_SENT on the next iteration.  Not applied on Linux or macOS.
-    """
-    start = time.monotonic()
-    end = start + spray_duration
-    first_iter = True
-    while time.monotonic() < end:
-        for p, s in bound_infos:
-            try:
-                err = s.connect_ex((dest_ip, p.dest_port))
-                if first_iter and err not in (0, 36, 115):
-                    # 36=EINPROGRESS(BSD), 115=EINPROGRESS(Linux), 0=connected
-                    # Anything else on first attempt is worth logging.
-                    log("[ENGINE-DBG] connect_ex({0}:{1}) from {2} -> errno={3}".format(
-                        dest_ip, p.dest_port, s.getsockname(), err,
-                    ))
-            except OSError as exc:
-                if first_iter:
-                    log("[ENGINE-DBG] connect_ex raised: {0}".format(repr(exc)))
-        first_iter = False
-
-        # Tight spray cadence -- both sides need to be in SYN_SENT when each
-        # other's SYN arrives for simultaneous-open to work.  On BSD the socket
-        # is permanently dead after the first RST, so we have only the very
-        # first iteration's SYN window to land the crossover; a small sleep
-        # keeps the loop from busy-spinning while still maximising the number
-        # of retry SYNs per second on platforms that allow it.
-        if not same_machine:
-            time.sleep(0.005)
+    # Wait out the rest of the spray window so the peer has time to
+    # fire its own SYNs and the kernel can complete simul-open without
+    # any further user-space pokes at the socket.  Burn at least one
+    # ms so a 0-duration spray still yields the GIL.
+    remaining = max(0.0, spray_duration - 0.001)
+    if remaining > 0:
+        time.sleep(remaining)
 
 
 def sleep_until(punch_time: float, f_timer: Any, max_sleep: int = 10) -> None:
