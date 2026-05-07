@@ -25,7 +25,7 @@ from aionetiface import (
     Interface,
     StartNodeNicknameFailed, SysClock, TunnelFailed,
     allow_windows_firewall,
-    async_run, async_wrap_errors, find_intersect, fstr,
+    async_run, async_wrap_errors, fstr,
     list_interfaces, load_interfaces, log, log_exception,
     sock_has_data, sys, to_b, to_s,
 )
@@ -36,7 +36,7 @@ from .defs import MENU_BANNER, PROGRAM_BANNER, demo_node_conf
 from .cmd_arg_defs import args
 from .utils import (
     add_echo_support, ainput_interrupt_w, cout,
-    display_ifs_loaded, filter_nics_by_mac,
+    display_ifs_loaded,
 )
 from .menu import run_menu_program, stop_nodes_option
 
@@ -54,32 +54,31 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
     # Load interfaces on machine.
     cout("Loading networking interfaces...")
     if_names = await list_interfaces()
-    nic_arg = list(args.nic) if args.nic else []
-    name_matched = False
     if args.nic:
-        filtered_nics = list(find_intersect(if_names, args.nic))
-        if filtered_nics:
-            if_names = filtered_nics
-            args.nic = []
-            name_matched = True
+        # --nic narrows to specific interface name(s). Names must match
+        # what list_interfaces returns (e.g. on Windows: the description
+        # like "Intel(R) 82574L Gigabit Network Connection"; on Linux:
+        # the kernel name like "ens192"). Pre-filter here so only the
+        # selected NIC(s) get loaded -- otherwise the demo wastes time
+        # running STUN / NAT detection on every adapter (mobile NICs,
+        # virtual adapters, etc.) and ends up publishing addresses for
+        # interfaces the caller never wanted.
+        if_names = [n for n in if_names if n in args.nic]
+        if not if_names:
+            raise ValueError(
+                "--nic supplied but no matching interface found. "
+                "Requested: {0}; available: {1}".format(
+                    args.nic, await list_interfaces(),
+                )
+            )
 
     ifs = []
     for attempt in range(3):
         ifs = await load_interfaces(
             if_names, Interface, min_agree=1, max_agree=4, timeout=4
         )
-        candidate = filter_nics_by_mac(args.nic, ifs) if args.nic else ifs
-        if candidate:
-            ifs = candidate
-            args.nic = []
+        if ifs:
             break
-        if name_matched:
-            raise RuntimeError(
-                "NIC '{0}' was found by name but failed to load. "
-                "Check the interface is up and has a valid IP.".format(
-                    ", ".join(str(n) for n in nic_arg)
-                )
-            )
         if attempt < 2:
             cout("No interfaces found (attempt {0}/3); retrying in 5 s...".format(attempt + 1))
             await asyncio.sleep(5)

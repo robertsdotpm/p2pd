@@ -6,7 +6,7 @@ import select
 import sys
 from aionetiface import (
     Any, Dict, EXT_BIND, IP4, IP6, List, NIC_BIND, Optional,
-    fstr, log, mac_norm, sock_has_data, to_b, to_s,
+    fstr, log, sock_has_data, to_b, to_s,
 )
 from ..node.nickname import pnp_name_has_tld
 from ..node.node_connect import resolve_pnp_addr
@@ -191,17 +191,6 @@ def patch_server_list(arg_list: List[str], server_list: List[Dict[str, Any]]) ->
         entry[af] = ip
         entry["afs"].append(af)
         server_list[offset] = entry
-
-
-def filter_nics_by_mac(mac_list: List[str], ifs: List[Any]) -> List[Any]:
-    """Return only the NICs whose MAC address appears in mac_list."""
-    mac_list = [mac_norm(mac) for mac in mac_list]
-    new_ifs = []
-    for nic in ifs:
-        if nic.mac in mac_list:
-            new_ifs.append(nic)
-
-    return new_ifs
 
 
 def display_ifs_loaded(ifs: List[Any]) -> None:

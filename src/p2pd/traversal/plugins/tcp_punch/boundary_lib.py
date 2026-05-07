@@ -72,7 +72,19 @@ FAST_PUNCH_PARAMS = {
     # rendezvous wait in exchange for far fewer flake failures.
     "window": 42,  # 42 s  (> 2 * 20 s max_clock_error)
     "max_clock_error": 20,  # 20 s  (covers XP NTP residuals + boot drift)
-    "min_run_window": 10,  # 10 s  (enough for setup + signaling)
+    # min_run_window=10 was inherited from DEFAULT_PUNCH_PARAMS, which
+    # sized it for *manual CLI* usage where a human types ssh commands
+    # on two machines and needs ~10s of slack to start both sides.
+    # Network-protocol invocation completes setup in <1s after PunchMsg
+    # arrives -- 10s is wildly conservative and was the actual cause of
+    # the bucket-fork failures we saw (~5% sweep flake): two peers with
+    # NTP-correct clocks 0.79s apart straddled the 10s "skip to next
+    # bucket" threshold, one bumped, the other didn't, and they ended
+    # up firing 42s apart on different ports.  Dropping to 3 s shrinks
+    # the fork window from 10/42=24% of every bucket transition to
+    # 3/42=7%; together with the small absolute setup cost (~100 ms
+    # for socket binds) this is comfortably enough headroom.
+    "min_run_window": 3,
     # Engine timing — bumped from 2.0 to 3.0 each after the matrix sweep
     # showed udp_punch flaking on busy hosts. With 18 sockets each spraying
     # at 50 Hz the connector saw only 1/18 of expected PROBEs back -- the
