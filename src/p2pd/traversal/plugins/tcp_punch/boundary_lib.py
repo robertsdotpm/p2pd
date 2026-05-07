@@ -163,11 +163,10 @@ boundary: int,
     return sorted(ports, reverse=True)
 
 
-# Per-OS port pool for the bucket allocator. Each peer picks ports for
-# itself (its own bind side) from its own OS's pool; when peer A computes
-# the ports it will *connect to* on peer B, it uses peer B's OS pool.
-# Both peers reach the same answer for each side because the bucket seed
-# is shared.
+# Per-OS port pool for the bucket allocator. The os_token is whatever
+# the platform module emitted on the peer (e.g. "Windows-XP",
+# "Windows-10", "Linux-5.10.0", "Darwin-22.1.0"). Match by substring so
+# we don't have to enumerate every possible release string.
 #
 # The motivating case is Windows XP. XP's NAT classification is run from
 # its normal ephemeral allocator (1025-5000); the FULL_CONE+EQUAL_DELTA
@@ -180,21 +179,25 @@ boundary: int,
 # simultaneous-open never converges. Pinning XP's allocator to its
 # 1025-5000 pool keeps the bind ports in the range the classifier
 # actually validated.
-PORT_POOL_BY_OS = {
-    "winxp":    (1025, 5000 - 1025 + 1),    # 1025..5000 (XP ephemeral)
-    "win2k":    (1025, 5000 - 1025 + 1),    # Win 2000 same legacy range
-}
 DEFAULT_PORT_POOL = (BASE_PORT, PORT_RANGE)
+WINXP_PORT_POOL = (1025, 5000 - 1025 + 1)  # 1025..5000
 
 
 def port_pool_for_os(os_token):
     """Return (base_port, port_range) for the bucket allocator for os_token.
 
-    Unknown / None -> default pool (BASE_PORT, PORT_RANGE).
+    os_token is the platform.system()+'-'+platform.release() string the
+    peer advertised (or None if the peer didn't ship one). Match by
+    substring so unknown future releases of the same OS family route
+    to the right pool. Returns DEFAULT_PORT_POOL on unknown OS or None.
     """
     if not os_token:
         return DEFAULT_PORT_POOL
-    return PORT_POOL_BY_OS.get(os_token, DEFAULT_PORT_POOL)
+    if "XP" in os_token:
+        return WINXP_PORT_POOL
+    if "2000" in os_token and "Windows" in os_token:
+        return WINXP_PORT_POOL
+    return DEFAULT_PORT_POOL
 
 
 def compute_rendezvous(
