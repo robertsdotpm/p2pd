@@ -1,7 +1,5 @@
 """Utilities for the simple TCP selector punch engine."""
 from typing import Any, List, Optional, Tuple
-import errno
-import selectors
 import socket
 import struct
 import sys
@@ -11,15 +9,6 @@ from aionetiface.net.bind.bind_rules import binder_sync
 from aionetiface.net.net_utils import ip_strip_if
 from aionetiface.net.socket import apply_nic_pin_sockopts
 from aionetiface.utility.cmd_tools import cmd as run_shell_cmd
-
-# Errno values that mean "the kernel received RST during SYN_SENT and the
-# socket is now permanently dead" -- different across POSIX and WinSock,
-# so build the set from whichever names exist on this platform.
-RST_ERRNOS = set()
-for rst_name in ("ECONNREFUSED", "WSAECONNREFUSED"):
-    rst_val = getattr(errno, rst_name, None)
-    if rst_val is not None:
-        RST_ERRNOS.add(rst_val)
 
 
 async def log_time_wait_residue(src_ip: Optional[str]) -> None:
@@ -225,53 +214,6 @@ def bind_tcp_sockets(
     )
 
 
-def recreate_tcp_punch_socket(
-    af: Any,
-    nic_id: Optional[str],
-    port_alloc: Any,
-    src_ip: Optional[str] = None,
-    route: Optional[Any] = None,
-) -> Any:
-    """Re-bind one TCP punch socket to the same source port after RST killed the previous fd.
-
-    Linux, BSD, macOS and Windows all transition the kernel socket to a
-    permanent CLOSED state when RST arrives during SYN_SENT --
-    connect_ex returns ECONNREFUSED (or WSAECONNREFUSED on Windows) once
-    and every subsequent call returns the cached error with no new SYN
-    on the wire.  When the peer's clock is even modestly behind ours
-    (XP NTP residual is the worst offender) our first SYN can land on
-    the peer's NAT before its outbound mapping exists, the router RSTs,
-    and our spray socket is silently dead for the rest of the punch
-    window even though the peer's eventual SYN does come back.
-
-    Mitigation: close the dead fd and re-create + re-bind to the same
-    src_port mid-spray.  The outbound NAT mapping for that src_port stays
-    live as long as a fresh SYN goes out within the NAT's TCP open timer
-    (tens of seconds, comfortably inside the 5 s spray).  SO_LINGER {1,0}
-    on the dead fd's close (set by sock_opt_voodoo + struct below)
-    sends RST instead of FIN so the local 4-tuple releases immediately
-    and the fresh bind doesn't TIME_WAIT-collide with itself.
-    """
-    if src_ip:
-        bind_ip = src_ip
-    else:
-        bind_ip = "0.0.0.0" if af == socket.AF_INET else "::"
-
-    s = socket.socket(af, socket.SOCK_STREAM)
-    sock_opt_voodoo(s)
-    apply_nic_pin_sockopts(s, route)
-    try:
-        s.setsockopt(
-            socket.SOL_SOCKET, socket.SO_LINGER,
-            struct.pack("ii", 1, 0),
-        )
-    except OSError:
-        pass
-    bind_tup = binder_sync(af, ip_strip_if(bind_ip), port_alloc.src_port, nic_id)
-    s.bind(bind_tup)
-    return s
-
-
 def listen_on_tcp_sockets(bound_infos: List[Tuple[Any, Any]]) -> List[Tuple[Any, Any]]:
     """Call listen() on each bound socket, returning those that succeed."""
     listen_infos = []
@@ -291,11 +233,6 @@ def connect_on_tcp_sockets(
     bound_infos: List[Tuple[Any, Any]],
     dest_ip: str,
     spray_duration: float = 5.0,
-    sel: Optional[Any] = None,
-    af: Any = None,
-    nic_id: Optional[str] = None,
-    src_ip: Optional[str] = None,
-    route: Optional[Any] = None,
 ) -> None:
     """
     Spray SYN packets at the destination for `spray_duration` seconds.
@@ -303,34 +240,15 @@ def connect_on_tcp_sockets(
     spray_duration: how long to keep spraying (seconds).  The CLI default is
     5.0 s; FAST_PUNCH_PARAMS uses 2.0 s for LAN/protocol usage.
 
-    Recreate-on-RST (all platforms): when a peer's SYN arrives at our NAT
-    before our outbound mapping for that src_port exists, the router RSTs
-    and the kernel kills our connecting socket -- subsequent connect_ex
-    returns the cached ECONNREFUSED with no further SYN on the wire.  This
-    is platform-universal (Linux/BSD/macOS/Windows all behave this way),
-    not a BSD-only quirk; the relevant trigger in production is peer clock
-    skew (XP NTP residual is the most common offender) firing the peer's
-    SYN late enough that our SYN crosses an unmapped peer port.
-
-    Pass sel + af + nic_id (+ src_ip / route as applicable) and any socket
-    that returns an RST errno is closed, unregistered from the selector,
-    re-bound to the same src_port via recreate_tcp_punch_socket, re-
-    registered, and replaced in bound_infos in place.  The next spray
-    iteration fires a fresh SYN from the same outbound NAT mapping so
-    when the peer's eventual SYN comes in, it lands on a live socket.
-
-    bound_infos is mutated in place; same_machine is forwarded only to
-    decide whether to back off between spray iterations.
+    sel/af/nic_id/src_ip: when provided on BSD, ECONNREFUSED (RST received
+    during SYN_SENT) triggers socket recreation so the spray can re-enter
+    SYN_SENT on the next iteration.  Not applied on Linux or macOS.
     """
-    recreate_enabled = sel is not None and af is not None
     start = time.monotonic()
     end = start + spray_duration
     first_iter = True
-    recreated = 0
-    recreate_failures = 0
     while time.monotonic() < end:
-        for i in range(len(bound_infos)):
-            p, s = bound_infos[i]
+        for p, s in bound_infos:
             try:
                 err = s.connect_ex((dest_ip, p.dest_port))
                 if first_iter and err not in (0, 36, 115):
@@ -339,48 +257,19 @@ def connect_on_tcp_sockets(
                     log("[ENGINE-DBG] connect_ex({0}:{1}) from {2} -> errno={3}".format(
                         dest_ip, p.dest_port, s.getsockname(), err,
                     ))
-                if recreate_enabled and err in RST_ERRNOS:
-                    try:
-                        sel.unregister(s)
-                    except (KeyError, ValueError, OSError):
-                        pass
-                    try:
-                        s.close()
-                    except OSError:
-                        pass
-                    try:
-                        new_s = recreate_tcp_punch_socket(
-                            af, nic_id, p, src_ip=src_ip, route=route,
-                        )
-                        sel.register(
-                            new_s,
-                            selectors.EVENT_WRITE | selectors.EVENT_READ,
-                        )
-                        bound_infos[i] = (p, new_s)
-                        recreated += 1
-                    except OSError as rebuild_exc:
-                        recreate_failures += 1
-                        log("[ENGINE-DBG] recreate after RST failed for src_port={0}: {1}".format(
-                            p.src_port, repr(rebuild_exc),
-                        ))
             except OSError as exc:
                 if first_iter:
                     log("[ENGINE-DBG] connect_ex raised: {0}".format(repr(exc)))
         first_iter = False
 
         # Tight spray cadence -- both sides need to be in SYN_SENT when each
-        # other's SYN arrives for simultaneous-open to work.  Without the
-        # recreate-on-RST path above, a single early SYN-RST from the peer's
-        # NAT (clock skew, slow wakeup) silently kills the spray; the small
-        # sleep keeps the loop from busy-spinning while still maximising the
-        # retry SYNs per second on platforms that allow it.
+        # other's SYN arrives for simultaneous-open to work.  On BSD the socket
+        # is permanently dead after the first RST, so we have only the very
+        # first iteration's SYN window to land the crossover; a small sleep
+        # keeps the loop from busy-spinning while still maximising the number
+        # of retry SYNs per second on platforms that allow it.
         if not same_machine:
             time.sleep(0.005)
-
-    if recreated or recreate_failures:
-        log("[ENGINE-DBG] connect_on_tcp_sockets recreated={0} failed={1} (RST mid-spray)".format(
-            recreated, recreate_failures,
-        ))
 
 
 def sleep_until(punch_time: float, f_timer: Any, max_sleep: int = 10) -> None:
