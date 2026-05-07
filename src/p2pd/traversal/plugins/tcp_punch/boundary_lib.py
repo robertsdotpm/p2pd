@@ -18,20 +18,30 @@ NTP_TIMEOUT = 1.0
 WINDOW = 42
 MAX_CLOCK_ERROR = 20  # The known max clock difference (1-20s)
 MIN_RUN_WINDOW = 10  # Minimum time required to run setup before the rendezvous
-# NUM_PORTS = number of source-port SYNs each side fires at the peer's
-# single predicted dest port. Higher N = more chances to converge when
-# port prediction has any error (e.g. XP's non-monotonic ephemeral
-# allocator producing wider mapping spread). 16 was the historical
-# value before db0c676 (which dropped to 2 nominally but kept punch_client
-# pinned at hardcoded n=16 -- so the live spray was 16 the whole time).
-# When 2a36880 removed the hardcode, NUM_PORTS=2 actually took effect
-# and broke XP tcp_punch. Bumping back to 16 restores what was
-# empirically working before. XP's 10-half-open cap (Tcpip Event 4226)
-# matters per *instant*, but with the 5 ms spray cadence the SYNs are
-# staggered over ~75 ms; combined with sub-second SYN turnaround on
-# LAN-routed traffic, the kernel keeps the in-flight half-open count
-# bounded well below 16 at any single moment.
-NUM_PORTS = 16
+# NUM_PORTS = TOTAL source-port SYNs each side fires per attempt.
+# With the two-bucket overlap port pool (boundary_alloc.py), this is
+# split as N//2 per bucket -- so NUM_PORTS=4 yields 2 boundary ports
+# from bucket B + 2 from bucket B+1 = 4 deterministic boundary ports
+# per fire.  Plus the 2-4 STUN-discovered NAT-predicted ports the
+# protocol layer adds, the engine fires 6-8 SYNs concurrently per
+# attempt -- comfortably under XP SP2+'s hard 10-concurrent-half-open
+# cap (Tcpip Event 4226).
+#
+# Why so few?
+#
+# Higher N looks defensive but tripping XP's 10-cap silently queues
+# SYNs 11+ past the 5s spray window -- they never go on the wire,
+# leaving the matrix dependent on whichever 10 made it.  The 5ms
+# spray cadence does NOT keep the half-open count below 10 because
+# round-trip time to a public peer (50-100ms) is much longer than
+# the per-iteration spray gap, so all N SYNs are simultaneously
+# in-flight half-open until SYN-ACK or RST returns.
+#
+# With deterministic boundary ports + EQUAL_DELTA NAT preservation,
+# even ONE matching port per bucket converges if both peers fire at
+# the same wall-clock moment.  N=4 boundary gives 2x redundancy per
+# bucket against bind collisions, and stays well clear of XP's cap.
+NUM_PORTS = 4
 BASE_PORT = 2024
 # Wider sample space than the original 20000 -- combined with the lower
 # BASE_PORT this gives the allocator the full user-port range (~2k-52k),
