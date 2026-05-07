@@ -203,9 +203,12 @@ def display_ifs_loaded(ifs: List[Any]) -> None:
                 buf += "(v4)"
             if af == IP6:
                 buf += "(v6)"
-        buf += fstr("\n\t\t{0} nat; ", (nat_txt[nic.nat["type"]],))
-        buf += fstr("{0} delta = ", (delta_txt[nic.nat["delta"]["type"]],))
-        buf += fstr("{0}", (nic.nat["delta"]["value"],))
+        if nic.nat is None:
+            buf += "\n\t\tnat = unknown (load_nat did not complete)"
+        else:
+            buf += fstr("\n\t\t{0} nat; ", (nat_txt[nic.nat["type"]],))
+            buf += fstr("{0} delta = ", (delta_txt[nic.nat["delta"]["type"]],))
+            buf += fstr("{0}", (nic.nat["delta"]["value"],))
         buf += "\n"
     cout(buf)
 

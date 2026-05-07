@@ -134,10 +134,12 @@ async def load_network_interfaces(node: Any) -> None:
 
 def start_background_port_forwarding(node: Any) -> Optional[Any]:
     """Launch a background UPnP port-forwarding task if the node is behind NAT and UPnP is enabled."""
-    # Check if all NICs are already open
+    # Check if all NICs are already open. A NIC whose load_nat did not
+    # complete (nic.nat is None) cannot be assumed open; conservatively
+    # treat it as closed so UPnP forwarding still runs.
     all_open_internet = True
     for nic in node.ifs:
-        if nic.nat["type"] != OPEN_INTERNET:
+        if nic.nat is None or nic.nat["type"] != OPEN_INTERNET:
             all_open_internet = False
             break
 

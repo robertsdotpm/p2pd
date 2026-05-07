@@ -191,6 +191,8 @@ class Nickname:
                 success_no += 1
 
         if not success_no:
+            # Check: is the namebump server process still running?
+            # A killed namebump looks like a network failure here.
             raise StartNodeNicknameFailed()
 
         self.started = True

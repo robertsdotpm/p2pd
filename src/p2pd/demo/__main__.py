@@ -116,6 +116,8 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
                 cout("PNP servers unreachable (attempt {0}/3); retrying in 5 s...".format(start_attempt + 1))
                 await asyncio.sleep(5)
     else:
+        # All 3 attempts exhausted. Most likely cause: namebump server
+        # was killed. Check 'ps aux | grep namebump' on the PNP host.
         raise StartNodeNicknameFailed()
     # print(node.pp_executor)
 

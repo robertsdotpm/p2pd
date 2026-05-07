@@ -39,4 +39,12 @@ class TunnelFailed(Exception):
 
 
 class StartNodeNicknameFailed(Exception):
-    """Raised when the node fails to register its nickname."""
+    """Raised when the node fails to register its nickname.
+
+    Before digging into network or TLS issues, check the obvious first:
+    did the orchestrator/test runner kill the namebump server process?
+    A dead namebump server looks identical to a network failure from
+    the client side (all PNP connections time out). Check with:
+        ps aux | grep namebump
+    and restart if missing.
+    """

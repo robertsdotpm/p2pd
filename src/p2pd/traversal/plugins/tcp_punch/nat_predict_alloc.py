@@ -2,7 +2,7 @@
 from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 import copy
-from aionetiface import Interface, get_n_stun_clients, UDP
+from aionetiface import Interface, fstr, get_n_stun_clients, log, UDP
 from .nat_predict import (
     NATMapping,
     nat_prediction,
@@ -12,7 +12,37 @@ from .nat_predict import (
     RESTRICT_PORT_NAT,
     delta_info,
     EQUAL_DELTA,
+    PRESERV_DELTA,
+    INDEPENDENT_DELTA,
+    DEPENDENT_DELTA,
+    PREDICTABLE_NATS,
 )
+
+
+def is_predictable_nat(nat: Optional[Dict[str, Any]]) -> bool:
+    """True if `get_single_mapping` can compute a port mapping for this NAT info.
+
+    Predictability needs at least one of:
+      - the NAT is open (no NAT, or symmetric UDP firewall)
+      - the delta type is EQUAL / PRESERV / INDEPENDENT / DEPENDENT
+      - the NAT type is in PREDICTABLE_NATS
+
+    Reaching get_single_mapping's final ``raise`` means none of the above
+    holds -- a symmetric NAT with random delta, the only shape we can't
+    punch through.
+    """
+    if not isinstance(nat, dict):
+        return False
+    if nat.get("is_open"):
+        return True
+    delta = nat.get("delta") or {}
+    if delta.get("type") in (
+        EQUAL_DELTA, PRESERV_DELTA, INDEPENDENT_DELTA, DEPENDENT_DELTA,
+    ):
+        return True
+    if nat.get("type") in PREDICTABLE_NATS:
+        return True
+    return False
 from .punch_utils import get_punch_mode
 from .punch_defs import (
     PortAlloc,
@@ -79,10 +109,34 @@ class NATPredictAlloc:
         self.self_mappings = []
 
     def set_nat_info(self, src_nat: Optional[Dict[str, Any]] = None, dest_nat: Optional[Dict[str, Any]] = None) -> None:
-        """Store the source and destination NAT info, defaulting to restricted-port NAT."""
+        """Store the source and destination NAT info.
+
+        Either side that is missing or unpredictable (typically symmetric +
+        random delta) is replaced with RESTRICT_PORT_NAT + EQUAL_DELTA. The
+        STUN-based NAT classifier can produce a false symmetric+random
+        reading on hosts whose ephemeral allocator is non-monotonic
+        (Windows XP being the obvious case), so we run the punch with a
+        sane assumed shape rather than fail closed. A wrong guess just
+        burns the plugin timeout; a right guess (the common case for
+        consumer routers) lets the punch succeed.
+        """
         nat_default = nat_info(RESTRICT_PORT_NAT, delta_info(EQUAL_DELTA, 0))
-        self.src_nat = src_nat or copy.deepcopy(nat_default)
-        self.dest_nat = dest_nat or copy.deepcopy(nat_default)
+        self.src_nat = self.coerce_predictable(src_nat, "src") or copy.deepcopy(nat_default)
+        self.dest_nat = self.coerce_predictable(dest_nat, "dest") or copy.deepcopy(nat_default)
+
+    def coerce_predictable(self, nat: Optional[Dict[str, Any]], side: str) -> Optional[Dict[str, Any]]:
+        """Return ``nat`` if predictable; ``None`` to trigger the default."""
+        if nat is None:
+            return None
+        if is_predictable_nat(nat):
+            return nat
+        delta = nat.get("delta") or {}
+        log(fstr(
+            "set_nat_info: {0}_nat unpredictable (type={1} delta_type={2}); "
+            "falling back to RESTRICT_PORT_NAT + EQUAL_DELTA",
+            (side, nat.get("type"), delta.get("type")),
+        ))
+        return None
 
     async def port_alloc(self, recv_mappings: Optional[List[Any]] = None) -> Tuple[List[Any], int]:
         """Progress the exchange state machine and return (port_allocs, is_end) for this round."""

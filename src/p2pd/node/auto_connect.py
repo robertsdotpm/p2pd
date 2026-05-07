@@ -1,5 +1,36 @@
-"""auto_connect: try installed plugins in batched per-pair rounds, fall back to TURN."""
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+"""auto_connect: phase-based connection establishment.
+
+Four phases run in order. The first phase to produce a viable pipe
+wins; auto_connect short-circuits and returns it.
+
+  Phase 1 -- direct_connect / reverse_connect
+            Race every (plugin x af x route_type x src x dest) combo
+            concurrently. 3-second total budget. LOOPBACK_BIND combos
+            are eligible when both sides advertise a loopback alias
+            (same-machine peers).
+
+  Phase 2 -- tcp_punch
+            NIC_BIND sub-phase first; if no NIC_BIND combos exist or
+            none win, EXT_BIND. Within each sub-phase, IPv4 first then
+            IPv6 (never concurrent). NICs on each side are sorted by
+            info["nat"]["type"] ascending so easiest NATs pair first.
+            Each parallel slot is a matching: no two attempts in a
+            slot share a src NIC or a dest NIC. Slots advance only
+            once every parallel attempt has finished or timed out.
+
+  Phase 3 -- udp_punch + random_probe
+            Identical scheduling to Phase 2. Both plugins race
+            concurrently within each scheduled (src, dest) pair.
+
+  Phase 4 -- turn
+            Sequential, no concurrency. Up to TURN_TOTAL_CAP attempts
+            in total. Prefer a fresh dest NIC each attempt; reuse one
+            only when the dest side has no untried NIC left.
+
+The `plugins=` argument filters which phases run. A phase is skipped
+when none of its plugins are in the configured set.
+"""
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 import asyncio
 from aionetiface import (
     IP4, IP6, NIC_BIND, EXT_BIND, LOOPBACK_BIND,
@@ -10,15 +41,25 @@ from .node_utils import enrich_addr_map_with_loopback
 from ..traversal.traversal_utils import close_plugin
 
 
-# Plugins that should never be tried in auto-mode: signaling-only,
-# relay, or meta-plugins. fan_out is excluded because auto_connect
-# already does its own per-pair combo enumeration -- racing fan_out
-# inside auto_connect would duplicate that work.
-SKIP_IN_AUTO = frozenset({"turn", "get_addr", "return_addr", "fan_out"})
+PHASE1_PLUGINS = ("direct_connect", "reverse_connect")
+PHASE2_PLUGINS = ("tcp_punch",)
+PHASE3_PLUGINS = ("udp_punch", "random_probe")
+PHASE4_PLUGINS = ("turn",)
 
-# Default batching knob. auto_connect kwarg overrides this.
-DEFAULT_MAX_ROUNDS = 3
+DEFAULT_PLUGINS = (
+    "direct_connect", "reverse_connect",
+    "tcp_punch", "udp_punch", "random_probe",
+    "turn",
+)
 
+PHASE1_BUDGET = 3.0
+TURN_TOTAL_CAP = 3
+DEFAULT_PLUGIN_TIMEOUT = 25.0
+
+
+# ---------------------------------------------------------------------------
+# Pair filtering primitives
+# ---------------------------------------------------------------------------
 
 def af_compatible(src_map: Dict[str, Any], dest_map: Dict[str, Any], af: Any) -> bool:
     """True if both nodes have at least one interface for this address family."""
@@ -26,7 +67,7 @@ def af_compatible(src_map: Dict[str, Any], dest_map: Dict[str, Any], af: Any) ->
 
 
 def pair_distinct(route_type: Any, src_info: Dict[str, Any], dest_info: Dict[str, Any]) -> bool:
-    """Per-pair validity by route_type.
+    """Per-pair validity for a route type.
 
     NIC_BIND      different NIC IPs (otherwise bind/connect collide)
     LOOPBACK_BIND both sides advertise a loopback alias (different by
@@ -47,59 +88,10 @@ def pair_distinct(route_type: Any, src_info: Dict[str, Any], dest_info: Dict[str
 
 
 def is_same_machine(src_map: Dict[str, Any], dest_map: Dict[str, Any]) -> bool:
-    """Return True if both addr_maps belong to the same physical host.
-
-    Same-machine peers can route directly between any two of their local
-    NICs (kernel owns both, so packets short-circuit via loopback) even
-    when the NICs are on different L2 subnets. That changes pair-generation:
-    NIC_BIND combos are no longer restricted to matching if_index.
-    """
+    """True if both addr_maps belong to the same physical host."""
     sid = src_map.get("machine_id")
     did = dest_map.get("machine_id")
     return bool(sid) and sid == did
-
-
-def has_valid_pair(
-    src_map: Dict[str, Any],
-    dest_map: Dict[str, Any],
-    af: Any,
-    route_type: Any,
-) -> bool:
-    """Return True if at least one viable (src_info, dest_info) pair exists.
-
-    NIC_BIND: requires different NIC IPs.
-    EXT_BIND: requires different external IPs.
-    Returns False if either AF dict is empty.
-
-    Different-machine peers: only matched-if_index pairs are considered
-    (alice's NIC0 may not have a route to bob's NIC1's subnet across
-    NATs). When the addr_maps share no if_index, optimistically allow it
-    and let the per-pair filter in auto_combo_batches make the final call.
-
-    Same-machine peers: all (src, dest) pairs are considered, because the
-    OS routes between any two local NICs locally regardless of subnet.
-    """
-    src_af = src_map.get(af)
-    dest_af = dest_map.get(af)
-    if not src_af or not dest_af:
-        return False
-
-    if is_same_machine(src_map, dest_map):
-        for src_info in src_af.values():
-            for dest_info in dest_af.values():
-                if pair_distinct(route_type, src_info, dest_info):
-                    return True
-        return False
-
-    found_shared = False
-    for if_idx, dest_info in dest_af.items():
-        src_info = src_af.get(if_idx)
-        if src_info is None:
-            continue
-        found_shared = True
-        if pair_distinct(route_type, src_info, dest_info):
-            return True
-    return not found_shared
 
 
 def viable_pairs_for_arc(
@@ -108,22 +100,15 @@ def viable_pairs_for_arc(
     src_map: Dict[str, Any],
     dest_map: Dict[str, Any],
 ) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
-    """Ordered list of (src_info, dest_info) pairs that survive per-pair filtering.
+    """Ordered (src_info, dest_info) pairs that survive per-pair filtering.
 
-    Different-machine peers: restricted to matching-if_index pairs because
-    crossing interfaces requires routing context the addr_map doesn't
-    capture (alice's NIC0 may not have a route to bob's NIC1's subnet
-    across NATs).
+    Different-machine peers: restricted to matching-if_index pairs (alice's
+    NIC0 may not have a route to bob's NIC1's subnet across NATs).
 
-    Same-machine peers: all (src, dest) pairs are emitted as the
-    Cartesian product. Both nodes' NICs live in the same kernel's
-    routing table, so dest_info["nic"] is reachable from any src NIC
-    via the local stack — even when src and dest sit on different
-    L2 subnets. Matching-if_index pairs come first so direct in-subnet
-    paths (when they exist) are tried before cross-subnet local routing.
-
-    Pairs that fail pair_distinct (NIC_BIND wants different NIC IPs,
-    EXT_BIND wants different ext IPs) are dropped.
+    Same-machine peers: emit the cross-product. Both nodes' NICs share one
+    kernel routing table so dest_info["nic"] is reachable from any src NIC
+    via the local stack. Matching-if_index pairs come first so direct
+    in-subnet paths are tried before cross-subnet local routing.
     """
     src_af = src_map.get(af, {}) or {}
     dest_af = dest_map.get(af, {}) or {}
@@ -135,18 +120,14 @@ def viable_pairs_for_arc(
     pairs = []
     seen = set()
 
-    # Matched-if_index pairs first (preserves the established priority order
-    # for normal cross-machine traversal).
     for if_idx, dest_info in dest_af.items():
         src_info = src_af.get(if_idx)
         if src_info is None:
             continue
         if pair_distinct(route_type, src_info, dest_info):
-            key = (id(src_info), id(dest_info))
-            seen.add(key)
+            seen.add((id(src_info), id(dest_info)))
             pairs.append((src_info, dest_info))
 
-    # Same-machine peers also emit cross-if_index pairs.
     if same_machine:
         for src_info in src_af.values():
             for dest_info in dest_af.values():
@@ -159,51 +140,11 @@ def viable_pairs_for_arc(
     return pairs
 
 
-def auto_combos(
-    node: Any,
-    src_map: Dict[str, Any],
-    dest_map: Dict[str, Any],
-) -> List[Tuple[str, Any, Any, Dict[str, Any], Dict[str, Any]]]:
-    """Flat per-pair combo list: [(plugin_name, af, route_type, src_info, dest_info), ...].
-
-    A combo is included when:
-      - the plugin is installed and not in SKIP_IN_AUTO
-      - both nodes have addresses for the AF
-      - the (src_info, dest_info) pair survives pair_distinct for the route_type
-
-    Route-type priority: NIC_BIND -> LOOPBACK_BIND -> EXT_BIND.
-    LOOPBACK_BIND combos are only generated for same-machine peers
-    (pair_distinct requires both sides advertise a loopback alias,
-    which only enrich_addr_map_with_loopback populates when same
-    machine_id). Plugins can opt out via SUPPORTED_ROUTE_TYPES on
-    the loader/class -- punch and turn don't drive the loopback
-    fast-path so they don't get LOOPBACK_BIND combos.
-
-    Kept for direct callers / unit tests; auto_connect itself uses the
-    batched generator below.
-    """
-    loaders = node.traversal.plugin_loaders
-    names = [n for n in loaders if n not in SKIP_IN_AUTO]
-    combos = []
-    for af in (IP4, IP6):
-        if not af_compatible(src_map, dest_map, af):
-            continue
-        for route_type in (NIC_BIND, LOOPBACK_BIND, EXT_BIND):
-            for src_info, dest_info in viable_pairs_for_arc(af, route_type, src_map, dest_map):
-                for name in names:
-                    if not _plugin_supports_route_type(loaders.get(name), route_type):
-                        continue
-                    combos.append((name, af, route_type, src_info, dest_info))
-    return combos
-
-
-def _plugin_supports_route_type(loader: Any, route_type: Any) -> bool:
+def plugin_supports_route_type(loader: Any, route_type: Any) -> bool:
     """True if the plugin loader's class accepts this route_type.
 
     Reads ``SUPPORTED_ROUTE_TYPES`` off the loader's plugin class
-    (default: every route_type allowed). Used by auto_combos to
-    skip combos a plugin would just no-op on -- e.g. PunchPlugin
-    declines LOOPBACK_BIND, TURNPlugin declines NIC_BIND/LOOPBACK_BIND.
+    (default: every route_type allowed).
     """
     if loader is None:
         return True
@@ -216,70 +157,18 @@ def _plugin_supports_route_type(loader: Any, route_type: Any) -> bool:
     return route_type in supported
 
 
-def auto_combo_batches(
-    node: Any,
-    src_map: Dict[str, Any],
-    dest_map: Dict[str, Any],
-    max_rounds: int = DEFAULT_MAX_ROUNDS,
-) -> Iterable[List[Tuple[str, Any, Any, Dict[str, Any], Dict[str, Any]]]]:
-    """Yield successive rounds of combos for auto_connect to race.
+def plugin_timeout(loader: Any) -> float:
+    """Per-plugin declared timeout from its loader meta, with a fallback."""
+    if isinstance(loader, dict):
+        t = loader.get("timeout")
+        if t is not None:
+            return float(t)
+    return DEFAULT_PLUGIN_TIMEOUT
 
-    Round k uses the k-th viable (src_info, dest_info) pair from each
-    (af, route_type) arc. Within a round, every non-TURN plugin is paired
-    with every (af, route_type, pair) so the batch contains the full plugin
-    fan-out for that pair index.
 
-    Bounded fan-out prevents thundering-herd on multi-homed hosts: a
-    4-NIC × 4-NIC node would otherwise produce 16 × len(plugins) × len(arcs)
-    racing plugins per call. With max_rounds=3 the cap is roughly
-    3 × len(plugins) × len(arcs).
-    """
-    names = [n for n in node.traversal.plugin_loaders if n not in SKIP_IN_AUTO]
-    if not names:
-        return
-
-    loaders = node.traversal.plugin_loaders
-
-    pairs_by_arc = {}
-    for af in (IP4, IP6):
-        if not af_compatible(src_map, dest_map, af):
-            continue
-        for route_type in (NIC_BIND, LOOPBACK_BIND, EXT_BIND):
-            viable = viable_pairs_for_arc(af, route_type, src_map, dest_map)
-            if viable:
-                pairs_by_arc[(af, route_type)] = viable
-
-    if not pairs_by_arc:
-        return
-
-    max_avail = max(len(v) for v in pairs_by_arc.values())
-    rounds = min(max_rounds, max_avail)
-
-    # Route-type priority within each batch: NIC_BIND first (literal
-    # local addresses, fastest when the kernel can route them),
-    # LOOPBACK_BIND second (same-machine fast-path for cross-subnet
-    # cases the kernel won't shortcut), EXT_BIND last (public WAN,
-    # always last because it round-trips outside the host).
-    arc_order = []
-    for af in (IP4, IP6):
-        for route_type in (NIC_BIND, LOOPBACK_BIND, EXT_BIND):
-            if (af, route_type) in pairs_by_arc:
-                arc_order.append((af, route_type))
-
-    for k in range(rounds):
-        batch = []
-        for (af, route_type) in arc_order:
-            viable = pairs_by_arc[(af, route_type)]
-            if k >= len(viable):
-                continue
-            src_info, dest_info = viable[k]
-            for name in names:
-                if not _plugin_supports_route_type(loaders.get(name), route_type):
-                    continue
-                batch.append((name, af, route_type, src_info, dest_info))
-        if batch:
-            yield batch
-
+# ---------------------------------------------------------------------------
+# Attempt + race helpers
+# ---------------------------------------------------------------------------
 
 async def attempt_one_combo(
     node: Any,
@@ -308,220 +197,413 @@ async def attempt_one_combo(
         return None
 
 
-async def race_plugin_results(
-    plugins: List[Any],
+def plugin_pipe(plugin: Any) -> Optional[Any]:
+    """Return the resolved pipe from a finished plugin, or None."""
+    if plugin is None:
+        return None
+    fut = getattr(plugin, "result", None)
+    if fut is None or not fut.done():
+        return None
+    try:
+        return fut.result()
+    except Exception:  # noqa: BLE001 -- failed plugin = None pipe
+        return None
+
+
+async def race_combos(
+    node: Any,
+    sig_pipe: Any,
+    src_map: Dict[str, Any],
+    dest_map: Dict[str, Any],
+    combos: Sequence[Tuple[str, Any, Any, Dict[str, Any], Dict[str, Any]]],
     timeout: float,
 ) -> Tuple[Optional[Any], Optional[Any]]:
-    """Await all plugin.result futures concurrently via callbacks.
+    """Launch combos concurrently; return (pipe, winner_plugin) or (None, None).
 
-    Returns (pipe, winning_plugin) as soon as any plugin resolves its result
-    to a non-None pipe. Returns (None, None) if all fail or timeout expires.
-
-    Using add_done_callback instead of awaiting plugin.result directly means
-    cancelling this coroutine does not cancel the underlying plugin futures —
-    so background processes (e.g. punch subprocess) can still resolve them.
+    First non-None pipe wins. Outstanding tasks are cancelled, then drained,
+    and every losing plugin is closed via close_plugin so its sockets are
+    released before the next slot.
     """
-    if not plugins:
+    if not combos:
         return None, None
 
-    resolved = asyncio.Future()
-    outstanding = [len(plugins)]
+    tasks = [
+        asyncio.ensure_future(
+            attempt_one_combo(node, sig_pipe, src_map, dest_map, combo)
+        )
+        for combo in combos
+    ]
 
-    def make_cb(plugin):
-        def cb(fut):
-            outstanding[0] -= 1
-            if resolved.done():
-                return
+    plugins = []
+    winner_pipe = None
+    winner_plugin = None
+    try:
+        for fut in asyncio.as_completed(tasks, timeout=timeout):
             try:
-                pipe = fut.result()
-            except Exception:
-                pipe = None
+                plugin = await fut
+            except asyncio.CancelledError:  # pylint: disable=try-except-raise
+                raise
+            except (asyncio.TimeoutError, OSError, ConnectionError, ValueError):
+                log_exception()
+                plugin = None
+            except Exception:  # noqa: BLE001 -- log unexpected, treat as loss
+                log_exception()
+                plugin = None
+            if plugin is None:
+                continue
+            plugins.append(plugin)
+            pipe = plugin_pipe(plugin)
             if pipe is not None:
-                resolved.set_result((pipe, plugin))
-            elif outstanding[0] <= 0:
-                resolved.set_result(None)
-        return cb
+                winner_pipe = pipe
+                winner_plugin = plugin
+                break
+    except asyncio.TimeoutError:
+        # Whole-race ceiling hit -- no winner this round.
+        pass
+    except asyncio.CancelledError:
+        for t in tasks:
+            if not t.done():
+                t.cancel()
+        raise
+
+    for t in tasks:
+        if not t.done():
+            t.cancel()
+    late = await asyncio.gather(*tasks, return_exceptions=True)
+    for item in late:
+        if (
+            item is not None
+            and not isinstance(item, BaseException)
+            and item is not winner_plugin
+            and item not in plugins
+        ):
+            plugins.append(item)
 
     for p in plugins:
-        p.result.add_done_callback(make_cb(p))
+        if p is not winner_plugin:
+            await close_plugin(p, node.traversal.plugins, node.traversal.inbound_pipes)
 
-    # When a future is already done at callback registration time, asyncio
-    # schedules the callback for the NEXT event-loop iteration rather than
-    # calling it synchronously. If every future was already done we must
-    # yield control once so those callbacks actually fire before we check the
-    # resolved state.
-    if all(p.result.done() for p in plugins):
-        await asyncio.sleep(0)
-
-    if not resolved.done():
-        remaining_count = sum(1 for p in plugins if not p.result.done())
-        if remaining_count == 0:
-            resolved.set_result(None)
-
-    try:
-        result = await asyncio.wait_for(asyncio.shield(resolved), timeout=timeout)
-    except asyncio.TimeoutError:
-        if not resolved.done():
-            resolved.cancel()
-        result = None
-
-    if result is None:
-        return None, None
-    return result
+    return winner_pipe, winner_plugin
 
 
-async def turn_fallback(
+# ---------------------------------------------------------------------------
+# Bipartite slot scheduling
+# ---------------------------------------------------------------------------
+
+def sort_nics_by_nat(nics: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sort NIC info dicts by ``info["nat"]["type"]`` ascending.
+
+    NICs without a parseable nat type are placed last so they don't crowd
+    out NICs with a known easy classification.
+    """
+    sentinel = 1 << 30
+
+    def key(info):
+        nat = info.get("nat") if isinstance(info, dict) else None
+        if isinstance(nat, dict) and "type" in nat:
+            try:
+                return int(nat["type"])
+            except (TypeError, ValueError):
+                return sentinel
+        return sentinel
+
+    return sorted(nics, key=key)
+
+
+def round_robin_slots(
+    src_nics: Sequence[Dict[str, Any]],
+    dest_nics: Sequence[Dict[str, Any]],
+) -> Iterable[List[Tuple[Dict[str, Any], Dict[str, Any]]]]:
+    """Schedule every (src, dest) pair into matching-disjoint slots.
+
+    Yields slots; each slot is a list of (src_info, dest_info) pairs in
+    which no two pairs share a src NIC or a dest NIC. Slot 0 pairs by
+    sorted index ((src[0], dest[0]), (src[1], dest[1]), ...) -- so the
+    easiest NATs on each side meet first when the input lists are sorted
+    by nat_type. Subsequent slots rotate the dest index so every (src,
+    dest) combination appears exactly once across all yielded slots.
+
+    For ``m = len(src_nics)``, ``n = len(dest_nics)`` the schedule has
+    ``max(m, n)`` slots and ``min(m, n)`` parallel pairs per slot --
+    which is the minimum possible (chromatic index of K(m,n)).
+    """
+    m = len(src_nics)
+    n = len(dest_nics)
+    if m == 0 or n == 0:
+        return
+
+    if m <= n:
+        for k in range(n):
+            slot = []
+            for i in range(m):
+                j = (i + k) % n
+                slot.append((src_nics[i], dest_nics[j]))
+            yield slot
+    else:
+        for k in range(m):
+            slot = []
+            for j in range(n):
+                i = (j + k) % m
+                slot.append((src_nics[i], dest_nics[j]))
+            yield slot
+
+
+def derive_sorted_nics(
+    pairs: Sequence[Tuple[Dict[str, Any], Dict[str, Any]]],
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Extract unique src and dest NICs from `pairs` and sort by nat_type."""
+    src_seen = {}
+    dest_seen = {}
+    for s, d in pairs:
+        src_seen.setdefault(id(s), s)
+        dest_seen.setdefault(id(d), d)
+    return (
+        sort_nics_by_nat(src_seen.values()),
+        sort_nics_by_nat(dest_seen.values()),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase implementations
+# ---------------------------------------------------------------------------
+
+async def phase1_direct(
     node: Any,
     src_map: Dict[str, Any],
     dest_map: Dict[str, Any],
     sig_pipe: Any,
-    timeout: float,
-    limit: int,
+    plugins: frozenset,
 ) -> Tuple[Optional[Any], Optional[Any]]:
-    """Try the TURN relay plugin sequentially for up to `limit` (af, if-pair) combos.
-
-    TURN requires different external IPs (EXT_BIND). We try AF=IP4 first, then
-    IP6. Within each AF we walk the if_infos_order list and attempt one TURN
-    session per pair, stopping as soon as one succeeds or we hit `limit`.
-
-    TURN is a separate pathway from the auto_combo_batches loop — it is only
-    consulted after every batch of direct/punch/reverse plugins has failed.
-    """
-    if "turn" not in node.traversal.plugin_loaders:
+    """Race direct_connect / reverse_connect across all valid combos."""
+    names = [n for n in PHASE1_PLUGINS if n in plugins]
+    if not names:
         return None, None
 
-    from ..traversal.traversal_utils import get_if_infos_order
-
-    count = 0
+    loaders = node.traversal.plugin_loaders
+    combos = []
     for af in (IP4, IP6):
         if not af_compatible(src_map, dest_map, af):
             continue
-        if not has_valid_pair(src_map, dest_map, af, EXT_BIND):
+        for route_type in (NIC_BIND, LOOPBACK_BIND, EXT_BIND):
+            for src_info, dest_info in viable_pairs_for_arc(
+                af, route_type, src_map, dest_map,
+            ):
+                for name in names:
+                    if name not in loaders:
+                        continue
+                    if not plugin_supports_route_type(loaders.get(name), route_type):
+                        continue
+                    combos.append((name, af, route_type, src_info, dest_info))
+
+    if not combos:
+        return None, None
+
+    log(fstr(
+        "auto_connect: phase1 racing {0} combos (budget={1}s)",
+        (len(combos), PHASE1_BUDGET),
+    ))
+    return await race_combos(
+        node, sig_pipe, src_map, dest_map, combos, PHASE1_BUDGET,
+    )
+
+
+async def punch_phase(
+    node: Any,
+    src_map: Dict[str, Any],
+    dest_map: Dict[str, Any],
+    sig_pipe: Any,
+    plugin_names: Sequence[str],
+    label: str,
+) -> Tuple[Optional[Any], Optional[Any]]:
+    """Generic phase-2/3 driver shared by tcp_punch and udp/probe.
+
+    NIC_BIND sub-phase first, then EXT_BIND if NIC_BIND yielded nothing.
+    Within a sub-phase, IP4 first then IP6, never concurrent. Per AF a
+    bipartite schedule (sorted by nat_type) drives parallel attempts in
+    each slot. plugin_names supplies the plugins raced concurrently
+    against each scheduled (src, dest) pair.
+    """
+    loaders = node.traversal.plugin_loaders
+    names = [n for n in plugin_names if n in loaders]
+    if not names:
+        return None, None
+
+    for route_type in (NIC_BIND, EXT_BIND):
+        active_names = [
+            n for n in names
+            if plugin_supports_route_type(loaders.get(n), route_type)
+        ]
+        if not active_names:
             continue
 
-        if_pairs = get_if_infos_order(af, EXT_BIND, src_map, dest_map)
-        same_machine = is_same_machine(src_map, dest_map)
+        slot_to = max(
+            (plugin_timeout(loaders.get(n)) for n in active_names),
+            default=DEFAULT_PLUGIN_TIMEOUT,
+        )
 
-        for src_info, dest_info in if_pairs:
-            if count >= limit:
-                return None, None
-            count += 1
+        for af in (IP4, IP6):
+            if not af_compatible(src_map, dest_map, af):
+                continue
+            pairs = viable_pairs_for_arc(af, route_type, src_map, dest_map)
+            if not pairs:
+                continue
 
-            plugin = None
-            try:
-                plugin = node.traversal.create_plugin(
-                    af, EXT_BIND, src_info, dest_info, same_machine, "turn"
-                )
-                plugin.set_addrs(src_map, dest_map)
-                plugin.sig_pipe = sig_pipe
-                await node.traversal.run_plugin(plugin)
+            src_nics, dest_nics = derive_sorted_nics(pairs)
+            allowed = {(id(s), id(d)) for s, d in pairs}
 
-                pipe = await asyncio.wait_for(
-                    asyncio.shield(plugin.result), timeout=timeout
+            for slot_idx, slot in enumerate(round_robin_slots(src_nics, dest_nics)):
+                # Drop pairs the route_type filter rejected (e.g. equal
+                # NIC IPs under NIC_BIND on same-machine cross-products).
+                slot = [(s, d) for s, d in slot if (id(s), id(d)) in allowed]
+                if not slot:
+                    continue
+
+                combos = []
+                for src_info, dest_info in slot:
+                    for name in active_names:
+                        combos.append(
+                            (name, af, route_type, src_info, dest_info)
+                        )
+
+                log(fstr(
+                    "auto_connect: {0} route={1} af={2} slot={3} pairs={4} timeout={5}s",
+                    (label, route_type, af, slot_idx, len(slot), slot_to),
+                ))
+                pipe, plugin = await race_combos(
+                    node, sig_pipe, src_map, dest_map, combos, slot_to,
                 )
                 if pipe is not None:
                     return pipe, plugin
 
-            except asyncio.CancelledError:  # pylint: disable=try-except-raise
-                raise
-            except (ValueError, OSError, ConnectionError, asyncio.TimeoutError):
-                log_exception()
+    return None, None
 
-            if plugin is not None:
-                await close_plugin(
-                    plugin, node.traversal.plugins, node.traversal.inbound_pipes
-                )
+
+async def phase2_tcp_punch(
+    node: Any,
+    src_map: Dict[str, Any],
+    dest_map: Dict[str, Any],
+    sig_pipe: Any,
+    plugins: frozenset,
+) -> Tuple[Optional[Any], Optional[Any]]:
+    if "tcp_punch" not in plugins:
+        return None, None
+    return await punch_phase(
+        node, src_map, dest_map, sig_pipe,
+        plugin_names=("tcp_punch",),
+        label="phase2",
+    )
+
+
+async def phase3_udp_probe(
+    node: Any,
+    src_map: Dict[str, Any],
+    dest_map: Dict[str, Any],
+    sig_pipe: Any,
+    plugins: frozenset,
+) -> Tuple[Optional[Any], Optional[Any]]:
+    names = tuple(n for n in PHASE3_PLUGINS if n in plugins)
+    if not names:
+        return None, None
+    return await punch_phase(
+        node, src_map, dest_map, sig_pipe,
+        plugin_names=names,
+        label="phase3",
+    )
+
+
+async def phase4_turn(
+    node: Any,
+    src_map: Dict[str, Any],
+    dest_map: Dict[str, Any],
+    sig_pipe: Any,
+    plugins: frozenset,
+    cap: int = TURN_TOTAL_CAP,
+) -> Tuple[Optional[Any], Optional[Any]]:
+    """Sequential TURN attempts, cap total attempts.
+
+    Iterate AFs (IP4 then IP6). For each AF, walk our NICs in nat_type
+    order. Pick the first dest NIC with which we form a valid
+    EXT_BIND pair and that we haven't paired with yet. Fall back to a
+    previously-used dest NIC only if every fresh option is invalid.
+    Stop as soon as we hit `cap` total attempts.
+    """
+    if "turn" not in plugins or "turn" not in node.traversal.plugin_loaders:
+        return None, None
+    loader = node.traversal.plugin_loaders["turn"]
+    if not plugin_supports_route_type(loader, EXT_BIND):
+        return None, None
+
+    timeout = plugin_timeout(loader)
+    attempts = 0
+
+    for af in (IP4, IP6):
+        if attempts >= cap:
+            break
+        if not af_compatible(src_map, dest_map, af):
+            continue
+        pairs = viable_pairs_for_arc(af, EXT_BIND, src_map, dest_map)
+        if not pairs:
+            continue
+
+        src_nics, dest_nics = derive_sorted_nics(pairs)
+        allowed = {(id(s), id(d)) for s, d in pairs}
+        used_dests = set()
+
+        for src_info in src_nics:
+            if attempts >= cap:
+                break
+
+            chosen = None
+            for dest_info in dest_nics:
+                if id(dest_info) in used_dests:
+                    continue
+                if (id(src_info), id(dest_info)) in allowed:
+                    chosen = dest_info
+                    break
+            if chosen is None:
+                for dest_info in dest_nics:
+                    if (id(src_info), id(dest_info)) in allowed:
+                        chosen = dest_info
+                        break
+            if chosen is None:
+                continue
+
+            used_dests.add(id(chosen))
+            attempts += 1
+            log(fstr(
+                "auto_connect: phase4 turn af={0} attempt={1}/{2}",
+                (af, attempts, cap),
+            ))
+            pipe, plugin = await race_combos(
+                node, sig_pipe, src_map, dest_map,
+                [("turn", af, EXT_BIND, src_info, chosen)],
+                timeout,
+            )
+            if pipe is not None:
+                return pipe, plugin
 
     return None, None
 
 
-def batch_timeout(node: Any, batch: List[Any]) -> float:
-    """Per-batch race timeout: max plugin.timeout across plugins in the batch.
-
-    A batch with punch (~50s) and direct_connect (~5s) waits for punch to
-    reach its declared budget before declaring the batch a loss. Fast
-    plugins that fail early just lose individually within the same race —
-    the slowest plugin in the batch sets the ceiling.
-    """
-    loaders = node.traversal.plugin_loaders
-    timeouts = []
-    for combo in batch:
-        plugin_name = combo[0]
-        meta = loaders.get(plugin_name)
-        if meta and "timeout" in meta:
-            timeouts.append(meta["timeout"])
-    if timeouts:
-        return float(max(timeouts))
-    # Conservative fallback if no per-plugin meta is available.
-    return 25.0
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Concurrent-socket budget (Windows in particular)
-#
-# Worst-case socket footprint during a single auto_connect run, while every
-# plugin is racing in parallel:
-#
-#   direct_connect   ~24 TCP   (up to 6 plugins x 3-4 loopback candidates)
-#   reverse_connect    0       (initiator only awaits a future)
-#   random_probe    ~256 UDP   per AF, in symmetric-NAT 256-pack mode
-#   udp_punch        ~4-8 UDP  per AF (recv_mappings x prediction window)
-#   tcp_punch       ~6-12 TCP  per AF (NAT-prediction binds + connects)
-#   turn             1-3 UDP   only on fallback
-#
-# Peak ~400-600 sockets in flight for a few seconds, dominated by
-# random_probe's 256-pack against a symmetric peer.
-#
-# Headroom on common Windows budgets:
-#   * Win7+ WinSock per-process default: ~16K sockets -- comfortable
-#   * Ephemeral port range default: 49152-65535 (~16K) -- comfortable
-#   * XP / Vista per-process: closer to 1K-2K, varies by SKU/registry --
-#     a single auto_connect fits, but back-to-back runs can chew the
-#     ephemeral pool because TIME_WAIT defaults to 4 minutes
-#
-# Most likely real-world failure mode is NOT WSAEMFILE (10024, "too many
-# open files"); it's WSAEADDRINUSE (10048) from TIME_WAIT exhausting the
-# ephemeral pool when a script loops auto_connect 20+ times in a row on
-# XP. Fix is `reuse_addr=True` (NODE_TEST_CONF already does this; prod
-# NODE_CONF deliberately doesn't, so a double-started node fails fast).
-#
-# Tightening levers we deliberately have NOT pulled yet, since the matrix
-# hasn't surfaced FD pressure:
-#   - random_probe pack 256 -> 128 (still effective on most symmetric NATs)
-#   - global socket-allocation semaphore at the traversal manager
-#   - SO_REUSEADDR on probe/punch sockets in production
-#   - audit close_plugin() to ensure synchronous socket close, not GC-deferred
-#
-# Worth revisiting if a real-world demo or stress test starts hitting
-# WSAEMFILE / WSAEADDRINUSE on the slower VMs.
-# ──────────────────────────────────────────────────────────────────────────────
-
+# ---------------------------------------------------------------------------
+# Orchestrator
+# ---------------------------------------------------------------------------
 
 async def auto_connect(
     node: Any,
     dest_addr: Any,
-    timeout: float = 60.0,
-    turn_limit: int = 3,
-    max_rounds: int = DEFAULT_MAX_ROUNDS,
+    plugins: Optional[Sequence[str]] = None,
 ) -> Tuple[Optional[Any], Optional[Any]]:
-    """Establish a P2P connection to dest_addr without specifying a plugin manually.
+    """Establish a P2P connection to dest_addr without picking a plugin.
 
-    Strategy:
-      1. Resolve dest_addr (accepts raw addr_bytes or a PNP nickname).
-      2. Build successive batches of (plugin, af, route_type, src_info, dest_info)
-         tuples, one batch per pair index. Round 0 uses the highest-priority
-         pair from each (af, route_type) arc; round 1 the next; up to max_rounds.
-      3. For each batch, launch every combo concurrently as tasks, then
-         race them via as_completed. The first non-None pipe wins; the
-         remaining tasks are cancelled.
-      4. If all batches fail, fall back to TURN (a separate pathway, never
-         interleaved with the direct/punch/reverse plugins above).
+    `plugins` selects which plugins are eligible. A phase whose plugins are
+    all absent from this set is skipped entirely. Defaults to the full set
+    in DEFAULT_PLUGINS.
 
-    `timeout` sets the TURN fallback per-pair timeout. Each batch in step 3
-    uses its own per-batch timeout derived from the slowest plugin in the
-    batch (see batch_timeout).
+    Returns ``(pipe, plugin)`` on success, ``(None, None)`` on failure.
     """
-    # --- 1. Resolve destination ---
+    plugin_set = frozenset(plugins) if plugins is not None else frozenset(DEFAULT_PLUGINS)
+
     try:
         addr_bytes, dest_vk, _ = await resolve_pnp_addr(node, dest_addr)
         dest_map = parse_node_addr(addr_bytes)
@@ -531,8 +613,6 @@ async def auto_connect(
     if dest_vk:
         dest_map["vk"] = dest_vk
 
-    # Attach the per-iface loopback alias so select_dest_ipr can prefer
-    # 127.X.Y.Z over the peer's NIC IP when same_pc=True.
     enrich_addr_map_with_loopback(dest_map)
 
     try:
@@ -544,114 +624,17 @@ async def auto_connect(
     except (OSError, ConnectionError, asyncio.TimeoutError):
         log_exception()
         return None, None
+
     src_map = node.addr_map
 
-    # --- 2 + 3. Batched fan-out across direct/punch/reverse plugins ---
-    batches = list(auto_combo_batches(node, src_map, dest_map, max_rounds=max_rounds))
-    log(fstr(
-        "auto_connect: {0} batches for {1}",
-        (len(batches), dest_addr),
-    ))
-    for bi, b in enumerate(batches):
-        log(fstr(
-            "auto_connect: batch[{0}] size={1} combos={2}",
-            (bi, len(b), [(c[0], c[1], c[2]) for c in b]),
-        ))
+    for phase_fn in (
+        phase1_direct,
+        phase2_tcp_punch,
+        phase3_udp_probe,
+        phase4_turn,
+    ):
+        pipe, plugin = await phase_fn(node, src_map, dest_map, sig_pipe, plugin_set)
+        if pipe is not None:
+            return pipe, plugin
 
-    for batch_idx, batch in enumerate(batches):
-        # Launch every combo in this batch concurrently. attempt_plugin
-        # awaits the underlying plugin.run() to completion, so each task
-        # resolves with a finalised plugin (success / failure / timeout).
-        attempt_tasks = [
-            asyncio.ensure_future(
-                attempt_one_combo(node, sig_pipe, src_map, dest_map, combo)
-            )
-            for combo in batch
-        ]
-
-        # Race for the first non-None pipe instead of awaiting all attempts.
-        # as_completed yields tasks in finish-order; the moment one completes
-        # with a viable plugin we break and cancel the rest, so a fast
-        # direct_connect doesn't get stalled waiting for a slow punch in the
-        # same batch.
-        winner_pipe = None
-        winner_plugin = None
-        plugins = []
-        batch_to = batch_timeout(node, batch)
-        log(fstr(
-            "auto_connect: starting batch {0} (size={1}, batch_timeout={2}s)",
-            (batch_idx, len(batch), batch_to),
-        ))
-        try:
-            for fut in asyncio.as_completed(attempt_tasks, timeout=batch_to):
-                try:
-                    plugin = await fut
-                except asyncio.CancelledError:  # pylint: disable=try-except-raise
-                    raise
-                except (asyncio.TimeoutError, OSError, ConnectionError, ValueError):
-                    log_exception()
-                    plugin = None
-                except Exception:  # noqa: BLE001 -- attempt_one_combo logs unexpected paths
-                    log_exception()
-                    plugin = None
-                if plugin is None:
-                    log(fstr(
-                        "auto_connect: batch {0} attempt produced no plugin",
-                        (batch_idx,),
-                    ))
-                    continue
-                plugins.append(plugin)
-                result_done = plugin.result.done()
-                pipe = None
-                if result_done:
-                    try:
-                        pipe = plugin.result.result()
-                    except Exception:  # noqa: BLE001
-                        pipe = None
-                log(fstr(
-                    "auto_connect: batch {0} got plugin={1} result_done={2} pipe={3}",
-                    (batch_idx, type(plugin).__name__, result_done, pipe is not None),
-                ))
-                if pipe is not None:
-                    winner_pipe = pipe
-                    winner_plugin = plugin
-                    break
-        except asyncio.TimeoutError:
-            # Whole-batch ceiling hit — no winner. Fall through to cleanup
-            # and the next batch (or TURN fallback).
-            pass
-        except asyncio.CancelledError:
-            for t in attempt_tasks:
-                if not t.done():
-                    t.cancel()
-            raise
-
-        # Cancel any attempts still running — first-winner short-circuits as
-        # soon as a viable pipe arrives, so we must reap the rest.
-        for t in attempt_tasks:
-            if not t.done():
-                t.cancel()
-        # Drain cancellations + collect any plugin objects that the cancelled
-        # tasks managed to create before being killed, so we can close them.
-        late = await asyncio.gather(*attempt_tasks, return_exceptions=True)
-        for item in late:
-            if (
-                item is not None
-                and not isinstance(item, BaseException)
-                and item is not winner_plugin
-                and item not in plugins
-            ):
-                plugins.append(item)
-
-        # Close every plugin in this batch except the winner.
-        for p in plugins:
-            if p is not winner_plugin:
-                await close_plugin(p, node.traversal.plugins, node.traversal.inbound_pipes)
-
-        if winner_pipe is not None:
-            return winner_pipe, winner_plugin
-
-    # --- 4. TURN fallback (separate pathway, last resort) ---
-    return await turn_fallback(
-        node, src_map, dest_map, sig_pipe, timeout, turn_limit,
-    )
+    return None, None
