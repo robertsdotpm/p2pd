@@ -85,33 +85,24 @@ FAST_PUNCH_PARAMS = {
     # rendezvous wait in exchange for far fewer flake failures.
     "window": 42,  # 42 s  (> 2 * 20 s max_clock_error)
     "max_clock_error": 20,  # 20 s  (covers XP NTP residuals + boot drift)
-    # min_run_window=10 was inherited from DEFAULT_PUNCH_PARAMS, which
-    # sized it for *manual CLI* usage where a human types ssh commands
-    # on two machines and needs ~10s of slack to start both sides.
-    # Network-protocol invocation completes setup in <1s after PunchMsg
-    # arrives -- 10s is wildly conservative and was the actual cause of
-    # the bucket-fork failures we saw (~5% sweep flake): two peers with
-    # NTP-correct clocks 0.79s apart straddled the 10s "skip to next
-    # bucket" threshold, one bumped, the other didn't, and they ended
-    # up firing 42s apart on different ports.  Dropping to 3 s shrinks
-    # the fork window from 10/42=24% of every bucket transition to
-    # 3/42=7%; together with the small absolute setup cost (~100 ms
-    # for socket binds) this is comfortably enough headroom.
-    # Back to 3 s now that NUM_PORTS=8 restores XP convergence margin.
-    # The 3 -> 10 revert earlier was a guess at fixing XP; the real
-    # cause was NUM_PORTS dropping from 16 to 2 (db0c676 + 2a36880).
-    # 3 s wins back the original sweep-flake reduction (bucket-fork
-    # window 3/42 = 7% vs 10/42 = 24% per bucket transition).
-    "min_run_window": 3,
-    # Engine timing — bumped from 2.0 to 3.0 each after the matrix sweep
-    # showed udp_punch flaking on busy hosts. With 18 sockets each spraying
-    # at 50 Hz the connector saw only 1/18 of expected PROBEs back -- the
-    # asyncio executor thread couldn't keep up with the 2 s window under
-    # MQTT broker churn + plugin coordination chatter. 3 s gives ~50%
-    # headroom on both directions, still well below DEFAULT_PUNCH_PARAMS's
-    # 5.0 s and well within plugin's 30/40 s timeout.
-    "connect_timeout": 3.0,  # 3.0 s spray window (5.0 caused regression)
-    "monitor_timeout": 3.0,  # 3.0 s monitor window
+    # min_run_window=10: was 3 to shrink the bucket-fork "skip to next
+    # bucket" zone (3/42 = 7% vs 10/42 = 24%).  With the two-bucket
+    # overlap port pool + dual-fire rendezvous (boundary_alloc.py +
+    # punch_client.run_engine), the bucket-fork zone is no longer a
+    # convergence-killer -- both peers always overlap on at least one
+    # common (rendezvous_time, port_pool) regardless of which side of
+    # the boundary their primary lands.  10 s gives more setup slack
+    # per bucket which matters more on slow stacks (XP/Vista) than the
+    # smaller fork zone did when there was only a single fire.
+    "min_run_window": 10,
+    # Engine timing — 5 s gives more SYN-cross opportunities per fire
+    # on slow stacks where the kernel's connect() retransmit cadence
+    # is slower than typical.  3 s was tight on XP where each spray
+    # iteration takes longer due to the older TCP stack; 5 s matches
+    # the DEFAULT_PUNCH_PARAMS engine duration and stays well within
+    # the dual-fire timeout budget (PLUGIN_CONF=180 s).
+    "connect_timeout": 5.0,  # 5.0 s spray window
+    "monitor_timeout": 5.0,  # 5.0 s monitor window
     "retry_interval": 0.05,  # 0.05 s selector poll interval (unchanged)
     # PunchClient / plugin timing
     "max_sleep": 65,  # 65 s cap — above worst-case wait of ~62 s

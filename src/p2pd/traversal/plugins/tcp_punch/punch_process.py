@@ -259,17 +259,17 @@ async def start_punching_process(nic: Any, puncher: Any, stop_reader: Any, proc_
 
         # The punch process makes a new connection to the
         # reverse connect server which we accept to connect the processes.
-        # Timeout sized for two-bucket dual-fire worst case: primary
-        # rendezvous wait can be up to WINDOW + max_clock_error (62s
-        # in FAST_PUNCH_PARAMS), then if the primary misses we wait
-        # another WINDOW (42s) for the secondary, plus engine fire/
-        # monitor (~6s).  Total worst case ~110s; 130s leaves headroom
-        # for setup overhead.  Was 60s when there was only a single
-        # fire, which silently truncated the secondary attempt.
-        print("[PUNCH-PROC] awaiting reverse_server.accept (130s)", flush=True)
-        log("[PUNCH-PROC] awaiting reverse_server.accept (130s)")
+        # Timeout sized for two-bucket dual-fire worst case with
+        # connect_timeout=monitor_timeout=5s engine windows:
+        #   primary  rendezvous wait : up to WINDOW + max_error (62s)
+        #   primary  engine          : 5+5 = 10s
+        #   secondary rendezvous wait: WINDOW (42s)
+        #   secondary engine         : 5+5 = 10s
+        # ~124s arithmetic + ~5s setup = ~129s.  150s leaves margin.
+        print("[PUNCH-PROC] awaiting reverse_server.accept (150s)", flush=True)
+        log("[PUNCH-PROC] awaiting reverse_server.accept (150s)")
         punch_process_connection = await asyncio.wait_for(
-            reverse_server.accept(), timeout=130
+            reverse_server.accept(), timeout=150
         )
         print("[PUNCH-PROC] reverse_server.accept returned conn={0}".format(
             punch_process_connection is not None,
