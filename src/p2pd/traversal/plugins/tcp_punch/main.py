@@ -15,6 +15,39 @@ from .nat_predict import NATMapping
 from ...traversal_plugin import TraversalPlugin
 from ....node.node_utils import get_pp_executors
 
+"""
+KNOWN LIMITATION: Windows XP as listener for cross-NAT tcp_punch.
+
+XP-SP3 (final QFE patches) does NOT reliably hold a TCP simul-open
+connection with a non-XP peer.  The wire-level handshake completes
+(SYN crossover, SYN-ACK both directions, final ACK), our engine
+catches the ESTABLISHED transition (successful=N/N), and the
+plugin returns pipe=True -- but ~140ms after the handshake XP's
+own tcpip.sys unilaterally RSTs the connection.  selector_proxy
+on the bridged socket then sees ConnectionResetError(104).
+
+This was deeply diagnosed in a 2026-05-08 session.  Eliminated as
+causes (none of these were the trigger): TCP SACK / TCP timestamps
+on the Linux peer, SO_LINGER {1,0} on Windows close, repeated
+connect_ex calls, the half-open SYN cap (Tcpip Event 4226),
+TCP task offload (DisableTaskOffload), TSO (TsoEnable), per-NIC
+checksum offload (TcpipOffload), AV / NDIS filter drivers, NIC
+protocol bindings.  Every variant produces the same deterministic
+174ms post-handshake RST.  It is a tcpip.sys behavior intrinsic
+to XP's stack -- not preventable from app code.
+
+Skype et al. avoided this by routing all XP-era cross-NAT data
+through UDP hole punching or supernode/TURN relays rather than
+TCP simul-open.  The same routing applies here: when the dest
+peer's os_token is "XP" or "Windows-2000", auto_connect should
+deprioritise tcp_punch and prefer udp_punch -> turn for the
+cross-NAT case.  tcp_punch remains correct for non-XP-listener
+pairs.  See p2pd/CLAUDE.md "Windows XP tcp_punch cross-NAT
+simul-open RST" section for the full ledger of tested causes
+and the engine-level fixes that came out of the diagnosis (which
+benefit every platform and should NOT be reverted).
+"""
+
 PLUGIN_CONF = {"timeout": 180}
 # 180s = max-rendezvous-wait (window=42 + max_clock_error=20 ≈ 62 s)
 #      + primary spray (~3 s) + primary monitor (~3 s)

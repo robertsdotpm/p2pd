@@ -156,6 +156,50 @@ XP's TCP/IP stack has two legacy quirks that any tcp_punch-related constant must
 
 - **Ephemeral source-port range** is `1025-5000` (~3975 ports), inherited from BSD-era WinSock. Vista raised it; Win7+ uses the IANA ephemeral range `49152-65535`. The narrow range only applies when the kernel auto-assigns a source port — explicit `bind(port=N)` works for any unprivileged port. But the NAT mapping the *router* creates for XP-originated traffic was tested using the auto-assigned 1025-5000 ports, so the NAT classifier's results are only valid in that range. Bucket-derived ports outside that range can produce different mapping behavior than the classifier observed. `BASE_PORT=2024` was chosen so the bucket pool overlaps with XP's ephemeral range; do not raise it without re-testing XP.
 
-- **Concurrent half-open TCP connect cap** is **10** on XP SP2+ (Tcpip Event 4226 in the System log when tripped). Vista SP1 raised it to 50; Win7+ removed it. tcp_punch's `NUM_PORTS` value is the number of source-port SYNs each side fires concurrently at the peer's single predicted dest port — so `NUM_PORTS` MUST stay `<= 10` to avoid the XP cap. We use `NUM_PORTS=8` for headroom (8 SYNs in flight, 2 cap-slots free). Bumping above 10 silently queues the excess SYNs past the punch window and breaks XP convergence; dropping below ~4 leaves too few attempts to converge when port prediction has any error (XP's non-monotonic ephemeral allocator gives wider mapping spread than other Windows). The historical `NUM_PORTS=2` (db0c676) hid behind a punch_client `n=16` hardcode until 2a36880 removed the override; that's the regression you want to avoid re-introducing.
+- **Concurrent half-open TCP connect cap** is **10** on XP SP2+ (Tcpip Event 4226 in the System log when tripped). Vista SP1 raised it to 50; Win7+ removed it. tcp_punch's `NUM_PORTS` value is the number of source-port SYNs each side fires concurrently at the peer's single predicted dest port. With the two-bucket overlap port pool, `NUM_PORTS=4` total (2 per bucket × 2 buckets) plus 2-4 STUN-discovered NAT-predicted ports = 6-8 SYNs concurrent per fire — comfortably under XP's 10 cap. Bumping `NUM_PORTS` above ~6 silently queues the excess SYNs past the punch window on XP and breaks convergence (the 5ms spray cadence does NOT keep half-open count below 10 because public-peer RTT (50-100ms) ≫ spray gap, so all N SYNs are simultaneously in-flight half-open until SYN-ACK or RST returns). The historical `NUM_PORTS=2` (db0c676) hid behind a punch_client `n=16` hardcode until 2a36880 removed the override; that's the regression you want to avoid re-introducing.
 
 The corollary for `interface_utils` and `socket.py`: do not hand XP a deterministic-bind port outside `[1025, 5000]` if the path needs the NAT mapping to match the classifier's reading. For tcp_punch the bucket math + `BASE_PORT=2024` already handles this; other code paths that pin specific source ports on XP need to be range-aware.
+
+## Windows XP tcp_punch cross-NAT simul-open RST (deeply diagnosed; not fixable from app-level)
+
+XP-as-listener cross-NAT tcp_punch will appear to work end-to-end (engine reports `successful=N/N`, `choose_winning_tcp_sock -> selected`, plugin returns `pipe=True`) but the connection dies ~140ms later with `ConnectionResetError(104)` on the bridged socket. **Do not waste time debugging this from app code.** It is a `tcpip.sys` behavior that we have eliminated every external explanation for.
+
+What happens on the wire (verified by tcpdump on the public peer):
+
+```text
+T+0ms     SYN crossover (both peers fire at deterministic punch_time)
+T+140ms   simul-open completes -- full SYN/SYN/SYN-ACK/SYN-ACK/ACK exchange
+T+~190ms  our monitor (early-exit on first ESTABLISHED) returns successful=N/N
+T+~270ms  choose_winning sends b"$", reverse_server bridge connects, pipe=True
+T+~314ms  XP unilaterally RSTs the punched connection (174ms after final ACK)
+```
+
+Eliminated as causes (all tested with cross-NAT XP-SP3-final-QFE → public Linux):
+
+- TCP SACK on Linux (sysctl tcp_sack=0 — no change)
+- TCP timestamps on Linux (sysctl tcp_timestamps=0 — no change)
+- SO_LINGER {1,0} on Windows close (disabled — no change)
+- Repeated `connect_ex` calls during spray (strict one-shot — no change)
+- 10-half-open SYN cap (Tcpip Event 4226 — NUM_PORTS=4 keeps us under it; no events fired)
+- Task offload globally (`DisableTaskOffload=1` registry — no change)
+- TCP Large Send Offload per-NIC (`TsoEnable=0` — no change)
+- TCP/IP checksum offload per-NIC (`TcpipOffload=0` — no change)
+- AV / NDIS filter drivers (none loaded; PSched bound to nothing; clean stock XP)
+- NIC bindings (only IPv4/IPv6 left enabled — no change)
+- `getsockname()` in connect-phase log (removed — no change)
+
+The 174ms timing is *deterministic and identical across all variants* — pure software path through `tcpip.sys`, no hardware/driver layer left to suspect. XP's TCP stack does not reliably hold a simul-open connection with a non-XP peer; this matches well-known XP TCP/IP limitations that Skype et al. avoided by routing all XP-era cross-NAT data through UDP hole punching or supernode/TURN relays rather than TCP simul-open.
+
+**Routing recommendation**: when the dest peer's `os_token` matches `port_pool_for_os` to `WINXP_PORT_POOL` (i.e. XP or Win2000), `auto_connect` should deprioritize `tcp_punch` and prefer `udp_punch` → `turn` for the cross-NAT case. tcp_punch still works fine for non-XP-listener pairs and should remain in the matrix.
+
+The engine-level fixes that came out of this diagnosis are KEEPERS regardless of the XP outcome, because they improve convergence for every platform:
+
+- `NUM_PORTS=4` total (down from 16) — under XP's half-open cap
+- Two-bucket overlap port pool — eliminates bucket-fork failure (peers landing in adjacent buckets due to signal latency)
+- Dual-fire rendezvous (primary + secondary punch_time, one window apart) — covers the residual bucket-fork case
+- NAT-predict bypass in `advance_punching_protocol` — removed STUN-discovered ports that didn't converge between peers
+- Strict one-shot `connect_ex` per socket — never re-touches the connect state machine
+- Early-exit monitor (50ms grace after first ESTABLISHED) — captures simul-open results before XP RSTs them; on non-XP peers this just returns sooner
+- SO_LINGER off on Windows — TIME_WAIT cost is per-test, simul-open hostility is the killer
+
+Do NOT revert any of those when revisiting tcp_punch.
