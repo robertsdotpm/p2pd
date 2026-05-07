@@ -246,28 +246,60 @@ def connect_on_tcp_sockets(
     spray_duration: float = 5.0,
 ) -> None:
     """
-    Strict one-shot connect_ex per socket; idle until `spray_duration` elapses.
+    Strict one-shot connect_ex per socket; return immediately to the engine.
 
-    XP's TCP stack does NOT cleanly separate the connect-phase and
+    Why one connect_ex per socket is enough:
+
+    "Spam many SYNs" punch designs typically refer to firing many
+    PARALLEL sockets bound to different source ports concurrently --
+    that's still what we do, via NUM_PORTS=4 (with two-bucket overlap
+    = 4 deterministic boundary ports per fire on each peer).  TEMPORAL
+    repetition of connect_ex on the same socket does NOT emit additional
+    SYNs on any modern TCP stack: once a non-blocking connect kicks the
+    socket into SYN_SENT, repeated connect_ex returns EALREADY (Linux)
+    / WSAEALREADY (Windows) / EISCONN (after established) -- no new
+    SYN is queued by the kernel.  The kernel's TCP retransmit timer
+    (RFC 6298: 1s, 3s, 6s, 12s, ... typical) is what actually causes
+    additional SYNs to go on the wire if the first one is lost; that's
+    fully autonomous, not driven by user-space.
+
+    So per-socket it's: one connect_ex → kernel emits SYN → kernel
+    handles retransmits → simul-open completes (or doesn't).  The
+    parallel SYNs across N sockets (each bound to a different
+    deterministic source port) give the engine N independent chances
+    at convergence per fire.  Internet packet loss (~0.1%) makes the
+    probability of ALL N SYNs being lost vanishingly small for N=4.
+
+    Why one-shot is also correct on XP specifically:
+
+    XP's tcpip.sys does NOT cleanly separate the connect-phase from the
     established-phase under async reuse.  ANY second call into the
-    connect path on the same socket -- even one that "harmlessly"
-    returns WSAEWOULDBLOCK / WSAEINVAL / WSAEISCONN -- can re-touch
-    the connect state machine, and on simul-open paths that re-touch
-    cascades into an internal abort that produces a delayed RST
-    ~174 ms after the wire-level handshake completes.
+    connect path on the same socket -- even one returning "harmless"
+    WSAEWOULDBLOCK / WSAEINVAL / WSAEISCONN -- re-touches the kernel's
+    connect state machine and is hostile to its simul-open transition.
+    Strict one-shot avoids the re-touch.  (Note: this does NOT prevent
+    XP from RSTing its own simul-open connections ~174ms after the
+    handshake completes -- that's a separate intrinsic tcpip.sys
+    behavior we ruled out at the kernel level; see CLAUDE.md "Windows
+    XP tcp_punch cross-NAT simul-open RST".  But strict one-shot is
+    the right baseline whether or not XP also tears the connection
+    down.)
 
-    The previous state-aware spray called connect_ex twice per socket
-    on XP (first returned 10035 / WSAEWOULDBLOCK, second returned
-    10022 / WSAEINVAL).  Pcap forensics tied the 174ms post-handshake
-    RST to that second call.  Eliminating it requires strict one-shot:
-    each socket gets EXACTLY one connect_ex; subsequent iterations of
-    the spray loop never touch it again.
+    Why we return immediately instead of sleeping `spray_duration`:
 
-    The kernel's TCP retransmit timer covers any SYN drops, so the
-    spray loop's repeated connect_ex was never doing useful work
-    anyway -- it was noise that XP couldn't tolerate.
+    The previous design slept the full spray_duration here before
+    letting the engine's monitor poll the selector.  That blocked the
+    monitor from observing the ESTABLISHED transition until well after
+    it happened -- on XP cross-NAT specifically, the brief ESTABLISHED
+    window (~180ms wide before XP RSTs) had already closed by the
+    time we started polling.  Returning immediately gives the monitor
+    the full engine window to observe transitions for any platform.
+    The kernel handles SYN retransmits regardless of whether we sit
+    in this function.
 
-    spray_duration: how long to keep the SYN_SENT window open (seconds).
+    same_machine and spray_duration are kept in the signature for
+    engine-call compatibility but are no longer functionally used --
+    timing is now controlled by the engine's monitor phase.
     """
     # First (and ONLY) connect_ex per socket.  Use the bind alloc's
     # src_port for diagnostic logging instead of getsockname() -- on
