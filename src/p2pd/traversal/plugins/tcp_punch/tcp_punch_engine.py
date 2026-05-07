@@ -207,7 +207,9 @@ af: Any,
         len(pre_connect_infos), spray_duration,
     ))
     connect_on_tcp_sockets(
-        same_machine, pre_connect_infos, dest_ip, spray_duration=spray_duration,
+        same_machine, pre_connect_infos, dest_ip,
+        spray_duration=spray_duration,
+        sel=sel, af=af, nic_id=nic_id, src_ip=src_ip,
     )
     print("[ENGINE] connect_on_tcp_sockets returned; entering monitor for {0}s".format(
         monitor_duration,

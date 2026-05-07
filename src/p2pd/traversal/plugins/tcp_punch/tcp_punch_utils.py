@@ -1,5 +1,7 @@
 """Utilities for the simple TCP selector punch engine."""
 from typing import Any, List, Optional, Tuple
+import random
+import selectors
 import socket
 import struct
 import sys
@@ -225,6 +227,51 @@ def bind_tcp_sockets(
     )
 
 
+def recreate_tcp_punch_socket(
+    af: Any,
+    nic_id: Optional[str],
+    port_alloc: Any,
+    src_ip: Optional[str] = None,
+    route: Optional[Any] = None,
+) -> Any:
+    """Re-bind one TCP punch socket to the same source port.
+
+    Used by the cycling spray (connect_on_tcp_sockets below) to refresh
+    a socket mid-spray.  Old-school punchers found that XP's TCP stack
+    gets stuck in inconsistent internal state if a single SYN_SENT
+    socket is held for a long time; cycling close + recreate gives
+    the kernel a fresh TCB each iteration, which sometimes catches
+    the brief ESTABLISHED window that XP's stack tears down moments
+    later.
+
+    The same NAT outbound mapping is reused across the close because
+    EQUAL_DELTA preservation means the NAT's mapping for src_port
+    persists for the TCP open timer (tens of seconds) regardless of
+    which socket on the LAN side is currently using it.
+    """
+    if src_ip:
+        bind_ip = src_ip
+    else:
+        bind_ip = "0.0.0.0" if af == socket.AF_INET else "::"
+
+    s = socket.socket(af, socket.SOCK_STREAM)
+    sock_opt_voodoo(s)
+    apply_nic_pin_sockopts(s, route)
+    # Match bind_punch_sockets' SO_LINGER policy: skip on Windows so
+    # cycling close() doesn't fire RSTs on still-in-progress sockets.
+    if sys.platform != "win32":
+        try:
+            s.setsockopt(
+                socket.SOL_SOCKET, socket.SO_LINGER,
+                struct.pack("ii", 1, 0),
+            )
+        except OSError:
+            pass
+    bind_tup = binder_sync(af, ip_strip_if(bind_ip), port_alloc.src_port, nic_id)
+    s.bind(bind_tup)
+    return s
+
+
 def listen_on_tcp_sockets(bound_infos: List[Tuple[Any, Any]]) -> List[Tuple[Any, Any]]:
     """Call listen() on each bound socket, returning those that succeed."""
     listen_infos = []
@@ -244,78 +291,139 @@ def connect_on_tcp_sockets(
     bound_infos: List[Tuple[Any, Any]],
     dest_ip: str,
     spray_duration: float = 5.0,
+    sel: Optional[Any] = None,
+    af: Any = None,
+    nic_id: Optional[str] = None,
+    src_ip: Optional[str] = None,
+    route: Optional[Any] = None,
 ) -> None:
+    """Cycling spray: bind/connect/close/recreate per cycle, jittered intervals.
+
+    Two-part fix for XP-as-listener simul-open instability:
+
+    (A) Fresh sockets per cycle.  A persistent SYN_SENT socket on XP
+    can sit in inconsistent kernel state for hundreds of ms after a
+    crossing SYN arrives -- pcap shows simul-open completing on the
+    wire, then XP unilaterally RSTing 174ms after the final ACK.
+    Closing and recreating the socket on a short interval gives the
+    kernel a fresh TCB; one of the cycles can catch the brief
+    ESTABLISHED window before XP's stack tears it down.  Old-school
+    punchers used this pattern (bind/connect/sleep/close/repeat)
+    precisely for older Windows TCP quirks.
+
+    (B) Jittered cycle interval.  Two peers running the same spray
+    code on synchronised clocks would otherwise phase-lock their
+    retransmit / cycle phases, every iteration potentially missing
+    each other's ESTABLISHED window in the same way.  ±100ms uniform
+    jitter per cycle desynchronises the peers' cycles so different
+    relative offsets are exercised across the spray window.
+
+    Note that this DOES require the bind metadata (sel/af/nic_id/
+    src_ip/route) so we can recreate sockets and re-register them
+    with the engine's selector; without those args we fall back to
+    a one-shot connect_ex on the initial sockets.
+
+    Same NAT mapping is reused across cycles -- EQUAL_DELTA NAT
+    preservation holds the LAN_port -> WAN_port mapping for the TCP
+    open timer (tens of seconds) regardless of which kernel socket
+    on the LAN side is using it.
+
+    Same-machine (LAN-back-to-self) usage skips cycling and uses a
+    single connect_ex pass; the LAN path doesn't have the XP simul-
+    open issue and the cycling overhead would slow LAN punches.
+
+    spray_duration: total spray window (seconds). FAST_PUNCH_PARAMS
+    uses 5.0s for tcp_punch.
     """
-    Initiate connect on each socket, then idle until `spray_duration` elapses.
+    cycling_enabled = (
+        sel is not None and af is not None and not same_machine
+    )
 
-    State-aware: once a socket's connect_ex returns anything other than the
-    "still in SYN_SENT, async connect in progress" codes, we stop calling
-    connect_ex on it.  Repeated connect_ex on an already-ESTABLISHED socket
-    on Windows XP triggers spurious RSTs ~140 ms after simul-open completes
-    -- the older XP TCP stack does not handle re-entry of the connect path
-    after the kernel state has advanced, and tears the connection down.
-    On Linux/BSD/Win7+ the call is a harmless WSAEISCONN/EISCONN return,
-    but skipping it everywhere is correct and matches the kernel's own
-    SYN-retransmit responsibility (the spray's repeated connect_ex never
-    actually emitted additional SYNs once the socket was past first
-    initiation -- the kernel's TCP retransmit timer drives that, not us).
-
-    spray_duration: how long to keep the SYN_SENT window open (seconds).
-    The CLI default is 5.0 s; FAST_PUNCH_PARAMS uses 5.0 s for tcp_punch.
-    """
-    # Codes meaning "connect is async-in-progress, socket still in SYN_SENT,
-    # call us again later" -- only on the FIRST call do we expect these.
-    # Subsequent calls always return an EALREADY-style code (no new SYN
-    # emitted by the kernel).
-    INPROGRESS_FIRST_CALL = (36, 115, 10035)
-    # 36    = EINPROGRESS (BSD/macOS)
-    # 115   = EINPROGRESS (Linux)
-    # 10035 = WSAEWOULDBLOCK (Windows)
-
-    start = time.monotonic()
-    end = start + spray_duration
-    completed = set()  # sockets that have moved past initial connect attempt
-    while time.monotonic() < end:
-        kicked_this_iter = 0
+    if not cycling_enabled:
+        # Fallback: one-shot connect_ex on the initial sockets and wait.
         for p, s in bound_infos:
-            if s in completed:
+            try:
+                s.connect_ex((dest_ip, p.dest_port))
+            except OSError as exc:
+                log("[ENGINE-DBG] connect_ex raised: " + repr(exc))
+        remaining = max(0.0, spray_duration - 0.005)
+        if remaining > 0:
+            time.sleep(remaining)
+        return
+
+    # Cycle interval: 200ms floor + 0..100ms jitter.  Yields ~3.5-5
+    # cycles in a 1s window, ~17-25 cycles in a 5s spray.  Each cycle
+    # is a complete close/recreate/connect, so each socket gets that
+    # many independent SYN attempts -- one of them should overlap
+    # with the peer's brief ESTABLISHED window if XP's stack is
+    # transiently capable.
+    cycle_floor = 0.20
+    cycle_jitter_max = 0.10
+
+    # Initial fire: connect on the freshly-bound sockets from setup_engine.
+    initial_kicks = 0
+    for p, s in bound_infos:
+        try:
+            s.connect_ex((dest_ip, p.dest_port))
+            initial_kicks += 1
+        except OSError as exc:
+            log("[ENGINE-DBG] initial connect_ex raised: " + repr(exc))
+
+    cycles = 0
+    cycle_failures = 0
+    end = time.monotonic() + spray_duration
+    while True:
+        # Jittered sleep -- random.uniform draws from a Mersenne Twister
+        # seeded per process, so two peers running the same code don't
+        # pick identical sequences.  Even if they did, the wall-clock
+        # offset between their cycle starts would still drift.
+        interval = cycle_floor + random.uniform(0, cycle_jitter_max)
+        time.sleep(interval)
+        if time.monotonic() >= end:
+            break
+
+        # Cycle: close + recreate + register + connect on every socket.
+        for i in range(len(bound_infos)):
+            p, old_s = bound_infos[i]
+            # Drop the old socket (closes silently when SO_LINGER not
+            # set -- on Windows we already skip SO_LINGER per the
+            # bind_punch_sockets policy; on Linux SO_LINGER is set so
+            # close fires RST, but a SYN_SENT socket without data has
+            # no peer state to RST against in practice).
+            try:
+                sel.unregister(old_s)
+            except (KeyError, ValueError, OSError):
+                pass
+            try:
+                old_s.close()
+            except OSError:
+                pass
+            # Fresh socket on same source port.  Kernel state cleared.
+            try:
+                new_s = recreate_tcp_punch_socket(
+                    af, nic_id, p, src_ip=src_ip, route=route,
+                )
+            except OSError as rebuild_exc:
+                cycle_failures += 1
+                log("[ENGINE-DBG] cycle recreate failed for src_port={0}: {1}".format(
+                    p.src_port, repr(rebuild_exc),
+                ))
                 continue
             try:
-                err = s.connect_ex((dest_ip, p.dest_port))
-                kicked_this_iter += 1
-                # Anything other than the first-call in-progress codes
-                # means the socket is no longer in the "needs initial
-                # connect kick" state.  Mark done so we never call
-                # connect_ex on it again.  This includes:
-                #   err == 0           -> connected (rare on non-blocking)
-                #   ECONNREFUSED/...   -> error
-                #   EALREADY/EISCONN   -> already in SYN_SENT or ESTABLISHED
-                # In all those cases, repeated connect_ex is either noise
-                # or actively harmful (the XP simul-open RST case).
-                if err not in INPROGRESS_FIRST_CALL:
-                    completed.add(s)
-                # Always log unexpected errnos on first observation per socket.
-                if err not in (0, 36, 115):
-                    log("[ENGINE-DBG] connect_ex({0}:{1}) from {2} -> errno={3}".format(
-                        dest_ip, p.dest_port, s.getsockname(), err,
-                    ))
+                sel.register(
+                    new_s,
+                    selectors.EVENT_WRITE | selectors.EVENT_READ,
+                )
+                bound_infos[i] = (p, new_s)
+                new_s.connect_ex((dest_ip, p.dest_port))
+                cycles += 1
             except OSError as exc:
-                completed.add(s)
-                log("[ENGINE-DBG] connect_ex raised: {0}".format(repr(exc)))
+                cycle_failures += 1
+                log("[ENGINE-DBG] cycle connect_ex raised: " + repr(exc))
 
-        # All sockets have been kicked once and have moved out of the
-        # "needs first connect" state; nothing more for the spray loop
-        # to do but wait for the engine's spray window to elapse so the
-        # peer has time to fire its own SYNs and the kernel's TCP
-        # retransmit timer covers any drops.
-        if kicked_this_iter == 0:
-            remaining = end - time.monotonic()
-            if remaining > 0:
-                time.sleep(remaining)
-            return
-
-        if not same_machine:
-            time.sleep(0.005)
+    log("[ENGINE-DBG] spray complete: initial_kicks={0} cycles={1} failures={2}".format(
+        initial_kicks, cycles, cycle_failures,
+    ))
 
 
 def sleep_until(punch_time: float, f_timer: Any, max_sleep: int = 10) -> None:
