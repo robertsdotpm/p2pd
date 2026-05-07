@@ -15,10 +15,13 @@ from .nat_predict import NATMapping
 from ...traversal_plugin import TraversalPlugin
 from ....node.node_utils import get_pp_executors
 
-PLUGIN_CONF = {"timeout": 150}
-# 150s = max-rendezvous-wait (window=42 + max_clock_error=20 ≈ 62 s)
-#      + spray (~3 s) + monitor (~3 s) + worker dispatch / engine
-#        setup overhead (varies by host, ~5-15 s on slow stacks)
+PLUGIN_CONF = {"timeout": 180}
+# 180s = max-rendezvous-wait (window=42 + max_clock_error=20 ≈ 62 s)
+#      + primary spray (~3 s) + primary monitor (~3 s)
+#      + secondary rendezvous wait (window=42 s) for two-bucket dual-fire
+#      + secondary spray (~3 s) + secondary monitor (~3 s)
+#      + worker dispatch / engine setup overhead (varies by host,
+#        ~5-15 s on slow stacks)
 #      + the post-punch reverse-bridge accept (typically <1 s)
 #      + a safety margin for slow stacks (XP/Vista) so the run_plugin
 #        wait_for doesn't cancel the awaiting reverse_server.accept
@@ -272,9 +275,16 @@ class PunchPlugin(TraversalPlugin):
         timestamp = self.sys_clock.time()
         puncher.set_timestamp(timestamp)
 
-        # Calculate a future timestamp to use as the punch time.
-        # Use the timing constants from the puncher's params so that the
-        # rendezvous window matches the params preset (e.g. FAST_PUNCH_PARAMS).
+        # Calculate the primary + secondary punch times for two-bucket
+        # overlap dual-fire.  See PunchClient.run_engine for the strategy:
+        # when the connector and listener call compute_rendezvous on
+        # opposite sides of a bucket boundary they pick adjacent buckets,
+        # but their {primary, primary+1} candidate sets always overlap on
+        # one common bucket -- so firing at both rendezvous in sequence
+        # guarantees the peer-pair lands on a synchronised fire moment.
+        # The secondary is exactly one WINDOW past the primary; both peers
+        # compute the same window arithmetic so they agree on the second
+        # rendezvous as well.
         p = puncher.params
         _, punch_time = compute_rendezvous(
             timestamp,
@@ -282,9 +292,9 @@ class PunchPlugin(TraversalPlugin):
             min_run_window=p["min_run_window"],
             max_error=p["max_clock_error"],
         )
+        secondary_punch_time = punch_time + p["window"]
 
-        # Set punch time.
-        puncher.set_punch_time(punch_time)
+        puncher.set_punch_time(punch_time, secondary_punch_time=secondary_punch_time)
 
         # Deterministic predictions based on boundary math.
         # PunchClient.add_port_allocator forwards self.params to the allocator

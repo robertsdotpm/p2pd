@@ -104,6 +104,14 @@ self,
         # The allocator has to decide on this.
         # Relative time from start_time bellow.
         self.punch_time = 0
+        # Two-bucket overlap dual-fire: when set, run_engine fires at
+        # punch_time first; if that converges, returns immediately;
+        # otherwise rebinds and fires at secondary_punch_time (one
+        # WINDOW later, the next bucket's rendezvous). Even when peers'
+        # bucket selections fork by 1, the peer-pair always shares a
+        # rendezvous time + port-pool overlap on at least one of the
+        # two fire moments.
+        self.secondary_punch_time = 0
 
         # Default to inaccurate system clock.
         self.timestamp = int(time.time())
@@ -148,13 +156,21 @@ self,
         self.start_time = time.monotonic()
 
     # Punch time is a future unix timestamp to start punching.
-    def set_punch_time(self, punch_time: int) -> None:
-        """Set the future Unix timestamp at which both peers will simultaneously send SYNs."""
+    def set_punch_time(self, punch_time: int, secondary_punch_time: int = 0) -> None:
+        """Set the primary and (optional) secondary fire times for two-bucket dual-fire.
+
+        secondary_punch_time, when non-zero, is the rendezvous of the
+        NEXT bucket (one WINDOW later) used by run_engine to retry
+        after a failed primary attempt.  See the two-bucket overlap
+        docstring on self.secondary_punch_time and on
+        boundary_port_alloc.
+        """
         wait = punch_time - getattr(self, "timestamp", punch_time)
-        log("[PUNCH-CLIENT] set_punch_time={0} wait_from_ts={1}s".format(
-            punch_time, wait,
+        log("[PUNCH-CLIENT] set_punch_time={0} secondary={1} wait_from_ts={2}s".format(
+            punch_time, secondary_punch_time, wait,
         ))
         self.punch_time = punch_time
+        self.secondary_punch_time = secondary_punch_time
 
     def sleep_until(self) -> None:
         """Block the calling thread until the punch time is reached, capped by max_sleep."""
@@ -224,7 +240,56 @@ self,
 
     # Return a socket (punched hole) on success.
     def run_engine(self, f_engine: Any) -> Optional[Any]:
-        """Execute the given punch engine function with this client's configuration and return the result socket."""
+        """Run the punch engine for the primary rendezvous, falling through to the secondary on miss.
+
+        Two-bucket overlap dual-fire:
+
+        Both peers compute the same {primary_bucket, primary_bucket+1}
+        candidate set, but their primary picks may differ by 1 when
+        their compute_rendezvous calls land on opposite sides of a
+        bucket boundary.  Whichever side of the fork each peer is on,
+        the peer-pair always overlaps on EXACTLY one common bucket --
+        and therefore on one common (rendezvous_time, port_pool)
+        moment.  Firing at both rendezvous in sequence guarantees
+        we hit the overlap regardless of which side forked.
+
+        If the primary fire converges, return immediately -- both peers
+        agreed on the primary bucket, no fallthrough needed.  If it
+        misses, the engine returns None and we re-arm punch_time to
+        the secondary rendezvous (one WINDOW later), let the engine
+        rebind fresh sockets, and fire again.  The same self.port_allocs
+        is reused across both fires because boundary_port_alloc already
+        produced the union of both buckets' ports.
+        """
+        log("[PUNCH-CLIENT] run_engine: primary punch_time={0} secondary={1}".format(
+            self.punch_time, self.secondary_punch_time,
+        ))
+        sock = f_engine(
+            af=self.af,
+            nic_id=self.nic_id,
+            port_allocs=self.port_allocs,
+            src_ip=self.src_ip,
+            dest_ip=self.dest_ip,
+            f_sleep_until=self.sleep_until,
+            our_ip=self.our_ip,
+            same_machine=self.same_machine,
+            params=self.params,
+        )
+        if sock is not None:
+            log("[PUNCH-CLIENT] run_engine: primary fire converged")
+            return sock
+
+        # Primary missed.  If a secondary punch_time was configured,
+        # fall through to it -- this is the dual-fire branch.
+        if not self.secondary_punch_time:
+            log("[PUNCH-CLIENT] run_engine: primary missed, no secondary configured")
+            return None
+
+        log("[PUNCH-CLIENT] run_engine: primary missed; falling through to "
+            "secondary punch_time={0}".format(self.secondary_punch_time))
+        self.punch_time = self.secondary_punch_time
+        # Clear secondary so a retry-of-retry doesn't loop.
+        self.secondary_punch_time = 0
         return f_engine(
             af=self.af,
             nic_id=self.nic_id,
