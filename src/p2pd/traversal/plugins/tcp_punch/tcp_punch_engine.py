@@ -75,20 +75,37 @@ sel: Any,
     retry_interval: float = RETRY_INTERVAL,
 ) -> Any:
     """
-    Poll the selector for `monitor_duration` seconds and collect successfully
-    connected sockets.
+    Poll the selector and collect successfully-connected sockets.
 
-    monitor_duration: how long to watch for connection events (seconds).
+    Exits early as soon as any socket transitions to ESTABLISHED so
+    choose_winning_tcp_sock can hand off the master/slave "$" sentinel
+    inside XP's brief simul-open ESTABLISHED window (~180ms wide -- XP
+    RSTs the connection 174ms after the wire-level handshake completes).
+    Without early exit the monitor's full 5s window expires long after
+    XP has torn the connection down, and the master's send b"$" gets
+    BrokenPipeError.
+
+    Lingering for a short grace period after the first ESTABLISHED lets
+    the other simul-open tuples in the same fire collect too -- they
+    transition within ~10-20ms of each other on the same RTT-aligned
+    pair -- but capped to 50ms so we still beat the 180ms RST window.
+
+    monitor_duration: max time to watch for connection events (seconds).
     retry_interval:   selector poll timeout per iteration (seconds).
     """
     successful = set()
 
     start_time = time.monotonic()
     end = start_time + monitor_duration
+    # Once we see the first ESTABLISHED, only wait this much longer for
+    # additional sockets to come up before exiting the loop.  50ms is
+    # comfortably under XP's 174ms post-handshake RST timer.
+    grace_period = 0.050
 
     write_evts = 0
     read_evts = 0
     write_so_errors = {}
+    first_success_at = None
     while time.monotonic() < end:
         events = sel.select(timeout=retry_interval)
 
@@ -103,13 +120,14 @@ sel: Any,
                     if err == 0:
                         # Confirms TCP state reached ESTABLISHED
                         sock.getpeername()
-                        successful.add(sock)
+                        if sock not in successful:
+                            successful.add(sock)
+                            if first_success_at is None:
+                                first_success_at = time.monotonic()
                         sel.modify(sock, selectors.EVENT_READ)
                     else:
                         write_so_errors[err] = write_so_errors.get(err, 0) + 1
-                        log("[ENGINE-DBG] WRITE SO_ERROR={0} on {1}".format(
-                            err, sock.getsockname(),
-                        ))
+                        log("[ENGINE-DBG] WRITE SO_ERROR={0}".format(err))
                 except OSError as exc:
                     log("[ENGINE-DBG] WRITE getsockopt/getpeername failed: {0}".format(repr(exc)))
 
@@ -120,15 +138,29 @@ sel: Any,
                     # Non-consuming probe
                     data = sock.recv(1, socket.MSG_PEEK)
                     if data:
-                        successful.add(sock)
+                        if sock not in successful:
+                            successful.add(sock)
+                            if first_success_at is None:
+                                first_success_at = time.monotonic()
                 except BlockingIOError:
                     # No payload yet, but socket alive
-                    successful.add(sock)
+                    if sock not in successful:
+                        successful.add(sock)
+                        if first_success_at is None:
+                            first_success_at = time.monotonic()
                 except OSError as exc:
                     log("[ENGINE-DBG] READ recv failed: {0}".format(repr(exc)))
 
-    print("[ENGINE-MON] window done write_evts={0} read_evts={1} so_errors={2} successful={3}".format(
-        write_evts, read_evts, write_so_errors, len(successful),
+        # Early exit once we have at least one ESTABLISHED socket and
+        # the grace period for stragglers has elapsed.  Critical for
+        # XP cross-NAT: handing off to choose_winning fast enough to
+        # send b"$" before the connection gets RST'd.
+        if first_success_at is not None and time.monotonic() - first_success_at >= grace_period:
+            break
+
+    elapsed = time.monotonic() - start_time
+    print("[ENGINE-MON] window done write_evts={0} read_evts={1} so_errors={2} successful={3} elapsed={4:.3f}s".format(
+        write_evts, read_evts, write_so_errors, len(successful), elapsed,
     ), flush=True)
     return successful
 
