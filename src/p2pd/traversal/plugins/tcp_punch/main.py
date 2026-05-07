@@ -70,12 +70,19 @@ class PunchPlugin(TraversalPlugin):
 
     async def run(self, reply: Optional[Any] = None) -> None:
         """Coordinate the hole-punch exchange and launch the background punching process."""
+        print("[PUNCH-RUN] enter plugin_id={0} reply={1} completed={2}".format(
+            self.plugin_id, reply is not None,
+            self.plugin_id in self.completed_pipe_ids,
+        ), flush=True)
         log("[PUNCH-RUN] enter plugin_id={0} reply={1} completed={2}".format(
             self.plugin_id,
             reply is not None,
             self.plugin_id in self.completed_pipe_ids,
         ))
         if self.plugin_id in self.completed_pipe_ids:
+            print("[PUNCH-RUN] already completed; returning early plugin_id={0}".format(
+                self.plugin_id,
+            ), flush=True)
             log("[PUNCH-RUN] already completed; returning early plugin_id={0}".format(
                 self.plugin_id,
             ))
@@ -85,23 +92,49 @@ class PunchPlugin(TraversalPlugin):
         puncher = self.punch_clients.get(self.plugin_id)
         if puncher is None:
             # First call: build a PunchClient with routing, timing, and port allocators.
+            print("[PUNCH-RUN] first call; setup_puncher_client plugin_id={0}".format(
+                self.plugin_id,
+            ), flush=True)
             log("[PUNCH-RUN] first call; setup_puncher_client plugin_id={0}".format(
                 self.plugin_id,
             ))
-            puncher, stuns = await self.setup_puncher_client(reply)
+            try:
+                puncher, stuns = await self.setup_puncher_client(reply)
+            except BaseException as exc:
+                print("[PUNCH-RUN] setup_puncher_client raised {0}: {1}".format(
+                    type(exc).__name__, exc,
+                ), flush=True)
+                raise
             if puncher is None:
+                print("[PUNCH-RUN] PunchPlugin: no STUN clients available; aborting.", flush=True)
                 log("[PUNCH-RUN] PunchPlugin: no STUN clients available; aborting punch.")
                 return
+            print("[PUNCH-RUN] setup_puncher_client OK; n_stuns={0}".format(
+                len(stuns) if stuns else 0,
+            ), flush=True)
 
             # A concurrent run() may have raced through the await above and already
             # registered a client.  Reuse it to avoid a duplicate punching process.
             puncher = self.punch_clients.get(self.plugin_id) or puncher
             if self.plugin_id not in self.punch_clients:
+                print("[PUNCH-RUN] configure_puncher_process plugin_id={0}".format(
+                    self.plugin_id,
+                ), flush=True)
                 log("[PUNCH-RUN] configure_puncher_process plugin_id={0}".format(
                     self.plugin_id,
                 ))
-                puncher = await self.configure_puncher_process(puncher, stuns)
+                try:
+                    puncher = await self.configure_puncher_process(puncher, stuns)
+                except BaseException as exc:
+                    print("[PUNCH-RUN] configure_puncher_process raised {0}: {1}".format(
+                        type(exc).__name__, exc,
+                    ), flush=True)
+                    raise
+                print("[PUNCH-RUN] configure_puncher_process OK", flush=True)
         else:
+            print("[PUNCH-RUN] reusing existing puncher plugin_id={0}".format(
+                self.plugin_id,
+            ), flush=True)
             log("[PUNCH-RUN] reusing existing puncher plugin_id={0}".format(
                 self.plugin_id,
             ))
@@ -109,21 +142,40 @@ class PunchPlugin(TraversalPlugin):
         # --- Advance the NAT traversal exchange ---
         # Each call computes the next round of port predictions and checks
         # whether both sides have exchanged enough mappings to attempt punching.
-        outgoing_msg = await self.advance_punching_protocol(
-            puncher, reply, puncher.punch_time
-        )
+        print("[PUNCH-RUN] advance_punching_protocol enter punch_time={0}".format(
+            getattr(puncher, "punch_time", "?"),
+        ), flush=True)
+        try:
+            outgoing_msg = await self.advance_punching_protocol(
+                puncher, reply, puncher.punch_time
+            )
+        except BaseException as exc:
+            print("[PUNCH-RUN] advance_punching_protocol raised {0}: {1}".format(
+                type(exc).__name__, exc,
+            ), flush=True)
+            raise
+        print("[PUNCH-RUN] advance_punching_protocol returned outgoing={0}".format(
+            outgoing_msg is not None,
+        ), flush=True)
 
         # None signals the exchange is complete; the background punch process
         # takes it from here.
         if outgoing_msg is None:
+            print("[PUNCH-RUN] advance returned None; exchange done plugin_id={0}".format(
+                self.plugin_id,
+            ), flush=True)
             log("[PUNCH-RUN] advance returned None; exchange done plugin_id={0}".format(
                 self.plugin_id,
             ))
             return
 
         # --- Send our port predictions to the peer ---
+        print("[PUNCH-RUN] sending outgoing PunchMsg plugin_id={0}".format(
+            self.plugin_id,
+        ), flush=True)
         log("[PUNCH-RUN] sending outgoing PunchMsg plugin_id={0}".format(self.plugin_id))
         await self.send_signal_msg(outgoing_msg)
+        print("[PUNCH-RUN] sent OK plugin_id={0}".format(self.plugin_id), flush=True)
 
     async def setup_puncher_client(self, reply: Optional[Any]) -> Tuple[Optional[Any], Optional[Any]]:
         """
@@ -319,11 +371,17 @@ class PunchPlugin(TraversalPlugin):
         # The delay is kept short when using FAST_PUNCH_PARAMS because the
         # rendezvous window is small and synchronised via sleep_until().
         coordinator_delay = puncher.params.get("coordinator_delay", 2.0)
+        print("[PUNCH-DELAY] enter plugin_id={0} delay={1}s".format(
+            self.plugin_id, coordinator_delay,
+        ), flush=True)
         log("[PUNCH-DELAY] enter plugin_id={0} delay={1}s".format(
             self.plugin_id, coordinator_delay,
         ))
         try:
             await asyncio.sleep(coordinator_delay)
+            print("[PUNCH-DELAY] sleep done; calling start_punching_process plugin_id={0}".format(
+                self.plugin_id,
+            ), flush=True)
             log("[PUNCH-DELAY] sleep done; calling start_punching_process plugin_id={0}".format(
                 self.plugin_id,
             ))
@@ -334,6 +392,9 @@ class PunchPlugin(TraversalPlugin):
                 self.proc_pool,
                 node_msg_cb=getattr(self, "node_msg_cb", None),
             )
+            print("[PUNCH-DELAY] start_punching_process returned plugin_id={0} pipe={1}".format(
+                self.plugin_id, pipe is not None,
+            ), flush=True)
             log("[PUNCH-DELAY] start_punching_process returned plugin_id={0} pipe={1}".format(
                 self.plugin_id, pipe is not None,
             ))
@@ -343,9 +404,13 @@ class PunchPlugin(TraversalPlugin):
             if not self.result.done():
                 self.result.set_result(pipe)
         except asyncio.CancelledError:
+            print("[PUNCH-DELAY] CANCELLED plugin_id={0}".format(self.plugin_id), flush=True)
             log("[PUNCH-DELAY] CANCELLED plugin_id={0}".format(self.plugin_id))
             raise
         except Exception as exc:  # pylint: disable=broad-except
+            print("[PUNCH-DELAY] EXCEPTION plugin_id={0} {1}: {2}".format(
+                self.plugin_id, type(exc).__name__, repr(exc),
+            ), flush=True)
             log("[PUNCH-DELAY] EXCEPTION plugin_id={0} {1}: {2}".format(
                 self.plugin_id, type(exc).__name__, repr(exc),
             ))
