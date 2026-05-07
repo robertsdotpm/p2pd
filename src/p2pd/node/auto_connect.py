@@ -33,7 +33,7 @@ when none of its plugins are in the configured set.
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 import asyncio
 from aionetiface import (
-    IP4, IP6, NIC_BIND, EXT_BIND, LOOPBACK_BIND,
+    IP4, IP6, NIC_BIND, EXT_BIND, LOOPBACK_BIND, TCP, UDP,
     fstr, log, log_exception, parse_node_addr,
 )
 from .node_connect import resolve_pnp_addr
@@ -46,11 +46,33 @@ PHASE2_PLUGINS = ("tcp_punch",)
 PHASE3_PLUGINS = ("udp_punch", "random_probe")
 PHASE4_PLUGINS = ("turn",)
 
-DEFAULT_PLUGINS = (
-    "direct_connect", "reverse_connect",
-    "tcp_punch", "udp_punch", "random_probe",
-    "turn",
-)
+# Plugin sets by transport.
+TCP_PLUGINS = ("direct_connect", "reverse_connect", "tcp_punch")
+UDP_PLUGINS = ("udp_punch", "random_probe", "turn")
+
+# Default rolls every plugin -- callers that pass plugins= explicitly
+# get exactly that set, with no transport filtering. The default
+# protocol on auto_connect is TCP, see plugins_for_protocol.
+DEFAULT_PLUGINS = TCP_PLUGINS + UDP_PLUGINS
+
+
+def plugins_for_protocol(protocol):
+    """Return the default plugin set for a transport.
+
+    `protocol=TCP` -- only stream plugins (direct_connect, reverse_connect,
+                      tcp_punch). The returned pipe has TCP semantics.
+    `protocol=UDP` -- only datagram plugins (udp_punch, random_probe, turn).
+                      The returned pipe has UDP semantics.
+    `protocol=None` -- every plugin in DEFAULT_PLUGINS, mixed transport.
+                       Caller must be ready to handle either pipe shape.
+    """
+    if protocol == TCP:
+        return TCP_PLUGINS
+    if protocol == UDP:
+        return UDP_PLUGINS
+    if protocol is None:
+        return DEFAULT_PLUGINS
+    raise ValueError("protocol must be TCP, UDP, or None")
 
 PHASE1_BUDGET = 3.0
 TURN_TOTAL_CAP = 3
@@ -592,17 +614,26 @@ async def phase4_turn(
 async def auto_connect(
     node: Any,
     dest_addr: Any,
+    protocol: Any = TCP,
     plugins: Optional[Sequence[str]] = None,
 ) -> Tuple[Optional[Any], Optional[Any]]:
     """Establish a P2P connection to dest_addr without picking a plugin.
 
-    `plugins` selects which plugins are eligible. A phase whose plugins are
-    all absent from this set is skipped entirely. Defaults to the full set
-    in DEFAULT_PLUGINS.
+    `protocol` controls which transport the returned pipe will use. Default
+    is TCP so callers can rely on stream semantics without thinking about
+    which plugin won. Pass `protocol=UDP` for a datagram pipe, or
+    `protocol=None` to allow any plugin (mixed-transport caller — be ready
+    to handle either pipe shape).
+
+    `plugins` is the power-user override: pass an explicit sequence of
+    plugin names and the protocol filter is bypassed. A phase whose
+    plugins are all absent from the resolved set is skipped entirely.
 
     Returns ``(pipe, plugin)`` on success, ``(None, None)`` on failure.
     """
-    plugin_set = frozenset(plugins) if plugins is not None else frozenset(DEFAULT_PLUGINS)
+    if plugins is None:
+        plugins = plugins_for_protocol(protocol)
+    plugin_set = frozenset(plugins)
 
     try:
         addr_bytes, dest_vk, _ = await resolve_pnp_addr(node, dest_addr)
