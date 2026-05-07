@@ -246,76 +246,53 @@ def connect_on_tcp_sockets(
     spray_duration: float = 5.0,
 ) -> None:
     """
-    Initiate connect on each socket, then idle until `spray_duration` elapses.
+    Strict one-shot connect_ex per socket; idle until `spray_duration` elapses.
 
-    State-aware: once a socket's connect_ex returns anything other than the
-    "still in SYN_SENT, async connect in progress" codes, we stop calling
-    connect_ex on it.  Repeated connect_ex on an already-ESTABLISHED socket
-    on Windows XP triggers spurious RSTs ~140 ms after simul-open completes
-    -- the older XP TCP stack does not handle re-entry of the connect path
-    after the kernel state has advanced, and tears the connection down.
-    On Linux/BSD/Win7+ the call is a harmless WSAEISCONN/EISCONN return,
-    but skipping it everywhere is correct and matches the kernel's own
-    SYN-retransmit responsibility (the spray's repeated connect_ex never
-    actually emitted additional SYNs once the socket was past first
-    initiation -- the kernel's TCP retransmit timer drives that, not us).
+    XP's TCP stack does NOT cleanly separate the connect-phase and
+    established-phase under async reuse.  ANY second call into the
+    connect path on the same socket -- even one that "harmlessly"
+    returns WSAEWOULDBLOCK / WSAEINVAL / WSAEISCONN -- can re-touch
+    the connect state machine, and on simul-open paths that re-touch
+    cascades into an internal abort that produces a delayed RST
+    ~174 ms after the wire-level handshake completes.
+
+    The previous state-aware spray called connect_ex twice per socket
+    on XP (first returned 10035 / WSAEWOULDBLOCK, second returned
+    10022 / WSAEINVAL).  Pcap forensics tied the 174ms post-handshake
+    RST to that second call.  Eliminating it requires strict one-shot:
+    each socket gets EXACTLY one connect_ex; subsequent iterations of
+    the spray loop never touch it again.
+
+    The kernel's TCP retransmit timer covers any SYN drops, so the
+    spray loop's repeated connect_ex was never doing useful work
+    anyway -- it was noise that XP couldn't tolerate.
 
     spray_duration: how long to keep the SYN_SENT window open (seconds).
-    The CLI default is 5.0 s; FAST_PUNCH_PARAMS uses 5.0 s for tcp_punch.
     """
-    # Codes meaning "connect is async-in-progress, socket still in SYN_SENT,
-    # call us again later" -- only on the FIRST call do we expect these.
-    # Subsequent calls always return an EALREADY-style code (no new SYN
-    # emitted by the kernel).
-    INPROGRESS_FIRST_CALL = (36, 115, 10035)
-    # 36    = EINPROGRESS (BSD/macOS)
-    # 115   = EINPROGRESS (Linux)
-    # 10035 = WSAEWOULDBLOCK (Windows)
+    # First (and ONLY) connect_ex per socket.  Use the bind alloc's
+    # src_port for diagnostic logging instead of getsockname() -- on
+    # XP getsockname() during the connect transition can have weird
+    # internal side effects (lock contention, half-initialised socket
+    # state exposure) so it is avoided in the hot path.
+    _ = same_machine  # accepted for signature compat with engine call
+    for p, s in bound_infos:
+        try:
+            err = s.connect_ex((dest_ip, p.dest_port))
+            # Log any errno except the well-known "in progress" / OK codes.
+            if err not in (0, 36, 115, 10035):
+                log("[ENGINE-DBG] connect_ex({0}:{1}) from src_port={2} -> errno={3}".format(
+                    dest_ip, p.dest_port, p.src_port, err,
+                ))
+        except OSError as exc:
+            log("[ENGINE-DBG] connect_ex raised: " + repr(exc))
 
-    start = time.monotonic()
-    end = start + spray_duration
-    completed = set()  # sockets that have moved past initial connect attempt
-    while time.monotonic() < end:
-        kicked_this_iter = 0
-        for p, s in bound_infos:
-            if s in completed:
-                continue
-            try:
-                err = s.connect_ex((dest_ip, p.dest_port))
-                kicked_this_iter += 1
-                # Anything other than the first-call in-progress codes
-                # means the socket is no longer in the "needs initial
-                # connect kick" state.  Mark done so we never call
-                # connect_ex on it again.  This includes:
-                #   err == 0           -> connected (rare on non-blocking)
-                #   ECONNREFUSED/...   -> error
-                #   EALREADY/EISCONN   -> already in SYN_SENT or ESTABLISHED
-                # In all those cases, repeated connect_ex is either noise
-                # or actively harmful (the XP simul-open RST case).
-                if err not in INPROGRESS_FIRST_CALL:
-                    completed.add(s)
-                # Always log unexpected errnos on first observation per socket.
-                if err not in (0, 36, 115):
-                    log("[ENGINE-DBG] connect_ex({0}:{1}) from {2} -> errno={3}".format(
-                        dest_ip, p.dest_port, s.getsockname(), err,
-                    ))
-            except OSError as exc:
-                completed.add(s)
-                log("[ENGINE-DBG] connect_ex raised: {0}".format(repr(exc)))
-
-        # All sockets have been kicked once and have moved out of the
-        # "needs first connect" state; nothing more for the spray loop
-        # to do but wait for the engine's spray window to elapse so the
-        # peer has time to fire its own SYNs and the kernel's TCP
-        # retransmit timer covers any drops.
-        if kicked_this_iter == 0:
-            remaining = end - time.monotonic()
-            if remaining > 0:
-                time.sleep(remaining)
-            return
-
-        if not same_machine:
-            time.sleep(0.005)
+    # Wait out the rest of the spray window so the peer has time to
+    # fire its own SYNs and the kernel can complete simul-open without
+    # any further user-space pokes at the socket.  Burn at least one
+    # ms so a 0-duration spray still yields the GIL.
+    remaining = max(0.0, spray_duration - 0.001)
+    if remaining > 0:
+        time.sleep(remaining)
 
 
 def sleep_until(punch_time: float, f_timer: Any, max_sleep: int = 10) -> None:
