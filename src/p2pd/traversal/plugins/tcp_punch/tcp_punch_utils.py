@@ -161,7 +161,18 @@ def bind_punch_sockets(
         # logs Event 4227 ("selected local endpoint was recently used");
         # back-to-back punches in the same NTP bucket get blocked at the
         # kernel before the SYN ever leaves. Best-effort: ignore failures.
-        if sock_type == socket.SOCK_STREAM:
+        #
+        # SKIP ON WINDOWS XP: pcap forensics on XP-as-listener cross-NAT
+        # punches show XP RSTing the established simul-open connection
+        # ~174ms after the final ACK -- with SO_LINGER {1,0}, every
+        # internal close() on the socket would produce that exact RST
+        # signature.  Disabling SO_LINGER on XP lets us tell whether
+        # the tear-down is an XP-side application close (we'd see a FIN
+        # instead) or a TCP-stack-level RST (we'd still see an RST).
+        # Currently disabled on all Windows pending the diagnosis; the
+        # TIME_WAIT cost is per-test, the simul-open RST is a punch
+        # killer.
+        if sock_type == socket.SOCK_STREAM and sys.platform != "win32":
             try:
                 s.setsockopt(
                     socket.SOL_SOCKET, socket.SO_LINGER,
