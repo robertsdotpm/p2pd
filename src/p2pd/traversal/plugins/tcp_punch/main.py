@@ -328,51 +328,33 @@ class PunchPlugin(TraversalPlugin):
         return puncher
 
     async def advance_punching_protocol(self, puncher: Any, reply: Optional[Any], punch_time: int) -> Optional[Any]:
-        """Compute the next round of port predictions and return an outgoing PunchMsg, or None when done."""
-        # For LAN, STUN is useless (returns each side's own port).
-        # Boundary ports from setup_puncher_client already align both sides.
-        # Send one empty PunchMsg to trigger the recipient; return None on reply.
-        if self.nat_alloc.punch_mode == TCP_PUNCH_LAN:
-            if reply is not None:
-                return None
-            msg = PunchMsg(
-                {
-                    "payload": {
-                        "punch_mode": self.nat_alloc.punch_mode,
-                        "mappings": [],
-                        "ntp": punch_time,
-                    },
-                }
-            )
-            msg.meta.plugin_name = "tcp_punch"
-            return msg
+        """Skip NAT prediction; rely entirely on deterministic boundary ports.
 
-        # Convert raw mappings from the peer into internal objects.
-        recv_mappings = None
+        Boundary ports added in setup_puncher_client (boundary_port_alloc)
+        already align both peers via the bucket math.  The NAT-prediction
+        round trips were producing 2-4 extra STUN-discovered ports per
+        side that did NOT converge in practice (the peers' STUN samples
+        produced disjoint port numbers, so no overlap), and the extra
+        protocol round trip delayed the engine start.  Removing it
+        leaves only the boundary 4-tuples (which DO match between peers
+        deterministically) and gets rid of an entire class of
+        "phantom port" noise in the punch.
+
+        The flow is now identical to the previous LAN-mode short circuit:
+        send one empty PunchMsg to trigger the recipient, return None on
+        the reply.  Both peers' engines fire on the same boundary set.
+        """
         if reply is not None:
-            recv_mappings = [NATMapping(m) for m in reply.payload.mappings]
-            assert recv_mappings
-
-        # Compute the next round of port predictions.
-        port_alloc, is_end = await self.nat_alloc.port_alloc(recv_mappings)
-        puncher.port_allocs += port_alloc
-
-        # End of protocol.
-        if is_end == 1:
             return None
-
-        # Gather our mappings and build the outgoing control message.
-        mappings = [m.to_json() for m in self.nat_alloc.send_mappings]
         msg = PunchMsg(
             {
                 "payload": {
                     "punch_mode": self.nat_alloc.punch_mode,
-                    "mappings": mappings,
+                    "mappings": [],
                     "ntp": punch_time,
                 },
             }
         )
-
         msg.meta.plugin_name = "tcp_punch"
         return msg
 
