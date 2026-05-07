@@ -275,6 +275,7 @@ def connect_on_tcp_sockets(
     # internal side effects (lock contention, half-initialised socket
     # state exposure) so it is avoided in the hot path.
     _ = same_machine  # accepted for signature compat with engine call
+    _ = spray_duration  # kept in signature; engine controls timing via monitor
     for p, s in bound_infos:
         try:
             err = s.connect_ex((dest_ip, p.dest_port))
@@ -286,13 +287,15 @@ def connect_on_tcp_sockets(
         except OSError as exc:
             log("[ENGINE-DBG] connect_ex raised: " + repr(exc))
 
-    # Wait out the rest of the spray window so the peer has time to
-    # fire its own SYNs and the kernel can complete simul-open without
-    # any further user-space pokes at the socket.  Burn at least one
-    # ms so a 0-duration spray still yields the GIL.
-    remaining = max(0.0, spray_duration - 0.001)
-    if remaining > 0:
-        time.sleep(remaining)
+    # Return immediately so the engine's monitor loop starts polling
+    # the selector right away.  XP's brief ESTABLISHED window after
+    # simul-open is ~180ms wide (T+140ms simul-open complete, T+320ms
+    # XP RSTs) -- if we sleep 5s here before letting monitor start,
+    # the entire window has closed by the time we observe the socket.
+    # The peer also fires at the same wall-clock punch_time, so we
+    # don't need to "hold" the spray for the peer; the peer's SYN
+    # crosses ours within one RTT and the kernel completes simul-open
+    # without further user-space pokes.
 
 
 def sleep_until(punch_time: float, f_timer: Any, max_sleep: int = 10) -> None:
