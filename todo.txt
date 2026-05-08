@@ -151,13 +151,10 @@ tasks are only processed after input finishes -- how to do this with async?
 
 
 - basic testing on different oses
-- interface cache needs to work before relaunch
 - update docs
 - move to new repos
 - push to pypi
-- todo: test successive use for new plugins
-  - prob need chained successive use tests for same plugin against the same node so you can test whether state gets contaminated and cleaned up properly
-- test demo interactions
-- make sure to also test ipv6 for new plugins
-- demo with no args should print help text
-- optional project website
+- different design for key management (make it based on the name of the gate)
+  - use that predicted syntax for using the library
+- remove all print crap
+- optimize pluins load times

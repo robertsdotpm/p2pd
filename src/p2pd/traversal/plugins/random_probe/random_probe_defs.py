@@ -16,19 +16,25 @@ PROBE_LEN = 4 + 16 + 1 + 2
 # so per-direction match rate is what actually matters in practice.
 #
 # DO NOT raise this above 256 without empirical re-testing across the
-# matrix. We tried N=512 (anchor sweep, 2026-05-07): random_probe v6
-# went 0/2 against the public anchor while udp_punch v6 still passed
-# in the same sweep. Dropping back to N=256 restored convergence on
-# the first inbound datagram (PASS on srv2022 in 72 s). Suspect cause
-# is one of: kernel UDP socket-buffer overrun on the spray burst, NIC
-# TX-ring saturation, consumer router stateful v6 flow-table cap, or
-# carrier v6 burst rate-limit -- whichever it is, 512 simultaneous v6
-# flows from one host trips it and 256 doesn't. udp_punch unaffected
-# because it only opens a handful of flows. The math doesn't need 512:
-# at N=256 the bidirectional miss rate is already ~2%, so the extra
-# flows buy almost nothing in collision probability and cost a real
-# regression on v6 paths.
-DEFAULT_PROBE_COUNT = 512  # DIAG: temporarily back to 512 for failure-mode confirmation
+# matrix.  N=512 deterministically fails on v6 against a NAT'd LAN
+# host through a consumer router.  Anchor sweep 2026-05-08, srv2022
+# (Win Server 2022 behind home router) <-> p2pd.net (public dual-stack
+# anchor):
+#   N=512: 0/3 PASS.  Pcap on the public anchor's NIC showed all 511
+#     outbound probes from srv2022 arrived AND all 512 outbound probes
+#     from p2pd.net left toward srv2022 -- yet srv2022's userspace
+#     reported dgrams_seen=0.  The full 512-packet inbound stream
+#     vanished between the public anchor's NIC and srv2022's
+#     userspace.
+#   N=256: PASS, convergence on the first arriving datagram (~ms).
+# udp_punch v6 (handful of flows) passes through the same router in
+# the same window, so the drop is flow-count-related, not a blanket
+# v6 firewall block.  Likely a stateful flow-table cap on the home
+# router that 512 simultaneous outbound UDP flows trips.  We didn't
+# pin it harder (router-side tcpdump would have); 256 is empirically
+# sufficient and the math doesn't need 512 -- bidirectional miss rate
+# at N=256 is already ~2%.
+DEFAULT_PROBE_COUNT = 256
 
 # Lowest destination port we'll fire at / bind from.  Below 1024 is
 # privileged on POSIX and below 32 768 is in many OSes' static-service
