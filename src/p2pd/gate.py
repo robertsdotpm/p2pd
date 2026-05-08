@@ -119,6 +119,15 @@ class Gate(object):
             return None
         return entry.pnp_name + entry.tld
 
+    @property
+    def nickname_error(self):
+        """The exception raised by the in-flight nickname registration
+        task, or None on success / not yet attempted.  Callers use
+        this to render typed errors (PnpServerResourceLimit,
+        NameAlreadyRegistered, PnpServerUnreachable, FullNameFailure)
+        instead of a generic "didn't register" message."""
+        return getattr(self.node, "nickname_error", None) if self.node else None
+
     async def __aexit__(self, exc_type, exc, tb):
         self.closed.set()
         if self.node is not None:

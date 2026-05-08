@@ -485,8 +485,21 @@ async def register_and_persist(node: Any, name: Any, owned: bool) -> None:
     """Run node.nickname(name, owned=...); on success, persist the
     resulting TLD + server list back to the keystore so subsequent
     starts (and external resolvers) know which TLD this name lives
-    under without a fresh fetch."""
-    full_name = await node.nickname(name, owned=owned)
+    under without a fresh fetch.
+
+    On failure, captures the exception on ``node.nickname_error`` so
+    callers can surface a typed message (resource exhaustion vs
+    name collision vs unreachable server) instead of a generic
+    "didn't load" string.
+    """
+    node.nickname_error = None
+    try:
+        full_name = await node.nickname(name, owned=owned)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # pylint: disable=broad-except
+        node.nickname_error = exc
+        raise
     entry = getattr(node, "keystore_entry", None)
     if entry is None:
         return

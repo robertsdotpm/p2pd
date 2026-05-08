@@ -133,6 +133,13 @@ class PnpServerUnreachable(Exception):
     reachable so the all-or-fail contract is meaningful."""
 
 
+class PnpServerResourceLimit(Exception):
+    """Raised when at least one PNP server rejected the put with a
+    ResourceLimit signal -- typically the per-source-IP name quota
+    has been hit.  Distinguished from generic FullNameFailure so
+    callers can surface a more actionable error to the user."""
+
+
 class Nickname:
     """Manages PNP nickname registration and lookup for a P2P node."""
 
@@ -317,6 +324,11 @@ class Nickname:
         # legacy unwrapped behaviour.
         wrapped_value = pnp_wrap_with_ts(value)
 
+        # Captured by per-offset workers so the post-gather check can
+        # surface ResourceLimit (per-IP name quota) as a typed
+        # exception distinct from generic FullNameFailure.
+        rejections = []
+
         # Single coro for storing at one server. namebump.Client.put
         # retries internally on transient network errors, so this worker
         # only needs to walk the AFs and surface any non-network failure.
@@ -355,6 +367,13 @@ class Nickname:
                         "Nickname.put: offset={0} af={1} value=None elapsed_ms={2} (server rejected)",
                         (offset, af, dt),
                     ))
+                except namebump.PutRejected as exc:
+                    log(fstr(
+                        "Nickname.put: offset={0} af={1} ResourceLimit: {2}",
+                        (offset, af, str(exc)),
+                    ))
+                    rejections.append((offset, af, str(exc)))
+                    return None
                 except (OSError, ConnectionError, asyncio.TimeoutError):
                     log_exception()
                     log(fstr(
@@ -381,6 +400,11 @@ class Nickname:
         expected_offsets = set(range(len(self.clients[IP4])))
         missing = sorted(expected_offsets - success_offsets)
         if missing:
+            if rejections:
+                raise PnpServerResourceLimit(fstr(
+                    "Nickname.put: PNP server quota exhausted: {0}",
+                    (rejections,),
+                ))
             raise FullNameFailure(fstr(
                 "Nickname.put: strict-all-or-fail: missing offsets {0}; "
                 "succeeded={1}",

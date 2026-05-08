@@ -29,7 +29,10 @@ from aionetiface import (
     list_interfaces, load_interfaces, log, log_exception,
     sock_has_data, sys, to_b, to_s,
 )
-from ..node.nickname import FullNameFailure
+from ..node.nickname import (
+    FullNameFailure, NameAlreadyRegistered,
+    PnpServerResourceLimit, PnpServerUnreachable,
+)
 from ..node.node import Node
 from ..gate import Gate
 from . import stop_rw
@@ -131,17 +134,24 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
         cout(fstr("Node nickname = {0}", (nick,)))
         cout()
     else:
-        cout("node id default nickname didnt load")
-        cout("might have been taken over or all servers down.")
+        err = gate.nickname_error
+        if isinstance(err, PnpServerResourceLimit):
+            cout("PNP nickname registration rejected: ResourceLimit.")
+            cout("The PNP server's per-source-IP name quota is exhausted.")
+            cout("Old names will expire over time; bump the server-side")
+            cout("V4_NAME_LIMIT / V6_NAME_LIMIT or wait for pruning.")
+        elif isinstance(err, NameAlreadyRegistered):
+            cout("PNP nickname is already registered to a different key.")
+            cout("Pick a different --node_id or load the existing keystore entry.")
+        elif isinstance(err, PnpServerUnreachable):
+            cout("PNP servers unreachable -- registration could not be verified.")
+            cout("Strict registration requires every configured server to respond.")
+        elif isinstance(err, FullNameFailure):
+            cout("PNP nickname registration failed: " + str(err))
+        else:
+            cout("node id default nickname didnt load")
+            cout("might have been taken over or all servers down.")
         cout("")
-
-    # Allow the freshly-put PNP record + MQTT subscription to propagate
-    # across the configured PNP/MQTT servers before we advertise this
-    # node as ready. Without this gap, a peer that resolves the nick
-    # immediately after seeing the "Listen on PNP" line can race a
-    # server that hasn't yet observed the put and silently hang in the
-    # resolve step.
-    await asyncio.sleep(8)
 
     nodes = [node]
     return nodes, ifs, nick

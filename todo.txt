@@ -149,15 +149,10 @@ plugins and cause timeouts loading it for the first time in the plugin run call
 duplicate messages are occuring through router
 tasks are only processed after input finishes -- how to do this with async?
 
-
-- basic testing on different oses
+- monitor
 - update docs
+- update read mwaite
 - move to new repos
 - push to pypi
 - remove all print crap
 - more upnp testing
-
-
-- different design for key management (make it based on the name of the gate)
-- use that predicted syntax for using the library
-- optimize pluins load times
