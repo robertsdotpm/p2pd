@@ -23,6 +23,7 @@ from aionetiface.net.selector_proxy import selector_proxy
 
 from ....protocol.proto_defs import P2P_PUNCH
 from ...traversal_plugin import TraversalPlugin
+from ...strategy_registry import register
 from ..tcp_punch.boundary_alloc import boundary_port_alloc
 from ..tcp_punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 from ..tcp_punch.nat_predict import NATMapping
@@ -34,13 +35,46 @@ from .udp_punch_defs import UDP_PUNCH_FRAME_LEN, UDP_PUNCH_MAGIC, UDP_PUNCH_NONC
 from .udp_punch_engine import drain_punch_residue, udp_punch_engine
 
 
+@register(phase="spray")
 class UdpPunchPlugin(TraversalPlugin):
     """Traversal plugin implementing UDP hole-punching via coordinated port prediction."""
 
+    name = "udp_punch"
+    transport = "udp"
     # Same exclusions as tcp_punch -- loopback has no NAT so prediction
     # does no useful work over it. Symmetric NAT goes to random_probe,
     # not here.
-    SUPPORTED_ROUTE_TYPES = (NIC_BIND, EXT_BIND)
+    route_types = (NIC_BIND, EXT_BIND)
+    conf = {"timeout": 150}
+    proto_messages = (
+        (UdpPunchMsg, P2P_PUNCH, 20),
+    )
+
+    @classmethod
+    async def setup(cls, node):
+        if not node.conf.get("enable_punching", True):
+            return None
+        factory = await UdpPunchPluginFactory.create(node.stun_clients, node.sys_clock)
+        # Late-claim NIC ownership: stash on the factory so the first
+        # plugin run claims at engine-start time.  Eager claim here
+        # would raise on collision, which the loader swallows -- and
+        # udp_punch would silently drop out of the registry.  Late
+        # surfacing only flags collisions when an actual punch attempt
+        # would have failed anyway.
+        claims = []
+        for nic in node.ifs:
+            nic_id = getattr(nic, "id", None)
+            if not nic_id:
+                continue
+            for af in nic.supported():
+                try:
+                    primary_ip = nic.nic(af)
+                except (ValueError, LookupError, AttributeError):
+                    primary_ip = None
+                if primary_ip:
+                    claims.append((nic_id, str(primary_ip), af))
+        factory.pending_claims = claims
+        return factory
 
     async def run(self, reply: Optional[Any] = None) -> None:
         """Coordinate the punch exchange and fire the in-process UDP engine."""
@@ -173,7 +207,14 @@ class UdpPunchPlugin(TraversalPlugin):
         print("[CLOCK] udp_punch my_now={0} punch_time={1} delta={2} window={3} max_clock_error={4}".format(
             timestamp, punch_time, punch_time - timestamp, p["window"], p["max_clock_error"],
         ))
-        puncher.set_punch_time(punch_time)
+        # Two-bucket overlap dual-fire: a peer pair whose
+        # compute_rendezvous calls land on opposite sides of a bucket
+        # boundary picks adjacent buckets; their {primary, primary+1}
+        # candidate sets always overlap on exactly one common bucket.
+        # Firing at both rendezvous in sequence guarantees we hit the
+        # overlap regardless of which side forked.  Mirrors tcp_punch.
+        secondary_punch_time = punch_time + p["window"]
+        puncher.set_punch_time(punch_time, secondary_punch_time=secondary_punch_time)
         # n=1: UDP punch must use exactly ONE socket per side.
         # With n=2, watch_for_winner returns the socket that first
         # receives a CONFIRM -- but each side races independently,
@@ -422,22 +463,31 @@ class UdpPunchPlugin(TraversalPlugin):
                 if not convergence.done():
                     convergence.set_result(success)
 
+            def f_engine(af, nic_id, port_allocs, src_ip, dest_ip,
+                         f_sleep_until, our_ip, same_machine, params):
+                # Adapter: PunchClient.run_engine calls f_engine with
+                # the tcp_punch signature (which includes our_ip and
+                # excludes nonce / stop_reader / route).  We close
+                # over the UDP-specific extras and ignore our_ip.
+                _ = our_ip
+                return udp_punch_engine(
+                    af=af,
+                    nic_id=nic_id,
+                    port_allocs=port_allocs,
+                    src_ip=src_ip,
+                    dest_ip=dest_ip,
+                    f_sleep_until=f_sleep_until,
+                    nonce=nonce,
+                    same_machine=same_machine,
+                    params=params,
+                    stop_reader=stop_reader,
+                    route=puncher_route,
+                )
+
             def punch_and_bridge():
-                """Worker: run UDP engine, signal main, then bridge."""
+                """Worker: run UDP engine (with dual-fire), signal main, then bridge."""
                 try:
-                    result = udp_punch_engine(
-                        af=af,
-                        nic_id=nic_id,
-                        port_allocs=port_allocs,
-                        src_ip=src_ip,
-                        dest_ip=dest_ip,
-                        f_sleep_until=f_sleep_until,
-                        nonce=nonce,
-                        same_machine=same_machine,
-                        params=params,
-                        stop_reader=stop_reader,
-                        route=puncher_route,
-                    )
+                    result = puncher.run_engine(f_engine)
                 except Exception:  # pylint: disable=broad-except
                     log_exception()
                     loop.call_soon_threadsafe(signal_convergence, False)
@@ -747,37 +797,3 @@ class UdpPunchPluginFactory:
         self.nic_ids_owned = []
 
 
-PLUGIN_CONF = {"timeout": 150}
-
-PROTO_MESSAGES = (
-    (UdpPunchMsg, P2P_PUNCH, 20),
-)
-
-
-async def setup_plugin(node):
-    """Create the udp_punch factory; returns None if punching is disabled in node.conf."""
-    if not node.conf.get("enable_punching", True):
-        return None
-    factory = await UdpPunchPluginFactory.create(node.stun_clients, node.sys_clock)
-    # Stash the (nic_id, primary_ip, af) claims on the factory so the
-    # first plugin run can claim them at engine-start time. Doing the
-    # claim eagerly here would raise ValueError on collision, which
-    # plugin_loader's broad except swallows -- udp_punch then silently
-    # drops out of plugin_loaders and breaks tests that assert it
-    # registered. Late-claim keeps registration unconditional and
-    # surfaces collisions only when an actual punch attempt would
-    # have been doomed anyway.
-    claims = []
-    for nic in node.ifs:
-        nic_id = getattr(nic, "id", None)
-        if not nic_id:
-            continue
-        for af in nic.supported():
-            try:
-                primary_ip = nic.nic(af)
-            except (ValueError, LookupError, AttributeError):
-                primary_ip = None
-            if primary_ip:
-                claims.append((nic_id, str(primary_ip), af))
-    factory.pending_claims = claims
-    return factory
