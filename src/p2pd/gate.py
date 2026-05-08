@@ -159,37 +159,66 @@ class Gate(object):
                 pass
         return False
 
-    async def connect(self, target, transport=None):
-        """Resolve a PeerHandle (or accept a nickname / addr_bytes) and open a pipe.
+    async def connect(self, target, transport=None, timeout=None):
+        """Resolve a PeerHandle / nickname / addr_bytes and return a Link.
 
         ``target`` is one of:
         - a ``PeerHandle`` (returned by ``peer.find("name")``);
         - a ``<name>.<tld>`` nickname string;
         - raw addr_bytes from ``node.address()``.
 
-        auto_connect resolves the nickname internally, so we just hand
-        it whichever form the caller passed.
+        ``transport`` accepts ``"tcp"`` / ``"udp"`` (string) or the
+        aionetiface ``TCP`` / ``UDP`` constants.  ``timeout`` (seconds)
+        bounds the auto_connect race; on hit, ``connect`` returns
+        ``None``.
 
-        Returns ``(pipe, plugin)``: the live ``Pipe`` and the plugin
-        instance that won the race, or ``(None, None)`` on failure.
+        Returns a ``Link`` on success, or ``None`` on failure.
         """
+        from aionetiface import TCP as _TCP, UDP as _UDP
         if isinstance(target, PeerHandle):
             dest = target.name
         else:
             dest = target
+
+        proto = transport
+        if isinstance(proto, str):
+            proto = {"tcp": _TCP, "udp": _UDP}.get(proto.lower(), proto)
+
         from .node.auto_connect import auto_connect
         kwargs = {}
-        if transport is not None:
-            kwargs["protocol"] = transport
-        return await auto_connect(self.node, dest, **kwargs)
+        if proto is not None:
+            kwargs["protocol"] = proto
+        coro = auto_connect(self.node, dest, **kwargs)
+        if timeout is not None:
+            try:
+                pipe, _plugin = await asyncio.wait_for(coro, timeout=timeout)
+            except asyncio.TimeoutError:
+                return None
+        else:
+            pipe, _plugin = await coro
+        if pipe is None:
+            return None
+        return Link(pipe)
 
     async def listen(self, handler):
-        """Block accepting inbound peers, dispatching each new peer to
-        ``handler(pipe)`` as a background task.  ``pipe`` is a
-        per-peer wrapper exposing ``async for msg in pipe`` and
-        ``await pipe.send(msg)``; for UDP the wrapper bakes in the
-        peer's client_tup so the user code never sees it.
+        """Run forever, dispatching each inbound message to ``handler(link, msg)``.
+
+        ``link`` is a per-peer ``Link`` wrapper; ``await link.send(msg)``
+        replies on the same channel.  For UDP the link bakes in the
+        peer's client_tup so the handler never sees it.
+
+        ``handler`` is called as a background task per message, so a
+        slow handler can't block dispatch on other peers.
+
+        If the gate hasn't been entered (``async with``) yet, this
+        starts it for the duration of the listen call.  Cancel the
+        outer task or set ``gate.closed`` to stop.
         """
+        owns_gate = False
+        if self.node is None:
+            await self.__aenter__()
+            owns_gate = True
+
         peers = {}
 
         async def shim(msg, client_tup, raw_pipe):
@@ -199,37 +228,49 @@ class Gate(object):
             else:
                 key = (id(raw_pipe), client_tup)
                 ctup = client_tup
-            wrapper = peers.get(key)
-            if wrapper is None:
-                wrapper = HandlerPipe(raw_pipe, ctup)
-                peers[key] = wrapper
-                asyncio.ensure_future(handler(wrapper))
-            await wrapper.queue.put(msg)
+            link = peers.get(key)
+            if link is None:
+                link = Link(raw_pipe, ctup)
+                peers[key] = link
+            asyncio.ensure_future(handler(link, msg))
 
         self.node.add_msg_cb(shim)
-        await self.closed.wait()
+        try:
+            await self.closed.wait()
+        finally:
+            if owns_gate:
+                await self.__aexit__(None, None, None)
 
 
-class HandlerPipe(object):
-    """Per-peer wrapper exposing async iteration + send.
+class Link(object):
+    """Bidirectional peer link returned by ``Gate.connect`` and yielded
+    by the ``Gate.listen`` handler shim.
 
-    For TCP, ``client_tup`` is None and ``send(msg)`` calls the raw
-    pipe's send directly (the connection knows its destination).  For
-    UDP, ``client_tup`` is baked in so ``send(msg)`` dispatches the
-    datagram back to the same peer.
+    ``await link.send(msg)`` writes bytes to the peer.  ``async for msg
+    in link`` iterates inbound bytes (only meaningful on the connector
+    side; listener-side messages arrive via the handler arg).
+    ``async with link`` closes the link on exit (TCP only — UDP server
+    pipes are shared across many peers, so closing per-peer would tear
+    down everyone else's session).
     """
 
-    def __init__(self, raw_pipe, client_tup=None):
-        self.raw = raw_pipe
+    def __init__(self, pipe, client_tup=None):
+        self.pipe = pipe
         self.client_tup = client_tup
-        self.queue = asyncio.Queue()
         self.closed = False
+        self._subscribed = False
 
     async def send(self, msg):
         if self.client_tup is None:
-            await self.raw.send(msg)
+            await self.pipe.send(msg)
         else:
-            await self.raw.send(msg, self.client_tup)
+            await self.pipe.send(msg, self.client_tup)
+
+    def _ensure_subscribed(self):
+        if not self._subscribed:
+            from aionetiface import SUB_ALL
+            self.pipe.subscribe(SUB_ALL)
+            self._subscribed = True
 
     def __aiter__(self):
         return self
@@ -237,8 +278,10 @@ class HandlerPipe(object):
     async def __anext__(self):
         if self.closed:
             raise StopAsyncIteration
-        msg = await self.queue.get()
-        if msg is None:
+        self._ensure_subscribed()
+        from aionetiface import SUB_ALL
+        msg = await self.pipe.recv(SUB_ALL)
+        if msg is None or self.closed:
             raise StopAsyncIteration
         return msg
 
@@ -247,12 +290,9 @@ class HandlerPipe(object):
 
     async def __aexit__(self, exc_type, exc, tb):
         self.closed = True
-        # TCP wrappers own the underlying socket lifetime; UDP wrappers
-        # share one bound socket across many peers, so closing the
-        # raw pipe per-peer would tear down everyone else's session.
         if self.client_tup is None:
             try:
-                await self.raw.close()
+                await self.pipe.close()
             except (OSError, asyncio.TimeoutError):
                 pass
         return False
