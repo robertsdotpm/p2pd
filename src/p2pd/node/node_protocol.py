@@ -70,6 +70,14 @@ async def node_protocol(node: Any, msg: bytes, client_tup: Tuple[str, int], pipe
     # TCP may buffer multiple messages — split and dispatch each.
     coros = []
     for m in msg.split(b"\n"):
+        # split(b"\n") on a trailing-newline payload yields an empty
+        # tail element ([..., b""]).  In particular the in-band ConId
+        # frame b"P2P-CID:<id>\n" produces [b"P2P-CID:<id>", b""] --
+        # the prefix gets peeled off below, but without this guard
+        # the empty bytes fall through to the user msg_cbs as a
+        # phantom b"" message right before the real first payload.
+        if not m:
+            continue
         # In-band ConId rendezvous: the very first frame on every
         # direct_connect inbound pipe is b"P2P-CID:<plugin_id>".
         # Peel it off, resolve the reverse_connect future, and keep
