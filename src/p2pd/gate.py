@@ -39,6 +39,17 @@ class peer(object):
 
     @staticmethod
     def find(name):
+        # Auto-append the active PNP TLD when the caller passes a bare
+        # nickname.  Lets `peer.find("alice")` Just Work alongside the
+        # explicit `peer.find("alice.p2p")` form.  Resolution downstream
+        # (resolve_pnp_addr) requires a TLD-suffixed name; without this
+        # the bare-name case silently falls through as raw addr_bytes
+        # and connect explodes on a malformed addr.
+        from .node.nickname import pnp_name_has_tld, pnp_get_tld
+        from aionetiface import IP4, PNP_SERVERS
+        if not pnp_name_has_tld(name):
+            tld = pnp_get_tld(list(range(len(PNP_SERVERS[IP4]))))
+            name = name + tld
         return PeerHandle(name)
 
 
@@ -148,16 +159,29 @@ class Gate(object):
                 pass
         return False
 
-    async def connect(self, target, transport=None, timeout=None):
-        """Resolve a PeerHandle (or accept addr_bytes) and open a pipe."""
+    async def connect(self, target, transport=None):
+        """Resolve a PeerHandle (or accept a nickname / addr_bytes) and open a pipe.
+
+        ``target`` is one of:
+        - a ``PeerHandle`` (returned by ``peer.find("name")``);
+        - a ``<name>.<tld>`` nickname string;
+        - raw addr_bytes from ``node.address()``.
+
+        auto_connect resolves the nickname internally, so we just hand
+        it whichever form the caller passed.
+
+        Returns ``(pipe, plugin)``: the live ``Pipe`` and the plugin
+        instance that won the race, or ``(None, None)`` on failure.
+        """
         if isinstance(target, PeerHandle):
-            addr_bytes = await self._resolve(target.name)
+            dest = target.name
         else:
-            addr_bytes = target
+            dest = target
         from .node.auto_connect import auto_connect
-        return await auto_connect(
-            self.node, addr_bytes, protocol=transport, timeout=timeout,
-        )
+        kwargs = {}
+        if transport is not None:
+            kwargs["protocol"] = transport
+        return await auto_connect(self.node, dest, **kwargs)
 
     async def listen(self, handler):
         """Block accepting inbound peers, dispatching each new peer to
