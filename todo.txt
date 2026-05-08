@@ -155,4 +155,4 @@ tasks are only processed after input finishes -- how to do this with async?
 - move to new repos
 - push to pypi
 - remove all print crap
-- more upnp testing
+- cleanup old pid files in aionetiface

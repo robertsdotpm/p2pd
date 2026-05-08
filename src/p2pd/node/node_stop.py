@@ -1,9 +1,49 @@
 """Graceful shutdown logic for a p2pd node."""
 from typing import Any
 import asyncio
+import glob
+import os
 from contextlib import suppress
 from aionetiface import log, log_exception, Daemon
 from ..errors import AlreadyClosedError
+
+
+def cleanup_stale_pidfiles(install_path: str) -> None:
+    """Delete *_pid.txt files in install_path whose locks aren't held.
+
+    The daemon writes one pidfile per (af, proto, port, ip) listener
+    and uses InterProcessLock to detect zombie servers on restart.
+    On a clean shutdown the lock is released but the file persists,
+    accumulating stale entries over many runs.  This sweep tries to
+    reacquire each lock non-blockingly: success means no live process
+    holds it, so the file is safe to remove; failure means another
+    p2pd instance still owns it and we leave it alone.
+    """
+    try:
+        from aionetiface.vendor.fasteners import InterProcessLock
+    except ImportError:
+        return
+
+    try:
+        candidates = glob.glob(os.path.join(install_path, "*_pid.txt"))
+    except OSError:
+        log_exception()
+        return
+
+    for path in candidates:
+        try:
+            lock = InterProcessLock(path)
+            if lock.acquire(blocking=False):
+                try:
+                    lock.release()
+                except OSError:
+                    log_exception()
+                try:
+                    os.unlink(path)
+                except OSError:
+                    log_exception()
+        except OSError:
+            log_exception()
 
 
 async def close_helper(p: Any) -> None:
@@ -96,5 +136,9 @@ async def node_stop(node: Any) -> None:
                 sock.close()
     node.stop_reader = None
     node.stop_writer = None
+
+    install_path = getattr(node, "install_path", None)
+    if install_path:
+        cleanup_stale_pidfiles(install_path)
 
     log("stop node () ending")

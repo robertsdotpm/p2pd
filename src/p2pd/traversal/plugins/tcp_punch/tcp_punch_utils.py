@@ -234,56 +234,35 @@ def connect_on_tcp_sockets(
     dest_ip: str,
     spray_duration: float = 5.0,
 ) -> None:
-    """Strict one-shot connect_ex per socket; idle until `spray_duration` elapses.
+    """Spray SYN packets at the destination for `spray_duration` seconds.
 
-    XP's TCP stack does NOT cleanly separate the connect-phase and
-    established-phase under async reuse.  ANY second call into the
-    connect path on the same socket -- even one that "harmlessly"
-    returns WSAEWOULDBLOCK / WSAEINVAL / WSAEISCONN -- can re-touch
-    the connect state machine, and on simul-open paths that re-touch
-    cascades into an internal abort that produces a delayed RST
-    ~174 ms after the wire-level handshake completes.
+    Loops over the bound sockets calling connect_ex on each.  Both peers
+    need to be in SYN_SENT when the other's SYN arrives for simul-open
+    to fire; repeated user-space pokes maximise the chance of overlap
+    even when one side starts slightly later than the other.  Cross-LAN
+    runs sleep 5ms between iterations to avoid busy-spin; same-machine
+    iterates flat-out since the loopback path has no RTT slack.
 
-    The previous state-aware spray called connect_ex twice per socket
-    on XP (first returned 10035 / WSAEWOULDBLOCK, second returned
-    10022 / WSAEINVAL).  Pcap forensics tied the 174ms post-handshake
-    RST to that second call.  Eliminating it requires strict one-shot:
-    each socket gets EXACTLY one connect_ex; subsequent iterations of
-    the spray loop never touch it again.
-
-    The kernel's TCP retransmit timer covers any SYN drops, so the
-    spray loop's repeated connect_ex was never doing useful work
-    anyway -- it was noise that XP couldn't tolerate.
-
-    spray_duration: how long to keep the SYN_SENT window open (seconds).
+    spray_duration: how long to keep spraying (seconds).
     """
-    # First (and ONLY) connect_ex per socket.  Use the bind alloc's
-    # src_port for diagnostic logging instead of getsockname() -- on
-    # XP getsockname() during the connect transition can have weird
-    # internal side effects (lock contention, half-initialised socket
-    # state exposure) so it is avoided in the hot path.
-    _ = same_machine  # accepted for signature compat with engine call
-    _ = spray_duration  # kept in signature; engine controls timing via monitor
-    for p, s in bound_infos:
-        try:
-            err = s.connect_ex((dest_ip, p.dest_port))
-            # Log any errno except the well-known "in progress" / OK codes.
-            if err not in (0, 36, 115, 10035):
-                log("[ENGINE-DBG] connect_ex({0}:{1}) from src_port={2} -> errno={3}".format(
-                    dest_ip, p.dest_port, p.src_port, err,
-                ))
-        except OSError as exc:
-            log("[ENGINE-DBG] connect_ex raised: " + repr(exc))
+    start = time.monotonic()
+    end = start + spray_duration
+    first_iter = True
+    while time.monotonic() < end:
+        for p, s in bound_infos:
+            try:
+                err = s.connect_ex((dest_ip, p.dest_port))
+                if first_iter and err not in (0, 36, 115, 10035):
+                    log("[ENGINE-DBG] connect_ex({0}:{1}) from src_port={2} -> errno={3}".format(
+                        dest_ip, p.dest_port, p.src_port, err,
+                    ))
+            except OSError as exc:
+                if first_iter:
+                    log("[ENGINE-DBG] connect_ex raised: " + repr(exc))
+        first_iter = False
 
-    # Return immediately so the engine's monitor loop starts polling
-    # the selector right away.  XP's brief ESTABLISHED window after
-    # simul-open is ~180ms wide (T+140ms simul-open complete, T+320ms
-    # XP RSTs) -- if we sleep 5s here before letting monitor start,
-    # the entire window has closed by the time we observe the socket.
-    # The peer also fires at the same wall-clock punch_time, so we
-    # don't need to "hold" the spray for the peer; the peer's SYN
-    # crosses ours within one RTT and the kernel completes simul-open
-    # without further user-space pokes.
+        if not same_machine:
+            time.sleep(0.005)
 
 
 def sleep_until(punch_time: float, f_timer: Any, max_sleep: int = 10) -> None:

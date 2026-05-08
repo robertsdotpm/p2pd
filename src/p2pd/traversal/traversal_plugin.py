@@ -5,7 +5,7 @@ from .traversal_utils import select_dest_ipr
 from aionetiface import to_s, rand_plain, log, NIC_BIND, EXT_BIND, LOOPBACK_BIND
 
 
-class TraversalPlugin:
+class Plugin:
     """Abstract base class for P2P connection traversal strategy plugins."""
 
     # Route types this plugin will accept combos for. auto_combos /
@@ -134,5 +134,5 @@ class TraversalPlugin:
     async def run(self, reply: Optional[Any] = None) -> None:
         """Execute the traversal strategy; subclasses must override this method."""
         log(
-            "TraversalPlugin.run() called on base class - subclass should override this."
+            "Plugin.run() called on base class - subclass should override this."
         )

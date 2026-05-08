@@ -30,8 +30,7 @@ from aionetiface import (
     sock_has_data, sys, to_b, to_s,
 )
 from ..node.nickname import (
-    FullNameFailure, NameAlreadyRegistered,
-    PnpServerResourceLimit, PnpServerUnreachable,
+    FullNameFailure, PnpServerResourceLimit, PnpServerUnreachable,
 )
 from ..node.node import Node
 from ..gate import Gate
@@ -140,9 +139,6 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
             cout("The PNP server's per-source-IP name quota is exhausted.")
             cout("Old names will expire over time; bump the server-side")
             cout("V4_NAME_LIMIT / V6_NAME_LIMIT or wait for pruning.")
-        elif isinstance(err, NameAlreadyRegistered):
-            cout("PNP nickname is already registered to a different key.")
-            cout("Pick a different --node_id or load the existing keystore entry.")
         elif isinstance(err, PnpServerUnreachable):
             cout("PNP servers unreachable -- registration could not be verified.")
             cout("Strict registration requires every configured server to respond.")

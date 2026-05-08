@@ -98,17 +98,10 @@ class Node(Daemon):
         """Establish a P2P connection to pnp_addr using the given AF, route type, and optional plugin."""
         return await node_connect(self, af, route_type, pnp_addr, plugin_name)
 
-    async def nickname(self, name: Any, value: Optional[Any] = None, owned: bool = False) -> str:
-        """Register name in the PNP system, defaulting value to this node's address bytes.
-
-        owned=True skips the first-time-registration collision check
-        (caller already owns this name via a persisted priv key and is
-        just refreshing the stored address).  See Nickname.put for the
-        strict all-or-fail contract.
-        """
+    async def nickname(self, name: Any, value: Optional[Any] = None) -> str:
+        """Register name in the PNP system, defaulting value to this node's address bytes."""
         value = value or self.addr_bytes
-        name = await self.nick_client.put(name, value, owned=owned)
-        return name
+        return await self.nick_client.put(name, value)
 
     def address(self) -> Optional[bytes]:
         """Return the node's address bytes, or None if the node has not started."""

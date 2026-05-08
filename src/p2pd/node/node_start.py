@@ -187,15 +187,13 @@ def load_cryptography_and_auth(node: Any) -> Any:
     pnp_name = getattr(node, "pnp_name", None)
     if pnp_name:
         from aionetiface import keystore
-        node.keystore_entry, node.sk_is_fresh = keystore.load_or_create(pnp_name)
-        node.sk = node.keystore_entry.sk
+        node.sk = keystore.load_or_create(pnp_name)
     else:
         install_path = resolve_install_path(node.conf)
-        node.sk, node.sk_is_fresh = load_signing_key(
+        node.sk, _ = load_signing_key(
             node.ifs, node.listen_ips, node.listen_port, install_path,
             node_name=getattr(node, "node_name", None),
         )
-        node.keystore_entry = None
     node.vk = node.sk.verifying_key
 
     node.node_id = hashlib.sha256(node.vk.to_string("compressed")).hexdigest()[:25]
@@ -262,19 +260,9 @@ async def setup_router_and_signal(node: Any, kp: Any, out: bool, cout: Callable)
     # construction means every MQTTClient stamps app-packet timestamps
     # off the same NTP-synced clock, instead of falling back to
     # wall-clock time.time (which on XP/Vista can be hours off).
-    # Use Interface("default") for Router so MQTT brokers go via the
-    # OS default route (the proven primary-NIC path that 8.8.8.8 probe
-    # picks at startup). Building AFGroup.from_interfaces(node.ifs)
-    # here was tempting -- it would let multi-homed hosts express
-    # per-AF NIC preference automatically -- but on VMs with a
-    # secondary mobile/CGNAT NIC, node.ifs[0] is sometimes the slow
-    # one, which silently routed every broker connection through CGNAT
-    # and broke convergence. Multi-homed callers who genuinely want a
-    # per-AF split should construct an AFGroup explicitly and pass it
-    # to Router; default stays "do what the OS does."
     router = Router(
         kp,
-        nic=Interface("default"),
+        nic=AFGroup.from_interfaces(node.ifs),
         get_time=node.sys_clock.time,
     )
     node.traversal = TraversalManager(
@@ -465,51 +453,30 @@ async def setup_nickname_service(node: Any) -> None:
         node.sys_clock,
     )
 
-    # Pick the name: explicit pnp_name (Gate path) takes priority over
-    # the legacy node_id-derived name.  owned=False on truly fresh
-    # keys (forces the strict first-time collision check); owned=True
-    # when loaded from keystore (refresh of a name we already control).
     register_name = getattr(node, "pnp_name", None) or node.node_id
-    owned = not getattr(node, "sk_is_fresh", True)
     task = asyncio.create_task(async_wrap_errors(
-        register_and_persist(node, register_name, owned=owned),
+        register_and_persist(node, register_name),
     ))
     node.resources.add_task(task)
-    # Expose the in-flight task so callers (Gate, tests) can await it
-    # if they need the resulting tld + persisted keystore state before
-    # making peer-resolving calls.
     node.nickname_register_task = task
 
 
-async def register_and_persist(node: Any, name: Any, owned: bool) -> None:
-    """Run node.nickname(name, owned=...); on success, persist the
-    resulting TLD + server list back to the keystore so subsequent
-    starts (and external resolvers) know which TLD this name lives
-    under without a fresh fetch.
+async def register_and_persist(node: Any, name: Any) -> None:
+    """Register name in PNP and stash the full name (with TLD) on node.full_name.
 
     On failure, captures the exception on ``node.nickname_error`` so
-    callers can surface a typed message (resource exhaustion vs
-    name collision vs unreachable server) instead of a generic
+    callers can surface a typed message instead of a generic
     "didn't load" string.
     """
     node.nickname_error = None
+    node.full_name = None
     try:
-        full_name = await node.nickname(name, owned=owned)
+        node.full_name = await node.nickname(name)
     except asyncio.CancelledError:
         raise
     except Exception as exc:  # pylint: disable=broad-except
         node.nickname_error = exc
         raise
-    entry = getattr(node, "keystore_entry", None)
-    if entry is None:
-        return
-    tld = "." + full_name.rsplit(".", 1)[-1] if "." in full_name else None
-    if tld is None:
-        return
-    from aionetiface import keystore
-    from aionetiface import IP4, PNP_SERVERS
-    servers = [s["host"] for s in PNP_SERVERS[IP4]]
-    keystore.mark_registered(entry, tld, servers)
 
 
 async def setup_traversal_plugins(node: Any) -> None:

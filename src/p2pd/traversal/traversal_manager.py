@@ -1,7 +1,7 @@
 """
 Orchestrates the traversal plugin lifecycle for P2P connections.
 
-Each connection attempt is handled by a TraversalPlugin instance. The manager
+Each connection attempt is handled by a Plugin instance. The manager
 routes incoming MQTT signaling messages to the correct plugin (creating a new
 one if needed), runs plugins with a timeout, and tracks background tasks.
 
@@ -15,7 +15,7 @@ import asyncio
 from collections import OrderedDict
 from typing import Any, Callable, Dict, List, Optional
 from aionetiface import IP4, NIC_BIND, get_running_loop, log
-from .traversal_plugin import TraversalPlugin
+from .traversal_plugin import Plugin
 from .traversal_utils import (
     async_wrap_errors,
     cancel_task,
@@ -107,7 +107,7 @@ class TraversalManager:
 
     # Plugins return pipes directly or await a pipe future that is resolved
     # elsewhere when a reply arrives over the signaling channel.
-    async def run_plugin(self, plugin: TraversalPlugin, reply: Optional[Any] = None) -> None:
+    async def run_plugin(self, plugin: Plugin, reply: Optional[Any] = None) -> None:
         """Run a single traversal plugin, optionally providing a reply message."""
         # Don't run if result is set.
         if plugin.result.done():
@@ -133,7 +133,14 @@ class TraversalManager:
             plugin.timeout,
         ))
 
-        # Each plugin has a run method.
+        # Each plugin has a run method.  Plugins that return from run()
+        # normally may have spawned a background task (e.g. tcp_punch's
+        # punch process) that resolves plugin.result later; do NOT
+        # touch result on the normal-return path or we'd race that
+        # task and prematurely fail a successful punch.  But on every
+        # ERROR path -- caught, timeout, or uncaught -- run() will not
+        # produce a result; resolve plugin.result to None so callers
+        # awaiting it (demo, race_plugin_results) return immediately.
         try:
             await asyncio.wait_for(plugin.run(reply), timeout=plugin.timeout)
         except asyncio.CancelledError:  # pylint: disable=try-except-raise
@@ -143,6 +150,13 @@ class TraversalManager:
                 type(exc).__name__, repr(exc),
             ))
             log_exception()
+            if not plugin.result.done():
+                plugin.result.set_result(None)
+        except Exception:  # pylint: disable=broad-except
+            log_exception()
+            if not plugin.result.done():
+                plugin.result.set_result(None)
+            raise
 
         log("[TM] run_plugin exit plugin={0} id={1} result_done={2}".format(
             getattr(plugin, "name", type(plugin).__name__),
@@ -161,7 +175,7 @@ class TraversalManager:
         dest_info: Optional[Dict[str, Any]],
         same_machine: bool,
         plugin_name: str,
-    ) -> TraversalPlugin:
+    ) -> Plugin:
         """Instantiate and configure a traversal plugin for the given src/dest pair.
 
         src_info / dest_info may be None for plugins that don't pin
@@ -247,7 +261,7 @@ class TraversalManager:
         dest_info: Dict[str, Any],
         af: Any = IP4,
         route_type: Any = NIC_BIND,
-    ) -> Optional[TraversalPlugin]:
+    ) -> Optional[Plugin]:
         """Run the named traversal plugin for one explicit src_info/dest_info pair."""
         # Need AF supported by both.
         if not src_map[af] or not dest_map[af]:
@@ -282,7 +296,7 @@ class TraversalManager:
     # parameters from an incoming signal message, swapping src and dest so that
     # "their dest" becomes our src and "their src" becomes our dest. It also
     # reuses the pipe_id from the message so both sides share the same session.
-    def create_inbound_plugin(self, msg: Any) -> TraversalPlugin:
+    def create_inbound_plugin(self, msg: Any) -> Plugin:
         """Create a traversal plugin for an inbound connection request, inverting src/dest."""
         # TODO: map GetAddr messages to the return_addr plugin handler.
         if isinstance(msg, ConMsg):
@@ -305,7 +319,7 @@ class TraversalManager:
         return plugin
 
     # Use signal router to send a message to the destination.
-    async def send_signal_msg(self, msg: Any, plugin: TraversalPlugin, relay_no: int = 2) -> None:
+    async def send_signal_msg(self, msg: Any, plugin: Plugin, relay_no: int = 2) -> None:
         """Encrypt and deliver a signalling message to the peer via the MQTT router."""
         print("[SIG-TX] send_signal_msg plugin_id={0!r} wire_name={1!r}".format(
             plugin.plugin_id, getattr(msg, "wire_name", "?"),

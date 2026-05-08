@@ -15,3 +15,6 @@ if __name__ != "__main__":
     from .node.nickname import *  # noqa: F401, F403  # pylint: disable=wildcard-import,unused-wildcard-import
     from .node.node_connect import resolve_pnp_addr  # noqa: F401  # pylint: disable=unused-import
     from .node.auto_connect import auto_connect  # noqa: F401  # pylint: disable=unused-import
+    from .traversal.traversal_plugin import Plugin  # noqa: F401  # pylint: disable=unused-import
+    from .traversal.strategy_registry import register  # noqa: F401  # pylint: disable=unused-import
+    from .gate import Gate, peer, PeerHandle  # noqa: F401  # pylint: disable=unused-import

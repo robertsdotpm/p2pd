@@ -2,13 +2,13 @@
 from typing import Any, Optional
 import asyncio
 from aionetiface import log, log_exception, fstr
-from ...traversal_plugin import TraversalPlugin
+from ...traversal_plugin import Plugin
 from ...strategy_registry import register
 from ....protocol.proto_msg import ReturnAddr
 
 
 @register(phase=None)
-class ReturnAddrPlugin(TraversalPlugin):
+class ReturnAddrPlugin(Plugin):
     """Traversal plugin that replies to a GetAddr request with the sender's own address."""
 
     name = "return_addr"

@@ -119,13 +119,6 @@ class FullNameFailure(Exception):
     """Raised when a nickname registration failed on all PNP servers."""
 
 
-class NameAlreadyRegistered(Exception):
-    """Raised when a first-time registration attempt collides with an
-    existing record on at least one PNP server.  Caller must pick a
-    different name (or load the existing priv key from disk and retry
-    with owned=True if they own the name)."""
-
-
 class PnpServerUnreachable(Exception):
     """Raised when one or more configured PNP servers could not be
     reached during start(), name-collision check, or strict put.
@@ -225,72 +218,17 @@ class Nickname:
         self.started = True
         return self
 
-    async def check_name_collision(self, name: Any, timeout: int = NAMING_TIMEOUT) -> List[int]:
-        """Probe every PNP server for an existing record under name.
-
-        Returns a list of offsets where a record was found.  Empty list
-        means the name is free everywhere.  Used by put() to enforce
-        first-time-registration collision detection without polluting
-        any server.  Treats unreachable servers as a fatal condition
-        because we can't verify the name is free there -- raises
-        PnpServerUnreachable rather than silently registering against
-        an unverified server.
-        """
-        async def worker(offset: int) -> Tuple[int, Optional[bool], Optional[bool]]:
-            """Returns (offset, found, reachable)."""
-            for af in VALID_AFS:
-                client = self.clients[af].get(offset)
-                if client is None:
-                    continue
-                try:
-                    ret = await asyncio.wait_for(client.get(name), timeout)
-                except (OSError, ConnectionError, asyncio.TimeoutError):
-                    log_exception()
-                    continue
-                if ret is None:
-                    return (offset, False, True)
-                if ret.value is None:
-                    return (offset, False, True)
-                return (offset, True, True)
-            return (offset, None, False)
-
-        tasks = [worker(o) for o in range(len(self.clients[IP4]))]
-        results = await asyncio.gather(*tasks)
-        unreachable = [o for o, _, reachable in results if not reachable]
-        if unreachable:
-            raise PnpServerUnreachable(fstr(
-                "Nickname.check_name_collision: unreachable offsets {0}",
-                (unreachable,),
-            ))
-        return sorted(o for o, found, _ in results if found)
-
     async def put(
         self,
         name: Any,
         value: Any,
-        owned: bool = False,
         behavior: Any = namebump.DO_BUMP,
         timeout: int = NAMING_TIMEOUT,
     ) -> str:
         """Store value under name on every PNP server (strict all-or-fail).
 
-        owned=False (first-time registration): pre-checks every server
-        for an existing record under name.  If any server already has
-        the name registered, raises NameAlreadyRegistered without
-        writing anything.  Then writes to every server in parallel and
-        requires every put to succeed.
-
-        owned=True: skip the existence check.  Caller has already
-        established ownership via a persisted priv key for this name
-        and is just refreshing the stored address.  Still requires
-        every put to succeed.
-
-        Always raises if any single server fails to write -- partial
-        success is treated as failure.  This is intentionally strict
-        (rather than "best-effort" like the old behaviour); the strict
-        contract makes the resulting TLD predictable from the static
-        server list, so callers know upfront which TLD their name
-        will live under.
+        Raises if any server fails to write.  The TLD of the returned
+        name is determined by the configured server list.
 
         The stored bytes are wrapped with a timestamp envelope (magic
         prefix + unix ts) so readers can filter by staleness via
@@ -300,18 +238,7 @@ class Nickname:
         if not self.started:
             raise AssertionError("Nickname client not started. Call start() first.")
         name = pnp_strip_tlds(name)
-        log(fstr(
-            "Nickname.put: name={0} owned={1} timeout={2}",
-            (name, owned, timeout),
-        ))
-
-        if not owned:
-            collisions = await self.check_name_collision(name, timeout=timeout)
-            if collisions:
-                raise NameAlreadyRegistered(fstr(
-                    "Nickname.put: name {0} already registered on offsets {1}",
-                    (name, collisions),
-                ))
+        log(fstr("Nickname.put: name={0} timeout={1}", (name, timeout)))
 
         # Wrap the value with the freshness envelope. The timestamp
         # written here is what Nickname.get(min_fresh_secs=...) checks

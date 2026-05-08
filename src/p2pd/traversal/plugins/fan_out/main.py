@@ -21,7 +21,7 @@ from aionetiface import (
     IP4, IP6, NIC_BIND, EXT_BIND, LOOPBACK_BIND,
     fstr, log, log_exception,
 )
-from ...traversal_plugin import TraversalPlugin
+from ...traversal_plugin import Plugin
 from ...strategy_registry import register
 from ...traversal_utils import close_plugin
 from ....node.auto_connect import race_plugin_results
@@ -63,7 +63,7 @@ def enumerate_viable_combos(
 
 
 @register(phase=None)
-class FanOutPlugin(TraversalPlugin):
+class FanOutPlugin(Plugin):
     """Meta-plugin: race a target plugin across every viable combo.
 
     Invoked explicitly (via node.connect for any-pathway requests) --
@@ -147,7 +147,7 @@ class FanOutPlugin(TraversalPlugin):
             ),
         ))
 
-        children = []  # type: List[TraversalPlugin]
+        children = []  # type: List[Plugin]
         for af, rt, src_info, dest_info in combos:
             try:
                 child = manager.create_plugin(

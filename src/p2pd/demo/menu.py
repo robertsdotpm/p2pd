@@ -89,16 +89,13 @@ async def connect_option(node: Any, con_opts: Tuple[Any, Optional[bytes], Option
         return "menu"
 
     plugin_holder = [plugin]
-    # Worst-case rendezvous wait covers two-bucket dual-fire:
-    #   - primary  rendezvous wait    : up to WINDOW + max_clock_error (62 s)
-    #   - primary  engine fire+monitor: ~6 s
-    #   - secondary rendezvous wait   : WINDOW (42 s)
-    #   - secondary engine fire+monitor: ~6 s
-    #   - coordinator_delay + loopback bridge accept + protocol setup: ~5 s
-    # ~120 s worst-case before plugin.result can resolve.  140 s here
-    # leaves margin while staying under PLUGIN_CONF["timeout"]=180 so
-    # the plugin's own lifecycle wait remains the dominant safety net.
-    pipe = await async_wrap_errors(plugin.result, timeout=140)
+    # Use the plugin's own configured timeout (set by TraversalManager
+    # from the per-plugin PLUGIN_CONF["timeout"]) plus a small margin
+    # for run_plugin's finally-block to resolve plugin.result.  With
+    # the TM's finally guarantee, any failure -- caught, raised, or
+    # silent early-return -- resolves the future immediately, so this
+    # outer wait only hits its ceiling on a legitimate long success.
+    pipe = await async_wrap_errors(plugin.result, timeout=plugin.timeout + 10)
 
     # Unconditional cleanup: cancels any still-running punch task and removes
     # the plugin from the traversal manager's registry.  On success the punch

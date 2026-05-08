@@ -471,14 +471,6 @@ async def bind_nic_v4(node: Any, nic_i: int, nic: Any) -> int:
         return 0
     nic_port = first[0]
 
-    # Latch global listen_port from the first NIC that publishes a port.
-    # Concurrent NICs may race here; either wins consistently because both
-    # writes are the same (or different ports if listen_port==0 at start --
-    # the per-NIC if_ports record below carries the real per-NIC port so
-    # make_node_addr stays correct either way).
-    if node.listen_port == 0:
-        node.listen_port = nic_port
-
     if not any(x is not None for x in listed):
         return 0
 
@@ -517,7 +509,8 @@ async def bind_loopback(node: Any, cand_af: int, cand_ip: str, cand_port: int, l
 
 
 async def listen_on_ifs(node: Any) -> None:
-    """Bind TCP listeners on every NIC and per-node loopback aliases, concurrently.
+    """Bind TCP listeners on every NIC, v6 ext per NIC, and per-node loopback
+    aliases -- all concurrently in a single gather.
 
     Failure semantics:
       - ANY NIC listen_local that fails => OSError (no real inbound path).
@@ -526,14 +519,23 @@ async def listen_on_ifs(node: Any) -> None:
       - v6 ext bind failures           => log + continue (NIC v4 still works).
       - Loopback alias failures        => log + continue (loopback is convenience).
 
-    All binds run concurrently via asyncio.gather(return_exceptions=True);
-    one slow / hung NIC never blocks any other.  No retries -- a failed
-    bind is a failed bind, surface it, move on.
+    When node.listen_port is 0, a probe socket pre-resolves an OS-assigned
+    ephemeral port so every concurrent bind targets the same number -- this
+    is what lets the loopback aliases publish a stable port without waiting
+    on the NIC binds to latch one.  All binds run concurrently via
+    asyncio.gather(return_exceptions=True); one slow / hung NIC never blocks
+    any other.  No retries -- a failed bind is a failed bind, surface it.
     """
     node.if_ports = {}
 
-    # ===== Phase 1: NIC binds (concurrent, critical) =====
-    nic_tasks = []  # list of (label, coro)
+    if node.listen_port == 0:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("", 0))
+            node.listen_port = probe.getsockname()[1]
+
+    nic_tasks = []  # critical: (label, coro)
+    aux_tasks = []  # non-critical: (label, coro)
+
     if node.listen_ips:
         # Strict listen_ips path: bind only the IPs in listen_ips on the NICs that own them.
         listen_iprs = [IPR(ip) for ip in node.listen_ips]
@@ -546,37 +548,6 @@ async def listen_on_ifs(node: Any) -> None:
         for nic_i, nic in enumerate(node.ifs):
             label = fstr("listen_local nic={0}", (nic.id,))
             nic_tasks.append((label, bind_nic_v4(node, nic_i, nic)))
-
-    nic_results = await asyncio.gather(
-        *(c for _, c in nic_tasks),
-        return_exceptions=True,
-    )
-    nic_successes = 0
-    nic_failures = []
-    for (label, _), r in zip(nic_tasks, nic_results):
-        if isinstance(r, int) and r > 0:
-            nic_successes += 1
-        else:
-            nic_failures.append(label)
-            if isinstance(r, BaseException) and not isinstance(r, asyncio.CancelledError):
-                log(fstr("listen_on_ifs: {0} raised: {1}", (label, r)))
-
-    if nic_tasks and nic_successes == 0:
-        msg = fstr(
-            "listen_on_ifs: every NIC bind failed ({0}/{0}); "
-            "node has no real inbound path. Failures: {1}",
-            (len(nic_tasks), "; ".join(nic_failures) or "(no labels)"),
-        )
-        log(msg)
-        raise OSError(msg)
-
-    # ===== Phase 2: aux binds (concurrent, non-critical) =====
-    # v6 ext per NIC + per-node loopback aliases.  Phase 2 runs after phase 1
-    # so node.listen_port is latched and loopback_candidates_for sees a stable
-    # port number (loopback aliases want to publish a consistent port).
-    aux_tasks = []  # list of (label, coro)
-    if not node.listen_ips:
-        for nic_i, nic in enumerate(node.ifs):
             if IP6 in nic.supported():
                 v6_label = fstr("v6 ext nic={0}", (nic.id,))
                 aux_tasks.append((v6_label, bind_nic_v6_ext(node, nic_i, nic, v6_label)))
@@ -591,14 +562,34 @@ async def listen_on_ifs(node: Any) -> None:
         cand_label = fstr("loopback {0}:{1}", (cand_ip, cand_port))
         aux_tasks.append((cand_label, bind_loopback(node, cand_af, cand_ip, cand_port, cand_label)))
 
-    if aux_tasks:
-        aux_results = await asyncio.gather(
-            *(c for _, c in aux_tasks),
-            return_exceptions=True,
-        )
-        for (label, _), r in zip(aux_tasks, aux_results):
+    all_tasks = nic_tasks + aux_tasks
+    results = await asyncio.gather(
+        *(c for _, c in all_tasks),
+        return_exceptions=True,
+    )
+
+    nic_successes = 0
+    nic_failures = []
+    for (label, _), r in zip(nic_tasks, results[: len(nic_tasks)]):
+        if isinstance(r, int) and r > 0:
+            nic_successes += 1
+        else:
+            nic_failures.append(label)
             if isinstance(r, BaseException) and not isinstance(r, asyncio.CancelledError):
-                log(fstr("listen_on_ifs: aux {0} raised: {1}", (label, r)))
+                log(fstr("listen_on_ifs: {0} raised: {1}", (label, r)))
+
+    for (label, _), r in zip(aux_tasks, results[len(nic_tasks):]):
+        if isinstance(r, BaseException) and not isinstance(r, asyncio.CancelledError):
+            log(fstr("listen_on_ifs: aux {0} raised: {1}", (label, r)))
+
+    if nic_tasks and nic_successes == 0:
+        msg = fstr(
+            "listen_on_ifs: every NIC bind failed ({0}/{0}); "
+            "node has no real inbound path. Failures: {1}",
+            (len(nic_tasks), "; ".join(nic_failures) or "(no labels)"),
+        )
+        log(msg)
+        raise OSError(msg)
 
 
 async def remote_reachability_cb(reachability: Dict[Any, Dict[Any, Any]], _msg: Any, client_tup: Any, pipe: Any) -> None:

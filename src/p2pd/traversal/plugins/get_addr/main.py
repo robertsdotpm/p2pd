@@ -1,13 +1,13 @@
 """Traversal plugin that resolves peer addresses via signalling."""
 from typing import Any, Optional
 from aionetiface import log, fstr
-from ...traversal_plugin import TraversalPlugin
+from ...traversal_plugin import Plugin
 from ...strategy_registry import register
 from ....protocol.proto_msg import GetAddr
 
 
 @register(phase=None)
-class GetAddrPlugin(TraversalPlugin):
+class GetAddrPlugin(Plugin):
     """Traversal plugin that requests and returns the peer's current network address."""
 
     name = "get_addr"

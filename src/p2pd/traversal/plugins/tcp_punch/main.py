@@ -54,12 +54,12 @@ from .punch_defs import TCP_PUNCH_LAN
 from .punch_process import start_punching_process
 from .tcp_punch_utils import log_time_wait_residue
 from .nat_predict import NATMapping
-from ...traversal_plugin import TraversalPlugin
+from ...traversal_plugin import Plugin
 from ...strategy_registry import register
 from ....node.node_utils import get_pp_executors
 
 @register(phase="punch")
-class PunchPlugin(TraversalPlugin):
+class PunchPlugin(Plugin):
     """Traversal plugin implementing TCP hole-punching via coordinated port prediction."""
 
     name = "tcp_punch"
@@ -119,6 +119,8 @@ class PunchPlugin(TraversalPlugin):
             if puncher is None:
                 print("[PUNCH-RUN] PunchPlugin: no STUN clients available; aborting.", flush=True)
                 log("[PUNCH-RUN] PunchPlugin: no STUN clients available; aborting punch.")
+                if not self.result.done():
+                    self.result.set_result(None)
                 return
             print("[PUNCH-RUN] setup_puncher_client OK; n_stuns={0}".format(
                 len(stuns) if stuns else 0,

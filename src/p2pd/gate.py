@@ -42,10 +42,16 @@ class peer(object):
         return PeerHandle(name)
 
 
-def derive_default_pnp_name(nic_ids, listen_port):
-    """sha256(NIC list + listen port), truncated.  Same inputs → same
-    name → same keystore file → stable identity across runs."""
-    parts = sorted(str(x) for x in nic_ids if x)
+def derive_default_pnp_name(nic_macs, listen_port):
+    """sha256(NIC MAC list + listen port), truncated.  Same inputs → same
+    name → same keystore file → stable identity across runs.
+
+    Keyed on MAC addresses so the derivation is unique per machine.
+    Kernel ifindex (nic.id on Linux) is reproducible per machine but
+    collides cross-machine (ifindex 2 = primary NIC on essentially
+    every Linux box), which produced same-name collisions across
+    unrelated hosts."""
+    parts = sorted(str(x) for x in nic_macs if x)
     parts.append(str(listen_port))
     payload = ":".join(parts).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:16]
@@ -90,8 +96,8 @@ class Gate(object):
         if self.requested_name is None:
             await load_network_interfaces(self.node)
             await load_machine_identity(self.node)
-            nic_ids = [getattr(nic, "id", None) for nic in self.node.ifs]
-            self.node.pnp_name = derive_default_pnp_name(nic_ids, self.node.listen_port)
+            nic_macs = [getattr(nic, "mac", None) for nic in self.node.ifs]
+            self.node.pnp_name = derive_default_pnp_name(nic_macs, self.node.listen_port)
         else:
             self.node.pnp_name = self.requested_name
 
@@ -114,18 +120,15 @@ class Gate(object):
         """Return ``<pnp_name><tld>`` (e.g. "alice.p2p") once
         registration has completed; returns None if registration was
         skipped or failed."""
-        entry = getattr(self.node, "keystore_entry", None) if self.node else None
-        if entry is None or not entry.tld:
-            return None
-        return entry.pnp_name + entry.tld
+        return getattr(self.node, "full_name", None) if self.node else None
 
     @property
     def nickname_error(self):
         """The exception raised by the in-flight nickname registration
         task, or None on success / not yet attempted.  Callers use
         this to render typed errors (PnpServerResourceLimit,
-        NameAlreadyRegistered, PnpServerUnreachable, FullNameFailure)
-        instead of a generic "didn't register" message."""
+        PnpServerUnreachable, FullNameFailure) instead of a generic
+        "didn't register" message."""
         return getattr(self.node, "nickname_error", None) if self.node else None
 
     async def __aexit__(self, exc_type, exc, tb):

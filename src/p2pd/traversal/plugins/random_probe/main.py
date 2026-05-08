@@ -36,7 +36,7 @@ from aionetiface.nic.nat.nat_defs import SYMMETRIC_NAT
 
 from ....protocol.proto_defs import P2P_RANDOM_PROBE
 from .proto import RandomProbeMsg
-from ...traversal_plugin import TraversalPlugin
+from ...traversal_plugin import Plugin
 from ...strategy_registry import register
 from aionetiface.net.selector_proxy import selector_proxy
 from ..tcp_punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
@@ -87,7 +87,7 @@ def is_symmetric_nat(nat_info: Dict[str, Any]) -> bool:
 
 
 @register(phase="spray")
-class RandomProbePlugin(TraversalPlugin):
+class RandomProbePlugin(Plugin):
     """Tailscale-style random UDP probe rendezvous for one (cone, sym) pair.
 
     The pair must be (one cone-NAT side, one symmetric-NAT side).
@@ -231,11 +231,15 @@ class RandomProbePlugin(TraversalPlugin):
                 "RandomProbePlugin: peer claimed role={0} but I'm also "
                 "{0}; aborting".format(peer_role)
             )
+            if not self.result.done():
+                self.result.set_result(None)
             return
 
         nonce = bytes.fromhex(reply.payload.magic)
         if len(nonce) != 16:
             log("RandomProbePlugin: bad nonce length in peer reply")
+            if not self.result.done():
+                self.result.set_result(None)
             return
 
         # Trust the peer's advertised addr if it's a usable string;

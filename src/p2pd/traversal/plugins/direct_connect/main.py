@@ -3,7 +3,7 @@ from typing import Any, List, Optional, Tuple
 import asyncio
 from aionetiface import IP4, IP6, Interface, TCP, Pipe, log, log_exception, fstr, to_b
 from aionetiface.net.bind.bind_utils import patch_connect_ip
-from ...traversal_plugin import TraversalPlugin
+from ...traversal_plugin import Plugin
 from ...strategy_registry import register
 from .con_id_frame import CON_ID_PREFIX
 
@@ -50,7 +50,7 @@ def loopback_src_for(plugin: Any) -> Optional[str]:
 
 
 @register(phase="direct")
-class DirectConnect(TraversalPlugin):
+class DirectConnect(Plugin):
     """Traversal plugin that attempts a straightforward TCP connection to the peer."""
 
     name = "direct_connect"
@@ -90,6 +90,8 @@ class DirectConnect(TraversalPlugin):
             print("[DIRECT-DBG] {0} loopback candidates: {1}".format(self.plugin_id, candidates))
             pipe = await self.try_loopback_candidates(candidates)
             if pipe is None:
+                if not self.result.done():
+                    self.result.set_result(None)
                 return
         else:
             # Non-loopback path: standard NIC-bind connect.

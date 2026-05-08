@@ -22,7 +22,7 @@ from aionetiface import (
 from aionetiface.net.selector_proxy import selector_proxy
 
 from ....protocol.proto_defs import P2P_PUNCH
-from ...traversal_plugin import TraversalPlugin
+from ...traversal_plugin import Plugin
 from ...strategy_registry import register
 from ..tcp_punch.boundary_alloc import boundary_port_alloc
 from ..tcp_punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
@@ -36,7 +36,7 @@ from .udp_punch_engine import drain_punch_residue, udp_punch_engine
 
 
 @register(phase="spray")
-class UdpPunchPlugin(TraversalPlugin):
+class UdpPunchPlugin(Plugin):
     """Traversal plugin implementing UDP hole-punching via coordinated port prediction."""
 
     name = "udp_punch"
@@ -83,6 +83,8 @@ class UdpPunchPlugin(TraversalPlugin):
             puncher, stuns = await self.setup_puncher_client(reply)
             if puncher is None:
                 log("UdpPunchPlugin: no STUN clients available; aborting punch.")
+                if not self.result.done():
+                    self.result.set_result(None)
                 return
 
             # Concurrent run() may have raced through; reuse the registered client.

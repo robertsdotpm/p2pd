@@ -1,13 +1,13 @@
 """Traversal plugin that inverts the connection direction."""
 from typing import Any, Optional
 from aionetiface import fstr, log
-from ...traversal_plugin import TraversalPlugin
+from ...traversal_plugin import Plugin
 from ...strategy_registry import register
 from ....protocol.proto_msg import ConMsg
 
 
 @register(phase="direct")
-class ReverseConnectPlugin(TraversalPlugin):
+class ReverseConnectPlugin(Plugin):
     """Traversal plugin that asks the remote peer to initiate the TCP connection."""
 
     name = "reverse_connect"

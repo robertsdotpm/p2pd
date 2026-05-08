@@ -2,7 +2,7 @@
 from typing import Any, Optional
 import asyncio
 from aionetiface import EXT_BIND, UDP, get_infra, fstr, log, log_p2p
-from ...traversal_plugin import TraversalPlugin
+from ...traversal_plugin import Plugin
 from ...strategy_registry import register
 from ....protocol.proto_defs import P2P_RELAY
 from .proto import TURNMsg
@@ -10,7 +10,7 @@ from .turn_utils import get_first_working_turn_client, rendezvous_rank
 
 
 @register(phase="relay")
-class TURNPlugin(TraversalPlugin):
+class TURNPlugin(Plugin):
     """Traversal plugin that establishes a P2P connection via a TURN relay server."""
 
     name = "turn"

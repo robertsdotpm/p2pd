@@ -63,7 +63,7 @@ def fire_probes(
     the NAT could have allocated. spray_interval throttles to avoid
     thundering-herd on the local NAT and the peer's NIC.
 
-    stop_reader is the project-wide stop socket (TraversalPlugin's
+    stop_reader is the project-wide stop socket (Plugin's
     self.stop_reader / Node.stop_rw[0]). When node_stop fires,
     sock_has_data flips True and the spray loop bails on the next
     iteration so the executor thread exits before the asyncio loop
