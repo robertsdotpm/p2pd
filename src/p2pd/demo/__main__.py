@@ -31,6 +31,7 @@ from aionetiface import (
 )
 from ..node.nickname import FullNameFailure
 from ..node.node import Node
+from ..gate import Gate
 from . import stop_rw
 from .defs import MENU_BANNER, PROGRAM_BANNER, demo_node_conf
 from .cmd_arg_defs import args
@@ -88,30 +89,29 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
     # Show the ifs loaded.
     display_ifs_loaded(ifs)
 
-    # Main node class with chosen ifs and conf.
-    # print(stop_rw)
-    node = None
-    for start_attempt in range(3):
-        node = Node(
-            ifs=ifs, ip=args.ip, port=args.port, stop_rw=stop_rw,
-            conf=demo_node_conf, node_name=args.node_id,
-        )
+    # Build the Gate: explicit name when --node_id is supplied,
+    # otherwise auto-derive a deterministic sha256(nics+port) name.
+    sys_clock_arg = None
+    if args.ntp:
+        sys_clock_arg = SysClock(interface=ifs[0], ntp_addr=args.ntp)
+        cout(fstr("Using --ntp source: {0}", (args.ntp,)))
 
-        # Start the node and install echo protocol handler.
-        cout(fstr("Starting node on {0}...", (node.listen_port,)))
-        node.add_msg_cb(add_echo_support)
-        # When --ntp is supplied, build the SysClock against that single
-        # source so cross-machine sync is bounded by LAN RTT (sub-ms)
-        # rather than internet pool RTT (50-100 ms).
-        sys_clock_arg = None
-        if args.ntp:
-            sys_clock_arg = SysClock(interface=ifs[0], ntp_addr=args.ntp)
-            cout(fstr("Using --ntp source: {0}", (args.ntp,)))
+    gate = None
+    for start_attempt in range(3):
+        gate = Gate(
+            name=args.node_id,
+            ifs=ifs, ip=args.ip, port=args.port, stop_rw=stop_rw,
+            conf=demo_node_conf, sys_clock=sys_clock_arg,
+        )
+        # Install the echo protocol handler before start so inbound
+        # messages from peers connecting to us get processed.
+        gate.add_msg_cb(add_echo_support)
+        cout(fstr("Starting node on {0}...", (gate.node.listen_port,)))
         try:
-            await node.start(sys_clock=sys_clock_arg, out=True, cout=cout)
+            await gate.__aenter__()
             break
         except StartNodeNicknameFailed:
-            await async_wrap_errors(node.close())
+            await async_wrap_errors(gate.__aexit__(None, None, None))
             if start_attempt < 2:
                 cout("PNP servers unreachable (attempt {0}/3); retrying in 5 s...".format(start_attempt + 1))
                 await asyncio.sleep(5)
@@ -119,21 +119,18 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
         # All 3 attempts exhausted. Most likely cause: namebump server
         # was killed. Check 'ps aux | grep namebump' on the PNP host.
         raise StartNodeNicknameFailed()
-    # print(node.pp_executor)
 
-    # Show the nodes address and listen port.
+    node = gate.node
+
     cout()
     cout(fstr("Node started = {0}", (to_s(node.addr_bytes),)))
     cout(fstr("Node port = {0}", (node.listen_port,)))
 
-    # Get PNP address of the node being started.
-    nick = None
-    try:
-        nick = await node.nickname(node.node_id)
+    nick = gate.full_name
+    if nick is not None:
         cout(fstr("Node nickname = {0}", (nick,)))
         cout()
-    except (StartNodeNicknameFailed, FullNameFailure):
-        log_exception()
+    else:
         cout("node id default nickname didnt load")
         cout("might have been taken over or all servers down.")
         cout("")

@@ -189,8 +189,14 @@ def norm_listen_ips(listen_ips: List[str]) -> List[str]:
     return listen_ips
 
 
-def load_signing_key(nics: List[Any], listen_ips: List[str], listen_port: int, install_path: str, node_name: Optional[str] = None) -> SigningKey:
+def load_signing_key(nics: List[Any], listen_ips: List[str], listen_port: int, install_path: str, node_name: Optional[str] = None) -> Tuple[SigningKey, bool]:
     """Load the node's ECDSA signing key from disk, generating and persisting a new one if absent.
+
+    Returns (signing_key, is_fresh).  is_fresh=True means the key was
+    generated this call (no prior file existed); is_fresh=False means
+    it was loaded from disk.  Callers use this to distinguish first-
+    time PNP registration (must check name is free) from re-registering
+    a name we already own (skip the collision check).
 
     Identity is keyed by node_name. When node_name is None the file
     falls back to the single shared "default" path at install_path --
@@ -229,17 +235,19 @@ def load_signing_key(nics: List[Any], listen_ips: List[str], listen_port: int, i
     if os.path.exists(sk_path):
         with open(sk_path, mode="r", encoding="utf-8") as fp:
             sk_hex = fp.read()
+        is_fresh = False
     else:
         sk = SigningKey.generate(curve=SECP256k1)
         sk_buf = sk.to_string()
         sk_hex = to_h(sk_buf)
         with open(sk_path, "w", encoding="utf-8") as file:
             file.write(sk_hex)
+        is_fresh = True
 
     # Convert secret key to a singing key.
     sk_buf = h_to_b(sk_hex)
     sk = SigningKey.from_string(sk_buf, curve=SECP256k1)
-    return sk
+    return sk, is_fresh
 
 
 async def fallback_machine_id(netifaces: Any, app_id: str = "p2pd") -> str:

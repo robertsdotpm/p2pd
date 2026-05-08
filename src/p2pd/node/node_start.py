@@ -176,12 +176,26 @@ async def load_machine_identity(node: Any) -> None:
 
 
 def load_cryptography_and_auth(node: Any) -> Any:
-    """Load or generate the node's ECDSA signing key, derive the node ID, and return the keypair."""
-    install_path = resolve_install_path(node.conf)
-    node.sk = load_signing_key(
-        node.ifs, node.listen_ips, node.listen_port, install_path,
-        node_name=getattr(node, "node_name", None),
-    )
+    """Load or generate the node's ECDSA signing key, derive the node ID, and return the keypair.
+
+    If ``node.pnp_name`` is set (Gate-driven path), the priv key comes
+    from the JSON keystore at ``~/aionetiface/<pnp_name>.json`` --
+    fresh entries are created on first call.  Otherwise we fall back
+    to the legacy ``load_signing_key`` hex-file path keyed by
+    ``node.node_name``.
+    """
+    pnp_name = getattr(node, "pnp_name", None)
+    if pnp_name:
+        from aionetiface import keystore
+        node.keystore_entry, node.sk_is_fresh = keystore.load_or_create(pnp_name)
+        node.sk = node.keystore_entry.sk
+    else:
+        install_path = resolve_install_path(node.conf)
+        node.sk, node.sk_is_fresh = load_signing_key(
+            node.ifs, node.listen_ips, node.listen_port, install_path,
+            node_name=getattr(node, "node_name", None),
+        )
+        node.keystore_entry = None
     node.vk = node.sk.verifying_key
 
     node.node_id = hashlib.sha256(node.vk.to_string("compressed")).hexdigest()[:25]
@@ -451,9 +465,38 @@ async def setup_nickname_service(node: Any) -> None:
         node.sys_clock,
     )
 
-    # Keep a reference so the task is not garbage-collected mid-run.
-    task = asyncio.create_task(async_wrap_errors(node.nickname(node.node_id)))
+    # Pick the name: explicit pnp_name (Gate path) takes priority over
+    # the legacy node_id-derived name.  owned=False on truly fresh
+    # keys (forces the strict first-time collision check); owned=True
+    # when loaded from keystore (refresh of a name we already control).
+    register_name = getattr(node, "pnp_name", None) or node.node_id
+    owned = not getattr(node, "sk_is_fresh", True)
+    task = asyncio.create_task(async_wrap_errors(
+        register_and_persist(node, register_name, owned=owned),
+    ))
     node.resources.add_task(task)
+    # Expose the in-flight task so callers (Gate, tests) can await it
+    # if they need the resulting tld + persisted keystore state before
+    # making peer-resolving calls.
+    node.nickname_register_task = task
+
+
+async def register_and_persist(node: Any, name: Any, owned: bool) -> None:
+    """Run node.nickname(name, owned=...); on success, persist the
+    resulting TLD + server list back to the keystore so subsequent
+    starts (and external resolvers) know which TLD this name lives
+    under without a fresh fetch."""
+    full_name = await node.nickname(name, owned=owned)
+    entry = getattr(node, "keystore_entry", None)
+    if entry is None:
+        return
+    tld = "." + full_name.rsplit(".", 1)[-1] if "." in full_name else None
+    if tld is None:
+        return
+    from aionetiface import keystore
+    from aionetiface import IP4, PNP_SERVERS
+    servers = [s["host"] for s in PNP_SERVERS[IP4]]
+    keystore.mark_registered(entry, tld, servers)
 
 
 async def setup_traversal_plugins(node: Any) -> None:
