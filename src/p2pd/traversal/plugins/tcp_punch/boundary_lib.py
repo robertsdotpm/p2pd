@@ -74,17 +74,21 @@ DEFAULT_PUNCH_PARAMS = {
 }
 
 FAST_PUNCH_PARAMS = {
-    # Time rendezvous — wider window than the original 6 s so cross-host
-    # NTP residual drift doesn't push peers into adjacent buckets. The
-    # matrix sweep showed XP-after-reboot pairs missing alignment by
-    # exactly 1 bucket: NTP-corrected times still drift 4-8 s between
-    # XP's slow stack and modern Windows, which is more than the old
-    # 2 s max_clock_error tolerance allowed.  Settling on the same
-    # values as DEFAULT_PUNCH_PARAMS (40 s of peer-clock tolerance,
-    # window > 2 * max_clock_error preserved) accepts a longer
-    # rendezvous wait in exchange for far fewer flake failures.
-    "window": 42,  # 42 s  (> 2 * 20 s max_clock_error)
-    "max_clock_error": 20,  # 20 s  (covers XP NTP residuals + boot drift)
+    # Time rendezvous — sized for SysClock-quorum'd peers.  Both sides
+    # compute punch_time through SysClock (NTP-quorum-backed) so peer-
+    # to-peer skew is the residual error in the quorum result --
+    # typically sub-second on modern OSes.  XP cross-NAT tcp_punch is
+    # routed away (see XP RST CLAUDE note), so only intra-LAN XP-
+    # punch passes through these params, where peer clocks usually
+    # share an upstream and fall well inside max_clock_error=4.
+    # Constraint: window > 2 * max_clock_error  →  10 > 8 ✓; the +2 s
+    # buffer above the strict minimum gives slack against sub-second
+    # jitter at bucket boundaries.  Worst-case rendezvous wait =
+    # window + max_clock_error = 14 s (down from 62 s).  If matrix
+    # sweep flakes appear, bump max_clock_error first (5 or 6) and
+    # widen window to 2*max+2.
+    "window": 10,
+    "max_clock_error": 4,
     # min_run_window=10 was inherited from DEFAULT_PUNCH_PARAMS, which
     # sized it for *manual CLI* usage where a human types ssh commands
     # on two machines and needs ~10s of slack to start both sides.
@@ -114,7 +118,7 @@ FAST_PUNCH_PARAMS = {
     "monitor_timeout": 3.0,  # 3.0 s monitor window
     "retry_interval": 0.05,  # 0.05 s selector poll interval (unchanged)
     # PunchClient / plugin timing
-    "max_sleep": 65,  # 65 s cap — above worst-case wait of ~62 s
+    "max_sleep": 16,  # 16 s cap — above worst-case wait of 14 s
     # (window + max_clock_error) so sleep_until reaches the actual
     # rendezvous time without the cap firing early.
     "coordinator_delay": 0.5,  # 0.5 s — sleep_until handles the actual
