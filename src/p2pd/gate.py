@@ -60,8 +60,16 @@ def derive_default_pnp_name(nic_macs, listen_port):
 class Gate(object):
     """Async-context wrapper around a Node with keystore-managed identity."""
 
-    def __init__(self, name=None, ifs=None, ip=None, port=None,
+    def __init__(self, name=None, ifs=None, ip=None, port=0,
                  stop_rw=None, conf=None, sys_clock=None):
+        # port=0 by default so two Gate instances on the same machine
+        # (the canonical "run the echo listener, then run a connector
+        # in another terminal" first-use pattern) don't collide on the
+        # legacy 10001.  listen_on_ifs pre-resolves 0 to an OS-assigned
+        # ephemeral port via a wildcard probe socket, then every NIC
+        # bind targets that resolved port -- so the published addr,
+        # loopback aliases, and nickname registration all stay
+        # consistent with each other.  Pass an explicit port to pin one.
         self.requested_name = name
         self.node_kwargs = {
             "ifs": ifs,
