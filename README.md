@@ -1,111 +1,116 @@
 # P2PD
 
-``[Python >= 3.5] [Mac, Win, Nix, BSD, Android]``
+`[Python ≥ 3.5] [macOS · Linux · Windows · BSD · Android]`
 
 [![Demo image](https://github.com/robertsdotpm/p2pd/blob/main/demo_small.gif?raw=true)](https://github.com/robertsdotpm/p2pd/blob/main/demo_large.gif)
 
 [Watch demo on Asciinema](https://asciinema.org/a/EhADOwnoPt5KBiQDbwR69bNHS)
 
-Update 3: I've been in the process of cleaning up all the code here. There's over
-20k lines and while it was once fine for a "demo" actually using it was quite horrible.
-I decided to take the step of split the project up into different packages.
+P2PD is a Python library for peer-to-peer NAT traversal. If two computers
+are each behind their own routers, P2PD opens a direct connection between
+them — across home routers, corporate firewalls, and CGNATs — without
+port-forwarding, relay servers, or a VPN.
 
-[aionetiface](https://github.com/robertsdotpm/aionetiface) -- will now handle just the networking. This is Python3 package that brings interface support and proper address
-handling to Python. There's more to it than that -- but the code is working well.
+The project is split into four sibling packages:
 
-[namebump](https://github.com/robertsdotpm/namebump) -- this is a new kind of
-public-access key-value store. It's a KVS that anyone can use. The database has
-resource limits per IP and names that aren't used expire over time.
+- **p2pd** (this repo) — the high-level peer API + traversal plugins.
+- [aionetiface](https://github.com/robertsdotpm/aionetiface) — interface
+  enumeration, address handling, and the asyncio socket primitives.
+- [namebump](https://github.com/robertsdotpm/namebump) — public-access KVS
+  used as the peer-name registry.  Anyone can register; per-IP quotas keep
+  it honest.
+- [sidewire](https://github.com/robertsdotpm/sidewire) — MQTT-based
+  signaling used by the punch and reverse-connect plugins.
 
-[dogdorm](https://github.com/robertsdotpm/dogdorm) -- this is a system for monitoring
-public servers used by peer-to-peer software (like STUN, TURN, MQTT, etc.) It
-is used to determine the reliability of public infrastructure so that software can
-be both decentralized and reliable.
+## Install
 
-Finally, there will be a yet unreleased NAT traversal work that depends on all of
-the above packages. It features a brand new algorithm for doing hole punching that
-is vastly improved over anything else I've previously seen. I will probably release
-this as a new package and deprecate this one because the name for P2PD isn't that
-allusive. ETA on everything finished I'm not sure -- but releasing the above
-to show you what I've already done.
+```bash
+python3 -m pip install p2pd
+```
 
-Here's a teaser so far of a very beautiful hole punching algorithm that depends
-on math and cryptography rather than complex network protocols:
+On non-Windows hosts, make sure `gcc` and `python3-devel` (or your distro's
+equivalent) are installed first.
 
-[punch.py](https://raw.githubusercontent.com/robertsdotpm/p2pd/refs/heads/folders_windows/examples/punch.py)
+## Quickstart
 
----
+The smallest useful program — Alice listens, Bob dials in by name:
 
-Update 2: P2P stuff is broken at the moment. I'm slowly fixing it and will build
-better tooling for testing in the future.
-Update: Great news everyone! I am over my burn out and feel inspired to hack again. Some things I want to do now:
+```python
+import asyncio
+from p2pd import Gate, peer
 
-- Improve docs and make videos so people know more what the project is about. People are still confused I think.
-- Improve how interfaces are done in this library -- abstract them out more. This will make the software more robust to failure in the event that interface detection fails.
-- More tests for loading nodes -- try to speed that up as people's time is very limited.
-- Lets take on the mobile network now and break symmetric NATs. I'm in a rare position now to do that as I'm now behind a CGNAT.
-- **Contributors:** You don't even have to write code to help me with this project. I'd love for people who are interested in the project to let me test connectivity from their network. I'm sure we can learn and improve the software.
-- I have an idea for something new that could be extremely useful if I can get it to work. You'll have to speculate what it is for nao ;)
+async def alice():
+    async with Gate("alice") as gate:
+        async for link in gate.listen():
+            async for msg in link:
+                await link.send(b"echo:" + msg)
 
-**P2PD is a library for doing NAT traversal in Python.** If you're behind a router and want to connect to another computer behind a router the software is for that.
-It accomplishes that by using multiple techniques that it tries to get a connection going. I think there was some confusion before with people thinking that this
-library was for making P2P networks (like Bitcoins P2P network.) Yes, you --could-- do that, but you would still have to write the bootstrapping code yourself
-(I should prob rename ths library at some point tbh, sorry.) The core feature of this library is to make direct connectivity just work regardless of the
-relationship between two computers. The computers could even be on the same LAN and the software is still smart enough to facilitate that.
+async def bob():
+    async with Gate("bob") as gate:
+        link = await gate.connect(peer.find("alice"))
+        await link.send(b"hi")
+        print(await link.recv())          # b"echo:hi"
 
-The new release includes a simple domain system that offers open,
-authenticated, registration-free, domain names. The feature is free
-to use (though some resource limits apply.)
+asyncio.run(asyncio.gather(alice(), bob()))
+```
 
-## Installation
+`Gate("alice")` derives a stable identity (an ECDSA keypair persisted under
+`~/aionetiface/<name>.json`) and registers `alice.p2p` on the public
+nickname server.  `peer.find("alice")` returns a handle that
+`gate.connect(...)` resolves and dials.
 
-On non-windows systems make sure you have gcc and python3-devel installed.
+If you need finer control (custom message callbacks, per-NIC binds,
+manual plugin selection), drop down to the `Node` API — see
+[docs/nodes.md](docs/nodes.md).
 
-   python3 -m pip install p2pd
+## Live demo
 
-## Demo
+```bash
+python3 -m p2pd.demo
+```
 
-For an interactive demo type this in your terminal.
+Drops you in an interactive menu where you can paste a peer's nickname or
+address bytes and try each traversal strategy individually
+(direct, reverse, tcp_punch, udp_punch, random_probe, turn).
 
-  python3 -m p2pd.demo
+## What's in the box
+
+- **Six traversal strategies** that `auto_connect` races concurrently:
+  - `direct_connect` — plain TCP to a reachable peer.
+  - `reverse_connect` — ask the peer to dial back through the signal channel.
+  - `tcp_punch` — TCP simultaneous-open hole punching for cone + restricted NATs.
+  - `udp_punch` — UDP hole punching with port-prediction (lower overhead than TCP punch).
+  - `random_probe` — Tailscale-style birthday-paradox bridge for cone↔symmetric pairs.
+  - `turn` — public TURN relay as last-resort fallback.
+- **NAT classifier** — distinguishes 7 NAT types × 5 port-delta sub-types,
+  so `auto_connect` only tries strategies the pair can actually use.
+- **Boundary-time rendezvous** — both peers compute a shared NTP-aligned
+  punch instant from a hash of the session, so coordination is one signal
+  round-trip instead of multiple.
+- **Multi-interface, every AF, every route type** — LAN, WAN, and
+  per-node loopback paths are exercised in parallel; first winner wins.
+- **Plugin registry** — drop a `@register`-decorated `Plugin` subclass
+  anywhere on the Python path and `auto_connect` picks it up.  See
+  [docs/writing_a_plugin.md](docs/writing_a_plugin.md).
+- **UPnP IGD + IPv6 pinhole** — opportunistically opens ports on the
+  router for direct reachability.
+- **Stdlib + ecdsa only** at runtime for the core paths — no native deps
+  for the user to compile.
 
 ## Documentation
 
-https://p2pd.readthedocs.io/
+Full docs: <https://p2pd.readthedocs.io/>
 
-## Features
+The same pages live under [`docs/`](docs/) in this repo:
 
-**P2PD** is a new project aiming to make peer-to-peer networking
-simple and ubiquitous. P2PD can be used either as a library or as a service.
-As a library P2PD is written in Python 3 using asyncio for everything.
-As a service P2PD provides a REST API on http://127.0.0.1:12333/.
-The REST API is provided for non-Python languages.
+- [introduction.md](docs/introduction.md) — what NAT traversal is + how P2PD approaches it
+- [quickstart.md](docs/quickstart.md) — two peers exchanging a message
+- [nodes.md](docs/nodes.md) — Node lifecycle if you want to skip the Gate wrapper
+- [connections.md](docs/connections.md) — `auto_connect`, `Pipe`, subscriptions
+- [plugins.md](docs/plugins.md) — the built-in traversal strategies, side by side
+- [writing_a_plugin.md](docs/writing_a_plugin.md) — build your own plugin
+- [configuration.md](docs/configuration.md) — every config knob
 
-P2PD offers engineers the following features:
+## License
 
-- Multiple strategies for establishing peer-to-peer direct connections.
-
-  - **Direct connect** = Connect to a reachable node.
-  - **Reverse connect** = Tell a node to connect to you.
-  - **TCP hole punching** = Simultaneous TCP connections.
-  - **TURN** = Use a proxy server as a last resort.
-- **Advanced NAT detection.** P2PD can detect 7 different types of NATs and
-   5 different sub-types for a combined total of **35 unique NAT
-   configurations.** The result is better NAT bypass.
-- **Smart TCP hole punching.** The TCP hole punching algorithm has been
-   designed to require minimal communication between peers to increase
-   the chances of success. The algorithm supports a diverse number of
-   NAT configurations for the best results possible.
-- **Port forwarding (IPv4) and pin hole (IPv6.)** Automatically
-   handles opening ports on the router to increase reachability.
-- **Multi-interface.** Focuses on NICs as the starting point
-   for building services. Introduces 'routes' as a
-   way to provide visibility into external addresses. You can build
-   services that support IPv4, IPv6, TCP, and UDP without writing
-   different code for each of them.
-- **Minimal dependencies.** Most of the code in P2PD uses the Python
-  standard library to improve portability and reduce packaging issues.
-- **Built on open protocols.**
-   **STUN** for address lookups, **MQTT** for signaling messages, and
-   **TURN** for last resort message relaying.
-   All of these protocols have public infrastructure.
+See [LICENSE](LICENSE).

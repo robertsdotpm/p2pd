@@ -1,193 +1,181 @@
 # Plugins
 
-p2pd uses a plugin system to try multiple connection strategies. Each plugin implements
-one traversal technique. `auto_connect` runs compatible plugins concurrently and returns
-the first winner.
+P2PD's connection layer is plugin-based.  Each plugin implements one
+traversal technique.  `auto_connect` walks them in *phase* order and
+runs every valid combo concurrently — first winner wins.
 
-## Overview
+## Phases and ordering
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        auto_connect                          │
-│                                                              │
-│  ┌─────────────┐  ┌──────────────┐  ┌───────────────────┐  │
-│  │direct_connect│  │reverse_connect│  │      punch        │  │
-│  │             │  │              │  │                   │  │
-│  │  plain TCP  │  │ ask peer to  │  │ hole-punch NATs   │  │
-│  │  connection │  │ connect back │  │ simultaneously    │  │
-│  └─────────────┘  └──────────────┘  └───────────────────┘  │
-│                                                              │
-│  If all fail ──► turn (relay, last resort)                   │
-└─────────────────────────────────────────────────────────────┘
-
-Supporting plugins (not in auto_connect):
-  get_addr    — ask peer for their current address
-  return_addr — respond to get_addr
+```text
+direct ─► punch ─► spray ─► relay
 ```
 
-## Plugin selection
+| Phase | When it runs | Plugins shipped |
+| --- | --- | --- |
+| `direct` | Always tried first | `direct_connect`, `reverse_connect` |
+| `punch` | If `direct` doesn't win | `tcp_punch` |
+| `spray` | If `punch` doesn't win | `udp_punch`, `random_probe` |
+| `relay` | Last resort | `turn` |
 
-`auto_connect` skips plugins in `SKIP_IN_AUTO = {"turn", "get_addr", "return_addr"}`.
-For the remaining plugins it builds all valid combinations:
+Within each phase, every valid `(plugin × address-family × route-type)`
+combo for the pair is launched concurrently.  As soon as any combo
+returns a working `Pipe`, the rest are cancelled and later phases are
+skipped.
 
-```
-for af in [IP4, IP6]:
-    for route_type in [NIC_BIND, EXT_BIND]:
-        for plugin in [direct_connect, reverse_connect, punch]:
-            if both nodes support af:
-                if nodes have distinct addresses for route_type:
-                    add combo
-```
+## Built-in plugins
 
-NIC_BIND (local path) combos are tried before EXT_BIND (WAN path).
+### `direct_connect`
 
-## direct_connect
+Plain TCP connect to the peer's advertised address.
 
-The simplest strategy: open a TCP connection directly to the peer's address.
-
-```
-Alice ──TCP connect──► Bob's public IP:port
+```text
+Alice ──TCP connect──► Bob:listen_port
 ```
 
 Works when:
-- Bob is not behind NAT (has a public IP)
-- Bob's router has port forwarding configured
-- UPnP opened a port on Bob's router
-- Both nodes are on the same LAN
 
-Fails when:
-- Bob is behind a NAT with no port forwarding
+- Bob has a public IP, or
+- Bob's router opened a port via UPnP, or
+- Both peers are on the same LAN, or
+- Both peers are on the same machine (loopback alias path).
 
-**Speed:** instant (no coordination needed)  
-**Reliability:** high when applicable, not widely applicable behind symmetric NATs
+Speed: instant.  Phase: `direct`.
 
-## reverse_connect
+### `reverse_connect`
 
-Alice asks Bob (via the signal channel) to connect to Alice instead.
+Alice signals Bob over MQTT: *"please connect to me using direct_connect"*.
+Bob runs his `direct_connect` against Alice.
 
-```
-Alice ──signal──► Bob: "please connect to me"
-Bob  ──TCP connect──► Alice's address
+```text
+Alice ──signal──► Bob (ConMsg{plugin_name="direct_connect"})
+Bob   ──TCP connect──► Alice
 ```
 
-Works when:
-- Alice has an open port but Bob does not
-- Complementary to direct_connect: if Alice can't connect to Bob, maybe Bob can connect to Alice
+Use when Alice is reachable but Bob is not.  Phase: `direct`.
 
-The plugin sends a `ConMsg` signal with `plugin_name="direct_connect"`, which causes
-Bob's `direct_connect` plugin to attempt the connection.
+### `tcp_punch`
 
-**Speed:** slightly slower (one signal round trip + connection)  
-**Reliability:** same as direct_connect but roles reversed
+TCP simultaneous-open through both NATs.  Both peers compute a shared
+NTP-aligned punch instant + a per-bucket port-prediction set, then
+fire `connect()` calls at each other's predicted ports at the agreed
+time.  Crossing SYNs create NAT state on both sides; one of the
+predicted 4-tuples lands an `ESTABLISHED` connection.
 
-## punch
+Boundary-time rendezvous (overlap window B and B+1) absorbs the
+~5% bucket-fork rate that comes from MQTT signal latency.
 
-Attempts TCP hole punching: both sides open their NAT simultaneously by sending
-packets at an agreed time. The crossed packets create NAT state entries on both sides,
-allowing subsequent packets through.
+Works for: full-cone, address-restricted, port-restricted NATs.
+Doesn't work for: symmetric NATs (port allocation isn't predictable
+enough — use `random_probe` instead).
 
+Phase: `punch`.  Internal timeout: 180 s.
+
+### `udp_punch`
+
+Same protocol exchange as `tcp_punch`, but the actual fire-and-verify
+phase runs in-process over UDP — no subprocess, no SYN/SYN-ACK
+sequencing, no half-open SYN cap.  Lower overhead and works on
+platforms where TCP simul-open is unreliable (XP cross-NAT, etc.).
+
+Phase: `spray`.  Internal timeout: 150 s.
+
+### `random_probe`
+
+Tailscale-style birthday-paradox bridge for cone↔symmetric pairs.
+The cone side fires N UDP probes at random destination ports on the
+symmetric peer's external IP; the symmetric side fires one probe
+from each of N source-port-distinct sockets at the cone peer's known
+`(ext_ip, ext_port)`.  With `N=256` each, ~63% of attempts produce a
+4-tuple that bridges both NATs.
+
+The plugin reuses `tcp_punch`'s boundary algorithm purely for *timing*
+synchronisation.  UDP only.
+
+Phase: `spray`.  Internal timeout: 150 s.
+
+### `turn`
+
+TURN (Traversal Using Relays around NAT) — relay all traffic through
+a public TURN server.  Last-resort fallback when no direct path
+exists.
+
+```text
+Alice ──UDP──► TURN server ──UDP──► Bob
 ```
-Alice ──signal──► Bob: "punch at T+5s, my predicted ports: [50001, 50002, ...]"
-Bob   ──signal──► Alice: "punch at T+5s, my predicted ports: [60001, 60002, ...]"
 
-At T+5s, both sides send TCP SYN packets to each other's predicted ports.
-One of them lands in the NAT state window and a connection forms.
-```
+Works for every NAT type because traffic is relayed.  Adds 2× the
+RTT to the relay server.  Phase: `relay`.  Internal timeout: 60 s.
 
-This plugin uses:
-- STUN clients to probe NAT behaviour and predict port allocations
-- NTP clock sync to coordinate the simultaneous punch time
-- A subprocess (`start_punching_process`) to hit the time window precisely
+## Auxiliary plugins
 
-Works for:
-- Full-cone NATs
-- Address-restricted NATs
-- Port-restricted NATs
+These don't participate in `auto_connect` directly — they expose
+specific signal-channel operations that other plugins or the node
+itself uses internally.
 
-Does not work for:
-- Symmetric NATs (port allocation is unpredictable)
+- **`get_addr` / `return_addr`** — refresh a peer's address by asking
+  them over the signal channel.  Used by `resolve_pnp_addr` when the
+  cached PNP record looks stale.
+- **`fan_out`** — runs N candidate plugins in parallel against the
+  same peer, picking the first one that establishes.  Used by
+  `auto_connect`'s phase machinery internally.
 
-Requires: `enable_punching=True` and `enable_stun_clients=True` in the conf.
+All three are registered with `phase=None`, so `auto_connect`'s
+phase walker skips them.
 
-**Speed:** slow (multiple STUN probes + NTP sync + punch delay ~5s)  
-**Reliability:** ~70-90% success for cone NATs, low for symmetric NATs  
-**Config:** `PLUGIN_CONF = {"timeout": 40}`
+## Plugin lookup
 
-## turn
+The `plugin_registry` is built at import time by every
+`@register(phase=...)` decorator.  `node.start()` calls
+`load_plugins(node)` which:
 
-TURN (Traversal Using Relays around NAT) relays all traffic through a public server.
-This is the last-resort fallback.
+1. Imports every `src/p2pd/traversal/plugins/<name>/main.py` (so all
+   built-in `@register` decorators fire).
+2. Calls `discover()` to import any external plugins advertised under
+   the `p2pd.strategies` entry-point group.
+3. Walks the registry and either:
+   - Calls `cls.setup(node)` and uses the returned factory as the
+     per-attempt builder, or
+   - Uses the class itself as the builder.
+4. Registers each plugin's `proto_messages` with the
+   `TraversalManager`'s wire-format dispatcher.
 
-```
-Alice ──────────────► TURN server ──────────────► Bob
-       (relayed)                    (relayed)
-```
+## Plugin lifecycle per connection attempt
 
-Works for every NAT type because all traffic goes through the relay server.
-
-**Speed:** adds latency equal to 2× the distance to the relay server  
-**Reliability:** very high (only fails if relay is unavailable)  
-**Cost:** traffic goes through public infrastructure; use only as fallback  
-**Config:** `PLUGIN_CONF = {"timeout": 20}`
-
-Note: `auto_connect` tries TURN only after all other strategies fail, up to
-`turn_limit` interface pairs.
-
-## get_addr / return_addr
-
-These are utility plugins for address resolution, not connection establishment.
-
-`get_addr` sends a signal to the peer asking for their current address.
-`return_addr` responds with the current address bytes.
-
-These are used internally by `resolve_pnp_addr` to refresh stale cached addresses.
-You typically don't use them directly.
-
-## Plugin lifecycle
-
-```
-install_plugin("direct_connect", conf)
+```text
+auto_connect(node, peer_addr)
        │
        ▼
-attempt_plugin(src_map, dest_map, sig_pipe, plugin_name, af, route_type)
+build (plugin × af × route_type) combos
        │
-       ├── validate combo (addresses match, distinct IPs, etc.)
+       ▼
+TraversalManager.attempt_plugin(...)
        │
-       ├── build plugin instance (plugin_loaders["direct_connect"]())
+       ├─ install: set_routing, set_context, set_inbound_pipes, set_send_signal_msg
        │
-       ├── configure: set_addrs, set_routing, set_context, set_inbound_pipes
-       │
-       └── schedule run() as a background task
+       └─ run_plugin(plugin)
               │
-              ▼
-         plugin.result  ← asyncio.Future
+              ├─ await asyncio.wait_for(plugin.run(reply), timeout=plugin.timeout)
               │
-    resolves to Pipe on success, or stays pending on failure
+              └─ on exception: plugin.result.set_result(None)        (fast-fail)
+
+plugin.result resolves to a Pipe on success, None on failure
 ```
 
-## Plugin state
+## What's available on `self` inside `run()`
 
-All plugins inherit from `TraversalPlugin`:
+See [writing_a_plugin.md](writing_a_plugin.md) for the full table of
+attributes and the resolution contract for `self.result`.
+
+## Running a single named plugin
+
+To pin `auto_connect` to one strategy, use `node.connect` directly:
 
 ```python
-class TraversalPlugin:
-    result     = asyncio.Future()  # resolves to Pipe on success
-    plugin_id  = str               # random 15-char ID for inbound routing
-    af         = IP4 | IP6         # address family in use
-    src_info   = dict              # {"ip": ..., "nat": ..., "ext": ..., "nic": ...}
-    dest_info  = dict              # same fields for peer
-    nic        = Interface         # local NIC object
-    route_type = NIC_BIND | EXT_BIND
+plugin = await node.connect(
+    af=IP4,
+    route_type=NIC_BIND,
+    pnp_addr=peer_addr,
+    plugin_name="direct_connect",
+)
+pipe = await asyncio.wait_for(plugin.result, timeout=10)
 ```
-
-## Auto-discovery
-
-Plugins are discovered automatically at startup. The loader scans
-`src/p2pd/traversal/plugins/` for subdirectories that contain `main.py` and
-expose either:
-
-- `PLUGIN_CLASS` — a class that will be instantiated per connection attempt, or
-- `async def setup_plugin(node)` — for plugins that need node-level shared state
-  (like shared STUN clients or a process pool)
-
-See [Writing a Plugin](writing_a_plugin.md) for how to create your own.

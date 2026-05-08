@@ -1,7 +1,15 @@
 # Nodes
 
-A `Node` is the central object in p2pd. It manages your identity, your servers,
+A `Node` is the central object in p2pd.  It manages your identity, your servers,
 your connections, and the traversal engine.
+
+> **Most users want `Gate`, not `Node`.**  `Gate` is a thin async-context
+> wrapper that gives a node a stable nickname-derived identity, calls
+> `node.start()` for you, exposes a `Link` per inbound peer, and tears
+> everything down on `__aexit__`.  See [quickstart.md](quickstart.md)
+> for the Gate-first flow.  Reach for `Node` directly when you need
+> custom message callbacks, manual plugin selection, multiple nodes
+> per process, or full control over the startup phase order.
 
 ## Creating a Node
 
@@ -90,17 +98,24 @@ pipe, _ = await auto_connect(node, peer_addr)
 Register a human-readable name in the PNP (Peer Name Protocol) system:
 
 ```python
-name = await node.nickname("alice@p2pd")
-print(name)   # "alice@p2pd" (or a modified name if taken)
+full = await node.nickname("alice")
+print(full)            # "alice.p2p"
 ```
 
-Names have a TLD format (`name@something`). Once registered, others can connect with:
+Names use a TLD suffix derived from the configured PNP server set
+(currently `.p2p` for the default single-server config — see
+`pnp_get_tld` in `nickname.py`).  Once registered, peers can connect
+by passing the full name:
 
 ```python
-pipe, _ = await auto_connect(node, "alice@p2pd")
+pipe, _ = await auto_connect(node, "alice.p2p")
 ```
 
-The name is auto-renewed when `enable_nickname=True` in the conf (the default).
+If the name is already registered to a different keypair, the server
+rejects the put on its signature check and `node.nickname(...)` raises.
+
+When `enable_nickname=True` (the default) the node also auto-registers
+its own derived name during `start()` — see `setup_nickname_service`.
 
 ## Receiving messages
 

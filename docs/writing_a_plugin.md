@@ -2,305 +2,242 @@
 
 This guide walks through building a custom traversal plugin from scratch.
 
-A runnable version of the example plugin lives at
-[tests/test_docs_plugin.py](../tests/test_docs_plugin.py).
+A plugin is responsible for one thing: producing a `Pipe` between two
+nodes.  When it succeeds, it resolves `self.result` with the pipe.
+When it fails, it resolves `self.result` with `None` (or just lets the
+TraversalManager's `finally` do it for you on exception).
 
-## What a plugin does
-
-A plugin is responsible for one thing: getting a `Pipe` between two nodes.
-It has access to:
-- Both nodes' address maps (IPs, NAT types, ports)
-- A signal channel to exchange coordination messages with the peer
-- The local NIC/interface for binding
-
-When it succeeds, it resolves `self.result` with the `Pipe`. If it can't make a
-connection, it just returns without setting the result.
-
-## Anatomy of a plugin
-
-Every plugin is a subclass of `TraversalPlugin` that overrides `run()`:
+## The minimum
 
 ```python
-from p2pd.traversal.traversal_plugin import TraversalPlugin
-
-class MyPlugin(TraversalPlugin):
-    async def run(self, reply=None) -> None:
-        # Make a Pipe here.
-        # If successful: self.result.set_result(pipe)
-        pass
-
-PLUGIN_CLASS = MyPlugin
-```
-
-The `run()` method may be called more than once if the plugin participates in a
-multi-round signal exchange (like `punch`). The `reply` argument is the signal
-message that triggered this call, or `None` on the first invocation.
-
-## Example 1: direct TCP connection
-
-The simplest possible plugin — just connect:
-
-```python
-# plugins/my_direct/main.py
-import asyncio
-from aionetiface import TCP, Pipe, log_exception
-from p2pd.traversal.traversal_plugin import TraversalPlugin
+from p2pd import Plugin, register
 
 
-class MyDirectPlugin(TraversalPlugin):
-    async def run(self, reply=None) -> None:
-        dest = (str(self.dest_info["ip"]), self.dest_info["port"])
+@register(phase="direct")
+class DirectTCP(Plugin):
+    name = "direct_tcp"
+    transport = "tcp"
+
+    async def run(self, reply=None):
+        if self.af not in self.nic.supported():
+            return self.result.set_result(None)         # skip
         route = await self.nic.route(self.af).bind()
-
-        try:
-            pipe = await Pipe(TCP, dest, route).connect()
-        except (OSError, ConnectionError, asyncio.TimeoutError):
-            log_exception()
-            return
-
-        if pipe is not None:
-            self.result.set_result(pipe)
-
-
-PLUGIN_CLASS = MyDirectPlugin
+        pipe = await route.connect(
+            (self.dest_info["ip"], self.dest_info["port"])
+        )
+        self.result.set_result(pipe)                    # winner
 ```
 
-Key attributes available in `run()`:
+Drop this in `src/p2pd/traversal/plugins/<dir>/main.py` (or anywhere
+on the Python path that gets imported during node startup) and the
+plugin loader picks it up automatically — `@register` adds the class
+to `plugin_registry` at import time, and `node.start()` walks that
+registry to install everything onto the `TraversalManager`.
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `self.af` | `IP4` or `IP6` | Address family to use |
-| `self.nic` | Interface | Local network interface |
-| `self.dest_info["ip"]` | str | Best destination IP (pre-selected by route_type) |
-| `self.dest_info["port"]` | int | Peer's listen port |
-| `self.dest_info["nat"]` | IPRange | Peer's NAT info |
-| `self.src_info` | dict | Same fields for local node |
-| `self.route_type` | NIC_BIND or EXT_BIND | Whether to use LAN or WAN path |
-| `self.same_machine` | bool | True if both endpoints are the same machine |
+## The class-attribute contract
 
-## Example 2: signal-coordinated connection
+Everything the framework needs lives in lowercase class attributes
+on the `Plugin` subclass:
 
-Plugins can exchange control messages over the signal channel before connecting.
-This is how `reverse_connect` works: it asks the peer to initiate the connection.
+| attr | required | what it does |
+| --- | --- | --- |
+| `name` | yes | Human-readable name, also the wire-protocol id used in `ConMsg.meta.plugin_name` |
+| `transport` | yes | `"tcp"` or `"udp"` |
+| `route_types` | no | Tuple of route types this plugin supports.  Default is all three: `(NIC_BIND, EXT_BIND, LOOPBACK_BIND)` |
+| `conf` | no | Plugin config dict.  Currently the framework reads `timeout` (seconds, default 10) and `set_bind` (default False).  See `traversal_manager.install_plugin` for the full shape. |
+| `proto_messages` | no | Tuple of `(MsgClass, strategy_enum, ttl)` triples.  Used by plugins that need a custom signal-channel message type. |
+| `phase` | yes (set by `@register`) | One of `"direct"`, `"punch"`, `"spray"`, `"relay"`, or `None`.  `auto_connect` walks phases in this order and stops as soon as one succeeds. |
+
+`@register(phase=...)` writes `phase` onto the class for you — you
+don't set it manually.
+
+## What `run()` gets
+
+By the time `run(self, reply=None)` is called, the framework has
+already populated the plugin instance with everything it needs:
+
+| attribute | type | description |
+| --- | --- | --- |
+| `self.result` | `asyncio.Future` | Resolve to a `Pipe` on success, or `None` on failure |
+| `self.plugin_id` | `str` | 15-char random id, used for inbound-pipe routing |
+| `self.af` | `IP4` or `IP6` | Address family this attempt uses |
+| `self.nic` | `Interface` | The local NIC selected for this attempt |
+| `self.src_info` | `dict` | Local addressing — `ip`, `port`, `nic`, `ext`, `nat`, `if_index`, … |
+| `self.dest_info` | `dict` | Same fields for the peer |
+| `self.route_type` | constant | `NIC_BIND`, `EXT_BIND`, or `LOOPBACK_BIND` |
+| `self.same_machine` | `bool` | True if both peers share a `machine_id` |
+| `self.timeout` | `int` | Seconds; `auto_connect`'s outer await uses this + a small margin |
+
+`reply` is the inbound signal message that triggered this `run()`
+call, or `None` on the first invocation.  Plugins that exchange
+multiple signal messages (`tcp_punch`, `udp_punch`, `random_probe`)
+get re-entered with `reply` set to whatever the peer sent back.
+
+## Resolving `self.result`
+
+Three contracts:
 
 ```python
-# plugins/my_reverse/main.py
-import asyncio
-from aionetiface import TCP, Pipe, log_exception
-from p2pd.traversal.traversal_plugin import TraversalPlugin
+self.result.set_result(pipe)         # success
+self.result.set_result(None)         # explicit fail-fast
+return                               # implicit fail (manager resolves to None)
+```
+
+The TraversalManager wraps every `run()` in a try/except that catches
+`asyncio.TimeoutError`, `OSError`, `ConnectionError`, and any
+uncaught `Exception`, and resolves `self.result` to `None` on each.
+You can let exceptions propagate; you don't need to swallow them
+yourself just to satisfy the future contract.
+
+What you **must not** do is exit `run()` after spawning a background
+task that will resolve the future later, without leaving the future
+unresolved — the manager only fast-fails on exception paths, not on
+normal returns, so a background-task plugin (like `tcp_punch`) keeps
+working.
+
+## Phases
+
+`auto_connect` walks phases in this order:
+
+```text
+direct → punch → spray → relay
+```
+
+Within a phase, every plugin is tried concurrently across every valid
+`(af, route_type, src_nic, dest_nic)` combination.  As soon as one
+combo wins, the rest are cancelled and the next phase is skipped.
+Plugins registered with `phase=None` are auxiliary (e.g. `get_addr`,
+`return_addr`, `fan_out`) — `auto_connect` doesn't dispatch them.
+
+Pick the phase that matches the strategy:
+
+| phase | for | examples |
+| --- | --- | --- |
+| `direct` | tries that work without coordination | `direct_connect`, `reverse_connect` |
+| `punch` | NTP-aligned simultaneous-open | `tcp_punch` |
+| `spray` | parallel UDP probe rendezvous | `udp_punch`, `random_probe` |
+| `relay` | last-resort relays | `turn` |
+
+## Signal-coordinated example
+
+This is `reverse_connect`, slightly trimmed:
+
+```python
+from p2pd import Plugin, register
 from p2pd.protocol.proto_msg import ConMsg
 
 
-class MyReversePlugin(TraversalPlugin):
-    """Ask the peer to connect to us instead."""
+@register(phase="direct")
+class ReverseConnect(Plugin):
+    name = "reverse_connect"
+    transport = "tcp"
 
-    async def run(self, reply=None) -> None:
-        # Build a signal message telling the peer to connect to us using
-        # the "direct_connect" plugin (they call DirectConnect.run()).
+    async def run(self, reply=None):
+        # Tell the peer to dial back at us using their direct_connect.
         msg = ConMsg()
         msg.meta.plugin_name = "direct_connect"
 
-        # Register an inbound slot BEFORE sending the signal to avoid a
-        # race condition: the peer might connect before we register.
+        # Reserve the inbound future BEFORE sending — a fast peer could
+        # connect back before we register, otherwise.
         self.register_inbound()
-
-        # Send the signal over MQTT.
         await self.send_signal_msg(msg)
 
-        # Wait for the inbound connection to arrive.
-        con = await self.wait_for_inbound()
-        self.result.set_result(con)
-
-
-PLUGIN_CLASS = MyReversePlugin
+        # Block until the peer's TCP connect lands and the inbound
+        # dispatcher routes it to our reserved future.
+        pipe = await self.wait_for_inbound()
+        self.result.set_result(pipe)
 ```
 
-### The signal exchange in detail
+Key helpers:
 
-```
-MyReversePlugin.run()             DirectConnect.run() on peer
-       │                                    │
-       ├─ register_inbound()                │
-       │   (registers future in             │
-       │    node.inbound_pipes)             │
-       │                                    │
-       ├─ send_signal_msg(msg) ─────────────► recv_signal_msg()
-       │                                    │    ▼
-       │                                    ├─ routes to DirectConnect
-       │                                    │
-       │                            ┌───────┤ DirectConnect.run()
-       │                            │       │  connects to our address
-       │   inbound_pipes[plugin_id] │       │  sends CON_ID_MSG + plugin_id
-       │   future resolves ◄────────┘       │
-       │                                    │
-       ├─ wait_for_inbound() returns pipe   │
-       │                                    │
-       └─ result.set_result(pipe)           └─ result.set_result(pipe)
-```
+- `self.register_inbound()` — claim an inbound-pipe slot under
+  `self.plugin_id`.  The inbound dispatcher routes any incoming
+  connection that carries this plugin_id back to your future.
+- `self.wait_for_inbound()` — await the slot you just registered.
+- `self.send_signal_msg(msg)` — push a `ConMsg`-shaped object out
+  through the MQTT signal channel.
 
-### Signal message types
+## Custom signal types
 
-| Class | Use |
-|-------|-----|
-| `ConMsg` | Ask peer to connect to us (used by reverse_connect) |
-| `GetAddr` | Ask peer for their current address |
-| `ReturnAddr` | Reply to GetAddr with address bytes |
-| `PunchMsg` | Exchange NAT port predictions for hole punching |
-| `TURNMsg` | TURN relay coordination |
-
-All signal messages have a `msg.meta.plugin_name` field that routes the message
-to the correct plugin instance on the receiving side.
-
-## Example 3: multi-round exchange
-
-For protocols that need multiple round trips (like punch), `run()` is called once
-per incoming signal message:
+Need a multi-round handshake (like the punch plugins)?  Define a
+message class in your plugin's `proto.py`, then register it via
+`proto_messages`:
 
 ```python
-class MyNegotiatePlugin(TraversalPlugin):
-    def __init__(self):
-        super().__init__()
-        self.round = 0
+from p2pd import Plugin, register
+from .proto import MyHandshakeMsg
 
-    async def run(self, reply=None) -> None:
-        self.round += 1
+P2P_MY_PROTO = 99
 
-        if self.round == 1:
-            # First call: send our offer
-            msg = build_offer_msg()
-            msg.meta.plugin_name = "my_negotiate"
-            await self.send_signal_msg(msg)
-            # run() returns; waiting for peer's reply
 
-        elif self.round == 2:
-            # Second call: peer replied with reply.payload
-            peer_data = reply.payload
-            pipe = await connect_using(peer_data)
-            if pipe is not None:
-                self.result.set_result(pipe)
+@register(phase="punch")
+class MyHandshake(Plugin):
+    name = "my_handshake"
+    transport = "udp"
+    proto_messages = (
+        (MyHandshakeMsg, P2P_MY_PROTO, 18),     # (msg_class, strategy_id, ttl_secs)
+    )
+
+    async def run(self, reply=None):
+        if reply is None:
+            # First call — initiator side.
+            outgoing = MyHandshakeMsg(...)
+            outgoing.meta.plugin_name = "my_handshake"
+            await self.send_signal_msg(outgoing)
+            return                               # wait for peer reply
+        # Second call — reply-handler side.
+        ...
+        self.result.set_result(pipe)
 ```
 
-The `TraversalManager` calls `run(reply=msg)` whenever a signal message arrives
-with `plugin_name` matching this plugin's name.
-
-## Plugin configuration
-
-A plugin can declare default configuration:
-
-```python
-PLUGIN_CONF = {
-    "timeout": 30,    # how long auto_connect waits for this plugin
-}
-```
-
-`timeout` is the only field the framework uses directly. Other fields are available
-to the plugin as custom state if you store them at the factory level.
+The plugin loader patches `WIRE_NAME = "<plugin_name>.<MsgClassName>"`
+onto the message class so it round-trips through pack/unpack
+automatically.
 
 ## Factory plugins
 
-For plugins that need shared state across all instances (like shared STUN clients
-or a process pool), use `setup_plugin` instead of `PLUGIN_CLASS`:
+When the plugin needs node-level shared state (TURN server pool,
+process pool, persistent NAT classifier), use a `setup` classmethod
+instead of letting the loader instantiate the class directly:
 
 ```python
-# plugins/my_heavy/main.py
+@register(phase="relay")
+class TURNRelay(Plugin):
+    name = "turn"
+    transport = "udp"
 
-class MyHeavyPlugin(TraversalPlugin):
-    def __init__(self):
-        super().__init__()
-        self.shared_resource = None  # filled in by factory
+    @classmethod
+    async def setup(cls, node):
+        if not node.conf.get("enable_turn", True):
+            return None                          # skip — plugin disabled
+        factory = TURNFactory(node)
+        node.resources.register(factory)         # auto-close on shutdown
+        return factory                           # used as the per-attempt builder
 
-    async def run(self, reply=None) -> None:
-        result = await use(self.shared_resource)
-        self.result.set_result(result)
-
-
-class MyHeavyFactory:
-    def __init__(self, shared_resource):
-        self.shared_resource = shared_resource
-
-    def build_plugin(self):
-        plugin = MyHeavyPlugin()
-        plugin.shared_resource = self.shared_resource
-        return plugin
-
-    async def close(self):
-        await self.shared_resource.close()
-
-
-async def setup_plugin(node):
-    """Called once at node startup. Returns factory or None to skip plugin."""
-    resource = await initialize_something_expensive()
-    factory = MyHeavyFactory(resource)
-    node.resources.register(factory)   # ensures factory.close() is called on shutdown
-    return factory
+    async def run(self, reply=None):
+        ...
 ```
 
-The factory's `build_plugin()` method is called by the traversal manager each time a
-new connection attempt starts.
+The returned factory's `build_plugin()` is called once per connection
+attempt; whatever it returns must be a `Plugin` instance.  Returning
+`None` from `setup` removes the plugin from the registry entirely.
 
-Return `None` from `setup_plugin` to disable the plugin conditionally:
+## Testing
 
-```python
-async def setup_plugin(node):
-    if not node.conf.get("enable_my_plugin", True):
-        return None   # plugin not loaded
-    ...
-```
-
-## Auto-discovery conventions
-
-Place your plugin in `src/p2pd/traversal/plugins/<name>/main.py`. The loader checks
-for either `PLUGIN_CLASS` or `setup_plugin` at module level.
-
-The plugin name defaults to the directory name but can be overridden:
+Use `NODE_TEST_CONF` so the test doesn't need MQTT / STUN / PNP:
 
 ```python
-PLUGIN_NAME = "my_custom_name"
-```
-
-Plugin directories are loaded in sorted alphabetical order.
-
-## Installing a plugin at runtime
-
-You can install a plugin outside of the auto-loader:
-
-```python
-node.traversal.install_plugin("my_plugin", {
-    "class": MyPlugin,
-    "timeout": 15,
-})
-```
-
-After installing, it is available to `auto_connect` and `node.connect`.
-
-## Testing your plugin
-
-Use `NODE_TEST_CONF` so you don't need a live MQTT connection for simple tests.
-For signal-based plugins you'll need `sig_pipe_no=1`.
-
-```python
-# tests/test_my_plugin.py
-import asyncio
 import unittest
-from aionetiface import dict_child
 from p2pd import Node
 from p2pd.node.node_defs import NODE_TEST_CONF
 from p2pd.node.auto_connect import auto_connect
 
-MY_TEST_CONF = dict_child({"sig_pipe_no": 1}, NODE_TEST_CONF)
-
 
 class TestMyPlugin(unittest.IsolatedAsyncioTestCase):
-    async def test_my_plugin_connects(self):
-        alice = await Node(conf=MY_TEST_CONF).start()
-        bob   = await Node(conf=MY_TEST_CONF).start()
+    async def test_connects(self):
+        alice = await Node(conf=NODE_TEST_CONF).start()
+        bob   = await Node(conf=NODE_TEST_CONF).start()
         try:
-            # Install only your plugin so auto_connect uses it exclusively
-            for node in (alice, bob):
-                # remove other plugins if needed
-                node.traversal.plugin_loaders.clear()
-                node.traversal.install_plugin("my_plugin", {"class": MyPlugin})
-
             pipe, _ = await auto_connect(alice, bob.address())
             self.assertIsNotNone(pipe)
         finally:
@@ -308,13 +245,22 @@ class TestMyPlugin(unittest.IsolatedAsyncioTestCase):
             await bob.close()
 ```
 
+To narrow `auto_connect` down to your plugin only, clear the
+manager's plugin_loaders before the call:
+
+```python
+for n in (alice, bob):
+    n.traversal.plugin_loaders.clear()
+    n.traversal.install_plugin("my_plugin", {"class": MyPlugin})
+```
+
 ## Checklist
 
-- [ ] Subclass `TraversalPlugin`
-- [ ] Override `async def run(self, reply=None)`
-- [ ] Call `self.result.set_result(pipe)` on success
-- [ ] Handle `OSError`, `ConnectionError`, `asyncio.TimeoutError` — just return, don't raise
-- [ ] Register inbound *before* sending signals to avoid race conditions
-- [ ] Place in `plugins/<name>/main.py` with `PLUGIN_CLASS` or `setup_plugin`
-- [ ] Set `PLUGIN_CONF = {"timeout": N}` for the right timeout
-- [ ] Write a test using `NODE_TEST_CONF`
+- [ ] `@register(phase="direct"|"punch"|"spray"|"relay"|None)` on the class
+- [ ] Subclass `Plugin`
+- [ ] Set `name` and `transport` class attrs
+- [ ] (Optional) `route_types`, `conf`, `proto_messages`, `setup`
+- [ ] `async def run(self, reply=None)` that resolves `self.result`
+- [ ] On any failure: `self.result.set_result(None)` (or just raise — the manager handles it)
+- [ ] Register inbound *before* sending signals, not after
+- [ ] Drop the file at `src/p2pd/traversal/plugins/<name>/main.py` for auto-discovery, or expose it via the `p2pd.strategies` entry-point group

@@ -157,20 +157,28 @@ custom conf dict.
 
 ## Plugin configuration
 
-Each plugin declares its own `PLUGIN_CONF`:
+Each plugin declares its own `conf` dict on the class:
 
 ```python
-# punch/main.py
-PLUGIN_CONF = {"timeout": 40}
+# tcp_punch/main.py
+@register(phase="punch")
+class PunchPlugin(Plugin):
+    name = "tcp_punch"
+    conf = {"timeout": 180}
 
 # turn/main.py
-PLUGIN_CONF = {"timeout": 20}
+@register(phase="relay")
+class TURNPlugin(Plugin):
+    name = "turn"
+    conf = {"timeout": 60}
 ```
 
-`timeout` is the number of seconds `auto_connect` waits for that plugin before
-giving up on it (the overall `auto_connect` timeout is separate).
+`timeout` is the number of seconds `TraversalManager` waits for one
+`plugin.run()` call before cancelling it.  The demo's outer await on
+`plugin.result` is `plugin.timeout + 10` (see `demo/menu.py`).
 
-To override a plugin timeout at runtime:
+To override a plugin timeout at runtime, replace its installed entry
+on the manager:
 
 ```python
 node.traversal.install_plugin("tcp_punch", {
