@@ -293,6 +293,9 @@ class PunchPlugin(TraversalPlugin):
             max_error=p["max_clock_error"],
         )
         secondary_punch_time = punch_time + p["window"]
+        print("[CLOCK] tcp_punch my_now={0} punch_time={1} delta={2} window={3} max_clock_error={4}".format(
+            timestamp, punch_time, punch_time - timestamp, p["window"], p["max_clock_error"],
+        ))
 
         puncher.set_punch_time(punch_time, secondary_punch_time=secondary_punch_time)
 
