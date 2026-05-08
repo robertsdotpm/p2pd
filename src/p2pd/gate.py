@@ -159,7 +159,8 @@ class Gate(object):
                 pass
         return False
 
-    async def connect(self, target, transport=None, timeout=None):
+    async def connect(self, target, transport=None, timeout=None,
+                      plugins=None):
         """Resolve a PeerHandle / nickname / addr_bytes and return a Link.
 
         ``target`` is one of:
@@ -171,6 +172,13 @@ class Gate(object):
         aionetiface ``TCP`` / ``UDP`` constants.  ``timeout`` (seconds)
         bounds the auto_connect race; on hit, ``connect`` returns
         ``None``.
+
+        ``plugins`` narrows the auto_connect race to a specific subset
+        of strategies -- pass a single name (``"tcp_punch"``) or a list
+        (``["tcp_punch", "udp_punch"]``).  Useful for testing one
+        plugin in isolation; the default ``None`` lets every registered
+        plugin race normally.  When set, the protocol filter is
+        bypassed so you don't have to also specify ``transport``.
 
         Returns a ``Link`` on success, or ``None`` on failure.
         """
@@ -184,10 +192,15 @@ class Gate(object):
         if isinstance(proto, str):
             proto = {"tcp": _TCP, "udp": _UDP}.get(proto.lower(), proto)
 
+        if isinstance(plugins, str):
+            plugins = [plugins]
+
         from .node.auto_connect import auto_connect
         kwargs = {}
         if proto is not None:
             kwargs["protocol"] = proto
+        if plugins is not None:
+            kwargs["plugins"] = plugins
         coro = auto_connect(self.node, dest, **kwargs)
         if timeout is not None:
             try:
