@@ -11,21 +11,24 @@ PROBE_LEN = 4 + 16 + 1 + 2
 # Default per-side probe count.  Birthday paradox: both sides draw N
 # ports from [PROBE_PORT_LO, PROBE_PORT_HI] = 32768 ports.
 # P(at least one match) ~= 1 - exp(-N^2/32768).
-# N=256 -> ~86.5% per-direction match (98% bidirectional under a
-# permissive firewall) but the matrix only saw ~60% on v6 LAN→public
-# paths because stateful IPv6 firewalls on the LAN VMs require the
-# inbound 5-tuple to match a previously-sent outbound flow, which
-# squashes effective collisions far below the bare-math expectation.
-# N=512 quadruples expected collisions to ~8 per direction, dragging
-# the bidirectional miss rate from ~13% down to e^-16 (negligible)
-# under permissive paths and pulling the firewall-restricted path
-# from coin-flip back into the high-90s. Cost: 2x outbound UDP for
-# ~10 s during convergence; 512 sockets stays well under the 1024
-# default ulimit. The CONE/SYM-hit overflow noted in the original
-# tuning comment doesn't apply here because sync_run_bidirectional_spray
-# is role-agnostic (both sides spray equally; no SYM-bound
-# pre-committed port for a stray CONE probe to mis-target).
-DEFAULT_PROBE_COUNT = 256
+# N=256 -> ~86.5% per-direction match (98% bidirectional). The first
+# incoming aligned datagram converges the algorithm in milliseconds,
+# so per-direction match rate is what actually matters in practice.
+#
+# DO NOT raise this above 256 without empirical re-testing across the
+# matrix. We tried N=512 (anchor sweep, 2026-05-07): random_probe v6
+# went 0/2 against the public anchor while udp_punch v6 still passed
+# in the same sweep. Dropping back to N=256 restored convergence on
+# the first inbound datagram (PASS on srv2022 in 72 s). Suspect cause
+# is one of: kernel UDP socket-buffer overrun on the spray burst, NIC
+# TX-ring saturation, consumer router stateful v6 flow-table cap, or
+# carrier v6 burst rate-limit -- whichever it is, 512 simultaneous v6
+# flows from one host trips it and 256 doesn't. udp_punch unaffected
+# because it only opens a handful of flows. The math doesn't need 512:
+# at N=256 the bidirectional miss rate is already ~2%, so the extra
+# flows buy almost nothing in collision probability and cost a real
+# regression on v6 paths.
+DEFAULT_PROBE_COUNT = 512  # DIAG: temporarily back to 512 for failure-mode confirmation
 
 # Lowest destination port we'll fire at / bind from.  Below 1024 is
 # privileged on POSIX and below 32 768 is in many OSes' static-service
