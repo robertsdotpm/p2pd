@@ -12,7 +12,7 @@ class TraversalPlugin:
     # auto_combo_batches consult this to skip combos a plugin would
     # just no-op on. Default: every route_type is fair game; plugins
     # override the tuple to opt out of specific paths.
-    SUPPORTED_ROUTE_TYPES = (NIC_BIND, LOOPBACK_BIND, EXT_BIND)
+    route_types = (NIC_BIND, LOOPBACK_BIND, EXT_BIND)
 
     def __init__(self) -> None:
         self.result = asyncio.Future()

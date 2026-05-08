@@ -39,40 +39,38 @@ from aionetiface import (
 from .node_connect import resolve_pnp_addr
 from .node_utils import enrich_addr_map_with_loopback
 from ..traversal.traversal_utils import close_plugin
+from ..traversal.strategy_registry import plugin_registry
 
 
-PHASE1_PLUGINS = ("direct_connect", "reverse_connect")
-PHASE2_PLUGINS = ("tcp_punch",)
-PHASE3_PLUGINS = ("udp_punch", "random_probe")
-PHASE4_PLUGINS = ("turn",)
-
-# Plugin sets by transport.
-TCP_PLUGINS = ("direct_connect", "reverse_connect", "tcp_punch")
-UDP_PLUGINS = ("udp_punch", "random_probe", "turn")
-
-# Default rolls every plugin -- callers that pass plugins= explicitly
-# get exactly that set, with no transport filtering. The default
-# protocol on auto_connect is TCP, see plugins_for_protocol.
-DEFAULT_PLUGINS = TCP_PLUGINS + UDP_PLUGINS
+def plugins_for_phase(phase):
+    """Return plugin names registered for a cascade phase, in registration order."""
+    return tuple(c.name for c in plugin_registry if getattr(c, "phase", None) == phase)
 
 
 def plugins_for_protocol(protocol):
     """Return the default plugin set for a transport.
 
-    `protocol=TCP` -- only stream plugins (direct_connect, reverse_connect,
-                      tcp_punch). The returned pipe has TCP semantics.
-    `protocol=UDP` -- only datagram plugins (udp_punch, random_probe, turn).
-                      The returned pipe has UDP semantics.
-    `protocol=None` -- every plugin in DEFAULT_PLUGINS, mixed transport.
-                       Caller must be ready to handle either pipe shape.
+    `protocol=TCP` -- only stream plugins.  The returned pipe has TCP semantics.
+    `protocol=UDP` -- only datagram plugins.  The returned pipe has UDP semantics.
+    `protocol=None` -- every cascade plugin, mixed transport.  Caller must be
+                       ready to handle either pipe shape.
     """
     if protocol == TCP:
-        return TCP_PLUGINS
-    if protocol == UDP:
-        return UDP_PLUGINS
-    if protocol is None:
-        return DEFAULT_PLUGINS
-    raise ValueError("protocol must be TCP, UDP, or None")
+        want = "tcp"
+    elif protocol == UDP:
+        want = "udp"
+    elif protocol is None:
+        want = None
+    else:
+        raise ValueError("protocol must be TCP, UDP, or None")
+
+    out = []
+    for c in plugin_registry:
+        if getattr(c, "phase", None) is None:
+            continue  # non-cascade helper
+        if want is None or getattr(c, "transport", None) == want:
+            out.append(c.name)
+    return tuple(out)
 
 PHASE1_BUDGET = 3.0
 TURN_TOTAL_CAP = 3
@@ -165,7 +163,7 @@ def viable_pairs_for_arc(
 def plugin_supports_route_type(loader: Any, route_type: Any) -> bool:
     """True if the plugin loader's class accepts this route_type.
 
-    Reads ``SUPPORTED_ROUTE_TYPES`` off the loader's plugin class
+    Reads ``route_types`` off the loader's plugin class
     (default: every route_type allowed).
     """
     if loader is None:
@@ -173,7 +171,7 @@ def plugin_supports_route_type(loader: Any, route_type: Any) -> bool:
     cls = loader.get("class") if isinstance(loader, dict) else None
     if cls is None:
         return True
-    supported = getattr(cls, "SUPPORTED_ROUTE_TYPES", None)
+    supported = getattr(cls, "route_types", None)
     if supported is None:
         return True
     return route_type in supported
@@ -397,7 +395,7 @@ async def phase1_direct(
     plugins: frozenset,
 ) -> Tuple[Optional[Any], Optional[Any]]:
     """Race direct_connect / reverse_connect across all valid combos."""
-    names = [n for n in PHASE1_PLUGINS if n in plugins]
+    names = [n for n in plugins_for_phase("direct") if n in plugins]
     if not names:
         return None, None
 
@@ -507,11 +505,12 @@ async def phase2_tcp_punch(
     sig_pipe: Any,
     plugins: frozenset,
 ) -> Tuple[Optional[Any], Optional[Any]]:
-    if "tcp_punch" not in plugins:
+    names = tuple(n for n in plugins_for_phase("punch") if n in plugins)
+    if not names:
         return None, None
     return await punch_phase(
         node, src_map, dest_map, sig_pipe,
-        plugin_names=("tcp_punch",),
+        plugin_names=names,
         label="phase2",
     )
 
@@ -523,7 +522,7 @@ async def phase3_udp_probe(
     sig_pipe: Any,
     plugins: frozenset,
 ) -> Tuple[Optional[Any], Optional[Any]]:
-    names = tuple(n for n in PHASE3_PLUGINS if n in plugins)
+    names = tuple(n for n in plugins_for_phase("spray") if n in plugins)
     if not names:
         return None, None
     return await punch_phase(
@@ -549,9 +548,16 @@ async def phase4_turn(
     previously-used dest NIC only if every fresh option is invalid.
     Stop as soon as we hit `cap` total attempts.
     """
-    if "turn" not in plugins or "turn" not in node.traversal.plugin_loaders:
+    relay_names = [n for n in plugins_for_phase("relay") if n in plugins]
+    if not relay_names:
         return None, None
-    loader = node.traversal.plugin_loaders["turn"]
+    # Phase 4 is single-plugin sequential. If multiple relay plugins
+    # exist in the registry they'd need a different scheduler; for now
+    # pick the first registered one.
+    relay_name = relay_names[0]
+    if relay_name not in node.traversal.plugin_loaders:
+        return None, None
+    loader = node.traversal.plugin_loaders[relay_name]
     if not plugin_supports_route_type(loader, EXT_BIND):
         return None, None
 
@@ -598,7 +604,7 @@ async def phase4_turn(
             ))
             pipe, plugin = await race_combos(
                 node, sig_pipe, src_map, dest_map,
-                [("turn", af, EXT_BIND, src_info, chosen)],
+                [(relay_name, af, EXT_BIND, src_info, chosen)],
                 timeout,
             )
             if pipe is not None:

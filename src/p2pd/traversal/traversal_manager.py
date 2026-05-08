@@ -112,7 +112,7 @@ class TraversalManager:
         # Don't run if result is set.
         if plugin.result.done():
             log("[TM] run_plugin skip (already done) plugin={0} id={1}".format(
-                getattr(plugin, "PLUGIN_NAME", type(plugin).__name__),
+                getattr(plugin, "name", type(plugin).__name__),
                 getattr(plugin, "plugin_id", "?"),
             ))
             return
@@ -127,7 +127,7 @@ class TraversalManager:
             reply.routing.load_if_extra(self.nics)
 
         log("[TM] run_plugin enter plugin={0} id={1} reply={2} timeout={3}s".format(
-            getattr(plugin, "PLUGIN_NAME", type(plugin).__name__),
+            getattr(plugin, "name", type(plugin).__name__),
             getattr(plugin, "plugin_id", "?"),
             reply is not None,
             plugin.timeout,
@@ -145,7 +145,7 @@ class TraversalManager:
             log_exception()
 
         log("[TM] run_plugin exit plugin={0} id={1} result_done={2}".format(
-            getattr(plugin, "PLUGIN_NAME", type(plugin).__name__),
+            getattr(plugin, "name", type(plugin).__name__),
             getattr(plugin, "plugin_id", "?"),
             plugin.result.done(),
         ))

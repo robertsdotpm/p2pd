@@ -2,11 +2,16 @@
 from typing import Any, Optional
 from aionetiface import fstr, log
 from ...traversal_plugin import TraversalPlugin
+from ...strategy_registry import register
 from ....protocol.proto_msg import ConMsg
 
 
+@register(phase="direct")
 class ReverseConnectPlugin(TraversalPlugin):
     """Traversal plugin that asks the remote peer to initiate the TCP connection."""
+
+    name = "reverse_connect"
+    transport = "tcp"
 
     async def run(self, reply: Optional[Any] = None) -> None:
         """Signal the remote peer to connect back to us and await the inbound pipe."""
@@ -46,4 +51,3 @@ class ReverseConnectPlugin(TraversalPlugin):
         ))
         self.result.set_result(con)
 
-PLUGIN_CLASS = ReverseConnectPlugin

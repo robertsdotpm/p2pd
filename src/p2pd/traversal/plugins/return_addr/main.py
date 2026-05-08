@@ -3,11 +3,15 @@ from typing import Any, Optional
 import asyncio
 from aionetiface import log, log_exception, fstr
 from ...traversal_plugin import TraversalPlugin
+from ...strategy_registry import register
 from ....protocol.proto_msg import ReturnAddr
 
 
+@register(phase=None)
 class ReturnAddrPlugin(TraversalPlugin):
     """Traversal plugin that replies to a GetAddr request with the sender's own address."""
+
+    name = "return_addr"
 
     async def run(self, reply: Optional[Any] = None) -> None:
         """Send a ReturnAddr signal message back to the requester with our current address."""
@@ -33,5 +37,3 @@ class ReturnAddrPlugin(TraversalPlugin):
             log_exception()
 
         self.result.set_result("Done")
-
-PLUGIN_CLASS = ReturnAddrPlugin

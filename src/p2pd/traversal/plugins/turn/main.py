@@ -3,19 +3,38 @@ from typing import Any, Optional
 import asyncio
 from aionetiface import EXT_BIND, UDP, get_infra, fstr, log, log_p2p
 from ...traversal_plugin import TraversalPlugin
+from ...strategy_registry import register
 from ....protocol.proto_defs import P2P_RELAY
 from .proto import TURNMsg
 from .turn_utils import get_first_working_turn_client, rendezvous_rank
 
 
+@register(phase="relay")
 class TURNPlugin(TraversalPlugin):
     """Traversal plugin that establishes a P2P connection via a TURN relay server."""
 
+    name = "turn"
+    transport = "udp"
     # TURN is a public-relay mechanism only; only EXT_BIND combos make
     # sense. auto_combos won't generate NIC_BIND / LOOPBACK_BIND combos
     # for us. The historical "if route_type == NIC_BIND: return"
     # guard at the top of run() is no longer needed.
-    SUPPORTED_ROUTE_TYPES = (EXT_BIND,)
+    route_types = (EXT_BIND,)
+    # 60 s budget: get_first_working_turn_client walks the rendezvous-
+    # ranked server list with a 6 s per-server cap (PER_SERVER_TIMEOUT
+    # in turn_utils.py); ~8 server attempts (48 s) leaves ~12 s for
+    # CreatePermission + relay-tup futures + post-allocate signaling
+    # tail latency on slower OSes / network paths.
+    conf = {"timeout": 60}
+    proto_messages = (
+        (TURNMsg, P2P_RELAY, 10),
+    )
+
+    @classmethod
+    async def setup(cls, node):
+        factory = TURNPluginFactory(node.msg_cb, node.node_id)
+        node.resources.register(factory)
+        return factory
 
     # Maximum number of server-renegotiation round trips before giving up.
     # Each round trip is one (initiator picks server, responder fails to
@@ -428,23 +447,3 @@ class TURNPluginFactory:
         self.turn_clients.clear()
 
 
-# Total budget the traversal manager gives this plugin's run() call.
-# get_first_working_turn_client walks the rendezvous-ranked server list
-# with a 6s per-server cap (PER_SERVER_TIMEOUT in turn_utils.py); we
-# need enough headroom here to absorb several bad-server fall-throughs
-# before reaching a working relay PLUS the CreatePermission round-trip
-# and the relay-tup futures. ~8 server attempts (48s) leaves ~12s for
-# the post-allocate signaling exchange and tail latency on slower
-# OSes / network paths.
-PLUGIN_CONF = {"timeout": 60}
-
-PROTO_MESSAGES = (
-    (TURNMsg, P2P_RELAY, 10),
-)
-
-
-async def setup_plugin(node):
-    """Create the TURN factory and register it for cleanup."""
-    factory = TURNPluginFactory(node.msg_cb, node.node_id)
-    node.resources.register(factory)
-    return factory

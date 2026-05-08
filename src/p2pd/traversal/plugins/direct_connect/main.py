@@ -4,6 +4,7 @@ import asyncio
 from aionetiface import IP4, IP6, Interface, TCP, Pipe, log, log_exception, fstr, to_b
 from aionetiface.net.bind.bind_utils import patch_connect_ip
 from ...traversal_plugin import TraversalPlugin
+from ...strategy_registry import register
 from .con_id_frame import CON_ID_PREFIX
 
 
@@ -48,8 +49,12 @@ def loopback_src_for(plugin: Any) -> Optional[str]:
     return str(src_lo)
 
 
+@register(phase="direct")
 class DirectConnect(TraversalPlugin):
     """Traversal plugin that attempts a straightforward TCP connection to the peer."""
+
+    name = "direct_connect"
+    transport = "tcp"
 
     async def run(self, reply: Optional[Any] = None) -> None:
         """Open a direct TCP connection to the peer and store the resulting pipe."""
@@ -226,8 +231,6 @@ class DirectConnect(TraversalPlugin):
         print("[DIRECT-DBG] {0} all loopback candidates failed".format(self.plugin_id))
         return None
 
-
-PLUGIN_CLASS = DirectConnect
 
 # direct_connect no longer owns any signal-channel messages.
 # The connection-request side stays at the core layer (ConMsg, registered

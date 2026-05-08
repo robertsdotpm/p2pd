@@ -37,6 +37,7 @@ from aionetiface.nic.nat.nat_defs import SYMMETRIC_NAT
 from ....protocol.proto_defs import P2P_RANDOM_PROBE
 from .proto import RandomProbeMsg
 from ...traversal_plugin import TraversalPlugin
+from ...strategy_registry import register
 from aionetiface.net.selector_proxy import selector_proxy
 from ..tcp_punch.boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
 
@@ -85,6 +86,7 @@ def is_symmetric_nat(nat_info: Dict[str, Any]) -> bool:
     return nat_info.get("type") == SYMMETRIC_NAT
 
 
+@register(phase="spray")
 class RandomProbePlugin(TraversalPlugin):
     """Tailscale-style random UDP probe rendezvous for one (cone, sym) pair.
 
@@ -97,12 +99,22 @@ class RandomProbePlugin(TraversalPlugin):
     public-IP punching has failed.
     """
 
+    name = "random_probe"
+    transport = "udp"
     # EXT_BIND is the production path; NIC_BIND is allowed so the
     # matrix sweep can exercise the algorithm on LAN where the IP
     # selection just collapses to NIC addresses (no NAT involved).
     # LOOPBACK_BIND stays out -- random_probe over loopback is
     # degenerate (kernel short-circuit, nothing to verify).
-    SUPPORTED_ROUTE_TYPES = (EXT_BIND, NIC_BIND)
+    route_types = (EXT_BIND, NIC_BIND)
+    conf = {"timeout": 150}
+    proto_messages = (
+        (RandomProbeMsg, P2P_RANDOM_PROBE, 18),
+    )
+
+    @classmethod
+    async def setup(cls, node):
+        return RandomProbePluginFactory(sys_clock=node.sys_clock)
 
     async def run(self, reply: Optional[RandomProbeMsg] = None) -> None:
         """Drive the random-probe rendezvous from initiator or responder side."""
@@ -865,16 +877,6 @@ class RandomProbePluginFactory:
         return None
 
 
-PLUGIN_CONF = {"timeout": 150}
-
-PROTO_MESSAGES = (
-    (RandomProbeMsg, P2P_RANDOM_PROBE, 18),
-)
-
-
-async def setup_plugin(node: Any) -> RandomProbePluginFactory:
-    """Discovered by plugin_loader; injects node.sys_clock into the factory."""
-    return RandomProbePluginFactory(sys_clock=node.sys_clock)
 
 
 # ─────────────────────────────────────────────────────────────────

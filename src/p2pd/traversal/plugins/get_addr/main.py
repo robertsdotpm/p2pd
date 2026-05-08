@@ -2,11 +2,15 @@
 from typing import Any, Optional
 from aionetiface import log, fstr
 from ...traversal_plugin import TraversalPlugin
+from ...strategy_registry import register
 from ....protocol.proto_msg import GetAddr
 
 
+@register(phase=None)
 class GetAddrPlugin(TraversalPlugin):
     """Traversal plugin that requests and returns the peer's current network address."""
+
+    name = "get_addr"
 
     async def run(self, reply: Optional[Any] = None) -> None:
         """Resolve the peer's address: extract from reply or send a GetAddr request."""
@@ -30,4 +34,3 @@ class GetAddrPlugin(TraversalPlugin):
         # Send this message to the dest_addr for this plugin instance.
         await self.send_signal_msg(msg)
 
-PLUGIN_CLASS = GetAddrPlugin

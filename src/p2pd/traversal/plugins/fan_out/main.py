@@ -22,6 +22,7 @@ from aionetiface import (
     fstr, log, log_exception,
 )
 from ...traversal_plugin import TraversalPlugin
+from ...strategy_registry import register
 from ...traversal_utils import close_plugin
 from ....node.auto_connect import race_plugin_results
 
@@ -61,11 +62,23 @@ def enumerate_viable_combos(
     return combos
 
 
+@register(phase=None)
 class FanOutPlugin(TraversalPlugin):
-    """Meta-plugin: race a target plugin across every viable combo."""
+    """Meta-plugin: race a target plugin across every viable combo.
 
+    Invoked explicitly (via node.connect for any-pathway requests) --
+    never raced as part of auto_connect's normal plugin sweep, since
+    auto_connect already does its own combo enumeration.
+    """
+
+    name = "fan_out"
     # fan_out itself doesn't bind any sockets; it is route-type-agnostic.
-    SUPPORTED_ROUTE_TYPES = (NIC_BIND, LOOPBACK_BIND, EXT_BIND)
+    route_types = (NIC_BIND, LOOPBACK_BIND, EXT_BIND)
+    conf = {
+        "timeout": 30,
+        "set_bind": False,
+        "max_pairs": 1,
+    }
 
     def __init__(self) -> None:
         super().__init__()
@@ -202,14 +215,3 @@ class FanOutPlugin(TraversalPlugin):
         self.result.set_result(pipe)
 
 
-PLUGIN_CLASS = FanOutPlugin
-
-# fan_out is invoked explicitly (via node.connect for any-pathway
-# requests) -- it should never be raced as part of auto_connect's
-# normal plugin sweep, since auto_connect already does its own
-# combo enumeration.
-PLUGIN_CONF = {
-    "timeout": 30,
-    "set_bind": False,
-    "max_pairs": 1,
-}

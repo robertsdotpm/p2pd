@@ -1,4 +1,46 @@
-"""Traversal plugin for TCP/UDP hole punching."""
+"""Traversal plugin for TCP hole punching via coordinated port prediction.
+
+Timeout budget (PLUGIN_CONF["timeout"] = 180):
+  180 s = max-rendezvous-wait (window=42 + max_clock_error=20 ≈ 62 s)
+        + primary spray (~3 s) + primary monitor (~3 s)
+        + secondary rendezvous wait (window=42 s) for two-bucket dual-fire
+        + secondary spray (~3 s) + secondary monitor (~3 s)
+        + worker dispatch / engine setup overhead (varies by host,
+          ~5-15 s on slow stacks)
+        + the post-punch reverse-bridge accept (typically <1 s)
+        + a safety margin for slow stacks (XP/Vista) so the run_plugin
+          wait_for doesn't cancel the awaiting reverse_server.accept
+          before the worker has had a chance to connect back. The
+          previous 80 s left only ~10 s margin which v13's vista-from-xp
+          ate, manifesting as WinError 10061 on the worker's connect-
+          back to a listener that had just been torn down by the
+          cancellation propagating from the timeout firing.
+
+PROTO_MESSAGES is consumed by plugin_loader: it merges each entry into
+TraversalManager.sig_proto so PunchMsg dispatches without core
+proto_msg.py edits.  Each tuple is (msg_class, strategy_enum, ttl_secs);
+plugin_loader derives the wire name as "<plugin_name>.<class>" and
+patches it onto the class -- no enum allocation needed.
+
+route_types: NIC_BIND covers the same-LAN case (kernel handles local
+routing for same-subnet peers); EXT_BIND covers the cross-WAN case via
+predicted NAT mappings.  LOOPBACK_BIND has no NAT in the path and the
+predict_alloc / rendezvous machinery produces no useful work over
+loopback, so we opt out of it declaratively -- auto_combos won't
+generate punch+LOOPBACK_BIND combos for us.
+
+Platform gotchas: Windows Firewall and Windows Defender Real-Time
+Protection can silently block or delay the punched TCP connections
+even after the hole-punch exchange completes successfully.  Symptoms:
+PunchMsg exchange finishes normally (both sides log the rendezvous),
+the punch process runs, but the TCP connect never completes or the
+first data packet is dropped.  During development / testing, disable
+both Windows Defender Firewall (all profiles) and Windows Security >
+Virus & threat protection > Real-time protection.  On production
+machines the right fix is an explicit inbound/outbound allow rule for
+the Python executable (or the specific port range used by the punch
+allocator).
+"""
 from typing import Any, Dict, Optional, Tuple
 import asyncio
 from aionetiface import log, NIC_BIND, EXT_BIND, SysClock, async_wrap_errors, cancel_task, shutdown_proc_pool
@@ -13,63 +55,29 @@ from .punch_process import start_punching_process
 from .tcp_punch_utils import log_time_wait_residue
 from .nat_predict import NATMapping
 from ...traversal_plugin import TraversalPlugin
+from ...strategy_registry import register
 from ....node.node_utils import get_pp_executors
 
-PLUGIN_CONF = {"timeout": 180}
-# 180s = max-rendezvous-wait (window=42 + max_clock_error=20 ≈ 62 s)
-#      + primary spray (~3 s) + primary monitor (~3 s)
-#      + secondary rendezvous wait (window=42 s) for two-bucket dual-fire
-#      + secondary spray (~3 s) + secondary monitor (~3 s)
-#      + worker dispatch / engine setup overhead (varies by host,
-#        ~5-15 s on slow stacks)
-#      + the post-punch reverse-bridge accept (typically <1 s)
-#      + a safety margin for slow stacks (XP/Vista) so the run_plugin
-#        wait_for doesn't cancel the awaiting reverse_server.accept
-#        before the worker has had a chance to connect back. The
-#        previous 80 s left only ~10 s margin which v13's vista-from-xp
-#        ate, manifesting as WinError 10061 on the worker's connect-
-#        back to a listener that had just been torn down by the
-#        cancellation propagating from the timeout firing.
-
-# Protocol auto-registration: plugin_loader merges these into
-# TraversalManager.sig_proto so PunchMsg dispatches without core
-# proto_msg.py edits.
-PROTO_MESSAGES = (
-    # (msg_class, strategy_enum, ttl_seconds)
-    # plugin_loader derives the wire name as "<plugin_name>.<class>"
-    # and patches it onto the class -- no enum allocation needed.
-    (PunchMsg, P2P_PUNCH, 20),
-)
-
-
+@register(phase="punch")
 class PunchPlugin(TraversalPlugin):
-    """Traversal plugin implementing TCP hole-punching via coordinated port prediction.
+    """Traversal plugin implementing TCP hole-punching via coordinated port prediction."""
 
-    Platform gotchas
-    ----------------
-    Windows Firewall and Windows Defender Real-Time Protection can silently
-    block or delay the punched TCP connections even after the hole-punch
-    exchange completes successfully.  Symptoms: PunchMsg exchange finishes
-    normally (both sides log the rendezvous), the punch process runs, but
-    the TCP connect never completes or the first data packet is dropped.
+    name = "tcp_punch"
+    transport = "tcp"
+    route_types = (NIC_BIND, EXT_BIND)
+    conf = {"timeout": 180}
+    proto_messages = (
+        (PunchMsg, P2P_PUNCH, 20),
+    )
 
-    During development / testing, disable both:
-      - Windows Defender Firewall (all profiles: Domain, Private, Public)
-      - Windows Security > Virus & threat protection > Real-time protection
-
-    On production machines the right fix is an explicit inbound/outbound
-    allow rule for the Python executable (or the specific port range used
-    by the punch allocator).
-    """
-
-    # Punch is a NAT-traversal mechanism. NIC_BIND covers the same-LAN
-    # case (kernel handles local routing for same-subnet peers); EXT_BIND
-    # covers the cross-WAN case via predicted NAT mappings. LOOPBACK_BIND
-    # has no NAT in the path and the predict_alloc / rendezvous machinery
-    # produces no useful work over loopback, so we opt out of it
-    # declaratively here -- auto_combos won't generate punch+LOOPBACK_BIND
-    # combos for us.
-    SUPPORTED_ROUTE_TYPES = (NIC_BIND, EXT_BIND)
+    @classmethod
+    async def setup(cls, node):
+        if not node.conf.get("enable_punching", True):
+            return None
+        factory = await PunchPluginFactory.create(node.stun_clients, node.sys_clock)
+        node.resources.punch_factory = factory
+        node.resources.register(factory)
+        return factory
 
     async def run(self, reply: Optional[Any] = None) -> None:
         """Coordinate the hole-punch exchange and launch the background punching process."""
@@ -512,11 +520,3 @@ self,
         self.proc_pool = None
 
 
-async def setup_plugin(node):
-    """Create the punch factory; returns None if punching is disabled in node.conf."""
-    if not node.conf.get("enable_punching", True):
-        return None
-    factory = await PunchPluginFactory.create(node.stun_clients, node.sys_clock)
-    node.resources.punch_factory = factory
-    node.resources.register(factory)
-    return factory
