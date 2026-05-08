@@ -28,9 +28,6 @@ The project is split into four sibling packages:
 python3 -m pip install p2pd
 ```
 
-On non-Windows hosts, make sure `gcc` and `python3-devel` (or your distro's
-equivalent) are installed first.
-
 ## Quickstart
 
 The smallest useful program — Alice listens, Bob dials in by name:
@@ -38,18 +35,26 @@ The smallest useful program — Alice listens, Bob dials in by name:
 ```python
 import asyncio
 from p2pd import Gate, peer
+from aionetiface import SUB_ALL
+
+
+async def echo(link):
+    async for msg in link:
+        await link.send(b"echo:" + msg)
+
 
 async def alice():
     async with Gate("alice") as gate:
-        async for link in gate.listen():
-            async for msg in link:
-                await link.send(b"echo:" + msg)
+        await gate.listen(echo)               # blocks; calls echo(link) per peer
+
 
 async def bob():
     async with Gate("bob") as gate:
-        link = await gate.connect(peer.find("alice"))
-        await link.send(b"hi")
-        print(await link.recv())          # b"echo:hi"
+        pipe, _ = await gate.connect(peer.find("alice"))
+        pipe.subscribe(SUB_ALL)
+        await pipe.send(b"hi")
+        print(await pipe.recv(SUB_ALL))       # b"echo:hi"
+
 
 asyncio.run(asyncio.gather(alice(), bob()))
 ```

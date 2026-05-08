@@ -28,18 +28,26 @@ and CGNATs — without port forwarding, relay servers, or a VPN.
 ```python
 import asyncio
 from p2pd import Gate, peer
+from aionetiface import SUB_ALL
+
+
+async def echo(link):
+    async for msg in link:
+        await link.send(b"echo:" + msg)
+
 
 async def alice():
     async with Gate("alice") as gate:
-        async for link in gate.listen():
-            async for msg in link:
-                await link.send(b"echo:" + msg)
+        await gate.listen(echo)
+
 
 async def bob():
     async with Gate("bob") as gate:
-        link = await gate.connect(peer.find("alice"))
-        await link.send(b"hi")
-        print(await link.recv())          # b"echo:hi"
+        pipe, _ = await gate.connect(peer.find("alice"))
+        pipe.subscribe(SUB_ALL)
+        await pipe.send(b"hi")
+        print(await pipe.recv(SUB_ALL))       # b"echo:hi"
+
 
 asyncio.run(asyncio.gather(alice(), bob()))
 ```
