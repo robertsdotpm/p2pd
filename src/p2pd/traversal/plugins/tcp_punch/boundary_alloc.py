@@ -68,21 +68,36 @@ def boundary_port_alloc(
         max_error=p["max_clock_error"],
     )
 
-    # Split n across the two buckets so the per-fire SYN count stays
-    # at the historical NUM_PORTS=16 value (8 + 8) -- staying under XP's
-    # 10-concurrent-half-open cap with the existing 5ms spray cadence.
-    n_per_bucket = max(1, n // 2)
-
     our_base, our_range = port_pool_for_os(our_os)
     their_base, their_range = port_pool_for_os(their_os)
     pools_match = (our_base, our_range) == (their_base, their_range)
 
+    # Two-bucket overlap is for tcp_punch convergence robustness
+    # (multiple SYNs per side, parallel attempts, TCP connect()
+    # explicit-failure semantics tolerate winner mismatch).  But
+    # udp_punch passes n=1 because UDP's "first CONFIRM wins" race is
+    # only safe when both peers have exactly ONE candidate socket --
+    # see udp_punch/main.py for the full rationale.  When n=1, honour
+    # that contract: produce exactly 1 port from the primary bucket
+    # only, no two-bucket fanout.  Loses bucket-fork tolerance for
+    # the udp_punch case but preserves correctness; the caller
+    # explicitly asked for the single-socket invariant.
+    if n <= 1:
+        buckets = (primary_bucket,)
+        n_per_bucket = 1
+    else:
+        # Split n across two buckets (overlap zone covers bucket-fork
+        # in case peers' compute_rendezvous calls land on opposite sides
+        # of a window boundary).
+        buckets = (primary_bucket, primary_bucket + 1)
+        n_per_bucket = max(1, n // 2)
+
     print(
         "boundary_port_alloc: timestamp={0} primary_bucket={1} "
-        "buckets=[{1},{2}] n_total={3} n_per_bucket={4} "
+        "buckets={2} n_in={3} n_per_bucket={4} "
         "window={5} max_clock_error={6} "
         "our_os={7} our_pool=[{8},{9}] their_os={10} their_pool=[{11},{12}]".format(
-            timestamp, primary_bucket, primary_bucket + 1,
+            timestamp, primary_bucket, list(buckets),
             n, n_per_bucket,
             p["window"], p["max_clock_error"],
             our_os, our_base, our_base + our_range - 1,
@@ -92,7 +107,7 @@ def boundary_port_alloc(
     )
 
     ret = []
-    for bucket in (primary_bucket, primary_bucket + 1):
+    for bucket in buckets:
         boundary = stable_boundary(bucket)
         our_ports = stable_ports(
             boundary, num_ports=n_per_bucket,
