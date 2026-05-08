@@ -1275,6 +1275,10 @@ def sync_run_bidirectional_spray(
     #     master AFTER master picked, so both sides agree on the path.
     deadline = time.time() + listen_timeout
     winner = None
+    datagrams_seen = 0
+    parsed_ok = 0
+    parsed_fail = 0
+    peer_ip_mismatch = 0
     while time.time() < deadline:
         remaining = deadline - time.time()
         if remaining <= 0:
@@ -1294,16 +1298,28 @@ def sync_run_bidirectional_spray(
             if len(peer) == 4:
                 scope_id = peer[3] if str(peer[0]).lower().startswith("fe80") else 0
                 peer = (normalize_ip6(peer[0]), peer[1], 0, scope_id)
+            datagrams_seen += 1
             parsed = decode_probe(data, nonce)
+            print("[RP-SPRAY-RX] dgram#{0} from {1}:{2} len={3} parsed={4} my_sock_port={5}".format(
+                datagrams_seen, peer[0], peer[1], len(data),
+                "ok" if parsed is not None else "no",
+                s.getsockname()[1] if s.getsockname() else -1,
+            ))
             if parsed is None:
+                parsed_fail += 1
                 # Non-probe -- leave for Pipe; could be early data.
                 continue
+            parsed_ok += 1
             # Consume the probe.
             try:
                 s.recvfrom(2048)
             except (BlockingIOError, OSError):
                 continue
             if peer_ext_ip and peer[0] != peer_ext_ip:
+                peer_ip_mismatch += 1
+                print("[RP-SPRAY-RX] skip: peer_ip {0} != expected {1}".format(
+                    peer[0], peer_ext_ip,
+                ))
                 continue
 
             is_confirm = parsed["idx"] == PROBE_IDX_CONFIRM
@@ -1343,6 +1359,9 @@ def sync_run_bidirectional_spray(
             break
 
     if winner is None:
+        print("[RP-SPRAY] timeout: dgrams_seen={0} parsed_ok={1} parsed_fail={2} peer_ip_mismatch={3}".format(
+            datagrams_seen, parsed_ok, parsed_fail, peer_ip_mismatch,
+        ))
         close_all(socks)
         return None
 
@@ -1353,8 +1372,9 @@ def sync_run_bidirectional_spray(
                 s.close()
             except OSError:
                 pass
-    print("[RP-SPRAY] converged peer={0}:{1} role={2}".format(
+    print("[RP-SPRAY] converged peer={0}:{1} role={2} dgrams_seen={3} parsed_ok={4}".format(
         winner["peer"][0], winner["peer"][1], winner["role"],
+        datagrams_seen, parsed_ok,
     ))
     return winner
 

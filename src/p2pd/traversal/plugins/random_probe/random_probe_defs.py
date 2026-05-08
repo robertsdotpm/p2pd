@@ -25,7 +25,7 @@ PROBE_LEN = 4 + 16 + 1 + 2
 # tuning comment doesn't apply here because sync_run_bidirectional_spray
 # is role-agnostic (both sides spray equally; no SYM-bound
 # pre-committed port for a stray CONE probe to mis-target).
-DEFAULT_PROBE_COUNT = 512
+DEFAULT_PROBE_COUNT = 256
 
 # Lowest destination port we'll fire at / bind from.  Below 1024 is
 # privileged on POSIX and below 32 768 is in many OSes' static-service
