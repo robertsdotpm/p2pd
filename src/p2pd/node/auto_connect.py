@@ -196,10 +196,19 @@ async def attempt_one_combo(
     dest_map,
     combo,
 ):
-    """Run one (plugin, af, route_type, src, dest) attempt to completion."""
+    """Run one (plugin, af, route_type, src, dest) attempt to completion.
+
+    For plugins whose run() returns early and resolves plugin.result
+    from a background task (tcp_punch, udp_punch, random_probe via
+    delayed_start_punching_proc), we need to await plugin.result
+    before returning -- otherwise race_combos sees an unresolved
+    plugin and treats it as a loss while the engine is still mid-
+    spray. The plugin's own timeout caps the wait, so a hung plugin
+    can't stall the race.
+    """
     plugin_name, af, route_type, src, dest = combo
     try:
-        return await node.traversal.attempt_plugin(
+        plugin = await node.traversal.attempt_plugin(
             src_map=src_map,
             dest_map=dest_map,
             sig_pipe=sig_pipe,
@@ -214,6 +223,19 @@ async def attempt_one_combo(
     except (ValueError, OSError, ConnectionError):
         log_exception()
         return None
+    if plugin is None or plugin.result.done():
+        return plugin
+    try:
+        await asyncio.wait_for(plugin.result, timeout=plugin.timeout)
+    except asyncio.TimeoutError:
+        log("attempt_one_combo: plugin.result timed out for {0}".format(plugin_name))
+    except asyncio.CancelledError:
+        raise
+    except Exception:  # pylint: disable=broad-except
+        # Plugin-side failure -- race_combos sees it via plugin_pipe
+        # returning None on the unresolved future.
+        log_exception()
+    return plugin
 
 
 def plugin_pipe(plugin):
