@@ -29,7 +29,13 @@ from p2pd.gate import Gate, peer
 async def main():
     target = os.environ["WG_TARGET"]
     name = os.environ.get("WG_CONNECT_NAME") or None
-    timeout = float(os.environ.get("WG_TIMEOUT", "300"))
+    # Default 900s: test_all_phases runs every phase serially -- tcp_punch
+    # plugin timeout is 180s, udp/spray 150s, turn 60s. With the phase loop
+    # iterating route_types and AFs per phase, the worst-case serial budget
+    # is multiples of those. 300s used to fire mid-cascade, dropping a
+    # winner pipe phase1 had already produced. 900s is generous but covers
+    # every realistic cumulative path.
+    timeout = float(os.environ.get("WG_TIMEOUT", "900"))
 
     async with (Gate(name=name) if name else Gate()) as gate:
         print("WG_CONNECTOR_READY: {0}".format(gate.full_name or "?"), flush=True)
