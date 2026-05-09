@@ -23,7 +23,7 @@ from aionetiface import (
 from ...traversal_plugin import Plugin
 from ...strategy_registry import register
 from ...traversal_utils import close_plugin
-from ....node.auto_connect import race_plugin_results
+from ....node.auto_connect import plugin_pipe
 
 
 def enumerate_viable_combos(
@@ -183,7 +183,34 @@ class FanOutPlugin(Plugin):
             "fan_out[{0}]: racing {1} children timeout={2}s",
             (self.plugin_id, len(children), self.timeout),
         ))
-        pipe, winner = await race_plugin_results(children, timeout=self.timeout)
+        # Race the children's plugin.result futures: first non-None pipe
+        # wins; on timeout we return (None, None) and the children are
+        # cancelled / closed below.
+        pipe, winner = None, None
+        result_futs = {c.result: c for c in children}
+        try:
+            for fut in asyncio.as_completed(list(result_futs.keys()), timeout=self.timeout):
+                try:
+                    candidate_pipe = await fut
+                except (asyncio.TimeoutError, OSError, ConnectionError, ValueError):
+                    log_exception()
+                    continue
+                except Exception:  # noqa: BLE001
+                    log_exception()
+                    continue
+                if candidate_pipe is None:
+                    continue
+                pipe = candidate_pipe
+                # Recover the plugin instance for the winning future.
+                for c in children:
+                    if c.result.done() and not c.result.cancelled() \
+                            and c.result.exception() is None \
+                            and c.result.result() is candidate_pipe:
+                        winner = c
+                        break
+                break
+        except asyncio.TimeoutError:
+            log_exception()
         log(fstr(
             "fan_out[{0}]: winner={1} pipe={2}",
             (self.plugin_id,
