@@ -204,18 +204,21 @@ class UdpPunchPlugin(Plugin):
         # overlap regardless of which side forked.  Mirrors tcp_punch.
         secondary_punch_time = punch_time + p["window"]
         puncher.set_punch_time(punch_time, secondary_punch_time=secondary_punch_time)
-        # n=1: UDP punch must use exactly ONE socket per side.
-        # With n=2, watch_for_winner returns the socket that first
-        # receives a CONFIRM -- but each side races independently,
-        # so A's winner can be socket 1 (connected to peer port Q1)
-        # while B's winner is socket 2 (connected to peer port P2).
-        # Both sides then send into each other's CLOSED socket →
-        # NO_ECHO every time. tcp_punch is immune because TCP
-        # connect() fails explicitly on the wrong port; UDP silently
-        # drops into the void. Passing n=1 here leaves tcp_punch
-        # untouched (it calls add_port_allocator separately with its
-        # own default of NUM_PORTS=2).
-        puncher.add_port_allocator(boundary_port_alloc, n=1)
+        # n=2 with n_per_bucket=1 (boundary_port_alloc's shape for
+        # n=2): one port from the primary bucket, one from primary+1,
+        # giving 2 sockets per side. Two peers whose
+        # compute_rendezvous calls land on opposite sides of the
+        # min_run_window cutoff pick adjacent buckets {B, B+1} and
+        # {B+1, B+2}; the sets overlap on exactly ONE bucket
+        # (B+1) -> exactly ONE matching port pair across both peers.
+        # All other sockets fire at non-existent peer ports and hear
+        # nothing, so watch_for_winner has only one candidate to
+        # converge on -- no first-CONFIRM-mismatch risk. The
+        # mismatch concern that justified n=1 historically only
+        # applies when n_per_bucket >= 2 (multiple matching pairs
+        # per bucket give an actual race); at 1 port per bucket the
+        # winner is deterministic on both sides.
+        puncher.add_port_allocator(boundary_port_alloc, n=2)
 
         return puncher, stuns
 
