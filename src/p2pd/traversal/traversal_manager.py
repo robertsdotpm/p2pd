@@ -91,6 +91,21 @@ class TraversalManager:
         self.addr_bytes = None
         self.cleanup_task = None
 
+        # Cached OS-default-route Interface used for loopback binds
+        # (binding 127.x on a real NIC raises EINVAL + the
+        # SO_BINDTODEVICE pin would block lo delivery).  Built lazily
+        # on first use; reused for every subsequent loopback combo.
+        self._default_nic = None
+
+    def default_nic(self) -> Any:
+        """Return the cached Interface("default") used for loopback binds."""
+        if self._default_nic is None:
+            from aionetiface import Interface
+            if Interface.default is None:
+                Interface.default = Interface("default")
+            self._default_nic = Interface.default
+        return self._default_nic
+
     def install_plugin(self, name: str, conf: Dict[str, Any]) -> None:
         """Register a traversal plugin class under name with the given configuration."""
         if "class" not in conf:
@@ -227,6 +242,22 @@ class TraversalManager:
             src_info, dest_info = resolve_pair(
                 af, route_type, src_info, dest_info, nic, same_machine,
             )
+
+            # Pick the right Interface for binding.  Loopback IPs (per-
+            # pubkey 127.X.Y.Z, 127.0.0.1, ::1) need Interface("default"):
+            # binding 127.x on a NIC route raises EINVAL because the IP
+            # doesn't live on that interface, AND the apply_nic_pin_sockopts
+            # SO_BINDTODEVICE pin would tie the socket to a physical NIC
+            # so the kernel's lo router can't deliver SYNs.  Interface("default")
+            # has name="default", which the SO_BINDTODEVICE call rejects with
+            # ENODEV, leaving the socket cleanly unpinned.
+            #
+            # Plugins read this nic via self.nic.route(af) without caring
+            # whether they got the physical NIC or the default placeholder.
+            ip_str = (src_info.get("ip") or "")
+            is_loopback = ip_str.startswith("127.") or ip_str.startswith("::1") or ip_str == "::1"
+            if is_loopback:
+                nic = self.default_nic()
 
         plugin.set_routing(af, src_info, dest_info, nic)
 

@@ -48,6 +48,10 @@ class Plugin:
         self.dest_info = dest_info
         self.nic = nic
 
+    async def bind(self, port: int = 0) -> Any:
+        """Return a route bound to this plugin's resolved src IP."""
+        return await self.nic.route(self.af).bind(ips=self.src_info["ip"], port=port)
+
     def set_context(self, route_type: Any, same_machine: bool, set_bind: bool, timeout: int) -> None:
         """Set the route type, same-machine flag, bind preference, and timeout for this plugin.
 

@@ -66,51 +66,6 @@ def _select_remote_dial(af, route_type, src_info, dest_info):
     return ip, port
 
 
-async def bind_route_for(nic, af, ip):
-    """Return a Route bound to *ip* on the right Interface for that IP.
-
-    Loopback IPs (127.x, ::1) can't be bound on a regular NIC's route
-    -- the kernel rejects with EINVAL because they don't live on that
-    interface.  The OS-default ``Interface("default")`` accepts any
-    local IP, so we route loopback binds through that and everything
-    else through the caller's NIC.
-
-    Concurrent callers must not share a Route instance -- the route
-    holds bind state and the second bind would clobber the first
-    (manifests as the second connect using the first's IP / port).
-    Deepcopy the route before binding so each caller owns their state.
-
-    Plugins call this without caring which case they're in: pass the
-    resolved ``src_info["ip"]`` and get a bound route back, or None
-    on bind failure.
-    """
-    import copy as _copy
-    from aionetiface import Interface
-    s = str(ip)
-    # Loopback detection is on the IP string regardless of af -- the
-    # per-pubkey loopback alias is attached to every if_info by
-    # enrich_addr_map_with_loopback, including the v6 entries, so a
-    # v6 LOOPBACK_BIND combo can legitimately surface with src_ip
-    # = "127.X.Y.Z".  In that case the bind has to go through the
-    # default Interface anyway; gating on af would route it to a v6
-    # NIC route and crash on the v4 ips= argument.
-    is_loopback = s.startswith("127.") or s == "::1" or s.startswith("::1")
-    bind_nic = await Interface("default") if is_loopback else nic
-    route = _copy.deepcopy(bind_nic.route(af))
-    # bind() short-circuits when self.resolved is True; the deepcopied
-    # Interface("default") route comes pre-resolved (its bind ran at
-    # Interface construction), so passing ips= here would be silently
-    # ignored.  Force a re-bind by clearing resolved + the cached tup.
-    route.resolved = False
-    route._bind_tups = ()
-    try:
-        await route.bind(ips=s)
-    except (OSError, ValueError):
-        log_exception()
-        return None
-    return route
-
-
 def resolve_pair(af, route_type, src_info, dest_info, nic, same_machine=False):
     """Resolve a (src_info, dest_info) pair into the bind / dial values
     a plugin will actually use.
