@@ -19,6 +19,157 @@ def f_path_txt(x):
     return "local" if x == NIC_BIND else "external"
 
 
+# Routing-decision keys that resolve_pair strips off the per-side dicts
+# before plugins see them.  After resolution the only addressing fields
+# that remain are "ip" + "port" -- the resolved local-bind / peer-dial
+# pair for the chosen route_type.  Peer metadata (if_index, nat,
+# netiface_index, machine_id, pub_key_hex, …) stays.
+_RESOLVE_DROP_KEYS = (
+    "nic", "ext", "loopback",
+    "nic_port", "ext_port",
+    "loopback_candidates",
+)
+
+
+def _select_local_bind(af, route_type, src_info, dest_info):
+    """Pick the local (ip, port) pair to bind for this route_type."""
+    if route_type == LOOPBACK_BIND:
+        ip = src_info.get("loopback")
+        port = src_info.get("nic_port", src_info.get("port"))
+    elif route_type == NIC_BIND:
+        ip = src_info["nic"]
+        port = src_info.get("nic_port", src_info.get("port"))
+    elif route_type == EXT_BIND:
+        # Kernel binds to a local NIC; ext is what the peer sees,
+        # not what we hand to bind().  Advertised port for the
+        # external path is ext_port.
+        ip = src_info["nic"]
+        port = src_info.get("ext_port", src_info.get("port"))
+    else:
+        raise ValueError(fstr("resolve_pair: unknown route_type {0}", (route_type,)))
+    return ip, port
+
+
+def _select_remote_dial(af, route_type, src_info, dest_info):
+    """Pick the (ip, port) pair to dial on the peer for this route_type."""
+    if route_type == LOOPBACK_BIND:
+        ip = dest_info.get("loopback")
+        port = dest_info.get("nic_port", dest_info.get("port"))
+    elif route_type == NIC_BIND:
+        ip = dest_info["nic"]
+        port = dest_info.get("nic_port", dest_info.get("port"))
+    elif route_type == EXT_BIND:
+        ip = dest_info["ext"]
+        port = dest_info.get("ext_port", dest_info.get("port"))
+    else:
+        raise ValueError(fstr("resolve_pair: unknown route_type {0}", (route_type,)))
+    return ip, port
+
+
+async def bind_route_for(nic, af, ip):
+    """Return a Route bound to *ip* on the right Interface for that IP.
+
+    Loopback IPs (127.x, ::1) can't be bound on a regular NIC's route
+    -- the kernel rejects with EINVAL because they don't live on that
+    interface.  The OS-default ``Interface("default")`` accepts any
+    local IP, so we route loopback binds through that and everything
+    else through the caller's NIC.
+
+    Concurrent callers must not share a Route instance -- the route
+    holds bind state and the second bind would clobber the first
+    (manifests as the second connect using the first's IP / port).
+    Deepcopy the route before binding so each caller owns their state.
+
+    Plugins call this without caring which case they're in: pass the
+    resolved ``src_info["ip"]`` and get a bound route back, or None
+    on bind failure.
+    """
+    import copy as _copy
+    from aionetiface import Interface
+    s = str(ip)
+    # Loopback detection is on the IP string regardless of af -- the
+    # per-pubkey loopback alias is attached to every if_info by
+    # enrich_addr_map_with_loopback, including the v6 entries, so a
+    # v6 LOOPBACK_BIND combo can legitimately surface with src_ip
+    # = "127.X.Y.Z".  In that case the bind has to go through the
+    # default Interface anyway; gating on af would route it to a v6
+    # NIC route and crash on the v4 ips= argument.
+    is_loopback = s.startswith("127.") or s == "::1" or s.startswith("::1")
+    bind_nic = await Interface("default") if is_loopback else nic
+    route = _copy.deepcopy(bind_nic.route(af))
+    # bind() short-circuits when self.resolved is True; the deepcopied
+    # Interface("default") route comes pre-resolved (its bind ran at
+    # Interface construction), so passing ips= here would be silently
+    # ignored.  Force a re-bind by clearing resolved + the cached tup.
+    route.resolved = False
+    route._bind_tups = ()
+    try:
+        await route.bind(ips=s)
+    except (OSError, ValueError):
+        log_exception()
+        return None
+    return route
+
+
+def resolve_pair(af, route_type, src_info, dest_info, nic, same_machine=False):
+    """Resolve a (src_info, dest_info) pair into the bind / dial values
+    a plugin will actually use.
+
+    Returns ``(src_resolved, dest_resolved)`` -- shallow copies of the
+    inputs with two changes:
+
+      1.  ``ip`` / ``port`` set to the chosen local bind / peer dial
+          values for *route_type*.  v6 link-local destinations get the
+          paired link-local source plus ``%scope`` patched into both
+          sides so Windows connect_ex works.
+      2.  Routing-decision keys (nic / ext / loopback / nic_port /
+          ext_port / loopback_candidates) are removed.  Plugins that
+          need additional info beyond (ip, port) read it from the
+          local NIC object directly, not from the per-side dict.
+
+    Peer metadata (if_index, nat, netiface_index, machine_id,
+    pub_key_hex, …) is preserved -- plugins legitimately need NAT
+    shape, if_index, etc.
+    """
+    src_ip, src_port = _select_local_bind(af, route_type, src_info, dest_info)
+    dest_ip, dest_port = _select_remote_dial(af, route_type, src_info, dest_info)
+
+    # v6 link-local fix-up: paired source must also be link-local, and
+    # both sides need %scope_id appended for the Windows TCP stack to
+    # route the SYN out the right interface.  Linux's getaddrinfo
+    # tolerates a bare fe80::, but baking the scope is harmless there
+    # and removes the cross-platform branch from every plugin.
+    if af == IP6 and dest_ip is not None and str(dest_ip).lower().startswith("fe80"):
+        if nic is not None:
+            try:
+                local_link = nic.route(af).link_locals[0]
+                src_ip = str(local_link)
+            except (IndexError, AttributeError, ValueError):
+                pass
+            try:
+                from aionetiface.net.bind.bind_utils import ip6_patch_bind_ip
+                scope = nic.get_nic_id(af)
+                if scope is not None:
+                    dest_ip = ip6_patch_bind_ip(str(dest_ip).split("%", 1)[0], scope)
+                    src_ip = ip6_patch_bind_ip(str(src_ip).split("%", 1)[0], scope)
+            except (ImportError, AttributeError, ValueError):
+                pass
+
+    # Soft migration: keep the raw routing-decision fields alongside
+    # the new ip/port for now so plugins still reading nic / ext /
+    # loopback / nic_port / ext_port keep working.  Once every plugin
+    # has been migrated to read ip/port only, swap to the strict shape
+    # by filtering _RESOLVE_DROP_KEYS off both dicts on the way out.
+    src_resolved = dict(src_info)
+    src_resolved["ip"] = str(src_ip) if src_ip is not None else None
+    src_resolved["port"] = src_port
+    dest_resolved = dict(dest_info)
+    dest_resolved["ip"] = str(dest_ip) if dest_ip is not None else None
+    dest_resolved["port"] = dest_port
+    _ = same_machine  # accepted for future fixups (multi-NIC same-pc edge case)
+    return src_resolved, dest_resolved
+
+
 def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info: Dict[str, Any], addr_types: List[Any], has_set_bind: bool = True) -> Optional[Any]:
     """Select the best destination IPRange for a traversal attempt.
 

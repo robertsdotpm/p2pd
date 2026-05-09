@@ -497,8 +497,24 @@ async def bind_loopback(node: Any, cand_af: int, cand_ip: str, cand_port: int, l
     """
     import copy as copy_mod
     try:
-        nic = node.ifs[0]
-        cand_route = copy_mod.deepcopy(nic.route(cand_af))
+        # Use Interface("default") rather than node.ifs[0] so the
+        # listen socket isn't SO_BINDTODEVICE-pinned to a physical
+        # NIC.  apply_nic_pin_sockopts pins to route.interface.name;
+        # Interface("default")'s name is "default" which the kernel
+        # rejects with ENODEV, leaving the socket unpinned -- which
+        # is exactly what we want for a 127.x bind, since the kernel
+        # routes loopback traffic via `lo` and a NIC-pinned listen
+        # socket can't accept SYNs that arrive on lo.
+        from aionetiface import Interface
+        default_nic = await Interface("default")
+        cand_route = copy_mod.deepcopy(default_nic.route(cand_af))
+        # Route.__deepcopy__ carries `resolved=True` from the source,
+        # but Bind.bind() short-circuits when self.resolved is True --
+        # so without this reset the bind(ips=cand_ip, port=cand_port)
+        # below is silently a no-op and add_listener ends up listening
+        # on the default-route IP instead of the per-pubkey alias.
+        cand_route.resolved = False
+        cand_route._bind_tups = ()
         await cand_route.bind(ips=cand_ip, port=cand_port)
         await node.add_listener(TCP, cand_route)
         log(fstr("listen_on_ifs: {0} bound af={1}", (label, cand_af)))

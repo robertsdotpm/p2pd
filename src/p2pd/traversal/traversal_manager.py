@@ -216,6 +216,18 @@ class TraversalManager:
             nic = self.nics[src_info["if_index"]]
         else:
             nic = None
+
+        # Pre-resolve (ip, port) per route_type before the plugin sees
+        # the per-side dicts.  Plugins read self.src_info["ip"] /
+        # ["port"] and self.dest_info["ip"] / ["port"] directly -- no
+        # route_type / fe80 / loopback-candidate branching inside
+        # plugin code.  See traversal_utils.resolve_pair.
+        if src_info is not None and dest_info is not None and route_type is not None:
+            from .traversal_utils import resolve_pair
+            src_info, dest_info = resolve_pair(
+                af, route_type, src_info, dest_info, nic, same_machine,
+            )
+
         plugin.set_routing(af, src_info, dest_info, nic)
 
         # Load extra info about pathway.
