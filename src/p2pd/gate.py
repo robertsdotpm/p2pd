@@ -168,9 +168,13 @@ class Gate(object):
         - raw addr_bytes from ``node.address()``.
 
         ``transport`` accepts ``"tcp"`` / ``"udp"`` (string) or the
-        aionetiface ``TCP`` / ``UDP`` constants.  ``timeout`` (seconds)
-        bounds the auto_connect race; on hit, ``connect`` returns
-        ``None``.
+        aionetiface ``TCP`` / ``UDP`` constants.  Default ``None``
+        means "any protocol, all plugins" -- every registered cascade
+        plugin (direct, reverse, punch, probe, turn) is eligible and
+        the returned ``Link`` may wrap either a TCP or UDP pipe.
+        Pass an explicit ``TCP`` or ``UDP`` constant to narrow to one
+        transport.  ``timeout`` (seconds) bounds the auto_connect
+        race; on hit, ``connect`` returns ``None``.
 
         ``plugins`` narrows the auto_connect race to a specific subset
         of strategies -- pass a single name (``"tcp_punch"``) or a list
@@ -201,10 +205,13 @@ class Gate(object):
         if isinstance(plugins, str):
             plugins = [plugins]
 
+        # transport=None -> protocol=None to auto_connect, which
+        # means "all cascade plugins" rather than auto_connect's own
+        # internal default of TCP. The Gate API surface is
+        # "no transport specified means any" while auto_connect's
+        # raw API stays narrow-by-default for explicit callers.
         from .node.auto_connect import auto_connect
-        kwargs = {}
-        if proto is not None:
-            kwargs["protocol"] = proto
+        kwargs = {"protocol": proto}
         if plugins is not None:
             kwargs["plugins"] = plugins
         if test_all_phases:
