@@ -21,7 +21,7 @@ from auto_connect_helpers import (
 )
 
 
-def has_symmetric_nat(node) -> bool:
+def has_symmetric_nat(node):
     """True iff any IP4 if_info on the node is classified as symmetric / hard NAT.
 
     The current punch algorithm cannot predict per-destination port
@@ -40,7 +40,7 @@ def has_symmetric_nat(node) -> bool:
     return False
 
 
-def is_loopback_addr(s) -> bool:
+def is_loopback_addr(s):
     """Return True iff s parses as a 127.0.0.0/8 or ::1 loopback string."""
     if not s:
         return False
@@ -52,7 +52,7 @@ def is_loopback_addr(s) -> bool:
     return False
 
 
-def all_punch_combos_loopback(node, dest_map) -> bool:
+def all_punch_combos_loopback(node, dest_map):
     """True iff every punch combo's dest IP is loopback.
 
     select_dest_ipr rewrites dest to the peer's loopback alias when
@@ -70,11 +70,11 @@ def all_punch_combos_loopback(node, dest_map) -> bool:
     src_map = node.addr_map
     same_pc = is_same_machine(src_map, dest_map)
     for combo in auto_combos(node, src_map, dest_map):
-        plugin_name, af, route_type, src_info, dest_info = combo
+        plugin_name, af, route_type, src, dest = combo
         if plugin_name != "tcp_punch":
             continue
         found_any = True
-        chosen = select_dest_ipr(af, same_pc, src_info, dest_info, [route_type])
+        chosen = select_dest_ipr(af, same_pc, src, dest, [route_type])
         if chosen is None:
             continue
         if not is_loopback_addr(chosen):

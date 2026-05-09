@@ -57,15 +57,15 @@ def all_punch_combos_loopback(node, dest_map):
     from p2pd.traversal.traversal_utils import select_dest_ipr
     found_any = False
     for combo in auto_combos(node, node.addr_map, dest_map):
-        plugin_name, af, route_type, src_info, dest_info = combo
+        plugin_name, af, route_type, src, dest = combo
         if plugin_name != "tcp_punch":
             continue
         same_pc = True
-        if src_info.get("machine_id") != dest_info.get("machine_id"):
+        if src.get("machine_id") != dest.get("machine_id"):
             same_pc = False
             continue
         found_any = True
-        chosen = select_dest_ipr(af, same_pc, src_info, dest_info, [route_type])
+        chosen = select_dest_ipr(af, same_pc, src, dest, [route_type])
         if chosen is None:
             continue
         if not is_loopback_addr(chosen):

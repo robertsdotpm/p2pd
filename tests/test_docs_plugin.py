@@ -10,7 +10,6 @@ and used with auto_connect.
 
 import asyncio
 import unittest
-from typing import Optional, Any
 from aionetiface import TCP, IP4, Pipe, dict_child, log_exception
 from aionetiface.testing import AsyncTestCase
 from p2pd import Node
@@ -32,7 +31,7 @@ class DocsDirectPlugin(TraversalPlugin):
 
     This is the Example 1 code from docs/writing_a_plugin.md.
 
-    Same-machine peers can be reached via dest_info["ip"] in the
+    Same-machine peers can be reached via dest["ip"] in the
     127.0.0.0/8 (or ::1) loopback range; binding the connect socket
     to a matching loopback source IP is required on Windows XP whose
     stack only routes 127.0.0.1 reliably (a connect from src=127.X.Y.Z
@@ -40,15 +39,15 @@ class DocsDirectPlugin(TraversalPlugin):
     loopback class -- modern Windows / Linux / macOS unaffected.
     """
 
-    async def run(self, reply: Optional[Any] = None) -> None:
-        dest = (str(self.dest_info["ip"]), self.dest_info["port"])
+    async def run(self, reply=None):
+        dest = (str(self.dest["ip"]), self.dest["port"])
 
         is_v4_loopback = (self.af == IP4) and dest[0].startswith("127.")
         is_v6_loopback = dest[0] == "::1" or dest[0].startswith("::1")
 
         if is_v4_loopback or is_v6_loopback:
             if self.af == IP4:
-                src_lo = self.src_info.get("loopback") if self.src_info else None
+                src_lo = self.src.get("loopback") if self.src else None
                 src_str = str(src_lo) if (src_lo and str(src_lo).startswith("127.")) else "127.0.0.1"
             else:
                 src_str = "::1"
@@ -78,12 +77,12 @@ class DocsReversePlugin(TraversalPlugin):
     This is the Example 2 code from docs/writing_a_plugin.md.
     """
 
-    async def run(self, reply: Optional[Any] = None) -> None:
+    async def run(self, reply=None):
         from p2pd.protocol.proto_msg import ConMsg
         msg = ConMsg()
         msg.meta.plugin_name = "direct_connect"
         self.register_inbound()
-        await self.send_signal_msg(msg)
+        await self.send_signal(msg)
         con = await self.wait_for_inbound()
         self.result.set_result(con)
 

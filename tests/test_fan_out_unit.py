@@ -155,15 +155,15 @@ class StubManager:
         self.created = []
         self.closed = []
 
-    def create_plugin(self, af, route_type, src_info, dest_info, same_machine, plugin_name):
+    def create_plugin(self, af, route_type, src, dest, same_machine, plugin_name):
         if not self.child_plugins_queue:
             raise AssertionError("StubManager: ran out of pre-stocked children")
         child = self.child_plugins_queue.pop(0)
         child.manager = self
         child.af = af
         child.route_type = route_type
-        child.src_info = src_info
-        child.dest_info = dest_info
+        child.src = src
+        child.dest = dest
         child.same_machine = same_machine
         self.plugins[child.plugin_id] = child
         self.created.append(child)

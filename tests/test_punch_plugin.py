@@ -208,7 +208,7 @@ class TestPunchPluginBidirectional(AsyncTestCase):
 
     def _make_addr_info(self, ip, if_index=0):
         """
-        Build a minimal src_info / dest_info dict for use by:
+        Build a minimal src / dest dict for use by:
           • TraversalPlugin.set_routing()
           • TraversalPlugin.set_context() → select_dest_ipr()
           • PunchPlugin.setup_puncher_client() → NATPredictAlloc.set_nat_info()
@@ -219,7 +219,7 @@ class TestPunchPluginBidirectional(AsyncTestCase):
             # Both sides share index 0 (same physical NIC, different IPs).
             "netiface_index": 0,
             # For NIC_BIND + same_machine=True, select_dest_ipr returns
-            # dest_info["nic"].  ext is compared only for EXT_BIND.
+            # dest["nic"].  ext is compared only for EXT_BIND.
             "ext": ip,
             "nic": ip,
             "nat": nat_info(RESTRICT_PORT_NAT, delta_info(EQUAL_DELTA, 0)),
@@ -255,15 +255,15 @@ class TestPunchPluginBidirectional(AsyncTestCase):
         # stop_reader is passed into the punch subprocess for proxy termination.
         plugin.stop_reader = self.stop_r
 
-        src_info = self._make_addr_info(src_ip)
-        dest_info = self._make_addr_info(dest_ip)
+        src = self._make_addr_info(src_ip)
+        dest = self._make_addr_info(dest_ip)
 
-        # set_routing stores af / src_info / dest_info / nic on the plugin.
+        # set_routing stores af / src / dest / nic on the plugin.
         # The NIC is also used by start_punching_process to create the listen
         # socket for the reverse-connect from the punch subprocess.
-        plugin.set_routing(IP4, src_info, dest_info, effective_nic)
+        plugin.set_routing(IP4, src, dest, effective_nic)
 
-        # set_context runs select_dest_ipr → sets dest_info["ip"] = dest_ip.
+        # set_context runs select_dest_ipr → sets dest["ip"] = dest_ip.
         plugin.set_context(
             route_type=NIC_BIND,
             same_machine=True,
@@ -335,7 +335,7 @@ class TestPunchPluginBidirectional(AsyncTestCase):
         plugin_b.set_inbound_pipes({}, plugin_id=plugin_a.plugin_id)
 
         # ── in-process message router ─────────────────────────────────────
-        # Each plugin's send_signal_msg writes into a queue; the test loop
+        # Each plugin's send_signal writes into a queue; the test loop
         # reads from the queues and delivers messages to the other plugin.
         msgs_for_b = asyncio.Queue()
         msgs_for_a = asyncio.Queue()
@@ -348,8 +348,8 @@ class TestPunchPluginBidirectional(AsyncTestCase):
             """B sends → captured for delivery to A."""
             await msgs_for_a.put(msg)
 
-        plugin_a.set_send_signal_msg(sender_a)
-        plugin_b.set_send_signal_msg(sender_b)
+        plugin_a.set_send_signal(sender_a)
+        plugin_b.set_send_signal(sender_b)
 
         # ── three-message handshake ───────────────────────────────────────
         # preload_mappings is patched to avoid real STUN connections while
@@ -649,10 +649,10 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
 
     def _make_addr_info_v6(self, ip_ipr, if_index=0):
         """
-        Build src_info / dest_info for an IPv6 link-local address.
+        Build src / dest for an IPv6 link-local address.
 
         The "nic" field carries the scoped address (fe80::...%ens34) so that
-        select_dest_ipr returns the scoped string as dest_info["ip"].
+        select_dest_ipr returns the scoped string as dest["ip"].
         setup_puncher_client then feeds this to PunchClient.__init__ which
         calls ip_norm (strips %) and patch_connect_ip (re-adds %) before use.
         """
@@ -685,10 +685,10 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
         plugin = factory.build_plugin()
         plugin.stop_reader = self.stop_r
 
-        src_info = self._make_addr_info_v6(src_ll_ipr)
-        dest_info = self._make_addr_info_v6(dest_ll_ipr)
+        src = self._make_addr_info_v6(src_ll_ipr)
+        dest = self._make_addr_info_v6(dest_ll_ipr)
 
-        plugin.set_routing(IP6, src_info, dest_info, effective_nic)
+        plugin.set_routing(IP6, src, dest, effective_nic)
         plugin.set_context(
             route_type=NIC_BIND,
             same_machine=True,
@@ -738,8 +738,8 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
         async def sender_b(msg, plugin=None, relay_no=2):
             await msgs_for_a.put(msg)
 
-        plugin_a.set_send_signal_msg(sender_a)
-        plugin_b.set_send_signal_msg(sender_b)
+        plugin_a.set_send_signal(sender_a)
+        plugin_b.set_send_signal(sender_b)
 
         with patch(
             "p2pd.traversal.plugins.tcp_punch.nat_predict.preload_mappings",

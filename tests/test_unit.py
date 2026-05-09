@@ -259,7 +259,7 @@ class TestProtoMessages(unittest.TestCase):
     def test_sig_msg_to_buf_and_try_unpack_roundtrip(self):
         """Wire sig_msg_to_buf -> try_unpack_msg with a live ConMsg."""
         msg = ConMsg({"meta": {"plugin_name": "direct_connect", "af": IP4}})
-        # Set routing with a real dest_buf so routing.dest is populated.
+        # Set routing with a real dest_buf so routing.dest_map is populated.
         msg.routing = ProtoMsg.Routing.from_dict(
             {
                 "af": IP4,
@@ -378,8 +378,8 @@ class TestTraversalPlugin(AsyncTestCase):
     async def test_set_send_signal_msg_stored(self):
         p = TraversalPlugin()
         sentinel = object()
-        p.set_send_signal_msg(sentinel)
-        self.assertIs(p._send_signal_msg, sentinel)
+        p.set_send_signal(sentinel)
+        self.assertIs(p.signal_sender, sentinel)
 
 
 # ===========================================================================
