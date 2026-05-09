@@ -35,6 +35,7 @@ from aionetiface import (
     IP4, IP6, NIC_BIND, EXT_BIND, LOOPBACK_BIND, TCP, UDP,
     fstr, log, log_exception, parse_node_addr,
 )
+from aionetiface.nic.nat.nat_defs import SYMMETRIC_NAT
 from .node_connect import resolve_pnp_addr
 from .node_utils import enrich_addr_map_with_loopback
 from ..traversal.traversal_utils import close_plugin
@@ -546,9 +547,33 @@ async def phase3_udp_probe(
     names = tuple(n for n in plugins_for_phase("spray") if n in plugins)
     if not names:
         return None, None
+
+    # The "never run two punches against the same dest concurrently"
+    # rule applies here too: udp_punch and random_probe both fire UDP
+    # sprays from the same NIC at the same dest, so racing them in
+    # parallel causes (a) bind contention on local ephemeral ports
+    # (random_probe takes 256, udp_punch tries 16 boundary buckets),
+    # (b) recv-buffer pressure on the peer's NIC, and (c) extra
+    # cross-magic frames each plugin's filter has to discard. Pick
+    # one based on NAT shape: random_probe is the only plugin that
+    # works when either peer is symmetric, so use it then; otherwise
+    # udp_punch is the predictable-NAT optimised path.
+    def has_symmetric(addr_map):
+        for af in (IP4, IP6):
+            for entry in (addr_map.get(af) or {}).values():
+                nat = entry.get("nat") or {}
+                if nat.get("type") == SYMMETRIC_NAT:
+                    return True
+        return False
+
+    if has_symmetric(src_map) or has_symmetric(dest_map):
+        chosen = "random_probe" if "random_probe" in names else names[0]
+    else:
+        chosen = "udp_punch" if "udp_punch" in names else names[0]
+    log("phase3_udp_probe: chose plugin={0} from {1}".format(chosen, names))
     return await punch_phase(
         node, src_map, dest_map, sig_pipe,
-        plugin_names=names,
+        plugin_names=(chosen,),
         label="phase3",
     )
 
