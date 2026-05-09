@@ -123,6 +123,21 @@ async def load_network_interfaces(node):
             log_exception()
             node.ifs = []
 
+    # Ensure NAT is classified on every NIC. The discover-path
+    # load_interfaces above runs nic.load_nat for each NIC it loads,
+    # but a caller passing pre-built Interfaces in (Gate(ifs=[...]))
+    # skips that branch -- and an unclassified NIC would then rely on
+    # the nat_info() sane default (RESTRICT_PORT + EQUAL_DELTA), which
+    # is good enough to keep punch / probe plugins working but worse
+    # than a real measurement. Run load_nat for any NIC whose nat is
+    # still None so we get the actual classification when we can.
+    needs_nat = [n for n in node.ifs if getattr(n, "nat", None) is None]
+    if needs_nat:
+        await asyncio.gather(
+            *[async_wrap_errors(n.load_nat()) for n in needs_nat],
+            return_exceptions=True,
+        )
+
     # Ensure deterministic order
     node.ifs = sorted(node.ifs, key=lambda x: x.name)
 
