@@ -148,7 +148,6 @@ def viable_pairs_for_arc(
     route_type,
     src_map,
     dest_map,
-    require_distinct=True,
 ):
     """Ordered (src, dest) pairs that survive per-pair filtering.
 
@@ -159,13 +158,6 @@ def viable_pairs_for_arc(
     kernel routing table so dest["nic"] is reachable from any src NIC
     via the local stack. Matching-if_index pairs come first so direct
     in-subnet paths are tried before cross-subnet local routing.
-
-    ``require_distinct`` (default True) gates pairs through
-    pair_distinct -- which for EXT_BIND requires distinct external IPs
-    so direct connect doesn't loop through the local NAT. TURN doesn't
-    need that check (the relay sits between peers; their ext IPs are
-    irrelevant to whether they can both reach the relay), so phase4_turn
-    passes False here.
     """
     src_af = src_map.get(af, {}) or {}
     dest_af = dest_map.get(af, {}) or {}
@@ -175,7 +167,7 @@ def viable_pairs_for_arc(
     same_machine = is_same_machine(src_map, dest_map)
 
     def viable(src, dest):
-        if require_distinct and not pair_distinct(route_type, src, dest):
+        if not pair_distinct(route_type, src, dest):
             return False
         # NIC_BIND combos for cross-internet peers fire SYNs at peer's
         # private RFC1918 LAN IP, which isn't routable. Gate on same_lan
@@ -665,14 +657,7 @@ async def phase4_turn(
             break
         if not af_compatible(src_map, dest_map, af):
             continue
-        # require_distinct=False: TURN goes through a public relay,
-        # so peers sharing an ext IP (both behind the same household
-        # NAT) is fine. The default pair_distinct(EXT_BIND) check
-        # would skip every pair when src.ext == dest.ext and phase4
-        # would silently bail before making a single allocation.
-        pairs = viable_pairs_for_arc(
-            af, EXT_BIND, src_map, dest_map, require_distinct=False,
-        )
+        pairs = viable_pairs_for_arc(af, EXT_BIND, src_map, dest_map)
         if not pairs:
             continue
 
