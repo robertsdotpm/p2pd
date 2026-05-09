@@ -1,5 +1,4 @@
 """TURN message parsing and state-machine processing."""
-from typing import Any, List, Optional, Tuple
 import asyncio
 import io
 import struct
@@ -25,7 +24,7 @@ except NameError:
 
 # Parse a TURN message.
 # Use bitwise OPs to get valid method and status codes.
-def turn_parse_msg(buf: Any) -> Tuple[Optional[Any], Optional[Any], Optional[Any]]:
+def turn_parse_msg(buf):
     """Parse raw bytes into (turn_msg, method, status) or (None, None, None) on failure."""
     try:
         turn_msg, _ = STUNMsg.unpack(buf, mode=RFC5389)
@@ -44,7 +43,7 @@ def turn_parse_msg(buf: Any) -> Tuple[Optional[Any], Optional[Any], Optional[Any
 # Return this information to the caller.
 
 
-def turn_get_data_attr(msg: Any, af: Any, client: Any) -> Tuple[Optional[bytes], Optional[Any]]:
+def turn_get_data_attr(msg, af, client):
     """Extract the DATA payload and XorPeerAddress from a TURN relay message."""
     # Step through all attributes.
     data = peer_tup = None
@@ -89,7 +88,7 @@ def turn_get_data_attr(msg: Any, af: Any, client: Any) -> Tuple[Optional[bytes],
 
 
 # True when all the fields in the client needed for auth are set.
-def is_auth_ready(self) -> bool:
+def is_auth_ready(self):
     """Return True when key, realm, and nonce are all set on the client."""
     key_con = self.key is not None
     realm_con = self.realm is not None
@@ -97,7 +96,7 @@ def is_auth_ready(self) -> bool:
     return bool(key_con and realm_con and nonce_con)
 
 
-def turn_proc_attrs(af: Any, attr_code: Any, attr_data: Any, msg: Any, self: Any) -> List[Any]:
+def turn_proc_attrs(af, attr_code, attr_data, msg, self):
     """Process a single TURN attribute and update client state, returning [error_code, error_msg]."""
     error_code = 0
     error_msg = b""
@@ -168,7 +167,7 @@ def turn_proc_attrs(af: Any, attr_code: Any, attr_data: Any, msg: Any, self: Any
 
 
 # Processes attributes from a TURN message.
-async def process_attributes(af: Any, self: Any, msg: Any) -> List[Any]:
+async def process_attributes(af, self, msg):
     """Walk all attributes in a TURN message, updating client state and returning any error info."""
     # Unpack attributes from message.
     error_code = 0
@@ -196,7 +195,7 @@ async def process_attributes(af: Any, self: Any, msg: Any) -> List[Any]:
 
 # Process any replies from the TURN server.
 # This function is run concurrently and doesn't block the main program.
-async def process_replies(self) -> None:
+async def process_replies(self):
     """Continuously receive and dispatch TURN server messages until the session stops."""
     # Keep processing until stopped.
     while self.state != TURN_ERROR_STOPPED:

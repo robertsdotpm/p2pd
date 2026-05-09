@@ -1,5 +1,4 @@
 """Command-line entry point and interactive REPL for p2pd."""
-from typing import Any
 import ast
 import asyncio
 import code
@@ -26,7 +25,7 @@ from aionetiface import fstr  # noqa: E402
 class AsyncIOInteractiveConsole(code.InteractiveConsole):
     """Interactive Python console that supports top-level await via asyncio."""
 
-    def __init__(self, locals: Any, loop: Any) -> None:
+    def __init__(self, locals, loop):
         super().__init__(locals)
         self.compile.compiler.flags |= ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
 
@@ -37,11 +36,11 @@ class AsyncIOInteractiveConsole(code.InteractiveConsole):
         self.repl_future = None
         self.repl_future_interrupted = False
 
-    def runcode(self, code: Any) -> None:
+    def runcode(self, code):
         """Execute a code object in the asyncio event loop, supporting top-level await."""
         future = concurrent.futures.Future()
 
-        def callback() -> None:
+        def callback():
             """Schedule the coroutine from the compiled code on the asyncio loop."""
             self.repl_future = None
             self.repl_future_interrupted = False
@@ -66,7 +65,7 @@ class AsyncIOInteractiveConsole(code.InteractiveConsole):
             try:
                 self.repl_future = self.loop.create_task(coro)
 
-                def propagate(task: Any) -> None:
+                def propagate(task):
                     """Mirror the task's outcome onto the console's futures-Future result."""
                     if task.cancelled():
                         future.cancel()
@@ -95,7 +94,7 @@ class AsyncIOInteractiveConsole(code.InteractiveConsole):
 class REPLThread(threading.Thread):
     """Background thread that drives the asyncio REPL console interaction."""
 
-    def run(self) -> None:
+    def run(self):
         """Drive the interactive REPL console until the user exits."""
         try:
             loop_policy = str(asyncio.get_event_loop_policy())

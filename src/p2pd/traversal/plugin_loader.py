@@ -32,7 +32,6 @@ Plugin-class metadata read off the class:
 Plugins shipped as separate pip-installed packages are picked up via
 the ``p2pd.strategies`` entry-point group when discover() runs.
 """
-from typing import Any
 import asyncio
 import importlib
 import os
@@ -64,7 +63,7 @@ def import_internal_plugins():
             log_exception()
 
 
-async def load_plugins(node: Any) -> None:
+async def load_plugins(node):
     """Discover and install every registered traversal strategy onto node."""
     import_internal_plugins()
     discover()  # external entry-point plugins, if any

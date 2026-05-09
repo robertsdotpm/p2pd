@@ -3,7 +3,6 @@
 Plugin-owned. plugin_loader registers RandomProbeMsg under wire
 name "random_probe.RandomProbeMsg" via PROTO_MESSAGES.
 """
-from typing import Any, Dict
 
 from ....protocol.proto_msg import ProtoMsg
 
@@ -27,13 +26,13 @@ class RandomProbeMsg(ProtoMsg):
 
         def __init__(
             self,
-            role: str,
-            punch_time: int,
-            magic: str,
-            ext_ip: str,
-            known_port: int = 0,
-            probe_count: int = 256,
-        ) -> None:
+            role,
+            punch_time,
+            magic,
+            ext_ip,
+            known_port=0,
+            probe_count=256,
+        ):
             self.role = role
             self.punch_time = int(punch_time)
             self.magic = magic
@@ -41,7 +40,7 @@ class RandomProbeMsg(ProtoMsg):
             self.known_port = int(known_port)
             self.probe_count = int(probe_count)
 
-        def to_dict(self) -> Dict[str, Any]:
+        def to_dict(self):
             return {
                 "role": self.role,
                 "punch_time": self.punch_time,
@@ -52,7 +51,7 @@ class RandomProbeMsg(ProtoMsg):
             }
 
         @staticmethod
-        def from_dict(d: Dict[str, Any]) -> "RandomProbeMsg.Payload":
+        def from_dict(d):
             return RandomProbeMsg.Payload(
                 d.get("role", "non_sym"),
                 d.get("punch_time", 0),
@@ -62,5 +61,5 @@ class RandomProbeMsg(ProtoMsg):
                 d.get("probe_count", 256),
             )
 
-    def __init__(self, data: Dict[str, Any]) -> None:
+    def __init__(self, data):
         super().__init__(data)

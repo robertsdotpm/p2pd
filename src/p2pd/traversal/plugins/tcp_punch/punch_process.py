@@ -65,8 +65,6 @@ two more reasons:
     reverse-connect through 127.0.0.1 removes the class of host-
     model and NIC-routing risk regardless of OS version.
 """
-
-from typing import Any, Optional
 import asyncio
 import signal
 import socket
@@ -75,7 +73,7 @@ from .tcp_punch_engine import tcp_selector_punch_engine
 from aionetiface.net.selector_proxy import selector_proxy
 
 
-def punching_process(puncher: Any, reverse_server_dest: Any, stop_reader: Any) -> None:
+def punching_process(puncher, reverse_server_dest, stop_reader):
     """Run the blocking punch engine and proxy the result back through a reverse connection.
 
     Despite the name, this currently runs in a ThreadPoolExecutor
@@ -140,7 +138,7 @@ def punching_process(puncher: Any, reverse_server_dest: Any, stop_reader: Any) -
         raise e
 
 
-async def start_punching_process(nic: Any, puncher: Any, stop_reader: Any, proc_pool: Optional[Any] = None, node_msg_cb: Optional[Any] = None) -> Optional[Any]:
+async def start_punching_process(nic, puncher, stop_reader, proc_pool=None, node_msg_cb=None):
     """Start the out-of-process punch worker and accept the reverse connection it makes back."""
     log("[PUNCH-PROC] start_punching_process enter af={0} src_ip={1} dest_ip={2} nic={3} node_msg_cb={4}".format(
         getattr(puncher, "af", None),

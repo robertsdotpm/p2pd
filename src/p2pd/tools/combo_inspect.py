@@ -20,8 +20,6 @@ what auto_connect would actually see at runtime.
 
 Read-only: no plugin runs, no TCP/UDP connect attempted. Just enumerates.
 """
-
-from typing import Any, List, Optional
 import argparse
 import asyncio
 import sys
@@ -48,8 +46,8 @@ AF_NAMES = {
 }
 
 
-def fmt_info(info: Any) -> str:
-    """Render a src_info / dest_info dict as a compact one-line string."""
+def fmt_info(info):
+    """Render a src / dest dict as a compact one-line string."""
     if info is None:
         return "-"
     parts = []
@@ -64,7 +62,7 @@ def fmt_info(info: Any) -> str:
     return " ".join(parts)
 
 
-async def resolve_remote(node: Any, addr: str) -> Any:
+async def resolve_remote(node, addr):
     """Resolve a PNP nickname (or raw addr_bytes hex) through the local node's
     signal channel and return the parsed addr_map ready for combo enumeration.
     """
@@ -75,12 +73,12 @@ async def resolve_remote(node: Any, addr: str) -> Any:
 
 
 def render_combos(
-    label_a: str,
-    label_b: str,
-    node: Any,
-    src_map: Any,
-    dest_map: Any,
-) -> None:
+    label_a,
+    label_b,
+    node,
+    src_map,
+    dest_map,
+):
     """Print a header + one row per combo from auto_combos."""
     combos = auto_combos(node, src_map, dest_map)
 
@@ -98,12 +96,12 @@ def render_combos(
     # Group by (af, route_type) for readability.
     bucket = {}
     order = []
-    for plugin_name, af, route_type, src_info, dest_info in combos:
+    for plugin_name, af, route_type, src, dest in combos:
         key = (af, route_type)
         if key not in bucket:
             bucket[key] = []
             order.append(key)
-        bucket[key].append((plugin_name, src_info, dest_info))
+        bucket[key].append((plugin_name, src, dest))
 
     for af, route_type in order:
         rows = bucket[(af, route_type)]
@@ -114,14 +112,14 @@ def render_combos(
             len(rows),
             "" if len(rows) == 1 else "s",
         ))
-        for plugin_name, src_info, dest_info in rows:
+        for plugin_name, src, dest in rows:
             print("    {0:<18} src[{1}]   dest[{2}]".format(
-                plugin_name, fmt_info(src_info), fmt_info(dest_info),
+                plugin_name, fmt_info(src), fmt_info(dest),
             ))
     print()
 
 
-async def main_async(args: argparse.Namespace) -> int:
+async def main_async(args):
     """Start a local node, resolve target addresses, render combos, exit."""
     addrs = args.addrs
     if len(addrs) not in (1, 2):
@@ -154,7 +152,7 @@ async def main_async(args: argparse.Namespace) -> int:
     return 0
 
 
-def main() -> int:
+def main():
     parser = argparse.ArgumentParser(
         description="Print the (plugin, af, route_type, src, dest) combos "
                     "auto_connect would race for a node pair, without actually "

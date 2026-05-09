@@ -56,8 +56,6 @@ https://community.ui.com/questions/Ports-required-for-upnp2/6692d89e-1dd6-4abd-a
 
 http://10.0.1.1:1900/igd.xml
 """
-
-from typing import Any, List, Optional, Tuple
 import socket
 import asyncio
 import time
@@ -80,17 +78,17 @@ from .upnp_utils import (
 
 
 async def brute_force_port_forward(
-af: Any,
-    interface: Any,
-    ext_port: int,
-    src_tup: Tuple[str, int],
-    desc: str,
-    proto: str,
-    add_host: Optional[str] = None,
-) -> Any:
+af,
+    interface,
+    ext_port,
+    src_tup,
+    desc,
+    proto,
+    add_host=None,
+):
     """Probe known UPnP ports on local gateways and attempt port forwarding via all found services."""
     # Check if a port is open.
-    async def try_connect(port: int, host: str) -> Optional[Tuple[str, int]]:
+    async def try_connect(port, host):
         """Attempt a TCP connection to host:port and return the dest tuple on success."""
         dest = (host, port)
         route = await interface.route(af).bind()
@@ -102,7 +100,7 @@ af: Any,
             return None
 
     # Try to load forwarding services at path and use them.
-    async def try_service_path(path: str, dest: Tuple[str, int]) -> int:
+    async def try_service_path(path, dest):
         """Fetch the UPnP description at path on dest and attempt to apply the forwarding rule."""
         # Get service URLs for port forwarding or pin hole.
         route = await interface.route(af).bind()
@@ -203,7 +201,7 @@ af: Any,
     return 0
 
 
-async def discover_upnp_devices(af: Any, nic: Any) -> Optional[List[Any]]:
+async def discover_upnp_devices(af, nic):
     """Send an SSDP M-SEARCH multicast and collect HTTP replies from responding UPnP devices."""
     # Set protocol family for multicast socket.
     sock_conf = dict_child(
@@ -279,13 +277,13 @@ async def discover_upnp_devices(af: Any, nic: Any) -> Optional[List[Any]]:
 
 
 async def port_forward_from_multicast(
-af: Any,
-    interface: Any,
-    ext_port: int,
-    src_tup: Tuple[str, int],
-    desc: str,
-    proto: str = "TCP",
-) -> Any:
+af,
+    interface,
+    ext_port,
+    src_tup,
+    desc,
+    proto="TCP",
+):
     """Discover UPnP devices via multicast and attempt port forwarding through each one."""
     try:
         # Get list of possible devices supporting UPNP.
@@ -323,7 +321,7 @@ af: Any,
 # the function returns as soon as possible.
 
 
-async def port_forward(af: Any, interface: Any, ext_port: int, src_tup: Tuple[str, int], desc: str, proto: str = "TCP") -> int:
+async def port_forward(af, interface, ext_port, src_tup, desc, proto="TCP"):
     """
     This process is very slow and will be done in the background
     incrementally. This is because there is a 64 socket max limit

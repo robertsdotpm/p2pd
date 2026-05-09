@@ -27,14 +27,14 @@ UDP_PUNCH_NONCE_LEN = 16
 UDP_PUNCH_FRAME_LEN = 4 + 1 + UDP_PUNCH_NONCE_LEN  # 21
 
 
-def build_frame(kind: int, nonce: bytes) -> bytes:
+def build_frame(kind, nonce):
     """Build a 21-byte UDP punch frame for the given kind + nonce."""
     if len(nonce) != UDP_PUNCH_NONCE_LEN:
         raise ValueError("nonce must be {0} bytes".format(UDP_PUNCH_NONCE_LEN))
     return UDP_PUNCH_MAGIC + bytes([kind]) + nonce
 
 
-def parse_frame(buf: bytes) -> tuple:
+def parse_frame(buf):
     """Parse a UDP punch frame; returns (kind, nonce) or (None, None) on mismatch.
 
     Used by the engine to filter inbound datagrams: anything that

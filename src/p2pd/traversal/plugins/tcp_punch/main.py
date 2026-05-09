@@ -41,9 +41,8 @@ machines the right fix is an explicit inbound/outbound allow rule for
 the Python executable (or the specific port range used by the punch
 allocator).
 """
-from typing import Any, Dict, Optional, Tuple
 import asyncio
-from aionetiface import log, NIC_BIND, EXT_BIND, SysClock, async_wrap_errors, cancel_task, shutdown_proc_pool
+from aionetiface import log, NIC_BIND, EXT_BIND, TCP, SysClock, async_wrap_errors, cancel_task, shutdown_proc_pool
 from ....protocol.proto_defs import P2P_PUNCH
 from .proto import PunchMsg
 from .boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
@@ -63,7 +62,7 @@ class PunchPlugin(Plugin):
     """Traversal plugin implementing TCP hole-punching via coordinated port prediction."""
 
     name = "tcp_punch"
-    transport = "tcp"
+    transport = TCP
     route_types = (NIC_BIND, EXT_BIND)
     conf = {"timeout": 180}
     proto_messages = (
@@ -79,7 +78,7 @@ class PunchPlugin(Plugin):
         node.resources.register(factory)
         return factory
 
-    async def run(self, reply: Optional[Any] = None) -> None:
+    async def run(self, reply=None):
         """Coordinate the hole-punch exchange and launch the background punching process."""
         print("[PUNCH-RUN] enter plugin_id={0} reply={1} completed={2}".format(
             self.plugin_id, reply is not None,
@@ -187,15 +186,15 @@ class PunchPlugin(Plugin):
             self.plugin_id,
         ), flush=True)
         log("[PUNCH-RUN] sending outgoing PunchMsg plugin_id={0}".format(self.plugin_id))
-        await self.send_signal_msg(outgoing_msg)
+        await self.send_signal(outgoing_msg)
         print("[PUNCH-RUN] sent OK plugin_id={0}".format(self.plugin_id), flush=True)
 
-    async def setup_puncher_client(self, reply: Optional[Any]) -> Tuple[Optional[Any], Optional[Any]]:
+    async def setup_puncher_client(self, reply):
         """
         Determines the source/destination addresses and the decider IP,
         creates a new PunchClient, and sets the coordinated time references.
         """
-        if_index = self.src_info["if_index"]
+        if_index = self.src["if_index"]
         # Safe two-level lookup: load_stun_clients populates entries
         # only for the (af, if_index) combinations that successfully
         # resolved a STUN server during node startup. On hosts where
@@ -209,60 +208,27 @@ class PunchPlugin(Plugin):
         if not stuns:
             return None, None
 
-        # Determine IP addresses via routing.
-        dest_ip = self.dest_info["ip"]
+        # Resolved by the manager via resolve_pair: src["ip"] is
+        # the local-bind IP and dest["ip"] is the dial target,
+        # already %scope-patched for v6 link-local and chosen for the
+        # active route_type (NIC_BIND vs EXT_BIND). No routing logic
+        # in the plugin.
+        src_ip = self.src["ip"]
+        dest_ip = self.dest["ip"]
 
-        # Defensive: punching to our own NIC IP is a malformed
+        # Defensive: punching to our own resolved bind IP is a malformed
         # configuration -- the rendezvous would loop back through the
         # local stack and the port-prediction state machine has
-        # historically crashed the whole node when it tries it. The
-        # combo generator should drop this via pair_distinct, but if
-        # it slips through (signaled-from-peer plugin instances bypass
-        # the local generator), bail cleanly with a logged message
-        # rather than tearing down the loop.
-        try:
-            src_nic_ip = self.src_info.get("nic")
-        except AttributeError:
-            src_nic_ip = None
-        if src_nic_ip is not None:
-            try:
-                if str(src_nic_ip) == str(dest_ip):
-                    log("PunchPlugin: dest matches own NIC IP ({0}); aborting".format(dest_ip))
-                    return None, None
-            except (TypeError, ValueError):
-                pass
+        # historically crashed the whole node when it tries it.
+        if src_ip and dest_ip and str(src_ip) == str(dest_ip):
+            log("PunchPlugin: dest matches own bind IP ({0}); aborting".format(dest_ip))
+            return None, None
 
-        route = await self.nic.route(self.af).bind()
-        if "fe80" == dest_ip[:4]:
-            # Use link-local source for link-local destination.
-            src_ip = str(route.link_locals[0])
-            # Append the local NIC scope_id to both addresses so the
-            # Windows connect_ex / bind paths know which interface to
-            # use. Linux's getaddrinfo accepts bare fe80:: and falls
-            # back to the routing table; Windows does not -- without
-            # the %ifindex the SYN never leaves and the listener log
-            # stays silent. On the bind side resolve_bind_ip already
-            # patches src_ip via ip6_patch_bind_ip, but the engine's
-            # raw connect_ex(dest_ip, port) gets no such treatment,
-            # so we have to bake the scope into dest_ip here. Strips
-            # any existing % first to keep the patch idempotent.
-            # Interface.get_nic_id(af) returns the right ifindex per
-            # AF -- on XP that's the v6-side index from TCPIP6 (vs
-            # the v4 index in nic.id); everywhere else the indices
-            # are unified so it returns the same value.
-            from aionetiface.net.bind.bind_utils import ip6_patch_bind_ip
-            v6_scope = self.nic.get_nic_id(self.af)
-            dest_ip = ip6_patch_bind_ip(dest_ip.split("%", 1)[0], v6_scope)
-            src_ip = ip6_patch_bind_ip(src_ip.split("%", 1)[0], v6_scope)
-        else:
-            # Use the interface's local IP
-            src_ip = route.nic()
-
-        # Determine the decider IP for master/slave role selection.
-        if self.route_type == NIC_BIND:
-            decider_ip = src_ip
-        else:
-            decider_ip = route.ext()
+        # Master/slave role selection works fine off the local bind IP
+        # for both NIC_BIND and EXT_BIND -- both peers see the same
+        # (src_ip, dest_ip) pair from opposite ends and pick the same
+        # role deterministically.
+        decider_ip = src_ip
 
         # Create and configure the PunchClient.
         # FAST_PUNCH_PARAMS is used for network-protocol punching: the punch_time
@@ -317,7 +283,7 @@ class PunchPlugin(Plugin):
         # Return the new puncher and the STUN clients
         return puncher, stuns
 
-    async def configure_puncher_process(self, puncher: Any, stuns: Any) -> Any:
+    async def configure_puncher_process(self, puncher, stuns):
         """
         Initializes the NAT Prediction Allocator, saves the PunchClient,
         and schedules the delayed asynchronous punching process.
@@ -329,8 +295,8 @@ class PunchPlugin(Plugin):
         # Note: this just wraps nat_predict.py.
         # There's an aweful lot of bloat just to use code thats already written.
         self.nat_alloc = NATPredictAlloc(stuns)
-        self.nat_alloc.set_nat_info(self.src_info["nat"], self.dest_info["nat"])
-        self.nat_alloc.set_punch_mode(self.same_machine, self.dest_info["ip"])
+        self.nat_alloc.set_nat_info(self.src["nat"], self.dest["nat"])
+        self.nat_alloc.set_punch_mode(self.same_machine, self.dest["ip"])
 
         # Schedule the punching process with a short delay.
         if self.plugin_id not in self.punch_proc:
@@ -340,7 +306,7 @@ class PunchPlugin(Plugin):
 
         return puncher
 
-    async def advance_punching_protocol(self, puncher: Any, reply: Optional[Any], punch_time: int) -> Optional[Any]:
+    async def advance_punching_protocol(self, puncher, reply, punch_time):
         """Compute the next round of port predictions and return an outgoing PunchMsg, or None when done."""
         # For LAN, STUN is useless (returns each side's own port).
         # Boundary ports from setup_puncher_client already align both sides.
@@ -390,7 +356,7 @@ class PunchPlugin(Plugin):
         return msg
 
     # ... (other methods, including delayed_start_punching_proc) ...
-    async def delayed_start_punching_proc(self, nic: Any, puncher: Any) -> None:
+    async def delayed_start_punching_proc(self, nic, puncher):
         """Wait a short coordinator delay then launch the punching process and resolve the result."""
         # Wait for the peer to receive our message and set up its own process.
         # The delay is kept short when using FAST_PUNCH_PARAMS because the
@@ -457,7 +423,7 @@ class PunchPlugin(Plugin):
             # a code path that closed without the linger sockopt.
             await log_time_wait_residue(getattr(puncher, "src_ip", None))
 
-    async def close(self) -> None:
+    async def close(self):
         """Cancel any in-flight punch task and remove this plugin's shared state.
 
         Safe to call multiple times: pop() is a no-op when the key is absent
@@ -482,11 +448,11 @@ class PunchPluginFactory:
 
     def __init__(
 self,
-        stun_clients: Any,
-        sys_clock: Optional[Any] = None,
-        punch_clients: Optional[Dict[str, Any]] = None,
-        proc_pool: Optional[Any] = None,
-    ) -> None:
+        stun_clients,
+        sys_clock=None,
+        punch_clients=None,
+        proc_pool=None,
+    ):
         self.stun_clients = stun_clients
         self.sys_clock = sys_clock or SysClock(None, 0.1)
         self.proc_pool = proc_pool
@@ -496,14 +462,14 @@ self,
         self.completed_pipe_ids = set()
 
     @classmethod
-    async def create(cls, stun_clients: Any, sys_clock: Any) -> "PunchPluginFactory":
+    async def create(cls, stun_clients, sys_clock):
         """Async factory that allocates a process pool executor and returns a ready factory."""
         factory = cls(stun_clients, sys_clock)
         factory.max_workers, factory.proc_pool = await get_pp_executors()
         factory.active_punchers = 0
         return factory
 
-    def build_plugin(self) -> PunchPlugin:
+    def build_plugin(self):
         """Create a new PunchPlugin wired to this factory's shared STUN clients and state."""
         plugin = PunchPlugin()
         plugin.stun_clients = self.stun_clients
@@ -514,7 +480,7 @@ self,
         plugin.completed_pipe_ids = self.completed_pipe_ids
         return plugin
 
-    async def close(self) -> None:
+    async def close(self):
         """Shut down the process pool executor used for running punch workers."""
         if not self.proc_pool:
             return

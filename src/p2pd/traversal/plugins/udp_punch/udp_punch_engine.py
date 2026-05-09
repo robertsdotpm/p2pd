@@ -23,7 +23,6 @@ Lessons re-applied from random_probe:
     arriving early on the bound port isn't drained by the punch
     loop -- the post-punch Pipe wrap needs that data.
 """
-from typing import Any, Dict, List, Optional, Tuple
 import select
 import socket
 import time
@@ -49,13 +48,13 @@ SPRAY_INTERVAL = 0.02
 
 
 def fire_probes(
-    bound_socks: List[Tuple[Any, Any]],
-    dest_ip: str,
-    nonce: bytes,
-    spray_duration: float,
-    spray_interval: float = SPRAY_INTERVAL,
-    stop_reader: Optional[Any] = None,
-) -> None:
+    bound_socks,
+    dest_ip,
+    nonce,
+    spray_duration,
+    spray_interval=SPRAY_INTERVAL,
+    stop_reader=None,
+):
     """Spray PROBE frames at the destination for spray_duration seconds.
 
     Each bound socket sends to (dest_ip, alloc.dest_port) so the
@@ -140,7 +139,7 @@ def fire_probes(
     ))
 
 
-def log_sock_addr(sock: Any) -> str:
+def log_sock_addr(sock):
     """Format a socket's bound address as host:port for logs (best-effort)."""
     try:
         addr = sock.getsockname()
@@ -152,13 +151,13 @@ def log_sock_addr(sock: Any) -> str:
 
 
 def watch_for_winner(
-    bound_socks: List[Tuple[Any, Any]],
-    nonce: bytes,
-    listen_duration: float,
-    retry_interval: float = RETRY_INTERVAL,
-    stop_reader: Optional[Any] = None,
-    is_master: bool = False,
-) -> Optional[Tuple[Any, Tuple[str, int]]]:
+    bound_socks,
+    nonce,
+    listen_duration,
+    retry_interval=RETRY_INTERVAL,
+    stop_reader=None,
+    is_master=False,
+):
     """Watch every bound socket for inbound; return (winner_sock, peer_addr) or None.
 
     Master/slave protocol (modelled on tcp_punch's choose_winning_tcp_sock):
@@ -319,7 +318,7 @@ def watch_for_winner(
     return None
 
 
-def drain_punch_residue(sock: Any, nonce: bytes) -> int:
+def drain_punch_residue(sock, nonce):
     """Synchronously drain queued PROBE/CONFIRM frames sitting in the kernel
     buffer for *sock* before it's wrapped in a Pipe.
 
@@ -348,18 +347,18 @@ def drain_punch_residue(sock: Any, nonce: bytes) -> int:
 
 
 def udp_punch_engine(
-    af: Any,
-    nic_id: Optional[str],
-    port_allocs: List[Any],
-    src_ip: Optional[str],
-    dest_ip: str,
-    f_sleep_until: Any,
-    nonce: bytes,
-    same_machine: bool = False,
-    params: Optional[Dict[str, Any]] = None,
-    stop_reader: Optional[Any] = None,
-    route: Optional[Any] = None,
-) -> Optional[Tuple[Any, Tuple[str, int]]]:
+    af,
+    nic_id,
+    port_allocs,
+    src_ip,
+    dest_ip,
+    f_sleep_until,
+    nonce,
+    same_machine=False,
+    params=None,
+    stop_reader=None,
+    route=None,
+):
     """Drive a full UDP punch: bind, barrier-sleep, fire, watch, return winner.
 
     Returns (sock, peer_addr) for the winning 4-tuple, or None.

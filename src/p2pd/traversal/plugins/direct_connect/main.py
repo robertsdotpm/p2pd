@@ -1,16 +1,15 @@
 """Traversal plugin for direct (non-NATed) connections.
 
-Plain TCP connect from src_info["ip"] to dest_info["ip"]:dest_info["port"].
+Plain TCP connect from src["ip"] to dest["ip"]:dest["port"].
 
 Routing decisions (which IP per route_type, v6 link-local %scope, loopback
 alias selection) all live in the manager before run() fires.  By the time
-this plugin runs, ``self.src_info["ip"]`` is the resolved local-bind IP,
-``self.dest_info["ip"]`` / ``["port"]`` is the dial target, and ``self.nic``
+this plugin runs, ``self.src["ip"]`` is the resolved local-bind IP,
+``self.dest["ip"]`` / ``["port"]`` is the dial target, and ``self.nic``
 is already the right Interface for binding (Interface("default") for
 loopback IPs, the physical NIC otherwise).  Call ``self.bind()`` to get a
 ready-to-use route.
 """
-from typing import Any, Optional
 import asyncio
 from aionetiface import TCP, Pipe, log, log_exception, fstr, to_b
 from ...traversal_plugin import Plugin
@@ -23,10 +22,10 @@ class DirectConnect(Plugin):
     """Open a plain TCP connection to the peer."""
 
     name = "direct_connect"
-    transport = "tcp"
+    transport = TCP
 
-    async def run(self, reply: Optional[Any] = None) -> None:
-        dest = (self.dest_info["ip"], self.dest_info["port"])
+    async def run(self, reply=None):
+        dest = (self.dest["ip"], self.dest["port"])
         try:
             route = await self.bind()
         except (OSError, ValueError):

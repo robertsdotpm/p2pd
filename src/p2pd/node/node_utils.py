@@ -1,5 +1,4 @@
 """Miscellaneous helpers for node startup and operation."""
-from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 import hashlib
 import os
@@ -20,12 +19,12 @@ from ..traversal.plugins.tcp_punch.punch_defs import PUNCH_CONF
 from ..vendor.machine_id import hashed_machine_id
 
 
-def resolve_install_path(conf: Dict[str, Any]) -> str:
+def resolve_install_path(conf):
     """Return the configured install path, falling back to the library root."""
     return conf["install_path"] or get_aionetiface_install_root()
 
 
-def loopback_candidates_for(pub_key_hex: str, listen_port: int) -> List[Tuple[int, str, int]]:
+def loopback_candidates_for(pub_key_hex, listen_port):
     """Ordered list of (af, ip, port) loopback candidates for same-machine traversal.
 
     Listener tries each on bind (best-effort, ignores collisions); peer
@@ -64,13 +63,13 @@ def loopback_candidates_for(pub_key_hex: str, listen_port: int) -> List[Tuple[in
     ]
 
 
-def enrich_addr_map_with_loopback(addr_map: Dict[str, Any]) -> Dict[str, Any]:
+def enrich_addr_map_with_loopback(addr_map):
     """Attach the per-node loopback alias + candidate fallbacks to every if_info.
 
     parse_node_addr (in aionetiface) is intentionally unaware of the p2pd
     loopback convention; we add the field on the p2pd side after parse so
-    select_dest_ipr can reach it as dest_info["loopback"] and the plugins
-    can iterate dest_info["loopback_candidates"] on connect failure.
+    select_dest_ipr can reach it as dest["loopback"] and the plugins
+    can iterate dest["loopback_candidates"] on connect failure.
     Mutates and returns addr_map for the convenience of callers that
     want to chain.
 
@@ -109,7 +108,7 @@ def enrich_addr_map_with_loopback(addr_map: Dict[str, Any]) -> Dict[str, Any]:
     return addr_map
 
 
-def loopback_ip_for_node(pub_key_hex: str) -> str:
+def loopback_ip_for_node(pub_key_hex):
     """Deterministic 127.X.Y.Z loopback address keyed on a node's pub_key.
 
     Same-machine peers can't reliably TCP-connect between two of their own
@@ -145,7 +144,7 @@ def loopback_ip_for_node(pub_key_hex: str) -> str:
     return "127.{0}.{1}.{2}".format(a, b, c)
 
 
-def make_stop_pair(existing: Optional[Any] = None) -> Tuple[Any, Any]:
+def make_stop_pair(existing=None):
     """Create a non-blocking/blocking socket pair used to signal shutdown, or return existing."""
     if existing:
         return existing
@@ -155,14 +154,14 @@ def make_stop_pair(existing: Optional[Any] = None) -> Tuple[Any, Any]:
     return stop_rw
 
 
-def pipe_future(inbound_pipes: Dict[str, Any], pipe_id: str) -> Any:
+def pipe_future(inbound_pipes, pipe_id):
     """Return the Future for pipe_id, creating it if it does not yet exist."""
     if pipe_id not in inbound_pipes:
         inbound_pipes[pipe_id] = asyncio.Future()
     return inbound_pipes[pipe_id]
 
 
-def pipe_ready(inbound_pipes: Dict[str, Any], pipe_id: str, pipe: Any) -> Any:
+def pipe_ready(inbound_pipes, pipe_id, pipe):
     """Resolve the Future for pipe_id with the given pipe object."""
     if pipe_id not in inbound_pipes:
         pipe_future(inbound_pipes, pipe_id)
@@ -171,7 +170,7 @@ def pipe_ready(inbound_pipes: Dict[str, Any], pipe_id: str, pipe: Any) -> Any:
     return pipe
 
 
-def norm_listen_ips(listen_ips: List[str]) -> List[str]:
+def norm_listen_ips(listen_ips):
     """Deduplicate and sort a list of listen IPs, normalising each address."""
     # Skip if empty.
     if not listen_ips:
@@ -189,7 +188,7 @@ def norm_listen_ips(listen_ips: List[str]) -> List[str]:
     return listen_ips
 
 
-def load_signing_key(nics: List[Any], listen_ips: List[str], listen_port: int, install_path: str, node_name: Optional[str] = None) -> Tuple[SigningKey, bool]:
+def load_signing_key(nics, listen_ips, listen_port, install_path, node_name=None):
     """Load the node's ECDSA signing key from disk, generating and persisting a new one if absent.
 
     Returns (signing_key, is_fresh).  is_fresh=True means the key was
@@ -250,7 +249,7 @@ def load_signing_key(nics: List[Any], listen_ips: List[str], listen_port: int, i
     return sk, is_fresh
 
 
-async def fallback_machine_id(netifaces: Any, app_id: str = "p2pd") -> str:
+async def fallback_machine_id(netifaces, app_id="p2pd"):
     """Derive a stable machine ID from hostname, default interface name, and MAC address."""
     host = socket.gethostname()
     if_name = get_default_iface(netifaces)
@@ -267,7 +266,7 @@ async def fallback_machine_id(netifaces: Any, app_id: str = "p2pd") -> str:
     return to_s(hashlib.sha256(to_b(buf)).hexdigest())
 
 
-async def close_idle_pipes(node: Any) -> None:
+async def close_idle_pipes(node):
     """
     As the number of free processes in the process pool
     decreases and the pool approaches full the need to
@@ -328,7 +327,7 @@ async def close_idle_pipes(node: Any) -> None:
         await asyncio.sleep(min(next_sleep, 5))
 
 
-async def load_stun_clients(ifs: List[Any], limit: int = USE_MAP_NO) -> Dict[Any, Dict[int, List[Any]]]:
+async def load_stun_clients(ifs, limit=USE_MAP_NO):
     """Concurrently load up to limit TCP STUN clients per AF per interface and return them indexed."""
     stun_clients = {IP4: {}, IP6: {}}
     tasks = []
@@ -337,7 +336,7 @@ async def load_stun_clients(ifs: List[Any], limit: int = USE_MAP_NO) -> Dict[Any
         interface = ifs[if_index]
         for af in interface.supported():
 
-            async def job(af: Any = af, if_index: int = if_index, interface: Any = interface) -> Tuple[Any, int, List[Any]]:
+            async def job(af=af, if_index=if_index, interface=interface):
                 """Fetch STUN clients for one (af, interface) pair and return them with their index."""
                 clients = await get_n_stun_clients(
                     af=af,
@@ -358,7 +357,7 @@ async def load_stun_clients(ifs: List[Any], limit: int = USE_MAP_NO) -> Dict[Any
     return stun_clients
 
 
-def worker_init() -> None:
+def worker_init():
     """
     This runs when each worker process starts.
     We tell the worker to ignore SIGINT.
@@ -371,7 +370,7 @@ def worker_init() -> None:
         pass
 
 
-async def get_pp_executors(workers: Optional[int] = None) -> Tuple[int, Optional[Any]]:
+async def get_pp_executors(workers=None):
     """Create a ThreadPoolExecutor for tcp_punch's burst-send worker.
 
     Was ProcessPoolExecutor for "more accurate timing and isolating
@@ -412,7 +411,7 @@ async def get_pp_executors(workers: Optional[int] = None) -> Tuple[int, Optional
     return workers, pp_executor
 
 
-async def load_machine_id(app_id: str, netifaces: Any) -> str:
+async def load_machine_id(app_id, netifaces):
     """Return a hashed machine ID for app_id, falling back to a network-derived value on failure."""
     try:
         return hashed_machine_id(app_id)
@@ -422,7 +421,7 @@ async def load_machine_id(app_id: str, netifaces: Any) -> str:
         return await fallback_machine_id(netifaces, app_id)
 
 
-async def soft_bind_and_listen(node: Any, route: Any, label: str) -> int:
+async def soft_bind_and_listen(node, route, label):
     """Bind and add_listener for one route; log on failure, never raise.
 
     Returns the actual bound port on success, 0 on failure.
@@ -451,7 +450,7 @@ async def soft_bind_and_listen(node: Any, route: Any, label: str) -> int:
     return result[0]
 
 
-async def bind_nic_v4(node: Any, nic_i: int, nic: Any) -> int:
+async def bind_nic_v4(node, nic_i, nic):
     """Bind v4 listen_local on one NIC.  Returns bound port (0 = fail).
 
     Critical: a zero return contributes to the "every NIC bind failed"
@@ -479,7 +478,7 @@ async def bind_nic_v4(node: Any, nic_i: int, nic: Any) -> int:
     return nic_port
 
 
-async def bind_nic_v6_ext(node: Any, nic_i: int, nic: Any, label: str) -> int:
+async def bind_nic_v6_ext(node, nic_i, nic, label):
     """Bind v6 ext on one NIC.  Returns bound port (0 = fail).  Non-critical."""
     v6_route = nic.route(IP6)
     port = await soft_bind_and_listen(node, v6_route, label)
@@ -488,7 +487,7 @@ async def bind_nic_v6_ext(node: Any, nic_i: int, nic: Any, label: str) -> int:
     return port
 
 
-async def bind_loopback(node: Any, cand_af: int, cand_ip: str, cand_port: int, label: str) -> int:
+async def bind_loopback(node, cand_af, cand_ip, cand_port, label):
     """Bind a per-node loopback alias.  Returns port (0 = fail).  Non-critical.
 
     Deepcopies the route because add_listener retains the reference; without
@@ -517,7 +516,7 @@ async def bind_loopback(node: Any, cand_af: int, cand_ip: str, cand_port: int, l
         return 0
 
 
-async def listen_on_ifs(node: Any) -> None:
+async def listen_on_ifs(node):
     """Bind TCP listeners on every NIC, v6 ext per NIC, and per-node loopback
     aliases -- all concurrently in a single gather.
 
@@ -601,7 +600,7 @@ async def listen_on_ifs(node: Any) -> None:
         raise OSError(msg)
 
 
-async def remote_reachability_cb(reachability: Dict[Any, Dict[Any, Any]], _msg: Any, client_tup: Any, pipe: Any) -> None:
+async def remote_reachability_cb(reachability, _msg, client_tup, pipe):
     """Mark the NIC as reachable when an inbound connection arrives from the known p2pd probe server."""
     try:
         p2pd_ips = (
@@ -622,7 +621,7 @@ async def remote_reachability_cb(reachability: Dict[Any, Dict[Any, Any]], _msg: 
         log_exception()
 
 
-async def forward(node: Any, port: int, reachability: Dict[Any, Dict[Any, Any]]) -> Tuple[List[Any], List[Any]]:
+async def forward(node, port, reachability):
     """Run UPnP port forwarding for every NIC/AF and probe reachability, returning (forwarded, reachable) lists."""
     from ..traversal.plugins.upnp.main import port_forward as upnp_port_forward
 
@@ -630,7 +629,7 @@ async def forward(node: Any, port: int, reachability: Dict[Any, Dict[Any, Any]])
     for nic in node.ifs:
         for af in nic.supported():
 
-            async def do_forward(af: Any = af, nic: Any = nic) -> Optional[List[Any]]:
+            async def do_forward(af=af, nic=nic):
                 """Forward the listen port for one (af, nic) pair and return [af, nic.id] on success."""
                 reachability[af][nic.id] = asyncio.Future()
                 route = await nic.route(af).bind()
@@ -646,7 +645,7 @@ async def forward(node: Any, port: int, reachability: Dict[Any, Dict[Any, Any]])
 
     test_addr = {IP4: "158.69.27.176", IP6: "2607:5300:60:80b0::1"}
 
-    async def reachability_test(af: Any, nic: Any) -> None:
+    async def reachability_test(af, nic):
         """Trigger the remote p2pd probe server to connect back to us on the forwarded port."""
         route = nic.route(af)
         curl = WebCurl((test_addr[af], 80), route, do_close=0)

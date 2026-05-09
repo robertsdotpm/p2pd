@@ -1,7 +1,7 @@
 """Meta-plugin that fans a target plugin out across viable combos.
 
 Given a target plugin name and optional (af, route_type) constraints,
-fan_out enumerates every viable (af, route_type, src_info, dest_info)
+fan_out enumerates every viable (af, route_type, src, dest)
 combo for the (src_map, dest_map) pair, spawns one child of the target
 plugin per combo, runs them all concurrently, and returns the first
 non-None pipe. Children that lose the race are cancelled and closed.
@@ -15,7 +15,6 @@ fan_out.
 
 Recursion is refused: target_plugin_name == "fan_out" raises.
 """
-from typing import Any, List, Optional, Tuple
 import asyncio
 from aionetiface import (
     IP4, IP6, NIC_BIND, EXT_BIND, LOOPBACK_BIND,
@@ -28,12 +27,12 @@ from ....node.auto_connect import race_plugin_results
 
 
 def enumerate_viable_combos(
-    af: Any,
-    route_type: Any,
-    src_map: Any,
-    dest_map: Any,
-) -> List[Tuple[Any, Any, Any, Any]]:
-    """Return [(af, route_type, src_info, dest_info), ...] within constraints.
+    af,
+    route_type,
+    src_map,
+    dest_map,
+):
+    """Return [(af, route_type, src, dest), ...] within constraints.
 
     af / route_type may be None (any-pathway sentinel), in which case
     every compatible value of that axis is iterated. Pair filtering
@@ -55,10 +54,10 @@ def enumerate_viable_combos(
         if not src_map.get(try_af) or not dest_map.get(try_af):
             continue
         for try_rt in route_types:
-            for src_info, dest_info in iter_viable_pairs(
+            for src, dest in iter_viable_pairs(
                 try_af, try_rt, src_map, dest_map,
             ):
-                combos.append((try_af, try_rt, src_info, dest_info))
+                combos.append((try_af, try_rt, src, dest))
     return combos
 
 
@@ -80,7 +79,7 @@ class FanOutPlugin(Plugin):
         "max_pairs": 1,
     }
 
-    def __init__(self) -> None:
+    def __init__(self):
         super().__init__()
         # Configured via configure_target() before run(). When
         # constraints are None they pass through to the combo
@@ -91,10 +90,10 @@ class FanOutPlugin(Plugin):
 
     def configure_target(
         self,
-        target_plugin_name: str,
-        af: Any = None,
-        route_type: Any = None,
-    ) -> None:
+        target_plugin_name,
+        af=None,
+        route_type=None,
+    ):
         """Set the child plugin and (af, route_type) constraints."""
         if target_plugin_name == "fan_out":
             raise ValueError("fan_out cannot target itself")
@@ -102,7 +101,7 @@ class FanOutPlugin(Plugin):
         self.constraint_af = af
         self.constraint_route_type = route_type
 
-    async def run(self, reply: Optional[Any] = None) -> None:
+    async def run(self, reply=None):
         """Spawn one child per viable combo, race their results, return the winner."""
         if self.target_plugin_name is None:
             raise ValueError("fan_out.run: configure_target() never called")
@@ -148,12 +147,12 @@ class FanOutPlugin(Plugin):
         ))
 
         children = []  # type: List[Plugin]
-        for af, rt, src_info, dest_info in combos:
+        for af, rt, src, dest in combos:
             try:
                 child = manager.create_plugin(
                     af, rt,
-                    src_info=src_info,
-                    dest_info=dest_info,
+                    src=src,
+                    dest=dest,
                     same_machine=same_machine,
                     plugin_name=self.target_plugin_name,
                 )

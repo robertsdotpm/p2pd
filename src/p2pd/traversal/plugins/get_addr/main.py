@@ -1,5 +1,4 @@
 """Traversal plugin that resolves peer addresses via signalling."""
-from typing import Any, Optional
 from aionetiface import log, fstr
 from ...traversal_plugin import Plugin
 from ...strategy_registry import register
@@ -12,14 +11,14 @@ class GetAddrPlugin(Plugin):
 
     name = "get_addr"
 
-    async def run(self, reply: Optional[Any] = None) -> None:
+    async def run(self, reply=None):
         """Resolve the peer's address: extract from reply or send a GetAddr request."""
         if reply:
             log(fstr(
                 "get_addr[{0}]: reply received -- resolving from src",
                 (self.plugin_id,),
             ))
-            self.result.set_result(reply.meta.src["bytes"])
+            self.result.set_result(reply.meta.src_map["bytes"])
             return
 
         log(fstr(
@@ -32,5 +31,5 @@ class GetAddrPlugin(Plugin):
         msg.meta.plugin_name = "return_addr"
 
         # Send this message to the dest_addr for this plugin instance.
-        await self.send_signal_msg(msg)
+        await self.send_signal(msg)
 

@@ -9,7 +9,6 @@ No more SIG enum number to coordinate -- the plugin folder name +
 class name uniquely identifies the type on the wire. The plugin
 loader patches WIRE_NAME onto the class at install time.
 """
-from typing import Any, Dict, List
 
 from ....protocol.proto_msg import ProtoMsg
 
@@ -34,13 +33,13 @@ class PunchMsg(ProtoMsg):
         it empty; the receiver tolerates either case.
         """
 
-        def __init__(self, punch_mode: int, ntp: Any, mappings: List[Any], nonce: str = "") -> None:
+        def __init__(self, punch_mode, ntp, mappings, nonce=""):
             self.ntp = ntp
             self.mappings = mappings
             self.punch_mode = int(punch_mode)
             self.nonce = nonce
 
-        def to_dict(self) -> Dict[str, Any]:
+        def to_dict(self):
             return {
                 "punch_mode": self.punch_mode,
                 "ntp": self.ntp,
@@ -49,7 +48,7 @@ class PunchMsg(ProtoMsg):
             }
 
         @staticmethod
-        def from_dict(d: Dict[str, Any]) -> "PunchMsg.Payload":
+        def from_dict(d):
             return PunchMsg.Payload(
                 d.get("punch_mode", TCP_PUNCH_REMOTE),
                 d.get("ntp", 0),

@@ -1,5 +1,4 @@
 """Sliding-window boundary analysis for port prediction."""
-from typing import Tuple
 import time
 import random
 
@@ -127,13 +126,13 @@ FAST_PUNCH_PARAMS = {
 }
 
 
-def now_from_network(network_timer: float, network_time: int) -> int:
+def now_from_network(network_timer, network_time):
     """Returns the current Unix timestamp aligned to the NTP reference."""
     elapsed = time.monotonic() - network_timer
     return network_time + int(elapsed)
 
 
-def quantized_bucket(now: int, window: int = WINDOW, max_error: int = MAX_CLOCK_ERROR) -> int:
+def quantized_bucket(now, window=WINDOW, max_error=MAX_CLOCK_ERROR):
     """
     Calculates the time bucket number, robust against clock offsets.
     By subtracting the max error, we shift the timeline so that both hosts,
@@ -142,7 +141,7 @@ def quantized_bucket(now: int, window: int = WINDOW, max_error: int = MAX_CLOCK_
     return int((now - max_error) // window)
 
 
-def stable_boundary(bucket: int) -> int:
+def stable_boundary(bucket):
     """
     Deterministic boundary stable against small clock offsets, used as PRNG seed.
     """
@@ -150,11 +149,11 @@ def stable_boundary(bucket: int) -> int:
 
 
 def stable_ports(
-boundary: int,
-    num_ports: int = NUM_PORTS,
-    base_port: int = BASE_PORT,
-    port_range: int = PORT_RANGE,
-) -> list:
+boundary,
+    num_ports=NUM_PORTS,
+    base_port=BASE_PORT,
+    port_range=PORT_RANGE,
+):
     """
     Deterministic, smooth port selection using PRNG seeded by boundary.
     """
@@ -205,11 +204,11 @@ def port_pool_for_os(os_token):
 
 
 def compute_rendezvous(
-now: int,
-    window: int = WINDOW,
-    min_run_window: int = MIN_RUN_WINDOW,
-    max_error: int = MAX_CLOCK_ERROR,
-) -> Tuple[int, int]:
+now,
+    window=WINDOW,
+    min_run_window=MIN_RUN_WINDOW,
+    max_error=MAX_CLOCK_ERROR,
+):
     """
     Computes the current time bucket and the rendezvous time (start of the NEXT bucket).
     """

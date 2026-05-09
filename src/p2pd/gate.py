@@ -16,7 +16,6 @@ deterministic per-host name from the NIC list + listen port, so two
 runs on the same host with the same NIC selection share an identity
 while different hosts get distinct identities without coordination.
 """
-from typing import Any, Awaitable, Callable, Optional
 import asyncio
 import hashlib
 

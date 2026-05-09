@@ -40,8 +40,6 @@ Design:
     - limitations:
         - FD limit on windows is 64
 """
-
-from typing import Any, Dict, Optional
 import sys
 import time
 import argparse
@@ -61,16 +59,16 @@ class PunchClient:
 
     def __init__(
 self,
-        dest_ip: str,
-        src_ip: Optional[str] = None,
-        our_ip: Optional[str] = None,
-        nic_id: Optional[str] = None,
-        max_sleep: int = 10,
-        same_machine: bool = False,
-        params: Optional[Dict[str, Any]] = None,
-        our_os: Optional[str] = None,
-        their_os: Optional[str] = None,
-    ) -> None:
+        dest_ip,
+        src_ip=None,
+        our_ip=None,
+        nic_id=None,
+        max_sleep=10,
+        same_machine=False,
+        params=None,
+        our_os=None,
+        their_os=None,
+    ):
         # Fallback to IP4
         self.af = socket.AF_INET
         if ":" in dest_ip:
@@ -141,12 +139,12 @@ self,
         # Patch dest IP based on special bind rules.
         self.dest_ip = patch_connect_ip(self.af, self.dest_ip, self.nic_id)
 
-    def set_src_ip(self, src_ip: str) -> None:
+    def set_src_ip(self, src_ip):
         """Override the source IP address used when binding punch sockets."""
         self.src_ip = src_ip
 
     # Timestamp is a unix timestamp.
-    def set_timestamp(self, timestamp: int) -> None:
+    def set_timestamp(self, timestamp):
         """Record the NTP-synchronised Unix timestamp as the clock reference for this punch."""
         wall = int(time.time())
         log("[PUNCH-CLIENT] set_timestamp ntp={0} wall={1} delta={2}s".format(
@@ -156,7 +154,7 @@ self,
         self.start_time = time.monotonic()
 
     # Punch time is a future unix timestamp to start punching.
-    def set_punch_time(self, punch_time: int, secondary_punch_time: int = 0) -> None:
+    def set_punch_time(self, punch_time, secondary_punch_time=0):
         """Set the primary and (optional) secondary fire times for two-bucket dual-fire.
 
         secondary_punch_time, when non-zero, is the rendezvous of the
@@ -172,7 +170,7 @@ self,
         self.punch_time = punch_time
         self.secondary_punch_time = secondary_punch_time
 
-    def sleep_until(self) -> None:
+    def sleep_until(self):
         """Block the calling thread until the punch time is reached, capped by max_sleep."""
         # Time elapsed in seconds since first starting.
         elapsed = time.monotonic() - self.start_time
@@ -213,7 +211,7 @@ self,
                         int(remaining),
                     ))
 
-    def add_port_allocator(self, f_port_alloc: Any, n: Optional[int] = None) -> None:
+    def add_port_allocator(self, f_port_alloc, n=None):
         """Run a port-allocation function and append unique PortAlloc entries to the list.
 
         n=None defers to the allocator's own default (boundary_port_alloc
@@ -239,7 +237,7 @@ self,
                 self.port_allocs.append(port_alloc)
 
     # Return a socket (punched hole) on success.
-    def run_engine(self, f_engine: Any) -> Optional[Any]:
+    def run_engine(self, f_engine):
         """Run the punch engine for the primary rendezvous, falling through to the secondary on miss.
 
         Two-bucket overlap dual-fire:

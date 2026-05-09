@@ -1,5 +1,4 @@
 """Graceful shutdown logic for a p2pd node."""
-from typing import Any
 import asyncio
 import glob
 import os
@@ -8,7 +7,7 @@ from aionetiface import log, log_exception, Daemon
 from ..errors import AlreadyClosedError
 
 
-def cleanup_stale_pidfiles(install_path: str) -> None:
+def cleanup_stale_pidfiles(install_path):
     """Delete *_pid.txt files in install_path whose locks aren't held.
 
     The daemon writes one pidfile per (af, proto, port, ip) listener
@@ -46,7 +45,7 @@ def cleanup_stale_pidfiles(install_path: str) -> None:
             log_exception()
 
 
-async def close_helper(p: Any) -> None:
+async def close_helper(p):
     """Call p.close(), silently swallowing AlreadyClosedError and logging other exceptions."""
     try:
         await p.close()
@@ -57,7 +56,7 @@ async def close_helper(p: Any) -> None:
         log("Error closing " + str(p))
 
 
-async def close_with_timeout(p: Any) -> None:
+async def close_with_timeout(p):
     """Close p with a 2-second timeout, logging a warning if the close operation hangs."""
     try:
         await asyncio.wait_for(close_helper(p), timeout=2)
@@ -66,7 +65,7 @@ async def close_with_timeout(p: Any) -> None:
 
 
 # Shutdown the node server and do cleanup.
-async def node_stop(node: Any) -> None:
+async def node_stop(node):
     """Shut down the node, closing traversal plugins, resources, the daemon, and the stop socket pair."""
     # Send stop signal (any amount of data.)
     try:

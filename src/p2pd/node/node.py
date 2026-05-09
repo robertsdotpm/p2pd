@@ -3,8 +3,6 @@ Note:
 Reusing address can hide socket errors and
 make servers appear broken when they're not.
 """
-
-from typing import Any, Callable, List, Optional
 from aionetiface import (
     Daemon, dict_child, NET_CONF, log_exception,
     Pipe, PipeClient, TCPClientProtocol, PipeEvents,
@@ -29,13 +27,13 @@ class Node(Daemon):
 
     def __init__(
         self,
-        ifs: Optional[List[Any]] = None,
-        ip: Optional[Any] = None,
-        port: int = NODE_PORT,
-        stop_rw: Optional[Any] = None,
-        conf: Optional[Any] = None,
-        node_name: Optional[str] = None,
-    ) -> None:
+        ifs=None,
+        ip=None,
+        port=NODE_PORT,
+        stop_rw=None,
+        conf=None,
+        node_name=None,
+    ):
         if conf is None:
             conf = NODE_CONF
         super().__init__()
@@ -71,11 +69,11 @@ class Node(Daemon):
         self.addr_bytes = None  # serialized
         self.addr_map = None  # parsed dict
 
-    async def msg_cb(self, msg: Any, client_tup: Any, pipe: Any) -> None:
+    async def msg_cb(self, msg, client_tup, pipe):
         """Route inbound pipe messages through the node protocol dispatcher."""
         await node_protocol(self, msg, client_tup, pipe)
 
-    def up_cb(self, _data: Any, _client_tup: Any, pipe: Any) -> None:
+    def up_cb(self, _data, _client_tup, pipe):
         """Notify on every newly-accepted inbound TCP pipe.
 
         Rendezvous is in-band now: the initiator writes a
@@ -89,25 +87,25 @@ class Node(Daemon):
             pipe, _client_tup,
         ))
 
-    async def start(self, sys_clock: Optional[Any] = None, out: bool = False, cout: Callable = print) -> "Node":
+    async def start(self, sys_clock=None, out=False, cout=print):
         """Run the full node startup sequence and return self when the node is ready."""
         await node_start(self, sys_clock=sys_clock, out=out, cout=cout)
         return self
 
-    async def connect(self, af: Any, route_type: Any, pnp_addr: Any, plugin_name: Optional[str] = None) -> Any:
+    async def connect(self, af, route_type, pnp_addr, plugin_name=None):
         """Establish a P2P connection to pnp_addr using the given AF, route type, and optional plugin."""
         return await node_connect(self, af, route_type, pnp_addr, plugin_name)
 
-    async def nickname(self, name: Any, value: Optional[Any] = None) -> str:
+    async def nickname(self, name, value=None):
         """Register name in the PNP system, defaulting value to this node's address bytes."""
         value = value or self.addr_bytes
         return await self.nick_client.put(name, value)
 
-    def address(self) -> Optional[bytes]:
+    def address(self):
         """Return the node's address bytes, or None if the node has not started."""
         return self.addr_bytes
 
-    def supported(self) -> List[Any]:
+    def supported(self):
         """Return sorted list of address families supported across all interfaces."""
         afs = set()
         for nic in self.ifs:
@@ -116,11 +114,11 @@ class Node(Daemon):
 
         return sorted(tuple(afs))
 
-    def add_msg_cb(self, msg_cb: Callable) -> None:
+    def add_msg_cb(self, msg_cb):
         """Register a message callback to receive all inbound pipe messages (idempotent)."""
         self.msg_cbs.add(msg_cb)
 
-    def on_plugin_done(self, future: Any) -> None:
+    def on_plugin_done(self, future):
         """Attach the node message callback to any pipe-like result from a finished plugin.
 
         Idempotent at every layer: result.add_msg_cb backs onto a set,
@@ -136,25 +134,25 @@ class Node(Daemon):
         except BaseException:
             log_exception()
 
-    def pipe_future(self, pipe_id: str) -> Any:
+    def pipe_future(self, pipe_id):
         """Return a Future that resolves when the inbound pipe with pipe_id is ready."""
         return pipe_future(self.inbound_pipes, pipe_id)
 
-    def pipe_ready(self, pipe_id: str, pipe: Any) -> Any:
+    def pipe_ready(self, pipe_id, pipe):
         """Resolve the Future for pipe_id with the given pipe, unblocking any waiters."""
         return pipe_ready(self.inbound_pipes, pipe_id, pipe)
 
-    async def close(self) -> None:
+    async def close(self):
         """Gracefully shut down the node, closing all connections, tasks, and services."""
         await node_stop(self)
 
-    def __await__(self) -> Any:
+    def __await__(self):
         return self.start().__await__()
 
-    async def __aenter__(self) -> "Node":
+    async def __aenter__(self):
         await self.start()
         return self
 
-    async def __aexit__(self, *_: Any) -> bool:
+    async def __aexit__(self, *_):
         await self.close()
         return False

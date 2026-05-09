@@ -30,7 +30,6 @@ wins; auto_connect short-circuits and returns it.
 The `plugins=` argument filters which phases run. A phase is skipped
 when none of its plugins are in the configured set.
 """
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 import asyncio
 from aionetiface import (
     IP4, IP6, NIC_BIND, EXT_BIND, LOOPBACK_BIND, TCP, UDP,
@@ -81,12 +80,12 @@ DEFAULT_PLUGIN_TIMEOUT = 25.0
 # Pair filtering primitives
 # ---------------------------------------------------------------------------
 
-def af_compatible(src_map: Dict[str, Any], dest_map: Dict[str, Any], af: Any) -> bool:
+def af_compatible(src_map, dest_map, af):
     """True if both nodes have at least one interface for this address family."""
     return bool(src_map.get(af)) and bool(dest_map.get(af))
 
 
-def pair_distinct(route_type: Any, src_info: Dict[str, Any], dest_info: Dict[str, Any]) -> bool:
+def pair_distinct(route_type, src, dest):
     """Per-pair validity for a route type.
 
     NIC_BIND      different NIC IPs (otherwise bind/connect collide)
@@ -96,18 +95,18 @@ def pair_distinct(route_type: Any, src_info: Dict[str, Any], dest_info: Dict[str
                   through the router back to the local stack)
     """
     if route_type == NIC_BIND:
-        return int(src_info["nic"]) != int(dest_info["nic"])
+        return int(src["nic"]) != int(dest["nic"])
     if route_type == LOOPBACK_BIND:
         return (
-            src_info.get("loopback") is not None
-            and dest_info.get("loopback") is not None
+            src.get("loopback") is not None
+            and dest.get("loopback") is not None
         )
     if route_type == EXT_BIND:
-        return int(src_info["ext"]) != int(dest_info["ext"])
+        return int(src["ext"]) != int(dest["ext"])
     return True
 
 
-def is_same_machine(src_map: Dict[str, Any], dest_map: Dict[str, Any]) -> bool:
+def is_same_machine(src_map, dest_map):
     """True if both addr_maps belong to the same physical host."""
     sid = src_map.get("machine_id")
     did = dest_map.get("machine_id")
@@ -115,18 +114,18 @@ def is_same_machine(src_map: Dict[str, Any], dest_map: Dict[str, Any]) -> bool:
 
 
 def viable_pairs_for_arc(
-    af: Any,
-    route_type: Any,
-    src_map: Dict[str, Any],
-    dest_map: Dict[str, Any],
-) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
-    """Ordered (src_info, dest_info) pairs that survive per-pair filtering.
+    af,
+    route_type,
+    src_map,
+    dest_map,
+):
+    """Ordered (src, dest) pairs that survive per-pair filtering.
 
     Different-machine peers: restricted to matching-if_index pairs (alice's
     NIC0 may not have a route to bob's NIC1's subnet across NATs).
 
     Same-machine peers: emit the cross-product. Both nodes' NICs share one
-    kernel routing table so dest_info["nic"] is reachable from any src NIC
+    kernel routing table so dest["nic"] is reachable from any src NIC
     via the local stack. Matching-if_index pairs come first so direct
     in-subnet paths are tried before cross-subnet local routing.
     """
@@ -140,27 +139,27 @@ def viable_pairs_for_arc(
     pairs = []
     seen = set()
 
-    for if_idx, dest_info in dest_af.items():
-        src_info = src_af.get(if_idx)
-        if src_info is None:
+    for if_idx, dest in dest_af.items():
+        src = src_af.get(if_idx)
+        if src is None:
             continue
-        if pair_distinct(route_type, src_info, dest_info):
-            seen.add((id(src_info), id(dest_info)))
-            pairs.append((src_info, dest_info))
+        if pair_distinct(route_type, src, dest):
+            seen.add((id(src), id(dest)))
+            pairs.append((src, dest))
 
     if same_machine:
-        for src_info in src_af.values():
-            for dest_info in dest_af.values():
-                key = (id(src_info), id(dest_info))
+        for src in src_af.values():
+            for dest in dest_af.values():
+                key = (id(src), id(dest))
                 if key in seen:
                     continue
-                if pair_distinct(route_type, src_info, dest_info):
-                    pairs.append((src_info, dest_info))
+                if pair_distinct(route_type, src, dest):
+                    pairs.append((src, dest))
 
     return pairs
 
 
-def plugin_supports_route_type(loader: Any, route_type: Any) -> bool:
+def plugin_supports_route_type(loader, route_type):
     """True if the plugin loader's class accepts this route_type.
 
     Reads ``route_types`` off the loader's plugin class
@@ -177,7 +176,7 @@ def plugin_supports_route_type(loader: Any, route_type: Any) -> bool:
     return route_type in supported
 
 
-def plugin_timeout(loader: Any) -> float:
+def plugin_timeout(loader):
     """Per-plugin declared timeout from its loader meta, with a fallback."""
     if isinstance(loader, dict):
         t = loader.get("timeout")
@@ -191,14 +190,14 @@ def plugin_timeout(loader: Any) -> float:
 # ---------------------------------------------------------------------------
 
 async def attempt_one_combo(
-    node: Any,
-    sig_pipe: Any,
-    src_map: Dict[str, Any],
-    dest_map: Dict[str, Any],
-    combo: Tuple[str, Any, Any, Dict[str, Any], Dict[str, Any]],
-) -> Optional[Any]:
-    """Run one (plugin, af, route_type, src_info, dest_info) attempt to completion."""
-    plugin_name, af, route_type, src_info, dest_info = combo
+    node,
+    sig_pipe,
+    src_map,
+    dest_map,
+    combo,
+):
+    """Run one (plugin, af, route_type, src, dest) attempt to completion."""
+    plugin_name, af, route_type, src, dest = combo
     try:
         return await node.traversal.attempt_plugin(
             src_map=src_map,
@@ -207,8 +206,8 @@ async def attempt_one_combo(
             plugin_name=plugin_name,
             af=af,
             route_type=route_type,
-            src_info=src_info,
-            dest_info=dest_info,
+            src=src,
+            dest=dest,
         )
     except asyncio.CancelledError:  # pylint: disable=try-except-raise
         raise
@@ -217,7 +216,7 @@ async def attempt_one_combo(
         return None
 
 
-def plugin_pipe(plugin: Any) -> Optional[Any]:
+def plugin_pipe(plugin):
     """Return the resolved pipe from a finished plugin, or None."""
     if plugin is None:
         return None
@@ -231,13 +230,13 @@ def plugin_pipe(plugin: Any) -> Optional[Any]:
 
 
 async def race_combos(
-    node: Any,
-    sig_pipe: Any,
-    src_map: Dict[str, Any],
-    dest_map: Dict[str, Any],
-    combos: Sequence[Tuple[str, Any, Any, Dict[str, Any], Dict[str, Any]]],
-    timeout: float,
-) -> Tuple[Optional[Any], Optional[Any]]:
+    node,
+    sig_pipe,
+    src_map,
+    dest_map,
+    combos,
+    timeout,
+):
     """Launch combos concurrently; return (pipe, winner_plugin) or (None, None).
 
     First non-None pipe wins. Outstanding tasks are cancelled, then drained,
@@ -310,7 +309,7 @@ async def race_combos(
 # Bipartite slot scheduling
 # ---------------------------------------------------------------------------
 
-def sort_nics_by_nat(nics: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def sort_nics_by_nat(nics):
     """Sort NIC info dicts by ``info["nat"]["type"]`` ascending.
 
     NICs without a parseable nat type are placed last so they don't crowd
@@ -331,12 +330,12 @@ def sort_nics_by_nat(nics: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def round_robin_slots(
-    src_nics: Sequence[Dict[str, Any]],
-    dest_nics: Sequence[Dict[str, Any]],
-) -> Iterable[List[Tuple[Dict[str, Any], Dict[str, Any]]]]:
+    src_nics,
+    dest_nics,
+):
     """Schedule every (src, dest) pair into matching-disjoint slots.
 
-    Yields slots; each slot is a list of (src_info, dest_info) pairs in
+    Yields slots; each slot is a list of (src, dest) pairs in
     which no two pairs share a src NIC or a dest NIC. Slot 0 pairs by
     sorted index ((src[0], dest[0]), (src[1], dest[1]), ...) -- so the
     easiest NATs on each side meet first when the input lists are sorted
@@ -369,8 +368,8 @@ def round_robin_slots(
 
 
 def derive_sorted_nics(
-    pairs: Sequence[Tuple[Dict[str, Any], Dict[str, Any]]],
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    pairs,
+):
     """Extract unique src and dest NICs from `pairs` and sort by nat_type."""
     src_seen = {}
     dest_seen = {}
@@ -388,12 +387,12 @@ def derive_sorted_nics(
 # ---------------------------------------------------------------------------
 
 async def phase1_direct(
-    node: Any,
-    src_map: Dict[str, Any],
-    dest_map: Dict[str, Any],
-    sig_pipe: Any,
-    plugins: frozenset,
-) -> Tuple[Optional[Any], Optional[Any]]:
+    node,
+    src_map,
+    dest_map,
+    sig_pipe,
+    plugins,
+):
     """Race direct_connect / reverse_connect across all valid combos."""
     names = [n for n in plugins_for_phase("direct") if n in plugins]
     if not names:
@@ -405,7 +404,7 @@ async def phase1_direct(
         if not af_compatible(src_map, dest_map, af):
             continue
         for route_type in (NIC_BIND, LOOPBACK_BIND, EXT_BIND):
-            for src_info, dest_info in viable_pairs_for_arc(
+            for src, dest in viable_pairs_for_arc(
                 af, route_type, src_map, dest_map,
             ):
                 for name in names:
@@ -413,7 +412,7 @@ async def phase1_direct(
                         continue
                     if not plugin_supports_route_type(loaders.get(name), route_type):
                         continue
-                    combos.append((name, af, route_type, src_info, dest_info))
+                    combos.append((name, af, route_type, src, dest))
 
     if not combos:
         return None, None
@@ -428,13 +427,13 @@ async def phase1_direct(
 
 
 async def punch_phase(
-    node: Any,
-    src_map: Dict[str, Any],
-    dest_map: Dict[str, Any],
-    sig_pipe: Any,
-    plugin_names: Sequence[str],
-    label: str,
-) -> Tuple[Optional[Any], Optional[Any]]:
+    node,
+    src_map,
+    dest_map,
+    sig_pipe,
+    plugin_names,
+    label,
+):
     """Generic phase-2/3 driver shared by tcp_punch and udp/probe.
 
     NIC_BIND sub-phase first, then EXT_BIND if NIC_BIND yielded nothing.
@@ -479,10 +478,10 @@ async def punch_phase(
                     continue
 
                 combos = []
-                for src_info, dest_info in slot:
+                for src, dest in slot:
                     for name in active_names:
                         combos.append(
-                            (name, af, route_type, src_info, dest_info)
+                            (name, af, route_type, src, dest)
                         )
 
                 log(fstr(
@@ -499,12 +498,12 @@ async def punch_phase(
 
 
 async def phase2_tcp_punch(
-    node: Any,
-    src_map: Dict[str, Any],
-    dest_map: Dict[str, Any],
-    sig_pipe: Any,
-    plugins: frozenset,
-) -> Tuple[Optional[Any], Optional[Any]]:
+    node,
+    src_map,
+    dest_map,
+    sig_pipe,
+    plugins,
+):
     names = tuple(n for n in plugins_for_phase("punch") if n in plugins)
     if not names:
         return None, None
@@ -516,12 +515,12 @@ async def phase2_tcp_punch(
 
 
 async def phase3_udp_probe(
-    node: Any,
-    src_map: Dict[str, Any],
-    dest_map: Dict[str, Any],
-    sig_pipe: Any,
-    plugins: frozenset,
-) -> Tuple[Optional[Any], Optional[Any]]:
+    node,
+    src_map,
+    dest_map,
+    sig_pipe,
+    plugins,
+):
     names = tuple(n for n in plugins_for_phase("spray") if n in plugins)
     if not names:
         return None, None
@@ -533,13 +532,13 @@ async def phase3_udp_probe(
 
 
 async def phase4_turn(
-    node: Any,
-    src_map: Dict[str, Any],
-    dest_map: Dict[str, Any],
-    sig_pipe: Any,
-    plugins: frozenset,
-    cap: int = TURN_TOTAL_CAP,
-) -> Tuple[Optional[Any], Optional[Any]]:
+    node,
+    src_map,
+    dest_map,
+    sig_pipe,
+    plugins,
+    cap=TURN_TOTAL_CAP,
+):
     """Sequential TURN attempts, cap total attempts.
 
     Iterate AFs (IP4 then IP6). For each AF, walk our NICs in nat_type
@@ -577,21 +576,21 @@ async def phase4_turn(
         allowed = {(id(s), id(d)) for s, d in pairs}
         used_dests = set()
 
-        for src_info in src_nics:
+        for src in src_nics:
             if attempts >= cap:
                 break
 
             chosen = None
-            for dest_info in dest_nics:
-                if id(dest_info) in used_dests:
+            for dest in dest_nics:
+                if id(dest) in used_dests:
                     continue
-                if (id(src_info), id(dest_info)) in allowed:
-                    chosen = dest_info
+                if (id(src), id(dest)) in allowed:
+                    chosen = dest
                     break
             if chosen is None:
-                for dest_info in dest_nics:
-                    if (id(src_info), id(dest_info)) in allowed:
-                        chosen = dest_info
+                for dest in dest_nics:
+                    if (id(src), id(dest)) in allowed:
+                        chosen = dest
                         break
             if chosen is None:
                 continue
@@ -604,7 +603,7 @@ async def phase4_turn(
             ))
             pipe, plugin = await race_combos(
                 node, sig_pipe, src_map, dest_map,
-                [(relay_name, af, EXT_BIND, src_info, chosen)],
+                [(relay_name, af, EXT_BIND, src, chosen)],
                 timeout,
             )
             if pipe is not None:
@@ -618,11 +617,11 @@ async def phase4_turn(
 # ---------------------------------------------------------------------------
 
 async def auto_connect(
-    node: Any,
-    dest_addr: Any,
-    protocol: Any = TCP,
-    plugins: Optional[Sequence[str]] = None,
-) -> Tuple[Optional[Any], Optional[Any]]:
+    node,
+    dest_addr,
+    protocol=TCP,
+    plugins=None,
+):
     """Establish a P2P connection to dest_addr without picking a plugin.
 
     `protocol` controls which transport the returned pipe will use. Default

@@ -1,5 +1,4 @@
 """NAT-prediction-based port allocator."""
-from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 import copy
 from aionetiface import Interface, fstr, get_n_stun_clients, log, UDP
@@ -19,7 +18,7 @@ from .nat_predict import (
 )
 
 
-def is_predictable_nat(nat: Optional[Dict[str, Any]]) -> bool:
+def is_predictable_nat(nat):
     """True if `get_single_mapping` can compute a port mapping for this NAT info.
 
     Predictability needs at least one of:
@@ -56,7 +55,7 @@ from .punch_defs import (
 )
 
 
-def nat_mapping_to_port_alloc(nat_mappings: List[Any]) -> List[Any]:
+def nat_mapping_to_port_alloc(nat_mappings):
     """Convert a list of NATMapping objects into PortAlloc entries for the punch engine."""
     out = []
     for m in nat_mappings:
@@ -65,7 +64,7 @@ def nat_mapping_to_port_alloc(nat_mappings: List[Any]) -> List[Any]:
     return out
 
 
-def nat_predict_states(dest_mappings: Optional[List[Any]], state: Optional[int]) -> Tuple[int, int]:
+def nat_predict_states(dest_mappings, state):
     """Advance the NAT prediction state machine and return the new (state, side) tuple."""
     # bool of dest_mappings, start state, to state.
     progressions = [
@@ -98,7 +97,7 @@ def nat_predict_states(dest_mappings: Optional[List[Any]], state: Optional[int])
 class NATPredictAlloc:
     """Allocates port mappings for NAT traversal using STUN-based prediction."""
 
-    def __init__(self, stun_clients: List[Any]) -> None:
+    def __init__(self, stun_clients):
         self.af = stun_clients[0].af
         self.same_machine = False
         self.stun_clients = stun_clients
@@ -108,7 +107,7 @@ class NATPredictAlloc:
         self.preloaded_mappings = []
         self.self_mappings = []
 
-    def set_nat_info(self, src_nat: Optional[Dict[str, Any]] = None, dest_nat: Optional[Dict[str, Any]] = None) -> None:
+    def set_nat_info(self, src_nat=None, dest_nat=None):
         """Store the source and destination NAT info.
 
         Either side that is missing or unpredictable (typically symmetric +
@@ -124,7 +123,7 @@ class NATPredictAlloc:
         self.src_nat = self.coerce_predictable(src_nat, "src") or copy.deepcopy(nat_default)
         self.dest_nat = self.coerce_predictable(dest_nat, "dest") or copy.deepcopy(nat_default)
 
-    def coerce_predictable(self, nat: Optional[Dict[str, Any]], side: str) -> Optional[Dict[str, Any]]:
+    def coerce_predictable(self, nat, side):
         """Return ``nat`` if predictable; ``None`` to trigger the default."""
         if nat is None:
             return None
@@ -138,7 +137,7 @@ class NATPredictAlloc:
         ))
         return None
 
-    async def port_alloc(self, recv_mappings: Optional[List[Any]] = None) -> Tuple[List[Any], int]:
+    async def port_alloc(self, recv_mappings=None):
         """Progress the exchange state machine and return (port_allocs, is_end) for this round."""
         # Change protocol state transition.
         self.state, self.side = nat_predict_states(
@@ -192,7 +191,7 @@ class NATPredictAlloc:
                 1,
             )
 
-    def set_punch_mode(self, same_machine: bool, dest_ip: str = "192.168.0.100") -> None:
+    def set_punch_mode(self, same_machine, dest_ip="192.168.0.100"):
         """Determine and store the punch mode (LAN, remote, or self) from the destination IP."""
         self.punch_mode = get_punch_mode(self.af, str(dest_ip), self.same_machine)
 

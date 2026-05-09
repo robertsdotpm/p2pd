@@ -7,7 +7,6 @@ the wire name differs so the receiver routes inbound to udp_punch
 instead of tcp_punch. plugin_loader patches WIRE_NAME to
 "udp_punch.UdpPunchMsg" at install time.
 """
-from typing import Any, Dict, Optional
 
 from ..tcp_punch.proto import PunchMsg
 
@@ -15,5 +14,5 @@ from ..tcp_punch.proto import PunchMsg
 class UdpPunchMsg(PunchMsg):
     """PunchMsg variant routed to udp_punch by its qualified wire name."""
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, data=None):
         super().__init__(data or {})

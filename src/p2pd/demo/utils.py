@@ -25,11 +25,11 @@ if not _IS_WINDOWS:
     ainput_interrupt_r, ainput_interrupt_w = os.pipe()
 
 
-async def ainput(prompt: str) -> str:
+async def ainput(prompt):
     """Read a line of input from stdin asynchronously, unblocking on shutdown signals."""
     loop = asyncio.get_event_loop()
 
-    def blocking_input() -> str:
+    def blocking_input():
         """Block in a thread waiting for stdin input or a shutdown interrupt.
 
         On POSIX we use select() over stdin + a shutdown-interrupt
@@ -75,7 +75,7 @@ async def ainput(prompt: str) -> str:
         raise
 
 
-def cout(*fargs) -> None:
+def cout(*fargs):
     """Print to stdout in interactive mode; mirror to log() under --cmd.
 
     Under `--cmd` (scripted/matrix runs) stdout is muted because the
@@ -103,7 +103,7 @@ def cout(*fargs) -> None:
         print(*fargs, flush=True)
 
 
-async def add_echo_support(msg: bytes, client_tup: Any, pipe: Any) -> None:
+async def add_echo_support(msg, client_tup, pipe):
     """Handle incoming ECHO protocol messages by stripping the prefix and sending back the payload."""
     print("[ECHO-CB] msg={0!r} client_tup={1!r}".format(msg[:48], client_tup))
     if b"ECHO" == msg[:4]:
@@ -128,13 +128,13 @@ async def add_echo_support(msg: bytes, client_tup: Any, pipe: Any) -> None:
             return
 
 
-def patch_log_p2p(m: Any, node_id: str = "") -> None:
+def patch_log_p2p(m, node_id=""):
     """Format and print a P2P log line prefixed with the node ID via cout."""
     out = fstr("p2p: <{0}> ", (node_id,)) + to_s(m)
     cout(out)
 
 
-def get_req_serv_parts(parts: List[str]) -> Any:
+def get_req_serv_parts(parts):
     """Parse a comma-separated server spec into (offset, af, ip, port) tuple."""
     ip = parts[2]
     offset = int(parts[0])
@@ -148,7 +148,7 @@ def get_req_serv_parts(parts: List[str]) -> Any:
     return offset, af, ip, port
 
 
-def patch_server_af_dict(arg_list: List[str], serv_dict: Dict[Any, Any]) -> None:
+def patch_server_af_dict(arg_list, serv_dict):
     """Override host/ip/port entries in an AF-keyed server dict using CLI arg strings."""
     # offset, af, ip, port
     serv_infos = arg_list
@@ -162,7 +162,7 @@ def patch_server_af_dict(arg_list: List[str], serv_dict: Dict[Any, Any]) -> None
             serv_dict["afs"] = []
 
 
-def patch_server_list(arg_list: List[str], server_list: List[Dict[str, Any]]) -> None:
+def patch_server_list(arg_list, server_list):
     """Patch entries in a flat server list with addresses and credentials from CLI arg strings."""
     # offset, af, ip, port, (optional) user, (optional) password
     serv_infos = arg_list
@@ -193,7 +193,7 @@ def patch_server_list(arg_list: List[str], server_list: List[Dict[str, Any]]) ->
         server_list[offset] = entry
 
 
-def display_ifs_loaded(ifs: List[Any]) -> None:
+def display_ifs_loaded(ifs):
     """Print a summary of each loaded interface including AF support and NAT type."""
     buf = ""
     for nic in ifs:
@@ -213,7 +213,7 @@ def display_ifs_loaded(ifs: List[Any]) -> None:
     cout(buf)
 
 
-async def get_dest_addr(node: Any, last_addr: Any) -> Any:
+async def get_dest_addr(node, last_addr):
     """
     Dest addr may have already been set from previous invocations of the
     program.
@@ -269,7 +269,7 @@ async def get_dest_addr(node: Any, last_addr: Any) -> Any:
     return dest_addr
 
 
-async def choose_connection_methods(con_method: Optional[str]) -> str:
+async def choose_connection_methods(con_method):
     """
     Select a connection method segment.
     """
@@ -301,7 +301,7 @@ async def choose_connection_methods(con_method: Optional[str]) -> str:
         return method_txt[con_method]
 
 
-async def choose_pathways(pathway: Optional[str]) -> Any:
+async def choose_pathways(pathway):
     """
     Choose the routing pathway to try (this controls IP selection!)
     This is why having accurate interface info is so important.
@@ -334,7 +334,7 @@ async def choose_pathways(pathway: Optional[str]) -> Any:
         pathway = None
 
 
-async def choose_address_families(addr_type: Optional[str]) -> Any:
+async def choose_address_families(addr_type):
     """
     Allows the code to specifically use one or more address families.
     Applicable / useful for dual-stack environments.
@@ -367,7 +367,7 @@ async def choose_address_families(addr_type: Optional[str]) -> Any:
         addr_type = None
 
 
-async def echo_client(pipe: Any, echo_data: Optional[bytes]) -> str:
+async def echo_client(pipe, echo_data):
     """
     Tunnel is open -- interactive echo client can be used.
     """

@@ -1,5 +1,4 @@
 """Utility functions shared across traversal strategies."""
-from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 from aionetiface import (
     IP4, IP6, IPRange, af_bitlen,
@@ -31,43 +30,43 @@ _RESOLVE_DROP_KEYS = (
 )
 
 
-def _select_local_bind(af, route_type, src_info, dest_info):
+def _select_local_bind(af, route_type, src, dest):
     """Pick the local (ip, port) pair to bind for this route_type."""
     if route_type == LOOPBACK_BIND:
-        ip = src_info.get("loopback")
-        port = src_info.get("nic_port", src_info.get("port"))
+        ip = src.get("loopback")
+        port = src.get("nic_port", src.get("port"))
     elif route_type == NIC_BIND:
-        ip = src_info["nic"]
-        port = src_info.get("nic_port", src_info.get("port"))
+        ip = src["nic"]
+        port = src.get("nic_port", src.get("port"))
     elif route_type == EXT_BIND:
         # Kernel binds to a local NIC; ext is what the peer sees,
         # not what we hand to bind().  Advertised port for the
         # external path is ext_port.
-        ip = src_info["nic"]
-        port = src_info.get("ext_port", src_info.get("port"))
+        ip = src["nic"]
+        port = src.get("ext_port", src.get("port"))
     else:
         raise ValueError(fstr("resolve_pair: unknown route_type {0}", (route_type,)))
     return ip, port
 
 
-def _select_remote_dial(af, route_type, src_info, dest_info):
+def _select_remote_dial(af, route_type, src, dest):
     """Pick the (ip, port) pair to dial on the peer for this route_type."""
     if route_type == LOOPBACK_BIND:
-        ip = dest_info.get("loopback")
-        port = dest_info.get("nic_port", dest_info.get("port"))
+        ip = dest.get("loopback")
+        port = dest.get("nic_port", dest.get("port"))
     elif route_type == NIC_BIND:
-        ip = dest_info["nic"]
-        port = dest_info.get("nic_port", dest_info.get("port"))
+        ip = dest["nic"]
+        port = dest.get("nic_port", dest.get("port"))
     elif route_type == EXT_BIND:
-        ip = dest_info["ext"]
-        port = dest_info.get("ext_port", dest_info.get("port"))
+        ip = dest["ext"]
+        port = dest.get("ext_port", dest.get("port"))
     else:
         raise ValueError(fstr("resolve_pair: unknown route_type {0}", (route_type,)))
     return ip, port
 
 
-def resolve_pair(af, route_type, src_info, dest_info, nic, same_machine=False):
-    """Resolve a (src_info, dest_info) pair into the bind / dial values
+def resolve_pair(af, route_type, src, dest, nic, same_machine=False):
+    """Resolve a (src, dest) pair into the bind / dial values
     a plugin will actually use.
 
     Returns ``(src_resolved, dest_resolved)`` -- shallow copies of the
@@ -86,8 +85,8 @@ def resolve_pair(af, route_type, src_info, dest_info, nic, same_machine=False):
     pub_key_hex, …) is preserved -- plugins legitimately need NAT
     shape, if_index, etc.
     """
-    src_ip, src_port = _select_local_bind(af, route_type, src_info, dest_info)
-    dest_ip, dest_port = _select_remote_dial(af, route_type, src_info, dest_info)
+    src_ip, src_port = _select_local_bind(af, route_type, src, dest)
+    dest_ip, dest_port = _select_remote_dial(af, route_type, src, dest)
 
     # v6 link-local fix-up: paired source must also be link-local, and
     # both sides need %scope_id appended for the Windows TCP stack to
@@ -110,22 +109,25 @@ def resolve_pair(af, route_type, src_info, dest_info, nic, same_machine=False):
             except (ImportError, AttributeError, ValueError):
                 pass
 
-    # Soft migration: keep the raw routing-decision fields alongside
-    # the new ip/port for now so plugins still reading nic / ext /
-    # loopback / nic_port / ext_port keep working.  Once every plugin
-    # has been migrated to read ip/port only, swap to the strict shape
-    # by filtering _RESOLVE_DROP_KEYS off both dicts on the way out.
-    src_resolved = dict(src_info)
+    # Strict mode: per-side dict carries only the resolved (ip, port)
+    # plus peer metadata (if_index, nat, netiface_index, machine_id,
+    # pub_key_hex, bytes, ...).  Raw routing-decision keys (nic / ext
+    # / loopback / nic_port / ext_port / loopback_candidates) are
+    # filtered out so plugins can't accidentally do per-route-type
+    # selection inside their run().
+    def strip(info):
+        return {k: v for k, v in info.items() if k not in _RESOLVE_DROP_KEYS}
+    src_resolved = strip(src)
     src_resolved["ip"] = str(src_ip) if src_ip is not None else None
     src_resolved["port"] = src_port
-    dest_resolved = dict(dest_info)
+    dest_resolved = strip(dest)
     dest_resolved["ip"] = str(dest_ip) if dest_ip is not None else None
     dest_resolved["port"] = dest_port
     _ = same_machine  # accepted for future fixups (multi-NIC same-pc edge case)
     return src_resolved, dest_resolved
 
 
-def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info: Dict[str, Any], addr_types: List[Any], has_set_bind: bool = True) -> Optional[Any]:
+def select_dest_ipr(af, same_pc, src, dest, addr_types, has_set_bind=True):
     """Select the best destination IPRange for a traversal attempt.
 
     Nodes behind the same router share an external address; in that case the
@@ -133,8 +135,8 @@ def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info:
     through the router.
     """
     # Shorten these for expressions.
-    src_nid = src_info["netiface_index"]
-    dest_nid = dest_info["netiface_index"]
+    src_nid = src["netiface_index"]
+    dest_nid = dest["netiface_index"]
 
     # Same-LAN detection. The right question for the NIC_BIND path is
     # "is dest reachable via my directly-connected interface, with no
@@ -143,25 +145,25 @@ def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info:
     # subnet (9-field addr), use it; otherwise fall back to the v4
     # ext-equality heuristic.
     same_lan = False
-    src_nic_subnet = getattr(src_info["nic"], "subnet", None)
+    src_nic_subnet = getattr(src["nic"], "subnet", None)
     if src_nic_subnet is not None and src_nic_subnet > 0:
         host_bits = af_bitlen(af) - src_nic_subnet
-        if af == IP6 and str(src_info["nic"]).lower().startswith("fe80:"):
+        if af == IP6 and str(src["nic"]).lower().startswith("fe80:"):
             try:
-                src_net = IPRange(str(src_info["ext"]), bitlen=host_bits)
-                same_lan = dest_info["ext"] in src_net
+                src_net = IPRange(str(src["ext"]), bitlen=host_bits)
+                same_lan = dest["ext"] in src_net
             except (ValueError, TypeError):
                 same_lan = False
         else:
             try:
-                src_net = IPRange(str(src_info["nic"]), bitlen=host_bits)
+                src_net = IPRange(str(src["nic"]), bitlen=host_bits)
                 same_lan = (
-                    dest_info["nic"] in src_net or dest_info["ext"] in src_net
+                    dest["nic"] in src_net or dest["ext"] in src_net
                 )
             except (ValueError, TypeError):
                 same_lan = False
     else:
-        same_lan = src_info["ext"] == dest_info["ext"]
+        same_lan = src["ext"] == dest["ext"]
 
     # Makes long conditions slightly more readable.
     same_if = src_nid == dest_nid
@@ -176,7 +178,7 @@ def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info:
         if addr_type == LOOPBACK_BIND:
             if not same_pc:
                 continue
-            lo = dest_info.get("loopback")
+            lo = dest.get("loopback")
             if lo is None:
                 continue
             return lo
@@ -187,9 +189,9 @@ def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info:
         # router or fail. When ext IPs differ (different ISPs etc.)
         # it's the natural cross-machine path.
         if addr_type == EXT_BIND:
-            if src_info["ext"] == dest_info["ext"]:
+            if src["ext"] == dest["ext"]:
                 continue
-            return dest_info["ext"]
+            return dest["ext"]
 
         # Local NIC address.
         #
@@ -205,25 +207,25 @@ def select_dest_ipr(af: Any, same_pc: bool, src_info: Dict[str, Any], dest_info:
             if not has_set_bind:
                 pass
             if af == IP6:
-                nic_str = str(dest_info["nic"]).lower().split("%")[0]
+                nic_str = str(dest["nic"]).lower().split("%")[0]
                 if not nic_str.startswith("fe80:"):
-                    return dest_info["nic"]
+                    return dest["nic"]
             if not (same_pc or same_lan):
                 continue
-            return dest_info["nic"]
+            return dest["nic"]
 
     # No compatible addresses.
     return None
 
 
-def sort_pairs_by_overlap(src_infos: List[Dict[str, Any]], dest_infos: List[Dict[str, Any]]) -> Tuple[List[Any], List[Any]]:
-    """Partition (src_info, dest_info) pairs into overlapping and non-overlapping external IPs."""
+def sort_pairs_by_overlap(srcs, dests):
+    """Partition (src, dest) pairs into overlapping and non-overlapping external IPs."""
     overlap = []
     unique = []
-    for src_info in src_infos:
-        for dest_info in dest_infos:
-            pair = [src_info, dest_info]
-            if src_info["ext"] == dest_info["ext"]:
+    for src in srcs:
+        for dest in dests:
+            pair = [src, dest]
+            if src["ext"] == dest["ext"]:
                 overlap.append(pair)
             else:
                 unique.append(pair)
@@ -232,16 +234,16 @@ def sort_pairs_by_overlap(src_infos: List[Dict[str, Any]], dest_infos: List[Dict
 
 
 async def for_addr_infos(
-strat: str,
-    func: Any,
-    timeout: int,
-    cleanup: Optional[Any],
-    has_set_bind: bool,
-    max_pairs: int,
-    reply: Optional[Any],
-    pp: Any,
-    conf: Dict[str, Any],
-) -> Tuple[Optional[Any], Optional[Any]]:
+strat,
+    func,
+    timeout,
+    cleanup,
+    has_set_bind,
+    max_pairs,
+    reply,
+    pp,
+    conf,
+):
     """
     Given info on a local interface, a remote interface,
     and a chosen connectivity technique, attempt to create
@@ -249,7 +251,7 @@ strat: str,
     addressing is suitably local or remote.
     """
 
-    async def try_addr_infos(af: Any, strat: str, addr_type: Any, src_info: Dict[str, Any], dest_info: Dict[str, Any]) -> Optional[Any]:
+    async def try_addr_infos(af, strat, addr_type, src, dest):
         """Attempt one connectivity strategy for a specific src/dest interface pair."""
         # Local addressing and/or remote.
         try:
@@ -263,7 +265,7 @@ strat: str,
             pp.node.pipe_future(pipe_id)
 
             # Select interface to use.
-            if_index = src_info["if_index"]
+            if_index = src["if_index"]
             interface = pp.node.ifs[if_index]
 
             # Ensure our selected NIC is what the
@@ -279,8 +281,8 @@ strat: str,
             dest_ip = select_dest_ipr(
                 af,
                 pp.same_machine,
-                src_info,
-                dest_info,
+                src,
+                dest,
                 [addr_type],
                 has_set_bind,
             )
@@ -290,18 +292,18 @@ strat: str,
             if dest_ip is None:
                 return
 
-            dest_info["ip"] = str(dest_ip)
+            dest["ip"] = str(dest_ip)
 
             # Use per-bind port when advertised (10-field wire format). Fall back to
             # the section's single port for peers on the old 8/9-field format.
             if addr_type == NIC_BIND:
-                dest_info["port"] = dest_info.get("nic_port", dest_info["port"])
+                dest["port"] = dest.get("nic_port", dest["port"])
             elif addr_type == EXT_BIND:
-                dest_info["port"] = dest_info.get("ext_port", dest_info["port"])
+                dest["port"] = dest.get("ext_port", dest["port"])
 
             # Detailed logging details.
             path_txt = f_path_txt(addr_type)
-            src_ip = src_info["nic"] if addr_type == NIC_BIND else src_info["ext"]
+            src_ip = src["nic"] if addr_type == NIC_BIND else src["ext"]
             msg = fstr(
                 "<{0}> Trying {1} {2} -> ",
                 (
@@ -313,7 +315,7 @@ strat: str,
             msg += fstr(
                 "{0} on '{1}'",
                 (
-                    dest_info["ip"],
+                    dest["ip"],
                     interface.name,
                 ),
             )
@@ -327,8 +329,8 @@ strat: str,
                     pp,
                     af,
                     pipe_id,
-                    src_info,
-                    dest_info,
+                    src,
+                    dest,
                     interface,
                     addr_type,
                     pp.same_machine,
@@ -345,7 +347,7 @@ strat: str,
                         "pipe_id": pipe_id,
                         "af": af,
                         "src_buf": pp.src_bytes,
-                        "src_index": src_info["if_index"],
+                        "src_index": src["if_index"],
                         "addr_types": [addr_type],
                     }
                 )
@@ -354,7 +356,7 @@ strat: str,
                     {
                         "af": af,
                         "dest_buf": pp.dest_bytes,
-                        "dest_index": dest_info["if_index"],
+                        "dest_index": dest["if_index"],
                     }
                 )
 
@@ -371,8 +373,8 @@ strat: str,
                 await cleanup(
                     af,
                     pipe_id,
-                    src_info,
-                    dest_info,
+                    src,
+                    dest,
                     interface,
                     addr_type,
                     reply,
@@ -393,19 +395,19 @@ strat: str,
         for af in conf["addr_families"]:
             if reply is not None:
                 # Try select if info based on their chosen offset.
-                src_info = pp.src[af][reply.routing.dest_index]
-                dest_info = pp.dest[af][reply.meta.src_index]
+                src = pp.src[af][reply.routing.dest_index]
+                dest = pp.dest[af][reply.meta.src_index]
                 ret = await async_wrap_errors(
-                    try_addr_infos(af, strat, addr_type, src_info, dest_info)
+                    try_addr_infos(af, strat, addr_type, src, dest)
                 )
 
                 return ret, addr_type
 
             # Get interface offset that supports this af.
-            # for src_info, dest_info in if_info_iter:
-            src_infos = list(pp.src[af].values())
-            dest_infos = list(pp.dest[af].values())
-            overlap, unique = sort_pairs_by_overlap(src_infos, dest_infos)
+            # for src, dest in if_info_iter:
+            srcs = list(pp.src[af].values())
+            dests = list(pp.dest[af].values())
+            overlap, unique = sort_pairs_by_overlap(srcs, dests)
 
             # If external address is the same try unique pairs first.
             if addr_type == EXT_BIND:
@@ -419,11 +421,11 @@ strat: str,
             if not pair_order:
                 log("pair order list is empty!")
 
-            for src_info, dest_info in pair_order:
+            for src, dest in pair_order:
                 # Only try up to N pairs per technique.
                 # Technique-specific N to avoid lengthy delays.
                 ret = await async_wrap_errors(
-                    try_addr_infos(af, strat, addr_type, src_info, dest_info)
+                    try_addr_infos(af, strat, addr_type, src, dest)
                 )
 
                 # Success so return.
@@ -443,21 +445,21 @@ strat: str,
 # TODO: make this work with everything.
 
 
-def get_if_infos_order(af: Any, route_type: Any, src_map: Dict[Any, Any], dest_map: Dict[Any, Any]) -> List[Any]:
+def get_if_infos_order(af, route_type, src_map, dest_map):
     """
     Given a list of interface details
     for an address family indexed by interface
     offset return a list of them directly.
     """
-    src_infos = list(src_map[af].values())
-    dest_infos = list(dest_map[af].values())
+    srcs = list(src_map[af].values())
+    dests = list(dest_map[af].values())
 
     # Given two lists of interface details, break them into
-    # two lists of (src_info, dest_info) pairs. The first
+    # two lists of (src, dest) pairs. The first
     # contains pairs for which both interface details have the
     # same ext (external address). The other is non-overlapping,
     # where both have different addresses.
-    overlap, unique = sort_pairs_by_overlap(src_infos, dest_infos)
+    overlap, unique = sort_pairs_by_overlap(srcs, dests)
 
     # If the route type is external then using the same external
     # address for overlapping pairs is likely not to lead to
@@ -480,7 +482,7 @@ def get_if_infos_order(af: Any, route_type: Any, src_map: Dict[Any, Any], dest_m
     return pair_order
 
 
-def try_unpack_msg(buf: Any, sk: Any, sig_proto_map: Dict[Any, Any]) -> Any:
+def try_unpack_msg(buf, sk, sig_proto_map):
     """Decrypt (if needed) and deserialise an incoming signal buffer into a protocol message.
 
     Wire layout (after stripping the encryption framing):
@@ -530,7 +532,7 @@ def try_unpack_msg(buf: Any, sk: Any, sig_proto_map: Dict[Any, Any]) -> Any:
     return msg
 
 
-def sig_msg_to_buf(msg: Any, dest_pk: Optional[Any]) -> bytes:
+def sig_msg_to_buf(msg, dest_pk):
     """Serialise a signal message, optionally encrypting it with the destination's public key."""
     if dest_pk:
         buf = b"\1" + encrypt(dest_pk, msg.pack())
@@ -542,7 +544,7 @@ def sig_msg_to_buf(msg: Any, dest_pk: Optional[Any]) -> bytes:
     return to_b(buf)
 
 
-async def close_plugin(plugin: Any, plugins: Dict[str, Any], inbound_pipes: Dict[str, Any]) -> None:
+async def close_plugin(plugin, plugins, inbound_pipes):
     """No-op for now. Cleanup semantics across plugins are flawed -- popping
     the plugin registry the moment result.done() is racing with the executor
     worker that's still alive (udp_punch's spray + bridge, tcp_punch's reverse

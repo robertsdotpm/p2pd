@@ -39,7 +39,6 @@ import random
 import socket
 import struct
 import time
-from typing import Any, Dict, List, Optional, Tuple
 
 from aionetiface.net.address import resolve_dest_tup
 
@@ -61,7 +60,7 @@ from .random_probe_defs import (
 # ─────────────────────────────────────────────────────────────────
 
 
-def encode_probe(nonce: bytes, role: bytes, idx: int) -> bytes:
+def encode_probe(nonce, role, idx):
     """Pack one probe datagram.
 
     *nonce* must be exactly 16 bytes; *role* must be ROLE_CONE or
@@ -76,7 +75,7 @@ def encode_probe(nonce: bytes, role: bytes, idx: int) -> bytes:
     return PROBE_MAGIC + nonce + role + struct.pack("!H", idx & 0xFFFF)
 
 
-def decode_probe(data: bytes, want_nonce: bytes) -> Optional[Dict[str, Any]]:
+def decode_probe(data, want_nonce):
     """
     Validate that *data* is one of *our* probes for the session
     identified by *want_nonce*.  Returns the parsed fields on hit,
@@ -101,7 +100,7 @@ def decode_probe(data: bytes, want_nonce: bytes) -> Optional[Dict[str, Any]]:
 # ─────────────────────────────────────────────────────────────────
 
 
-def random_probe_ports(count: int, rng: Optional[random.Random] = None) -> List[int]:
+def random_probe_ports(count, rng=None):
     """Return *count* distinct random ports in [PROBE_PORT_LO, PROBE_PORT_HI].
 
     The cone uses these as destination ports it fires at; the
@@ -125,10 +124,10 @@ def random_probe_ports(count: int, rng: Optional[random.Random] = None) -> List[
 
 
 def make_udp_socket(
-    bind_ip: str,
-    bind_port: int = 0,
-    interface: Optional[Any] = None,
-) -> socket.socket:
+    bind_ip,
+    bind_port=0,
+    interface=None,
+):
     """
     Create a non-blocking UDP socket bound to (bind_ip, bind_port).
 
@@ -219,7 +218,7 @@ def normalize_ip6(addr):
         return addr
 
 
-def close_all(socks: List[socket.socket]) -> None:
+def close_all(socks):
     """Close every socket; never raises (best-effort cleanup)."""
     for s in socks:
         try:
@@ -228,7 +227,7 @@ def close_all(socks: List[socket.socket]) -> None:
             pass
 
 
-def drain_probe_residue(sock: socket.socket, want_nonce: bytes) -> int:
+def drain_probe_residue(sock, want_nonce):
     """Drain in-flight probe datagrams from *sock* without blocking.
 
     Uses MSG_PEEK to look without consuming -- only consumes
@@ -260,10 +259,10 @@ def drain_probe_residue(sock: socket.socket, want_nonce: bytes) -> int:
 
 
 async def async_drain_probe_residue(
-    sock: socket.socket,
-    want_nonce: bytes,
-    duration: float = 1.0,
-) -> int:
+    sock,
+    want_nonce,
+    duration=1.0,
+):
     """Drain probe-format datagrams from *sock* for *duration* seconds.
 
     Uses MSG_PEEK to look at the head of the kernel queue
@@ -314,12 +313,12 @@ async def async_drain_probe_residue(
 
 
 def sync_stun_discover_mapping(
-    sock: socket.socket,
-    stun_server: Tuple[str, int],
-    af: int,
-    timeout: float = 3.0,
-    retries: int = 3,
-) -> Optional[Tuple[str, int]]:
+    sock,
+    stun_server,
+    af,
+    timeout=3.0,
+    retries=3,
+):
     """Sync version of stun_discover_mapping.
 
     No asyncio.  Uses select() for the wait, plain recvfrom for
@@ -376,13 +375,13 @@ def sync_stun_discover_mapping(
 
 
 async def stun_discover_mapping(
-    loop: Any,
-    sock: socket.socket,
-    stun_server: Tuple[str, int],
-    af: int,
-    timeout: float = 3.0,
-    retries: int = 3,
-) -> Optional[Tuple[str, int]]:
+    loop,
+    sock,
+    stun_server,
+    af,
+    timeout=3.0,
+    retries=3,
+):
     """
     Send a STUN binding request via the *already-bound* UDP socket
     and return the (mapped_ip, mapped_port) the server reports, or
@@ -446,7 +445,7 @@ async def stun_discover_mapping(
     return None
 
 
-async def recvfrom_async(loop: Any, sock: socket.socket, bufsize: int = 2048) -> Tuple[bytes, Tuple[str, int]]:
+async def recvfrom_async(loop, sock, bufsize=2048):
     """
     Async UDP recvfrom that works on Python 3.5+.
 
@@ -457,7 +456,7 @@ async def recvfrom_async(loop: Any, sock: socket.socket, bufsize: int = 2048) ->
     """
     fut = loop.create_future()
 
-    def on_readable() -> None:
+    def on_readable():
         if fut.done():
             return
         try:
@@ -480,11 +479,11 @@ async def recvfrom_async(loop: Any, sock: socket.socket, bufsize: int = 2048) ->
 
 
 async def peek_then_recv_probe(
-    loop: Any,
-    sock: socket.socket,
-    want_nonce: bytes,
-    bufsize: int = 2048,
-) -> Tuple[Optional[Tuple[bytes, Tuple[str, int]]], bool]:
+    loop,
+    sock,
+    want_nonce,
+    bufsize=2048,
+):
     """Wait for inbound, peek at it, conditionally consume.
 
     Returns ((data, addr), True) when a *probe* (PROBE_MAGIC +
@@ -504,7 +503,7 @@ async def peek_then_recv_probe(
     """
     fut = loop.create_future()
 
-    def on_readable() -> None:
+    def on_readable():
         if fut.done():
             return
         try:
@@ -543,18 +542,18 @@ async def peek_then_recv_probe(
 
 
 def sync_run_non_sym_side(
-    bind_ip: str,
-    known_port: int,
-    peer_ext_ip: str,
-    nonce: bytes,
-    probe_count: int = DEFAULT_PROBE_COUNT,
-    listen_timeout: float = PROBE_LISTEN_TIMEOUT,
-    rng: Optional[random.Random] = None,
-    sock: Optional[socket.socket] = None,
-    own_ext_ip: Optional[str] = None,
-    interface: Optional[Any] = None,
-    require_alignment: bool = True,
-) -> Optional[Dict[str, Any]]:
+    bind_ip,
+    known_port,
+    peer_ext_ip,
+    nonce,
+    probe_count=DEFAULT_PROBE_COUNT,
+    listen_timeout=PROBE_LISTEN_TIMEOUT,
+    rng=None,
+    sock=None,
+    own_ext_ip=None,
+    interface=None,
+    require_alignment=True,
+):
     """Sync version of run_non_sym_side.
 
     No asyncio.add_reader / remove_reader cycling -- uses
@@ -742,15 +741,15 @@ def sync_run_non_sym_side(
 
 
 def sync_run_symmetric_side(
-    bind_ip: str,
-    cone_ext_ip: str,
-    cone_ext_port: int,
-    nonce: bytes,
-    probe_count: int = DEFAULT_PROBE_COUNT,
-    listen_timeout: float = PROBE_LISTEN_TIMEOUT,
-    rng: Optional[random.Random] = None,
-    interface: Optional[Any] = None,
-) -> Optional[Dict[str, Any]]:
+    bind_ip,
+    cone_ext_ip,
+    cone_ext_port,
+    nonce,
+    probe_count=DEFAULT_PROBE_COUNT,
+    listen_timeout=PROBE_LISTEN_TIMEOUT,
+    rng=None,
+    interface=None,
+):
     """Sync version of run_symmetric_side.
 
     Opens N sockets, each on a distinct local source port, fires
@@ -853,18 +852,18 @@ def sync_run_symmetric_side(
 
 
 async def run_non_sym_side(
-    bind_ip: str,
-    known_port: int,
-    peer_ext_ip: str,
-    nonce: bytes,
-    probe_count: int = DEFAULT_PROBE_COUNT,
-    listen_timeout: float = PROBE_LISTEN_TIMEOUT,
-    rng: Optional[random.Random] = None,
-    sock: Optional[socket.socket] = None,
-    own_ext_ip: Optional[str] = None,
-    interface: Optional[Any] = None,
-    require_alignment: bool = True,
-) -> Optional[Dict[str, Any]]:
+    bind_ip,
+    known_port,
+    peer_ext_ip,
+    nonce,
+    probe_count=DEFAULT_PROBE_COUNT,
+    listen_timeout=PROBE_LISTEN_TIMEOUT,
+    rng=None,
+    sock=None,
+    own_ext_ip=None,
+    interface=None,
+    require_alignment=True,
+):
     """
     Run the non-symmetric half of the random-probe rendezvous.
 
@@ -995,15 +994,15 @@ async def run_non_sym_side(
 
 
 async def run_symmetric_side(
-    bind_ip: str,
-    cone_ext_ip: str,
-    cone_ext_port: int,
-    nonce: bytes,
-    probe_count: int = DEFAULT_PROBE_COUNT,
-    listen_timeout: float = PROBE_LISTEN_TIMEOUT,
-    rng: Optional[random.Random] = None,
-    interface: Optional[Any] = None,
-) -> Optional[Dict[str, Any]]:
+    bind_ip,
+    cone_ext_ip,
+    cone_ext_port,
+    nonce,
+    probe_count=DEFAULT_PROBE_COUNT,
+    listen_timeout=PROBE_LISTEN_TIMEOUT,
+    rng=None,
+    interface=None,
+):
     """
     Run the symmetric-side half of the random-probe rendezvous.
 
@@ -1050,7 +1049,7 @@ async def run_symmetric_side(
     # as the winner.
     deadline = loop.time() + listen_timeout
 
-    async def watch(sock: socket.socket) -> Optional[Dict[str, Any]]:
+    async def watch(sock):
         while True:
             remaining = deadline - loop.time()
             if remaining <= 0:
@@ -1159,15 +1158,15 @@ async def run_symmetric_side(
 
 
 def sync_run_bidirectional_spray(
-    bind_ip: str,
-    peer_ext_ip: str,
-    nonce: bytes,
-    probe_count: int = DEFAULT_PROBE_COUNT,
-    listen_timeout: float = PROBE_LISTEN_TIMEOUT,
-    rng: Optional[random.Random] = None,
-    interface: Optional[Any] = None,
-    own_ext_ip: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+    bind_ip,
+    peer_ext_ip,
+    nonce,
+    probe_count=DEFAULT_PROBE_COUNT,
+    listen_timeout=PROBE_LISTEN_TIMEOUT,
+    rng=None,
+    interface=None,
+    own_ext_ip=None,
+):
     """Direction-agnostic random-probe punch: both sides run this same
     code regardless of which is initiator/responder or what NAT type
     detection said.
@@ -1384,7 +1383,7 @@ def sync_run_bidirectional_spray(
 # ─────────────────────────────────────────────────────────────────
 
 
-async def wait_until(unix_time: int, max_sleep: float = 30.0) -> None:
+async def wait_until(unix_time, max_sleep=30.0):
     """
     Sleep until the given unix timestamp.
 

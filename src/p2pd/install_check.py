@@ -25,7 +25,6 @@ p2pd demo and is also invoked by the test runner after every
 pip-install pass.  Off by default so production callers aren't
 forced into a particular install layout.
 """
-from typing import Any, Dict, List, Optional
 import importlib
 import os
 
@@ -33,7 +32,7 @@ import os
 SIBLING_REPOS = ("aionetiface", "p2pd", "sidewire", "namebump")
 
 
-def package_path(module_name: str) -> Optional[str]:
+def package_path(module_name):
     """Return the absolute directory of *module_name*'s package, or None on import failure."""
     try:
         mod = importlib.import_module(module_name)
@@ -45,7 +44,7 @@ def package_path(module_name: str) -> Optional[str]:
     return os.path.dirname(os.path.abspath(file_path))
 
 
-def install_root(pkg_path: str) -> Optional[str]:
+def install_root(pkg_path):
     """Walk up to the directory that's shared by all four siblings.
 
     Editable layout: <projects>/<repo>/src/<pkg>/__init__.py
@@ -68,7 +67,7 @@ def install_root(pkg_path: str) -> Optional[str]:
     return parent
 
 
-def collect_install_info() -> Dict[str, Dict[str, Any]]:
+def collect_install_info():
     """Return a {repo: {pkg_path, install_root, error}} map for every sibling."""
     info = {}
     for name in SIBLING_REPOS:
@@ -83,7 +82,7 @@ def collect_install_info() -> Dict[str, Dict[str, Any]]:
     return info
 
 
-def format_install_info(info: Dict[str, Dict[str, Any]]) -> List[str]:
+def format_install_info(info):
     """Return human-readable lines summarising each sibling's install path."""
     lines = []
     for name in SIBLING_REPOS:
@@ -95,7 +94,7 @@ def format_install_info(info: Dict[str, Dict[str, Any]]) -> List[str]:
     return lines
 
 
-def verify_sibling_installs(strict: bool = False) -> Dict[str, Dict[str, Any]]:
+def verify_sibling_installs(strict=False):
     """Audit + (optionally) enforce a consistent install layout for the four sibling repos.
 
     Returns the info dict on success.  When *strict* is True, raises

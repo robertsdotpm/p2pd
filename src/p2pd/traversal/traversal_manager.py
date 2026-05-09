@@ -13,7 +13,6 @@ running instance.
 
 import asyncio
 from collections import OrderedDict
-from typing import Any, Callable, Dict, List, Optional
 from aionetiface import IP4, NIC_BIND, get_running_loop, log
 from .traversal_plugin import Plugin
 from .traversal_utils import (
@@ -36,12 +35,12 @@ class TraversalManager:
 
     def __init__(
         self,
-        router: Any,
-        stop_reader: Any,
-        inbound_pipes: Optional[Dict[str, Any]] = None,
-        nics: Optional[List[Any]] = None,
-        node_msg_cb: Optional[Callable] = None,
-    ) -> None:
+        router,
+        stop_reader,
+        inbound_pipes=None,
+        nics=None,
+        node_msg_cb=None,
+    ):
         # by plugin_id
         self.plugins = {}
         self.plugin_loaders = OrderedDict()
@@ -97,7 +96,7 @@ class TraversalManager:
         # on first use; reused for every subsequent loopback combo.
         self._default_nic = None
 
-    def default_nic(self) -> Any:
+    def default_nic(self):
         """Return the cached Interface("default") used for loopback binds."""
         if self._default_nic is None:
             from aionetiface import Interface
@@ -106,7 +105,7 @@ class TraversalManager:
             self._default_nic = Interface.default
         return self._default_nic
 
-    def install_plugin(self, name: str, conf: Dict[str, Any]) -> None:
+    def install_plugin(self, name, conf):
         """Register a traversal plugin class under name with the given configuration."""
         if "class" not in conf:
             raise ValueError("plugin conf must include a 'class' key")
@@ -122,7 +121,7 @@ class TraversalManager:
 
     # Plugins return pipes directly or await a pipe future that is resolved
     # elsewhere when a reply arrives over the signaling channel.
-    async def run_plugin(self, plugin: Plugin, reply: Optional[Any] = None) -> None:
+    async def run_plugin(self, plugin, reply=None):
         """Run a single traversal plugin, optionally providing a reply message."""
         # Don't run if result is set.
         if plugin.result.done():
@@ -184,16 +183,16 @@ class TraversalManager:
 
     def create_plugin(
         self,
-        af: Any,
-        route_type: Any,
-        src_info: Optional[Dict[str, Any]],
-        dest_info: Optional[Dict[str, Any]],
-        same_machine: bool,
-        plugin_name: str,
-    ) -> Plugin:
+        af,
+        route_type,
+        src,
+        dest,
+        same_machine,
+        plugin_name,
+    ):
         """Instantiate and configure a traversal plugin for the given src/dest pair.
 
-        src_info / dest_info may be None for plugins that don't pin
+        src / dest may be None for plugins that don't pin
         a specific (src, dest) interface pair (any-pathway mode --
         used by reverse_connect when it leaves the choice up to the
         responder). The nic lookup is skipped in that case.
@@ -227,20 +226,20 @@ class TraversalManager:
 
         # Load routing details in plugin. Pinned-pair plugins resolve
         # the NIC up-front; sparse plugins (any-pathway) get nic=None.
-        if src_info is not None and "if_index" in src_info:
-            nic = self.nics[src_info["if_index"]]
+        if src is not None and "if_index" in src:
+            nic = self.nics[src["if_index"]]
         else:
             nic = None
 
         # Pre-resolve (ip, port) per route_type before the plugin sees
-        # the per-side dicts.  Plugins read self.src_info["ip"] /
-        # ["port"] and self.dest_info["ip"] / ["port"] directly -- no
+        # the per-side dicts.  Plugins read self.src["ip"] /
+        # ["port"] and self.dest["ip"] / ["port"] directly -- no
         # route_type / fe80 / loopback-candidate branching inside
         # plugin code.  See traversal_utils.resolve_pair.
-        if src_info is not None and dest_info is not None and route_type is not None:
+        if src is not None and dest is not None and route_type is not None:
             from .traversal_utils import resolve_pair
-            src_info, dest_info = resolve_pair(
-                af, route_type, src_info, dest_info, nic, same_machine,
+            src, dest = resolve_pair(
+                af, route_type, src, dest, nic, same_machine,
             )
 
             # Pick the right Interface for binding.  Loopback IPs (per-
@@ -254,12 +253,12 @@ class TraversalManager:
             #
             # Plugins read this nic via self.nic.route(af) without caring
             # whether they got the physical NIC or the default placeholder.
-            ip_str = (src_info.get("ip") or "")
+            ip_str = (src.get("ip") or "")
             is_loopback = ip_str.startswith("127.") or ip_str.startswith("::1") or ip_str == "::1"
             if is_loopback:
                 nic = self.default_nic()
 
-        plugin.set_routing(af, src_info, dest_info, nic)
+        plugin.set_routing(af, src, dest, nic)
 
         # Load extra info about pathway.
         plugin.set_context(
@@ -273,7 +272,7 @@ class TraversalManager:
         plugin.expires_at = get_running_loop().time() + plugin.timeout
 
         # Set function for plugin to send signaling replies.
-        plugin.set_send_signal_msg(self.send_signal_msg)
+        plugin.set_send_signal(self.send_signal)
 
         # Wire done_callback via add_done_callback so it fires whenever the
         # result resolves — even from a background task (e.g. punch process)
@@ -288,24 +287,24 @@ class TraversalManager:
         return plugin
 
     # Use a plugin to try get a pipe to a destination node for one explicit
-    # (src_info, dest_info) interface pair. Pair selection now lives at the
-    # caller — auto_connect generates one (plugin, af, route_type, src_info,
-    # dest_info) combo per viable pair, and node.connect picks the first
+    # (src, dest) interface pair. Pair selection now lives at the
+    # caller — auto_connect generates one (plugin, af, route_type, src,
+    # dest) combo per viable pair, and node.connect picks the first
     # viable pair from get_if_infos_order. Keeping the pair out of this
     # method makes multi-interface fan-out work: launch one plugin per pair
     # and let race_plugin_results pick the winner.
     async def attempt_plugin(
         self,
-        src_map: Dict[str, Any],
-        dest_map: Dict[str, Any],
-        sig_pipe: Any,
-        plugin_name: str,
-        src_info: Dict[str, Any],
-        dest_info: Dict[str, Any],
-        af: Any = IP4,
-        route_type: Any = NIC_BIND,
-    ) -> Optional[Plugin]:
-        """Run the named traversal plugin for one explicit src_info/dest_info pair."""
+        src_map,
+        dest_map,
+        sig_pipe,
+        plugin_name,
+        src,
+        dest,
+        af=IP4,
+        route_type=NIC_BIND,
+    ):
+        """Run the named traversal plugin for one explicit src/dest pair."""
         # Need AF supported by both.
         if not src_map[af] or not dest_map[af]:
             raise ValueError("AF not supported between hosts.")
@@ -319,7 +318,7 @@ class TraversalManager:
             ))
 
         plugin = self.create_plugin(
-            af, route_type, src_info, dest_info, same_machine, plugin_name
+            af, route_type, src, dest, same_machine, plugin_name
         )
 
         # Load overall addr info into the plugin.
@@ -339,7 +338,7 @@ class TraversalManager:
     # parameters from an incoming signal message, swapping src and dest so that
     # "their dest" becomes our src and "their src" becomes our dest. It also
     # reuses the pipe_id from the message so both sides share the same session.
-    def create_inbound_plugin(self, msg: Any) -> Plugin:
+    def create_inbound_plugin(self, msg):
         """Create a traversal plugin for an inbound connection request, inverting src/dest."""
         # TODO: map GetAddr messages to the return_addr plugin handler.
         if isinstance(msg, ConMsg):
@@ -352,19 +351,19 @@ class TraversalManager:
         plugin = self.create_plugin(
             msg.meta.af,
             msg.meta.route_type,
-            src_info=msg.routing.dest_info,  # their dest = our src
-            dest_info=msg.meta.src_info,  # their src = our dest
+            src=msg.routing.dest,  # their dest = our src
+            dest=msg.meta.src,  # their src = our dest
             same_machine=msg.meta.same_machine,
             plugin_name=msg.meta.plugin_name,
         )
-        plugin.set_addrs(msg.routing.dest, msg.meta.src)
+        plugin.set_addrs(msg.routing.dest_map, msg.meta.src_map)
         plugin.set_inbound_pipes(self.inbound_pipes, msg.meta.pipe_id)
         return plugin
 
     # Use signal router to send a message to the destination.
-    async def send_signal_msg(self, msg: Any, plugin: Plugin, relay_no: int = 2) -> None:
+    async def send_signal(self, msg, plugin, relay_no=2):
         """Encrypt and deliver a signalling message to the peer via the MQTT router."""
-        print("[SIG-TX] send_signal_msg plugin_id={0!r} wire_name={1!r}".format(
+        print("[SIG-TX] send_signal plugin_id={0!r} wire_name={1!r}".format(
             plugin.plugin_id, getattr(msg, "wire_name", "?"),
         ))
         try:
@@ -385,7 +384,7 @@ class TraversalManager:
                     "af": plugin.af,
                     # Our node address with interface details.
                     "src_buf": plugin.src_map["bytes"],
-                    "src_index": plugin.src_info["if_index"],
+                    "src_index": plugin.src["if_index"],
                     "route_type": plugin.route_type,
                     "same_machine": plugin.same_machine,
                     "plugin_name": msg.meta.plugin_name,
@@ -398,7 +397,7 @@ class TraversalManager:
                 {
                     "af": plugin.af,
                     "dest_buf": plugin.dest_map["bytes"],
-                    "dest_index": plugin.dest_info["if_index"],
+                    "dest_index": plugin.dest["if_index"],
                 }
             )
 
@@ -412,12 +411,12 @@ class TraversalManager:
             await plugin.sig_pipe.send(buf)
             print("[SIG-TX]   plugin.sig_pipe.send returned (sent OK)")
         except (OSError, ConnectionError, asyncio.TimeoutError) as exc:
-            print("[SIG-TX]   send_signal_msg raised: {0!r}".format(exc))
+            print("[SIG-TX]   send_signal raised: {0!r}".format(exc))
             log_exception()
 
     # Receive a signal message from the router and pass it to a plugin.
     # Called by the MQTT client as: handler(msg, src_pk, queue_id, client)
-    async def recv_signal_msg(self, msg: Any, src_pk_hex: str, pipe_id_hex: str, client: Any) -> None:
+    async def recv_signal_msg(self, msg, src_pk_hex, pipe_id_hex, client):
         """Decrypt an incoming signal message and dispatch it to the matching or new plugin."""
         print("[SIG-RX] recv_signal_msg src_pk_hex={0}... pipe_id_hex={1}...".format(
             (src_pk_hex or "?")[:12], (pipe_id_hex or "?")[:12],
@@ -510,7 +509,7 @@ class TraversalManager:
     # frame off the first message on each new inbound TCP pipe and calls
     # this method to resolve the reverse_connect inbound future for the
     # plugin_id with the live pipe.
-    def resolve_inbound_by_plugin_id(self, plugin_id: str, pipe: Any) -> None:
+    def resolve_inbound_by_plugin_id(self, plugin_id, pipe):
         """Resolve the reverse_connect inbound future for plugin_id with pipe."""
         fut = self.inbound_pipes.get(plugin_id)
         if fut is None:
@@ -526,7 +525,7 @@ class TraversalManager:
         print("[CON-ID-RX]   resolved inbound future for plugin_id={0!r} -- "
               "reverse_connect should now wake up".format(plugin_id))
 
-    async def close(self) -> None:
+    async def close(self):
         """Cancel all pending plugins and background tasks, releasing their resources."""
         await cancel_task(self.cleanup_task)
         for plugin in list(self.plugins.values()):
@@ -539,7 +538,7 @@ class TraversalManager:
         self.tasks.clear()
 
     # Cleanup timed out plugins.
-    async def cleanup_loop(self) -> None:
+    async def cleanup_loop(self):
         """Periodically scan for expired plugins and close them to free resources."""
         while True:
             await asyncio.sleep(5)
@@ -553,10 +552,7 @@ class TraversalManager:
             except (OSError, AttributeError, asyncio.TimeoutError):
                 log_exception()
 
-    def install_plugin_done_callback(self, done_callback: Callable) -> None:
+    def install_plugin_done_callback(self, done_callback):
         """Register a callback to be invoked when any plugin finishes."""
         self.done_callback = done_callback
 
-    def set_send_signal_msg(self, send_signal_msg: Callable) -> None:
-        """Register the function used to send signalling messages to peers."""
-        self.send_signal_msg = send_signal_msg

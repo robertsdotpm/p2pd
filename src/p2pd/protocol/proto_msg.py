@@ -8,7 +8,6 @@ proto.py and auto-register via PROTO_MESSAGES on plugin load -- see
 plugin_loader.py and TraversalManager.sig_proto.
 """
 import json
-from typing import Any, Dict, List, Optional, Tuple
 from aionetiface import (
     to_s, to_b, to_n, i_to_af, fstr, parse_node_addr, log, IP4, EXT_BIND,
     af_from_ip_s, IPRange,
@@ -29,7 +28,7 @@ class ProtoMsg:
     """Base class for all P2P traversal protocol messages."""
 
     @staticmethod
-    def load_addr(af: Any, addr_buf: Any, if_index: int) -> Tuple[Any, Dict[str, Any]]:
+    def load_addr(af, addr_buf, if_index):
         """Parse addr_buf into (af, addr_dict), validating that if_index is present."""
         # Validate src address.
         addr = parse_node_addr(addr_buf)
@@ -60,15 +59,15 @@ class ProtoMsg:
 
         def __init__(
             self,
-            ttl: int = 0,
-            pipe_id: Any = b"",
-            af: Any = IP4,
-            src_buf: Any = b"",
-            src_index: int = 0,
-            route_type: Any = EXT_BIND,
-            same_machine: bool = False,
-            plugin_name: Optional[str] = None,
-        ) -> None:
+            ttl=0,
+            pipe_id=b"",
+            af=IP4,
+            src_buf=b"",
+            src_index=0,
+            route_type=EXT_BIND,
+            same_machine=False,
+            plugin_name=None,
+        ):
             # Load meta data about message.
             self.ttl = to_n(ttl)
             self.pipe_id = to_s(pipe_id)
@@ -81,20 +80,20 @@ class ProtoMsg:
             if src_buf:
                 self.load_src_addr()
 
-        def load_src_addr(self) -> None:
-            """Parse src_buf and populate af, src, and src_info on this Meta instance."""
+        def load_src_addr(self):
+            """Parse src_buf and populate af, src_map, and src on this Meta instance."""
             # Parse src_buf to addr.
-            self.af, self.src = ProtoMsg.load_addr(
+            self.af, self.src_map = ProtoMsg.load_addr(
                 self.af,
                 self.src_buf,
                 self.src_index,
             )
 
             # Reference to the network info.
-            info = self.src[self.af]
-            self.src_info = info[self.src_index]
+            info = self.src_map[self.af]
+            self.src = info[self.src_index]
 
-        def to_dict(self) -> Dict[str, Any]:
+        def to_dict(self):
             """Serialise this Meta to a plain dict suitable for JSON encoding."""
             return {
                 "ttl": self.ttl,
@@ -108,7 +107,7 @@ class ProtoMsg:
             }
 
         @staticmethod
-        def from_dict(d: Dict[str, Any]) -> "ProtoMsg.Meta":
+        def from_dict(d):
             """Construct a Meta instance from a plain dict, using safe defaults for missing keys."""
             return ProtoMsg.Meta(
                 d.get("ttl", 0),
@@ -125,7 +124,7 @@ class ProtoMsg:
     class Routing:
         """Encapsulates destination routing information for a protocol message."""
 
-        def __init__(self, af: Any = IP4, dest_buf: Any = b"", dest_index: int = 0) -> None:
+        def __init__(self, af=IP4, dest_buf=b"", dest_index=0):
             self.dest_buf = to_s(dest_buf)
             self.dest_index = to_n(dest_index)
             self.af = af
@@ -133,7 +132,7 @@ class ProtoMsg:
                 self.set_cur_dest(dest_buf)
                 self.cur_dest_buf = None  # set later.
 
-        def load_if_extra(self, nics: List[Any]) -> None:
+        def load_if_extra(self, nics):
             """Resolve the dest_index to the matching NIC object from the provided list."""
             if_index = self.dest_index
             self.interface = nics[if_index]
@@ -144,20 +143,20 @@ class ProtoMsg:
         current address of the node that receives this.
         """
 
-        def set_cur_dest(self, cur_dest_buf: Any) -> None:
+        def set_cur_dest(self, cur_dest_buf):
             """Update the destination address from a fresh address buffer and reparse routing info."""
             self.cur_dest_buf = to_s(cur_dest_buf)
-            self.af, self.dest = ProtoMsg.load_addr(
+            self.af, self.dest_map = ProtoMsg.load_addr(
                 self.af,
                 cur_dest_buf,
                 self.dest_index,
             )
 
             # Reference to the network info.
-            info = self.dest[self.af]
-            self.dest_info = info[self.dest_index]
+            info = self.dest_map[self.af]
+            self.dest = info[self.dest_index]
 
-        def to_dict(self) -> Dict[str, Any]:
+        def to_dict(self):
             """Serialise this Routing to a plain dict suitable for JSON encoding."""
             return {
                 "af": int(self.af),
@@ -166,7 +165,7 @@ class ProtoMsg:
             }
 
         @staticmethod
-        def from_dict(d: Dict[str, Any]) -> "ProtoMsg.Routing":
+        def from_dict(d):
             """Construct a Routing instance from a plain dict, using safe defaults for missing keys."""
             return ProtoMsg.Routing(
                 d.get("af", IP4),
@@ -178,15 +177,15 @@ class ProtoMsg:
     class Payload:
         """Abstract payload container for protocol message data."""
 
-        def __init__(self) -> None:
+        def __init__(self):
             pass
 
-        def to_dict(self) -> Dict[str, Any]:
+        def to_dict(self):
             """Return an empty dict; subclasses override to include their fields."""
             return {}
 
         @staticmethod
-        def from_dict(d: Dict[str, Any]) -> "ProtoMsg.Payload":
+        def from_dict(d):
             """Construct an empty Payload; subclasses override to deserialise their fields."""
             return ProtoMsg.Payload()
 
@@ -197,7 +196,7 @@ class ProtoMsg:
     # by hand. Core messages bake "core.<ClassName>" in directly.
     WIRE_NAME = ""  # type: str
 
-    def __init__(self, data: Dict[str, Any], wire_name: Optional[str] = None) -> None:
+    def __init__(self, data, wire_name=None):
         self.meta = ProtoMsg.Meta.from_dict(data.get("meta", {}))
 
         self.routing = ProtoMsg.Routing.from_dict(data.get("routing", {}))
@@ -209,7 +208,7 @@ class ProtoMsg:
         # class-level WIRE_NAME is the source of truth.
         self.wire_name = wire_name or self.WIRE_NAME
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self):
         """Serialise the full message (meta, routing, payload) to a JSON-compatible dict."""
         d = {
             "meta": self.meta.to_dict(),
@@ -219,7 +218,7 @@ class ProtoMsg:
 
         return d
 
-    def pack(self, sk: Optional[Any] = None) -> bytes:
+    def pack(self, sk=None):
         """Serialise this message to bytes with a length-prefixed wire_name + JSON payload.
 
         Wire layout (after optional encryption framing handled in
@@ -244,7 +243,7 @@ class ProtoMsg:
         return bytes([len(name_bytes)]) + name_bytes + to_b(json.dumps(self.to_dict()))
 
     @classmethod
-    def unpack(cls, buf: Any) -> "ProtoMsg":
+    def unpack(cls, buf):
         """Deserialise bytes (without the leading enum byte) into a ProtoMsg instance."""
         try:
             d = json.loads(to_s(buf))
@@ -259,13 +258,13 @@ class ProtoMsg:
         # check sig matches serialized obj.
         return cls(d)
 
-    def set_cur_addr(self, cur_addr_buf: Any) -> None:
+    def set_cur_addr(self, cur_addr_buf):
         """Update routing with the current address buffer and set the same-machine flag."""
         self.routing.set_cur_dest(cur_addr_buf)
 
         # Set same machine flag.
-        sid = self.meta.src["machine_id"]
-        did = self.routing.dest["machine_id"]
+        sid = self.meta.src_map["machine_id"]
+        did = self.routing.dest_map["machine_id"]
         if sid == did:
             self.meta.same_machine = True
 
@@ -281,7 +280,7 @@ class DoneMsg(ProtoMsg):
 
     WIRE_NAME = "core.DoneMsg"
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, data=None):
         super().__init__({})
 
 
@@ -290,7 +289,7 @@ class RetryMsg(ProtoMsg):
 
     WIRE_NAME = "core.RetryMsg"
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, data=None):
         super().__init__({})
 
 
@@ -299,7 +298,7 @@ class ConMsg(ProtoMsg):
 
     WIRE_NAME = "core.ConMsg"
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, data=None):
         super().__init__(data or {})
 
 
@@ -308,7 +307,7 @@ class GetAddr(ProtoMsg):
 
     WIRE_NAME = "core.GetAddr"
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, data=None):
         super().__init__(data or {})
 
 
@@ -317,11 +316,11 @@ class ReturnAddr(ProtoMsg):
 
     WIRE_NAME = "core.ReturnAddr"
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, data=None):
         super().__init__(data or {})
 
 
-def build_core_sig_proto() -> Dict[str, list]:
+def build_core_sig_proto():
     """Return a fresh dict of CORE (plugin-independent) signal types.
 
     Keys are wire names ("core.ConMsg", etc.) -- the same name the

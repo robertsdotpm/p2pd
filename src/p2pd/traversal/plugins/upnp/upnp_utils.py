@@ -1,5 +1,4 @@
 """Helper functions for UPnP IGD port-mapping."""
-from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 import urllib.parse
 from aionetiface import (
@@ -85,7 +84,7 @@ Ensure we bind to link local scope and private IPs.
 """
 
 
-async def get_upnp_route(af: Any, nic: Any, hostname: Optional[str] = None) -> Any:
+async def get_upnp_route(af, nic, hostname=None):
     """Return a bound route suitable for reaching the given UPnP hostname on the specified NIC."""
     if af == IP6:
         route = nic.route(af)
@@ -107,7 +106,7 @@ async def get_upnp_route(af: Any, nic: Any, hostname: Optional[str] = None) -> A
 # for discovering UPNP devices.
 
 
-def build_upnp_discover_buf(af: Any) -> bytes:
+def build_upnp_discover_buf(af):
     """Build an SSDP M-SEARCH multicast packet for discovering UPnP devices on the given AF."""
     if af == IP4:
         host = to_s(UPNP_IP[af])
@@ -137,7 +136,7 @@ def build_upnp_discover_buf(af: Any) -> bytes:
 # of service URL for a UPNP device.
 
 
-def find_upnp_service_by_type(d: Any, service_type: str) -> List[Any]:
+def find_upnp_service_by_type(d, service_type):
     """Recursively search a parsed XML dict for all UPnP service entries matching service_type."""
     results = []
     for k, v in d.items():
@@ -156,7 +155,7 @@ def find_upnp_service_by_type(d: Any, service_type: str) -> List[Any]:
 
 
 # Main code that gets a list of port forward tasks for a device.
-async def get_upnp_forwarding_services(route: Any, dest: Tuple[str, int], path: str) -> Optional[Any]:
+async def get_upnp_forwarding_services(route, dest, path):
     """Fetch the device description at path and return matching port-forwarding service info."""
     # Service type lookup table.
     service_types = {IP4: "WANIPConnection", IP6: "WANIPv6FirewallControl"}
@@ -189,7 +188,7 @@ async def get_upnp_forwarding_services(route: Any, dest: Tuple[str, int], path: 
         log_exception()
 
 
-async def get_upnp_forwarding_services_for_replies(af: Any, src_tup: Any, nic: Any, replies: List[Any]) -> List[Any]:
+async def get_upnp_forwarding_services_for_replies(af, src_tup, nic, replies):
     """Concurrently fetch forwarding service info from all UPnP devices that replied to M-SEARCH."""
     # Port forward on all devices that replied.
     tasks = []
@@ -212,16 +211,16 @@ async def get_upnp_forwarding_services_for_replies(af: Any, src_tup: Any, nic: A
 
 
 async def add_upnp_forwarding_rule(
-af: Any,
-    nic: Any,
-    dest: Tuple[str, int],
-    service: Dict[str, Any],
-    lan_ip: str,
-    lan_port: int,
-    ext_port: int,
-    proto: str,
-    desc: str,
-) -> Any:
+af,
+    nic,
+    dest,
+    service,
+    lan_ip,
+    lan_port,
+    ext_port,
+    proto,
+    desc,
+):
     """Send a SOAP AddPortMapping or AddPinhole request to a UPnP device and return its response."""
     # Do port forwarding.
     desc = to_s(desc)
@@ -332,7 +331,7 @@ af: Any,
     )
 
 
-def sort_upnp_replies_by_unique_location(replies: List[Any]) -> List[Any]:
+def sort_upnp_replies_by_unique_location(replies):
     """Deduplicate M-SEARCH replies, keeping only the first response per Location header."""
     # Filter duplicate replies.
     unique = {}
@@ -350,16 +349,16 @@ def sort_upnp_replies_by_unique_location(replies: List[Any]) -> List[Any]:
 
 
 async def use_upnp_forwarding_services(
-af: Any,
-    interface: Any,
-    ext_port: int,
-    src_tup: Any,
-    desc: str,
-    proto: str,
-    service_infos: List[Any],
-) -> int:
+af,
+    interface,
+    ext_port,
+    src_tup,
+    desc,
+    proto,
+    service_infos,
+):
     """Try all provided UPnP service endpoints concurrently and return 1 on the first success."""
-    async def worker(service_info: Any) -> int:
+    async def worker(service_info):
         """Submit a port-forwarding rule to one service endpoint and return 1 on success."""
         resp = await add_upnp_forwarding_rule(
             af,

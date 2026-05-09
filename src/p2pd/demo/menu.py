@@ -15,7 +15,7 @@ from .utils import (
 
 # Open a tunnel to a remote destination.
 # Accepts a PNP address or a full node address.
-async def connect_option(node: Any, con_opts: Tuple[Any, Optional[bytes], Optional[Any]]) -> str:
+async def connect_option(node, con_opts):
     """Open a P2P tunnel to a remote address and run an interactive echo session."""
     # Some variables set by command line flags or other parts.
     last_addr, echo_data, cmd_opts = con_opts
@@ -128,7 +128,7 @@ async def connect_option(node: Any, con_opts: Tuple[Any, Optional[bytes], Option
     return "menu"
 
 
-async def accept_option(nick: Optional[str]) -> str:
+async def accept_option(nick):
     """Wait in an accept loop, printing the node's PNP nickname, until a stop signal arrives."""
     print("\tListen on PNP: ", nick, flush=True)
     while not sock_has_data(stop_rw[0]):
@@ -137,7 +137,7 @@ async def accept_option(nick: Optional[str]) -> str:
     return "menu"
 
 
-async def nickname_option(node: Any) -> str:
+async def nickname_option(node):
     """Prompt for a nickname string and register it on the PNP network."""
     choice = await ainput("Enter nickname: ")
     try:
@@ -149,7 +149,7 @@ async def nickname_option(node: Any) -> str:
     return "menu"
 
 
-async def stop_nodes_option(nodes: List[Any]) -> str:
+async def stop_nodes_option(nodes):
     """Gracefully shut down all provided nodes."""
     cout("")
     cout("Stopping nodes...")

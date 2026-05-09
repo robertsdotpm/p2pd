@@ -15,8 +15,6 @@ python3 -m p2pd.demo --disable_upnp 1 \
 python3 -m p2pd.demo --disable_upnp 1 --nic 000c2957d05c
 python3 -m p2pd.demo --disable_upnp 1 --nic ens34
 """
-
-from typing import Any, List, Optional, Tuple
 import asyncio
 import time
 import signal
@@ -46,7 +44,7 @@ from .menu import run_menu_program, stop_nodes_option
 # Load interfaces, start node, and return node info.
 
 
-async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
+async def setup_node():
     """Load network interfaces, start the P2P node, and register a default nickname."""
     allow_windows_firewall("p2pd-demo")
 
@@ -156,7 +154,7 @@ async def setup_node() -> Tuple[List[Any], List[Any], Optional[str]]:
 # Run the main menu loop for node interaction.
 
 
-async def run_node_loop(nodes: List[Any], ifs: List[Any], nick: Optional[str]) -> None:
+async def run_node_loop(nodes, ifs, nick):
     """Drive the interactive menu loop until the user exits or a stop signal arrives."""
     # Options for making a connection.
     # Set connection menu mode.
@@ -213,7 +211,7 @@ async def run_node_loop(nodes: List[Any], ifs: List[Any], nick: Optional[str]) -
 # Also waits for close events and handles cleanup.
 
 
-async def main() -> None:
+async def main():
     """Entry point: set up signal handlers, start the node, and run the menu loop."""
     # Strict install verification when --verify_install is passed.
     # Runs before any sibling-touching logic so a stale aionetiface
@@ -229,7 +227,7 @@ async def main() -> None:
     nodes = []
     if sys.platform != "win32":
 
-        def set_shut_down() -> None:
+        def set_shut_down():
             """Send a shutdown signal to all waiting loops and unblock pending ainput calls."""
             # Signal the stop socket so the main loop exits.
             try:

@@ -18,7 +18,6 @@ import asyncio
 import os
 import socket as socket_mod
 import time
-from typing import Any, Dict, List, Optional, Tuple
 
 from aionetiface import (
     EXT_BIND,
@@ -59,7 +58,7 @@ from .random_probe_lib import (
 )
 
 
-def is_symmetric_nat(nat_info: Dict[str, Any]) -> bool:
+def is_symmetric_nat(nat_info):
     """
     True iff *nat_info* describes a symmetric NAT.
 
@@ -100,7 +99,7 @@ class RandomProbePlugin(Plugin):
     """
 
     name = "random_probe"
-    transport = "udp"
+    transport = UDP
     # EXT_BIND is the production path; NIC_BIND is allowed so the
     # matrix sweep can exercise the algorithm on LAN where the IP
     # selection just collapses to NIC addresses (no NAT involved).
@@ -116,7 +115,7 @@ class RandomProbePlugin(Plugin):
     async def setup(cls, node):
         return RandomProbePluginFactory(sys_clock=node.sys_clock)
 
-    async def run(self, reply: Optional[RandomProbeMsg] = None) -> None:
+    async def run(self, reply=None):
         """Drive the random-probe rendezvous from initiator or responder side."""
         # Loopback is excluded above; any other route_type passes
         # through. The IP-selection block below picks NIC vs EXT
@@ -128,32 +127,29 @@ class RandomProbePlugin(Plugin):
                 "(kernel short-circuit, no probes needed)."
             )
 
-        my_nat = self.src_info.get("nat") or {}
-        peer_nat = self.dest_info.get("nat") or {}
+        my_nat = self.src.get("nat") or {}
+        peer_nat = self.dest.get("nat") or {}
 
-        # Pick the addresses each side will fire probes at /from.
-        # NIC_BIND or same-machine: use the NIC IPs (no NAT in the
-        # path, kernel delivers directly when dst is bound locally).
-        # EXT_BIND cross-machine: use ext IPs (the production path
-        # the algorithm was designed for).
+        # Wire-advertised "address each side identifies itself by" --
+        # used for the role-decider comparison and as the value placed
+        # on RandomProbeMsg.payload.ext_ip. NOT necessarily the local
+        # bind IP -- for EXT_BIND it's the route's external IP, what
+        # the peer actually observes through NAT.
+        #
+        # peer_addr_ip is always self.dest["ip"]: resolve_pair set
+        # that to the peer's NIC IP for NIC_BIND / same_machine and
+        # to the peer's ext IP for EXT_BIND, which is exactly what
+        # the peer's view of "their own" address matches -- so both
+        # peers compute the same (my, their) pair and the role
+        # decider stays symmetric.
+        self.peer_addr_ip = str(self.dest.get("ip") or "")
         if self.route_type == NIC_BIND or self.same_machine:
-            my_nic = self.src_info.get("nic") or self.src_info.get("ext") or ""
-            peer_nic = self.dest_info.get("nic") or self.dest_info.get("ext") or ""
-            # IPv6 link-local (fe80::) addresses require a per-host scope ID
-            # that cannot be exchanged meaningfully between machines.
-            # route.nic() returns the global address, so if the NIC address
-            # is link-local, fall back to the global (ext) address so that
-            # bind_ip and peer_addr_ip agree on address type and probes
-            # actually arrive at the listening socket.
-            if str(my_nic).lower().startswith("fe80"):
-                my_nic = self.src_info.get("ext") or my_nic
-            if str(peer_nic).lower().startswith("fe80"):
-                peer_nic = self.dest_info.get("ext") or peer_nic
-            self.my_addr_ip = str(my_nic)
-            self.peer_addr_ip = str(peer_nic)
+            self.my_addr_ip = str(self.src.get("ip") or "")
         else:
-            self.my_addr_ip = str(self.src_info.get("ext") or "")
-            self.peer_addr_ip = str(self.dest_info.get("ext") or "")
+            try:
+                self.my_addr_ip = str(self.nic.route(self.af).ext())
+            except (AttributeError, OSError, ValueError):
+                self.my_addr_ip = str(self.src.get("ip") or "")
 
         # Role assignment by NAT restrictiveness, then by IP:
         #   1. Whichever side has the *higher* NAT type number plays
@@ -221,7 +217,7 @@ class RandomProbePlugin(Plugin):
 
             outgoing = self.build_msg(my_role, punch_time, to_s(self.session_nonce.hex()))
             outgoing.meta.plugin_name = "random_probe"
-            await self.send_signal_msg(outgoing)
+            await self.send_signal(outgoing)
             return
 
         # Responder: extract peer's params, lock our role, fire.
@@ -286,7 +282,7 @@ class RandomProbePlugin(Plugin):
                 await self.prebind_non_sym_sock()
             our_msg = self.build_msg(my_role, punch_time, reply.payload.magic)
             our_msg.meta.plugin_name = "random_probe"
-            await self.send_signal_msg(our_msg)
+            await self.send_signal(our_msg)
 
         # Guard against MQTT redelivery: the peer's RandomProbeMsg
         # gets fanned out across multiple brokers, so this run() can
@@ -312,26 +308,20 @@ class RandomProbePlugin(Plugin):
             await asyncio.sleep(ntp_delay)
 
         try:
-            route = await self.nic.route(self.af).bind()
+            route = await self.bind()
         except (OSError, ValueError):
             log("RandomProbePlugin: route bind failed; aborting")
             if not self.result.done():
                 self.result.set_result(None)
             return
-        bind_ip = str(route.nic())
-        # External IP for master/slave election in
-        # sync_run_bidirectional_spray. tcp_punch's choose_winning_tcp_sock
-        # uses the same value (route.ext()) for the same reason: bind_ip
-        # on a NAT'd host is the LAN-side address which the peer never
-        # sees, so comparing bind_ips wouldn't give a consistent symmetric
-        # answer on both ends. The external IP is what the peer actually
-        # observes, so own_ext_ip > peer_ext_ip is symmetric-decidable on
-        # both sides without coordination.  Fall back to bind_ip when
-        # route.ext() is unavailable (single-NIC LAN-only setups).
-        try:
-            own_ext_ip = str(route.ext())
-        except (AttributeError, OSError, ValueError):
-            own_ext_ip = bind_ip
+        bind_ip = self.src["ip"]
+        # Master/slave election uses the wire-advertised "address each
+        # side identifies itself by" (my_addr_ip / peer_addr_ip):
+        # for NIC_BIND that's the NIC IP, for EXT_BIND it's the
+        # externally-observable IP. Both peers see the same pair of
+        # strings, so own_ext_ip > peer_ext_ip is symmetric-decidable
+        # without coordination.
+        own_ext_ip = self.my_addr_ip or bind_ip
 
         print("[RP-FIRE] role={0} bind_ip={1} peer_addr={2} peer_known_port={3} "
               "punch_time={4} now={5}".format(
@@ -461,7 +451,7 @@ class RandomProbePlugin(Plugin):
         ))
 
         try:
-            route = await self.nic.route(self.af).bind()
+            route = await self.bind()
         except (OSError, ValueError):
             log("RandomProbePlugin: route bind failed for bridge wrap")
             for s in (listener_sock, worker_sock, res["sock"]):
@@ -664,13 +654,13 @@ class RandomProbePlugin(Plugin):
 
     # ── helpers ─────────────────────────────────────────────────
 
-    def set_failed_result(self) -> None:
+    def set_failed_result(self):
         """Resolve self.result with None so node.connect returns
         promptly instead of waiting out the plugin timeout."""
         if not self.result.done():
             self.result.set_result(None)
 
-    def build_msg(self, role: str, punch_time: int, magic: str) -> RandomProbeMsg:
+    def build_msg(self, role, punch_time, magic):
         """Build the RandomProbeMsg this side sends to its peer.
 
         ext_ip in the payload carries whichever address the algorithm
@@ -705,7 +695,7 @@ class RandomProbePlugin(Plugin):
             },
         })
 
-    async def prebind_non_sym_sock(self) -> None:
+    async def prebind_non_sym_sock(self):
         """Bind the non-sym side's UDP socket *before* signaling +
         STUN-discover the (mapped_ip, mapped_port) it lands at.
 
@@ -725,13 +715,13 @@ class RandomProbePlugin(Plugin):
         still useful for same-machine / loopback testing.
         """
         try:
-            route = await self.nic.route(self.af).bind()
+            await self.bind()
         except (OSError, ValueError):
             log("RandomProbePlugin: pre-bind route bind failed")
             return
         try:
             self.prebound_sock = make_udp_socket(
-                str(route.nic()), 0, interface=self.nic,
+                self.src["ip"], 0, interface=self.nic,
             )
             self.prebound_port = self.prebound_sock.getsockname()[1]
         except OSError:
@@ -784,7 +774,7 @@ class RandomProbePlugin(Plugin):
         log("RandomProbePlugin: STUN discovery failed on all servers; "
             "falling back to local port {0}".format(self.prebound_port))
 
-    def udp_stun_servers(self) -> List[Tuple[str, int]]:
+    def udp_stun_servers(self):
         """Return up to 4 UDP STUN server (ip, port) tuples for our AF.
 
         Pulls from aionetiface's get_infra rather than node.stun_clients
@@ -809,12 +799,12 @@ class RandomProbePlugin(Plugin):
                 continue
         return out
 
-    async def resolve_stun_dest(self, dest: Tuple[str, int]) -> Tuple[str, int]:
+    async def resolve_stun_dest(self, dest):
         """DNS-resolve *dest* using the plugin's NIC + AF context."""
         from aionetiface import resolv_dest
         return await resolv_dest(self.af, dest, self.nic)
 
-    def our_known_port(self) -> int:
+    def our_known_port(self):
         """Known external port to advertise; 0 when we're playing sym role.
 
         Checks our *assigned role* (set in run() based on the
@@ -838,16 +828,16 @@ class RandomProbePlugin(Plugin):
         prebound = getattr(self, "prebound_port", 0)
         if prebound:
             return int(prebound)
-        bp = self.src_info.get("bind_port") or 0
+        bp = self.src.get("bind_port") or 0
         return int(bp)
 
 
-def p_or_default(key: str) -> float:
+def p_or_default(key):
     """Look up *key* in FAST_PUNCH_PARAMS with a sensible fallback."""
     return float(FAST_PUNCH_PARAMS.get(key, 8.0))
 
 
-def drain_queue(q: Any) -> int:
+def drain_queue(q):
     """Drain an asyncio.Queue without blocking; return count drained."""
     n = 0
     while True:
@@ -867,16 +857,16 @@ class RandomProbePluginFactory:
     used by the punch plugin).
     """
 
-    def __init__(self, sys_clock: Optional[Any] = None) -> None:
+    def __init__(self, sys_clock=None):
         self.sys_clock = sys_clock or SysClock(None, 0.1)
 
-    def build_plugin(self) -> "RandomProbePlugin":
+    def build_plugin(self):
         """Create a new RandomProbePlugin wired to this factory's SysClock."""
         plugin = RandomProbePlugin()
         plugin.sys_clock = self.sys_clock
         return plugin
 
-    async def close(self) -> None:
+    async def close(self):
         """No-op: the factory holds no socket / process state."""
         return None
 

@@ -3,7 +3,6 @@
 Plugin-owned. plugin_loader registers TURNMsg under wire name
 "turn.TURNMsg" via PROTO_MESSAGES.
 """
-from typing import Any, Dict
 
 from ....protocol.proto_msg import ProtoMsg
 
@@ -28,13 +27,13 @@ class TURNMsg(ProtoMsg):
 
         def __init__(
             self,
-            peer_tup: Any,
-            relay_tup: Any,
-            server_host: Any = None,
-            server_port: Any = None,
-            tried_servers: Any = None,
-            reject_reason: Any = None,
-        ) -> None:
+            peer_tup,
+            relay_tup,
+            server_host=None,
+            server_port=None,
+            tried_servers=None,
+            reject_reason=None,
+        ):
             self.peer_tup = peer_tup
             self.relay_tup = relay_tup
             self.server_host = server_host
@@ -56,7 +55,7 @@ class TURNMsg(ProtoMsg):
             # flow.
             self.reject_reason = reject_reason
 
-        def to_dict(self) -> Dict[str, Any]:
+        def to_dict(self):
             d = {
                 "peer_tup": self.peer_tup,
                 "relay_tup": self.relay_tup,
@@ -72,7 +71,7 @@ class TURNMsg(ProtoMsg):
             return d
 
         @staticmethod
-        def from_dict(d: Dict[str, Any]) -> "TURNMsg.Payload":
+        def from_dict(d):
             return TURNMsg.Payload(
                 d["peer_tup"],
                 d["relay_tup"],

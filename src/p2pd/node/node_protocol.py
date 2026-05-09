@@ -9,8 +9,6 @@ let everything after that flow through the registered msg_cbs as
 normal data. One channel for connect + rendezvous, no cross-channel
 race.
 """
-
-from typing import Any, Tuple
 import asyncio
 import time
 from aionetiface import log, to_s
@@ -25,7 +23,7 @@ from ..traversal.plugins.udp_punch.udp_punch_defs import (
 )
 
 
-def is_random_probe_datagram(msg: bytes) -> bool:
+def is_random_probe_datagram(msg):
     """True iff *msg* looks like a stray random_probe probe.
 
     Probe datagrams have a fixed length and a fixed 4-byte magic
@@ -38,7 +36,7 @@ def is_random_probe_datagram(msg: bytes) -> bool:
     return len(msg) == PROBE_LEN and msg[:4] == PROBE_MAGIC
 
 
-def is_udp_punch_datagram(msg: bytes) -> bool:
+def is_udp_punch_datagram(msg):
     """True iff *msg* looks like a stray udp_punch PROBE / CONFIRM frame.
 
     Same shape problem as random_probe: after convergence the engine's
@@ -50,7 +48,7 @@ def is_udp_punch_datagram(msg: bytes) -> bool:
     return len(msg) == UDP_PUNCH_FRAME_LEN and msg[:4] == UDP_PUNCH_MAGIC
 
 
-async def node_protocol(node: Any, msg: bytes, client_tup: Tuple[str, int], pipe: Any) -> None:
+async def node_protocol(node, msg, client_tup, pipe):
     """Dispatch each newline-delimited message from the pipe to all registered msg_cbs."""
     # Drop residual algorithm frames (random_probe probes, udp_punch
     # PROBE/CONFIRM): both protocols keep spraying for hundreds of ms

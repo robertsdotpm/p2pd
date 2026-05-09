@@ -1,5 +1,4 @@
 """Simple echo server used for connectivity testing."""
-from typing import Any
 import asyncio
 from aionetiface import (
     Daemon, async_wrap_errors, fstr, get_running_loop, Interface, TCP, IP4,
@@ -9,10 +8,10 @@ from aionetiface import (
 class EchoServer(Daemon):
     """Simple echo server daemon that reflects all received messages back to senders."""
 
-    def __init__(self) -> None:
+    def __init__(self):
         super().__init__()
 
-    async def msg_cb(self, msg: bytes, client_tup: Any, pipe: Any) -> None:
+    async def msg_cb(self, msg, client_tup, pipe):
         """Echo msg back to client_tup on the same pipe."""
         await async_wrap_errors(pipe.send(msg, client_tup))
 

@@ -38,8 +38,6 @@
       production bug -- but if you regress NIC-bind LAN BSD tests,
       check NTP sync first before chasing punch code.
 """
-
-from typing import Any, Dict, List, Optional, Tuple
 import selectors
 import socket
 import time
@@ -53,7 +51,7 @@ CONNECT_TIMEOUT = 5.0
 RETRY_INTERVAL = 0.05
 
 
-def setup_engine(af: Any, port_allocs: List[Any], src_ip: Optional[str], nic_id: Optional[str]) -> Tuple[List[Any], Any]:
+def setup_engine(af, port_allocs, src_ip, nic_id):
     """Bind all sockets for the given port allocations and register them with a selector."""
     # TCP hole punching uses ONE socket per port.
     # No listen sockets. Each socket will perform active open only.
@@ -70,10 +68,10 @@ def setup_engine(af: Any, port_allocs: List[Any], src_ip: Optional[str], nic_id:
 
 
 def socket_event_monitor(
-sel: Any,
-    monitor_duration: float = CONNECT_TIMEOUT,
-    retry_interval: float = RETRY_INTERVAL,
-) -> Any:
+sel,
+    monitor_duration=CONNECT_TIMEOUT,
+    retry_interval=RETRY_INTERVAL,
+):
     """
     Poll the selector and collect successfully-connected sockets.
 
@@ -166,16 +164,16 @@ sel: Any,
 
 
 def tcp_selector_punch_engine(
-af: Any,
-    nic_id: Optional[str],
-    port_allocs: List[Any],
-    src_ip: Optional[str],
-    dest_ip: str,
-    f_sleep_until: Any,
-    our_ip: Optional[str],
-    same_machine: bool,
-    params: Optional[Dict[str, Any]] = None,
-) -> Optional[Any]:
+af,
+    nic_id,
+    port_allocs,
+    src_ip,
+    dest_ip,
+    f_sleep_until,
+    our_ip,
+    same_machine,
+    params=None,
+):
     """
     TCP hole-punch engine.
 

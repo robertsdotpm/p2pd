@@ -1,5 +1,4 @@
 """Utilities for the simple TCP selector punch engine."""
-from typing import Any, List, Optional, Tuple
 import socket
 import struct
 import sys
@@ -11,7 +10,7 @@ from aionetiface.net.socket import apply_nic_pin_sockopts
 from aionetiface.utility.cmd_tools import cmd as run_shell_cmd
 
 
-async def log_time_wait_residue(src_ip: Optional[str]) -> None:
+async def log_time_wait_residue(src_ip):
     """Run `netstat -an` and log TIME_WAIT entries whose local IP matches src_ip.
 
     Best-effort post-mortem after a punch attempt. SO_LINGER {1,0} on
@@ -58,7 +57,7 @@ different operating systems.
 """
 
 
-def sock_opt_voodoo(s: Any) -> None:
+def sock_opt_voodoo(s):
     """Apply non-blocking mode and the platform-correct address-reuse sockopt for hole punching.
 
     Windows: SO_REUSEADDR has the *opposite* semantics of POSIX -- it
@@ -109,13 +108,13 @@ def sock_opt_voodoo(s: Any) -> None:
 
 
 def bind_punch_sockets(
-    af: Any,
-    nic_id: Optional[str],
-    port_allocs: List[Any],
-    src_ip: Optional[str] = None,
-    sock_type: int = socket.SOCK_STREAM,
-    route: Optional[Any] = None,
-) -> List[Tuple[Any, Any]]:
+    af,
+    nic_id,
+    port_allocs,
+    src_ip=None,
+    sock_type=socket.SOCK_STREAM,
+    route=None,
+):
     """Create and bind one socket per port allocation; returns (alloc, sock) pairs.
 
     Shared by tcp_punch (sock_type=SOCK_STREAM, default) and udp_punch
@@ -201,12 +200,12 @@ def bind_punch_sockets(
 
 
 def bind_tcp_sockets(
-    af: Any,
-    nic_id: Optional[str],
-    port_allocs: List[Any],
-    src_ip: Optional[str] = None,
-    route: Optional[Any] = None,
-) -> List[Tuple[Any, Any]]:
+    af,
+    nic_id,
+    port_allocs,
+    src_ip=None,
+    route=None,
+):
     """Create and bind one TCP socket per port allocation, returning successful (alloc, socket) pairs."""
     return bind_punch_sockets(
         af, nic_id, port_allocs, src_ip,
@@ -214,7 +213,7 @@ def bind_tcp_sockets(
     )
 
 
-def listen_on_tcp_sockets(bound_infos: List[Tuple[Any, Any]]) -> List[Tuple[Any, Any]]:
+def listen_on_tcp_sockets(bound_infos):
     """Call listen() on each bound socket, returning those that succeed."""
     listen_infos = []
     for bound_info in bound_infos:
@@ -229,11 +228,11 @@ def listen_on_tcp_sockets(bound_infos: List[Tuple[Any, Any]]) -> List[Tuple[Any,
 
 
 def connect_on_tcp_sockets(
-    same_machine: bool,
-    bound_infos: List[Tuple[Any, Any]],
-    dest_ip: str,
-    spray_duration: float = 5.0,
-) -> None:
+    same_machine,
+    bound_infos,
+    dest_ip,
+    spray_duration=5.0,
+):
     """Spray SYN packets at the destination for `spray_duration` seconds.
 
     Loops over the bound sockets calling connect_ex on each.  Both peers
@@ -265,7 +264,7 @@ def connect_on_tcp_sockets(
             time.sleep(0.005)
 
 
-def sleep_until(punch_time: float, f_timer: Any, max_sleep: int = 10) -> None:
+def sleep_until(punch_time, f_timer, max_sleep=10):
     """Block until punch_time (from f_timer()), sleeping at most max_sleep seconds."""
     now = f_timer()
     sleep_time = max(0, punch_time - now)

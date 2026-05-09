@@ -10,7 +10,6 @@ path has no NAT to traverse so port prediction does no useful work.
 For symmetric NAT pairs, use the random_probe plugin instead --
 udp_punch only handles cone NATs and predictable-symmetric NATs.
 """
-from typing import Any, Dict, Optional, Tuple
 import asyncio
 import os
 import socket as _socket
@@ -40,7 +39,7 @@ class UdpPunchPlugin(Plugin):
     """Traversal plugin implementing UDP hole-punching via coordinated port prediction."""
 
     name = "udp_punch"
-    transport = "udp"
+    transport = UDP
     # Same exclusions as tcp_punch -- loopback has no NAT so prediction
     # does no useful work over it. Symmetric NAT goes to random_probe,
     # not here.
@@ -76,7 +75,7 @@ class UdpPunchPlugin(Plugin):
         factory.pending_claims = claims
         return factory
 
-    async def run(self, reply: Optional[Any] = None) -> None:
+    async def run(self, reply=None):
         """Coordinate the punch exchange and fire the in-process UDP engine."""
         puncher = self.punch_clients.get(self.plugin_id)
         if puncher is None:
@@ -117,11 +116,11 @@ class UdpPunchPlugin(Plugin):
                 m.to_json() for m in send_mappings
             ]
 
-        await self.send_signal_msg(outgoing_msg)
+        await self.send_signal(outgoing_msg)
 
-    async def setup_puncher_client(self, reply: Optional[Any]) -> Tuple[Optional[Any], Optional[Any]]:
+    async def setup_puncher_client(self, reply):
         """Build a fresh PunchClient + decide on a session nonce for this attempt."""
-        if_index = self.src_info["if_index"]
+        if_index = self.src["if_index"]
         # Safe two-level lookup; same rationale as tcp_punch's
         # setup_puncher_client: hosts without working v6 STUN
         # (XP / Vista) never populate the inner dict for
@@ -131,43 +130,31 @@ class UdpPunchPlugin(Plugin):
         if not stuns:
             return None, None
 
-        dest_ip = self.dest_info["ip"]
+        # Resolved by the manager via resolve_pair: src["ip"] is
+        # the local-bind IP and dest["ip"] is the dial target,
+        # already %scope-patched for v6 link-local and chosen for the
+        # active route_type (NIC_BIND vs EXT_BIND). No routing logic
+        # in the plugin.
+        src_ip = self.src["ip"]
+        dest_ip = self.dest["ip"]
 
-        # Defensive: same-NIC self-target would loop the predictions
-        # back through the local stack with no NAT involvement.
-        try:
-            src_nic_ip = self.src_info.get("nic")
-        except AttributeError:
-            src_nic_ip = None
-        if src_nic_ip is not None:
-            try:
-                if str(src_nic_ip) == str(dest_ip):
-                    log("UdpPunchPlugin: dest matches own NIC IP ({0}); aborting".format(dest_ip))
-                    return None, None
-            except (TypeError, ValueError):
-                pass
+        # Defensive: punching to our own resolved bind IP would loop
+        # the predictions back through the local stack with no NAT
+        # involvement.
+        if src_ip and dest_ip and str(src_ip) == str(dest_ip):
+            log("UdpPunchPlugin: dest matches own bind IP ({0}); aborting".format(dest_ip))
+            return None, None
 
-        route = await self.nic.route(self.af).bind()
-        if "fe80" == dest_ip[:4]:
-            src_ip = str(route.link_locals[0])
-            # Bake the AF-correct scope_id into both the dest and src
-            # link-local IPs so Windows sendto / connect_ex reach the
-            # right interface. Without this the engine sprays into the
-            # OS-default NIC and the peer never sees the probes.
-            # Mirrors tcp_punch's setup_puncher_client (commits 10f4977
-            # + 87148ae). XP keeps separate v4/v6 ifindex spaces, so
-            # use get_nic_id(af) instead of nic.id.
-            from aionetiface.net.bind.bind_utils import ip6_patch_bind_ip
-            v6_scope = self.nic.get_nic_id(self.af)
-            dest_ip = ip6_patch_bind_ip(dest_ip.split("%", 1)[0], v6_scope)
-            src_ip = ip6_patch_bind_ip(src_ip.split("%", 1)[0], v6_scope)
-        else:
-            src_ip = route.nic()
+        # delayed_run_engine forwards puncher.route to the engine for
+        # NIC pinning; bind it via the Plugin.bind helper to use the
+        # already-resolved src_ip.
+        route = await self.bind()
 
-        if self.route_type == NIC_BIND:
-            decider_ip = src_ip
-        else:
-            decider_ip = route.ext()
+        # Master/slave role selection works fine off the local bind IP
+        # for both NIC_BIND and EXT_BIND -- both peers see the same
+        # (src_ip, dest_ip) pair from opposite ends and pick the same
+        # role deterministically.
+        decider_ip = src_ip
 
         puncher = PunchClient(
             dest_ip,
@@ -232,13 +219,13 @@ class UdpPunchPlugin(Plugin):
 
         return puncher, stuns
 
-    async def configure_puncher_process(self, puncher: Any, stuns: Any) -> Any:
+    async def configure_puncher_process(self, puncher, stuns):
         """Register the puncher and schedule the in-process punch engine."""
         self.punch_clients[self.plugin_id] = puncher
 
         self.nat_alloc = NATPredictAlloc(stuns)
-        self.nat_alloc.set_nat_info(self.src_info["nat"], self.dest_info["nat"])
-        self.nat_alloc.set_punch_mode(self.same_machine, self.dest_info["ip"])
+        self.nat_alloc.set_nat_info(self.src["nat"], self.dest["nat"])
+        self.nat_alloc.set_punch_mode(self.same_machine, self.dest["ip"])
 
         if self.plugin_id not in self.punch_proc:
             self.punch_proc[self.plugin_id] = asyncio.create_task(
@@ -246,7 +233,7 @@ class UdpPunchPlugin(Plugin):
             )
         return puncher
 
-    async def advance_punching_protocol(self, puncher: Any, reply: Optional[Any], punch_time: int) -> Optional[Any]:
+    async def advance_punching_protocol(self, puncher, reply, punch_time):
         """Compute the next round of port predictions; return outgoing UdpPunchMsg or None when done."""
         # For LAN, STUN is useless (returns each side's own port).
         # boundary_port_alloc in delayed_run_engine handles port
@@ -292,7 +279,7 @@ class UdpPunchPlugin(Plugin):
         msg.meta.plugin_name = "udp_punch"
         return msg
 
-    async def delayed_run_engine(self, puncher: Any) -> None:
+    async def delayed_run_engine(self, puncher):
         """Wait for coordinator delay, set up bridge, dispatch worker that runs engine + bridge."""
         coordinator_delay = puncher.params.get("coordinator_delay", 2.0)
         try:
@@ -699,7 +686,7 @@ class UdpPunchPlugin(Plugin):
         # that pops; cleanup semantics will be revisited in a dedicated
         # session.
 
-    async def close(self) -> None:
+    async def close(self):
         """Cancel any in-flight engine task and clear the per-session state."""
         task = self.punch_proc.pop(self.plugin_id, None)
         self.punch_clients.pop(self.plugin_id, None)
@@ -736,10 +723,10 @@ class UdpPunchPluginFactory:
 
     def __init__(
         self,
-        stun_clients: Any,
-        sys_clock: Optional[Any] = None,
-        punch_clients: Optional[Dict[str, Any]] = None,
-    ) -> None:
+        stun_clients,
+        sys_clock=None,
+        punch_clients=None,
+    ):
         self.stun_clients = stun_clients
         self.sys_clock = sys_clock or SysClock(None, 0.1)
         self.punch_clients = punch_clients if punch_clients is not None else {}
@@ -751,11 +738,11 @@ class UdpPunchPluginFactory:
         self.pending_claims = []
 
     @classmethod
-    async def create(cls, stun_clients: Any, sys_clock: Any) -> "UdpPunchPluginFactory":
+    async def create(cls, stun_clients, sys_clock):
         """Async factory; UDP punch needs no process pool so this is a thin wrapper."""
         return cls(stun_clients, sys_clock)
 
-    def claim_nics(self, claims: Any) -> None:
+    def claim_nics(self, claims):
         """Register this factory as the udp_punch owner for each (nic_id, ip, af) tuple; raise ValueError on collision."""
         for key in claims:
             if key in PUNCH_NIC_OWNERS:
@@ -772,7 +759,7 @@ class UdpPunchPluginFactory:
             PUNCH_NIC_OWNERS[key] = self
             self.nic_ids_owned.append(key)
 
-    def build_plugin(self) -> UdpPunchPlugin:
+    def build_plugin(self):
         """Create a fresh UdpPunchPlugin wired to this factory's shared state."""
         # Claim the (nic, ip, af) tuples lazily on first plugin
         # build. Raises ValueError if another factory in this process
@@ -791,7 +778,7 @@ class UdpPunchPluginFactory:
         plugin.punch_proc = self.punch_proc
         return plugin
 
-    async def close(self) -> None:
+    async def close(self):
         """Release the NIC ownership claims so a fresh Node can re-create the factory."""
         for nic_id in self.nic_ids_owned:
             if PUNCH_NIC_OWNERS.get(nic_id) is self:

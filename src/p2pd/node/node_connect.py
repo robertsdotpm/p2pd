@@ -1,5 +1,4 @@
 """Outbound connection logic for a p2pd node."""
-from typing import Any, Optional, Tuple
 import asyncio
 from aionetiface import (
     sort_ips_by_nic, route_pool_from_ips, fstr, log, parse_node_addr,
@@ -9,7 +8,7 @@ from .node_utils import enrich_addr_map_with_loopback
 from ..traversal.traversal_address import get_updated_addr_from_mqtt, pnp_name_has_tld
 
 
-def apply_listen_ips(node: Any) -> None:
+def apply_listen_ips(node):
     """Restrict node.ifs to NICs that own a listen IP, and narrow each NIC's route pool."""
     by_nic = sort_ips_by_nic(node.listen_ips, node.ifs)
     found = set()
@@ -26,7 +25,7 @@ def apply_listen_ips(node: Any) -> None:
         raise ValueError("listen IPs not found on any interface: " + ", ".join(missing))
 
 
-async def resolve_pnp_addr(node: Any, pnp_addr: Any) -> Tuple[Any, Optional[Any], Optional[str]]:
+async def resolve_pnp_addr(node, pnp_addr):
     """Resolve a PNP nickname to (addr_bytes, dest_vk, source).
 
     source is "mqtt" if the address was refreshed via the MQTT router,
@@ -55,12 +54,12 @@ async def resolve_pnp_addr(node: Any, pnp_addr: Any) -> Tuple[Any, Optional[Any]
 
 
 def iter_viable_pairs(
-    af: Any,
-    route_type: Any,
-    src_map: Any,
-    dest_map: Any,
+    af,
+    route_type,
+    src_map,
+    dest_map,
 ):
-    """Yield every (src_info, dest_info) pair that's distinct enough
+    """Yield every (src, dest) pair that's distinct enough
     to be useful for *route_type*, in priority order.
 
     NIC_BIND      different NIC IPs
@@ -72,32 +71,32 @@ def iter_viable_pairs(
     # traversal package at module load time.
     from ..traversal.traversal_utils import get_if_infos_order
 
-    for src_info, dest_info in get_if_infos_order(af, route_type, src_map, dest_map):
+    for src, dest in get_if_infos_order(af, route_type, src_map, dest_map):
         if route_type == NIC_BIND:
-            if int(src_info["nic"]) == int(dest_info["nic"]):
+            if int(src["nic"]) == int(dest["nic"]):
                 continue
         elif route_type == LOOPBACK_BIND:
-            if src_info.get("loopback") is None or dest_info.get("loopback") is None:
+            if src.get("loopback") is None or dest.get("loopback") is None:
                 continue
         elif route_type == EXT_BIND:
-            if int(src_info["ext"]) == int(dest_info["ext"]):
+            if int(src["ext"]) == int(dest["ext"]):
                 continue
-        yield src_info, dest_info
+        yield src, dest
 
 
 def select_first_viable_pair(
-    af: Any,
-    route_type: Any,
-    src_map: Any,
-    dest_map: Any,
-) -> Optional[Tuple[Any, Any]]:
+    af,
+    route_type,
+    src_map,
+    dest_map,
+):
     """First-only convenience wrapper around iter_viable_pairs."""
     for pair in iter_viable_pairs(af, route_type, src_map, dest_map):
         return pair
     return None
 
 
-async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_name: Optional[str] = None) -> Any:
+async def connect(node, af, route_type, pnp_addr, plugin_name=None):
     """Resolve the destination address and run the traversal plugin to establish a P2P connection.
 
     reverse_connect is special-cased: per the any-pathway design the
@@ -141,8 +140,8 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
         plugin = node.traversal.create_plugin(
             af=None,
             route_type=None,
-            src_info=None,
-            dest_info=None,
+            src=None,
+            dest=None,
             same_machine=same_machine,
             plugin_name="fan_out",
         )
@@ -174,38 +173,38 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
     if plugin_name == "get_addr":
         pass
     elif route_type == NIC_BIND:
-        for if_idx, dest_info in dest_map[af].items():
-            src_info = src_map[af].get(if_idx)
-            if src_info is None:
+        for if_idx, dest in dest_map[af].items():
+            src = src_map[af].get(if_idx)
+            if src is None:
                 continue
-            if int(dest_info["nic"]) == int(src_info["nic"]):
+            if int(dest["nic"]) == int(src["nic"]):
                 log(fstr(
                     "node.connect: dest if_index {0} shares NIC IP {1} "
                     "with this node for AF {2} -- this pair will be "
                     "skipped; trying other pairs.",
-                    (if_idx, dest_info["nic"].ip, af),
+                    (if_idx, dest["nic"].ip, af),
                 ))
     elif route_type in (EXT_BIND, None):
-        for if_idx, dest_info in dest_map[af].items():
-            src_info = src_map[af].get(if_idx)
-            if src_info is None:
+        for if_idx, dest in dest_map[af].items():
+            src = src_map[af].get(if_idx)
+            if src is None:
                 continue
-            if int(dest_info["ext"]) == int(src_info["ext"]):
+            if int(dest["ext"]) == int(src["ext"]):
                 log(fstr(
                     "node.connect: dest if_index {0} shares external IP "
                     "{1} with this node for AF {2} -- this pair will be "
                     "skipped; trying other pairs.",
-                    (if_idx, dest_info["ext"].ip, af),
+                    (if_idx, dest["ext"].ip, af),
                 ))
 
-    # Walk every viable (src_info, dest_info) pair in priority order.
+    # Walk every viable (src, dest) pair in priority order.
     # If the plugin raises ValueError on a pair (e.g. random_probe on
     # a non-(sym, non-sym) pair, or a same-IP self-target check),
     # log the reason and try the next pair.  Only when *every* pair
     # fails do we surface the last ValueError to the caller.
     last_err = None
     tried = 0
-    for src_info, dest_info in iter_viable_pairs(af, route_type, src_map, dest_map):
+    for src, dest in iter_viable_pairs(af, route_type, src_map, dest_map):
         tried += 1
         try:
             return await node.traversal.attempt_plugin(
@@ -213,8 +212,8 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
                 dest_map=dest_map,
                 sig_pipe=sig_pipe,
                 plugin_name=plugin_name,
-                src_info=src_info,
-                dest_info=dest_info,
+                src=src,
+                dest=dest,
                 af=af,
                 route_type=route_type,
             )
@@ -222,7 +221,7 @@ async def connect(node: Any, af: Any, route_type: Any, pnp_addr: Any, plugin_nam
             log(
                 "node.connect: pair (src_if={0}, dest_if={1}) rejected "
                 "by {2}: {3}; trying next pair".format(
-                    src_info.get("if_index"), dest_info.get("if_index"),
+                    src.get("if_index"), dest.get("if_index"),
                     plugin_name, exc,
                 )
             )

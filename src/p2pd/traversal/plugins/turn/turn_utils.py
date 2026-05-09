@@ -1,11 +1,10 @@
 """Helpers for the TURN traversal plugin."""
-from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 from aionetiface import to_b, rendezvous_score, log_exception
 from .turn_client import TURNClient
 
 
-def rendezvous_rank(key: Any, servers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def rendezvous_rank(key, servers):
     """Rank TURN server dicts by rendezvous hash of key + server identity.
 
     Both peers independently produce the same ranking from the shared
@@ -14,7 +13,7 @@ def rendezvous_rank(key: Any, servers: List[Dict[str, Any]]) -> List[Dict[str, A
     """
     key_b = to_b(key)
 
-    def score(s: Dict[str, Any]) -> Any:
+    def score(s):
         """Compute a rendezvous hash score for server s against the shared key."""
         return rendezvous_score(key_b, to_b(s["ip"]), str(s["port"]).encode())
 
@@ -22,13 +21,13 @@ def rendezvous_rank(key: Any, servers: List[Dict[str, Any]]) -> List[Dict[str, A
 
 
 async def get_turn_client(
-af: Any,
-    server: Dict[str, Any],
-    interface: Any,
-    dest_peer: Optional[Any] = None,
-    dest_relay: Optional[Any] = None,
-    msg_cb: Optional[Any] = None,
-) -> Tuple[Any, Any, TURNClient]:
+af,
+    server,
+    interface,
+    dest_peer=None,
+    dest_relay=None,
+    msg_cb=None,
+):
     """Connect to a TURN server, allocate a relay, and optionally whitelist a peer."""
     turn_client = TURNClient(
         af=af,
@@ -54,12 +53,12 @@ PER_SERVER_TIMEOUT = 6.0
 
 
 async def get_first_working_turn_client(
-    af: Any,
-    servers: List[Dict[str, Any]],
-    nic: Any,
-    msg_cb: Any,
-    per_server_timeout: float = PER_SERVER_TIMEOUT,
-) -> Optional[TURNClient]:
+    af,
+    servers,
+    nic,
+    msg_cb,
+    per_server_timeout=PER_SERVER_TIMEOUT,
+):
     """Try each TURN server in ranked order and return the first one that connects.
 
     Each server attempt is bounded by ``per_server_timeout`` so a single

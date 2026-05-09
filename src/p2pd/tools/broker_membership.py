@@ -23,7 +23,6 @@ to collect via SSH and aggregate offline. Each broker entry gives
 Read-only: starts a Node, runs the standard router discovery, then
 shuts down. Does not bind a demo listener port.
 """
-from typing import Any, Dict, List
 import asyncio
 import json
 import sys
@@ -32,7 +31,7 @@ from aionetiface import async_run, IP4
 from ..node.node import Node
 
 
-def fmt_client(client: Any) -> Dict[str, Any]:
+def fmt_client(client):
     """Render an MQTTClient as a (af, host, port) dict for JSON output."""
     af = getattr(client, "af", None)
     dest = getattr(client, "dest", None) or (None, None)
@@ -44,7 +43,7 @@ def fmt_client(client: Any) -> Dict[str, Any]:
     }
 
 
-async def main_async(peer_pub_hexes: List[str]) -> int:
+async def main_async(peer_pub_hexes):
     """Start a node, dump self + (optional) per-peer broker membership."""
     print("starting node (this takes a few seconds)...", file=sys.stderr)
     node = await Node().start()
@@ -116,7 +115,7 @@ async def main_async(peer_pub_hexes: List[str]) -> int:
     return 0
 
 
-def main() -> int:
+def main():
     peer_pub_hexes = sys.argv[1:]
     try:
         return async_run(main_async(peer_pub_hexes))

@@ -3,8 +3,6 @@ Note:
 Reusing address can hide socket errors and
 make servers appear broken when they're not.
 """
-
-from typing import Any, Callable, Optional
 import asyncio
 import hashlib
 import time
@@ -35,7 +33,7 @@ from ..install_check import verify_sibling_installs
 # ==========================================
 # Orchestrates the startup sequence for a P2P node.
 # ==========================================
-async def node_start(node: Any, sys_clock: Optional[Any] = None, out: bool = False, cout: Callable = print) -> Any:
+async def node_start(node, sys_clock=None, out=False, cout=print):
     """Execute the full ordered startup sequence for a P2P node and return it when ready.
 
     WARNING -- propagation race after node_start returns
@@ -113,7 +111,7 @@ async def node_start(node: Any, sys_clock: Optional[Any] = None, out: bool = Fal
 # ==========================================
 # Phase: Hardware & Network Setup
 # ==========================================
-async def load_network_interfaces(node: Any) -> None:
+async def load_network_interfaces(node):
     """Discover and sort all available network interfaces, raising RuntimeError if none are found."""
     if not node.ifs:
         try:
@@ -132,7 +130,7 @@ async def load_network_interfaces(node: Any) -> None:
         raise AssertionError("p2p node could not load ifs.")
 
 
-def start_background_port_forwarding(node: Any) -> Optional[Any]:
+def start_background_port_forwarding(node):
     """Launch a background UPnP port-forwarding task if the node is behind NAT and UPnP is enabled."""
     # Check if all NICs are already open. A NIC whose load_nat did not
     # complete (nic.nat is None) cannot be assumed open; conservatively
@@ -147,7 +145,7 @@ def start_background_port_forwarding(node: Any) -> Optional[Any]:
     if node.conf["enable_upnp"] and not all_open_internet:
         reachability = {IP4: {}, IP6: {}}
 
-        async def reachability_cb(msg: Any, client_tup: Any, pipe: Any) -> None:
+        async def reachability_cb(msg, client_tup, pipe):
             """Forward inbound messages to the shared reachability checker."""
             await remote_reachability_cb(reachability, msg, client_tup, pipe)
 
@@ -162,7 +160,7 @@ def start_background_port_forwarding(node: Any) -> Optional[Any]:
 # ==========================================
 # Phase: Identity & Security
 # ==========================================
-async def load_machine_identity(node: Any) -> None:
+async def load_machine_identity(node):
     """Load or derive a stable machine ID and set the node's listen port deterministically."""
     node.machine_id = await load_machine_id("p2pd", node.ifs[0].netifaces)
 
@@ -175,7 +173,7 @@ async def load_machine_identity(node: Any) -> None:
         node.listen_port = field_wrap(dhash(node.machine_id), [10000, 60000])
 
 
-def load_cryptography_and_auth(node: Any) -> Any:
+def load_cryptography_and_auth(node):
     """Load or generate the node's ECDSA signing key, derive the node ID, and return the keypair.
 
     If ``node.pnp_name`` is set (Gate-driven path), the priv key comes
@@ -213,7 +211,7 @@ def load_cryptography_and_auth(node: Any) -> Any:
 # ==========================================
 # Phase: Time & Synchronization (concurrent)
 # ==========================================
-async def initialize_system_clock(node: Any, sys_clock: Optional[Any], out: bool, cout: Callable) -> None:
+async def initialize_system_clock(node, sys_clock, out, cout):
     """Create or reuse the system clock, optionally synchronising it against NTP."""
     if sys_clock is None:
         if node.conf["init_clock_skew"]:
@@ -228,7 +226,7 @@ async def initialize_system_clock(node: Any, sys_clock: Optional[Any], out: bool
         node.sys_clock = sys_clock
 
 
-async def load_p2p_stun_clients(node: Any, out: bool, cout: Callable) -> None:
+async def load_p2p_stun_clients(node, out, cout):
     """Load TCP STUN clients for each interface and AF if hole-punching is enabled."""
     if node.conf.get("enable_punching", True):
         if out:
@@ -253,7 +251,7 @@ async def load_p2p_stun_clients(node: Any, out: bool, cout: Callable) -> None:
             cout(buf)
 
 
-async def setup_router_and_signal(node: Any, kp: Any, out: bool, cout: Callable) -> None:
+async def setup_router_and_signal(node, kp, out, cout):
     """Instantiate the MQTT router, install default traversal plugins, and start the signal channel."""
     # node.sys_clock is established by initialize_system_clock which
     # runs before this in node_start. Threading get_time at Router
@@ -279,7 +277,7 @@ async def setup_router_and_signal(node: Any, kp: Any, out: bool, cout: Callable)
     await setup_signal_router(node, router, out, cout)
 
 
-async def setup_signal_router(node: Any, router: Any, out: bool, cout: Callable) -> None:
+async def setup_signal_router(node, router, out, cout):
     """Attach the router to the node and start MQTT subscriptions for inbound signalling."""
     node.router = router
 
@@ -301,7 +299,7 @@ async def setup_signal_router(node: Any, router: Any, out: bool, cout: Callable)
 # ==========================================
 # Phase: Connectivity Clients
 # ==========================================
-async def initialize_punch_coordination(node: Any, out: bool, cout: Callable) -> None:
+async def initialize_punch_coordination(node, out, cout):
     """Log the NTP clock skew value used to coordinate hole-punch timing across peers."""
     if out:
         cout("\tLoading NTP clock skew...")
@@ -314,7 +312,7 @@ async def initialize_punch_coordination(node: Any, out: bool, cout: Callable) ->
 # ==========================================
 # Phase: Start Servers
 # ==========================================
-def start_maintenance_tasks(node: Any) -> None:
+def start_maintenance_tasks(node):
     """Launch the background idle-pipe-closer loop and register it for cancellation on shutdown."""
     # Simple loop to close idle tasks.
     node.resources.set_idle_closer(create_task(close_idle_pipes(node)))
@@ -323,7 +321,7 @@ def start_maintenance_tasks(node: Any) -> None:
 # ==========================================
 # Phase: Finalize Connectivity
 # ==========================================
-def build_node_address(node: Any, out: bool) -> None:
+def build_node_address(node, out):
     """Serialise the node's public key and interface info into addr_bytes and parse it into addr_map."""
     if node.node_id is None:
         raise AssertionError("node_id was not set before building node address.")
@@ -387,12 +385,12 @@ def build_node_address(node: Any, out: bool) -> None:
         raise ValueError("Can't parse nodes p2p addr.") from exc
 
     # Attach the per-node loopback alias to every if_info. select_dest_ipr
-    # uses dest_info["loopback"] when same_pc=True so cross-subnet
+    # uses dest["loopback"] when same_pc=True so cross-subnet
     # same-machine peers route via 127.0.0.0/8 instead of NIC IPs.
     enrich_addr_map_with_loopback(node.addr_map)
 
 
-async def finalize_port_forwarding(node: Any, upnp_task: Optional[Any], out: bool, cout: Callable) -> None:
+async def finalize_port_forwarding(node, upnp_task, out, cout):
     """Await the background UPnP task and log whether forwarding and reachability succeeded."""
     if upnp_task:
         if out:
@@ -431,7 +429,7 @@ async def finalize_port_forwarding(node: Any, upnp_task: Optional[Any], out: boo
 # ==========================================
 # Phase: High-Level Services
 # ==========================================
-async def setup_nickname_service(node: Any) -> None:
+async def setup_nickname_service(node):
     """Initialise the PNP nickname client and optionally register this node's ID.
 
     Skips the entire client construction when enable_nickname=False --
@@ -461,7 +459,7 @@ async def setup_nickname_service(node: Any) -> None:
     node.nickname_register_task = task
 
 
-async def register_and_persist(node: Any, name: Any) -> None:
+async def register_and_persist(node, name):
     """Register name in PNP and stash the full name (with TLD) on node.full_name.
 
     On failure, captures the exception on ``node.nickname_error`` so
@@ -479,7 +477,7 @@ async def register_and_persist(node: Any, name: Any) -> None:
         raise
 
 
-async def setup_traversal_plugins(node: Any) -> None:
+async def setup_traversal_plugins(node):
     """Discover and install all traversal plugins found under the plugins/ directory."""
     await load_plugins(node)
     log("traversal plugin_loaders: " + str(node.traversal.plugin_loaders))

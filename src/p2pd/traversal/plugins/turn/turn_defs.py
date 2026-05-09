@@ -1,5 +1,4 @@
 """Constants and helper functions for the TURN protocol."""
-from typing import Any, Dict, List, Optional
 
 # Config variables -------------------------------------
 
@@ -32,7 +31,7 @@ TURN_REFRESH_FAIL = 8
 TURN_ERROR_STOPPED = 9
 
 
-def turn_vars_to_server(var_list: List[Any], af: Any) -> Dict[str, Any]:
+def turn_vars_to_server(var_list, af):
     """Build a server info dict from a positional var list [host, port, user, pass, realm]."""
     return {
         "host": var_list[0],
@@ -43,7 +42,7 @@ def turn_vars_to_server(var_list: List[Any], af: Any) -> Dict[str, Any]:
     }
 
 
-def find_turn_server(turn_server: Dict[str, Any], turn_servers: List[Dict[str, Any]], af: Optional[Any] = None) -> bool:
+def find_turn_server(turn_server, turn_servers, af=None):
     """Return True if turn_server matches an entry in turn_servers by host, port, credentials, and AF."""
     for needle in turn_servers:
         # Not the same server host or IP.

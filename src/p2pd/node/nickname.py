@@ -4,8 +4,6 @@ multiple ifaces; Otherwise use what we've got
 
 python3 run_pnp_serv.py
 """
-
-from typing import Any, List, Optional, Tuple
 import asyncio
 import time
 from aionetiface import (
@@ -28,14 +26,14 @@ PNP_TS_MAGIC = b"PNP1"
 PNP_TS_HEADER_LEN = 12  # 4 magic + 8 timestamp
 
 
-def pnp_wrap_with_ts(value: Any, ts: Optional[int] = None) -> bytes:
+def pnp_wrap_with_ts(value, ts=None):
     """Prefix value with a timestamp envelope for staleness detection."""
     if ts is None:
         ts = int(time.time())
     return PNP_TS_MAGIC + ts.to_bytes(8, "big") + to_b(value)
 
 
-def pnp_unwrap_ts(value: Any) -> Tuple[int, Any]:
+def pnp_unwrap_ts(value):
     """Split a (possibly wrapped) PNP value into (timestamp, payload).
 
     Returns (0, value) if the value isn't in the wrapped format -- this
@@ -63,19 +61,19 @@ PNP_TLD_TO_INDEX = {
 }
 
 
-def pnp_get_tld(offsets: List[int]) -> str:
+def pnp_get_tld(offsets):
     """Return the PNP TLD string (e.g. '.peer') corresponding to the given server index list."""
     index = frozenset(offsets)
     return PNP_INDEX_TO_TLD[index]
 
 
-def pnp_get_offsets(tld: str) -> List[int]:
+def pnp_get_offsets(tld):
     """Return the list of PNP server offsets that must hold a record for the given TLD."""
     index = PNP_TLD_TO_INDEX[tld]
     return list(index)
 
 
-def pnp_strip_tlds(name: Any) -> str:
+def pnp_strip_tlds(name):
     """Strip any known PNP TLD suffix from name and return the bare label."""
     name = to_s(name)
     for tld in PNP_TLD_TO_INDEX:
@@ -92,7 +90,7 @@ def pnp_strip_tlds(name: Any) -> str:
     return name
 
 
-def pnp_name_has_tld(name: Any) -> bool:
+def pnp_name_has_tld(name):
     """Return True if name ends with a recognised PNP TLD suffix."""
     name = to_s(name)
     for tld in PNP_TLD_TO_INDEX:
@@ -136,7 +134,7 @@ class PnpServerResourceLimit(Exception):
 class Nickname:
     """Manages PNP nickname registration and lookup for a P2P node."""
 
-    def __init__(self, sk: SigningKey, ifs: List[Any], sys_clock: Any) -> None:
+    def __init__(self, sk, ifs, sys_clock):
         self.sk = sk
         self.ifs = ifs
         self.sys_clock = sys_clock
@@ -156,7 +154,7 @@ class Nickname:
         self.clients = {IP4: {}, IP6: {}}
         self.started = False
 
-    async def start(self, timeout: int = 2) -> "Nickname":
+    async def start(self, timeout=2):
         """Connect to all reachable PNP servers and mark the client as started."""
         tasks = []
 
@@ -176,7 +174,7 @@ class Nickname:
                 )
                 client.kp = namebump.Keypair(self.sk)
 
-                async def job(af: Any = af, index: int = index, client: Any = client) -> Tuple[Any, int, Optional[Any]]:
+                async def job(af=af, index=index, client=client):
                     """Start the namebump client and verify connectivity, returning (af, index, client)."""
                     pipe = None
                     try:
@@ -220,11 +218,11 @@ class Nickname:
 
     async def put(
         self,
-        name: Any,
-        value: Any,
-        behavior: Any = namebump.DO_BUMP,
-        timeout: int = NAMING_TIMEOUT,
-    ) -> str:
+        name,
+        value,
+        behavior=namebump.DO_BUMP,
+        timeout=NAMING_TIMEOUT,
+    ):
         """Store value under name on every PNP server (strict all-or-fail).
 
         Raises if any server fails to write.  The TLD of the returned
@@ -259,7 +257,7 @@ class Nickname:
         # Single coro for storing at one server. namebump.Client.put
         # retries internally on transient network errors, so this worker
         # only needs to walk the AFs and surface any non-network failure.
-        async def worker(offset: int) -> Optional[int]:
+        async def worker(offset):
             """Attempt to store the name on the PNP server at offset and return offset on success."""
             import time as _time
             for af in VALID_AFS:
@@ -345,13 +343,13 @@ class Nickname:
 
     async def get(
         self,
-        name: Any,
-        timeout: int = NAMING_TIMEOUT,
-        min_fresh_secs: int = 0,
-        wait_for_fresh: bool = False,
-        max_wait_secs: int = 30,
-        retry_interval: float = 2.0,
-    ) -> Optional[Any]:
+        name,
+        timeout=NAMING_TIMEOUT,
+        min_fresh_secs=0,
+        wait_for_fresh=False,
+        max_wait_secs=30,
+        retry_interval=2.0,
+    ):
         """Look up name on the authoritative PNP servers and return the first successful result.
 
         min_fresh_secs > 0 enables staleness filtering. The stored
@@ -380,7 +378,7 @@ class Nickname:
         if not self.started:
             raise AssertionError("Nickname client not started. Call start() first.")
 
-        async def worker(offset: int, name: Any) -> Optional[Any]:
+        async def worker(offset, name):
             """Query the PNP server at offset for name and return the first non-None record."""
             import time as _time
             for af in VALID_AFS:
@@ -440,7 +438,7 @@ class Nickname:
         offsets = pnp_get_offsets(tld)
         name = name[: -len(tld)]
 
-        async def one_sweep() -> Optional[Any]:
+        async def one_sweep():
             """Fan out one round of PNP queries and return the first
             non-None result, or None if no server responded with a
             record that passed the freshness filter."""
@@ -502,13 +500,13 @@ class Nickname:
             ))
             await asyncio.sleep(retry_interval)
 
-    async def delete(self, name: Any, timeout: int = NAMING_TIMEOUT) -> None:
+    async def delete(self, name, timeout=NAMING_TIMEOUT):
         """Delete the record for name from all reachable PNP servers concurrently."""
         if not self.started:
             raise AssertionError("Nickname client not started. Call start() first.")
         name = pnp_strip_tlds(name)
 
-        async def worker(offset: int) -> Optional[Any]:
+        async def worker(offset):
             """Send a delete request for name to the PNP server at offset and return the result."""
             for af in VALID_AFS:
                 try:
@@ -527,7 +525,7 @@ class Nickname:
 
         await asyncio.gather(*tasks)
 
-    async def close(self) -> None:
+    async def close(self):
         """Close all active PNP client connections and reset the started flag."""
         for af in self.clients:
             for index in list(self.clients[af]):
@@ -540,15 +538,15 @@ class Nickname:
                 self.clients[af][index] = None
         self.started = False
 
-    async def __aenter__(self) -> "Nickname":
+    async def __aenter__(self):
         await self.start()
         return self
 
-    async def __aexit__(self, *_) -> bool:
+    async def __aexit__(self, *_):
         await self.close()
         return False
 
-    def __await__(self) -> Any:
+    def __await__(self):
         return self.start().__await__()
 
 

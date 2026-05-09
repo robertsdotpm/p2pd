@@ -1,7 +1,5 @@
 """Base class and lifecycle helpers for traversal plugins."""
-from typing import Any, Callable, Dict, Optional
 import asyncio
-from .traversal_utils import select_dest_ipr
 from aionetiface import to_s, rand_plain, log, NIC_BIND, EXT_BIND, LOOPBACK_BIND
 
 
@@ -14,7 +12,7 @@ class Plugin:
     # override the tuple to opt out of specific paths.
     route_types = (NIC_BIND, LOOPBACK_BIND, EXT_BIND)
 
-    def __init__(self) -> None:
+    def __init__(self):
         self.result = asyncio.Future()
         self.plugin_id = to_s(rand_plain(15))
         self.has_reply = asyncio.Event()
@@ -22,8 +20,8 @@ class Plugin:
         self.src_map = None
         self.dest_map = None
         self.af = None
-        self.src_info = None
-        self.dest_info = None
+        self.src = None
+        self.dest = None
         self.nic = None
         self.route_type = None
         self.same_machine = None
@@ -34,100 +32,57 @@ class Plugin:
         # Set by manager.create_plugin so meta-plugins (fan_out) can
         # spawn and run children. Regular plugins ignore it.
         self.manager = None
-        self._send_signal_msg = None
+        self.signal_sender = None
 
-    def set_addrs(self, src_map: Dict[str, Any], dest_map: Dict[str, Any]) -> None:
+    def set_addrs(self, src_map, dest_map):
         """Store the source and destination full address maps for this plugin."""
         self.src_map = src_map
         self.dest_map = dest_map
 
-    def set_routing(self, af: Any, src_info: Dict[str, Any], dest_info: Dict[str, Any], nic: Any) -> None:
+    def set_routing(self, af, src, dest, nic):
         """Configure the address family, interface info, and NIC to use for this traversal."""
         self.af = af
-        self.src_info = src_info
-        self.dest_info = dest_info
+        self.src = src
+        self.dest = dest
         self.nic = nic
 
-    async def bind(self, port: int = 0) -> Any:
+    async def bind(self, port=0):
         """Return a route bound to this plugin's resolved src IP."""
-        return await self.nic.route(self.af).bind(ips=self.src_info["ip"], port=port)
+        return await self.nic.route(self.af).bind(ips=self.src["ip"], port=port)
 
-    def set_context(self, route_type: Any, same_machine: bool, set_bind: bool, timeout: int) -> None:
+    def set_context(self, route_type, same_machine, set_bind, timeout):
         """Set the route type, same-machine flag, bind preference, and timeout for this plugin.
 
-        When route_type / af / src_info / dest_info are unconstrained
-        (any-pathway mode -- used by reverse_connect when the responder
-        is free to pick), we skip dest IP selection entirely. The
-        plugin (e.g. reverse_connect) is responsible for handling the
-        unconstrained case in its run() method.
+        Routing-decision (dest ip / port selection) lives in
+        traversal_manager.create_plugin -> resolve_pair, which runs
+        before set_context. By the time this fires, src["ip"] /
+        dest["ip"] / dest["port"] are already the resolved values.
         """
         self.route_type = route_type
         self.same_machine = same_machine
         self.set_bind = set_bind
         self.timeout = timeout
 
-        # Skip route determination -- not relevant.
-        if not route_type or self.dest_info is None or self.src_info is None or self.af is None:
-            if self.dest_info is not None:
-                self.dest_info["ip"] = ""
-            return
-
-        # Determine the best destination IP to use
-        # for the connectivity technique based on
-        # addressing and relationships between the
-        # two machines (deep networking specific.)
-        selected = select_dest_ipr(
-            self.af,
-            same_machine,
-            self.src_info,
-            self.dest_info,
-            [route_type],
-            # can you make this case
-            # run for all
-            # try it
-            set_bind,
-        )
-        self.dest_info["ip"] = str(selected) if selected is not None else ""
-        print("[CTX-DBG] route_type={0} af={1} same_machine={2} src_loopback={3} dest_loopback={4} dest_nic={5} dest_ext={6} -> dest_ip={7!r}".format(
-            route_type, self.af, same_machine,
-            self.src_info.get("loopback"),
-            self.dest_info.get("loopback"),
-            self.dest_info.get("nic"),
-            self.dest_info.get("ext"),
-            self.dest_info["ip"],
-        ))
-
-        # Select the port that matches the bind side chosen above.
-        if route_type == NIC_BIND:
-            self.dest_info["port"] = self.dest_info.get("nic_port", self.dest_info["port"])
-        elif route_type == EXT_BIND:
-            self.dest_info["port"] = self.dest_info.get("ext_port", self.dest_info["port"])
-
-        # Need a destination address.
-        # Possibly a different address type will work.
-        if self.dest_info["ip"] == "":
-            raise ValueError("Cannot select valid dest IP")
-
-    def set_inbound_pipes(self, pipes: Dict[str, Any], plugin_id: Optional[str] = None) -> None:
+    def set_inbound_pipes(self, pipes, plugin_id=None):
         """Attach the shared inbound-pipe dict and optionally override the plugin_id."""
         self.plugin_id = plugin_id or self.plugin_id
         self.inbound_pipes = pipes
 
-    def set_send_signal_msg(self, send_signal_msg: Callable) -> None:
+    def set_send_signal(self, send_signal):
         """Register the manager-level function plugins call to send signal messages."""
-        self._send_signal_msg = send_signal_msg
+        self.signal_sender = send_signal
 
-    async def send_signal_msg(self, msg: Any, relay_no: int = 2) -> Any:
+    async def send_signal(self, msg, relay_no=2):
         """Delegate sending a signal message to the manager, passing self as the plugin context."""
-        return await self._send_signal_msg(msg, self, relay_no)
+        return await self.signal_sender(msg, self, relay_no)
 
-    def register_inbound(self) -> None:
+    def register_inbound(self):
         """Pre-register a Future in inbound_pipes so arriving connections are not missed."""
         # Register before sending any signal to avoid a race where the inbound
         # connection arrives before the future exists.
         self.inbound_pipes[self.plugin_id] = asyncio.Future()
 
-    async def wait_for_inbound(self) -> Any:
+    async def wait_for_inbound(self):
         """Await the Future for this plugin's inbound connection and clean up on failure."""
         # Per-run cleanup intentionally does NOT pop inbound_pipes
         # here. Cleanup semantics across plugins will be revisited in
@@ -135,7 +90,7 @@ class Plugin:
         # inbound connection has somewhere to land.
         return await self.inbound_pipes[self.plugin_id]
 
-    async def run(self, reply: Optional[Any] = None) -> None:
+    async def run(self, reply=None):
         """Execute the traversal strategy; subclasses must override this method."""
         log(
             "Plugin.run() called on base class - subclass should override this."

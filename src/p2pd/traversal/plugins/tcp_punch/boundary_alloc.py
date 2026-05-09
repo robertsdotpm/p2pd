@@ -1,5 +1,4 @@
 """Boundary-based port allocator for NAT prediction."""
-from typing import Any, Dict, List, Optional, Tuple
 import os
 from .boundary_lib import (
     compute_rendezvous, stable_boundary, stable_ports,
@@ -10,12 +9,12 @@ from .punch_defs import PortAlloc
 
 
 def boundary_port_alloc(
-    timestamp: int,
-    n: int = NUM_PORTS,
-    params: Optional[Dict[str, Any]] = None,
-    our_os: Optional[str] = None,
-    their_os: Optional[str] = None,
-) -> Tuple[List[Any], int]:
+    timestamp,
+    n=NUM_PORTS,
+    params=None,
+    our_os=None,
+    their_os=None,
+):
     """
     Two-bucket overlapping port pool seeded by the NTP-aligned time bucket.
 

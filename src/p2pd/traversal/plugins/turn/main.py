@@ -1,5 +1,4 @@
 """Traversal plugin that relays connections through a TURN server."""
-from typing import Any, Optional
 import asyncio
 from aionetiface import EXT_BIND, UDP, get_infra, fstr, log, log_p2p
 from ...traversal_plugin import Plugin
@@ -14,7 +13,7 @@ class TURNPlugin(Plugin):
     """Traversal plugin that establishes a P2P connection via a TURN relay server."""
 
     name = "turn"
-    transport = "udp"
+    transport = UDP
     # TURN is a public-relay mechanism only; only EXT_BIND combos make
     # sense. auto_combos won't generate NIC_BIND / LOOPBACK_BIND combos
     # for us. The historical "if route_type == NIC_BIND: return"
@@ -42,7 +41,7 @@ class TURNPlugin(Plugin):
     # candidates this is generous -- 5 cycles can exclude up to 5 servers.
     MAX_RENEGOTIATIONS = 5
 
-    def __init__(self) -> None:
+    def __init__(self):
         super().__init__()
 
         # Resolved by a second run() call on this same instance when the peer's
@@ -59,7 +58,7 @@ class TURNPlugin(Plugin):
         self.tried_servers = set()
         self.renego_count = 0
 
-    async def run(self, reply: Optional[Any] = None) -> None:
+    async def run(self, reply=None):
         """Allocate a TURN relay, exchange addresses with the peer, and establish the channel.
 
         Server selection is initiator-decides with renegotiation. Mirrors
@@ -351,7 +350,7 @@ class TURNPlugin(Plugin):
             server_host, server_port, msg.payload.relay_tup,
             [list(t) for t in sorted(self.tried_servers)],
         ))
-        await self.send_signal_msg(msg)
+        await self.send_signal(msg)
         print("[TURN-DBG] TURNMsg sent OK")
 
         # --- Wait for the peer to whitelist our relay ---
@@ -362,7 +361,7 @@ class TURNPlugin(Plugin):
         if not self.result.done():
             self.result.set_result(pipe)
 
-    async def _send_rejection(self, reason: str) -> None:
+    async def _send_rejection(self, reason):
         """Tell the peer we cannot allocate on the server they just asked us
         to use. Carries our full tried_servers set so the peer's next pick
         excludes everything we've ruled out, not just the one server we
@@ -384,9 +383,9 @@ class TURNPlugin(Plugin):
             "turn[{0}]: sending rejection reason={1} tried={2}",
             (self.plugin_id, reason, sorted(self.tried_servers)),
         ))
-        await self.send_signal_msg(msg)
+        await self.send_signal(msg)
 
-    async def close(self) -> None:
+    async def close(self):
         """Clean up after a TURN connection attempt.
 
         On failure (timeout, cancellation, error) the TURNClient is closed
@@ -423,12 +422,12 @@ class TURNPlugin(Plugin):
 class TURNPluginFactory:
     """Creates and configures TURNPlugin instances sharing TURN client sessions."""
 
-    def __init__(self, msg_cb: Optional[Any] = None, node_id: str = "") -> None:
+    def __init__(self, msg_cb=None, node_id=""):
         self.turn_clients = {}
         self.msg_cb = msg_cb
         self.node_id = node_id
 
-    def build_plugin(self) -> TURNPlugin:
+    def build_plugin(self):
         """Create a new TURNPlugin instance wired to this factory's shared client pool."""
         plugin = TURNPlugin()
         plugin.turn_clients = self.turn_clients
@@ -436,7 +435,7 @@ class TURNPluginFactory:
         plugin.node_id = self.node_id
         return plugin
 
-    async def close(self) -> None:
+    async def close(self):
         """Close all shared TURN clients and clear the pool."""
         for client in list(self.turn_clients.values()):
             try:
