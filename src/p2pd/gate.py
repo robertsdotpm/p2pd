@@ -242,7 +242,7 @@ class Gate(object):
                 ctup = client_tup
             link = peers.get(key)
             if link is None:
-                link = Link(raw_pipe, ctup)
+                link = Link(raw_pipe, ctup, managed=True)
                 peers[key] = link
             asyncio.ensure_future(handler(link, msg))
 
@@ -266,11 +266,25 @@ class Link(object):
     down everyone else's session).
     """
 
-    def __init__(self, pipe, client_tup=None):
+    def __init__(self, pipe, client_tup=None, managed=False):
         self.pipe = pipe
         self.client_tup = client_tup
         self.closed = False
         self.subscribed = False
+        # managed=True is set by Gate.listen's shim: messages arrive via
+        # the handler(link, msg) callback, so we must NOT subscribe the
+        # pipe stream as a parallel consumer (would double-buffer and
+        # split the stream between handler calls and recv() awaiters).
+        # Clear any stale stream.subs left by an earlier consumer too --
+        # otherwise add_msg keeps queueing into them and bloats memory.
+        # ensure_subscribed / recv / __anext__ short-circuit in this
+        # mode -- listen users should consume via the handler signature.
+        self.managed = managed
+        if managed:
+            try:
+                pipe.pipe_events.stream.subs = {}
+            except AttributeError:
+                pass
 
     async def send(self, msg):
         if self.client_tup is None:
@@ -279,6 +293,11 @@ class Link(object):
             await self.pipe.send(msg, self.client_tup)
 
     def ensure_subscribed(self):
+        # No-op in managed (Gate.listen) mode: messages already arrive
+        # via the handler callback, parallel subscription would split
+        # the stream.  See __init__ for the full rationale.
+        if self.managed:
+            return
         if not self.subscribed:
             from aionetiface import SUB_ALL
             self.pipe.subscribe(SUB_ALL)
@@ -287,8 +306,10 @@ class Link(object):
     async def recv(self):
         """Await one inbound message on the link and return its bytes,
         or None if the link has been closed.  Convenience over the
-        ``async for`` iterator for one-shot reads."""
-        if self.closed:
+        ``async for`` iterator for one-shot reads.  Returns None
+        immediately when called on a Gate.listen-managed link -- those
+        deliver messages via the handler signature, not via recv()."""
+        if self.closed or self.managed:
             return None
         self.ensure_subscribed()
         from aionetiface import SUB_ALL
@@ -301,7 +322,7 @@ class Link(object):
         return self
 
     async def __anext__(self):
-        if self.closed:
+        if self.closed or self.managed:
             raise StopAsyncIteration
         self.ensure_subscribed()
         from aionetiface import SUB_ALL
