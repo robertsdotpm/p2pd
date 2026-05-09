@@ -54,21 +54,19 @@ def plugins_for_protocol(protocol):
     `protocol=UDP` -- only datagram plugins.  The returned pipe has UDP semantics.
     `protocol=None` -- every cascade plugin, mixed transport.  Caller must be
                        ready to handle either pipe shape.
+
+    Plugin classes set `transport = TCP` / `UDP` (the SOCK_STREAM /
+    SOCK_DGRAM constants from aionetiface).  Compare directly against
+    those enums.
     """
-    if protocol == TCP:
-        want = "tcp"
-    elif protocol == UDP:
-        want = "udp"
-    elif protocol is None:
-        want = None
-    else:
+    if protocol not in (TCP, UDP, None):
         raise ValueError("protocol must be TCP, UDP, or None")
 
     out = []
     for c in plugin_registry:
         if getattr(c, "phase", None) is None:
             continue  # non-cascade helper
-        if want is None or getattr(c, "transport", None) == want:
+        if protocol is None or getattr(c, "transport", None) == protocol:
             out.append(c.name)
     return tuple(out)
 
