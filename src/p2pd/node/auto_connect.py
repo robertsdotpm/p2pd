@@ -727,11 +727,13 @@ async def auto_connect(
     ):
         pipe, plugin = await phase_fn(node, src_map, dest_map, sig_pipe, plugin_set)
         if test_all_phases:
-            log("[AC-PHASE] {0} -> pipe={1} plugin={2}".format(
+            line = "[AC-PHASE] {0} -> pipe={1} plugin={2}".format(
                 phase_fn.__name__,
                 pipe is not None,
                 getattr(plugin, "name", type(plugin).__name__) if plugin is not None else None,
-            ))
+            )
+            log(line)
+            print(line, flush=True)
             if pipe is not None and winner_pipe is None:
                 winner_pipe = pipe
                 winner_plugin = plugin

@@ -1,0 +1,73 @@
+"""Real-world Gate connector for the gate_sweep matrix runner.
+
+Spins up a default Gate (no --nic, --ip, or --port pinning), calls
+``gate.connect(peer.find(target), test_all_phases=True)`` so every
+auto_connect phase runs serially regardless of which one wins first,
+sends a PING and reads back the PONG.
+
+Per-phase outcomes are picked up from the [AC-PHASE] log lines auto_connect
+prints to stdout in test_all_phases mode. We additionally print:
+
+    OUTCOME winner_plugin=<name|none>
+    OUTCOME echo_ok=<true|false>
+    OUTCOME echo_msg=<bytes-repr>
+
+so the orchestrator can grep a single stable shape per iteration.
+"""
+import asyncio
+import os
+import sys
+
+from aionetiface import aionetiface_setup_event_loop
+aionetiface_setup_event_loop()
+
+sys.argv = [sys.argv[0]]
+
+from p2pd.gate import Gate, peer
+
+
+async def main():
+    target = os.environ["WG_TARGET"]
+    name = os.environ.get("WG_CONNECT_NAME") or None
+    timeout = float(os.environ.get("WG_TIMEOUT", "300"))
+
+    async with (Gate(name=name) if name else Gate()) as gate:
+        print("WG_CONNECTOR_READY: {0}".format(gate.full_name or "?"), flush=True)
+        link = await gate.connect(
+            peer.find(target),
+            test_all_phases=True,
+            timeout=timeout,
+        )
+        if link is None:
+            print("OUTCOME winner_plugin=none", flush=True)
+            print("OUTCOME echo_ok=false", flush=True)
+            return
+        winner = type(link.pipe).__name__
+        # The plugin name is informational here -- auto_connect's
+        # [AC-PHASE] lines already disclose which plugin won. We
+        # echo the underlying pipe class instead so the orchestrator
+        # can sanity-check transport.
+        print("OUTCOME winner_pipe={0}".format(winner), flush=True)
+        ok = False
+        msg = None
+        try:
+            async with link:
+                await link.send(b"PING:gate_sweep")
+
+                async def one():
+                    async for m in link:
+                        return m
+
+                msg = await asyncio.wait_for(one(), timeout=10.0)
+                ok = msg is not None and msg.startswith(b"PONG:")
+        except asyncio.TimeoutError:
+            pass
+        except Exception as exc:  # pylint: disable=broad-except
+            print("OUTCOME echo_exc={0}".format(repr(exc)), flush=True)
+        print("OUTCOME echo_ok={0}".format("true" if ok else "false"), flush=True)
+        if msg is not None:
+            print("OUTCOME echo_msg={0!r}".format(msg[:80]), flush=True)
+
+
+if __name__ == "__main__":
+    asyncio.get_event_loop().run_until_complete(main())
