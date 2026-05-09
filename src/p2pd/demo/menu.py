@@ -1,7 +1,7 @@
 """Interactive menu system for the p2pd demo."""
 import asyncio
 from aionetiface import (
-    Any, List, Optional, SUB_ALL, Tuple,
+    SUB_ALL,
     async_wrap_errors, fstr, log, log_exception, sock_has_data,
 )
 from ..traversal.traversal_utils import close_plugin

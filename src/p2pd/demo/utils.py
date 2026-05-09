@@ -5,7 +5,7 @@ import platform
 import select
 import sys
 from aionetiface import (
-    Any, Dict, EXT_BIND, IP4, IP6, List, NIC_BIND, Optional,
+    EXT_BIND, IP4, IP6, NIC_BIND,
     fstr, log, sock_has_data, to_b, to_s,
 )
 from ..node.nickname import pnp_name_has_tld
