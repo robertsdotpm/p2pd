@@ -39,10 +39,17 @@ def _select_local_bind(af, route_type, src, dest):
         ip = src["nic"]
         port = src.get("nic_port", src.get("port"))
     elif route_type == EXT_BIND:
-        # Kernel binds to a local NIC; ext is what the peer sees,
-        # not what we hand to bind().  Advertised port for the
-        # external path is ext_port.
-        ip = src["nic"]
+        # v4: NAT box rewrites src; kernel binds to the local LAN
+        # address (src["nic"]) and the peer sees src["ext"].
+        # v6: no NAT in the path -- bind == advertise == ext (global).
+        # make_node_addr serialises v6's nic as fe80 link-local when
+        # any link-local exists on the route (topology.py:428-430),
+        # so binding to src["nic"] for v6 EXT_BIND would put us on a
+        # link-local source addr that can't reach a global remote.
+        if af == IP6:
+            ip = src.get("ext") or src["nic"]
+        else:
+            ip = src["nic"]
         port = src.get("ext_port", src.get("port"))
     else:
         raise ValueError(fstr("resolve_pair: unknown route_type {0}", (route_type,)))
@@ -55,7 +62,18 @@ def _select_remote_dial(af, route_type, src, dest):
         ip = dest.get("loopback")
         port = dest.get("nic_port", dest.get("port"))
     elif route_type == NIC_BIND:
-        ip = dest["nic"]
+        # v6 mirror of the local-bind logic: dest["nic"] is the peer's
+        # fe80 link-local when any v6 link-local exists on their route.
+        # That's only reachable on a shared L2 segment; for cross-link
+        # we want their global v6 -- which lives in dest["ext"].
+        if af == IP6:
+            dest_nic = dest.get("nic")
+            if dest_nic is None or str(dest_nic).lower().startswith("fe80"):
+                ip = dest.get("ext") or dest_nic
+            else:
+                ip = dest_nic
+        else:
+            ip = dest["nic"]
         port = dest.get("nic_port", dest.get("port"))
     elif route_type == EXT_BIND:
         ip = dest["ext"]
