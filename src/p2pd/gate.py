@@ -159,7 +159,7 @@ class Gate(object):
         return False
 
     async def connect(self, target, transport=None, timeout=None,
-                      plugins=None):
+                      plugins=None, test_all_phases=False):
         """Resolve a PeerHandle / nickname / addr_bytes and return a Link.
 
         ``target`` is one of:
@@ -178,6 +178,13 @@ class Gate(object):
         plugin in isolation; the default ``None`` lets every registered
         plugin race normally.  When set, the protocol filter is
         bypassed so you don't have to also specify ``transport``.
+
+        ``test_all_phases=True`` is a diagnostic mode that runs every
+        auto_connect phase serially -- even after an earlier one
+        produced a pipe -- so cumulative state (TIME_WAIT, broker
+        sessions, port pressure) shows up in the per-phase outcome
+        log.  The first winning pipe is what gets returned to the
+        caller; later phases' pipes are closed.
 
         Returns a ``Link`` on success, or ``None`` on failure.
         """
@@ -200,6 +207,8 @@ class Gate(object):
             kwargs["protocol"] = proto
         if plugins is not None:
             kwargs["plugins"] = plugins
+        if test_all_phases:
+            kwargs["test_all_phases"] = True
         coro = auto_connect(self.node, dest, **kwargs)
         if timeout is not None:
             try:

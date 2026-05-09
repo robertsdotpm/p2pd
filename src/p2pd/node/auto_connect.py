@@ -668,6 +668,7 @@ async def auto_connect(
     dest_addr,
     protocol=TCP,
     plugins=None,
+    test_all_phases=False,
 ):
     """Establish a P2P connection to dest_addr without picking a plugin.
 
@@ -680,6 +681,14 @@ async def auto_connect(
     `plugins` is the power-user override: pass an explicit sequence of
     plugin names and the protocol filter is bypassed. A phase whose
     plugins are all absent from the resolved set is skipped entirely.
+
+    `test_all_phases=True` is a diagnostic mode: every phase runs even
+    after an earlier one already produced a pipe. Each phase's outcome
+    is logged with an [AC-PHASE] prefix so you can grep cumulative
+    behaviour (e.g. punch failing after direct's TIME_WAIT residue).
+    The first winning pipe is what gets returned to the caller; later
+    phases run for telemetry and any pipes they produce are closed
+    via close_plugin so they don't leak.
 
     Returns ``(pipe, plugin)`` on success, ``(None, None)`` on failure.
     """
@@ -710,6 +719,8 @@ async def auto_connect(
 
     src_map = node.addr_map
 
+    winner_pipe = None
+    winner_plugin = None
     for phase_fn in (
         phase1_direct,
         phase2_tcp_punch,
@@ -717,7 +728,29 @@ async def auto_connect(
         phase4_turn,
     ):
         pipe, plugin = await phase_fn(node, src_map, dest_map, sig_pipe, plugin_set)
+        if test_all_phases:
+            log("[AC-PHASE] {0} -> pipe={1} plugin={2}".format(
+                phase_fn.__name__,
+                pipe is not None,
+                getattr(plugin, "name", type(plugin).__name__) if plugin is not None else None,
+            ))
+            if pipe is not None and winner_pipe is None:
+                winner_pipe = pipe
+                winner_plugin = plugin
+            elif pipe is not None:
+                # Already have a winner -- close this later phase's pipe
+                # so it doesn't leak. close_plugin is the canonical
+                # cleanup path; safe to call on already-closed plugins.
+                try:
+                    await close_plugin(
+                        plugin, node.traversal.plugins, node.traversal.inbound_pipes,
+                    )
+                except (OSError, asyncio.TimeoutError):
+                    log_exception()
+            continue
         if pipe is not None:
             return pipe, plugin
 
+    if test_all_phases:
+        return winner_pipe, winner_plugin
     return None, None
