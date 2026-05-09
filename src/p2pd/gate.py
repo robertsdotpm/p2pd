@@ -270,7 +270,7 @@ class Link(object):
         self.pipe = pipe
         self.client_tup = client_tup
         self.closed = False
-        self._subscribed = False
+        self.subscribed = False
 
     async def send(self, msg):
         if self.client_tup is None:
@@ -278,11 +278,24 @@ class Link(object):
         else:
             await self.pipe.send(msg, self.client_tup)
 
-    def _ensure_subscribed(self):
-        if not self._subscribed:
+    def ensure_subscribed(self):
+        if not self.subscribed:
             from aionetiface import SUB_ALL
             self.pipe.subscribe(SUB_ALL)
-            self._subscribed = True
+            self.subscribed = True
+
+    async def recv(self):
+        """Await one inbound message on the link and return its bytes,
+        or None if the link has been closed.  Convenience over the
+        ``async for`` iterator for one-shot reads."""
+        if self.closed:
+            return None
+        self.ensure_subscribed()
+        from aionetiface import SUB_ALL
+        msg = await self.pipe.recv(SUB_ALL)
+        if self.closed:
+            return None
+        return msg
 
     def __aiter__(self):
         return self
@@ -290,7 +303,7 @@ class Link(object):
     async def __anext__(self):
         if self.closed:
             raise StopAsyncIteration
-        self._ensure_subscribed()
+        self.ensure_subscribed()
         from aionetiface import SUB_ALL
         msg = await self.pipe.recv(SUB_ALL)
         if msg is None or self.closed:
