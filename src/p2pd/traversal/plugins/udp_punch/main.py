@@ -127,6 +127,37 @@ class UdpPunchPlugin(Plugin):
         # (af=AF_INET6, if_index), and bare indexing raises KeyError
         # before the "no STUN clients loaded" guard runs.
         stuns = self.stun_clients.get(self.af, {}).get(if_index, [])
+        # Lazy retry mirrors tcp_punch.setup_puncher_client: empty
+        # cached lists from startup get a one-shot retry here so
+        # the responder isn't disabled for the whole process when
+        # STUN happened to be temporarily unreachable on first
+        # boot. See tcp_punch comment for the matrix data behind
+        # this.
+        if not stuns:
+            from aionetiface import (
+                get_n_stun_clients, RFC5389, TCP, USE_MAP_NO,
+            )
+            from ..tcp_punch.punch_defs import PUNCH_CONF
+            try:
+                # proto=TCP matches load_stun_clients in
+                # node_utils so the cache slot we're filling stays
+                # consistent with what tcp_punch sees on the same
+                # (af, if_index). NATPredictAlloc only uses these
+                # for STUN-protocol port-mapping prediction; the
+                # transport doesn't matter to it.
+                retry = await asyncio.wait_for(
+                    get_n_stun_clients(
+                        af=self.af, n=USE_MAP_NO, mode=RFC5389,
+                        interface=self.nic, proto=TCP, conf=PUNCH_CONF,
+                    ),
+                    timeout=4.0,
+                )
+            except (OSError, ConnectionError, asyncio.TimeoutError):
+                retry = None
+            if retry:
+                stuns = retry
+                self.stun_clients.setdefault(self.af, {})[if_index] = retry
+                print("[UDP-PUNCH-RUN] lazy STUN retry recovered n={0}".format(len(retry)))
         if not stuns:
             return None, None
 

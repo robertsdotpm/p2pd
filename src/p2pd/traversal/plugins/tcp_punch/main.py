@@ -204,6 +204,36 @@ class PunchPlugin(Plugin):
         # the "no STUN clients loaded" guard below ever runs.
         stuns = self.stun_clients.get(self.af, {}).get(if_index, [])
 
+        # Lazy retry: load_stun_clients ran once at node startup and
+        # cached whatever get_n_stun_clients returned. The win10 /
+        # win81 mobile-NIC paths and Windows v6 STUN paths on this
+        # matrix periodically come back empty when the STUN servers
+        # were temporarily unreachable at startup; the cached
+        # emptiness then disables the punch responder for the rest
+        # of the process. Retry once on first responder run -- by
+        # the time an inbound PunchMsg arrives, the path is usually
+        # working again. This was observed in 9 listener logs across
+        # the v4 + v6 sweeps (always win10 or win81).
+        if not stuns:
+            from aionetiface import (
+                get_n_stun_clients, TCP, RFC5389, USE_MAP_NO,
+            )
+            from .punch_defs import PUNCH_CONF
+            try:
+                retry = await asyncio.wait_for(
+                    get_n_stun_clients(
+                        af=self.af, n=USE_MAP_NO, mode=RFC5389,
+                        interface=self.nic, proto=TCP, conf=PUNCH_CONF,
+                    ),
+                    timeout=4.0,
+                )
+            except (OSError, ConnectionError, asyncio.TimeoutError):
+                retry = None
+            if retry:
+                stuns = retry
+                self.stun_clients.setdefault(self.af, {})[if_index] = retry
+                print("[PUNCH-RUN] lazy STUN retry recovered n={0}".format(len(retry)))
+
         # Skip if no STUN clients loaded.
         if not stuns:
             return None, None
