@@ -280,7 +280,10 @@ async def async_drain_probe_residue(
     so late arrivers get silently dropped instead of being
     delivered as data on the user's pipe.
     """
-    loop = asyncio.get_event_loop()
+    if hasattr(asyncio, "get_running_loop"):
+        loop = asyncio.get_running_loop()
+    else:
+        loop = asyncio.get_event_loop()
     deadline = loop.time() + duration
     drained = 0
     sock.setblocking(False)
@@ -885,7 +888,10 @@ async def run_non_sym_side(
     The caller is responsible for closing the returned socket when
     the resulting connection is no longer needed.
     """
-    loop = asyncio.get_event_loop()
+    if hasattr(asyncio, "get_running_loop"):
+        loop = asyncio.get_running_loop()
+    else:
+        loop = asyncio.get_event_loop()
     if sock is None:
         sock = make_udp_socket(bind_ip, known_port, interface=interface)
 
@@ -1019,7 +1025,10 @@ async def run_symmetric_side(
 
     All non-winning sockets are closed before the function returns.
     """
-    loop = asyncio.get_event_loop()
+    if hasattr(asyncio, "get_running_loop"):
+        loop = asyncio.get_running_loop()
+    else:
+        loop = asyncio.get_event_loop()
     src_ports = random_probe_ports(probe_count, rng=rng)
 
     socks = []

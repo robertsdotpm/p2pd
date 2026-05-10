@@ -352,7 +352,10 @@ class RandomProbePlugin(Plugin):
         # collision count is probe_count^2 / 65000 ~= 1 with N=256.
         # See investigation in 2026-05-03 commit history for the full
         # case.
-        loop_for_algo = asyncio.get_event_loop()
+        if hasattr(asyncio, "get_running_loop"):
+            loop_for_algo = asyncio.get_running_loop()
+        else:
+            loop_for_algo = asyncio.get_event_loop()
         print("[RP-SPRAY-DISPATCH] role-label={0} (ignored) bind={1} peer={2}".format(
             my_role, bind_ip, peer_addr_ip,
         ))
@@ -438,10 +441,10 @@ class RandomProbePlugin(Plugin):
             worker_sock.connect(listener_addr)
         except OSError as exc:
             log("RandomProbePlugin: bridge setup failed: " + repr(exc))
-            for s in (res["sock"],):
+            for s in (res["sock"], listener_sock, worker_sock):
                 try:
                     s.close()
-                except OSError:
+                except (OSError, NameError):
                     pass
             if not self.result.done():
                 self.result.set_result(None)
@@ -457,7 +460,7 @@ class RandomProbePlugin(Plugin):
                 UDP, dest=worker_addr_for_pipe,
                 route=route, sock=listener_sock,
             ).connect()
-        except (OSError, ConnectionError, ValueError):
+        except (OSError, ConnectionError, ValueError, asyncio.TimeoutError):
             log("RandomProbePlugin: bridge Pipe wrap failed")
             for s in (listener_sock, worker_sock, res["sock"]):
                 try:
@@ -513,7 +516,10 @@ class RandomProbePlugin(Plugin):
         # starts; demo echo bytes queue in worker_sock with nobody
         # reading them and the 4s echo timeout fires before
         # selector_proxy ever begins forwarding.
-        loop_for_bridge = asyncio.get_event_loop()
+        if hasattr(asyncio, "get_running_loop"):
+            loop_for_bridge = asyncio.get_running_loop()
+        else:
+            loop_for_bridge = asyncio.get_event_loop()
         punched_sock_ref = res["sock"]
         peer_ref = res["peer"]
         nonce_ref = nonce
@@ -734,7 +740,10 @@ class RandomProbePlugin(Plugin):
                 "for full-cone-with-port-preservation peers)")
             return
 
-        loop = asyncio.get_event_loop()
+        if hasattr(asyncio, "get_running_loop"):
+            loop = asyncio.get_running_loop()
+        else:
+            loop = asyncio.get_event_loop()
         for stun_server in stun_servers:
             try:
                 resolved = await self.resolve_stun_dest(stun_server)

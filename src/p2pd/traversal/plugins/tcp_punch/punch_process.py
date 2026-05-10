@@ -226,7 +226,10 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None, node
 
         # Start the punching in a new process.
         # Store the future so the caller can inspect / cancel it if needed.
-        loop = asyncio.get_event_loop()
+        if hasattr(asyncio, "get_running_loop"):
+            loop = asyncio.get_running_loop()
+        else:
+            loop = asyncio.get_event_loop()
         args = (puncher, reverse_server_dest, stop_reader)
         print("[PUNCH-PROC] dispatching worker via run_in_executor "
               "(proc_pool={0}) reverse_dest={1}".format(
