@@ -159,7 +159,7 @@ class Gate(object):
         return False
 
     async def connect(self, target, transport=None, timeout=None,
-                      plugins=None, test_all_phases=False):
+                      plugins=None, test_all_phases=False, afs=None):
         """Resolve a PeerHandle / nickname / addr_bytes and return a Link.
 
         ``target`` is one of:
@@ -216,6 +216,8 @@ class Gate(object):
             kwargs["plugins"] = plugins
         if test_all_phases:
             kwargs["test_all_phases"] = True
+        if afs is not None:
+            kwargs["afs"] = afs
         coro = auto_connect(self.node, dest, **kwargs)
         if timeout is not None:
             try:

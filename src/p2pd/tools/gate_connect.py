@@ -18,12 +18,25 @@ import asyncio
 import os
 import sys
 
-from aionetiface import aionetiface_setup_event_loop
+from aionetiface import aionetiface_setup_event_loop, IP4, IP6
 aionetiface_setup_event_loop()
 
 sys.argv = [sys.argv[0]]
 
 from p2pd.gate import Gate, peer
+
+
+def parse_afs(env_value):
+    """Parse WG_AFS env: '4' / '6' / '4,6' / unset -> None (both)."""
+    if not env_value:
+        return None
+    out = []
+    for tok in env_value.replace(" ", "").split(","):
+        if tok == "4":
+            out.append(IP4)
+        elif tok == "6":
+            out.append(IP6)
+    return tuple(out) if out else None
 
 
 async def main():
@@ -37,12 +50,16 @@ async def main():
     # every realistic cumulative path.
     timeout = float(os.environ.get("WG_TIMEOUT", "900"))
 
+    afs = parse_afs(os.environ.get("WG_AFS"))
     async with (Gate(name=name) if name else Gate()) as gate:
-        print("WG_CONNECTOR_READY: {0}".format(gate.full_name or "?"), flush=True)
+        print("WG_CONNECTOR_READY: {0} afs={1}".format(
+            gate.full_name or "?", afs,
+        ), flush=True)
         link = await gate.connect(
             peer.find(target),
             test_all_phases=True,
             timeout=timeout,
+            afs=afs,
         )
         if link is None:
             print("OUTCOME winner_plugin=none", flush=True)

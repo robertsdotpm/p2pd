@@ -711,6 +711,7 @@ async def auto_connect(
     protocol=TCP,
     plugins=None,
     test_all_phases=False,
+    afs=None,
 ):
     """Establish a P2P connection to dest_addr without picking a plugin.
 
@@ -731,6 +732,12 @@ async def auto_connect(
     The first winning pipe is what gets returned to the caller; later
     phases run for telemetry and any pipes they produce are closed
     via close_plugin so they don't leak.
+
+    `afs` (default None = both IP4 and IP6) restricts the phases to
+    the given iterable of address families. Pass ``[IP6]`` to test
+    only the v6 path -- the v4 entries are stripped from src_map /
+    dest_map before any phase runs, so af_compatible() naturally
+    short-circuits the v4 branches inside each phase.
 
     Returns ``(pipe, plugin)`` on success, ``(None, None)`` on failure.
     """
@@ -760,6 +767,17 @@ async def auto_connect(
         return None, None
 
     src_map = node.addr_map
+
+    if afs is not None:
+        # Diagnostic / power-user override: pin the cascade to a
+        # specific AF or AF set by stripping the others off the addr
+        # maps. Phase loops iterate (IP4, IP6) and call
+        # af_compatible(src_map, dest_map, af) which returns False
+        # when one side is empty -- so a v6-only run produces only
+        # v6 combos and the v4 branches are no-ops.
+        keep = set(afs)
+        src_map = {k: v for k, v in src_map.items() if k not in (IP4, IP6) or k in keep}
+        dest_map = {k: v for k, v in dest_map.items() if k not in (IP4, IP6) or k in keep}
 
     winner_pipe = None
     winner_plugin = None
