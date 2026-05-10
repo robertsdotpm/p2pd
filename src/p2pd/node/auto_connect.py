@@ -562,6 +562,16 @@ async def punch_phase(
     return None, None
 
 
+def addr_map_has_symmetric(addr_map):
+    """True if any (af, nic) entry in addr_map has NAT type SYMMETRIC."""
+    for af in (IP4, IP6):
+        for entry in (addr_map.get(af) or {}).values():
+            nat = entry.get("nat") or {}
+            if nat.get("type") == SYMMETRIC_NAT:
+                return True
+    return False
+
+
 async def phase2_tcp_punch(
     node,
     src_map,
@@ -571,6 +581,20 @@ async def phase2_tcp_punch(
 ):
     names = tuple(n for n in plugins_for_phase("punch") if n in plugins)
     if not names:
+        return None, None
+    # Skip tcp_punch entirely when either peer is behind a SYMMETRIC
+    # NAT. The plugin's port-prediction math (boundary_port_alloc) is
+    # built on EIM/EDM/preserving NAT behaviour where the next outbound
+    # source-port is predictable. Symmetric NATs assign a fresh
+    # external port per (src,dst) tuple, so the predicted ports never
+    # match the peer's actual mappings -- every spray returns
+    # successful=0/N. Without this skip, phase2 burns its full plugin
+    # timeout (180 s) on a punch that's mathematically impossible.
+    # Going straight to phase3 (where random_probe handles symmetric)
+    # is strictly faster with no loss in success.
+    if addr_map_has_symmetric(src_map) or addr_map_has_symmetric(dest_map):
+        log("phase2_tcp_punch: SYMMETRIC NAT detected on at least one "
+            "side; skipping tcp_punch (cannot predict ports)")
         return None, None
     return await punch_phase(
         node, src_map, dest_map, sig_pipe,
@@ -600,15 +624,7 @@ async def phase3_udp_probe(
     # one based on NAT shape: random_probe is the only plugin that
     # works when either peer is symmetric, so use it then; otherwise
     # udp_punch is the predictable-NAT optimised path.
-    def has_symmetric(addr_map):
-        for af in (IP4, IP6):
-            for entry in (addr_map.get(af) or {}).values():
-                nat = entry.get("nat") or {}
-                if nat.get("type") == SYMMETRIC_NAT:
-                    return True
-        return False
-
-    if has_symmetric(src_map) or has_symmetric(dest_map):
+    if addr_map_has_symmetric(src_map) or addr_map_has_symmetric(dest_map):
         chosen = "random_probe" if "random_probe" in names else names[0]
     else:
         chosen = "udp_punch" if "udp_punch" in names else names[0]
