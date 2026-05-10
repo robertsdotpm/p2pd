@@ -207,59 +207,75 @@ af,
             af, src_ip, dest_ip, len(port_allocs),
             spray_duration, monitor_duration, same_machine,
         ))
-    pre_connect_infos, sel = setup_engine(af, port_allocs, src_ip, nic_id)
-    bound_locals = []
-    for pa, s in pre_connect_infos:
-        try:
-            bound_locals.append(s.getsockname())
-        except OSError:
-            bound_locals.append("?")
-    print("[ENGINE] setup_engine bound {0}/{1} sockets locals={2}".format(
-        len(pre_connect_infos), len(port_allocs), bound_locals,
-    ), flush=True)
-    log("[ENGINE] setup_engine bound {0}/{1} sockets".format(
-        len(pre_connect_infos), len(port_allocs),
-    ))
+    sock = None
+    pre_connect_infos = []
+    sel = None
+    try:
+        pre_connect_infos, sel = setup_engine(af, port_allocs, src_ip, nic_id)
+        bound_locals = []
+        for pa, s in pre_connect_infos:
+            try:
+                bound_locals.append(s.getsockname())
+            except OSError:
+                bound_locals.append("?")
+        print("[ENGINE] setup_engine bound {0}/{1} sockets locals={2}".format(
+            len(pre_connect_infos), len(port_allocs), bound_locals,
+        ), flush=True)
+        log("[ENGINE] setup_engine bound {0}/{1} sockets".format(
+            len(pre_connect_infos), len(port_allocs),
+        ))
 
-    # Wait for synchronized punch time frame
-    print("[ENGINE] sleep_until enter", flush=True)
-    log("[ENGINE] entering sleep_until -> punch rendezvous")
-    f_sleep_until()
+        # Wait for synchronized punch time frame
+        print("[ENGINE] sleep_until enter", flush=True)
+        log("[ENGINE] entering sleep_until -> punch rendezvous")
+        f_sleep_until()
 
-    # Initiate simultaneous open
-    print("[ENGINE] sleep_until done; spraying {0} connects for {1}s to {2}".format(
-        len(pre_connect_infos), spray_duration, dest_ip,
-    ), flush=True)
-    log("[ENGINE] sleep_until done; spraying {0} connects for {1}s".format(
-        len(pre_connect_infos), spray_duration,
-    ))
-    connect_on_tcp_sockets(
-        same_machine, pre_connect_infos, dest_ip, spray_duration=spray_duration,
-    )
-    print("[ENGINE] connect_on_tcp_sockets returned; entering monitor for {0}s".format(
-        monitor_duration,
-    ), flush=True)
+        # Initiate simultaneous open
+        print("[ENGINE] sleep_until done; spraying {0} connects for {1}s to {2}".format(
+            len(pre_connect_infos), spray_duration, dest_ip,
+        ), flush=True)
+        log("[ENGINE] sleep_until done; spraying {0} connects for {1}s".format(
+            len(pre_connect_infos), spray_duration,
+        ))
+        connect_on_tcp_sockets(
+            same_machine, pre_connect_infos, dest_ip, spray_duration=spray_duration,
+        )
+        print("[ENGINE] connect_on_tcp_sockets returned; entering monitor for {0}s".format(
+            monitor_duration,
+        ), flush=True)
 
-    # Immediately monitor, no blind sleep
-    successful = socket_event_monitor(
-        sel, monitor_duration=monitor_duration, retry_interval=retry_interval
-    )
+        # Immediately monitor, no blind sleep
+        successful = socket_event_monitor(
+            sel, monitor_duration=monitor_duration, retry_interval=retry_interval
+        )
 
-    sock_list = list(successful)
-    print("[ENGINE] monitor done; successful={0}/{1}".format(
-        len(sock_list), len(pre_connect_infos),
-    ), flush=True)
-    log("[ENGINE] monitor done; successful={0}/{1}".format(
-        len(sock_list), len(pre_connect_infos),
-    ))
+        sock_list = list(successful)
+        print("[ENGINE] monitor done; successful={0}/{1}".format(
+            len(sock_list), len(pre_connect_infos),
+        ), flush=True)
+        log("[ENGINE] monitor done; successful={0}/{1}".format(
+            len(sock_list), len(pre_connect_infos),
+        ))
 
-    # Application-level validation should still be done after this
-    sock = choose_winning_tcp_sock(dest_ip, sock_list, our_ip)
-    print("[ENGINE] choose_winning_tcp_sock -> {0}".format(
-        "selected" if sock else "no winner",
-    ), flush=True)
-    log("[ENGINE] choose_winning_tcp_sock -> {0}".format(
-        "selected" if sock else "no winner",
-    ))
+        # Application-level validation should still be done after this
+        sock = choose_winning_tcp_sock(dest_ip, sock_list, our_ip)
+        print("[ENGINE] choose_winning_tcp_sock -> {0}".format(
+            "selected" if sock else "no winner",
+        ), flush=True)
+        log("[ENGINE] choose_winning_tcp_sock -> {0}".format(
+            "selected" if sock else "no winner",
+        ))
 
-    return sock
+        return sock
+    finally:
+        if sel is not None:
+            try:
+                sel.close()
+            except Exception:
+                pass
+        for _, s in pre_connect_infos:
+            if s is not sock:
+                try:
+                    s.close()
+                except OSError:
+                    pass
