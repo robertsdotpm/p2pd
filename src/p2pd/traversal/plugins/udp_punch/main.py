@@ -384,7 +384,10 @@ class UdpPunchPlugin(Plugin):
                 # but pass a flat (ip, port) to Pipe.
                 listener_addr = listener_sock.getsockname()
                 worker_addr = worker_sock.getsockname()
-                worker_addr_for_pipe = (worker_addr[0], worker_addr[1])
+                # Use full getsockname() address for both connect() and Pipe
+                # dest so the asyncio transport's self._address comparison
+                # never mismatches on IPv6 (4-tuple vs 2-tuple ValueError).
+                worker_addr_for_pipe = worker_addr
                 # UDP-connect both ends so recv/send default to the
                 # known peer and the kernel filters incoming.
                 listener_sock.connect(worker_addr)

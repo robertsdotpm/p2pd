@@ -227,5 +227,12 @@ def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
     else:
         # Non-master side waits for the first completed connection
         winner = wait_for_first_with_data(sock_list)
+        for loser in sock_list:
+            if loser is not winner:
+                try:
+                    loser.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+                loser.close()
 
     return winner
