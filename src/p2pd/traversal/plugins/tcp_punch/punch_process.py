@@ -277,9 +277,13 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None, node
         ))
 
         return punch_process_connection
-    except (asyncio.TimeoutError, asyncio.CancelledError) as e:
-        print("[PUNCH-PROC] reverse_server.accept timed out or cancelled: " + repr(e), flush=True)
-        log("[PUNCH-PROC] start_punching_process timed out or cancelled: " + repr(e))
+    except asyncio.CancelledError:
+        print("[PUNCH-PROC] reverse_server.accept cancelled", flush=True)
+        log("[PUNCH-PROC] start_punching_process cancelled")
+        raise
+    except asyncio.TimeoutError as e:
+        print("[PUNCH-PROC] reverse_server.accept timed out: " + repr(e), flush=True)
+        log("[PUNCH-PROC] start_punching_process timed out: " + repr(e))
     except (OSError, ConnectionError) as e:
         print("[PUNCH-PROC] OS/Connection error: " + repr(e), flush=True)
         log("[PUNCH-PROC] start_punching_process OS/Connection error: " + repr(e))
