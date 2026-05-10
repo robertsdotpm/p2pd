@@ -75,6 +75,10 @@ def plugins_for_protocol(protocol):
 PHASE1_BUDGET = 3.0
 TURN_TOTAL_CAP = 3
 DEFAULT_PLUGIN_TIMEOUT = 25.0
+# ICE-PAC (draft-ietf-ice-pac) grace window after race_combos timeout:
+# probe-lab data (arXiv:2510.27500 §6) shows ~8% of successes arrive in
+# the window immediately after the local probe timeout fires.
+PHASE_GRACE_S = 0.200
 
 
 # ---------------------------------------------------------------------------
@@ -376,8 +380,27 @@ async def race_combos(
                 winner_plugin = plugin
                 break
     except asyncio.TimeoutError:
-        # Whole-race ceiling hit -- no winner this round.
-        pass
+        # ICE-PAC grace window (draft-ietf-ice-pac, arXiv:2510.27500 §6):
+        # probe-lab data shows ~8% of successful punches arrive in the window
+        # just after the local timeout fires -- the peer's spray lands while
+        # our tasks are still alive but as_completed has already raised.
+        # Waiting PHASE_GRACE_S lets any task that completes in that window
+        # resolve as a winner before we cancel everything.
+        await asyncio.sleep(PHASE_GRACE_S)
+        for t in tasks:
+            if not t.done():
+                continue
+            try:
+                late_plugin = t.result()
+            except Exception:  # noqa: BLE001
+                continue
+            if late_plugin is None:
+                continue
+            plugins.append(late_plugin)
+            late_pipe = plugin_pipe(late_plugin)
+            if late_pipe is not None and winner_pipe is None:
+                winner_pipe = late_pipe
+                winner_plugin = late_plugin
     except asyncio.CancelledError:
         for t in tasks:
             if not t.done():
