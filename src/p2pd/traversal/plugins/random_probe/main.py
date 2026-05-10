@@ -117,6 +117,7 @@ class RandomProbePlugin(Plugin):
 
     async def run(self, reply=None):
         """Drive the random-probe rendezvous from initiator or responder side."""
+        self.bridge_socks = []
         # Loopback is excluded above; any other route_type passes
         # through. The IP-selection block below picks NIC vs EXT
         # addresses so the algorithm runs correctly on either path.
@@ -450,6 +451,8 @@ class RandomProbePlugin(Plugin):
                 self.result.set_result(None)
             return
 
+        self.bridge_socks = [res["sock"], listener_sock, worker_sock]
+
         log("RandomProbePlugin: bridge listener={0} worker={1}".format(
             listener_addr, worker_addr,
         ))
@@ -645,6 +648,31 @@ class RandomProbePlugin(Plugin):
         # If sym's [RP-INBOUND] shows this msg, the sock works
         # post-Pipe-wrap and the bug is in pipe.send.  If it
         # doesn't, the sock itself stopped working after wrap.
+
+    async def close(self):
+        """Close bridge sockets and cancel the result future.
+
+        Mirrors udp_punch's close() so close_plugin() in traversal_utils
+        can call it on timeout/CancelledError paths. The bridge_worker
+        thread sees EBADF/OSError on the closed sockets and exits.
+        """
+        for sock in getattr(self, "bridge_socks", []):
+            try:
+                sock.close()
+            except OSError:
+                pass
+        self.bridge_socks = []
+
+        prebound = getattr(self, "prebound_sock", None)
+        if prebound is not None:
+            try:
+                prebound.close()
+            except OSError:
+                pass
+            self.prebound_sock = None
+
+        if not self.result.done():
+            self.result.cancel()
 
     # ── helpers ─────────────────────────────────────────────────
 

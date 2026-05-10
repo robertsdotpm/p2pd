@@ -472,7 +472,6 @@ self,
             """Send a CreatePermission for peer_tup and record the relay mapping."""
             # Generate message to send.
             msg = await self.white_list_msg(peer_tup)
-            self.peers[peer_tup] = peer_relay_tup
 
             # Send message to turn server.
             f, retransmit, new_future = self.record_msg(msg)
@@ -505,6 +504,12 @@ self,
 
             # White list the peer if needed.
             await async_retry(f, count=5, timeout=5)
+
+            # Record the relay mapping only after CreatePermission is confirmed.
+            # Writing before confirmation caused accept_peer() to short-circuit as
+            # already_accepted=True on retries even when no valid permission exists,
+            # silently routing data to an unconfirmed relay entry.
+            self.peers[peer_tup] = peer_relay_tup
 
             # Start the loop to refresh the permission.
             task = asyncio.create_task(async_wrap_errors(refresher()))
