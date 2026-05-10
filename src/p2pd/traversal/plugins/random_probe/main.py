@@ -451,19 +451,6 @@ class RandomProbePlugin(Plugin):
             listener_addr, worker_addr,
         ))
 
-        try:
-            route = await self.bind()
-        except (OSError, ValueError):
-            log("RandomProbePlugin: route bind failed for bridge wrap")
-            for s in (listener_sock, worker_sock, res["sock"]):
-                try:
-                    s.close()
-                except OSError:
-                    pass
-            if not self.result.done():
-                self.result.set_result(None)
-            return
-
         from aionetiface import Pipe, UDP
         try:
             pipe = await Pipe(

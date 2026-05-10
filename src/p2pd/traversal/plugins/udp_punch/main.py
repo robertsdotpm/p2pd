@@ -707,6 +707,10 @@ class UdpPunchPlugin(Plugin):
 
             if not self.result.done():
                 self.result.set_result(pipe if converged else None)
+        except asyncio.CancelledError:
+            if not self.result.done():
+                self.result.set_result(None)
+            raise
         except Exception:  # pylint: disable=broad-except
             log_exception()
             if not self.result.done():
