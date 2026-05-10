@@ -88,6 +88,16 @@ class Plugin:
         # here. Cleanup semantics across plugins will be revisited in
         # a dedicated session; for now leave the entry so a late
         # inbound connection has somewhere to land.
+        timeout = getattr(self, "timeout", None)
+        if timeout is not None:
+            try:
+                return await asyncio.wait_for(
+                    asyncio.shield(self.inbound_pipes[self.plugin_id]),
+                    timeout=timeout * 0.9,
+                )
+            except asyncio.TimeoutError:
+                log("wait_for_inbound timed out after {0}s".format(timeout * 0.9))
+                return None
         return await self.inbound_pipes[self.plugin_id]
 
     async def run(self, reply=None):

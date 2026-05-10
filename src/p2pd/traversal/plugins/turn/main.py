@@ -304,8 +304,8 @@ class TURNPlugin(Plugin):
                 )
             except asyncio.TimeoutError:
                 print("[TURN-DBG] accept_peer timed out; sending rejection")
-                await self.close()
                 await self._send_rejection("accept_peer_timeout")
+                await self.close()
                 return
             print("[TURN-DBG] accept_peer returned already_accepted={0}".format(already_accepted))
 

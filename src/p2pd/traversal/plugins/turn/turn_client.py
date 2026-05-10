@@ -624,7 +624,10 @@ self,
         await self.do_cleanup()
 
         # Processing loop sets this when done.
-        await self.turn_client_stopped.wait()
+        try:
+            await asyncio.wait_for(self.turn_client_stopped.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            log("[TURN] turn_client_stopped wait timed out; process_replies may have crashed")
 
         # Wait for permission refresher tasks or cancel them.
         await gather_or_cancel(self.tasks, 2)
