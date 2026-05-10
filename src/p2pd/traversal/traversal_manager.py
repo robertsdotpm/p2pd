@@ -561,7 +561,9 @@ class TraversalManager:
                     if now >= plugin.expires_at:
                         try:
                             await close_plugin(plugin, self.plugins, self.inbound_pipes)
-                        except (asyncio.CancelledError, OSError, AttributeError, asyncio.TimeoutError):
+                        except asyncio.CancelledError:
+                            raise
+                        except (OSError, AttributeError, asyncio.TimeoutError):
                             log_exception()
             except asyncio.CancelledError:
                 raise
