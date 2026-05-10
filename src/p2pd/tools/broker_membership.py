@@ -83,6 +83,8 @@ async def main_async(peer_pub_hexes):
                     node.router.servers,
                     node.router.clients,
                 )
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:  # noqa: BLE001 -- diagnostic path
                 out["publish_for"][tgt] = {"error": "{0}: {1}".format(type(exc).__name__, exc)}
                 continue
