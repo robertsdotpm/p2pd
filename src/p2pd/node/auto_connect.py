@@ -544,10 +544,22 @@ async def punch_phase(
 
                 combos = []
                 for src, dest in slot:
+                    pair_sym = _pair_has_symmetric(src, dest)
                     for name in active_names:
+                        if pair_sym and name in SYMMETRIC_INCOMPATIBLE_PLUGINS:
+                            # Predictable-port punch plugins can't work
+                            # when either end of THIS specific pair is
+                            # behind a symmetric NAT -- the bucket math
+                            # has no fixed peer port to target. Other
+                            # pairs in this slot may still be punchable
+                            # so we filter at the combo level, not the
+                            # phase level.
+                            continue
                         combos.append(
                             (name, af, route_type, src, dest)
                         )
+                if not combos:
+                    continue
 
                 log(fstr(
                     "auto_connect: {0} route={1} af={2} slot={3} pairs={4} timeout={5}s",
@@ -563,13 +575,32 @@ async def punch_phase(
 
 
 def addr_map_has_symmetric(addr_map):
-    """True if any (af, nic) entry in addr_map has NAT type SYMMETRIC."""
+    """True if any (af, nic) entry in addr_map has NAT type SYMMETRIC.
+
+    Kept for tests / external callers; the cascade now filters
+    per-pair via _pair_has_symmetric in punch_phase.
+    """
     for af in (IP4, IP6):
         for entry in (addr_map.get(af) or {}).values():
             nat = entry.get("nat") or {}
             if nat.get("type") == SYMMETRIC_NAT:
                 return True
     return False
+
+
+def _pair_has_symmetric(src, dest):
+    """True if either end of this specific (src, dest) NIC pair is symmetric."""
+    src_nat = (src.get("nat") or {}).get("type")
+    dest_nat = (dest.get("nat") or {}).get("type")
+    return src_nat == SYMMETRIC_NAT or dest_nat == SYMMETRIC_NAT
+
+
+# Plugins whose port-prediction math (boundary_port_alloc) requires
+# a deterministic NAT mapping function on both sides. Excluded from
+# pairs where either NIC reports SYMMETRIC NAT. random_probe is
+# specifically designed to handle the symmetric case via birthday-
+# paradox spread, so it is NOT in this set.
+SYMMETRIC_INCOMPATIBLE_PLUGINS = frozenset({"tcp_punch", "udp_punch"})
 
 
 async def phase2_tcp_punch(
@@ -592,10 +623,14 @@ async def phase2_tcp_punch(
     # timeout (180 s) on a punch that's mathematically impossible.
     # Going straight to phase3 (where random_probe handles symmetric)
     # is strictly faster with no loss in success.
-    if addr_map_has_symmetric(src_map) or addr_map_has_symmetric(dest_map):
-        log("phase2_tcp_punch: SYMMETRIC NAT detected on at least one "
-            "side; skipping tcp_punch (cannot predict ports)")
-        return None, None
+    # Symmetric-NAT skipping is now per-pair inside punch_phase via
+    # the SYMMETRIC_INCOMPATIBLE filter, not a coarse addr_map check.
+    # The coarse check was over-broad: hosts with multiple NICs (e.g.
+    # a primary FULL_CONE LAN NIC and a secondary SYMMETRIC mobile
+    # NIC) would have phase2 skipped entirely even though the
+    # FULL_CONE-FULL_CONE pair could punch fine. Per-pair filtering
+    # keeps the impossible (sym, *) and (*, sym) pairs out of the
+    # combo list while preserving viable LAN-LAN and EXT-EXT combos.
     # Skip tcp_punch when the destination is a Windows-XP listener
     # and we are not on the same machine. CLAUDE.md and pcap forensics
     # document an unfixable XP tcpip.sys behaviour: cross-machine
