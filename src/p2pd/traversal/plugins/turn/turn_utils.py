@@ -52,35 +52,84 @@ af,
 PER_SERVER_TIMEOUT = 6.0
 
 
+RACE_BATCH_SIZE = 2
+
+
 async def get_first_working_turn_client(
     af,
     servers,
     nic,
     msg_cb,
     per_server_timeout=PER_SERVER_TIMEOUT,
+    race_n=RACE_BATCH_SIZE,
 ):
-    """Try each TURN server in ranked order and return the first one that connects.
+    """Race the top race_n TURN servers concurrently; first to allocate wins.
 
-    Each server attempt is bounded by ``per_server_timeout`` so a single
-    unreachable / slow server (typically one with high failed_tests in
-    servers.json that rendezvous_rank still happened to hash up front)
-    cannot eat the plugin's overall budget. The plugin's PLUGIN_CONF
-    timeout must be set high enough to absorb several of these
-    per-server caps in a row -- if it isn't, we'll bail before
-    finding a working relay even though the network is fine.
+    The previous shape was a strictly-sequential walk, so a single slow
+    server at the head of the rendezvous-rank ate per_server_timeout
+    (6 s default) before the next was tried. Public TURN endpoints
+    have observable per-attempt failure rates in the matrix data
+    (cycle 3 win11 just showed turn=- with no obvious initiator-side
+    fault); racing 2 candidates in parallel turns the wallclock
+    behaviour from "sum of failures" into "min of failures" without
+    changing what success looks like to the responder.
+
+    Coordination with the responder is preserved: the winner's dest
+    tuple is what gets sent in the initiator's TURNMsg.payload, so
+    the responder still allocates on the SAME server we landed on.
+    Cancelled in-flight allocations leave a relay reservation on the
+    losing server that expires under its lease (~10 min default);
+    no leak.
+
+    On total batch failure (all race_n candidates timed out / errored),
+    fall through to the original sequential walk over the rest. This
+    preserves the renegotiation MAX_RENEGOTIATIONS budget upstream.
     """
-    for server in servers:
+    if not servers:
+        return None
+
+    async def try_one(server):
         try:
             _, _, turn_client = await asyncio.wait_for(
-                get_turn_client(
-                    af,
-                    server,
-                    nic,
-                    msg_cb=msg_cb,
-                ),
+                get_turn_client(af, server, nic, msg_cb=msg_cb),
                 timeout=per_server_timeout,
             )
             return turn_client
         except (OSError, ConnectionError, asyncio.TimeoutError):
             log_exception()
-            continue
+            return None
+
+    batch = list(servers[:race_n])
+    rest = list(servers[race_n:])
+
+    if len(batch) > 1:
+        tasks = [asyncio.ensure_future(try_one(s)) for s in batch]
+        winner = None
+        try:
+            for fut in asyncio.as_completed(tasks):
+                client = None
+                try:
+                    client = await fut
+                except (OSError, ConnectionError, asyncio.TimeoutError):
+                    client = None
+                if client is not None:
+                    winner = client
+                    break
+        finally:
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+        if winner is not None:
+            return winner
+    elif batch:
+        client = await try_one(batch[0])
+        if client is not None:
+            return client
+
+    # Batch failed -- sequential fallthrough over remaining servers.
+    for server in rest:
+        client = await try_one(server)
+        if client is not None:
+            return client
+    return None
