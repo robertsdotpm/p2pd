@@ -31,6 +31,7 @@ The `plugins=` argument filters which phases run. A phase is skipped
 when none of its plugins are in the configured set.
 """
 import asyncio
+import time
 from aionetiface import (
     IP4, IP6, IPRange, NIC_BIND, EXT_BIND, LOOPBACK_BIND, TCP, UDP,
     af_bitlen, fstr, log, log_exception, parse_node_addr,
@@ -848,6 +849,20 @@ async def auto_connect(
         src_map = {k: v for k, v in src_map.items() if k not in (IP4, IP6) or k in keep}
         dest_map = {k: v for k, v in dest_map.items() if k not in (IP4, IP6) or k in keep}
 
+    def worst_nat(addr_map):
+        """Return the highest NAT type integer across all AFs in addr_map, or None."""
+        worst = None
+        for af in (IP4, IP6):
+            for entry in (addr_map.get(af) or {}).values():
+                nat_type = (entry.get("nat") or {}).get("type")
+                try:
+                    v = int(nat_type)
+                    if worst is None or v > worst:
+                        worst = v
+                except (TypeError, ValueError):
+                    pass
+        return worst
+
     winner_pipe = None
     winner_plugin = None
     for phase_fn in (
@@ -856,12 +871,19 @@ async def auto_connect(
         phase3_udp_probe,
         phase4_turn,
     ):
+        phase_t0 = time.monotonic()
         pipe, plugin = await phase_fn(node, src_map, dest_map, sig_pipe, plugin_set)
         if test_all_phases:
-            line = "[AC-PHASE] {0} -> pipe={1} plugin={2}".format(
+            elapsed_ms = int((time.monotonic() - phase_t0) * 1000)
+            src_nat = worst_nat(src_map)
+            dest_nat = worst_nat(dest_map)
+            line = "[AC-PHASE] {0} -> pipe={1} plugin={2} src_nat={3} dest_nat={4} elapsed={5}ms".format(
                 phase_fn.__name__,
                 pipe is not None,
                 getattr(plugin, "name", type(plugin).__name__) if plugin is not None else None,
+                src_nat,
+                dest_nat,
+                elapsed_ms,
             )
             log(line)
             print(line, flush=True)
