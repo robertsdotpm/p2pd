@@ -400,6 +400,8 @@ self,
     # Will write credential and HMAC if a message needs 'signing.'
     async def send_turn_msg(self, msg, do_sign=False):
         """Serialise and send a TURN control message, signing with HMAC-MD5 if requested."""
+        if self.turn_pipe is None or self.turn_pipe.on_close.is_set():
+            raise ConnectionError("TURN pipe is closed")
         buf, _ = STUNMsg.unpack(msg.pack(), mode=RFC5389)
         if self.requires_auth:
             if do_sign and self.key:
