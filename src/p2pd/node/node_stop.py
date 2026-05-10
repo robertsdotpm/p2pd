@@ -100,6 +100,8 @@ async def node_stop(node):
                         await close_with_timeout(pipe)
                     except (OSError, asyncio.TimeoutError):
                         pass
+            else:
+                result.cancel()
 
     if getattr(node, "resources", None):
         await node.resources.close()

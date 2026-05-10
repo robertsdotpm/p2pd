@@ -97,6 +97,9 @@ class Plugin:
                 )
             except asyncio.TimeoutError:
                 log("wait_for_inbound timed out after {0}s".format(timeout * 0.9))
+                fut = self.inbound_pipes.get(self.plugin_id)
+                if fut is not None and not fut.done():
+                    fut.cancel()
                 return None
         return await self.inbound_pipes[self.plugin_id]
 

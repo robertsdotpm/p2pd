@@ -157,7 +157,9 @@ class TraversalManager:
         # awaiting it (demo, race_plugin_results) return immediately.
         try:
             await asyncio.wait_for(plugin.run(reply), timeout=plugin.timeout)
-        except asyncio.CancelledError:  # pylint: disable=try-except-raise
+        except asyncio.CancelledError:
+            if not plugin.result.done():
+                plugin.result.cancel()
             raise
         except (asyncio.TimeoutError, OSError, ConnectionError) as exc:
             log("[TM] run_plugin caught {0}: {1}".format(
@@ -546,7 +548,10 @@ class TraversalManager:
                 now = get_running_loop().time()
                 for plugin in list(self.plugins.values()):
                     if now >= plugin.expires_at:
-                        await close_plugin(plugin, self.plugins, self.inbound_pipes)
+                        try:
+                            await close_plugin(plugin, self.plugins, self.inbound_pipes)
+                        except (asyncio.CancelledError, OSError, AttributeError, asyncio.TimeoutError):
+                            log_exception()
             except asyncio.CancelledError:
                 raise
             except (OSError, AttributeError, asyncio.TimeoutError):
