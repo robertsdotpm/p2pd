@@ -115,6 +115,12 @@ async def setup_node():
             if start_attempt < 2:
                 cout("PNP servers unreachable (attempt {0}/3); retrying in 5 s...".format(start_attempt + 1))
                 await asyncio.sleep(5)
+        except asyncio.CancelledError:
+            await async_wrap_errors(gate.__aexit__(None, None, None))
+            raise
+        except Exception:
+            await async_wrap_errors(gate.__aexit__(None, None, None))
+            raise
     else:
         # All 3 attempts exhausted. Most likely cause: namebump server
         # was killed. Check 'ps aux | grep namebump' on the PNP host.
