@@ -1,5 +1,6 @@
 """Outbound connection logic for a p2pd node."""
 import asyncio
+import time
 from aionetiface import (
     sort_ips_by_nic, route_pool_from_ips, fstr, log, parse_node_addr,
     IP4, IP6, NIC_BIND, EXT_BIND, LOOPBACK_BIND,
@@ -39,6 +40,12 @@ async def resolve_pnp_addr(node, pnp_addr):
         raise LookupError(fstr("Nickname '{0}' not found", (pnp_addr,)))
     addr_bytes = pkt.value
     dest_vk = pkt.vkc
+    pkt_age = time.time() - getattr(pkt, "pnp_ts", time.time())
+    if pkt_age > 300:
+        log(fstr(
+            "PNP record for '{0}' is {1}s old; attempting MQTT refresh",
+            (pnp_addr, int(pkt_age)),
+        ))
     source = "nickname"
     try:
         updated_addr_bytes = await asyncio.wait_for(
@@ -49,6 +56,11 @@ async def resolve_pnp_addr(node, pnp_addr):
             source = "mqtt"
     except asyncio.TimeoutError:
         log("Timeout MQTT get updated bytes " + str(pnp_addr))
+        if pkt_age > 300:
+            log(fstr(
+                "Warning: MQTT refresh failed; using {0}s-old PNP record for '{1}'",
+                (int(pkt_age), pnp_addr),
+            ))
 
     return addr_bytes, dest_vk, source
 
