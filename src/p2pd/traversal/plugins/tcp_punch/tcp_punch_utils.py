@@ -169,17 +169,28 @@ def bind_punch_sockets(
             except OSError:
                 pass
         bind_tup = binder_sync(af, ip_strip_if(bind_ip), p.src_port, nic_id)
-        try:
-            s.bind(bind_tup)
-            bound_socks.append((p, s))
-        except OSError as exc:
-            # Port collision (typically with the demo's main listener
-            # at 10001 / the OS-picked secondary port) means the engine
-            # silently loses that allocation. Log it so a "punch
-            # converged but echo never came back" failure can be
-            # traced to the actual bind that failed -- otherwise the
-            # engine just runs with fewer sockets and no diagnostic.
-            bind_failures.append((bind_tup, repr(exc)))
+        bound = False
+        for retry in range(4):
+            try_port = p.src_port + retry
+            if try_port > 65535:
+                break
+            try_tup = binder_sync(af, ip_strip_if(bind_ip), try_port, nic_id)
+            try:
+                s.bind(try_tup)
+                bound_socks.append((p, s))
+                bound = True
+                if retry:
+                    log(fstr(
+                        "bind_punch_sockets: port collision on {0}; rebind to +{1} succeeded",
+                        (bind_tup, retry),
+                    ))
+                break
+            except OSError as exc:
+                if retry == 3:
+                    bind_failures.append((bind_tup, repr(exc)))
+                    s.close()
+                    bound = True
+        if not bound:
             s.close()
 
     if bind_failures:

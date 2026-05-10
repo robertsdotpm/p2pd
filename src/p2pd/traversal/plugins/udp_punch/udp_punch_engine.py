@@ -293,8 +293,22 @@ def watch_for_winner(
     # Fallback: no CONFIRM arrived but we may have replied to a PROBE.
     # Walk sockets once more peeking for any pending CONFIRM that
     # arrived just as we exited the loop.
+    #
+    # Slave grace window: if we replied to at least one of master's PROBEs
+    # but never received the master's 5x CONFIRM burst, give 20ms for the
+    # burst to arrive in-flight.  A PROBE arriving near the last ms of
+    # listen_duration would cause master to send its burst right as we
+    # exited the loop; 20ms is 2x a typical LAN RTT and safely below any
+    # meaningful timeout.  Master doesn't need this because it returns
+    # immediately on its first PROBE arrival.
+    fallback_timeout = 0.0
+    if not is_master and probes_seen > 0 and confirms_seen == 0:
+        fallback_timeout = 0.020
+        log("udp_punch.watch_for_winner: slave grace window 20ms (probes_seen={0})".format(
+            probes_seen,
+        ))
     try:
-        ready, _, _ = select.select(socks, [], [], 0.0)
+        ready, _, _ = select.select(socks, [], [], fallback_timeout)
     except (OSError, ValueError):
         ready = []
     for s in ready:
