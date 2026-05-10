@@ -384,7 +384,9 @@ class PunchPlugin(Plugin):
         recv_mappings = None
         if reply is not None:
             recv_mappings = [NATMapping(m) for m in reply.payload.mappings]
-            assert recv_mappings
+            if not recv_mappings:
+                log("[TCP-PUNCH] advance_punching_protocol: peer sent empty mappings list; dropping")
+                return None
 
         # Compute the next round of port predictions.
         port_alloc, is_end = await self.nat_alloc.port_alloc(recv_mappings)
