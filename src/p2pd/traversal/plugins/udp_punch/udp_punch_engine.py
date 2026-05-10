@@ -388,15 +388,6 @@ def udp_punch_engine(
         log("udp_punch_engine: NO sockets bound; aborting")
         return None
 
-    # Synchronised barrier: wait for the agreed punch_time so both
-    # sides spray in the same window.
-    f_sleep_until()
-
-    log("udp_punch_engine: entering fire_probes")
-    fire_probes(
-        bound_socks, dest_ip, nonce,
-        spray_duration=spray_duration, stop_reader=stop_reader,
-    )
     # Master/slave election by external-IP comparison.  Same trick
     # tcp_punch's choose_winning_tcp_sock uses (`our_ip > their_ip`).
     # Master locks on first PROBE/CONFIRM arrival and signals via a
@@ -422,6 +413,51 @@ def udp_punch_engine(
     is_master = bool(
         own_ip_for_election and dest_ip
         and str(own_ip_for_election) > str(dest_ip)
+    )
+
+    # Synchronised barrier: wait for the agreed punch_time so both
+    # sides spray in the same window.
+    f_sleep_until()
+
+    # Slave-side low-TTL NAT priming (R7-1): the slave fires one PROBE
+    # per socket with TTL=4 immediately after the barrier.  TTL=4 crosses
+    # the local LAN + CPE router + one ISP aggregation hop and then
+    # expires (ICMP TTL-exceeded returned); it never reaches the remote
+    # peer, but it opens the outbound NAT mapping in this side's router
+    # so the master's first arriving PROBE finds an already-open pinhole
+    # instead of hitting a closed port-restricted entry.  The master does
+    # NOT prime: its role is to be the first to send the real probes that
+    # the slave's pinhole will accept.
+    if not is_master:
+        sock_family = bound_socks[0][1].family if bound_socks else socket.AF_INET
+        if sock_family == socket.AF_INET6:
+            ttl_level = socket.IPPROTO_IPV6
+            ttl_opt = socket.IPV6_UNICAST_HOPS
+        else:
+            ttl_level = socket.IPPROTO_IP
+            ttl_opt = socket.IP_TTL
+        af_for_prime = sock_family
+        prime_frame = build_frame(UDP_PUNCH_KIND_PROBE, nonce)
+        prime_tups = [
+            resolve_dest_tup(af_for_prime, dest_ip, a.dest_port, socket.SOCK_DGRAM)
+            for a, _ in bound_socks
+        ]
+        for (_, s), tup in zip(bound_socks, prime_tups):
+            try:
+                orig_ttl = s.getsockopt(ttl_level, ttl_opt)
+                s.setsockopt(ttl_level, ttl_opt, 4)
+                s.sendto(prime_frame, tup)
+                s.setsockopt(ttl_level, ttl_opt, orig_ttl)
+            except OSError:
+                pass
+        log("udp_punch_engine: slave TTL-prime sent on {0} sockets".format(
+            len(bound_socks),
+        ))
+
+    log("udp_punch_engine: entering fire_probes")
+    fire_probes(
+        bound_socks, dest_ip, nonce,
+        spray_duration=spray_duration, stop_reader=stop_reader,
     )
 
     log(fstr(
