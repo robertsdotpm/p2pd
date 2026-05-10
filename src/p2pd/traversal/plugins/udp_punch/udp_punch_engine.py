@@ -469,10 +469,18 @@ def udp_punch_engine(
         ))
 
     log("udp_punch_engine: entering fire_probes")
-    fire_probes(
-        bound_socks, dest_ip, nonce,
-        spray_duration=spray_duration, stop_reader=stop_reader,
-    )
+    try:
+        fire_probes(
+            bound_socks, dest_ip, nonce,
+            spray_duration=spray_duration, stop_reader=stop_reader,
+        )
+    except Exception:
+        for _, s in bound_socks:
+            try:
+                s.close()
+            except OSError:
+                pass
+        raise
 
     log(fstr(
         "udp_punch_engine: fire_probes returned; entering watch_for_winner role={0} own={1} peer={2}",
