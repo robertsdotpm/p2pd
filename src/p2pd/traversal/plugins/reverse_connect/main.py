@@ -25,4 +25,5 @@ class ReverseConnectPlugin(Plugin):
             (self.plugin_id,),
         ))
         pipe = await self.wait_for_inbound()
-        self.result.set_result(pipe)
+        if not self.result.done():
+            self.result.set_result(pipe)

@@ -35,4 +35,5 @@ class ReturnAddrPlugin(Plugin):
             ))
             log_exception()
 
-        self.result.set_result("Done")
+        if not self.result.done():
+            self.result.set_result("Done")
