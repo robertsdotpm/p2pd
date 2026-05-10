@@ -99,6 +99,7 @@ sel,
     # additional sockets to come up before exiting the loop.  50ms is
     # comfortably under XP's 174ms post-handshake RST timer.
     grace_period = 0.050
+    grace_extended = False
 
     write_evts = 0
     read_evts = 0
@@ -154,6 +155,10 @@ sel,
         # XP cross-NAT: handing off to choose_winning fast enough to
         # send b"$" before the connection gets RST'd.
         if first_success_at is not None and time.monotonic() - first_success_at >= grace_period:
+            if len(successful) > 1 and not grace_extended:
+                grace_period += 0.050
+                grace_extended = True
+                continue
             break
 
     elapsed = time.monotonic() - start_time

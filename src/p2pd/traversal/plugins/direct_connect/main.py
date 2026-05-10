@@ -36,7 +36,7 @@ class DirectConnect(Plugin):
         try:
             pipe = await asyncio.wait_for(
                 Pipe(TCP, dest, route).connect(),
-                timeout=4.0,
+                timeout=8.0,
             )
         except (OSError, ConnectionError, asyncio.TimeoutError):
             log_exception()

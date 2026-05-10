@@ -218,14 +218,20 @@ class Gate(object):
             kwargs["test_all_phases"] = True
         if afs is not None:
             kwargs["afs"] = afs
+        from .node.nickname import FullNameFailure
         coro = auto_connect(self.node, dest, **kwargs)
         if timeout is not None:
             try:
                 pipe, _plugin = await asyncio.wait_for(coro, timeout=timeout)
             except asyncio.TimeoutError:
                 return None
+            except FullNameFailure:
+                return None
         else:
-            pipe, _plugin = await coro
+            try:
+                pipe, _plugin = await coro
+            except FullNameFailure:
+                return None
         if pipe is None:
             return None
         return Link(pipe)
