@@ -55,6 +55,13 @@ class DirectConnect(Plugin):
             await pipe.send(CON_ID_PREFIX + to_b(self.plugin_id) + b"\n")
         except (OSError, ConnectionError, asyncio.TimeoutError):
             log_exception()
+            try:
+                await pipe.close()
+            except Exception:
+                pass
+            if not self.result.done():
+                self.result.set_result(None)
+            return
 
         log(fstr(
             "direct_connect[{0}]: connected dest={1}",

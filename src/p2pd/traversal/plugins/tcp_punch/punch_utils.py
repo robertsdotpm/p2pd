@@ -216,7 +216,14 @@ def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
     our_ip = our_ip or sock_list[0].getsockname()[0]
     if our_ip > their_ip:
         winner = sock_list.pop()
-        winner.send(b"$")
+        try:
+            winner.send(b"$")
+        except OSError:
+            try:
+                winner.close()
+            except OSError:
+                pass
+            winner = None
         for loser in sock_list:
             try:
                 loser.shutdown(socket.SHUT_RDWR)
