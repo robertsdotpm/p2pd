@@ -375,6 +375,7 @@ class UdpPunchPlugin(Plugin):
                 )
                 worker_sock.setblocking(False)
                 worker_sock.bind((loopback_host, 0))
+                self.bridge_socks = [listener_sock, worker_sock]
 
                 # getsockname() returns a 2-tuple for v4 and a 4-tuple
                 # for v6 ((host, port, flowinfo, scope_id)). The Pipe
@@ -737,6 +738,13 @@ class UdpPunchPlugin(Plugin):
                 await task
             except (asyncio.CancelledError, Exception):
                 pass
+
+        for sock in getattr(self, "bridge_socks", []):
+            try:
+                sock.close()
+            except OSError:
+                pass
+        self.bridge_socks = []
 
         if not self.result.done():
             self.result.cancel()

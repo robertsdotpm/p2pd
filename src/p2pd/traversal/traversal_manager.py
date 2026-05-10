@@ -181,7 +181,18 @@ class TraversalManager:
         ))
 
         if plugin.result.done():
-            await close_plugin(plugin, self.plugins, self.inbound_pipes)
+            result_val = None
+            try:
+                result_val = plugin.result.result()
+            except (asyncio.CancelledError, Exception):
+                pass
+            if result_val is not None:
+                plugin.expires_at = get_running_loop().time() + 3600
+                log("[TM] run_plugin success: extended expires_at by 3600s for plugin={0}".format(
+                    getattr(plugin, "plugin_id", "?"),
+                ))
+            else:
+                await close_plugin(plugin, self.plugins, self.inbound_pipes)
 
     def create_plugin(
         self,
