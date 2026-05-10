@@ -337,6 +337,47 @@ async def nat_prediction(mode, src_nat, dest_nat, stuns, recv_mappings=None, tes
         # Save prediction.
         results.append(result)
 
+    # R8-6: sequential-allocator one-step-ahead candidate.
+    # ~40-60% of SOHO routers allocate ports sequentially (Guha2005 §3.2).
+    # The STUN measurement captures the external port at measurement time;
+    # by the time the real punch socket connects, the NAT may have advanced
+    # by one delta increment. Adding `last_remote + delta` as an extra
+    # candidate covers this "off-by-one" without any extra round trips.
+    # Only applied for INDEPENDENT_DELTA / DEPENDENT_DELTA with abs(delta)<=10
+    # to avoid inflating the candidate list for high-variance deltas.
+    src_delta = src_nat.get("delta") or {}
+    src_delta_type = src_delta.get("type")
+    src_delta_val = src_delta.get("value", 0)
+    if (
+        src_delta_type in (INDEPENDENT_DELTA, DEPENDENT_DELTA)
+        and abs(src_delta_val) <= 10
+        and preloaded_mappings
+    ):
+        ahead_remote = field_wrap(
+            preloaded_mappings[-1].remote + src_delta_val, use_range
+        )
+        results.append(NATMapping([from_range([2000, MAX_PORT]), 0, ahead_remote]))
+        log("[NAT-PREDICT] R8-6: added one-ahead candidate remote={0} "
+            "(delta={1})".format(ahead_remote, src_delta_val))
+
+    # R11-3: ±1 jitter candidates for small-delta NATs (Wang2011 §3.3
+    # found ~18% of consumer NATs add ±1-3 random jitter on top of a
+    # dominant fixed delta; mode-delta is stable but individual allocation
+    # can drift by one). Only when abs(delta) <= 2 to avoid over-expanding
+    # the list for large-step allocators where ±1 is noise.
+    if (
+        src_delta_type == INDEPENDENT_DELTA
+        and abs(src_delta_val) <= 2
+        and results
+    ):
+        base_remote = results[0].remote
+        results.append(NATMapping([from_range([2000, MAX_PORT]), 0,
+                                   port_wrap(base_remote - 1)]))
+        results.append(NATMapping([from_range([2000, MAX_PORT]), 0,
+                                   port_wrap(base_remote + 1)]))
+        log("[NAT-PREDICT] R11-3: added jitter candidates remote={0}+-1 "
+            "(delta={1})".format(base_remote, src_delta_val))
+
     return results, preloaded_mappings
 
 
