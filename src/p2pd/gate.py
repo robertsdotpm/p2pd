@@ -281,6 +281,11 @@ class Gate(object):
             await self.closed.wait()
         finally:
             self.node.msg_cbs.discard(shim)
+            if pending_handler_tasks:
+                for t in list(pending_handler_tasks):
+                    if not t.done():
+                        t.cancel()
+                await asyncio.gather(*pending_handler_tasks, return_exceptions=True)
             if owns_gate:
                 await self.__aexit__(None, None, None)
 
