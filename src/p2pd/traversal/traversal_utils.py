@@ -30,7 +30,7 @@ RESOLVE_DROP_KEYS = (
 )
 
 
-def _select_local_bind(af, route_type, src, dest):
+def select_local_bind(af, route_type, src, dest):
     """Pick the local (ip, port) pair to bind for this route_type."""
     if route_type == LOOPBACK_BIND:
         ip = src.get("loopback")
@@ -56,7 +56,7 @@ def _select_local_bind(af, route_type, src, dest):
     return ip, port
 
 
-def _select_remote_dial(af, route_type, src, dest):
+def select_remote_dial(af, route_type, src, dest):
     """Pick the (ip, port) pair to dial on the peer for this route_type."""
     if route_type == LOOPBACK_BIND:
         ip = dest.get("loopback")
@@ -103,8 +103,8 @@ def resolve_pair(af, route_type, src, dest, nic, same_machine=False):
     pub_key_hex, …) is preserved -- plugins legitimately need NAT
     shape, if_index, etc.
     """
-    src_ip, src_port = _select_local_bind(af, route_type, src, dest)
-    dest_ip, dest_port = _select_remote_dial(af, route_type, src, dest)
+    src_ip, src_port = select_local_bind(af, route_type, src, dest)
+    dest_ip, dest_port = select_remote_dial(af, route_type, src, dest)
 
     # v6 link-local fix-up: paired source must also be link-local, and
     # both sides need %scope_id appended for the Windows TCP stack to

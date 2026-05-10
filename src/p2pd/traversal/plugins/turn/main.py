@@ -217,7 +217,7 @@ class TURNPlugin(Plugin):
                         (self.plugin_id, target_host, target_port),
                     ))
                     self.tried_servers.add(initiator_choice)
-                    await self._send_rejection("not_in_infra")
+                    await self.send_rejection("not_in_infra")
                     return
 
             if chosen_servers is None:
@@ -257,7 +257,7 @@ class TURNPlugin(Plugin):
                         (self.plugin_id, initiator_choice[0], initiator_choice[1]),
                     ))
                     self.tried_servers.add(initiator_choice)
-                    await self._send_rejection("unreachable")
+                    await self.send_rejection("unreachable")
                     return
                 print("[TURN-DBG] no working TURN server -- aborting")
                 log(fstr(
@@ -306,7 +306,7 @@ class TURNPlugin(Plugin):
                 )
             except asyncio.TimeoutError:
                 print("[TURN-DBG] accept_peer timed out; sending rejection")
-                await self._send_rejection("accept_peer_timeout")
+                await self.send_rejection("accept_peer_timeout")
                 await self.close()
                 return
             print("[TURN-DBG] accept_peer returned already_accepted={0}".format(already_accepted))
@@ -379,7 +379,7 @@ class TURNPlugin(Plugin):
         if not self.result.done():
             self.result.set_result(pipe)
 
-    async def _send_rejection(self, reason):
+    async def send_rejection(self, reason):
         """Tell the peer we cannot allocate on the server they just asked us
         to use. Carries our full tried_servers set so the peer's next pick
         excludes everything we've ruled out, not just the one server we
