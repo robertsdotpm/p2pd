@@ -217,6 +217,7 @@ async def discover_upnp_devices(af, nic):
     sock = await socket_factory(route, sock_type=UDP, conf=sock_conf)
     if sock is None:
         log(fstr("discover upnp sock none {0}", (af,)))
+        return
 
     if af == IP4:
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
@@ -229,8 +230,14 @@ async def discover_upnp_devices(af, nic):
     dest = (UPNP_IP[af], UPNP_PORT)
     try:
         pipe = await Pipe(UDP, dest, route, sock=sock, conf=sock_conf).connect()
+    except asyncio.CancelledError:
+        raise
     except (OSError, ConnectionError):
         log_exception()
+        try:
+            sock.close()
+        except OSError:
+            pass
         pipe = None
 
     # print("discover upnp devs ", af, pipe)
