@@ -174,7 +174,10 @@ async def process_attributes(af, self, msg):
     error_msg = b""
     while not msg.eof():
         attr_code, _, attr_data = msg.read_attr()
-        turn_proc_attrs(af, attr_code, attr_data, msg, self)
+        attr_result = turn_proc_attrs(af, attr_code, attr_data, msg, self)
+        if attr_result[0]:
+            error_code = attr_result[0]
+            error_msg = attr_result[1]
         stun_proc_attrs(af, attr_code, attr_data, msg)
         if hasattr(msg, "rtup"):
             if not self.client_tup_future.done():
