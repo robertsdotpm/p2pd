@@ -142,18 +142,15 @@ def bind_punch_sockets(
         s = socket.socket(af, sock_type)
         sock_opt_voodoo(s)
         apply_nic_pin_sockopts(s, route)
-        # Bump the receive buffer for UDP punch sockets so back-to-back
-        # PROBE arrival across N spray rounds doesn't overflow the
-        # default 64 KB Windows socket buffer. Matrix data showed the
-        # connector receiving only 1 of ~18 expected PROBEs under
-        # load; a fatter buffer absorbs the burst even when the
-        # asyncio executor thread is briefly starved. Best-effort:
-        # the kernel may cap below what we ask for and that's fine.
-        if sock_type == socket.SOCK_DGRAM:
-            try:
-                s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 256 * 1024)
-            except OSError:
-                pass
+        # Bump the receive buffer so burst arrivals during executor
+        # stall don't overflow the default 64 KB Windows socket buffer.
+        # Applies to both DGRAM (PROBE bursts) and STREAM (SYN-ACK DATA
+        # arriving before userspace drains the SYN-ACK notification).
+        # Best-effort: the kernel may cap below what we ask for.
+        try:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 256 * 1024)
+        except OSError:
+            pass
         # SO_LINGER {l_onoff=1, l_linger=0} on TCP punch sockets so close()
         # sends RST instead of FIN -- bypasses TIME_WAIT entirely. Without
         # this, Windows refuses to reuse the same 4-tuple for ~240 s and
