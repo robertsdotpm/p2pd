@@ -1,4 +1,5 @@
 """Utilities for the simple TCP selector punch engine."""
+import asyncio
 import socket
 import struct
 import sys
@@ -28,6 +29,8 @@ async def log_time_wait_residue(src_ip):
         return
     try:
         text = await run_shell_cmd("netstat -an", timeout=10)
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:  # pylint: disable=broad-except
         # Diag is best-effort. Never let it kill the punch finally.
         log("[POST-PUNCH-DIAG] netstat failed: " + repr(exc))
