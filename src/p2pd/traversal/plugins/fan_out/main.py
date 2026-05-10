@@ -195,6 +195,8 @@ class FanOutPlugin(Plugin):
                 except (asyncio.TimeoutError, OSError, ConnectionError, ValueError):
                     log_exception()
                     continue
+                except asyncio.CancelledError:
+                    raise
                 except Exception:  # noqa: BLE001
                     log_exception()
                     continue

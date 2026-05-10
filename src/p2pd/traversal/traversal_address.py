@@ -64,4 +64,9 @@ async def get_updated_addr_from_mqtt(node, dest_bytes):
     except asyncio.TimeoutError:
         log("get_updated_addr_from_mqtt timed out waiting for reply")
         return None
+    finally:
+        try:
+            await plugin.close()
+        except Exception:
+            pass
     return updated_bytes
