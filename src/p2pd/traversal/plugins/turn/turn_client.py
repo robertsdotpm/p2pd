@@ -367,6 +367,7 @@ self,
         task = asyncio.create_task(
             async_wrap_errors(self.stream.ack_send(data, dest_tup))
         )
+        self.tasks = [t for t in self.tasks if not t.done()]
         self.tasks.append(task)
 
     async def recv(self, sub=None, timeout=2):

@@ -546,7 +546,7 @@ async def punch_phase(
 
                 combos = []
                 for src, dest in slot:
-                    pair_sym = _pair_has_symmetric(src, dest)
+                    pair_sym = pair_has_symmetric(src, dest)
                     for name in active_names:
                         if pair_sym and name in SYMMETRIC_INCOMPATIBLE_PLUGINS:
                             # Predictable-port punch plugins can't work
@@ -580,7 +580,7 @@ def addr_map_has_symmetric(addr_map):
     """True if any (af, nic) entry in addr_map has NAT type SYMMETRIC.
 
     Kept for tests / external callers; the cascade now filters
-    per-pair via _pair_has_symmetric in punch_phase.
+    per-pair via pair_has_symmetric in punch_phase.
     """
     for af in (IP4, IP6):
         for entry in (addr_map.get(af) or {}).values():
@@ -590,7 +590,7 @@ def addr_map_has_symmetric(addr_map):
     return False
 
 
-def _pair_has_symmetric(src, dest):
+def pair_has_symmetric(src, dest):
     """True if either end of this specific (src, dest) NIC pair is symmetric."""
     src_nat = (src.get("nat") or {}).get("type")
     dest_nat = (dest.get("nat") or {}).get("type")

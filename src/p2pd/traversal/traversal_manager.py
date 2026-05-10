@@ -94,16 +94,16 @@ class TraversalManager:
         # (binding 127.x on a real NIC raises EINVAL + the
         # SO_BINDTODEVICE pin would block lo delivery).  Built lazily
         # on first use; reused for every subsequent loopback combo.
-        self._default_nic = None
+        self.default_nic_cache = None
 
     def default_nic(self):
         """Return the cached Interface("default") used for loopback binds."""
-        if self._default_nic is None:
+        if self.default_nic_cache is None:
             from aionetiface import Interface
             if Interface.default is None:
                 Interface.default = Interface("default")
-            self._default_nic = Interface.default
-        return self._default_nic
+            self.default_nic_cache = Interface.default
+        return self.default_nic_cache
 
     def install_plugin(self, name, conf):
         """Register a traversal plugin class under name with the given configuration."""
@@ -456,12 +456,12 @@ class TraversalManager:
             from aionetiface import log, fstr
             log(fstr(
                 "[SIG-RX] ConMsg EXPIRED: ttl={0} now={1} skew={2}s "
-                "wire_name={3!r} pipe_id={4!r}; dropping. If skew is large "
+                "wire_name={3} pipe_id={4}; dropping. If skew is large "
                 "the sender's sys_clock is probably drifted vs ours -- check "
                 "NTP sync on both peers.",
                 (msg.meta.ttl, now, skew,
-                 getattr(msg, "wire_name", "?"),
-                 getattr(msg.meta, "pipe_id", "?")),
+                 repr(getattr(msg, "wire_name", "?")),
+                 repr(getattr(msg.meta, "pipe_id", "?"))),
             ))
             raise ValueError("Discarding expired msg.")
 

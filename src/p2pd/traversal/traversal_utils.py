@@ -23,7 +23,7 @@ def f_path_txt(x):
 # that remain are "ip" + "port" -- the resolved local-bind / peer-dial
 # pair for the chosen route_type.  Peer metadata (if_index, nat,
 # netiface_index, machine_id, pub_key_hex, …) stays.
-_RESOLVE_DROP_KEYS = (
+RESOLVE_DROP_KEYS = (
     "nic", "ext", "loopback",
     "nic_port", "ext_port",
     "loopback_candidates",
@@ -134,7 +134,7 @@ def resolve_pair(af, route_type, src, dest, nic, same_machine=False):
     # filtered out so plugins can't accidentally do per-route-type
     # selection inside their run().
     def strip(info):
-        return {k: v for k, v in info.items() if k not in _RESOLVE_DROP_KEYS}
+        return {k: v for k, v in info.items() if k not in RESOLVE_DROP_KEYS}
     src_resolved = strip(src)
     src_resolved["ip"] = str(src_ip) if src_ip is not None else None
     src_resolved["port"] = src_port
@@ -563,12 +563,31 @@ def sig_msg_to_buf(msg, dest_pk):
 
 
 async def close_plugin(plugin, plugins, inbound_pipes):
-    """No-op for now. Cleanup semantics across plugins are flawed -- popping
-    the plugin registry the moment result.done() is racing with the executor
-    worker that's still alive (udp_punch's spray + bridge, tcp_punch's reverse
-    server, turn's allocation lifecycle). The follow-up signal then re-enters
-    run() with empty state and spawns a duplicate engine that collides on the
-    same predicted ports (Windows EADDRINUSE 10048). Will be revisited in a
-    dedicated session; for now leave registries populated and the plugin's
-    close() unrun on the per-message path."""
-    return
+    """Release plugin resources and remove it from registries.
+
+    Safe to call multiple times (pop is a no-op when the key is absent).
+    Registry pop is intentionally deferred until here (not at result.done()
+    time) to avoid the race where a follow-up PunchMsg signal arrives
+    between the done() check and the pop and finds an empty registry slot,
+    spawning a duplicate engine that collides on the same predicted ports.
+    By the time close_plugin is called the result is already resolved so no
+    further signals for this plugin_id are in-flight.
+    """
+    plugin_id = getattr(plugin, "plugin_id", None)
+    plugins.pop(plugin_id, None)
+
+    fut = inbound_pipes.pop(plugin_id, None)
+    if fut is not None and not fut.done():
+        fut.cancel()
+
+    if not plugin.result.done():
+        plugin.result.cancel()
+
+    close_fn = getattr(plugin, "close", None)
+    if close_fn is not None:
+        try:
+            await asyncio.wait_for(close_fn(), timeout=5.0)
+        except (asyncio.TimeoutError, OSError):
+            log_exception()
+        except asyncio.CancelledError:
+            pass

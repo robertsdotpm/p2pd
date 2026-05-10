@@ -304,7 +304,8 @@ async def process_replies(self):
             # Stale nonce.
             if error_code == 438:
                 log(fstr("stole nonce. retransmit for {0}", (txid,)))
-                self.msgs[txid]["status"].set_result(STATUS_RETRY)
+                if not self.msgs[txid]["status"].done():
+                    self.msgs[txid]["status"].set_result(STATUS_RETRY)
                 continue
 
         # Attempt to authenticate or create a relay address or refresh one.
@@ -312,7 +313,8 @@ async def process_replies(self):
             log("got alloc")
 
             # Notify sender that message was received.
-            self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
+            if not self.msgs[txid]["status"].done():
+                self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
             if turn_status == STUNMsgCodes.SuccessResp:
                 if self.state != TURN_TRY_ALLOCATE:
                     # self.txid = txid
@@ -343,7 +345,8 @@ async def process_replies(self):
         if turn_method == STUNMsgTypes.CreatePermission:
             if turn_status == STUNMsgCodes.SuccessResp:
                 # Notify sender that message was received.
-                self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
+                if not self.msgs[txid]["status"].done():
+                    self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
             else:
                 error = fstr("Error in TURN create permission = ") + fstr(
                     "{0}", (to_h(turn_msg.pack()),)
@@ -353,7 +356,8 @@ async def process_replies(self):
             continue
 
         if turn_method == STUNMsgTypes.Refresh:
-            self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
+            if not self.msgs[txid]["status"].done():
+                self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
             continue
 
     self.turn_client_stopped.set()
