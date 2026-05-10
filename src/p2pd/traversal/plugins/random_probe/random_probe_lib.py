@@ -1291,6 +1291,15 @@ def sync_run_bidirectional_spray(
         for s in ready:
             try:
                 data, peer = s.recvfrom(2048, socket.MSG_PEEK)
+            except ConnectionResetError:
+                # WSAECONNRESET = ICMP port-unreachable from one of our probes.
+                # MSG_PEEK does not consume the error on Windows -- every peek
+                # fires again until a bare recvfrom drains it.
+                try:
+                    s.recvfrom(2048)
+                except (OSError, BlockingIOError):
+                    pass
+                continue
             except (BlockingIOError, InterruptedError, OSError):
                 continue
             # Normalize v6 peer addr (XP flowinfo workaround).
@@ -1307,6 +1316,9 @@ def sync_run_bidirectional_spray(
             if parsed is None:
                 parsed_fail += 1
                 # Non-probe -- leave for Pipe; could be early data.
+                # Sleep briefly so the same datagram at head of queue
+                # does not spin select() at full speed.
+                time.sleep(0.001)
                 continue
             parsed_ok += 1
             # Consume the probe.
