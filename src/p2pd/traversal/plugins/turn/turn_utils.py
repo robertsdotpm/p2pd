@@ -119,7 +119,13 @@ async def get_first_working_turn_client(
             for t in tasks:
                 if not t.done():
                     t.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+            late = await asyncio.gather(*tasks, return_exceptions=True)
+            for item in late:
+                if (
+                    isinstance(item, TURNClient)
+                    and item is not winner
+                ):
+                    asyncio.ensure_future(item.close())
         if winner is not None:
             return winner
     elif batch:
