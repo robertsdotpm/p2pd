@@ -85,6 +85,8 @@ async def main():
                 ok = msg is not None and msg.startswith(b"PONG:")
         except asyncio.TimeoutError:
             pass
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:  # pylint: disable=broad-except
             print("OUTCOME echo_exc={0}".format(repr(exc)), flush=True)
         print("OUTCOME echo_ok={0}".format("true" if ok else "false"), flush=True)

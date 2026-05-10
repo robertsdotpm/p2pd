@@ -32,6 +32,8 @@ async def main():
                 plugins=[plugin_name],
                 timeout=timeout,
             )
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
             print("OUTCOME connect_exc={0}".format(repr(exc)), flush=True)
             return
@@ -55,6 +57,8 @@ async def main():
                 ), flush=True)
         except asyncio.TimeoutError:
             print("OUTCOME echo_timeout", flush=True)
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:  # pylint: disable=broad-except
             print("OUTCOME echo_exc={0}".format(repr(exc)), flush=True)
 
