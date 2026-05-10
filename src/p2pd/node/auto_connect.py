@@ -405,7 +405,16 @@ async def race_combos(
         for t in tasks:
             if not t.done():
                 t.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        late = await asyncio.gather(*tasks, return_exceptions=True)
+        for item in late:
+            if (
+                item is not None
+                and not isinstance(item, BaseException)
+                and item not in plugins
+            ):
+                plugins.append(item)
+        for p in plugins:
+            await close_plugin(p, node.traversal.plugins, node.traversal.inbound_pipes)
         raise
 
     for t in tasks:
