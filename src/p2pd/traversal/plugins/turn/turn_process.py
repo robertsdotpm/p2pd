@@ -114,7 +114,8 @@ def turn_proc_attrs(af, attr_code, attr_data, msg, self):
             self.relay_tup = stun_addr.tup
 
             # Indicate the tup has been set.
-            self.relay_tup_future.set_result(self.relay_tup)
+            if not self.relay_tup_future.done():
+                self.relay_tup_future.set_result(self.relay_tup)
             log(fstr("> Turn setting relay addr = {0}", (self.relay_tup,)))
             self.relay_event.set()
 
