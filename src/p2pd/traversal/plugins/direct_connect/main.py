@@ -57,6 +57,8 @@ class DirectConnect(Plugin):
             log_exception()
             try:
                 await pipe.close()
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 pass
             if not self.result.done():

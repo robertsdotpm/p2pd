@@ -164,6 +164,8 @@ class TURNPlugin(Plugin):
                     pass
                 try:
                     await existing.close()
+                except asyncio.CancelledError:
+                    raise
                 except Exception:
                     log_p2p("turn[{0}]: error closing rejected client".format(self.plugin_id),
                             self.node_id[:8])

@@ -67,6 +67,8 @@ async def get_updated_addr_from_mqtt(node, dest_bytes):
     finally:
         try:
             await plugin.close()
+        except asyncio.CancelledError:
+            raise
         except Exception:
             pass
     return updated_bytes
