@@ -148,6 +148,7 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None, node
         node_msg_cb is not None,
     ))
     reverse_server = None
+    worker_fut = None
     try:
         # Create a listen server for receiving a connection back from
         # the punching process. The bridge from the punch worker to
@@ -291,5 +292,8 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None, node
     finally:
         print("[PUNCH-PROC] cleanup", flush=True)
         log("[PUNCH-PROC] start_punching_process exiting (cleanup)")
+        if worker_fut is not None and not worker_fut.done():
+            worker_fut.cancel()
+            log("[PUNCH-PROC] worker_fut cancelled in finally")
         if reverse_server is not None:
             await async_wrap_errors(reverse_server.close(keep_clients=True))

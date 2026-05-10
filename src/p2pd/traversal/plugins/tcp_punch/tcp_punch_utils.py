@@ -185,8 +185,6 @@ def bind_punch_sockets(
             except OSError as exc:
                 if retry == 3:
                     bind_failures.append((bind_tup, repr(exc)))
-                    s.close()
-                    bound = True
         if not bound:
             s.close()
 

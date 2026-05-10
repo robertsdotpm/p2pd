@@ -424,6 +424,10 @@ class PunchPlugin(Plugin):
             # which would raise asyncio.InvalidStateError.
             if not self.result.done():
                 self.result.set_result(pipe)
+            elif pipe is not None:
+                # result was already cancelled/resolved by race_combos while
+                # start_punching_process was in flight; close the orphaned pipe.
+                await async_wrap_errors(pipe.close())
         except asyncio.CancelledError:
             print("[PUNCH-DELAY] CANCELLED plugin_id={0}".format(self.plugin_id), flush=True)
             log("[PUNCH-DELAY] CANCELLED plugin_id={0}".format(self.plugin_id))
