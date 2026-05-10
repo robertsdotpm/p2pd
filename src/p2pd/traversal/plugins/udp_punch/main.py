@@ -746,9 +746,25 @@ class UdpPunchPluginFactory:
         return cls(stun_clients, sys_clock)
 
     def claim_nics(self, claims):
-        """Register this factory as the udp_punch owner for each (nic_id, ip, af) tuple; raise ValueError on collision."""
+        """Register this factory as the udp_punch owner for each (nic_id, ip, af) tuple; raise ValueError on cross-factory collision.
+
+        Self-collision (same key appearing twice in our own claims) is
+        treated as a no-op. Windows multi-name NIC enumeration can
+        report the same physical adapter via both the hardware name
+        and the friendly name (e.g. "Intel(R) PRO/1000 MT Network
+        Connection" + "Local Area Connection" both pointing at the
+        same primary IP), so node.ifs yields multiple nic objects
+        whose (nic_id, primary_ip, af) tuples collapse to the same
+        key. Without this, the first inbound UdpPunchMsg's call to
+        build_plugin -> claim_nics tripped on its own duplicate and
+        raised, taking the udp_punch responder offline for the whole
+        process.
+        """
         for key in claims:
-            if key in PUNCH_NIC_OWNERS:
+            existing = PUNCH_NIC_OWNERS.get(key)
+            if existing is self:
+                continue
+            if existing is not None:
                 nic_id, ip_str, af = key
                 raise ValueError(
                     "udp_punch is already active on (nic={0!r}, ip={1!r}, "
