@@ -231,7 +231,15 @@ def watch_for_winner(
 
             kind, recv_nonce = parse_frame(buf)
             if kind is None or recv_nonce != nonce:
-                # Not a punch frame; leave it for the Pipe layer.
+                # Not a punch frame from this session (wrong nonce or format).
+                # Drain it so the queue advances to real punch frames.
+                # MSG_PEEK always surfaces the oldest datagram — a stuck
+                # foreign packet blocks every punch frame behind it and
+                # causes select() to spin at 100% CPU until the window ends.
+                try:
+                    s.recvfrom(65535)
+                except OSError:
+                    pass
                 foreign_seen += 1
                 continue
 
@@ -328,6 +336,11 @@ def watch_for_winner(
             except OSError:
                 pass
             return (s, addr)
+        # Drain foreign datagram so it doesn't hide a CONFIRM sitting behind it.
+        try:
+            s.recvfrom(65535)
+        except OSError:
+            pass
 
     return None
 

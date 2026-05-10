@@ -342,6 +342,7 @@ async def process_replies(self):
                     )
                     self.tasks.append(task)
 
+            self.msgs.pop(txid, None)
             continue
 
         # White list a particular peer to send replies to our relay address.
@@ -356,11 +357,13 @@ async def process_replies(self):
                 )
                 log(error)
 
+            self.msgs.pop(txid, None)
             continue
 
         if turn_method == STUNMsgTypes.Refresh:
             if not self.msgs[txid]["status"].done():
                 self.msgs[txid]["status"].set_result(STATUS_SUCCESS)
+            self.msgs.pop(txid, None)
             continue
 
     self.turn_client_stopped.set()
