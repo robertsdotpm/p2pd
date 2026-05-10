@@ -27,7 +27,10 @@ if not _IS_WINDOWS:
 
 async def ainput(prompt):
     """Read a line of input from stdin asynchronously, unblocking on shutdown signals."""
-    loop = asyncio.get_event_loop()
+    if hasattr(asyncio, "get_running_loop"):
+        loop = asyncio.get_running_loop()
+    else:
+        loop = asyncio.get_event_loop()
 
     def blocking_input():
         """Block in a thread waiting for stdin input or a shutdown interrupt.
