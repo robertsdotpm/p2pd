@@ -42,6 +42,7 @@ the Python executable (or the specific port range used by the punch
 allocator).
 """
 import asyncio
+import time
 from aionetiface import log, NIC_BIND, EXT_BIND, TCP, SysClock, async_wrap_errors, cancel_task, shutdown_proc_pool
 from ....protocol.proto_defs import P2P_PUNCH
 from .proto import PunchMsg
@@ -80,6 +81,20 @@ class PunchPlugin(Plugin):
 
     async def run(self, reply=None):
         """Coordinate the hole-punch exchange and launch the background punching process."""
+        # RTT measurement: when the peer's reply lands, compute half the
+        # signal round-trip and resolve the coordinator-delay future.
+        # delayed_start_punching_proc awaits this instead of sleeping the
+        # hardcoded static delay, so both sides start punching simultaneously.
+        if reply is not None:
+            t0 = self.punch_rtt_t0.pop(self.plugin_id, None)
+            if t0 is not None:
+                rtt_half = max(0.1, min(5.0, (time.monotonic() - t0) / 2.0))
+                rtt_fut = self.rtt_futs.get(self.plugin_id)
+                if rtt_fut is not None and not rtt_fut.done():
+                    rtt_fut.set_result(rtt_half)
+                    log("[PUNCH-RUN] RTT measured rtt_half={0:.3f}s plugin_id={1}".format(
+                        rtt_half, self.plugin_id,
+                    ))
         print("[PUNCH-RUN] enter plugin_id={0} reply={1} completed={2}".format(
             self.plugin_id, reply is not None,
             self.plugin_id in self.completed_pipe_ids,
@@ -187,6 +202,7 @@ class PunchPlugin(Plugin):
         ), flush=True)
         log("[PUNCH-RUN] sending outgoing PunchMsg plugin_id={0}".format(self.plugin_id))
         await self.send_signal(outgoing_msg)
+        self.punch_rtt_t0[self.plugin_id] = time.monotonic()
         print("[PUNCH-RUN] sent OK plugin_id={0}".format(self.plugin_id), flush=True)
 
     async def setup_puncher_client(self, reply):
@@ -328,6 +344,10 @@ class PunchPlugin(Plugin):
         self.nat_alloc.set_nat_info(self.src["nat"], self.dest["nat"])
         self.nat_alloc.set_punch_mode(self.same_machine, self.dest["ip"])
 
+        # Create the RTT-delay future before the punch task reads it.
+        if self.plugin_id not in self.rtt_futs:
+            self.rtt_futs[self.plugin_id] = asyncio.get_event_loop().create_future()
+
         # Schedule the punching process with a short delay.
         if self.plugin_id not in self.punch_proc:
             self.punch_proc[self.plugin_id] = asyncio.create_task(
@@ -388,10 +408,25 @@ class PunchPlugin(Plugin):
     # ... (other methods, including delayed_start_punching_proc) ...
     async def delayed_start_punching_proc(self, nic, puncher):
         """Wait a short coordinator delay then launch the punching process and resolve the result."""
-        # Wait for the peer to receive our message and set up its own process.
-        # The delay is kept short when using FAST_PUNCH_PARAMS because the
-        # rendezvous window is small and synchronised via sleep_until().
-        coordinator_delay = puncher.params.get("coordinator_delay", 2.0)
+        # Use RTT/2 as the coordinator delay when the PunchMsg round-trip
+        # has been measured; fall back to the static value when the
+        # measurement is not ready in time (first-call races, LAN mode).
+        static_delay = puncher.params.get("coordinator_delay", 2.0)
+        coordinator_delay = static_delay
+        rtt_fut = self.rtt_futs.get(self.plugin_id)
+        if rtt_fut is not None:
+            try:
+                rtt_half = await asyncio.wait_for(
+                    asyncio.shield(rtt_fut), timeout=static_delay,
+                )
+                coordinator_delay = max(0.1, min(static_delay, rtt_half))
+                log("[PUNCH-DELAY] RTT coordinator_delay={0:.3f}s (static={1:.3f}s) plugin_id={2}".format(
+                    coordinator_delay, static_delay, self.plugin_id,
+                ))
+            except asyncio.TimeoutError:
+                log("[PUNCH-DELAY] RTT wait timed out; using static {0:.3f}s plugin_id={1}".format(
+                    static_delay, self.plugin_id,
+                ))
         print("[PUNCH-DELAY] enter plugin_id={0} delay={1}s".format(
             self.plugin_id, coordinator_delay,
         ), flush=True)
@@ -465,6 +500,10 @@ class PunchPlugin(Plugin):
         """
         task = self.punch_proc.pop(self.plugin_id, None)
         self.punch_clients.pop(self.plugin_id, None)
+        self.punch_rtt_t0.pop(self.plugin_id, None)
+        rtt_fut = self.rtt_futs.pop(self.plugin_id, None)
+        if rtt_fut is not None and not rtt_fut.done():
+            rtt_fut.cancel()
         log("[PUNCH-CLOSE] plugin_id={0} task_was_pending={1}".format(
             self.plugin_id,
             task is not None and not task.done() if task else False,
@@ -494,6 +533,8 @@ self,
         self.punch_clients = punch_clients if punch_clients is not None else {}
         self.punch_proc = {}
         self.completed_pipe_ids = set()
+        self.rtt_futs = {}
+        self.punch_rtt_t0 = {}
 
     @classmethod
     async def create(cls, stun_clients, sys_clock):
@@ -512,6 +553,8 @@ self,
         plugin.punch_clients = self.punch_clients
         plugin.punch_proc = self.punch_proc
         plugin.completed_pipe_ids = self.completed_pipe_ids
+        plugin.rtt_futs = self.rtt_futs
+        plugin.punch_rtt_t0 = self.punch_rtt_t0
         return plugin
 
     async def close(self):
