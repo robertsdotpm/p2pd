@@ -514,6 +514,9 @@ def try_unpack_msg(buf, sk, sig_proto_map):
     """
     buf = h_to_b(buf)
 
+    if len(buf) < 1:
+        raise ValueError("try_unpack_msg: empty payload")
+
     # Try to decrypt message if its encrypted.
     is_enc = buf[0]
     if is_enc:

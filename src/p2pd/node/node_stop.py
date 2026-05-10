@@ -51,6 +51,8 @@ async def close_helper(p):
         await p.close()
     except AlreadyClosedError:
         pass
+    except asyncio.CancelledError:
+        raise
     except (OSError, asyncio.TimeoutError):
         log_exception()
         log("Error closing " + str(p))
