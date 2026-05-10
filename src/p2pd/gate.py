@@ -280,6 +280,7 @@ class Gate(object):
         try:
             await self.closed.wait()
         finally:
+            self.node.msg_cbs.discard(shim)
             if owns_gate:
                 await self.__aexit__(None, None, None)
 

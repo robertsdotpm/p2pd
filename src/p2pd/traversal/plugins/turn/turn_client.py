@@ -155,7 +155,7 @@ self,
         """Connect to the TURN server, allocate a relay address, and start the processing loop."""
         # Set and validate peer address.
         log("> Turn starting client.")
-        if self.turn_user is None and self.turn_pw is None:
+        if not self.requires_auth:
             self.auth_event.set()
 
         # Connect to TURN server over UDP.
