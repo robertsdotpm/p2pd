@@ -19,7 +19,7 @@ while different hosts get distinct identities without coordination.
 import asyncio
 import hashlib
 
-from aionetiface import TCP
+from aionetiface import TCP, log
 
 from .node.node import Node
 from .node.node_start import load_network_interfaces, load_machine_identity
@@ -256,6 +256,7 @@ class Gate(object):
             owns_gate = True
 
         peers = {}
+        pending_handler_tasks = set()
 
         async def shim(msg, client_tup, raw_pipe):
             if getattr(raw_pipe, "proto", None) == TCP:
@@ -268,7 +269,12 @@ class Gate(object):
             if link is None:
                 link = Link(raw_pipe, ctup, managed=True)
                 peers[key] = link
-            asyncio.ensure_future(handler(link, msg))
+            task = asyncio.ensure_future(handler(link, msg))
+            pending_handler_tasks.add(task)
+            task.add_done_callback(pending_handler_tasks.discard)
+            n = len(pending_handler_tasks)
+            if n >= 50 and n % 50 == 0:
+                log("[GATE-LISTEN] {0} concurrent handler tasks pending".format(n))
 
         self.node.add_msg_cb(shim)
         try:
