@@ -295,7 +295,7 @@ class TraversalManager:
 
         # Schedule cleanup loop if needed.
         if not self.cleanup_task or self.cleanup_task.done():
-            self.cleanup_task = asyncio.create_task(self.cleanup_loop())
+            self.cleanup_task = get_running_loop().create_task(self.cleanup_loop())
 
         return plugin
 
@@ -508,7 +508,7 @@ class TraversalManager:
 
         # Schedule the plugin run as a background task.
         # Keep a reference so the task isn't garbage-collected mid-run.
-        task = asyncio.create_task(
+        task = get_running_loop().create_task(
             async_wrap_errors(self.run_plugin(plugin, reply=msg))
         )
 

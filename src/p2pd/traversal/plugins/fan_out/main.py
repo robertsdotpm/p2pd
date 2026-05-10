@@ -213,6 +213,19 @@ class FanOutPlugin(Plugin):
                 break
         except asyncio.TimeoutError:
             log_exception()
+        except asyncio.CancelledError:
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            for c in children:
+                try:
+                    await close_plugin(
+                        c, manager.plugins, manager.inbound_pipes,
+                    )
+                except (OSError, asyncio.TimeoutError):
+                    log_exception()
+            raise
         log(fstr(
             "fan_out[{0}]: winner={1} pipe={2}",
             (self.plugin_id,
