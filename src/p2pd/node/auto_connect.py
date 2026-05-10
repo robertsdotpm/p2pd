@@ -596,6 +596,23 @@ async def phase2_tcp_punch(
         log("phase2_tcp_punch: SYMMETRIC NAT detected on at least one "
             "side; skipping tcp_punch (cannot predict ports)")
         return None, None
+    # Skip tcp_punch when the destination is a Windows-XP listener
+    # and we are not on the same machine. CLAUDE.md and pcap forensics
+    # document an unfixable XP tcpip.sys behaviour: cross-machine
+    # tcp_punch handshakes complete on the wire in full but XP
+    # unilaterally RSTs the connection ~140ms after the final ACK.
+    # The engine reports success but every echo round-trip dies. The
+    # only way to make TCP simul-open work on XP is via a kernel-mode
+    # NDIS filter that bypasses tcpip.sys entirely (Hamachi did this
+    # in the XP era); not reachable from a Python library.
+    # Same-LAN / same-machine paths win phase1_direct first so this
+    # skip costs nothing on the LAN side; cross-internet just saves
+    # the 180s plugin timeout that would never converge anyway.
+    dest_os = (dest_map or {}).get("os") or ""
+    if dest_os.startswith("Windows-XP") and not is_same_machine(src_map, dest_map):
+        log("phase2_tcp_punch: dest is Windows-XP cross-machine; "
+            "skipping (tcpip.sys simul-open RST is unfixable on XP)")
+        return None, None
     return await punch_phase(
         node, src_map, dest_map, sig_pipe,
         plugin_names=names,
