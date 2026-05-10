@@ -177,7 +177,7 @@ async def process_attributes(af, self, msg):
         turn_proc_attrs(af, attr_code, attr_data, msg, self)
         stun_proc_attrs(af, attr_code, attr_data, msg)
         if hasattr(msg, "rtup"):
-            if not self.mapped:
+            if not self.client_tup_future.done():
                 self.mapped = msg.rtup
                 self.client_tup_future.set_result(self.mapped)
 

@@ -293,7 +293,9 @@ class UdpPunchPlugin(Plugin):
         recv_mappings = None
         if reply is not None:
             recv_mappings = [NATMapping(m) for m in reply.payload.mappings]
-            assert recv_mappings
+            if not recv_mappings:
+                log("[UDP-PUNCH] advance_punching_protocol: peer sent empty mappings list; dropping")
+                return None
 
         port_alloc, is_end = await self.nat_alloc.port_alloc(recv_mappings)
         puncher.port_allocs += port_alloc
@@ -472,7 +474,10 @@ class UdpPunchPlugin(Plugin):
             puncher_route = puncher.route
             stop_reader = self.stop_reader
 
-            loop = asyncio.get_event_loop()
+            if hasattr(asyncio, "get_running_loop"):
+                loop = asyncio.get_running_loop()
+            else:
+                loop = asyncio.get_event_loop()
             # convergence is resolved by the worker via call_soon_threadsafe
             # the moment the engine returns a winner and selector_proxy is
             # ready to read worker_sock. Until that happens, ECHO bytes the

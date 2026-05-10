@@ -220,15 +220,21 @@ self,
         # Refresh allocations.
         async def refresher():
             """Periodically refresh the TURN allocation to prevent it from expiring."""
-            while True:
+            while self.state != TURN_ERROR_STOPPED:
                 await asyncio.sleep(TURN_REFRESH_EXPIRY - 60)
+                if self.state == TURN_ERROR_STOPPED:
+                    break
                 try:
                     await async_retry(
                         lambda: self.refresh_allocation(), count=5, timeout=5
                     )
+                except asyncio.CancelledError:
+                    raise
                 except (OSError, ConnectionError, asyncio.TimeoutError):
                     try:
                         await self.reconnect(n=1)
+                    except asyncio.CancelledError:
+                        raise
                     except (OSError, ConnectionError, asyncio.TimeoutError):
                         log_exception()
                         continue
@@ -479,8 +485,15 @@ self,
             """Refresh the peer permission before it expires until the TURN session stops."""
             while self.state != TURN_ERROR_STOPPED:
                 await asyncio.sleep(TURN_REFRESH_EXPIRY - 60)
-                await async_retry(f, count=5, timeout=5)
-                log("Refresh permission.")
+                if self.state == TURN_ERROR_STOPPED:
+                    break
+                try:
+                    await async_retry(f, count=5, timeout=5)
+                    log("Refresh permission.")
+                except asyncio.CancelledError:
+                    raise
+                except (OSError, ConnectionError, asyncio.TimeoutError):
+                    log_exception()
 
         # Prevent garbage collection.
         if not already_accepted:
@@ -588,31 +601,39 @@ self,
         # shutting down anyway, so any send error here is non-fatal --
         # the worst case if this fails is the server GCs us on its own
         # timer.
-        if self.turn_pipe is not None and self.state != TURN_ERROR_STOPPED:
-            try:
-                msg = await self.retract_msg()
-                await asyncio.wait_for(
-                    self.send_turn_msg(msg, do_sign=True), timeout=2,
-                )
-            except (OSError, ConnectionError, asyncio.TimeoutError):
-                log_exception()
+        try:
+            if self.turn_pipe is not None and self.state != TURN_ERROR_STOPPED:
+                try:
+                    msg = await self.retract_msg()
+                    await asyncio.wait_for(
+                        self.send_turn_msg(msg, do_sign=True), timeout=2,
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except (OSError, ConnectionError, asyncio.TimeoutError):
+                    log_exception()
 
-        if self.turn_pipe is not None:
-            await self.turn_pipe.close()
+            if self.turn_pipe is not None:
+                try:
+                    await self.turn_pipe.close()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    log_exception()
+        finally:
+            # Make the main message process loop end.
+            self.state = TURN_ERROR_STOPPED
 
-        # Make the main message process loop end.
-        self.state = TURN_ERROR_STOPPED
+            # Make pending TURN handlers finish.
+            if not self.client_tup_future.done():
+                self.client_tup_future.set_result((0, 0))
 
-        # Make pending TURN handlers finish.
-        if not self.client_tup_future.done():
-            self.client_tup_future.set_result((0, 0))
+            if not self.relay_tup_future.done():
+                self.relay_tup_future.set_result((0, 0))
 
-        if not self.relay_tup_future.done():
-            self.relay_tup_future.set_result((0, 0))
-
-        # Make any pending send or recv calls finish.
-        self.auth_event.set()
-        self.relay_event.set()
+            # Make any pending send or recv calls finish.
+            self.auth_event.set()
+            self.relay_event.set()
 
     async def close(self):
         """Shut down the TURN client, waiting for the processing loop to finish."""
