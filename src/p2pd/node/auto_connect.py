@@ -31,6 +31,7 @@ The `plugins=` argument filters which phases run. A phase is skipped
 when none of its plugins are in the configured set.
 """
 import asyncio
+import ipaddress
 import time
 from aionetiface import (
     IP4, IP6, IPRange, NIC_BIND, EXT_BIND, LOOPBACK_BIND, TCP, UDP,
@@ -144,6 +145,30 @@ def is_same_machine(src_map, dest_map):
     return bool(sid) and sid == did
 
 
+def is_transition_v6(ip_str):
+    """Return True for IPv6 transition addresses that route via IPv4 middleboxes.
+
+    Teredo (2001:0000::/32) and 6to4 (2002::/16) look like global unicast
+    but require functional relay infrastructure and fail silently when the
+    relay is unreachable or the local NAT blocks the encapsulation protocol.
+    Filtering them from direct-connect candidates avoids 3-30s stall
+    timeouts on Vista/Win7-10 hosts that enable Teredo by default.
+    """
+    try:
+        packed = ipaddress.ip_address(ip_str).packed
+        if len(packed) != 16:
+            return False
+        # Teredo: 2001:0000::/32
+        if packed[:4] == b"\x20\x01\x00\x00":
+            return True
+        # 6to4: 2002::/16
+        if packed[:2] == b"\x20\x02":
+            return True
+    except ValueError:
+        pass
+    return False
+
+
 def viable_pairs_for_arc(
     af,
     route_type,
@@ -178,6 +203,14 @@ def viable_pairs_for_arc(
         # pair_distinct's loopback check; EXT_BIND is global by nature.
         if route_type == NIC_BIND and not (same_machine or same_lan(af, src, dest)):
             return False
+        # Skip IPv6 transition addresses (Teredo/6to4) on EXT_BIND paths.
+        # They look like global unicast but route through IPv4 relays that
+        # are often unreachable or NAT-blocked, causing 3-30s stall before
+        # the TCP connect times out (Vista/Win7-10 enable Teredo by default).
+        if af == IP6 and route_type == EXT_BIND:
+            dest_ext = dest.get("ext")
+            if dest_ext is not None and is_transition_v6(str(dest_ext)):
+                return False
         return True
 
     pairs = []
