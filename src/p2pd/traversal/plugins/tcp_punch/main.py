@@ -346,7 +346,11 @@ class PunchPlugin(Plugin):
 
         # Create the RTT-delay future before the punch task reads it.
         if self.plugin_id not in self.rtt_futs:
-            self.rtt_futs[self.plugin_id] = asyncio.get_event_loop().create_future()
+            if hasattr(asyncio, "get_running_loop"):
+                rtt_loop = asyncio.get_running_loop()
+            else:
+                rtt_loop = asyncio.get_event_loop()
+            self.rtt_futs[self.plugin_id] = rtt_loop.create_future()
 
         # Schedule the punching process with a short delay.
         if self.plugin_id not in self.punch_proc:
