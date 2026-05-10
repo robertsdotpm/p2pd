@@ -298,7 +298,15 @@ class TURNPlugin(Plugin):
             print("[TURN-DBG] accept_peer dest_peer={0} dest_relay={1}".format(
                 dest_peer, dest_relay,
             ))
-            already_accepted = await client.accept_peer(dest_peer, dest_relay)
+            try:
+                already_accepted = await asyncio.wait_for(
+                    client.accept_peer(dest_peer, dest_relay), 30,
+                )
+            except asyncio.TimeoutError:
+                print("[TURN-DBG] accept_peer timed out; sending rejection")
+                await self.close()
+                await self._send_rejection("accept_peer_timeout")
+                return
             print("[TURN-DBG] accept_peer returned already_accepted={0}".format(already_accepted))
 
             # Unblock any initiating run() that is waiting for the peer's info.
@@ -354,9 +362,17 @@ class TURNPlugin(Plugin):
         print("[TURN-DBG] TURNMsg sent OK")
 
         # --- Wait for the peer to whitelist our relay ---
-        # self.ready is resolved by a second run() call when the peer's reply arrives.
+        # self.ready is resolved by a second run() call when the peer's reply
+        # arrives. Cap at 40s: peer allocation + accept_peer takes at most
+        # ~35s (6s alloc + 25s accept_peer max), plus signaling overhead.
+        # Without this cap, a non-responding peer makes us burn the full
+        # 60s plugin timeout at the initiator side.
         print("[TURN-DBG] awaiting self.ready (peer-whitelist barrier)")
-        pipe = await self.ready
+        try:
+            pipe = await asyncio.wait_for(self.ready, 40)
+        except asyncio.TimeoutError:
+            print("[TURN-DBG] self.ready timed out (peer never whitelisted)")
+            return
         print("[TURN-DBG] self.ready resolved -> setting final result")
         if not self.result.done():
             self.result.set_result(pipe)
