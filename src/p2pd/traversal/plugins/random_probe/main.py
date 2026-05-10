@@ -428,11 +428,12 @@ class RandomProbePlugin(Plugin):
             )
             worker_sock.setblocking(False)
             worker_sock.bind((loopback_host, 0))
-            # getsockname() returns 4-tuple for v6; Pipe needs 2-tuple.
-            # See udp_punch main.py for the same issue.
+            # getsockname() may return a 4-tuple on IPv6.  Use the full
+            # address for both connect() and the Pipe dest so the asyncio
+            # transport's self._address comparison never mismatches.
             listener_addr = listener_sock.getsockname()
             worker_addr = worker_sock.getsockname()
-            worker_addr_for_pipe = (worker_addr[0], worker_addr[1])
+            worker_addr_for_pipe = worker_addr
             listener_sock.connect(worker_addr)
             worker_sock.connect(listener_addr)
         except OSError as exc:
