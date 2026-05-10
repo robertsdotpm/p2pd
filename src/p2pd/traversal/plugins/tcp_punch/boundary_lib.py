@@ -41,6 +41,14 @@ CONNECT_TIMEOUT = 5.0
 RETRY_INTERVAL = 0.05
 MAX_SLEEP = 10
 LARGE_PRIME = 2654435761
+
+# Ports that SIP-ALG and RTP helper modules on SOHO routers (Asus,
+# Linksys, MikroTik) may silently inspect, mangle, or redirect.
+# stable_ports() re-samples when the bucket RNG lands on one of
+# these so they never appear in the spray set.
+SIP_ALG_BLACKLIST = frozenset(
+    [5060, 5061] + list(range(10000, 20001))
+)
 # --------------------------
 
 # --------------------------
@@ -161,7 +169,8 @@ boundary,
     ports = set()
     while len(ports) < num_ports:
         port = base_port + rng.randint(0, port_range - 1)
-        ports.add(port)
+        if port not in SIP_ALG_BLACKLIST:
+            ports.add(port)
 
     return sorted(ports, reverse=True)
 
