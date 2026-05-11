@@ -51,9 +51,9 @@ def parse_args():
     parser.add_argument("--peer-public-ip", required=True)
     parser.add_argument("--peer-port", required=True, type=int)
     parser.add_argument("--punch-at", required=True, type=float)
-    parser.add_argument("--spray-duration", default=3.0, type=float)
-    parser.add_argument("--monitor-duration", default=5.0, type=float)
-    parser.add_argument("--timeout", default=15.0, type=float)
+    parser.add_argument("--spray-duration", default=6.0, type=float)
+    parser.add_argument("--monitor-duration", default=8.0, type=float)
+    parser.add_argument("--timeout", default=20.0, type=float)
     return parser.parse_args()
 
 
@@ -134,11 +134,15 @@ def main():
     # SYN_SENT when the peer's SYN lands and the kernel treats the
     # exchange as simul-open, completing the handshake.
     #
-    # connect_on_tcp_sockets sprays for spray_duration seconds (we
-    # pass 3.0), so a 0.5s lead leaves ~2.5s of spray AFTER the
-    # nominal punch_at -- plenty of overlap with the peer's own
-    # spray window.
-    LEAD_TIME_S = 0.5
+    # connect_on_tcp_sockets sprays for spray_duration seconds.
+    # Cross-platform smoke test sets spray_duration=6.0 and uses a
+    # 2.5s lead time so the spray window is [punch_at-2.5,
+    # punch_at+3.5].  The wider envelope absorbs the residual clock-
+    # probe error of the simple one-sample midpoint method, which is
+    # bounded by ~RTT/2 -- for p2pd.net at 3s RTT that's ±1.5s.  A
+    # narrower window can land the SYNs outside the peer's listen
+    # state and produce kernel RSTs.
+    LEAD_TIME_S = 2.5
     now = time.time()
     delay = args.punch_at - LEAD_TIME_S - now
     if delay > 0:
