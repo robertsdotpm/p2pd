@@ -384,6 +384,48 @@ af,
             if map_success in out:
                 return 1
 
+        # Failure-class classifier.  miniupnpd-derived stacks (most
+        # consumer CPEs) return SOAP faults with a small set of well-
+        # known error codes for AddPinhole / AddPortMapping; logging
+        # the class lets operators tell "this router has no IPv6
+        # firewall control service" apart from "the LAN IP I passed
+        # is a temp-address" or "I asked for a port already mapped".
+        # The old behaviour swallowed all failures as a single "no",
+        # producing the silent-NO_ECHO debugging cliff documented in
+        # miniupnp#600 / pfSense#15448 / openwrt routing#545.
+        fault_classes = (
+            (b"<errorCode>401</errorCode>", "invalid-action (no IGDv2 / WANIPv6FirewallControl service)"),
+            (b"<errorCode>402</errorCode>", "invalid-args"),
+            (b"<errorCode>501</errorCode>", "action-failed (router refused)"),
+            (b"<errorCode>606</errorCode>", "action-not-authorized (often temp-address: pass stable LAN IP)"),
+            (b"<errorCode>713</errorCode>", "SpecifiedArrayIndexInvalid"),
+            (b"<errorCode>714</errorCode>", "NoSuchEntryInArray"),
+            (b"<errorCode>715</errorCode>", "WildCardNotPermittedInSrcIP"),
+            (b"<errorCode>716</errorCode>", "WildCardNotPermittedInExtPort"),
+            (b"<errorCode>718</errorCode>", "ConflictInMappingEntry (already mapped to other host)"),
+            (b"<errorCode>724</errorCode>", "SamePortValuesRequired"),
+            (b"<errorCode>725</errorCode>", "OnlyPermanentLeasesSupported"),
+            (b"<errorCode>726</errorCode>", "RemoteHostOnlySupportsWildcard"),
+            (b"<errorCode>727</errorCode>", "ExternalPortOnlySupportsWildcard"),
+            (b"<errorCode>728</errorCode>", "NoPortMapsAvailable"),
+            (b"<errorCode>729</errorCode>", "ConflictWithOtherMechanisms"),
+            (b"<errorCode>732</errorCode>", "WildCardNotPermittedInIntPort"),
+        )
+        classified = None
+        for marker, label in fault_classes:
+            if marker in out:
+                classified = label
+                break
+        if classified is None and b"<s:Fault>" in out:
+            classified = "unclassified SOAP fault"
+
+        if classified is not None:
+            from aionetiface import log, fstr
+            log(fstr(
+                "upnp: AddPinhole/AddPortMapping rejected af={0} ext={1} "
+                "proto={2} class={3}",
+                (af, ext_port, proto, classified),
+            ))
         return 0
 
     # Launch all workers concurrently
