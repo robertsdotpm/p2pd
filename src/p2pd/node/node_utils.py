@@ -622,21 +622,64 @@ async def remote_reachability_cb(reachability, _msg, client_tup, pipe):
 
 
 async def forward(node, port, reachability):
-    """Run UPnP port forwarding for every NIC/AF and probe reachability, returning (forwarded, reachable) lists."""
+    """Run UPnP+PCP port forwarding for every NIC/AF and probe reachability, returning (forwarded, reachable) lists."""
     from ..traversal.plugins.upnp.main import port_forward as upnp_port_forward
+    from .pcp_client import pcp_try_anycast_and_gateway, PROTOCOL_TCP
 
     tasks = []
     for nic in node.ifs:
         for af in nic.supported():
 
             async def do_forward(af=af, nic=nic):
-                """Forward the listen port for one (af, nic) pair and return [af, nic.id] on success."""
+                """Forward the listen port for one (af, nic) pair and return [af, nic.id] on success.
+
+                Races UPnP and PCP: the first to install a mapping wins.
+                UPnP-IGD is the old standard most consumer home routers
+                implement; PCP (RFC 6887) is the modern replacement
+                that several carriers and prosumer CPEs run instead --
+                some of them explicitly disable UPnP-IGD.  Running both
+                in parallel covers both populations without doubling
+                the cold-start budget.
+                """
                 reachability[af][nic.id] = asyncio.Future()
                 route = await nic.route(af).bind()
                 src_ip = route.nic() if af == IP4 else route.ext()
                 src_tup = (src_ip, port)
-                ret = await upnp_port_forward(af, nic, port, src_tup, "p2pd")
-                if ret:
+
+                async def via_upnp():
+                    return await upnp_port_forward(af, nic, port, src_tup, "p2pd")
+
+                async def via_pcp():
+                    gws = nic.netifaces.gateways()
+                    gw = None
+                    if af in gws:
+                        # netifaces returns [(addr, ifname), ...]; take first.
+                        glist = gws[af]
+                        if glist:
+                            gw = glist[0][0]
+                    sock_af = socket.AF_INET6 if af == IP6 else socket.AF_INET
+                    parsed = await pcp_try_anycast_and_gateway(
+                        sock_af, src_ip, gw, port, proto=PROTOCOL_TCP,
+                        suggested_ext_port=port,
+                    )
+                    return 1 if parsed and parsed.get("result_code") == 0 else 0
+
+                upnp_task = asyncio.ensure_future(via_upnp())
+                pcp_task = asyncio.ensure_future(via_pcp())
+                race = [upnp_task, pcp_task]
+                winner = 0
+                try:
+                    for done in asyncio.as_completed(race):
+                        result = await done
+                        if result:
+                            winner = 1
+                            break
+                finally:
+                    for t in race:
+                        if not t.done():
+                            t.cancel()
+                    await asyncio.gather(*race, return_exceptions=True)
+                if winner:
                     return [af, nic.id]
 
             tasks.append(do_forward())
