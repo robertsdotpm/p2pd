@@ -122,7 +122,11 @@ async def load_network_interfaces(node):
     discovery block is skipped; the manual path validates that each pre-loaded
     NIC has NAT info so prediction can proceed.
     """
-    manual = bool(node.ifs)
+    # manual is True only for NICs that were pre-loaded by the caller and
+    # passed as ifs= to Gate/Node.  NICs loaded by a previous call to this
+    # function (e.g. Gate.__aenter__ pre-loading for name derivation) are
+    # NOT manual -- node.ifs_autoloaded marks that case.
+    manual = bool(node.ifs) and not getattr(node, "ifs_autoloaded", False)
     if not node.ifs:
         nic_names = getattr(node, "nic_names", [])
         for attempt in range(3):
@@ -153,6 +157,10 @@ async def load_network_interfaces(node):
                     attempt + 1
                 ))
                 await asyncio.sleep(5)
+
+        # Mark that these NICs were auto-discovered (not passed as ifs=) so
+        # a second call from node_start skips the manual NAT check.
+        node.ifs_autoloaded = True
 
     node.ifs = sorted(node.ifs, key=lambda x: x.name)
 
