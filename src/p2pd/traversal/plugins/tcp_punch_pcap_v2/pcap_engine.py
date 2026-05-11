@@ -142,15 +142,21 @@ async def spawn_connections(port_alloc_subs, src_ip, dest_ip, loop=None):
 
 
 async def wait_first_established(conns, monitor_timeout=3.0):
-    """Equivalent to socket_event_monitor: wait until one Connection
-    reaches ESTABLISHED. Returns the list of ESTABLISHED Connections
-    observed within the grace window (possibly empty on timeout).
+    """Equivalent to socket_event_monitor: wait the FULL monitor_timeout
+    collecting all Connections that reach ESTABLISHED, then return the
+    set (possibly empty).
 
-    Mirrors the legacy "first ESTABLISHED + tiny grace period"
-    behaviour from socket_event_monitor: as soon as one Connection
-    fires the event, give the other tuples ~50 ms to catch up so the
-    canonical-winner master/slave handshake (choose_canonical_winner)
-    sees the full set of converged 4-tuples.
+    Earlier behaviour exited ~50 ms after the FIRST ESTABLISHED event.
+    That cut the converged set down to whichever Connections happened
+    to fire SYN+ACK in the first burst -- 7/20 on real cross-NAT runs
+    -- which then mismatched the legacy peer's canonical winner pick
+    (legacy's kernel collects ALL successes inside the full 3 s monitor
+    window). Mismatched picks closed each side's chosen 4-tuple and
+    the slave's race for `$` timed out.
+
+    Waiting the full window mirrors legacy's socket_event_monitor:
+    both peers see the same 4-tuple set, the sort key is symmetric,
+    so sorted_conns[-1] picks the same canonical winner on both sides.
     """
     if not conns:
         return []
@@ -167,19 +173,10 @@ async def wait_first_established(conns, monitor_timeout=3.0):
     start = time.monotonic()
     end = start + monitor_timeout
     winners = []
-    first_at = None
-    grace = 0.050
     try:
         while pending:
-            # Compute the wait deadline. Once a first winner has been
-            # observed, cap the remaining wait to the small grace
-            # period so stragglers in the same fire have ~50 ms to
-            # converge but we don't burn the whole monitor_timeout.
             now = time.monotonic()
-            if first_at is None:
-                remaining = end - now
-            else:
-                remaining = (first_at + grace) - now
+            remaining = end - now
             if remaining <= 0:
                 break
             done, pending = await asyncio.wait(
@@ -194,9 +191,7 @@ async def wait_first_established(conns, monitor_timeout=3.0):
                 if not d.cancelled() and conn.state is not None \
                         and conn.state.is_established():
                     winners.append(conn)
-                    if first_at is None:
-                        first_at = time.monotonic()
-            # If nothing completed and we ran past the deadline, exit.
+            # If nothing completed before timeout, exit.
             if not done:
                 break
     finally:
