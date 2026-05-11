@@ -135,6 +135,8 @@ class TURNPlugin(Plugin):
                     "turn[{0}]: exceeded MAX_RENEGOTIATIONS ({1}); aborting",
                     (self.plugin_id, self.MAX_RENEGOTIATIONS),
                 ))
+                if not self.result.done():
+                    self.result.set_result(None)
                 return
             print("[TURN-DBG] peer rejected our server reason={0!r} round={1}/{2} tried={3}".format(
                 getattr(reply.payload, "reject_reason", None),
@@ -218,6 +220,8 @@ class TURNPlugin(Plugin):
                     ))
                     self.tried_servers.add(initiator_choice)
                     await self.send_rejection("not_in_infra")
+                    if not self.result.done():
+                        self.result.set_result(None)
                     return
 
             if chosen_servers is None:
@@ -258,12 +262,16 @@ class TURNPlugin(Plugin):
                     ))
                     self.tried_servers.add(initiator_choice)
                     await self.send_rejection("unreachable")
+                    if not self.result.done():
+                        self.result.set_result(None)
                     return
                 print("[TURN-DBG] no working TURN server -- aborting")
                 log(fstr(
                     "turn[{0}]: no working TURN server -- aborting",
                     (self.plugin_id,),
                 ))
+                if not self.result.done():
+                    self.result.set_result(None)
                 return
             print("[TURN-DBG] allocated relay on {0}".format(getattr(client, "dest", "?")))
             log(fstr(
@@ -289,6 +297,8 @@ class TURNPlugin(Plugin):
                 self.turn_clients[self.plugin_id] = client
 
         if client is None:
+            if not self.result.done():
+                self.result.set_result(None)
             return
 
         # --- Accept the peer's relay (reply path only) ---
@@ -308,6 +318,8 @@ class TURNPlugin(Plugin):
                 print("[TURN-DBG] accept_peer timed out; sending rejection")
                 await self.send_rejection("accept_peer_timeout")
                 await self.close()
+                if not self.result.done():
+                    self.result.set_result(None)
                 return
             print("[TURN-DBG] accept_peer returned already_accepted={0}".format(already_accepted))
 
@@ -374,6 +386,8 @@ class TURNPlugin(Plugin):
             pipe = await asyncio.wait_for(self.ready, 40)
         except asyncio.TimeoutError:
             print("[TURN-DBG] self.ready timed out (peer never whitelisted)")
+            if not self.result.done():
+                self.result.set_result(None)
             return
         print("[TURN-DBG] self.ready resolved -> setting final result")
         if not self.result.done():

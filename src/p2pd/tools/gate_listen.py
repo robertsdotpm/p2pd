@@ -36,6 +36,9 @@ async def emit_ready_when_registered(gate):
         if gate.full_name:
             print("WG_READY: {0}".format(gate.full_name), flush=True)
             return
+        if gate.node and getattr(gate.node, "nickname_error", None) is not None:
+            print("WG_READY_TIMEOUT", flush=True)
+            return
     print("WG_READY_TIMEOUT", flush=True)
 
 
@@ -43,7 +46,12 @@ async def main():
     name = os.environ.get("WG_LISTEN_NAME") or None
     gate = Gate(name=name) if name else Gate()
     asyncio.ensure_future(emit_ready_when_registered(gate))
-    await gate.listen(handle)
+    try:
+        await gate.listen(handle)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        print("WG_READY_TIMEOUT", flush=True)
 
 
 if __name__ == "__main__":
