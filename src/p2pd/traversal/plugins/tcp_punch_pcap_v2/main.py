@@ -314,12 +314,26 @@ class PunchPcapV2Plugin(Plugin):
         return msg
 
     async def delayed_start_punching_proc(self, nic, puncher):
-        """Wait coordinator delay then fire the pcap engine."""
+        """Wait coordinator delay then fire the pcap engine.
+
+        On a winner, wrap the userspace ``Connection`` in a
+        :class:`PipeShim` so downstream code (gate.Link, demo,
+        plugin_chain) sees the same Pipe-shaped object the legacy
+        tcp_punch plugin produces. Firewall teardown ownership
+        transfers to the shim: it will run remove_block_ports when
+        ``shim.close()`` is called (in close ordering finally so
+        cancellation can't skip it). On a miss, this method does the
+        teardown itself.
+        """
+        from aionetiface.net.pcap.tcp.pipe_shim import PipeShim
+
         coordinator_delay = puncher.params.get("coordinator_delay", 0.5)
         print("[PUNCH-PCAPV2-DELAY] enter delay={0}s".format(
             coordinator_delay,
         ), flush=True)
         firewall_ports = []
+        winner_conn = None
+        shim_wrapped = False
         try:
             await asyncio.sleep(coordinator_delay)
             # Install per-OS firewall blocks on every predicted local
@@ -342,7 +356,7 @@ class PunchPcapV2Plugin(Plugin):
             async def sleep_until_async():
                 await loop.run_in_executor(None, puncher.sleep_until)
 
-            winner = await pcap_selector_punch_engine(
+            winner_conn = await pcap_selector_punch_engine(
                 nic_pcap_name=nic_pcap_name,
                 port_allocs=puncher.port_allocs,
                 src_ip=puncher.src_ip,
@@ -352,19 +366,16 @@ class PunchPcapV2Plugin(Plugin):
                 loop=loop,
             )
             print("[PUNCH-PCAPV2-DELAY] engine returned {0}".format(
-                "winner" if winner is not None else "None",
+                "winner" if winner_conn is not None else "None",
             ), flush=True)
 
-            # Secondary-bucket fallback. If the primary missed and the
-            # PunchClient carries a secondary_punch_time, retry the
-            # same port_allocs (boundary_port_alloc already produced
-            # union(B, B+1)) at the secondary rendezvous.
-            if winner is None and puncher.secondary_punch_time:
+            # Secondary-bucket fallback.
+            if winner_conn is None and puncher.secondary_punch_time:
                 log("tcp_punch_pcap_v2: primary missed; firing secondary "
                     "at {0}".format(puncher.secondary_punch_time))
                 puncher.punch_time = puncher.secondary_punch_time
                 puncher.secondary_punch_time = 0
-                winner = await pcap_selector_punch_engine(
+                winner_conn = await pcap_selector_punch_engine(
                     nic_pcap_name=nic_pcap_name,
                     port_allocs=puncher.port_allocs,
                     src_ip=puncher.src_ip,
@@ -374,13 +385,43 @@ class PunchPcapV2Plugin(Plugin):
                     loop=loop,
                 )
 
-            if not self.result.done():
-                self.result.set_result(winner)
-            elif winner is not None:
-                try:
-                    await winner.close()
-                except Exception:
-                    pass
+            # Wrap winner in PipeShim. The shim owns firewall teardown
+            # from this point on -- DO NOT remove ports in the finally
+            # below; that would tear down the path while data is still
+            # flowing.
+            if winner_conn is not None:
+                # Build a peer client_tup from the Connection's
+                # FourTuple. This drives subscribe()'s client_tup
+                # filter and surfaces on Link.client_tup.
+                ft = getattr(winner_conn, "ft", None)
+                peer_tup = None
+                if ft is not None:
+                    peer_tup = (ft.remote_ip, int(ft.remote_port))
+                ports_to_clean = list(firewall_ports)
+
+                def firewall_teardown_cb():
+                    if ports_to_clean:
+                        remove_block_ports(ports_to_clean)
+
+                shim = PipeShim(
+                    winner_conn,
+                    client_tup=peer_tup,
+                    firewall_teardown=firewall_teardown_cb,
+                    loop=loop,
+                )
+                shim_wrapped = True
+                if not self.result.done():
+                    self.result.set_result(shim)
+                else:
+                    # Outer race resolved already; close shim cleanly so
+                    # firewall rules and Connection both come down.
+                    try:
+                        await shim.close()
+                    except Exception:
+                        pass
+            else:
+                if not self.result.done():
+                    self.result.set_result(None)
         except asyncio.CancelledError:
             print("[PUNCH-PCAPV2-DELAY] CANCELLED", flush=True)
             raise
@@ -390,7 +431,9 @@ class PunchPcapV2Plugin(Plugin):
             ), flush=True)
             raise
         finally:
-            if firewall_ports:
+            # If no shim took ownership of firewall ports, clean them
+            # up here. CancelledError + Exception paths land here too.
+            if not shim_wrapped and firewall_ports:
                 try:
                     remove_block_ports(firewall_ports)
                 except Exception as exc:
