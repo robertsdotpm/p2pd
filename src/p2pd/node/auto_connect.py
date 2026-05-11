@@ -75,10 +75,18 @@ def plugins_for_protocol(protocol):
 PHASE1_BUDGET = 3.0
 TURN_TOTAL_CAP = 3
 DEFAULT_PLUGIN_TIMEOUT = 25.0
-# ICE-PAC (draft-ietf-ice-pac) grace window after race_combos timeout:
-# probe-lab data (arXiv:2510.27500 §6) shows ~8% of successes arrive in
-# the window immediately after the local probe timeout fires.
-PHASE_GRACE_S = 0.200
+# ICE-PAC (draft-ietf-ice-pac) grace window after race_combos timeout.
+# probe-lab data (arXiv:2510.27500 §6) shows ~8% of successful punches
+# arrive in the window immediately after the local probe timeout
+# fires: the peer's last spray was in flight when our as_completed
+# raised, and the SYN-ACK lands milliseconds-to-seconds later.  Widen
+# the window so we actually catch those late arrivals.  Earlier value
+# 0.200 s caught only the leading edge; 3.0 s captures the bulk per
+# the same paper's CDF without inflating happy-path latency (the
+# loop short-circuits as soon as a winning future resolves, so a
+# fast pipe still returns fast).  Cap is well under the per-phase
+# plugin timeouts so a hung sibling can't extend the total cascade.
+PHASE_GRACE_S = 3.0
 
 
 # ---------------------------------------------------------------------------
