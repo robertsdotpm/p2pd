@@ -9,7 +9,7 @@ wins; auto_connect short-circuits and returns it.
             are eligible when both sides advertise a loopback alias
             (same-machine peers).
 
-  Phase 2 -- tcp_punch
+  Phase 2 -- tcp_punch "punch"
             NIC_BIND sub-phase first; if no NIC_BIND combos exist or
             none win, EXT_BIND. Within each sub-phase, IPv4 first then
             IPv6 (never concurrent). NICs on each side are sorted by
@@ -18,7 +18,7 @@ wins; auto_connect short-circuits and returns it.
             slot share a src NIC or a dest NIC. Slots advance only
             once every parallel attempt has finished or timed out.
 
-  Phase 3 -- udp_punch + random_probe
+  Phase 3 -- udp_punch + random_probe "spray"
             Identical scheduling to Phase 2. Both plugins race
             concurrently within each scheduled (src, dest) pair.
 
@@ -930,15 +930,16 @@ async def auto_connect(
 
     winner_pipe = None
     winner_plugin = None
-    for phase_fn in (
-        phase1_direct,
-        phase2_tcp_punch,
-        phase3_udp_probe,
-        phase4_turn,
-    ):
-        phase_t0 = time.monotonic()
-        pipe, plugin = await phase_fn(node, src_map, dest_map, sig_pipe, plugin_set)
-        if test_all_phases:
+
+    if test_all_phases:
+        for phase_fn in (
+            phase1_direct,
+            phase2_tcp_punch,
+            phase3_udp_probe,
+            phase4_turn,
+        ):
+            phase_t0 = time.monotonic()
+            pipe, plugin = await phase_fn(node, src_map, dest_map, sig_pipe, plugin_set)
             elapsed_ms = int((time.monotonic() - phase_t0) * 1000)
             src_nat = worst_nat(src_map)
             dest_nat = worst_nat(dest_map)
@@ -956,19 +957,64 @@ async def auto_connect(
                 winner_pipe = pipe
                 winner_plugin = plugin
             elif pipe is not None:
-                # Already have a winner -- close this later phase's pipe
-                # so it doesn't leak. close_plugin is the canonical
-                # cleanup path; safe to call on already-closed plugins.
                 try:
                     await close_plugin(
                         plugin, node.traversal.plugins, node.traversal.inbound_pipes,
                     )
                 except (OSError, asyncio.TimeoutError):
                     log_exception()
-            continue
-        if pipe is not None:
-            return pipe, plugin
-
-    if test_all_phases:
         return winner_pipe, winner_plugin
-    return None, None
+
+    # Happy Eyeballs cascade: start each phase PHASE_INTERLEAVE_S after the
+    # previous one without waiting for it to finish.  The first phase to
+    # return a non-None pipe wins; all others are cancelled.
+    # Phases that are still sleeping in their interleave delay are cancelled
+    # before they even send any signals to the peer.
+    PHASE_INTERLEAVE_S = 1.5
+    phase_fns = (phase1_direct, phase2_tcp_punch, phase3_udp_probe, phase4_turn)
+
+    async def delayed_phase(delay, fn):
+        if delay > 0:
+            await asyncio.sleep(delay)
+        return await fn(node, src_map, dest_map, sig_pipe, plugin_set)
+
+    tasks = [
+        asyncio.ensure_future(delayed_phase(i * PHASE_INTERLEAVE_S, fn))
+        for i, fn in enumerate(phase_fns)
+    ]
+    pending = set(tasks)
+    try:
+        while pending:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for t in done:
+                if t.cancelled():
+                    continue
+                exc = t.exception()
+                if exc is not None:
+                    log("[AC-PHASE] phase task raised: " + repr(exc))
+                    continue
+                pipe, plugin = t.result()
+                if pipe is not None:
+                    winner_pipe = pipe
+                    winner_plugin = plugin
+                    for t2 in pending:
+                        t2.cancel()
+                    if pending:
+                        await asyncio.gather(*pending, return_exceptions=True)
+                    pending = set()
+                    break
+    except asyncio.CancelledError:
+        for t in tasks:
+            if not t.done():
+                t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+    finally:
+        for t in tasks:
+            if not t.done():
+                t.cancel()
+        remaining = [t for t in tasks if not t.done()]
+        if remaining:
+            await asyncio.gather(*remaining, return_exceptions=True)
+
+    return winner_pipe, winner_plugin
