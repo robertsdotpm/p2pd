@@ -15,7 +15,7 @@ import os
 import socket as _socket
 
 from aionetiface import (
-    EXT_BIND, NIC_BIND, Pipe, SysClock, UDP, fstr, log, log_exception,
+    EXT_BIND, NIC_BIND, Pipe, SysClock, UDP, fstr, get_running_loop, log, log_exception,
     rand_b,
 )
 from aionetiface.net.selector_proxy import selector_proxy
@@ -474,10 +474,7 @@ class UdpPunchPlugin(Plugin):
             puncher_route = puncher.route
             stop_reader = self.stop_reader
 
-            if hasattr(asyncio, "get_running_loop"):
-                loop = asyncio.get_running_loop()
-            else:
-                loop = asyncio.get_event_loop()
+            loop = get_running_loop()
             # convergence is resolved by the worker via call_soon_threadsafe
             # the moment the engine returns a winner and selector_proxy is
             # ready to read worker_sock. Until that happens, ECHO bytes the

@@ -6,7 +6,7 @@ import select
 import sys
 from aionetiface import (
     EXT_BIND, IP4, IP6, NIC_BIND,
-    fstr, log, sock_has_data, to_b, to_s,
+    fstr, get_running_loop, log, sock_has_data, to_b, to_s,
 )
 from ..node.nickname import pnp_name_has_tld
 from ..node.node_connect import resolve_pnp_addr
@@ -27,10 +27,7 @@ if not _IS_WINDOWS:
 
 async def ainput(prompt):
     """Read a line of input from stdin asynchronously, unblocking on shutdown signals."""
-    if hasattr(asyncio, "get_running_loop"):
-        loop = asyncio.get_running_loop()
-    else:
-        loop = asyncio.get_event_loop()
+    loop = get_running_loop()
 
     def blocking_input():
         """Block in a thread waiting for stdin input or a shutdown interrupt.

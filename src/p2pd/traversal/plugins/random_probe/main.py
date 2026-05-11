@@ -26,6 +26,7 @@ from aionetiface import (
     Pipe,
     SysClock,
     UDP,
+    get_running_loop,
     log,
     log_exception,
     rand_b,
@@ -353,10 +354,7 @@ class RandomProbePlugin(Plugin):
         # collision count is probe_count^2 / 65000 ~= 1 with N=256.
         # See investigation in 2026-05-03 commit history for the full
         # case.
-        if hasattr(asyncio, "get_running_loop"):
-            loop_for_algo = asyncio.get_running_loop()
-        else:
-            loop_for_algo = asyncio.get_event_loop()
+        loop_for_algo = get_running_loop()
         print("[RP-SPRAY-DISPATCH] role-label={0} (ignored) bind={1} peer={2}".format(
             my_role, bind_ip, peer_addr_ip,
         ))
@@ -519,10 +517,7 @@ class RandomProbePlugin(Plugin):
         # starts; demo echo bytes queue in worker_sock with nobody
         # reading them and the 4s echo timeout fires before
         # selector_proxy ever begins forwarding.
-        if hasattr(asyncio, "get_running_loop"):
-            loop_for_bridge = asyncio.get_running_loop()
-        else:
-            loop_for_bridge = asyncio.get_event_loop()
+        loop_for_bridge = get_running_loop()
         punched_sock_ref = res["sock"]
         peer_ref = res["peer"]
         nonce_ref = nonce
@@ -768,10 +763,7 @@ class RandomProbePlugin(Plugin):
                 "for full-cone-with-port-preservation peers)")
             return
 
-        if hasattr(asyncio, "get_running_loop"):
-            loop = asyncio.get_running_loop()
-        else:
-            loop = asyncio.get_event_loop()
+        loop = get_running_loop()
         for stun_server in stun_servers:
             try:
                 resolved = await self.resolve_stun_dest(stun_server)

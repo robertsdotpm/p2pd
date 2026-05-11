@@ -68,7 +68,7 @@ two more reasons:
 import asyncio
 import signal
 import socket
-from aionetiface import Pipe, TCP, log, log_exception, async_wrap_errors
+from aionetiface import Pipe, TCP, log, log_exception, async_wrap_errors, get_running_loop
 from .tcp_punch_engine import tcp_selector_punch_engine
 from aionetiface.net.selector_proxy import selector_proxy
 
@@ -226,10 +226,7 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None, node
 
         # Start the punching in a new process.
         # Store the future so the caller can inspect / cancel it if needed.
-        if hasattr(asyncio, "get_running_loop"):
-            loop = asyncio.get_running_loop()
-        else:
-            loop = asyncio.get_event_loop()
+        loop = get_running_loop()
         args = (puncher, reverse_server_dest, stop_reader)
         print("[PUNCH-PROC] dispatching worker via run_in_executor "
               "(proc_pool={0}) reverse_dest={1}".format(

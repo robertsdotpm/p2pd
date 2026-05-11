@@ -43,7 +43,7 @@ allocator).
 """
 import asyncio
 import time
-from aionetiface import log, NIC_BIND, EXT_BIND, TCP, SysClock, async_wrap_errors, cancel_task, shutdown_proc_pool
+from aionetiface import log, NIC_BIND, EXT_BIND, TCP, SysClock, async_wrap_errors, cancel_task, get_running_loop, shutdown_proc_pool
 from ....protocol.proto_defs import P2P_PUNCH
 from .proto import PunchMsg
 from .boundary_lib import FAST_PUNCH_PARAMS, compute_rendezvous
@@ -346,10 +346,7 @@ class PunchPlugin(Plugin):
 
         # Create the RTT-delay future before the punch task reads it.
         if self.plugin_id not in self.rtt_futs:
-            if hasattr(asyncio, "get_running_loop"):
-                rtt_loop = asyncio.get_running_loop()
-            else:
-                rtt_loop = asyncio.get_event_loop()
+            rtt_loop = get_running_loop()
             self.rtt_futs[self.plugin_id] = rtt_loop.create_future()
 
         # Schedule the punching process with a short delay.
