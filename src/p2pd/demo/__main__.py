@@ -20,17 +20,15 @@ import time
 import signal
 import os
 from aionetiface import (
-    Interface,
-    StartNodeNicknameFailed, SysClock, TunnelFailed,
+    StartNodeNicknameFailed, TunnelFailed,
     allow_windows_firewall,
     async_run, async_wrap_errors, fstr,
-    list_interfaces, load_interfaces, log, log_exception,
+    log, log_exception,
     sock_has_data, sys, to_b, to_s,
 )
 from ..node.nickname import (
     FullNameFailure, PnpServerResourceLimit, PnpServerUnreachable,
 )
-from ..node.node import Node
 from ..gate import Gate
 from . import stop_rw
 from .defs import MENU_BANNER, PROGRAM_BANNER, demo_node_conf
@@ -52,56 +50,16 @@ async def setup_node():
     cout(PROGRAM_BANNER)
     cout("pid = " + str(os.getpid()))
 
-    # Load interfaces on machine.
     cout("Loading networking interfaces...")
-    if_names = await list_interfaces()
-    if args.nic:
-        # --nic narrows to specific interface name(s). Names must match
-        # what list_interfaces returns (e.g. on Windows: the description
-        # like "Intel(R) 82574L Gigabit Network Connection"; on Linux:
-        # the kernel name like "ens192"). Pre-filter here so only the
-        # selected NIC(s) get loaded -- otherwise the demo wastes time
-        # running STUN / NAT detection on every adapter (mobile NICs,
-        # virtual adapters, etc.) and ends up publishing addresses for
-        # interfaces the caller never wanted.
-        if_names = [n for n in if_names if n in args.nic]
-        if not if_names:
-            raise ValueError(
-                "--nic supplied but no matching interface found. "
-                "Requested: {0}; available: {1}".format(
-                    args.nic, await list_interfaces(),
-                )
-            )
-
-    ifs = []
-    for attempt in range(3):
-        ifs = await load_interfaces(
-            if_names, Interface, min_agree=1, max_agree=4, timeout=4
-        )
-        if ifs:
-            break
-        if attempt < 2:
-            cout("No interfaces found (attempt {0}/3); retrying in 5 s...".format(attempt + 1))
-            await asyncio.sleep(5)
-    else:
-        raise ValueError("Failed to load interfaces.")
-
-    # Show the ifs loaded.
-    display_ifs_loaded(ifs)
-
-    # Build the Gate: explicit name when --node_id is supplied,
-    # otherwise auto-derive a deterministic sha256(nics+port) name.
-    sys_clock_arg = None
-    if args.ntp:
-        sys_clock_arg = SysClock(interface=ifs[0], ntp_addr=args.ntp)
-        cout(fstr("Using --ntp source: {0}", (args.ntp,)))
 
     gate = None
     for start_attempt in range(3):
         gate = Gate(
             name=args.node_id,
-            ifs=ifs, ip=args.ip, port=args.port, stop_rw=stop_rw,
-            conf=demo_node_conf, sys_clock=sys_clock_arg,
+            nic_names=args.nic or None,
+            ntp_addr=args.ntp or None,
+            ip=args.ip, port=args.port, stop_rw=stop_rw,
+            conf=demo_node_conf,
         )
         # Install the echo protocol handler before start so inbound
         # messages from peers connecting to us get processed.
@@ -127,6 +85,10 @@ async def setup_node():
         raise StartNodeNicknameFailed()
 
     node = gate.node
+    ifs = node.ifs
+
+    # Show which interfaces were loaded and their NAT classification.
+    display_ifs_loaded(ifs)
 
     cout()
     cout(fstr("Node started = {0}", (to_s(node.addr_bytes),)))

@@ -112,19 +112,48 @@ async def node_start(node, sys_clock=None, out=False, cout=print):
 # Phase: Hardware & Network Setup
 # ==========================================
 async def load_network_interfaces(node):
-    """Discover and sort all available network interfaces, raising if none are found."""
+    """Discover and sort all available network interfaces, raising if none are found.
+
+    Respects node.nic_names (list of str): when non-empty, only interfaces
+    whose name appears in that list are loaded.  Pass an empty list or omit
+    nic_names to discover all available interfaces.
+
+    Idempotent: when node.ifs is already populated (e.g. Gate(ifs=[...])) the
+    discovery block is skipped; the manual path validates that each pre-loaded
+    NIC has NAT info so prediction can proceed.
+    """
     manual = bool(node.ifs)
     if not node.ifs:
-        try:
-            if_names = await list_interfaces()
-            node.ifs = await load_interfaces(if_names, Interface)
-        except asyncio.CancelledError:  # pylint: disable=try-except-raise
-            raise
-        except (OSError, asyncio.TimeoutError):
-            log_exception()
-            node.ifs = []
+        nic_names = getattr(node, "nic_names", [])
+        for attempt in range(3):
+            try:
+                if_names = await list_interfaces()
+                if nic_names:
+                    filtered = [n for n in if_names if n in nic_names]
+                    if not filtered:
+                        raise ValueError(
+                            "nic_names {0!r} matched no available interfaces {1!r}".format(
+                                nic_names, if_names
+                            )
+                        )
+                    if_names = filtered
+                node.ifs = await load_interfaces(if_names, Interface)
+            except asyncio.CancelledError:
+                raise
+            except ValueError:
+                raise
+            except (OSError, asyncio.TimeoutError):
+                log_exception()
+                node.ifs = []
 
-    # Ensure deterministic order
+            if node.ifs:
+                break
+            if attempt < 2:
+                log("load_network_interfaces: no interfaces loaded (attempt {0}/3); retrying in 5s".format(
+                    attempt + 1
+                ))
+                await asyncio.sleep(5)
+
     node.ifs = sorted(node.ifs, key=lambda x: x.name)
 
     if not node.ifs:

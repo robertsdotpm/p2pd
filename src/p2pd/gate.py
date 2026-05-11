@@ -70,8 +70,8 @@ def derive_default_pnp_name(nic_macs, listen_port):
 class Gate(object):
     """Async-context wrapper around a Node with keystore-managed identity."""
 
-    def __init__(self, name=None, ifs=None, ip=None, port=0,
-                 stop_rw=None, conf=None, sys_clock=None):
+    def __init__(self, name=None, ifs=None, nic_names=None, ip=None, port=0,
+                 stop_rw=None, conf=None, sys_clock=None, ntp_addr=None):
         # port=0 by default so two Gate instances on the same machine
         # (the canonical "run the echo listener, then run a connector
         # in another terminal" first-use pattern) don't collide on the
@@ -81,6 +81,10 @@ class Gate(object):
         # loopback aliases, and nickname registration all stay
         # consistent with each other.  Pass an explicit port to pin one.
         self.requested_name = name
+        # nic_names: list of interface names to load, or None/[] to discover all.
+        self.nic_names = list(nic_names) if nic_names else []
+        # ntp_addr: custom NTP server ("host" or "host:port"); None uses the pool default.
+        self.ntp_addr = ntp_addr
         self.node_kwargs = {
             "ifs": ifs,
             "ip": ip,
@@ -98,11 +102,15 @@ class Gate(object):
         protocol handlers (e.g. echo) before start() runs."""
         if self.node is None:
             self.node = Node(**{k: v for k, v in self.node_kwargs.items() if v is not None})
+        self.node.nic_names = self.nic_names
         self.node.add_msg_cb(cb)
 
     async def __aenter__(self):
         if self.node is None:
             self.node = Node(**{k: v for k, v in self.node_kwargs.items() if v is not None})
+
+        # Attach nic_names so load_network_interfaces can filter to them.
+        self.node.nic_names = self.nic_names
 
         # Pin the PNP name BEFORE start() so node_start's keystore
         # lookup picks up our priv key (or generates a fresh one).
@@ -119,7 +127,14 @@ class Gate(object):
         else:
             self.node.pnp_name = self.requested_name
 
-        await self.node.start(sys_clock=self.sys_clock)
+        # Build SysClock from ntp_addr after interfaces are known, if the
+        # caller supplied an NTP address but not a pre-built SysClock.
+        sys_clock = self.sys_clock
+        if sys_clock is None and self.ntp_addr is not None:
+            from aionetiface import SysClock
+            sys_clock = SysClock(interface=self.node.ifs[0], ntp_addr=self.ntp_addr)
+
+        await self.node.start(sys_clock=sys_clock)
 
         # Wait for the in-flight nickname registration task so the
         # keystore entry (and therefore self.full_name) is populated
