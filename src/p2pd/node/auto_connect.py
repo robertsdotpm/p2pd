@@ -720,9 +720,32 @@ async def phase2_tcp_punch(
     # the 180s plugin timeout that would never converge anyway.
     dest_os = (dest_map or {}).get("os") or ""
     if dest_os.startswith("Windows-XP") and not is_same_machine(src_map, dest_map):
+        # XP's tcpip.sys RSTs cross-NAT tcp_punch simul-open ~140 ms
+        # after the handshake completes (see /home/x/projects/p2pd/
+        # CLAUDE.md "Windows XP cross-NAT tcp_punch is not fixable
+        # from user-space").  Route to tcp_punch_pcap, which performs
+        # the simul-open in a pure-Python userspace TCP stack on top
+        # of libpcap / WinPcap so tcpip.sys never sees the crossover.
+        # If the pcap variant is not registered on this node
+        # (wpcap.dll missing, plugin failed to install), we fall back
+        # to the historic skip behaviour.
+        if "tcp_punch_pcap" in names:
+            log("phase2_tcp_punch: dest is Windows-XP cross-machine; "
+                "routing to tcp_punch_pcap (userspace pcap stack)")
+            return await punch_phase(
+                node, src_map, dest_map, sig_pipe,
+                plugin_names=("tcp_punch_pcap",),
+                label="phase2_pcap",
+            )
         log("phase2_tcp_punch: dest is Windows-XP cross-machine; "
-            "skipping (tcpip.sys simul-open RST is unfixable on XP)")
+            "skipping (tcpip.sys simul-open RST is unfixable on XP, "
+            "tcp_punch_pcap not available)")
         return None, None
+    # On non-XP destinations, skip tcp_punch_pcap -- the pure-Python
+    # stack is slower than the kernel and we only need it for the XP
+    # bypass.  Strip it from the plugin list so the normal tcp_punch
+    # race isn't diluted.
+    names = tuple(n for n in names if n != "tcp_punch_pcap")
     return await punch_phase(
         node, src_map, dest_map, sig_pipe,
         plugin_names=names,
