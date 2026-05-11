@@ -167,16 +167,36 @@ class FanOutPlugin(Plugin):
             self.result.set_result(None)
             return
 
-        # Spawn each child's run() concurrently. run_plugin awaits to
+        # Spawn each child's run() concurrently, staggered by
+        # PHASE_STAGGER_S between successive launches.  RFC 8305 Happy
+        # Eyeballs v2 recommends ~250 ms between competing connection
+        # attempts so a fast first candidate gets a head start without
+        # starving slower paths.  In our setting a second motive
+        # applies: consumer IPv6 CPEs silently drop UDP flows past a
+        # ~256 simultaneous-flows-from-one-LAN-host cap (see
+        # project_consumer_router_v6_flow_cap memo), so racing N
+        # combos with zero stagger can self-DoS the v6 path the moment
+        # children > cap.  Staggering thins the burst rate without
+        # sacrificing the race semantics: late children still come in
+        # and beat the timeout, and as_completed below still picks the
+        # first non-None winner.  run_plugin awaits the child to
         # completion; we don't gather the tasks ourselves -- we race
-        # plugin.result futures via add_done_callback so cancelling
-        # this coroutine doesn't cancel underlying child plugin
-        # futures (matters for plugins like tcp_punch where a
-        # subprocess may resolve the result long after run_plugin
-        # returns).
+        # plugin.result futures so cancelling this coroutine doesn't
+        # cancel underlying child plugin futures (matters for plugins
+        # like tcp_punch where a subprocess may resolve the result
+        # long after run_plugin returns).
+        PHASE_STAGGER_S = 0.25
+
+        async def staggered_run_plugin(child, delay):
+            if delay > 0:
+                await asyncio.sleep(delay)
+            return await manager.run_plugin(child)
+
         tasks = [
-            asyncio.ensure_future(manager.run_plugin(c))
-            for c in children
+            asyncio.ensure_future(
+                staggered_run_plugin(c, i * PHASE_STAGGER_S)
+            )
+            for i, c in enumerate(children)
         ]
 
         log(fstr(
