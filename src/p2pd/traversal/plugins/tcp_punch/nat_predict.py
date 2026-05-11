@@ -261,7 +261,10 @@ mode,
     # Poor concurrency support.
     if our_nat["delta"]["type"] == DEPENDENT_DELTA:
         next_local = port_wrap(last_local + 1)
-        next_remote = field_wrap(last_remote + our_nat["delta"]["value"], use_range)
+        delta_val = our_nat["delta"]["value"]
+        if delta_val == 0:
+            return NATMapping([next_local, our_reply, last_remote])
+        next_remote = field_wrap(last_remote + delta_val, use_range)
 
         # Return port predictions.
         # These allocations apply even if strict port NAT.

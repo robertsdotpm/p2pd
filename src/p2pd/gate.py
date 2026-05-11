@@ -126,9 +126,10 @@ class Gate(object):
         # by the time __aenter__ returns.
         register_task = getattr(self.node, "nickname_register_task", None)
         if register_task is not None:
+            from .node.nickname import FullNameFailure
             try:
                 await register_task
-            except (OSError, asyncio.TimeoutError):
+            except (OSError, asyncio.TimeoutError, FullNameFailure):
                 pass
 
         return self

@@ -493,7 +493,10 @@ class PunchPlugin(Plugin):
             # TIME_WAIT? With SO_LINGER {1,0} on punch sockets the
             # answer should always be 0. Any non-zero count points at
             # a code path that closed without the linger sockopt.
-            await log_time_wait_residue(getattr(puncher, "src_ip", None))
+            try:
+                await log_time_wait_residue(getattr(puncher, "src_ip", None))
+            except Exception:
+                pass
 
     async def close(self):
         """Cancel any in-flight punch task and remove this plugin's shared state.

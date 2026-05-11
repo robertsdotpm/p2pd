@@ -328,13 +328,14 @@ class TURNPlugin(Plugin):
                 print("[TURN-DBG] resolving self.ready (unblock the initiating run)")
                 self.ready.set_result(client)
 
-            # If both sides have already whitelisted each other, the relay
-            # channel is fully established — nothing more to send.
+            # If both sides have already whitelisted each other we still
+            # need to send the follow-up TURNMsg so the other side's
+            # run() gets triggered and can resolve its self.ready Future.
+            # (Without the message the initiator times out after 40s.)
             if already_accepted:
-                print("[TURN-DBG] both sides whitelisted -> setting result, returning")
+                print("[TURN-DBG] both sides whitelisted -> will send follow-up TURNMsg then return")
                 if not self.result.done():
                     self.result.set_result(client)
-                return
 
             our_relay = await client.relay_tup_future
             print("[TURN-DBG] our_relay={0} -- sending follow-up TURNMsg".format(our_relay))

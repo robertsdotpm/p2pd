@@ -421,7 +421,10 @@ self,
         def new_future():
             """Replace the status future for this TXID with a fresh one and return it."""
             a_future = asyncio.Future()
-            self.msgs[msg.txn_id]["status"] = a_future
+            # The entry may have been popped by turn_process after the
+            # response was processed; guard against KeyError.
+            if msg.txn_id in self.msgs:
+                self.msgs[msg.txn_id]["status"] = a_future
             return a_future
 
         def closure():
