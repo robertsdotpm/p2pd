@@ -1,4 +1,4 @@
-"""Unit tests for tcp_punch_pcap_v2 -- engine orchestration in isolation.
+"""Unit tests for tcp_punch_pcap -- engine orchestration in isolation.
 
 Three test classes, all using AsyncTestCase per CLAUDE.md.
 
@@ -38,9 +38,9 @@ SRC = os.path.normpath(os.path.join(HERE, "..", "src"))
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
-from p2pd.traversal.plugins.tcp_punch_pcap_v2 import pcap_mux_reader
-from p2pd.traversal.plugins.tcp_punch_pcap_v2 import pcap_engine
-from p2pd.traversal.plugins.tcp_punch_pcap_v2 import firewall_helper
+from p2pd.traversal.plugins.tcp_punch_pcap import pcap_mux_reader
+from p2pd.traversal.plugins.tcp_punch_pcap import pcap_engine
+from p2pd.traversal.plugins.tcp_punch_pcap import firewall_helper
 from p2pd.traversal.plugins.tcp_punch.punch_defs import PortAlloc
 
 

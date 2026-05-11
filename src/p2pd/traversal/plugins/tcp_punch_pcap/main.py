@@ -80,10 +80,10 @@ def is_pcap_substrate_eligible_os():
 
 
 @register(phase="punch")
-class PunchPcapV2Plugin(Plugin):
+class PunchPcapPlugin(Plugin):
     """tcp_punch with the kernel-socket spray replaced by pcap Connections."""
 
-    name = "tcp_punch_pcap_v2"
+    name = "tcp_punch_pcap"
     transport = TCP
     # Same routing as the original tcp_punch_pcap: only EXT_BIND.
     # NIC_BIND / LOOPBACK_BIND don't need the userspace bypass.
@@ -100,33 +100,49 @@ class PunchPcapV2Plugin(Plugin):
 
     @classmethod
     async def setup(cls, node):
+        """Plugin entry point. DISABLED BY DEFAULT.
+
+        The pcap stack is empirical / research-grade and brings hard
+        host requirements (libpcap/Npcap/WinPcap, permissive INPUT
+        firewall surface, CAP_NET_RAW or admin). Opt in explicitly:
+
+            conf["enable_pcap_tcp_punch"] = True
+
+        Without that key the setup short-circuits and the node falls
+        through to the kernel-stack tcp_punch plugin as usual.
+        """
+        conf = getattr(node, "conf", {}) or {}
+        if not conf.get("enable_pcap_tcp_punch", False):
+            log("tcp_punch_pcap: disabled by default; set "
+                "conf['enable_pcap_tcp_punch']=True to enable")
+            return None
         if not node.conf.get("enable_punching", True):
             return None
         if not is_pcap_substrate_eligible_os():
-            log("tcp_punch_pcap_v2: local OS not eligible; disabling")
+            log("tcp_punch_pcap: local OS not eligible; disabling")
             return None
         try:
             from aionetiface.net.pcap import get_backend, PcapUnavailableError
         except ImportError:
-            log("tcp_punch_pcap_v2: pcap import failed; disabling")
+            log("tcp_punch_pcap: pcap import failed; disabling")
             return None
         try:
             factory = get_backend()
         except PcapUnavailableError as exc:
-            log("tcp_punch_pcap_v2: pcap unavailable ({0}); disabling".format(
+            log("tcp_punch_pcap: pcap unavailable ({0}); disabling".format(
                 exc,
             ))
             return None
         if not factory.available():
-            log("tcp_punch_pcap_v2: pcap factory unavailable; disabling")
+            log("tcp_punch_pcap: pcap factory unavailable; disabling")
             return None
-        log("tcp_punch_pcap_v2: ready -- pcap library = {0}".format(
+        log("tcp_punch_pcap: ready -- pcap library = {0}".format(
             factory.library_version(),
         ))
-        factory_holder = PunchPcapV2Factory.create(
+        factory_holder = PunchPcapFactory.create(
             node.stun_clients, node.sys_clock,
         )
-        node.resources.punch_pcap_v2_factory = factory_holder
+        node.resources.punch_pcap_factory = factory_holder
         node.resources.register(factory_holder)
         return factory_holder
 
@@ -217,7 +233,7 @@ class PunchPcapV2Plugin(Plugin):
         src_ip = self.src["ip"]
         dest_ip = self.dest["ip"]
         if src_ip and dest_ip and str(src_ip) == str(dest_ip):
-            log("tcp_punch_pcap_v2: dest matches own bind IP ({0}); "
+            log("tcp_punch_pcap: dest matches own bind IP ({0}); "
                 "aborting".format(dest_ip))
             return None, None
 
@@ -291,7 +307,7 @@ class PunchPcapV2Plugin(Plugin):
         if reply is not None:
             recv_mappings = [NATMapping(m) for m in reply.payload.mappings]
             if not recv_mappings:
-                log("tcp_punch_pcap_v2: peer sent empty mappings; dropping")
+                log("tcp_punch_pcap: peer sent empty mappings; dropping")
                 return None
 
         port_alloc, is_end = await self.nat_alloc.port_alloc(recv_mappings)
@@ -371,7 +387,7 @@ class PunchPcapV2Plugin(Plugin):
 
             # Secondary-bucket fallback.
             if winner_conn is None and puncher.secondary_punch_time:
-                log("tcp_punch_pcap_v2: primary missed; firing secondary "
+                log("tcp_punch_pcap: primary missed; firing secondary "
                     "at {0}".format(puncher.secondary_punch_time))
                 puncher.punch_time = puncher.secondary_punch_time
                 puncher.secondary_punch_time = 0
@@ -444,7 +460,7 @@ class PunchPcapV2Plugin(Plugin):
                 try:
                     remove_block_ports(firewall_ports)
                 except Exception as exc:
-                    log("tcp_punch_pcap_v2: remove_block_ports raised "
+                    log("tcp_punch_pcap: remove_block_ports raised "
                         "{0}".format(exc))
             self.completed_pipe_ids.add(self.plugin_id)
 
@@ -480,7 +496,7 @@ class PunchPcapV2Plugin(Plugin):
         self.completed_pipe_ids.add(self.plugin_id)
 
 
-class PunchPcapV2Factory:
+class PunchPcapFactory:
     """Mirror of PunchPluginFactory: shared STUN clients + per-session state.
 
     The v2 plugin doesn't need a ProcessPoolExecutor (pcap engine
@@ -501,7 +517,7 @@ class PunchPcapV2Factory:
         return cls(stun_clients, sys_clock)
 
     def build_plugin(self):
-        plugin = PunchPcapV2Plugin()
+        plugin = PunchPcapPlugin()
         plugin.stun_clients = self.stun_clients
         plugin.sys_clock = self.sys_clock
         plugin.punch_clients = self.punch_clients
