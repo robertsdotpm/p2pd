@@ -254,6 +254,58 @@ def stop_tcpdump(proc, pcap_path, local_pcap_path):
                             "sudo rm -f {0}".format(pcap_path)))
 
 
+def probe_host_offset(host, user, python_cmd, label):
+    """Query the remote host's `time.time()` and compute its clock
+    offset relative to this coordinator's clock.
+
+    Method: record T0 just before SSH, run `python -c "..."` on the
+    remote, record T1 just after it returns, parse remote's reported
+    time as host_local_time.  Offset = host_local_time - (T0+T1)/2.
+
+    This is the simple "probe-and-offset" approach -- equivalent to
+    a one-sample NTP exchange without the round-trip-bias correction.
+    Good enough for a single-shot smoke test where the absolute punch
+    moment only needs to be aligned to within a few hundred ms.
+
+    Returns a float offset in seconds.  Positive offset means the
+    host's clock is AHEAD of the coordinator's.
+    """
+    remote_cmd = '{0} -c "import time; print(time.time())"'.format(python_cmd)
+    argv = ssh_cmd(host, user, remote_cmd)
+    print("coordinator: probing clock offset for {0} ({1})".format(label, host))
+    coordinator_t0 = time.time()
+    try:
+        out = subprocess.check_output(argv, stderr=subprocess.STDOUT,
+                                      universal_newlines=True)
+    except subprocess.CalledProcessError as exc:
+        print("coordinator: probe failed for {0}: rc={1} out={2!r}".format(
+            label, exc.returncode, exc.output))
+        raise
+    coordinator_t1 = time.time()
+
+    # The remote may emit Windows-style line endings or extra noise
+    # before the float (e.g. cmd.exe banner if any).  Take the last
+    # non-blank line and parse it.
+    lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+    if not lines:
+        raise RuntimeError(
+            "empty time probe output for {0}: {1!r}".format(label, out))
+    try:
+        host_local_time = float(lines[-1])
+    except ValueError:
+        raise RuntimeError(
+            "could not parse time from {0}: {1!r}".format(label, out))
+
+    midpoint = (coordinator_t0 + coordinator_t1) / 2.0
+    rtt = coordinator_t1 - coordinator_t0
+    offset = host_local_time - midpoint
+    print(("coordinator: {0} clock probe: coord_t0={1:.3f} coord_t1={2:.3f} "
+           "midpoint={3:.3f} host_t={4:.3f} rtt={5:.3f}s offset={6:.3f}s").format(
+        label, coordinator_t0, coordinator_t1, midpoint,
+        host_local_time, rtt, offset))
+    return offset
+
+
 def build_xp_argv(xp_dest, punch_at):
     """Compose the cmd.exe one-liner that launches the responder.
 
@@ -316,15 +368,43 @@ def main():
         print("coordinator: upload_scripts failed: {0}".format(exc))
         return 2
 
+    # Probe each host's clock BEFORE starting tcpdump or workers, so
+    # we know the offset between the coordinator's clock and each
+    # worker's clock.  XP's BIOS clock in particular can be hours off
+    # (observed: ~11h ahead on previous run) and a naive shared
+    # absolute punch_at fires immediately on XP while Linux sleeps
+    # for minutes.  See p2pd CLAUDE.md / previous diagnosis.
+    try:
+        linux_offset = probe_host_offset(
+            LINUX_HOST, LINUX_USER, LINUX_PYTHON, "linux")
+    except Exception as exc:
+        print("coordinator: linux clock probe failed: {0}".format(exc))
+        return 2
+    # XP needs the full path to python.exe and double-quoting (cmd.exe).
+    try:
+        xp_offset = probe_host_offset(
+            XP_HOST, XP_USER, '"{0}"'.format(XP_PYTHON), "xp")
+    except Exception as exc:
+        print("coordinator: xp clock probe failed: {0}".format(exc))
+        return 2
+
     tcpdump_proc = start_tcpdump(remote_pcap)
 
-    # Wall-clock punch time, after both workers are launched.
-    punch_at = time.time() + args.punch_offset
-    print("coordinator: punch_at = {0:.3f} (now+{1:.1f}s)".format(
-        punch_at, args.punch_offset))
+    # Wall-clock punch time, on the COORDINATOR's clock.  Each
+    # worker then receives an absolute timestamp expressed in its
+    # OWN local clock by adding that host's offset.
+    coordinator_punch_at = time.time() + args.punch_offset
+    linux_punch_at = coordinator_punch_at + linux_offset
+    xp_punch_at = coordinator_punch_at + xp_offset
+    print("coordinator: coordinator_punch_at = {0:.3f} (now+{1:.1f}s)".format(
+        coordinator_punch_at, args.punch_offset))
+    print("coordinator: linux_offset  = {0:+.3f}s  -> linux_punch_at  = {1:.3f}".format(
+        linux_offset, linux_punch_at))
+    print("coordinator: xp_offset     = {0:+.3f}s  -> xp_punch_at     = {1:.3f}".format(
+        xp_offset, xp_punch_at))
 
-    xp_argv = build_xp_argv(xp_dest, punch_at)
-    linux_argv = build_linux_argv(linux_dest, punch_at)
+    xp_argv = build_xp_argv(xp_dest, xp_punch_at)
+    linux_argv = build_linux_argv(linux_dest, linux_punch_at)
 
     results = {"xp": None, "linux": None}
 
