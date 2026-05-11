@@ -205,9 +205,43 @@ def wait_for_first_with_data(sockets, timeout=5.0):
         sel.close()
 
 
+def peer_symmetric_4tuple_key(sock):
+    """Sort key that both peers compute identically for the same
+    connection. Mirrors tcp_punch_pcap_v2.pcap_engine.sort_key_ft.
+
+    Each peer sees its own ``getsockname()`` as "local" and the
+    other end's address as "remote" -- but if we sort the (ip, port)
+    pair before returning, both peers produce the SAME tuple for
+    the same TCP connection. That gives a deterministic canonical
+    winner regardless of which sockets each side happened to see
+    establish first.
+    """
+    try:
+        local = sock.getsockname()
+        remote = sock.getpeername()
+    except (OSError, socket.error):
+        return ((), ())
+    a = (str(local[0]), int(local[1]))
+    b = (str(remote[0]), int(remote[1]))
+    return tuple(sorted((a, b)))
+
+
 # In a LAN = lan ip, or for WAN targets = wan IPs.
 def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
-    """Select one winning socket from a punched connection set, closing the rest."""
+    """Select one winning socket from a punched connection set,
+    closing the rest.
+
+    The master side picks a canonical winner deterministically by
+    sorting ``sock_list`` on the peer-symmetric 4-tuple key (see
+    ``peer_symmetric_4tuple_key``) and taking the LAST element.
+    Both peers see the same set of 4-tuples in the same canonical
+    order, so the master's chosen winner is the same connection the
+    non-master is willing to keep. This replaces an earlier
+    ``sock_list.pop()`` against the unsorted ``successful`` list,
+    which produced a non-deterministic winner depending on which
+    sockets happened to reach ESTABLISHED first in the punch monitor
+    window.
+    """
     # No open sockets.
     if not sock_list:
         return None
@@ -215,7 +249,9 @@ def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
     # Master side closes all others immediately
     our_ip = our_ip or sock_list[0].getsockname()[0]
     if our_ip > their_ip:
-        winner = sock_list.pop()
+        sorted_socks = sorted(sock_list, key=peer_symmetric_4tuple_key)
+        winner = sorted_socks[-1]
+        losers = [s for s in sorted_socks if s is not winner]
         try:
             winner.send(b"$")
         except OSError:
@@ -224,7 +260,7 @@ def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
             except OSError:
                 pass
             winner = None
-        for loser in sock_list:
+        for loser in losers:
             try:
                 loser.shutdown(socket.SHUT_RDWR)
             except OSError:
