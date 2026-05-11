@@ -579,6 +579,10 @@ def sync_run_non_sym_side(
 
     ports = random_probe_ports(probe_count, rng=rng)
     expected_src_ports = set(ports)
+    # 100 pps governor -- see sync_run_symmetric_side for the rationale
+    # (consumer-router conntrack table + port-scan heuristic).
+    PROBE_RATE_PPS = 100
+    INTER_PROBE_S = 1.0 / PROBE_RATE_PPS
     for idx, dst_port in enumerate(ports):
         try:
             sock.sendto(
@@ -587,9 +591,11 @@ def sync_run_non_sym_side(
             )
         except OSError:
             continue
+        if idx + 1 < len(ports):
+            time.sleep(INTER_PROBE_S)
 
-    print("[RP-NONSYM] fired {0} cone probes to {1}, listening".format(
-        len(ports), peer_ext_ip,
+    print("[RP-NONSYM] fired {0} cone probes to {1} at {2} pps, listening".format(
+        len(ports), peer_ext_ip, PROBE_RATE_PPS,
     ))
     datagrams_seen = 0
     deadline = time.time() + listen_timeout
@@ -773,6 +779,18 @@ def sync_run_symmetric_side(
     print("[RP-SYM] start nonce={0} socks={1} target={2}:{3}".format(
         nonce.hex()[:8], len(socks), cone_ext_ip, cone_ext_port,
     ))
+    # Probe-rate governor: cap egress at ~100 packets/sec.  An
+    # unrate-limited spray of N=256 sockets * 1 probe each is fine on
+    # the wire, but consumer routers with small conntrack tables (16k
+    # default on many SOHO models) hit session-table exhaustion at the
+    # burst and silently drop subsequent flows for several seconds.
+    # Many also have a "port scan" heuristic that triggers on N>~150
+    # distinct dest tuples in a burst and starts dropping outbound
+    # traffic from the offending source for ~30s.  100 pps gives ~10ms
+    # between probes -- below the 2-3s spray window we'd otherwise
+    # see, well over the timing precision the protocol needs.
+    PROBE_RATE_PPS = 100
+    INTER_PROBE_S = 1.0 / PROBE_RATE_PPS
     probes_sent = 0
     for idx, s in enumerate(socks):
         try:
@@ -783,7 +801,14 @@ def sync_run_symmetric_side(
             probes_sent += 1
         except OSError:
             continue
-    print("[RP-SYM] fired {0} sym probes, listening".format(probes_sent))
+        # time.sleep is fine here because sync_run_symmetric_side is
+        # called from a process-pool worker (see plugin run path);
+        # there is no asyncio loop to starve.
+        if idx + 1 < len(socks):
+            time.sleep(INTER_PROBE_S)
+    print("[RP-SYM] fired {0} sym probes at {1} pps, listening".format(
+        probes_sent, PROBE_RATE_PPS,
+    ))
 
     deadline = time.time() + listen_timeout
     winner = None
@@ -890,12 +915,18 @@ async def run_non_sym_side(
     if sock is None:
         sock = make_udp_socket(bind_ip, known_port, interface=interface)
 
-    # Fire N probes at random destination ports on the peer's ext IP.
-    # We don't sleep between sends -- the symmetric NAT at the other
-    # end either has a matching mapping installed by now (the timing
-    # barrier handled that) or it doesn't.
+    # Fire N probes at random destination ports on the peer's ext IP,
+    # paced at PROBE_RATE_PPS (100 pps).  Mirrors the rate governor on
+    # the sync paths -- conservative consumer routers either drop the
+    # tail of an unrate-limited burst (conntrack table exhaustion) or
+    # trip "port scan" heuristics that filter outbound traffic for
+    # ~30s.  100 pps spaces sends ~10ms apart, well below the
+    # protocol's tolerance.  asyncio.sleep here yields the loop so
+    # the listen path below stays responsive.
     ports = random_probe_ports(probe_count, rng=rng)
     expected_src_ports = set(ports)
+    PROBE_RATE_PPS = 100
+    INTER_PROBE_S = 1.0 / PROBE_RATE_PPS
     for idx, dst_port in enumerate(ports):
         try:
             sock.sendto(
@@ -906,6 +937,8 @@ async def run_non_sym_side(
             # ENETUNREACH / EHOSTUNREACH while firing -- skip and
             # keep going.  One bad probe doesn't fail the round.
             continue
+        if idx + 1 < len(ports):
+            await asyncio.sleep(INTER_PROBE_S)
 
     # Listen for the first inbound probe whose *source port* is one
     # we also fired at.  In real (cone, sym) NAT, that's the case
@@ -1035,7 +1068,11 @@ async def run_symmetric_side(
         return None
 
     # Fire one probe from every socket so each one burns a fresh
-    # external mapping on the symmetric NAT.
+    # external mapping on the symmetric NAT, paced at PROBE_RATE_PPS
+    # (100) to stay under consumer-router conntrack and port-scan
+    # heuristics -- see the sync paths above for the full rationale.
+    PROBE_RATE_PPS = 100
+    INTER_PROBE_S = 1.0 / PROBE_RATE_PPS
     for idx, s in enumerate(socks):
         try:
             s.sendto(
@@ -1044,6 +1081,8 @@ async def run_symmetric_side(
             )
         except OSError:
             continue
+        if idx + 1 < len(socks):
+            await asyncio.sleep(INTER_PROBE_S)
 
     # Race the receive on every socket.  As soon as *one* gets a
     # valid probe back we cancel the rest and return that socket
