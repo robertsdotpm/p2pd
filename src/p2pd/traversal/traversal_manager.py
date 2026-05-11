@@ -371,7 +371,18 @@ class TraversalManager:
             plugin_name=msg.meta.plugin_name,
         )
         plugin.set_addrs(msg.routing.dest_map, msg.meta.src_map)
+        # set_inbound_pipes overrides plugin.plugin_id to the peer's
+        # session id (msg.meta.pipe_id) so both sides share one key.
+        # create_plugin already inserted under the fresh random id; re-key
+        # self.plugins to the peer-supplied id so retransmit-guard lookups
+        # in recv_signal_msg (which key on msg.meta.pipe_id) actually hit.
+        # Without this rekey, every retransmit creates a NEW plugin and
+        # TURN spams a follow-up TURNMsg on each re-entry.
+        old_id = plugin.plugin_id
         plugin.set_inbound_pipes(self.inbound_pipes, msg.meta.pipe_id)
+        if old_id != plugin.plugin_id and old_id in self.plugins:
+            self.plugins.pop(old_id, None)
+            self.plugins[plugin.plugin_id] = plugin
         return plugin
 
     # Use signal router to send a message to the destination.
