@@ -143,17 +143,17 @@ async def spawn_connections(port_alloc_subs, src_ip, dest_ip, loop=None):
 
 async def wait_first_established(conns, monitor_timeout=3.0):
     """Equivalent to socket_event_monitor: wait until one Connection
-    reaches ESTABLISHED. Returns the winner Connection, or None on
-    timeout.
+    reaches ESTABLISHED. Returns the list of ESTABLISHED Connections
+    observed within the grace window (possibly empty on timeout).
 
     Mirrors the legacy "first ESTABLISHED + tiny grace period"
     behaviour from socket_event_monitor: as soon as one Connection
-    fires the event, give the other tuples ~50 ms to catch up (so we
-    can pick the canonical winner via the master/slave selection
-    later if needed), then return.
+    fires the event, give the other tuples ~50 ms to catch up so the
+    canonical-winner master/slave handshake (choose_canonical_winner)
+    sees the full set of converged 4-tuples.
     """
     if not conns:
-        return None
+        return []
 
     # Build one wait_for-style awaitable per connection.
     pending = set()
@@ -208,11 +208,172 @@ async def wait_first_established(conns, monitor_timeout=3.0):
         log("tcp_punch_pcap_v2: monitor done; no ESTABLISHED in {0:.3f}s".format(
             time.monotonic() - start,
         ))
-        return None
+        return []
     print("[ENGINE-PCAPV2] monitor done winners={0}/{1} elapsed={2:.3f}s".format(
         len(winners), len(conns), time.monotonic() - start,
     ), flush=True)
-    return winners[0]
+    return winners
+
+
+def sort_key_ft(conn):
+    """Sort key matching legacy: sort by (local_ip, local_port,
+    remote_ip, remote_port) so master.pop() picks a deterministic
+    canonical winner across both peers.
+
+    Legacy `choose_winning_tcp_sock` does `sock_list.pop()` on the
+    `successful` list which was built in spawn order, then mutated by
+    the engine's add-on-established. To get a deterministic winner
+    that both peers agree on, we sort by 4-tuple and pop the last
+    element. Both peers see the SAME set of 4-tuples (mirror images
+    on src/dst, but mirroring preserves sort order across peers if we
+    use the canonical 4-tuple shape) -- so both peers pop the same
+    Connection.
+
+    The canonical shape we sort by is (min(ip), max(ip), min(port),
+    max(port))-ish? No: we sort by the local 4-tuple as observed on
+    THIS peer. Both peers must agree, so we instead sort by the
+    "peer-symmetric" tuple: sorted((local_ip, local_port), (remote_ip,
+    remote_port)). Each side computes the same pair-set, so both
+    agree on the canonical ordering even though their local view of
+    "local" and "remote" is swapped.
+    """
+    ft = getattr(conn, "ft", None)
+    if ft is None:
+        return ((), ())
+    a = (ft.local_ip, int(ft.local_port))
+    b = (ft.remote_ip, int(ft.remote_port))
+    pair = tuple(sorted((a, b)))
+    return pair
+
+
+async def choose_canonical_winner(established, src_ip, dest_ip,
+                                  slave_timeout=4.0):
+    """Master/slave canonical-winner handshake -- pcap mirror of
+    legacy ``choose_winning_tcp_sock``.
+
+    Parameters
+    ----------
+    established : list of Connection
+        All Connections that reached ESTABLISHED in the grace window.
+    src_ip, dest_ip : str
+        Our local IP and the peer IP, compared as strings to decide
+        master vs slave (master = my_ip > peer_ip), matching legacy.
+    slave_timeout : float
+        How long the slave waits for the master's ``$`` byte before
+        giving up. Mirrors legacy's 5s wait_for_first_with_data.
+
+    Returns
+    -------
+    Connection or None : the canonical winner both peers agree on,
+        or None if the handshake failed (no `$` observed, or the
+        master's send raised). On failure, ALL Connections in
+        established are closed and the caller should set result(None).
+    """
+    if not established:
+        return None
+
+    is_master = src_ip > dest_ip
+    role = "master" if is_master else "slave"
+    sorted_conns = sorted(established, key=sort_key_ft)
+    print("[ENGINE-PCAPV2] choose_canonical_winner role={0} src_ip={1} "
+          "dest_ip={2} n_est={3} sorted_4tuples={4}".format(
+              role, src_ip, dest_ip, len(sorted_conns),
+              [getattr(c, "ft", None) and c.ft.key() for c in sorted_conns],
+          ), flush=True)
+    log("tcp_punch_pcap_v2: canonical-winner handshake role={0} "
+        "n_established={1}".format(role, len(sorted_conns)))
+
+    if is_master:
+        # Mirror legacy `sock_list.pop()` after the deterministic sort.
+        winner = sorted_conns[-1]
+        winner_ft = getattr(winner, "ft", None)
+        winner_key = winner_ft.key() if winner_ft is not None else None
+        try:
+            await winner.send(b"$")
+            print("[ENGINE-PCAPV2] master sent $ on 4tuple={0}".format(
+                winner_key,
+            ), flush=True)
+            log("tcp_punch_pcap_v2: master sent $ on {0}".format(winner_key))
+        except Exception as exc:
+            print("[ENGINE-PCAPV2] master send($) failed on 4tuple={0}: "
+                  "{1}".format(winner_key, exc), flush=True)
+            log("tcp_punch_pcap_v2: master send($) failed: {0}".format(exc))
+            for c in sorted_conns:
+                try:
+                    await c.close()
+                except Exception:
+                    pass
+            return None
+        return winner
+
+    # Slave: race recv(1) across every established Connection.
+    # The first byte each conn delivers is consumed from its read_buf
+    # by Connection.recv -- so when we wrap the winner in PipeShim
+    # later, the application's first recv(SUB_ALL) won't see the `$`.
+    loop = asyncio.get_event_loop()
+    tasks = {}
+    for c in sorted_conns:
+        t = loop.create_task(c.recv(1, timeout=slave_timeout))
+        tasks[t] = c
+
+    winner = None
+    winner_byte = None
+    start = time.monotonic()
+    pending = set(tasks.keys())
+    try:
+        while pending and winner is None:
+            done, pending = await asyncio.wait(
+                pending,
+                timeout=slave_timeout,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if not done:
+                break
+            for d in done:
+                c = tasks.get(d)
+                if c is None:
+                    continue
+                try:
+                    data = d.result()
+                except Exception as exc:
+                    log("tcp_punch_pcap_v2: slave recv raised on "
+                        "{0}: {1}".format(
+                            getattr(c, "ft", None)
+                            and c.ft.key(), exc,
+                        ))
+                    continue
+                if data:
+                    winner = c
+                    winner_byte = data
+                    break
+    finally:
+        # Cancel still-pending recvs.
+        for t in pending:
+            t.cancel()
+
+    elapsed = time.monotonic() - start
+    if winner is None:
+        print("[ENGINE-PCAPV2] slave timed out waiting for $; closing all "
+              "(elapsed={0:.3f}s)".format(elapsed), flush=True)
+        log("tcp_punch_pcap_v2: slave timed out waiting for $ "
+            "({0:.3f}s)".format(elapsed))
+        for c in sorted_conns:
+            try:
+                await c.close()
+            except Exception:
+                pass
+        return None
+
+    winner_ft = getattr(winner, "ft", None)
+    winner_key = winner_ft.key() if winner_ft is not None else None
+    print("[ENGINE-PCAPV2] slave got byte={0} on 4tuple={1} "
+          "(elapsed={2:.3f}s)".format(
+              repr(winner_byte), winner_key, elapsed,
+          ), flush=True)
+    log("tcp_punch_pcap_v2: slave got {0} on {1}".format(
+        repr(winner_byte), winner_key,
+    ))
+    return winner
 
 
 async def cleanup_losers(conns, winner):
@@ -287,13 +448,31 @@ async def pcap_selector_punch_engine(
             port_alloc_subs, src_ip, dest_ip, loop=loop,
         )
 
-        # Monitor for the first ESTABLISHED.
-        winner = await wait_first_established(
+        # Monitor for ESTABLISHED Connections. Returns the list of
+        # all Connections that converged within the grace window.
+        established = await wait_first_established(
             conns, monitor_timeout=monitor_timeout,
         )
 
-        if winner is None:
+        if not established:
             log("tcp_punch_pcap_v2: spray missed; closing all conns")
+            await cleanup_losers(conns, None)
+            return None
+
+        # Canonical-winner handshake: both peers must converge on the
+        # SAME 4-tuple. Without this step v2 picks established[0]
+        # while legacy uses `$` master/slave -- mismatch closes each
+        # side's chosen winner.
+        winner = await choose_canonical_winner(
+            established, src_ip, dest_ip,
+        )
+
+        if winner is None:
+            log("tcp_punch_pcap_v2: canonical-winner handshake failed; "
+                "all conns closed")
+            # choose_canonical_winner already closed the established
+            # set on failure; close any spawned-but-never-established
+            # conns too.
             await cleanup_losers(conns, None)
             return None
 

@@ -279,6 +279,33 @@ async def main_coro(args):
         pong = b"PONG-FROM-V2-" + (b"b" * 1000) + b"-END\n"
         sent = await winner.send(pong)
         log_print("sent pong bytes={0}".format(sent))
+
+        # Close-handshake: wait for legacy DONE marker, then send ours.
+        # This ensures neither side FINs until both have application-
+        # level confirmation that PONG was drained. Without this,
+        # v2's pipe.close() would FIN immediately and legacy's
+        # selector_proxy tears down on EOF before the recv buffer
+        # is drained at the application layer.
+        log_print("awaiting DONE-FROM-LEGACY")
+        done_in = b""
+        deadline_done = time.time() + 5.0
+        while time.time() < deadline_done:
+            chunk = await winner.recv(SUB_ALL, timeout=1)
+            if chunk is None:
+                continue
+            done_in += chunk
+            if b"DONE-FROM-LEGACY\n" in done_in:
+                break
+        log_print("recv done-from-legacy bytes={0} matched={1}".format(
+            len(done_in), b"DONE-FROM-LEGACY\n" in done_in))
+        if b"DONE-FROM-LEGACY\n" not in done_in:
+            log_print("DONE-FROM-LEGACY missing; first 64={0!r}".format(
+                done_in[:64]))
+            exit_code = 1
+
+        done_out = b"DONE-FROM-V2\n"
+        sent_done = await winner.send(done_out)
+        log_print("sent done-from-v2 bytes={0}".format(sent_done))
     except asyncio.CancelledError:
         # 3.8+ split CancelledError out of Exception; handle separately
         # so this branch doesn't swallow loop-shutdown cancellations.

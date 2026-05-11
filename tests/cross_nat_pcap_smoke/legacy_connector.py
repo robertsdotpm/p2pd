@@ -254,6 +254,32 @@ async def main_coro(args):
             log_print("pong payload mismatch; got first 64={0!r}".format(
                 pong[:64]))
             exit_code = 1
+
+        # Close-handshake: send our DONE marker, then wait for v2's.
+        # By the time both DONEs are exchanged, all earlier payload
+        # bytes have been drained at the application layer on both
+        # sides -- so the subsequent pipe.close() FIN can no longer
+        # race the recv buffer.
+        done_out = b"DONE-FROM-LEGACY\n"
+        sent_done = await winner.send(done_out)
+        log_print("sent done-from-legacy bytes={0}".format(sent_done))
+
+        log_print("awaiting DONE-FROM-V2")
+        done_in = b""
+        deadline_done = time.time() + 5.0
+        while time.time() < deadline_done:
+            chunk = await winner.recv(SUB_ALL, timeout=1)
+            if chunk is None:
+                continue
+            done_in += chunk
+            if b"DONE-FROM-V2\n" in done_in:
+                break
+        log_print("recv done-from-v2 bytes={0} matched={1}".format(
+            len(done_in), b"DONE-FROM-V2\n" in done_in))
+        if b"DONE-FROM-V2\n" not in done_in:
+            log_print("DONE-FROM-V2 missing; first 64={0!r}".format(
+                done_in[:64]))
+            exit_code = 1
     except asyncio.CancelledError:
         # 3.8+ split: separate handler so loop-shutdown cancellations
         # don't get swallowed by the broad Exception arm below.
