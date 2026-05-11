@@ -7,11 +7,15 @@ stack that talks to the NIC directly through libpcap / WinPcap /
 Npcap.
 
 Wire protocol:
-    Reuses PunchMsg verbatim (via the PunchPcapMsg subclass) so the
-    legacy plugin's payload format -- mappings, NTP punch time, clock
-    uncertainty -- is shared.  Receiver dispatch is keyed off the
-    wire name "tcp_punch_pcap.PunchPcapMsg", which plugin_loader
-    derives at install time.
+    Reuses tcp_punch.PunchMsg verbatim -- ONE wire type for both
+    plugins, so a peer running legacy tcp_punch on the kernel stack
+    and a peer running tcp_punch_pcap on a userspace pcap stack speak
+    the same bytes on the signal channel.  Critically, we DO NOT
+    re-register PunchMsg under our own plugin name in proto_messages
+    (that would create a "tcp_punch_pcap.PunchMsg" wire name and break
+    interop with peers that have only tcp_punch installed).  We
+    leave the wire-name registration to tcp_punch and simply import +
+    use PunchMsg directly.
 
 Routing eligibility (`route_types`):
     EXT_BIND only.  Same-LAN (NIC_BIND) and same-host (LOOPBACK_BIND)
@@ -20,9 +24,14 @@ Routing eligibility (`route_types`):
     EXT_BIND cross-NAT path triggers the tcpip.sys RST that this
     plugin exists to dodge.
 
-This file deliberately mirrors the structure of
-plugins/tcp_punch/main.py so a future merge / refactor can fold
-the two into a single plugin parameterised by transport backend.
+Asymmetric routing:
+    Each peer independently picks its local plugin based on ITS OWN
+    OS (src_map.os).  The XP peer routes locally to tcp_punch_pcap;
+    the non-XP peer routes locally to tcp_punch.  Both fire SYNs at
+    the negotiated 4-tuples; on the wire they're indistinguishable.
+    The XP-side userspace stack captures the inbound SYN via WinPcap
+    before tcpip.sys gets to RST it (helped by a transient firewall
+    block rule installed by punch_engine.pcap_punch_engine).
 """
 import asyncio
 
@@ -34,8 +43,24 @@ from ....protocol.proto_defs import P2P_PUNCH
 from ...strategy_registry import register
 from ...traversal_plugin import Plugin
 
-from .proto import PunchPcapMsg
+from ..tcp_punch.proto import PunchMsg, TCP_PUNCH_REMOTE
 from .punch_engine import pcap_punch_engine
+
+
+def is_pcap_eligible_os(os_string):
+    """True when our local OS is one where tcp_punch_pcap should run.
+
+    Currently: Windows-XP and Windows-2000 -- the two NT-5 releases
+    whose tcpip.sys exhibits the unfixable simul-open RST.  Other
+    Windows versions (Vista / 7 / 8 / 10 / 11) use the kernel stack
+    just fine and stick with legacy tcp_punch.
+    """
+    if not os_string:
+        return False
+    return (
+        os_string.startswith("Windows-XP")
+        or os_string.startswith("Windows-2000")
+    )
 
 
 @register(phase="punch")
@@ -51,22 +76,46 @@ class PunchPcapPlugin(Plugin):
     # converges in <2 s once both sides fire or it won't converge at
     # all (no NAT timer extension to play for).
     conf = {"timeout": 30}
-    proto_messages = (
-        (PunchPcapMsg, P2P_PUNCH, 20),
-    )
+    # IMPORTANT: do NOT register PunchMsg here.  tcp_punch already
+    # registers it under the wire name "tcp_punch.PunchMsg".  Listing
+    # it here would either collide (plugin_loader's collision check)
+    # or, if the loader allowed it, create a second wire name
+    # ("tcp_punch_pcap.PunchMsg") which would BREAK interop with
+    # peers running only tcp_punch.  Both plugins share the single
+    # wire registration owned by tcp_punch.
+    proto_messages = ()
 
     @classmethod
     async def setup(cls, node):
         """Plugin loader entry point.
 
-        Returns the plugin class itself when the host has a working
-        pcap library (so plugin_loader uses it as the constructor),
-        or None when wpcap.dll / libpcap.so is missing (so the plugin
-        is silently disabled and auto_connect routes XP destinations
-        the way it did before this branch landed).
+        Returns the plugin class itself when this node should run
+        tcp_punch_pcap locally, or None when it shouldn't (so the
+        plugin is silently disabled).  Disabled when:
+          - punching is globally disabled via node.conf
+          - the local OS is not Windows-XP / Windows-2000 (defence-
+            in-depth: routing in auto_connect already only picks us
+            when our OS qualifies, but we double-check here so a
+            mis-routed plugin selection can't crash on an OS that
+            doesn't need / can't run the pcap bypass)
+          - the pcap backend (libpcap / WinPcap / Npcap) isn't
+            available at runtime
         """
         if not node.conf.get("enable_punching", True):
             return None
+
+        # OS gate -- only run on the NT-5 family.  os_id() returns
+        # "Windows-XP" / "Windows-2000" / etc. on Windows.
+        try:
+            from aionetiface import os_id
+            local_os = os_id()
+        except ImportError:
+            local_os = ""
+        if not is_pcap_eligible_os(local_os):
+            log("tcp_punch_pcap: local OS {0!r} is not NT-5 family; "
+                "plugin not registered".format(local_os))
+            return None
+
         try:
             from aionetiface.net.pcap import get_backend, PcapUnavailableError
         except ImportError:
@@ -90,31 +139,31 @@ class PunchPcapPlugin(Plugin):
     async def run(self, reply=None):
         """Drive one round of the pcap-based punch protocol.
 
-        Phase 3 scaffolding: the full bucket-aligned firing logic
+        Phase 3b scaffolding: the full bucket-aligned firing logic
         from tcp_punch/main.py is not duplicated here.  For the
         Windows-XP 2-VM smoke test this plugin treats the punch like
         a directly-coordinated simul-open:
 
           1. First call (reply=None): announce our preferred local
-             port to the peer via PunchPcapMsg, return that message.
-          2. Second call (reply=PunchPcapMsg): peer announced theirs.
+             port to the peer via PunchMsg, return.
+          2. Second call (reply=PunchMsg): peer announced theirs.
              Fire pcap_punch_engine with simul=True.
 
-        This matches what the XP smoke test in p2pd_test_run/
-        actually needs (LAN address pair, no NAT mapping prediction).
-        Full bucket-aligned firing for cross-WAN XP listeners is
-        Phase 4 work.
+        Wire format is the shared tcp_punch.PunchMsg.  We label our
+        outgoing messages with plugin_name="tcp_punch" so the peer's
+        signal dispatcher routes them to whichever plugin THAT peer
+        is using for the wire-type "tcp_punch.PunchMsg" -- either
+        legacy tcp_punch or tcp_punch_pcap.  The peer's inbound
+        dispatcher applies the same OS-based override we do on our
+        side (see traversal_manager.create_inbound_plugin).
         """
-        # Minimal first-message: announce src_ip:src_port -- since this
-        # plugin only fires on EXT_BIND, those are the post-NAT externals
-        # that the manager has already resolved.
         my_port = (self.src or {}).get("port") or 0
         my_ip = (self.src or {}).get("ip") or ""
 
         if reply is None:
-            msg = PunchPcapMsg({
+            msg = PunchMsg({
                 "payload": {
-                    "punch_mode": 2,  # tcp_punch.proto.TCP_PUNCH_REMOTE
+                    "punch_mode": TCP_PUNCH_REMOTE,
                     "ntp": 0,
                     "mappings": [{"src": my_ip, "port": my_port}],
                     "nonce": "",
@@ -122,7 +171,11 @@ class PunchPcapPlugin(Plugin):
                     "clock_uncertainty": 0.0,
                 },
             })
-            msg.meta.plugin_name = "tcp_punch_pcap"
+            # Label as legacy tcp_punch on the wire.  The receiver's
+            # inbound dispatcher will redirect to tcp_punch_pcap if
+            # ITS local OS is NT-5; otherwise it stays in tcp_punch.
+            # This keeps the two plugins fully interoperable.
+            msg.meta.plugin_name = "tcp_punch"
             await self.send_signal(msg)
             return
 
@@ -142,10 +195,12 @@ class PunchPcapPlugin(Plugin):
                 self.result.set_result(None)
             return
 
-        # Acknowledge with our mapping so the peer also fires.
-        ack = PunchPcapMsg({
+        # Acknowledge with our mapping so the peer also fires.  Same
+        # wire-name convention (tcp_punch) -- see comment above on
+        # the initial send.
+        ack = PunchMsg({
             "payload": {
-                "punch_mode": 2,
+                "punch_mode": TCP_PUNCH_REMOTE,
                 "ntp": 0,
                 "mappings": [{"src": my_ip, "port": my_port}],
                 "nonce": "",
@@ -153,13 +208,16 @@ class PunchPcapPlugin(Plugin):
                 "clock_uncertainty": 0.0,
             },
         })
-        ack.meta.plugin_name = "tcp_punch_pcap"
+        ack.meta.plugin_name = "tcp_punch"
         await async_wrap_errors(self.send_signal(ack))
 
-        # Fire the pcap-driven punch.  The peer is doing the same thing
-        # from their side; the userspace simul-open handler in
-        # aionetiface/net/pcap/tcp/state.py expects a bare SYN to arrive
-        # on the same four-tuple.
+        # Fire the pcap-driven punch.  The peer is doing the same
+        # thing from their side -- either via their own pcap engine
+        # (if they're also NT-5) or via their kernel TCP stack (if
+        # they're a modern OS).  On the wire both look identical;
+        # the userspace simul-open handler in aionetiface/net/pcap/
+        # tcp/state.py expects a bare SYN to arrive on the same
+        # four-tuple.
         nic_pcap_name = self.lookup_nic_pcap_name()
         log("tcp_punch_pcap: firing simul-open local={0}:{1} remote={2}:{3} iface={4}".format(
             my_ip, my_port, peer_ip, peer_port, nic_pcap_name))

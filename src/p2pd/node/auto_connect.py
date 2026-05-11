@@ -698,45 +698,42 @@ async def phase2_tcp_punch(
     # FULL_CONE-FULL_CONE pair could punch fine. Per-pair filtering
     # keeps the impossible (sym, *) and (*, sym) pairs out of the
     # combo list while preserving viable LAN-LAN and EXT-EXT combos.
-    # Skip tcp_punch when the destination is a Windows-XP listener
-    # and we are not on the same machine. CLAUDE.md and pcap forensics
-    # document an unfixable XP tcpip.sys behaviour: cross-machine
-    # tcp_punch handshakes complete on the wire in full but XP
-    # unilaterally RSTs the connection ~140ms after the final ACK.
-    # The engine reports success but every echo round-trip dies. The
-    # only way to make TCP simul-open work on XP is via a kernel-mode
-    # NDIS filter that bypasses tcpip.sys entirely (Hamachi did this
-    # in the XP era); not reachable from a Python library.
-    # Same-LAN / same-machine paths win phase1_direct first so this
-    # skip costs nothing on the LAN side; cross-internet just saves
-    # the 180s plugin timeout that would never converge anyway.
-    dest_os = (dest_map or {}).get("os") or ""
-    if dest_os.startswith("Windows-XP") and not is_same_machine(src_map, dest_map):
-        # XP's tcpip.sys RSTs cross-NAT tcp_punch simul-open ~140 ms
-        # after the handshake completes (see /home/x/projects/p2pd/
-        # CLAUDE.md "Windows XP cross-NAT tcp_punch is not fixable
-        # from user-space").  Route to tcp_punch_pcap, which performs
-        # the simul-open in a pure-Python userspace TCP stack on top
-        # of libpcap / WinPcap so tcpip.sys never sees the crossover.
-        # If the pcap variant is not registered on this node
-        # (wpcap.dll missing, plugin failed to install), we fall back
-        # to the historic skip behaviour.
+    # Asymmetric plugin selection based on OUR OS only:
+    #   - we are on Windows-XP / Windows-2000 cross-machine ->
+    #     route locally to tcp_punch_pcap (userspace pcap stack
+    #     bypasses XP's tcpip.sys simul-open RST -- see
+    #     /home/x/projects/p2pd/CLAUDE.md "Windows XP cross-NAT
+    #     tcp_punch is not fixable from user-space")
+    #   - we are on any other OS -> route locally to tcp_punch
+    #     (kernel stack, unchanged)
+    # The PEER independently picks its plugin from its own OS.  A
+    # non-XP peer's selection doesn't force us into tcp_punch_pcap
+    # and vice versa.  The two plugins share the same wire format
+    # (tcp_punch.PunchMsg) so the choices interoperate freely.
+    src_os = (src_map or {}).get("os") or ""
+    we_are_nt5 = (
+        src_os.startswith("Windows-XP")
+        or src_os.startswith("Windows-2000")
+    )
+    if we_are_nt5 and not is_same_machine(src_map, dest_map):
         if "tcp_punch_pcap" in names:
-            log("phase2_tcp_punch: dest is Windows-XP cross-machine; "
-                "routing to tcp_punch_pcap (userspace pcap stack)")
+            log("phase2_tcp_punch: local OS is {0} cross-machine; "
+                "routing to tcp_punch_pcap (userspace pcap stack)".format(
+                    src_os,
+                ))
             return await punch_phase(
                 node, src_map, dest_map, sig_pipe,
                 plugin_names=("tcp_punch_pcap",),
                 label="phase2_pcap",
             )
-        log("phase2_tcp_punch: dest is Windows-XP cross-machine; "
-            "skipping (tcpip.sys simul-open RST is unfixable on XP, "
-            "tcp_punch_pcap not available)")
+        log("phase2_tcp_punch: local OS is {0} cross-machine; "
+            "tcp_punch_pcap not installed -- skipping (legacy tcp_punch "
+            "would hit the tcpip.sys RST and waste 180 s)".format(src_os))
         return None, None
-    # On non-XP destinations, skip tcp_punch_pcap -- the pure-Python
-    # stack is slower than the kernel and we only need it for the XP
-    # bypass.  Strip it from the plugin list so the normal tcp_punch
-    # race isn't diluted.
+    # Not-NT5: strip tcp_punch_pcap from the plugin list -- the
+    # plugin's setup() already opts out on non-NT5 hosts as defence-
+    # in-depth, but if it somehow registered we still don't want to
+    # race against legacy tcp_punch.
     names = tuple(n for n in names if n != "tcp_punch_pcap")
     return await punch_phase(
         node, src_map, dest_map, sig_pipe,

@@ -29,6 +29,8 @@ from aionetiface.net.pcap import (
 )
 from aionetiface.net.pcap.tcp.conn import Connection, ConnectionError2
 
+from .firewall import install_block_rule, remove_block_rule
+
 
 async def pcap_punch_engine(nic_pcap_name, local_ip, local_port,
                              remote_ip, remote_port, timeout=10.0,
@@ -75,47 +77,72 @@ async def pcap_punch_engine(nic_pcap_name, local_ip, local_port,
     if not factory.available():
         log("tcp_punch_pcap: pcap factory reports unavailable")
         return None
+    # Install the Windows-Firewall inbound block on the predicted
+    # local port BEFORE we open the pcap handle, so the very first
+    # SYN the peer fires is dropped by the firewall before tcpip.sys
+    # can RST it.  install_block_rule is a no-op on non-Windows; on
+    # Windows it returns False if netsh failed (rare; usually means
+    # not-admin or firewall service stopped).  We log and continue
+    # in the no-op-failed case -- tcpip.sys might still reply with
+    # an RST but the userspace stack can still observe the wire.
+    firewall_installed = install_block_rule(local_port)
+    if not firewall_installed:
+        log("tcp_punch_pcap: install_block_rule({0}) returned False; "
+            "tcpip.sys may RST the punched SYN".format(local_port))
     try:
-        backend = factory.open(nic_pcap_name, timeout_ms=10)
-    except PcapError as exc:
-        log("tcp_punch_pcap: pcap_open_live({0}) failed: {1}".format(
-            nic_pcap_name, exc,
-        ))
-        return None
-    try:
-        bpf = "tcp and port {0} and port {1}".format(local_port, remote_port)
         try:
-            backend.set_filter(bpf)
+            backend = factory.open(nic_pcap_name, timeout_ms=10)
         except PcapError as exc:
-            log("tcp_punch_pcap: set_filter({0}) failed: {1}".format(bpf, exc))
-            # Filter is optional -- recv() still works, just noisier.
-
-        conn = Connection(backend, local_ip, local_mac=local_mac)
-        await conn.start_active(
-            remote_ip=remote_ip,
-            remote_port=remote_port,
-            local_port=local_port,
-            remote_mac=remote_mac,
-            simul=True,
-        )
+            log("tcp_punch_pcap: pcap_open_live({0}) failed: {1}".format(
+                nic_pcap_name, exc,
+            ))
+            return None
         try:
-            await conn.wait_established(timeout=timeout)
-        except ConnectionError2 as exc:
-            log("tcp_punch_pcap: handshake failed: {0}".format(exc))
+            bpf = "tcp and port {0} and port {1}".format(local_port, remote_port)
             try:
-                await conn.close()
-            except Exception:
-                pass
+                backend.set_filter(bpf)
+            except PcapError as exc:
+                log("tcp_punch_pcap: set_filter({0}) failed: {1}".format(bpf, exc))
+                # Filter is optional -- recv() still works, just noisier.
+
+            conn = Connection(backend, local_ip, local_mac=local_mac)
+            await conn.start_active(
+                remote_ip=remote_ip,
+                remote_port=remote_port,
+                local_port=local_port,
+                remote_mac=remote_mac,
+                simul=True,
+            )
+            try:
+                await conn.wait_established(timeout=timeout)
+            except ConnectionError2 as exc:
+                log("tcp_punch_pcap: handshake failed: {0}".format(exc))
+                try:
+                    await conn.close()
+                except Exception:
+                    pass
+                try:
+                    backend.close()
+                except Exception:
+                    pass
+                return None
+            return conn
+        except Exception as exc:
+            log("tcp_punch_pcap: engine error: {0}".format(exc))
             try:
                 backend.close()
             except Exception:
                 pass
             return None
-        return conn
-    except Exception as exc:
-        log("tcp_punch_pcap: engine error: {0}".format(exc))
+    finally:
+        # Always remove the firewall rule, even on early-return
+        # (handshake timeout, RST, pcap error) and on cancellation.
+        # Leaving a block rule installed would silently keep tcpip.sys
+        # rejecting future kernel-socket binds on the same port until
+        # the user finds the orphaned rule in wf.msc.
         try:
-            backend.close()
-        except Exception:
-            pass
-        return None
+            remove_block_rule(local_port)
+        except Exception as exc:
+            log("tcp_punch_pcap: remove_block_rule({0}) raised {1}".format(
+                local_port, exc,
+            ))
