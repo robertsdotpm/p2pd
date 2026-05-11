@@ -207,7 +207,7 @@ def wait_for_first_with_data(sockets, timeout=5.0):
 
 def peer_symmetric_4tuple_key(sock):
     """Sort key that both peers compute identically for the same
-    connection. Mirrors tcp_punch_pcap_v2.pcap_engine.sort_key_ft.
+    connection. Mirrors tcp_punch_pcap.pcap_engine.sort_key_ft.
 
     Each peer sees its own ``getsockname()`` as "local" and the
     other end's address as "remote" -- but if we sort the (ip, port)

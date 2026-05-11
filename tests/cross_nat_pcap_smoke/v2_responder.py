@@ -1,4 +1,4 @@
-"""Driver: tcp_punch_pcap_v2 PunchPcapV2Plugin on the responder side.
+"""Driver: tcp_punch_pcap PunchPcapPlugin on the responder side.
 
 Invokes the v2 plugin directly via its actual entry points
 (Plugin.run with reply=None first, then reply=PunchMsg as JSON
@@ -102,7 +102,7 @@ async def main_coro(args):
     from aionetiface import (
         Interface, SysClock, TCP, get_n_stun_clients, RFC5389, USE_MAP_NO,
     )
-    from p2pd.traversal.plugins.tcp_punch_pcap_v2 import main as v2_main
+    from p2pd.traversal.plugins.tcp_punch_pcap import main as v2_main
     from p2pd.traversal.plugins.tcp_punch.punch_defs import PUNCH_CONF
     from p2pd.traversal.plugins.tcp_punch.proto import PunchMsg
 
@@ -149,7 +149,7 @@ async def main_coro(args):
 
     # Build the v2 plugin via the factory shape, mimicking what
     # PunchPluginFactory.create produces. v2 doesn't need a proc pool.
-    factory = v2_main.PunchPcapV2Factory.create(stun_clients_map, sys_clock)
+    factory = v2_main.PunchPcapFactory.create(stun_clients_map, sys_clock)
     plugin = factory.build_plugin()
     plugin.plugin_id = args.plugin_id
 

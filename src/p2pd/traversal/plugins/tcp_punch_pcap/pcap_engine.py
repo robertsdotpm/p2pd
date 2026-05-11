@@ -83,15 +83,15 @@ async def pcap_setup_engine(nic_pcap_name, port_allocs, src_ip, dest_ip,
     try:
         factory = get_backend()
     except PcapUnavailableError as exc:
-        log("tcp_punch_pcap_v2: pcap unavailable: {0}".format(exc))
+        log("tcp_punch_pcap: pcap unavailable: {0}".format(exc))
         return (None, None, [])
     if not factory.available():
-        log("tcp_punch_pcap_v2: pcap factory not available")
+        log("tcp_punch_pcap: pcap factory not available")
         return (None, None, [])
     try:
         backend = factory.open(nic_pcap_name, timeout_ms=10)
     except PcapError as exc:
-        log("tcp_punch_pcap_v2: pcap_open_live({0}) failed: {1}".format(
+        log("tcp_punch_pcap: pcap_open_live({0}) failed: {1}".format(
             nic_pcap_name, exc,
         ))
         return (None, None, [])
@@ -100,7 +100,7 @@ async def pcap_setup_engine(nic_pcap_name, port_allocs, src_ip, dest_ip,
     try:
         backend.set_filter(bpf)
     except PcapError as exc:
-        log("tcp_punch_pcap_v2: set_filter({0}) failed: {1}".format(bpf, exc))
+        log("tcp_punch_pcap: set_filter({0}) failed: {1}".format(bpf, exc))
         # filter is optional
 
     mux = PcapMuxReader(backend, loop=loop)
@@ -135,7 +135,7 @@ async def spawn_connections(port_alloc_subs, src_ip, dest_ip, loop=None):
                 simul=True,
             )
         except Exception as exc:
-            log("tcp_punch_pcap_v2: start_active({0}->{1}) failed: {2}".format(
+            log("tcp_punch_pcap: start_active({0}->{1}) failed: {2}".format(
                 pa.src_port, pa.dest_port, exc,
             ))
     return conns
@@ -200,7 +200,7 @@ async def wait_first_established(conns, monitor_timeout=3.0):
             t.cancel()
 
     if not winners:
-        log("tcp_punch_pcap_v2: monitor done; no ESTABLISHED in {0:.3f}s".format(
+        log("tcp_punch_pcap: monitor done; no ESTABLISHED in {0:.3f}s".format(
             time.monotonic() - start,
         ))
         return []
@@ -275,7 +275,7 @@ async def choose_canonical_winner(established, src_ip, dest_ip,
               role, src_ip, dest_ip, len(sorted_conns),
               [getattr(c, "ft", None) and c.ft.key() for c in sorted_conns],
           ), flush=True)
-    log("tcp_punch_pcap_v2: canonical-winner handshake role={0} "
+    log("tcp_punch_pcap: canonical-winner handshake role={0} "
         "n_established={1}".format(role, len(sorted_conns)))
 
     if is_master:
@@ -288,11 +288,11 @@ async def choose_canonical_winner(established, src_ip, dest_ip,
             print("[ENGINE-PCAPV2] master sent $ on 4tuple={0}".format(
                 winner_key,
             ), flush=True)
-            log("tcp_punch_pcap_v2: master sent $ on {0}".format(winner_key))
+            log("tcp_punch_pcap: master sent $ on {0}".format(winner_key))
         except Exception as exc:
             print("[ENGINE-PCAPV2] master send($) failed on 4tuple={0}: "
                   "{1}".format(winner_key, exc), flush=True)
-            log("tcp_punch_pcap_v2: master send($) failed: {0}".format(exc))
+            log("tcp_punch_pcap: master send($) failed: {0}".format(exc))
             for c in sorted_conns:
                 try:
                     await c.close()
@@ -331,7 +331,7 @@ async def choose_canonical_winner(established, src_ip, dest_ip,
                 try:
                     data = d.result()
                 except Exception as exc:
-                    log("tcp_punch_pcap_v2: slave recv raised on "
+                    log("tcp_punch_pcap: slave recv raised on "
                         "{0}: {1}".format(
                             getattr(c, "ft", None)
                             and c.ft.key(), exc,
@@ -350,7 +350,7 @@ async def choose_canonical_winner(established, src_ip, dest_ip,
     if winner is None:
         print("[ENGINE-PCAPV2] slave timed out waiting for $; closing all "
               "(elapsed={0:.3f}s)".format(elapsed), flush=True)
-        log("tcp_punch_pcap_v2: slave timed out waiting for $ "
+        log("tcp_punch_pcap: slave timed out waiting for $ "
             "({0:.3f}s)".format(elapsed))
         for c in sorted_conns:
             try:
@@ -365,7 +365,7 @@ async def choose_canonical_winner(established, src_ip, dest_ip,
           "(elapsed={2:.3f}s)".format(
               repr(winner_byte), winner_key, elapsed,
           ), flush=True)
-    log("tcp_punch_pcap_v2: slave got {0} on {1}".format(
+    log("tcp_punch_pcap: slave got {0} on {1}".format(
         repr(winner_byte), winner_key,
     ))
     return winner
@@ -424,9 +424,9 @@ async def pcap_selector_punch_engine(
             nic_pcap_name, port_allocs, src_ip, dest_ip, loop=loop,
         )
         if backend is None:
-            log("tcp_punch_pcap_v2: pcap_setup_engine returned no backend")
+            log("tcp_punch_pcap: pcap_setup_engine returned no backend")
             return None
-        log("tcp_punch_pcap_v2: opened {0} subscribers on iface {1}".format(
+        log("tcp_punch_pcap: opened {0} subscribers on iface {1}".format(
             len(port_alloc_subs), nic_pcap_name,
         ))
 
@@ -450,7 +450,7 @@ async def pcap_selector_punch_engine(
         )
 
         if not established:
-            log("tcp_punch_pcap_v2: spray missed; closing all conns")
+            log("tcp_punch_pcap: spray missed; closing all conns")
             await cleanup_losers(conns, None)
             return None
 
@@ -463,7 +463,7 @@ async def pcap_selector_punch_engine(
         )
 
         if winner is None:
-            log("tcp_punch_pcap_v2: canonical-winner handshake failed; "
+            log("tcp_punch_pcap: canonical-winner handshake failed; "
                 "all conns closed")
             # choose_canonical_winner already closed the established
             # set on failure; close any spawned-but-never-established
