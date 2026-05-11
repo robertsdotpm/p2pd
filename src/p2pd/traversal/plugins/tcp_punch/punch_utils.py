@@ -205,42 +205,49 @@ def wait_for_first_with_data(sockets, timeout=5.0):
         sel.close()
 
 
-def peer_symmetric_4tuple_key(sock):
-    """Sort key that both peers compute identically for the same
-    connection. Mirrors tcp_punch_pcap.pcap_engine.sort_key_ft.
-
-    Each peer sees its own ``getsockname()`` as "local" and the
-    other end's address as "remote" -- but if we sort the (ip, port)
-    pair before returning, both peers produce the SAME tuple for
-    the same TCP connection. That gives a deterministic canonical
-    winner regardless of which sockets each side happened to see
-    establish first.
-    """
-    try:
-        local = sock.getsockname()
-        remote = sock.getpeername()
-    except (OSError, socket.error):
-        return ((), ())
-    a = (str(local[0]), int(local[1]))
-    b = (str(remote[0]), int(remote[1]))
-    return tuple(sorted((a, b)))
+# NOTE: do NOT add a "peer-symmetric 4-tuple sort" here for picking a
+# canonical winner.  It looks tempting (both peers sort the same way →
+# both peers pick the same socket → no need for the $-byte handshake)
+# but it does NOT work for cross-NAT punches.  The reason:
+#
+#   Each peer's ``getsockname()`` returns ITS OWN local IP and port.
+#   For a NAT'd peer, that's the LAN IP (e.g. 10.0.1.132) -- NOT the
+#   public IP the remote peer sees the packets arrive from (e.g.
+#   113.29.240.148 after the NAT translates the source).  Likewise
+#   ``getpeername()`` returns the peer's PUBLIC IP, not the peer's
+#   own local view of itself.  So:
+#
+#     XP side          : sorted([(10.0.1.132, 43202),
+#                                 (158.69.27.176, 43201)])
+#     p2pd.net side    : sorted([(158.69.27.176, 43201),
+#                                 (113.29.240.148, 43202)])
+#
+#   The sort INPUTS DIFFER because XP's local 10.0.1.132 is not the
+#   113.29.240.148 p2pd.net sees as remote.  Sort outputs diverge ->
+#   the two peers pick DIFFERENT canonical winners -> handshake fails.
+#
+#   Port-only sort would be peer-symmetric (A's local port == B's
+#   remote port and vice versa, NAT doesn't rewrite ports for tracked
+#   connections) but it's still not needed: the $-byte propagation
+#   handshake below makes the master's pick authoritative, slave just
+#   detects whichever socket received $.  Master can use ANY local
+#   deterministic pick (pop()).  We do NOT need peers to agree on
+#   sort order at all.
+#
+# An earlier change here added the broken peer-symmetric 4-tuple sort.
+# It's been reverted.  Don't re-introduce it.
 
 
 # In a LAN = lan ip, or for WAN targets = wan IPs.
 def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
-    """Select one winning socket from a punched connection set,
-    closing the rest.
+    """Select one winning socket from a punched connection set, closing the rest.
 
-    The master side picks a canonical winner deterministically by
-    sorting ``sock_list`` on the peer-symmetric 4-tuple key (see
-    ``peer_symmetric_4tuple_key``) and taking the LAST element.
-    Both peers see the same set of 4-tuples in the same canonical
-    order, so the master's chosen winner is the same connection the
-    non-master is willing to keep. This replaces an earlier
-    ``sock_list.pop()`` against the unsorted ``successful`` list,
-    which produced a non-deterministic winner depending on which
-    sockets happened to reach ESTABLISHED first in the punch monitor
-    window.
+    Master picks via ``sock_list.pop()`` -- a LOCAL non-deterministic
+    choice is fine here because the $-byte handshake propagates the
+    pick to the slave (slave waits for the first socket to deliver
+    data, which is whichever one master sent $ on).  Do NOT try to
+    make this pick peer-symmetric via 4-tuple sort -- see the NOTE
+    above this function for why that fails under NAT.
     """
     # No open sockets.
     if not sock_list:
@@ -249,9 +256,7 @@ def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
     # Master side closes all others immediately
     our_ip = our_ip or sock_list[0].getsockname()[0]
     if our_ip > their_ip:
-        sorted_socks = sorted(sock_list, key=peer_symmetric_4tuple_key)
-        winner = sorted_socks[-1]
-        losers = [s for s in sorted_socks if s is not winner]
+        winner = sock_list.pop()
         try:
             winner.send(b"$")
         except OSError:
@@ -260,7 +265,7 @@ def choose_winning_tcp_sock(their_ip, sock_list, our_ip=None):
             except OSError:
                 pass
             winner = None
-        for loser in losers:
+        for loser in sock_list:
             try:
                 loser.shutdown(socket.SHUT_RDWR)
             except OSError:
