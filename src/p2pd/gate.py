@@ -112,6 +112,19 @@ class Gate(object):
         # Attach nic_names so load_network_interfaces can filter to them.
         self.node.nic_names = self.nic_names
 
+        # When the caller pre-loaded NICs via ifs=, validate they have NAT
+        # info before handing off to node.start.  The auto-discovery path
+        # (load_network_interfaces) runs load_nat itself; the ifs= path
+        # bypasses that and requires it from the caller.
+        for nic in self.node.ifs:
+            if getattr(nic, "nat", None) is None:
+                raise RuntimeError(
+                    "NIC {!r} was passed without NAT info loaded; "
+                    "call nic.load_nat() before passing to Gate.".format(
+                        getattr(nic, "name", repr(nic))
+                    )
+                )
+
         # Pin the PNP name BEFORE start() so node_start's keystore
         # lookup picks up our priv key (or generates a fresh one).
         # When the caller didn't pass a name, run the two cheap pre-

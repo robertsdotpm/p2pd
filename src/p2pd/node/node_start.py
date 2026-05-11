@@ -118,15 +118,10 @@ async def load_network_interfaces(node):
     whose name appears in that list are loaded.  Pass an empty list or omit
     nic_names to discover all available interfaces.
 
-    Idempotent: when node.ifs is already populated (e.g. Gate(ifs=[...])) the
-    discovery block is skipped; the manual path validates that each pre-loaded
-    NIC has NAT info so prediction can proceed.
+    Idempotent: skips discovery when node.ifs is already populated.
+    NAT validation for manually-passed NICs is the caller's responsibility
+    (Gate.__aenter__ checks this before invoking node.start).
     """
-    # manual is True only for NICs that were pre-loaded by the caller and
-    # passed as ifs= to Gate/Node.  NICs loaded by a previous call to this
-    # function (e.g. Gate.__aenter__ pre-loading for name derivation) are
-    # NOT manual -- node.ifs_autoloaded marks that case.
-    manual = bool(node.ifs) and not getattr(node, "ifs_autoloaded", False)
     if not node.ifs:
         nic_names = getattr(node, "nic_names", [])
         for attempt in range(3):
@@ -158,28 +153,10 @@ async def load_network_interfaces(node):
                 ))
                 await asyncio.sleep(5)
 
-        # Mark that these NICs were auto-discovered (not passed as ifs=) so
-        # a second call from node_start skips the manual NAT check.
-        node.ifs_autoloaded = True
-
     node.ifs = sorted(node.ifs, key=lambda x: x.name)
 
     if not node.ifs:
         raise AssertionError("p2p node could not load ifs.")
-
-    # NICs discovered automatically have load_nat run during interface
-    # loading.  NICs passed manually (Gate(ifs=[...])) bypass that path —
-    # require the caller to have run nic.load_nat() themselves so that NAT
-    # classification is accurate rather than falling back to a default.
-    if manual:
-        for nic in node.ifs:
-            if getattr(nic, "nat", None) is None:
-                raise RuntimeError(
-                    "NIC {!r} was passed without NAT info loaded; "
-                    "call nic.load_nat() before passing to Gate.".format(
-                        getattr(nic, "name", repr(nic))
-                    )
-                )
 
 
 def start_background_port_forwarding(node):
