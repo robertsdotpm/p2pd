@@ -218,6 +218,10 @@ async def main_coro(args):
     stdin_task.cancel()
     try:
         await stdin_task
+    except asyncio.CancelledError:
+        # 3.8+: CancelledError is not an Exception subclass; broad
+        # Exception catch lets it escape. Handle as expected outcome.
+        pass
     except Exception:
         pass
 

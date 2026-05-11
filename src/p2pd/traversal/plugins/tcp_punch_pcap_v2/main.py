@@ -398,6 +398,9 @@ class PunchPcapV2Plugin(Plugin):
                 if ft is not None:
                     peer_tup = (ft.remote_ip, int(ft.remote_port))
                 ports_to_clean = list(firewall_ports)
+                print("[PUNCH-PCAPV2-DELAY] wrapping winner peer_tup={0} "
+                      "firewall_ports={1}".format(peer_tup, ports_to_clean),
+                      flush=True)
 
                 def firewall_teardown_cb():
                     if ports_to_clean:
@@ -409,9 +412,13 @@ class PunchPcapV2Plugin(Plugin):
                     firewall_teardown=firewall_teardown_cb,
                     loop=loop,
                 )
+                print("[PUNCH-PCAPV2-DELAY] PipeShim constructed; calling "
+                      "set_result", flush=True)
                 shim_wrapped = True
                 if not self.result.done():
                     self.result.set_result(shim)
+                    print("[PUNCH-PCAPV2-DELAY] set_result(shim) done",
+                          flush=True)
                 else:
                     # Outer race resolved already; close shim cleanly so
                     # firewall rules and Connection both come down.
