@@ -205,37 +205,43 @@ def wait_for_first_with_data(sockets, timeout=5.0):
         sel.close()
 
 
-# NOTE: do NOT add a "peer-symmetric 4-tuple sort" here for picking a
-# canonical winner.  It looks tempting (both peers sort the same way →
-# both peers pick the same socket → no need for the $-byte handshake)
-# but it does NOT work for cross-NAT punches.  The reason:
+# NOTE: do NOT add ANY "peer-symmetric sort" here for picking a
+# canonical winner -- not on IPs, not on ports, not on a derived key.
+# It looks tempting (both peers sort the same way → both peers pick
+# the same socket → no need for the $-byte handshake) but NOTHING the
+# two peers observe is reliably peer-symmetric across NAT:
 #
-#   Each peer's ``getsockname()`` returns ITS OWN local IP and port.
-#   For a NAT'd peer, that's the LAN IP (e.g. 10.0.1.132) -- NOT the
-#   public IP the remote peer sees the packets arrive from (e.g.
+#   IPs differ.  Each peer's ``getsockname()`` returns ITS OWN local
+#   IP.  For a NAT'd peer that's the LAN IP (e.g. 10.0.1.132) -- NOT
+#   the public IP the remote peer sees the packets arrive from (e.g.
 #   113.29.240.148 after the NAT translates the source).  Likewise
 #   ``getpeername()`` returns the peer's PUBLIC IP, not the peer's
-#   own local view of itself.  So:
+#   own local view of itself.
 #
-#     XP side          : sorted([(10.0.1.132, 43202),
-#                                 (158.69.27.176, 43201)])
-#     p2pd.net side    : sorted([(158.69.27.176, 43201),
-#                                 (113.29.240.148, 43202)])
+#   Ports also differ in the general case.  A binds local_port_A.
+#   For a *preserving* NAT (e.g. typical home routers, "EQUAL" delta
+#   class in p2pd's NAT classifier), the NAT translates the source
+#   port unchanged, so B sees packets from (public_A, local_port_A)
+#   and the pair (local_port_A, local_port_B) IS peer-symmetric.
+#   But for *symmetric/random/delta-predicted* NATs (carriers,
+#   enterprise, modern CGN, etc.), the NAT rewrites the source port
+#   per-connection in ways the bound port does NOT determine.  The
+#   port pair is whatever the NAT mapping happened to allocate;
+#   tcp_punch SPRAYS multiple sockets specifically because the
+#   delta-predicted port set is approximate.  Under those NAT classes,
+#   port-pair symmetry breaks too.
 #
-#   The sort INPUTS DIFFER because XP's local 10.0.1.132 is not the
-#   113.29.240.148 p2pd.net sees as remote.  Sort outputs diverge ->
-#   the two peers pick DIFFERENT canonical winners -> handshake fails.
+#   Conclusion: there is no observable that BOTH peers can sort on to
+#   agree on a canonical winner across all NAT classes.  The $-byte
+#   propagation handshake below IS the only peer-symmetric mechanism.
+#   Master picks LOCALLY (sock_list.pop() is fine -- doesn't even need
+#   to be deterministic) and slave converges on whichever socket
+#   received $.  Don't replace this with a sort-based "deterministic"
+#   winner -- it'll work in your local test (preserving NAT both
+#   sides) and break in production (mixed NAT classes).
 #
-#   Port-only sort would be peer-symmetric (A's local port == B's
-#   remote port and vice versa, NAT doesn't rewrite ports for tracked
-#   connections) but it's still not needed: the $-byte propagation
-#   handshake below makes the master's pick authoritative, slave just
-#   detects whichever socket received $.  Master can use ANY local
-#   deterministic pick (pop()).  We do NOT need peers to agree on
-#   sort order at all.
-#
-# An earlier change here added the broken peer-symmetric 4-tuple sort.
-# It's been reverted.  Don't re-introduce it.
+# An earlier change here added a broken 4-tuple sort.  Reverted.
+# Don't re-introduce it.
 
 
 # In a LAN = lan ip, or for WAN targets = wan IPs.
