@@ -496,6 +496,10 @@ class TraversalManager:
             plugin = self.plugins[msg.meta.pipe_id]
             if src_pk_hex != plugin.dest_map["pub_key_hex"]:
                 raise ValueError("src_pk_hex mismatch for existing plugin.")
+            # Retransmit of an already-resolved signal — peer's republish
+            # loop hasn't received the ACK yet; nothing to do.
+            if plugin.result.done():
+                return
 
         # Plugin doesn't exist so create it.
         if msg.meta.pipe_id not in self.plugins:
