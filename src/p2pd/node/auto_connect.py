@@ -928,6 +928,38 @@ async def auto_connect(
                     pass
         return worst
 
+    def is_cgnat_external(addr_map):
+        """Return True if any external IP in addr_map is a CGNAT/RFC-6598 address.
+
+        RFC 6598 (100.64.0.0/10) is IANA shared address space allocated for
+        carrier-grade NAT.  An external IP in this range means the peer is
+        behind at least two NAT hops.  RFC 1918 in the external slot means a
+        private UPnP or CGNAT mapping that never reached a public address.
+        """
+        cgnat_net = ipaddress.ip_network(u"100.64.0.0/10")
+        private_nets = [
+            ipaddress.ip_network(u"10.0.0.0/8"),
+            ipaddress.ip_network(u"172.16.0.0/12"),
+            ipaddress.ip_network(u"192.168.0.0/16"),
+        ]
+        for af in (IP4, IP6):
+            for entry in (addr_map.get(af) or {}).values():
+                ext = entry.get("ext")
+                if not ext:
+                    continue
+                try:
+                    addr = ipaddress.ip_address(str(ext))
+                    if addr.version != 4:
+                        continue
+                    if addr in cgnat_net:
+                        return True
+                    for net in private_nets:
+                        if addr in net:
+                            return True
+                except (ValueError, TypeError):
+                    pass
+        return False
+
     winner_pipe = None
     winner_plugin = None
 
@@ -943,13 +975,17 @@ async def auto_connect(
             elapsed_ms = int((time.monotonic() - phase_t0) * 1000)
             src_nat = worst_nat(src_map)
             dest_nat = worst_nat(dest_map)
-            line = "[AC-PHASE] {0} -> pipe={1} plugin={2} src_nat={3} dest_nat={4} elapsed={5}ms".format(
+            src_cgnat = is_cgnat_external(src_map)
+            dest_cgnat = is_cgnat_external(dest_map)
+            line = "[AC-PHASE] {0} -> pipe={1} plugin={2} src_nat={3} dest_nat={4} elapsed={5}ms src_cgnat={6} dest_cgnat={7}".format(
                 phase_fn.__name__,
                 pipe is not None,
                 getattr(plugin, "name", type(plugin).__name__) if plugin is not None else None,
                 src_nat,
                 dest_nat,
                 elapsed_ms,
+                src_cgnat,
+                dest_cgnat,
             )
             log(line)
             print(line, flush=True)
