@@ -217,16 +217,21 @@ async def main_coro(args):
             traceback.print_exc()
             break
 
-    log_print("waiting on plugin.result with timeout={0:.1f}s".format(
-        deadline - time.time()))
+    log_print("waiting on plugin.result with timeout={0:.1f}s done={1}".format(
+        deadline - time.time(), plugin.result.done()))
     try:
         winner = await asyncio.wait_for(
             asyncio.shield(plugin.result),
             timeout=max(1.0, deadline - time.time()),
         )
+        log_print("plugin.result await returned winner_type={0}".format(
+            type(winner).__name__))
     except asyncio.TimeoutError:
         log_print("plugin.result timed out")
         winner = None
+    except asyncio.CancelledError:
+        log_print("plugin.result wait cancelled")
+        raise
     except Exception as exc:
         log_print("plugin.result raised {0}: {1}".format(
             type(exc).__name__, exc))
@@ -235,6 +240,12 @@ async def main_coro(args):
     stdin_task.cancel()
     try:
         await stdin_task
+    except asyncio.CancelledError:
+        # 3.8+: CancelledError is NOT an Exception subclass anymore;
+        # the previous broad-Exception catch let it escape and aborted
+        # the script before the payload exchange could run. Handle it
+        # explicitly here as the expected outcome of our own cancel.
+        pass
     except Exception:
         pass
 
