@@ -137,7 +137,7 @@ async def load_network_interfaces(node):
     if manual:
         for nic in node.ifs:
             if getattr(nic, "nat", None) is None:
-                raise ValueError(
+                raise RuntimeError(
                     "NIC {!r} was passed without NAT info loaded; "
                     "call nic.load_nat() before passing to Gate.".format(
                         getattr(nic, "name", repr(nic))
