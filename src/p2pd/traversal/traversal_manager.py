@@ -160,6 +160,7 @@ class TraversalManager:
         except asyncio.CancelledError:
             if not plugin.result.done():
                 plugin.result.cancel()
+            asyncio.ensure_future(async_wrap_errors(close_plugin(plugin, self.plugins, self.inbound_pipes)))
             raise
         except (asyncio.TimeoutError, OSError, ConnectionError) as exc:
             log("[TM] run_plugin caught {0}: {1}".format(
