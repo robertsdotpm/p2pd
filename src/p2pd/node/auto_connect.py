@@ -1014,56 +1014,34 @@ async def auto_connect(
                     log_exception()
         return winner_pipe, winner_plugin
 
-    # Happy Eyeballs cascade: start each phase PHASE_INTERLEAVE_S after the
-    # previous one without waiting for it to finish.  The first phase to
-    # return a non-None pipe wins; all others are cancelled.
-    # Phases that are still sleeping in their interleave delay are cancelled
-    # before they even send any signals to the peer.
-    PHASE_INTERLEAVE_S = 1.5
+    # Strict-serial cascade.  Run each phase to completion before
+    # starting the next.  The previous design (Happy Eyeballs 1.5 s
+    # interleave) ran phases concurrently for a small latency win on
+    # cases that needed multiple phases, but the combined flow rate
+    # from one host was bad enough to:
+    #   - exceed the XP 10-half-open SYN cap (Tcpip Event 4226) when
+    #     tcp_punch's spray overlapped with anything else
+    #   - exceed the consumer-router ~256 v6-flow cap when udp_punch's
+    #     256-socket spray overlapped tcp_punch's SYNs and TURN traffic
+    #   - look indistinguishable from a port-scan / attack to common
+    #     "port scan" heuristics on enterprise / hotel / dorm networks
+    #     (~150 distinct dest tuples in a burst triggers filter-out)
+    #   - confuse attribution: when a pipe lands during overlap, we
+    #     can't tell which plugin's spray actually opened the path
+    #   - silently diverge from test behaviour: test_all_phases=True
+    #     (what gate_sweep uses) ran phases serially, so we tested one
+    #     mode and shipped a different one.
+    # Strict serialisation costs latency on the rare path that needs
+    # all four phases (worst case = sum of phase budgets), but every
+    # plugin gets a clean stage with no concurrent flow pressure.
     phase_fns = (phase1_direct, phase2_tcp_punch, phase3_udp_probe, phase4_turn)
-
-    async def delayed_phase(delay, fn):
-        if delay > 0:
-            await asyncio.sleep(delay)
-        return await fn(node, src_map, dest_map, sig_pipe, plugin_set)
-
-    tasks = [
-        asyncio.ensure_future(delayed_phase(i * PHASE_INTERLEAVE_S, fn))
-        for i, fn in enumerate(phase_fns)
-    ]
-    pending = set(tasks)
-    try:
-        while pending:
-            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
-            for t in done:
-                if t.cancelled():
-                    continue
-                exc = t.exception()
-                if exc is not None:
-                    log("[AC-PHASE] phase task raised: " + repr(exc))
-                    continue
-                pipe, plugin = t.result()
-                if pipe is not None:
-                    winner_pipe = pipe
-                    winner_plugin = plugin
-                    for t2 in pending:
-                        t2.cancel()
-                    if pending:
-                        await asyncio.gather(*pending, return_exceptions=True)
-                    pending = set()
-                    break
-    except asyncio.CancelledError:
-        for t in tasks:
-            if not t.done():
-                t.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        raise
-    finally:
-        for t in tasks:
-            if not t.done():
-                t.cancel()
-        remaining = [t for t in tasks if not t.done()]
-        if remaining:
-            await asyncio.gather(*remaining, return_exceptions=True)
+    for phase_fn in phase_fns:
+        pipe, plugin = await phase_fn(
+            node, src_map, dest_map, sig_pipe, plugin_set,
+        )
+        if pipe is not None:
+            winner_pipe = pipe
+            winner_plugin = plugin
+            break
 
     return winner_pipe, winner_plugin
