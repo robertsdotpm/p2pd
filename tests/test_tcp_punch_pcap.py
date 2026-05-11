@@ -195,11 +195,27 @@ class TestPcapMuxReaderRouting(AsyncTestCase):
 # 2. pcap_selector_punch_engine orchestration
 
 
+class FakeFt(object):
+    """Lightweight stand-in for the FourTuple object pcap_engine
+    inspects via conn.ft.key() and sort_key_ft."""
+
+    def __init__(self, local_ip, local_port, remote_ip, remote_port):
+        self.local_ip = local_ip
+        self.local_port = local_port
+        self.remote_ip = remote_ip
+        self.remote_port = remote_port
+
+    def key(self):
+        return (self.local_ip, self.local_port,
+                self.remote_ip, self.remote_port)
+
+
 class FakeConnection(object):
     """Stub Connection for the engine test. Mirrors the slice of the
     real Connection contract that pcap_engine touches: established_event
     (asyncio.Event), state (with is_established()), start_active
-    coroutine, close coroutine.
+    coroutine, close coroutine, plus send/recv for the canonical-
+    winner master/slave handshake.
     """
 
     def __init__(self, backend, local_ip, loop=None, reader=None):
@@ -213,6 +229,8 @@ class FakeConnection(object):
         self.remote_ip = None
         self.closed = False
         self.state = self  # so engine's conn.state.is_established works
+        self.ft = None
+        self.sent_bytes = b""
 
     def is_established(self):
         return self.established_event.is_set()
@@ -222,6 +240,18 @@ class FakeConnection(object):
         self.remote_ip = remote_ip
         self.remote_port = remote_port
         self.local_port = local_port
+        self.ft = FakeFt(self.local_ip, local_port, remote_ip, remote_port)
+
+    async def send(self, data):
+        self.sent_bytes += bytes(data)
+        return len(data)
+
+    async def recv(self, n, timeout=None):
+        # Slave's race: this fake never delivers a $ byte, so the
+        # recv hangs until cancelled. Sleeping past the timeout lets
+        # asyncio.wait observe the timeout cleanly.
+        await asyncio.sleep(timeout if timeout is not None else 1.0)
+        return b""
 
     async def close(self):
         self.closed = True
@@ -298,11 +328,15 @@ class TestPcapEngineOrchestration(AsyncTestCase):
                 self.spawned[1].trigger_established()
         asyncio.ensure_future(fire_winner())
 
+        # src_ip > dest_ip puts this peer in master role for the
+        # canonical-winner handshake, so the engine sends `$` on the
+        # winner rather than waiting for a slave-side recv (which the
+        # fake can't deliver).
         winner = await pcap_engine.pcap_selector_punch_engine(
             nic_pcap_name="lo",
             port_allocs=port_allocs,
-            src_ip="127.0.0.1",
-            dest_ip="127.0.0.2",
+            src_ip="127.0.0.2",
+            dest_ip="127.0.0.1",
             f_sleep_until_async=sleep_until_async,
             params={"monitor_timeout": 1.0, "connect_timeout": 1.0},
         )
@@ -318,8 +352,11 @@ class TestPcapEngineOrchestration(AsyncTestCase):
         self.assertIn((2024, 2025), starts)
         self.assertIn((3030, 3031), starts)
         self.assertIn((4040, 4041), starts)
-        # Winner is the FakeConnection we tripped.
+        # Winner is the FakeConnection we tripped (the only one to
+        # reach ESTABLISHED in the monitor window).
         self.assertIs(winner, self.spawned[1])
+        # Master sent the canonical-winner `$` byte on the chosen conn.
+        self.assertEqual(winner.sent_bytes, b"$")
         # Losers were closed; winner was not.
         self.assertFalse(winner.closed)
         for loser in (self.spawned[0], self.spawned[2]):
