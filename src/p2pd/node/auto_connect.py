@@ -979,7 +979,37 @@ async def auto_connect(
             phase4_turn,
         ):
             phase_t0 = time.monotonic()
-            pipe, plugin = await phase_fn(node, src_map, dest_map, sig_pipe, plugin_set)
+            # Catch per-phase failures so a late phase's exception
+            # doesn't tear down a winner_pipe set by an earlier
+            # phase.  The triggering case for this guard was
+            # phase4_turn propagating CancelledError when
+            # race_combos's own internal cleanup cancelled its child
+            # tasks after as_completed timed out -- internal-cleanup
+            # noise, not outer-caller cancellation.  CancelledError
+            # is the awkward case: it can mean "outer wait_for
+            # fired" OR "child task we awaited got cancelled by us
+            # already."  If we have a winner_pipe in hand, prefer
+            # to return it -- a true outer cancellation will hit
+            # the next await we make and propagate naturally.
+            try:
+                pipe, plugin = await phase_fn(
+                    node, src_map, dest_map, sig_pipe, plugin_set,
+                )
+            except asyncio.CancelledError:
+                if winner_pipe is not None:
+                    log("[AC-PHASE] {0} cancelled but winner already "
+                        "established via earlier phase; returning early".format(
+                            phase_fn.__name__,
+                        ))
+                    return winner_pipe, winner_plugin
+                raise
+            except Exception as exc:  # pylint: disable=broad-except
+                log("[AC-PHASE] {0} raised {1}: {2}; "
+                    "continuing with current winner_pipe={3}".format(
+                        phase_fn.__name__, type(exc).__name__, repr(exc),
+                        winner_pipe is not None,
+                    ))
+                pipe, plugin = None, None
             elapsed_ms = int((time.monotonic() - phase_t0) * 1000)
             src_nat = worst_nat(src_map)
             dest_nat = worst_nat(dest_map)
