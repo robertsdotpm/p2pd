@@ -13,17 +13,33 @@ filter driver; we work around it from user-space by talking to the
 NIC directly through libpcap / WinPcap, never letting tcpip.sys see
 the simul-open SYN crossover.
 
-Plugin routing (set in p2pd/node/auto_connect.py phase2_tcp_punch):
-  - dest is Windows-XP cross-machine + route_type=EXT_BIND ->
-    tcp_punch_pcap
-  - all other OS/route combinations -> legacy tcp_punch
+Wire-format design (do NOT redesign without rereading this):
+  Both plugins (tcp_punch and tcp_punch_pcap) share ONE wire message
+  type: tcp_punch.PunchMsg.  tcp_punch_pcap does NOT register its
+  own wire-name -- it leaves the proto_messages tuple empty and
+  imports PunchMsg from ..tcp_punch.proto for direct use.  This
+  guarantees interop: a peer running tcp_punch on a Linux kernel
+  stack and a peer running tcp_punch_pcap on a userspace pcap stack
+  exchange the same bytes on the signal channel.
 
-Wire protocol reuses PunchMsg via the PunchPcapMsg subclass so the
-plugin_loader can register a distinct wire name without forcing the
-legacy plugin to know about us.
+Routing (asymmetric, based on LOCAL OS only):
+  Each peer independently picks its plugin based on its own OS
+  (src_map.os in auto_connect.phase2_tcp_punch, or os_id() in
+  traversal_manager.create_inbound_plugin for inbound).
+    - LOCAL OS starts with "Windows-XP" or "Windows-2000" AND
+      route_type=EXT_BIND AND tcp_punch_pcap is installed
+        -> tcp_punch_pcap on this side
+    - any other case -> tcp_punch (kernel stack)
+  The peer's choice is independent of ours.  A Linux connector
+  paired with an XP listener: Linux picks tcp_punch, XP picks
+  tcp_punch_pcap.  Both fire SYNs simultaneously; on the wire they
+  look identical.
 
-This plugin is intentionally minimal compared to tcp_punch: the bucket
-math + NAT prediction in the legacy plugin (boundary_alloc.py,
-nat_predict.py) is reused via composition where it makes sense and
-skipped where it does not.  See main.py for the engine glue.
+tcpip.sys interference avoidance:
+  XP's tcpip.sys may RST an inbound SYN that doesn't match a kernel
+  socket.  punch_engine.pcap_punch_engine installs a transient
+  Windows Firewall inbound block rule on the predicted local TCP
+  port BEFORE injecting the first frame, and removes the rule in
+  a finally: clause so a crash never leaves the firewall stuck.
+  See firewall.py for the netsh wrapper.
 """

@@ -358,6 +358,35 @@ class TraversalManager:
         if isinstance(msg, ConMsg):
             msg.meta.plugin_name = "direct_connect"
 
+        # Asymmetric tcp_punch -> tcp_punch_pcap override:
+        # When the peer sends a PunchMsg labelled plugin_name="tcp_punch"
+        # but OUR local OS is NT-5 (XP / 2000) AND we have the
+        # tcp_punch_pcap plugin installed, redirect locally to
+        # tcp_punch_pcap.  The peer can't know our OS at signal-
+        # dispatch time (they pick their plugin from THEIR OS), so
+        # the redirection must happen here, on the receiver side.
+        # The wire bytes are identical (both plugins share
+        # tcp_punch.PunchMsg) -- only the local plugin instantiated
+        # to handle the message changes.
+        # See p2pd/src/p2pd/traversal/plugins/tcp_punch_pcap/__init__.py
+        # for the full design rationale.
+        if (
+            msg.meta.plugin_name == "tcp_punch"
+            and "tcp_punch_pcap" in self.plugin_loaders
+        ):
+            try:
+                from aionetiface import os_id
+                local_os = os_id() or ""
+            except ImportError:
+                local_os = ""
+            if (
+                local_os.startswith("Windows-XP")
+                or local_os.startswith("Windows-2000")
+            ):
+                log("create_inbound_plugin: redirecting tcp_punch -> "
+                    "tcp_punch_pcap (local OS {0!r})".format(local_os))
+                msg.meta.plugin_name = "tcp_punch_pcap"
+
         if msg.meta.plugin_name not in self.plugin_loaders:
             raise ValueError("Plugin not installed.")
 
