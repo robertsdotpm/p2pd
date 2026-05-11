@@ -5,23 +5,24 @@ Runs ON the local dev host (Linux).  Drives the test end-to-end:
   1. Picks two predicted local TCP ports (both in [2024, 52023],
      never 22), one per peer.
   2. Computes a wall-clock punch time (time.time() + PUNCH_OFFSET).
-  3. Starts tcpdump on debian-nat for the punch traffic.
-  4. SSHes to debian-nat and to the XP VM in parallel, launching
-     linux_connector.py and xp_responder.py with matching args.
+  3. Starts tcpdump on the linux peer (p2pd.net) for the punch
+     traffic.
+  4. SSHes to the linux peer and to the XP VM in parallel,
+     launching linux_connector.py and xp_responder.py with matching
+     args.
   5. Captures stdout/stderr from both halves until they exit.
   6. Stops tcpdump, downloads the capture for offline inspection.
   7. Reports outcome based on exit codes + the captured logs.
 
 What this test asserts about the cross-NAT tcp_punch_pcap engine:
     The XP-side pcap stack can complete a TCP simul-open against a
-    non-XP kernel-stack peer ACROSS NAT (both sides NATted in this
-    setup -- XP at 113.29.240.148, debian-nat at 23.94.29.30).
-    Success requires:
-      - Both NATs preserve source ports for outbound SYNs (cone NAT
-        on each end).  If either NAT is symmetric, the predicted
-        destination port won't match the mapping and the punch fails
-        without ever seeing a peer SYN.  That's an environment
-        failure, not an engine bug.
+    non-XP kernel-stack peer.  Topology is ASYMMETRIC-NAT: XP is
+    behind NAT (10.0.1.132 / public 113.29.240.148), the linux peer
+    p2pd.net is on a public IP (158.69.27.176) with no NAT in
+    front.  Success requires:
+      - XP's NAT preserves source ports for outbound SYNs (cone
+        NAT).  Only one NAT in this topology so this is the only
+        port-preservation constraint.
       - The pcap stack on XP captures the inbound SYN before
         tcpip.sys RSTs it.  This is what the production plugin's
         firewall-block-rule trick was for; here we DON'T install
@@ -51,14 +52,27 @@ import time
 
 
 # Hosts and credentials.
+#
+# Peer swapped from debian-nat to p2pd.net: debian-nat sits behind a
+# stateful upstream firewall that RSTs inbound TCP SYNs from a
+# different angle than its own outbound SYNs leave by -- proven by
+# RSTs returning with ack == iss+1 while debian-nat's own tcpdump
+# showed nothing inbound.  p2pd.net is a public-IP host (not NAT'd)
+# so no mystery upstream filter.  Topology is now asymmetric-NAT
+# (only XP behind NAT) rather than both-NAT, which is fine for
+# validating the XP tcpip.sys bypass against an unfiltered peer.
 LOCAL_DEV_HOST = "local"
-LINUX_HOST = "debian-nat"
-LINUX_USER = None  # baked into ~/.ssh/config for "debian-nat"
+LINUX_HOST = "p2pd.net"
+LINUX_USER = "debian"
 LINUX_REPO_P2PD = "/tmp/sweep_repos/p2pd"
 LINUX_REPO_AIONETIFACE = "/tmp/sweep_repos/aionetiface"
 LINUX_PYTHON = "python3"
-LINUX_LAN_IP = "192.168.206.2"  # debian-nat eth0 IP
-LINUX_PUBLIC_IP = "23.94.29.30"
+# p2pd.net is not behind NAT: the IP it sees locally on eno1 IS its
+# public IP.  Both fields therefore point at 158.69.27.176.
+LINUX_LAN_IP = "158.69.27.176"
+LINUX_PUBLIC_IP = "158.69.27.176"
+# Public NIC on p2pd.net; matches anchor_sweep.py CONNECTORS config.
+LINUX_PCAP_IFACE = "eno1"
 
 XP_HOST = "10.0.1.132"
 XP_USER = "matthew"
@@ -154,9 +168,10 @@ def upload_scripts():
     test re-runnable: a fresh dispatcher run picks up the latest
     edits without needing a `git pull` step on each VM.
 
-    On debian-nat the repo is reset via dispatcher policy so we
-    just rely on the in-repo path.  On XP the repo state might be
-    stale; we scp the script to a known location.
+    On the linux peer (p2pd.net) the repo is reset via dispatcher
+    policy before this script runs, so we just rely on the in-repo
+    path.  On XP the repo state might be stale; we scp the script
+    to a known location.
     """
     here = os.path.dirname(os.path.abspath(__file__))
     xp_script = os.path.join(here, "xp_responder.py")
@@ -176,15 +191,20 @@ def upload_scripts():
         raise RuntimeError(
             "scp xp_responder.py to XP failed rc={0}".format(rc))
 
-    # debian-nat: place the connector under /tmp.
+    # Linux peer: place the connector under /tmp.
     linux_dest = "/tmp/linux_connector.py"
+    if LINUX_USER:
+        linux_scp_target = "{0}@{1}:{2}".format(
+            LINUX_USER, LINUX_HOST, linux_dest)
+    else:
+        linux_scp_target = "{0}:{1}".format(LINUX_HOST, linux_dest)
     argv = [
         "scp", "-o", "StrictHostKeyChecking=no",
         "-o", "UserKnownHostsFile=/dev/null",
         linux_script,
-        "{0}:{1}".format(LINUX_HOST, linux_dest),
+        linux_scp_target,
     ]
-    print("coordinator: scp linux_connector.py -> debian-nat")
+    print("coordinator: scp linux_connector.py -> {0}".format(LINUX_HOST))
     rc = subprocess.call(argv)
     if rc != 0:
         raise RuntimeError(
@@ -199,10 +219,13 @@ def start_tcpdump(pcap_path):
 
     We filter on the XP public IP so the capture stays small.
     """
-    bpf = "host {0}".format(XP_PUBLIC_IP)
+    # Filter on the punch ports on the public NIC (eno1 on p2pd.net).
+    # Capturing on the specific NIC plus the punch ports keeps the
+    # pcap small and lets us see SYN/RST direction unambiguously.
+    bpf = "tcp and (port {0} or port {1})".format(LINUX_PORT, XP_PORT)
     remote_cmd = (
-        "sudo tcpdump -i any -w {0} '{1}' 2>&1"
-    ).format(pcap_path, bpf)
+        "sudo tcpdump -i {0} -w {1} '{2}' 2>&1"
+    ).format(LINUX_PCAP_IFACE, pcap_path, bpf)
     argv = ssh_cmd(LINUX_HOST, LINUX_USER, remote_cmd)
     print("coordinator: starting remote tcpdump -> {0}".format(pcap_path))
     proc = subprocess.Popen(
@@ -240,10 +263,14 @@ def stop_tcpdump(proc, pcap_path, local_pcap_path):
             pass
 
     # Download.
+    if LINUX_USER:
+        pcap_src = "{0}@{1}:{2}".format(LINUX_USER, LINUX_HOST, pcap_path)
+    else:
+        pcap_src = "{0}:{1}".format(LINUX_HOST, pcap_path)
     argv = [
         "scp", "-o", "StrictHostKeyChecking=no",
         "-o", "UserKnownHostsFile=/dev/null",
-        "{0}:{1}".format(LINUX_HOST, pcap_path),
+        pcap_src,
         local_pcap_path,
     ]
     print("coordinator: scp {0} -> {1}".format(pcap_path, local_pcap_path))

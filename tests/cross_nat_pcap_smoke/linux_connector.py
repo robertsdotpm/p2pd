@@ -123,14 +123,30 @@ def main():
         s.setblocking(False)
         sel.register(s, selectors.EVENT_WRITE | selectors.EVENT_READ)
 
-    # Sleep until wall-clock punch time.
+    # Sleep until wall-clock punch time, MINUS a lead time so this
+    # side enters connect_ex spray ~LEAD_TIME_S BEFORE the peer's SYN
+    # is expected to land.  Without the lead, both sides target the
+    # same instant and clock-probe residual error (observed ~150 ms
+    # with a 3 s SSH RTT) is enough for the peer's SYN to arrive
+    # before this side has a socket in SYN_SENT -- kernel sees an
+    # unsolicited SYN to a closed/listening port and RSTs.  By
+    # starting the spray early, the local socket is already in
+    # SYN_SENT when the peer's SYN lands and the kernel treats the
+    # exchange as simul-open, completing the handshake.
+    #
+    # connect_on_tcp_sockets sprays for spray_duration seconds (we
+    # pass 3.0), so a 0.5s lead leaves ~2.5s of spray AFTER the
+    # nominal punch_at -- plenty of overlap with the peer's own
+    # spray window.
+    LEAD_TIME_S = 0.5
     now = time.time()
-    delay = args.punch_at - now
+    delay = args.punch_at - LEAD_TIME_S - now
     if delay > 0:
-        print("linux_connector: sleeping {0:.3f}s until punch_at".format(delay))
+        print("linux_connector: sleeping {0:.3f}s until punch_at-{1:.3f}s "
+              "(lead time)".format(delay, LEAD_TIME_S))
         time.sleep(delay)
     else:
-        print("linux_connector: punch_at already passed by {0:.3f}s; "
+        print("linux_connector: punch_at-lead already passed by {0:.3f}s; "
               "firing immediately".format(-delay))
 
     # Spray SYNs at the peer.  same_machine=False since we're
