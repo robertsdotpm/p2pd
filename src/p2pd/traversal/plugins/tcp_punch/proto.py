@@ -31,13 +31,26 @@ class PunchMsg(ProtoMsg):
         needs an app-level token to distinguish real arrivals from
         random scanner traffic on the predicted port). tcp_punch leaves
         it empty; the receiver tolerates either case.
+
+        tx_unix / clock_uncertainty are added in 2026: the sender's
+        SysClock.time() at the moment of send + its Marzullo half-width.
+        Used by the receiver for a pre-bucket sanity check: if the two
+        peers' clocks disagree by more than (our_uncertainty +
+        peer_uncertainty + max_clock_error), the bucket fire is
+        guaranteed to miss; bail out immediately instead of burning the
+        14 s rendezvous wait.  Defaults to 0/0.0 for from_dict so
+        peers running pre-handoff code still decode cleanly (the
+        receiver then skips the sanity check rather than tripping it).
         """
 
-        def __init__(self, punch_mode, ntp, mappings, nonce=""):
+        def __init__(self, punch_mode, ntp, mappings, nonce="",
+                     tx_unix=0, clock_uncertainty=0.0):
             self.ntp = ntp
             self.mappings = mappings
             self.punch_mode = int(punch_mode)
             self.nonce = nonce
+            self.tx_unix = tx_unix
+            self.clock_uncertainty = clock_uncertainty
 
         def to_dict(self):
             return {
@@ -45,6 +58,8 @@ class PunchMsg(ProtoMsg):
                 "ntp": self.ntp,
                 "mappings": self.mappings,
                 "nonce": self.nonce,
+                "tx_unix": self.tx_unix,
+                "clock_uncertainty": self.clock_uncertainty,
             }
 
         @staticmethod
@@ -54,4 +69,6 @@ class PunchMsg(ProtoMsg):
                 d.get("ntp", 0),
                 d["mappings"],
                 d.get("nonce", ""),
+                d.get("tx_unix", 0),
+                d.get("clock_uncertainty", 0.0),
             )

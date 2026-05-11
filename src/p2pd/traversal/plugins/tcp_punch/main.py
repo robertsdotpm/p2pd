@@ -99,6 +99,50 @@ class PunchPlugin(Plugin):
             ))
             return
 
+        # Pre-bucket clock-truth sanity check.  When a peer reply
+        # carries tx_unix + clock_uncertainty (added 2026; older peers
+        # send 0/0.0 and we fall through), check whether the inferred
+        # skew between our clocks could possibly fit inside the
+        # bucket's max_clock_error budget.  If not, bail out NOW
+        # rather than waiting the full ~14 s rendezvous to discover
+        # the punch missed.  Strictly a pre-bucket guard -- the bucket
+        # algorithm itself remains the sole authority for fire time
+        # (see the DO NOT replace... comment above
+        # delayed_start_punching_proc).
+        if reply is not None:
+            peer_tx = getattr(reply.payload, "tx_unix", 0)
+            if peer_tx:
+                from .boundary_lib import FAST_PUNCH_PARAMS
+                peer_unc = float(getattr(reply.payload, "clock_uncertainty", 0.0))
+                our_unc = float(getattr(self.sys_clock, "uncertainty", 0.0))
+                max_err = FAST_PUNCH_PARAMS.get("max_clock_error", 4)
+                our_now = int(self.sys_clock.time())
+                # Allow signal-channel latency on top of the clock
+                # tolerance: a slow MQTT broker hop can easily add a
+                # few seconds between tx_unix and arrival.  Budget
+                # 10 s for signal latency; anything beyond that plus
+                # the combined uncertainty plus the bucket tolerance
+                # is a clock the bucket math cannot bridge.
+                SIGNAL_LATENCY_BUDGET = 10
+                budget = our_unc + peer_unc + max_err + SIGNAL_LATENCY_BUDGET
+                skew = abs(our_now - peer_tx)
+                if skew > budget:
+                    log("[PUNCH-RUN] pre-bucket bailout: clock skew "
+                        "{0}s exceeds budget {1}s (our_unc={2:.2f} "
+                        "peer_unc={3:.2f} max_err={4} latency={5}); "
+                        "plugin_id={6}".format(
+                            skew, int(budget), our_unc, peer_unc,
+                            max_err, SIGNAL_LATENCY_BUDGET,
+                            self.plugin_id,
+                        ))
+                    print("[PUNCH-RUN] pre-bucket bailout: clock skew "
+                          "{0}s > budget {1}s plugin_id={2}".format(
+                              skew, int(budget), self.plugin_id,
+                          ), flush=True)
+                    if not self.result.done():
+                        self.result.set_result(None)
+                    return
+
         # --- Get or create the PunchClient for this session ---
         puncher = self.punch_clients.get(self.plugin_id)
         if puncher is None:
@@ -341,6 +385,13 @@ class PunchPlugin(Plugin):
         """Compute the next round of port predictions and return an outgoing PunchMsg, or None when done."""
         # For LAN, STUN is useless (returns each side's own port).
         # Boundary ports from setup_puncher_client already align both sides.
+        # Sender's clock witness: NTP time at moment of send + bounded
+        # uncertainty from SysClock's Marzullo intersection.  The
+        # receiver uses these to abort doomed punches BEFORE the 14 s
+        # rendezvous wait (see PunchPlugin.run pre-bucket bailout).
+        tx_unix = int(self.sys_clock.time())
+        clock_uncertainty = float(getattr(self.sys_clock, "uncertainty", 0.0))
+
         # Send one empty PunchMsg to trigger the recipient; return None on reply.
         if self.nat_alloc.punch_mode == TCP_PUNCH_LAN:
             if reply is not None:
@@ -351,6 +402,8 @@ class PunchPlugin(Plugin):
                         "punch_mode": self.nat_alloc.punch_mode,
                         "mappings": [],
                         "ntp": punch_time,
+                        "tx_unix": tx_unix,
+                        "clock_uncertainty": clock_uncertainty,
                     },
                 }
             )
@@ -381,6 +434,8 @@ class PunchPlugin(Plugin):
                     "punch_mode": self.nat_alloc.punch_mode,
                     "mappings": mappings,
                     "ntp": punch_time,
+                    "tx_unix": tx_unix,
+                    "clock_uncertainty": clock_uncertainty,
                 },
             }
         )
