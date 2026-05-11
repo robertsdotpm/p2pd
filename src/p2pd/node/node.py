@@ -69,6 +69,9 @@ class Node(Daemon):
         self.addr_bytes = None  # serialized
         self.addr_map = None  # parsed dict
 
+        # Optional TelemetryWriter; set by caller after Node() to opt in.
+        self.telemetry = None
+
     async def msg_cb(self, msg, client_tup, pipe):
         """Route inbound pipe messages through the node protocol dispatcher."""
         await node_protocol(self, msg, client_tup, pipe)

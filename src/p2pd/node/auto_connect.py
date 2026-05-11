@@ -953,6 +953,19 @@ async def auto_connect(
             )
             log(line)
             print(line, flush=True)
+            tel = getattr(node, "telemetry", None)
+            if tel is not None:
+                try:
+                    tel.record(
+                        phase_fn.__name__,
+                        getattr(plugin, "name", None) if plugin is not None else None,
+                        pipe is not None,
+                        elapsed_ms,
+                        src_nat,
+                        dest_nat,
+                    )
+                except Exception:
+                    pass
             if pipe is not None and winner_pipe is None:
                 winner_pipe = pipe
                 winner_plugin = plugin
