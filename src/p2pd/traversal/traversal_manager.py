@@ -559,12 +559,16 @@ class TraversalManager:
             try:
                 now = get_running_loop().time()
                 for plugin in list(self.plugins.values()):
-                    if now >= plugin.expires_at:
+                    expires_at = getattr(plugin, "expires_at", None)
+                    if expires_at is None:
+                        log("[TM] cleanup_loop: plugin missing expires_at, skipping")
+                        continue
+                    if now >= expires_at:
                         try:
                             await close_plugin(plugin, self.plugins, self.inbound_pipes)
                         except asyncio.CancelledError:
                             raise
-                        except (OSError, AttributeError, asyncio.TimeoutError):
+                        except (OSError, asyncio.TimeoutError):
                             log_exception()
             except asyncio.CancelledError:
                 raise

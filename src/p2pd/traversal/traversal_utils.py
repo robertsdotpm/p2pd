@@ -593,4 +593,4 @@ async def close_plugin(plugin, plugins, inbound_pipes):
         except (asyncio.TimeoutError, OSError):
             log_exception()
         except asyncio.CancelledError:
-            pass
+            raise
