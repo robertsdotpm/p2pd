@@ -380,10 +380,12 @@ def main():
     except Exception as exc:
         print("coordinator: linux clock probe failed: {0}".format(exc))
         return 2
-    # XP needs the full path to python.exe and double-quoting (cmd.exe).
+    # XP needs the full path to python.exe.  No outer quoting -- the
+    # path has no spaces and cmd.exe parses the `-c "..."` arg
+    # correctly only when the leading exe token is unquoted.
     try:
         xp_offset = probe_host_offset(
-            XP_HOST, XP_USER, '"{0}"'.format(XP_PYTHON), "xp")
+            XP_HOST, XP_USER, XP_PYTHON, "xp")
     except Exception as exc:
         print("coordinator: xp clock probe failed: {0}".format(exc))
         return 2
