@@ -367,7 +367,6 @@ if __name__ == "__main__":
         nic = await Interface("enp0s25")
         af = IP4
         route = nic.route(af)
-        print(route.ext())
 
         # r = await nic.route(IP4).bind()
         # dest = ("192.168.0.1", 1900)
@@ -382,7 +381,6 @@ if __name__ == "__main__":
 
         # src_ip = route.ext()
 
-        print(src_ip)
         await port_forward(af, nic, 60001, (src_ip, 8000), "test")
         while True:
             await asyncio.sleep(1)

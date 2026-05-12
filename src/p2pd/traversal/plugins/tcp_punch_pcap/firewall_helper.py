@@ -37,7 +37,7 @@ try:
     from aionetiface import log
 except ImportError:
     def log(msg):
-        print(msg)
+        pass
 
 
 def is_linux():

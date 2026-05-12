@@ -119,12 +119,6 @@ class FanOutPlugin(Plugin):
             self.dest_map,
         )
 
-        print("[FAN-OUT] target={0!r} af_constraint={1} route_constraint={2} combos={3}".format(
-            self.target_plugin_name,
-            self.constraint_af,
-            self.constraint_route_type,
-            len(combos),
-        ))
         log(fstr(
             "fan_out[{0}]: target={1} combos={2}",
             (self.plugin_id, self.target_plugin_name, len(combos)),

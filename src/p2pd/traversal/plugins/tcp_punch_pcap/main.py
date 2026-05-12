@@ -149,12 +149,7 @@ class PunchPcapPlugin(Plugin):
     async def run(self, reply=None):
         """Coordinate the bucket-aligned punch exchange and dispatch the
         pcap-driven spray on the second message."""
-        print("[PUNCH-PCAPV2-RUN] enter plugin_id={0} reply={1} completed={2}".format(
-            self.plugin_id, reply is not None,
-            self.plugin_id in self.completed_pipe_ids,
-        ), flush=True)
         if self.plugin_id in self.completed_pipe_ids:
-            print("[PUNCH-PCAPV2-RUN] already completed; returning", flush=True)
             return
 
         # Pre-bucket clock-truth sanity check (verbatim shape from tcp_punch).
@@ -183,11 +178,8 @@ class PunchPcapPlugin(Plugin):
             try:
                 puncher, stuns = await self.setup_puncher_client(reply)
             except BaseException as exc:
-                print("[PUNCH-PCAPV2-RUN] setup_puncher_client raised "
-                      "{0}: {1}".format(type(exc).__name__, exc), flush=True)
                 raise
             if puncher is None:
-                print("[PUNCH-PCAPV2-RUN] no STUN clients; aborting", flush=True)
                 if not self.result.done():
                     self.result.set_result(None)
                 return
@@ -200,7 +192,6 @@ class PunchPcapPlugin(Plugin):
             puncher, reply, puncher.punch_time,
         )
         if outgoing_msg is None:
-            print("[PUNCH-PCAPV2-RUN] exchange done", flush=True)
             return
         await self.send_signal(outgoing_msg)
 
@@ -259,11 +250,6 @@ class PunchPcapPlugin(Plugin):
             max_error=p["max_clock_error"],
         )
         secondary_punch_time = punch_time + p["window"]
-        print("[CLOCK-PCAPV2] my_now={0} punch_time={1} delta={2} "
-              "window={3} max_clock_error={4}".format(
-                  timestamp, punch_time, punch_time - timestamp,
-                  p["window"], p["max_clock_error"],
-              ), flush=True)
         puncher.set_punch_time(
             punch_time, secondary_punch_time=secondary_punch_time,
         )
@@ -344,9 +330,6 @@ class PunchPcapPlugin(Plugin):
         from aionetiface.net.pcap.tcp.pipe_shim import PipeShim
 
         coordinator_delay = puncher.params.get("coordinator_delay", 0.5)
-        print("[PUNCH-PCAPV2-DELAY] enter delay={0}s".format(
-            coordinator_delay,
-        ), flush=True)
         firewall_ports = []
         winner_conn = None
         shim_wrapped = False
@@ -381,9 +364,6 @@ class PunchPcapPlugin(Plugin):
                 params=puncher.params,
                 loop=loop,
             )
-            print("[PUNCH-PCAPV2-DELAY] engine returned {0}".format(
-                "winner" if winner_conn is not None else "None",
-            ), flush=True)
 
             # Secondary-bucket fallback.
             if winner_conn is None and puncher.secondary_punch_time:
@@ -414,9 +394,6 @@ class PunchPcapPlugin(Plugin):
                 if ft is not None:
                     peer_tup = (ft.remote_ip, int(ft.remote_port))
                 ports_to_clean = list(firewall_ports)
-                print("[PUNCH-PCAPV2-DELAY] wrapping winner peer_tup={0} "
-                      "firewall_ports={1}".format(peer_tup, ports_to_clean),
-                      flush=True)
 
                 def firewall_teardown_cb():
                     if ports_to_clean:
@@ -428,13 +405,9 @@ class PunchPcapPlugin(Plugin):
                     firewall_teardown=firewall_teardown_cb,
                     loop=loop,
                 )
-                print("[PUNCH-PCAPV2-DELAY] PipeShim constructed; calling "
-                      "set_result", flush=True)
                 shim_wrapped = True
                 if not self.result.done():
                     self.result.set_result(shim)
-                    print("[PUNCH-PCAPV2-DELAY] set_result(shim) done",
-                          flush=True)
                 else:
                     # Outer race resolved already; close shim cleanly so
                     # firewall rules and Connection both come down.
@@ -446,12 +419,8 @@ class PunchPcapPlugin(Plugin):
                 if not self.result.done():
                     self.result.set_result(None)
         except asyncio.CancelledError:
-            print("[PUNCH-PCAPV2-DELAY] CANCELLED", flush=True)
             raise
         except Exception as exc:
-            print("[PUNCH-PCAPV2-DELAY] EXCEPTION {0}: {1}".format(
-                type(exc).__name__, repr(exc),
-            ), flush=True)
             raise
         finally:
             # If no shim took ownership of firewall ports, clean them

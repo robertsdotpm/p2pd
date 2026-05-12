@@ -1008,7 +1008,6 @@ async def auto_connect(
                 dest_cgnat,
             )
             log(line)
-            print(line, flush=True)
             tel = getattr(node, "telemetry", None)
             if tel is not None:
                 try:

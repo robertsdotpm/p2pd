@@ -397,11 +397,8 @@ class P2PDServer(RESTD):
 # pragma: no cover
 async def start_p2pd_server(port=REST_API_PORT, ifs=None, enable_upnp=False):
     """Start a P2PD node and bind the REST API server to the loopback interface on port."""
-    print("Loading interfaces...")
-    print("If you've just connected a new NIC ")
-    print("there can be a slight delay until it's online.")
     if enable_upnp:
-        print("Doing node port forwarding and pin hole rules.")
+        pass
 
     # Passed to setup the p2p node.
     node_conf = dict_child({"enable_upnp": enable_upnp}, NODE_CONF)
@@ -439,7 +436,6 @@ async def start_p2pd_server(port=REST_API_PORT, ifs=None, enable_upnp=False):
 async def p2pd_workspace():
     """Launch the P2PD REST server and block indefinitely for manual testing."""
     await start_p2pd_server()
-    print(fstr("http://localhost:{0}/", (REST_API_PORT,)))
     while True:
         await asyncio.sleep(1)
 

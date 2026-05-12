@@ -27,8 +27,8 @@
       the faster side's socket, then the slower side's eventual SYN
       hits the dead port and gets RST'd in return.  Both fail.
     * Internet NTP RTT of 50-100ms means SysClock can only sync peers
-      to ~+/-50ms.  Local LAN NTP (chrony at 10.0.1.204 in our test
-      bench) brings RTT to <1ms and the LAN tests pass.  The --ntp
+      to ~+/-50ms.  A LAN chrony server brings RTT to <1ms and the
+      LAN tests pass.  The --ntp
       flag on demo/__main__.py points the node at a chosen NTP server
       explicitly for this reason.
     * Cross-NAT (real-world) tests are immune: the NAT's port-mapping
@@ -162,9 +162,6 @@ sel,
             break
 
     elapsed = time.monotonic() - start_time
-    print("[ENGINE-MON] window done write_evts={0} read_evts={1} so_errors={2} successful={3} elapsed={4:.3f}s".format(
-        write_evts, read_evts, write_so_errors, len(successful), elapsed,
-    ), flush=True)
     return successful
 
 
@@ -197,11 +194,6 @@ af,
         monitor_duration = CONNECT_TIMEOUT
         retry_interval = RETRY_INTERVAL
 
-    print("[ENGINE] enter af={0} src_ip={1} dest_ip={2} ports={3} "
-          "spray={4}s monitor={5}s same_machine={6}".format(
-              af, src_ip, dest_ip, len(port_allocs),
-              spray_duration, monitor_duration, same_machine,
-          ), flush=True)
     log("[ENGINE] tcp_selector_punch_engine af={0} src_ip={1} dest_ip={2} "
         "ports={3} spray={4}s monitor={5}s same_machine={6}".format(
             af, src_ip, dest_ip, len(port_allocs),
@@ -218,31 +210,21 @@ af,
                 bound_locals.append(s.getsockname())
             except OSError:
                 bound_locals.append("?")
-        print("[ENGINE] setup_engine bound {0}/{1} sockets locals={2}".format(
-            len(pre_connect_infos), len(port_allocs), bound_locals,
-        ), flush=True)
         log("[ENGINE] setup_engine bound {0}/{1} sockets".format(
             len(pre_connect_infos), len(port_allocs),
         ))
 
         # Wait for synchronized punch time frame
-        print("[ENGINE] sleep_until enter", flush=True)
         log("[ENGINE] entering sleep_until -> punch rendezvous")
         f_sleep_until()
 
         # Initiate simultaneous open
-        print("[ENGINE] sleep_until done; spraying {0} connects for {1}s to {2}".format(
-            len(pre_connect_infos), spray_duration, dest_ip,
-        ), flush=True)
         log("[ENGINE] sleep_until done; spraying {0} connects for {1}s".format(
             len(pre_connect_infos), spray_duration,
         ))
         connect_on_tcp_sockets(
             same_machine, pre_connect_infos, dest_ip, spray_duration=spray_duration,
         )
-        print("[ENGINE] connect_on_tcp_sockets returned; entering monitor for {0}s".format(
-            monitor_duration,
-        ), flush=True)
 
         # Immediately monitor, no blind sleep
         successful = socket_event_monitor(
@@ -250,18 +232,12 @@ af,
         )
 
         sock_list = list(successful)
-        print("[ENGINE] monitor done; successful={0}/{1}".format(
-            len(sock_list), len(pre_connect_infos),
-        ), flush=True)
         log("[ENGINE] monitor done; successful={0}/{1}".format(
             len(sock_list), len(pre_connect_infos),
         ))
 
         # Application-level validation should still be done after this
         sock = choose_winning_tcp_sock(dest_ip, sock_list, our_ip)
-        print("[ENGINE] choose_winning_tcp_sock -> {0}".format(
-            "selected" if sock else "no winner",
-        ), flush=True)
         log("[ENGINE] choose_winning_tcp_sock -> {0}".format(
             "selected" if sock else "no winner",
         ))

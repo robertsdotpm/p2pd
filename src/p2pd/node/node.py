@@ -86,9 +86,6 @@ class Node(Daemon):
         wires self.msg_cb to the pipe so node_protocol receives the
         frame as part of normal data flow.
         """
-        print("[NODE-UP-CB] up_cb fired pipe={0!r} client_tup={1!r}".format(
-            pipe, _client_tup,
-        ))
 
     async def start(self, sys_clock=None, out=False, cout=print):
         """Run the full node startup sequence and return self when the node is ready."""

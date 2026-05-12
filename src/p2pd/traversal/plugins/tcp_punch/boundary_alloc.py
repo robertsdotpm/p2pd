@@ -91,19 +91,6 @@ def boundary_port_alloc(
         buckets = (primary_bucket, primary_bucket + 1)
         n_per_bucket = max(1, n // 2)
 
-    print(
-        "boundary_port_alloc: timestamp={0} primary_bucket={1} "
-        "buckets={2} n_in={3} n_per_bucket={4} "
-        "window={5} max_clock_error={6} "
-        "our_os={7} our_pool=[{8},{9}] their_os={10} their_pool=[{11},{12}]".format(
-            timestamp, primary_bucket, list(buckets),
-            n, n_per_bucket,
-            p["window"], p["max_clock_error"],
-            our_os, our_base, our_base + our_range - 1,
-            their_os, their_base, their_base + their_range - 1,
-        ),
-        flush=True,
-    )
 
     ret = []
     for bucket in buckets:

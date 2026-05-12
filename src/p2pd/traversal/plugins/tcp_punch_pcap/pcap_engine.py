@@ -204,9 +204,6 @@ async def wait_first_established(conns, monitor_timeout=3.0):
             time.monotonic() - start,
         ))
         return []
-    print("[ENGINE-PCAPV2] monitor done winners={0}/{1} elapsed={2:.3f}s".format(
-        len(winners), len(conns), time.monotonic() - start,
-    ), flush=True)
     return winners
 
 
@@ -270,11 +267,6 @@ async def choose_canonical_winner(established, src_ip, dest_ip,
     is_master = src_ip > dest_ip
     role = "master" if is_master else "slave"
     sorted_conns = sorted(established, key=sort_key_ft)
-    print("[ENGINE-PCAPV2] choose_canonical_winner role={0} src_ip={1} "
-          "dest_ip={2} n_est={3} sorted_4tuples={4}".format(
-              role, src_ip, dest_ip, len(sorted_conns),
-              [getattr(c, "ft", None) and c.ft.key() for c in sorted_conns],
-          ), flush=True)
     log("tcp_punch_pcap: canonical-winner handshake role={0} "
         "n_established={1}".format(role, len(sorted_conns)))
 
@@ -285,13 +277,8 @@ async def choose_canonical_winner(established, src_ip, dest_ip,
         winner_key = winner_ft.key() if winner_ft is not None else None
         try:
             await winner.send(b"$")
-            print("[ENGINE-PCAPV2] master sent $ on 4tuple={0}".format(
-                winner_key,
-            ), flush=True)
             log("tcp_punch_pcap: master sent $ on {0}".format(winner_key))
         except Exception as exc:
-            print("[ENGINE-PCAPV2] master send($) failed on 4tuple={0}: "
-                  "{1}".format(winner_key, exc), flush=True)
             log("tcp_punch_pcap: master send($) failed: {0}".format(exc))
             for c in sorted_conns:
                 try:
@@ -348,8 +335,6 @@ async def choose_canonical_winner(established, src_ip, dest_ip,
 
     elapsed = time.monotonic() - start
     if winner is None:
-        print("[ENGINE-PCAPV2] slave timed out waiting for $; closing all "
-              "(elapsed={0:.3f}s)".format(elapsed), flush=True)
         log("tcp_punch_pcap: slave timed out waiting for $ "
             "({0:.3f}s)".format(elapsed))
         for c in sorted_conns:
@@ -361,10 +346,6 @@ async def choose_canonical_winner(established, src_ip, dest_ip,
 
     winner_ft = getattr(winner, "ft", None)
     winner_key = winner_ft.key() if winner_ft is not None else None
-    print("[ENGINE-PCAPV2] slave got byte={0} on 4tuple={1} "
-          "(elapsed={2:.3f}s)".format(
-              repr(winner_byte), winner_key, elapsed,
-          ), flush=True)
     log("tcp_punch_pcap: slave got {0} on {1}".format(
         repr(winner_byte), winner_key,
     ))
@@ -411,10 +392,6 @@ async def pcap_selector_punch_engine(
         monitor_timeout = 3.0
         connect_timeout = 3.0
 
-    print("[ENGINE-PCAPV2] enter src_ip={0} dest_ip={1} n_allocs={2} "
-          "monitor={3}s".format(
-              src_ip, dest_ip, len(port_allocs), monitor_timeout,
-          ), flush=True)
 
     backend = None
     mux = None
@@ -432,9 +409,7 @@ async def pcap_selector_punch_engine(
 
         # Bucket-aligned wait. f_sleep_until_async is a coroutine that
         # blocks until the rendezvous moment.
-        print("[ENGINE-PCAPV2] sleep_until_async enter", flush=True)
         await f_sleep_until_async()
-        print("[ENGINE-PCAPV2] sleep_until_async done; firing SYNs", flush=True)
 
         # Burst-start every Connection. start_active queues the SYN
         # frame and returns immediately; the SYN is on the wire within

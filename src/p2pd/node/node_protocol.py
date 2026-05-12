@@ -59,7 +59,6 @@ async def node_protocol(node, msg, client_tup, pipe):
     if is_udp_punch_datagram(msg):
         return
 
-    print("Node proto: ", msg)
 
     # Track idle pipe recv time.
     if pipe in node.resources.last_recv_queue:
@@ -85,9 +84,6 @@ async def node_protocol(node, msg, client_tup, pipe):
         if not getattr(pipe, "con_id_seen", False) and m.startswith(CON_ID_PREFIX):
             plugin_id = to_s(m[len(CON_ID_PREFIX):])
             pipe.con_id_seen = True
-            print("[CON-ID-RX] in-band ConId pipe={0!r} plugin_id={1!r}".format(
-                pipe, plugin_id,
-            ))
             if node.traversal is not None:
                 node.traversal.resolve_inbound_by_plugin_id(plugin_id, pipe)
             continue

@@ -573,9 +573,6 @@ def sync_run_non_sym_side(
     sock.setblocking(False)
 
     actual_port = sock.getsockname()[1]
-    print("[RP-NONSYM] start port={0} nonce={1}".format(
-        actual_port, nonce.hex()[:8],
-    ))
 
     ports = random_probe_ports(probe_count, rng=rng)
     expected_src_ports = set(ports)
@@ -594,22 +591,17 @@ def sync_run_non_sym_side(
         if idx + 1 < len(ports):
             time.sleep(INTER_PROBE_S)
 
-    print("[RP-NONSYM] fired {0} cone probes to {1} at {2} pps, listening".format(
-        len(ports), peer_ext_ip, PROBE_RATE_PPS,
-    ))
     datagrams_seen = 0
     deadline = time.time() + listen_timeout
     while True:
         remaining = deadline - time.time()
         if remaining <= 0:
-            print("[RP-NONSYM] timeout after {0} datagrams".format(datagrams_seen))
             return None
         try:
             ready, _, _ = select_mod.select([sock], [], [], remaining)
         except (OSError, select_mod.error):
             return None
         if not ready:
-            print("[RP-NONSYM] timeout after {0} datagrams".format(datagrams_seen))
             return None
         try:
             data, peer = sock.recvfrom(2048, socket.MSG_PEEK)
@@ -640,9 +632,6 @@ def sync_run_non_sym_side(
         # Probe-only consumption: non-probes stay in the queue
         # for the application Pipe.
         parsed = decode_probe(data, nonce)
-        print("[RP-NONSYM] datagram from {0}:{1} len={2} decode={3}".format(
-            peer[0], peer[1], len(data), parsed,
-        ))
         if parsed is None:
             # Not our probe -- leave in the queue.  Yield via a
             # tiny sleep so we don't spin if there's persistent
@@ -655,13 +644,10 @@ def sync_run_non_sym_side(
         except (BlockingIOError, OSError):
             continue
         if parsed["role"] != ROLE_SYM:
-            print("[RP-NONSYM] skip: role={0} not SYM".format(parsed["role"]))
             continue
         if own_ext_ip and peer[0] == own_ext_ip:
-            print("[RP-NONSYM] skip: peer IP == own_ext_ip {0}".format(own_ext_ip))
             continue
         if require_alignment and peer[1] not in expected_src_ports:
-            print("[RP-NONSYM] skip: alignment check {0} not in expected".format(peer[1]))
             continue
         try:
             sock.sendto(
@@ -670,7 +656,6 @@ def sync_run_non_sym_side(
             )
         except OSError:
             pass
-        print("[RP-NONSYM] converged (tentative): peer={0}:{1}".format(peer[0], peer[1]))
         # Phase 2: wait briefly for SYM_CONFIRM so that when there are
         # multiple birthday-paradox collisions both sides lock onto the
         # SAME socket.  SYM sends CONFIRM from its winning socket; if
@@ -729,9 +714,6 @@ def sync_run_non_sym_side(
                 continue
             # SYM_CONFIRM received: SYM has locked onto cpeer[1].
             if cpeer[1] != final_peer[1]:
-                print("[RP-NONSYM] CONFIRM override: {0} -> {1}".format(
-                    final_peer[1], cpeer[1],
-                ))
                 final_peer = cpeer
                 try:
                     sock.sendto(
@@ -741,9 +723,6 @@ def sync_run_non_sym_side(
                 except OSError:
                     pass
             break
-        print("[RP-NONSYM] converged (final): peer={0}:{1}".format(
-            final_peer[0], final_peer[1],
-        ))
         return {"sock": sock, "peer": final_peer, "role": "non_sym"}
 
 
@@ -776,9 +755,6 @@ def sync_run_symmetric_side(
         return None
     for s in socks:
         s.setblocking(False)
-    print("[RP-SYM] start nonce={0} socks={1} target={2}:{3}".format(
-        nonce.hex()[:8], len(socks), cone_ext_ip, cone_ext_port,
-    ))
     # Probe-rate governor: cap egress at ~100 packets/sec.  An
     # unrate-limited spray of N=256 sockets * 1 probe each is fine on
     # the wire, but consumer routers with small conntrack tables (16k
@@ -806,9 +782,6 @@ def sync_run_symmetric_side(
         # there is no asyncio loop to starve.
         if idx + 1 < len(socks):
             time.sleep(INTER_PROBE_S)
-    print("[RP-SYM] fired {0} sym probes at {1} pps, listening".format(
-        probes_sent, PROBE_RATE_PPS,
-    ))
 
     deadline = time.time() + listen_timeout
     winner = None
@@ -1273,10 +1246,6 @@ def sync_run_bidirectional_spray(
     for s in socks:
         s.setblocking(False)
 
-    print("[RP-SPRAY] start nonce={0} socks={1} target_ip={2} role={3}".format(
-        nonce.hex()[:8], len(socks), peer_ext_ip,
-        "MASTER" if is_master else "SLAVE",
-    ))
 
     # Fire one probe from each socket to a random destination port.
     # Use ROLE_SYM as the marker; the receive side accepts any role
@@ -1295,7 +1264,6 @@ def sync_run_bidirectional_spray(
             probes_sent += 1
         except OSError:
             continue
-    print("[RP-SPRAY] fired {0} probes, listening".format(probes_sent))
 
     # Convergence protocol (master/slave, modelled on tcp_punch):
     #
@@ -1348,11 +1316,6 @@ def sync_run_bidirectional_spray(
                 peer = (normalize_ip6(peer[0]), peer[1], 0, scope_id)
             datagrams_seen += 1
             parsed = decode_probe(data, nonce)
-            print("[RP-SPRAY-RX] dgram#{0} from {1}:{2} len={3} parsed={4} my_sock_port={5}".format(
-                datagrams_seen, peer[0], peer[1], len(data),
-                "ok" if parsed is not None else "no",
-                s.getsockname()[1] if s.getsockname() else -1,
-            ))
             if parsed is None:
                 parsed_fail += 1
                 # Non-probe -- leave for Pipe; could be early data.
@@ -1368,9 +1331,6 @@ def sync_run_bidirectional_spray(
                 continue
             if peer_ext_ip and peer[0] != peer_ext_ip:
                 peer_ip_mismatch += 1
-                print("[RP-SPRAY-RX] skip: peer_ip {0} != expected {1}".format(
-                    peer[0], peer_ext_ip,
-                ))
                 continue
 
             is_confirm = parsed["idx"] == PROBE_IDX_CONFIRM
@@ -1410,9 +1370,6 @@ def sync_run_bidirectional_spray(
             break
 
     if winner is None:
-        print("[RP-SPRAY] timeout: dgrams_seen={0} parsed_ok={1} parsed_fail={2} peer_ip_mismatch={3}".format(
-            datagrams_seen, parsed_ok, parsed_fail, peer_ip_mismatch,
-        ))
         close_all(socks)
         return None
 
@@ -1423,10 +1380,6 @@ def sync_run_bidirectional_spray(
                 s.close()
             except OSError:
                 pass
-    print("[RP-SPRAY] converged peer={0}:{1} role={2} dgrams_seen={3} parsed_ok={4}".format(
-        winner["peer"][0], winner["peer"][1], winner["role"],
-        datagrams_seen, parsed_ok,
-    ))
     return winner
 
 

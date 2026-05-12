@@ -83,14 +83,6 @@ def punching_process(puncher, reverse_server_dest, stop_reader):
     outside the main thread, and the SIGINT handler is pointless
     in a worker thread anyway (signals route to the main thread).
     """
-    print("[PUNCH-WORKER] enter af={0} src_ip={1} dest_ip={2} "
-          "port_allocs={3} reverse_dest={4}".format(
-              getattr(puncher, "af", None),
-              getattr(puncher, "src_ip", None),
-              getattr(puncher, "dest_ip", None),
-              len(getattr(puncher, "port_allocs", []) or []),
-              reverse_server_dest,
-          ), flush=True)
     log("[PUNCH-WORKER] enter af={0} src_ip={1} dest_ip={2} "
         "port_allocs={3} reverse_dest={4}".format(
             getattr(puncher, "af", None),
@@ -105,33 +97,24 @@ def punching_process(puncher, reverse_server_dest, stop_reader):
         pass
     try:
         # New punched TCP sock to destination.
-        print("[PUNCH-WORKER] calling run_engine", flush=True)
         log("[PUNCH-WORKER] calling run_engine")
         punched_sock = puncher.run_engine(tcp_selector_punch_engine)
         if not punched_sock:
-            print("[PUNCH-WORKER] run_engine returned no socket -- punch failed", flush=True)
             log("[PUNCH-WORKER] run_engine returned no socket -- punch failed")
             return
-        print("[PUNCH-WORKER] run_engine returned punched socket; "
-              "connecting back to reverse server {0}".format(reverse_server_dest),
-              flush=True)
         log("[PUNCH-WORKER] run_engine returned punched socket; "
             "connecting back to reverse server {0}".format(reverse_server_dest))
 
         # Make reverse connect to listen server in main process.
         # Handles passing messages between the punch sock <--> reverse con.
         selector_proxy(punched_sock, reverse_server_dest, stop_reader)
-        print("[PUNCH-WORKER] selector_proxy returned; worker exiting", flush=True)
         log("[PUNCH-WORKER] selector_proxy returned; worker exiting")
     except KeyboardInterrupt:
-        print("[PUNCH-WORKER] KeyboardInterrupt; exiting silently", flush=True)
         log("[PUNCH-WORKER] KeyboardInterrupt; exiting silently")
     except (OSError, ConnectionError) as e:
-        print("[PUNCH-WORKER] OS/Connection error: " + repr(e), flush=True)
         log("[PUNCH-WORKER] OS/Connection error: " + repr(e))
         log_exception()
     except Exception as e:
-        print("[PUNCH-WORKER] unexpected exception: " + repr(e), flush=True)
         log("[PUNCH-WORKER] unexpected exception: " + repr(e))
         # Prevent thread or process blow up.
         log_exception()
@@ -228,11 +211,6 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None, node
         # Store the future so the caller can inspect / cancel it if needed.
         loop = get_running_loop()
         args = (puncher, reverse_server_dest, stop_reader)
-        print("[PUNCH-PROC] dispatching worker via run_in_executor "
-              "(proc_pool={0}) reverse_dest={1}".format(
-                  type(proc_pool).__name__ if proc_pool else "None",
-                  reverse_server_dest,
-              ), flush=True)
         log("[PUNCH-PROC] dispatching punching_process via run_in_executor "
             "(proc_pool={0})".format(type(proc_pool).__name__ if proc_pool else "None"))
         worker_fut = loop.run_in_executor(proc_pool, punching_process, *args)
@@ -244,14 +222,10 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None, node
             except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
                 exc = None
             if exc is not None:
-                print("[PUNCH-PROC] worker future raised {0}: {1}".format(
-                    type(exc).__name__, repr(exc),
-                ), flush=True)
                 log("[PUNCH-PROC] worker future raised {0}: {1}".format(
                     type(exc).__name__, repr(exc),
                 ))
             else:
-                print("[PUNCH-PROC] worker future completed cleanly", flush=True)
                 log("[PUNCH-PROC] worker future completed cleanly")
 
         worker_fut.add_done_callback(worker_done)
@@ -265,32 +239,24 @@ async def start_punching_process(nic, puncher, stop_reader, proc_pool=None, node
         # monitor (~6s).  Total worst case ~110s; 130s leaves headroom
         # for setup overhead.  Was 60s when there was only a single
         # fire, which silently truncated the secondary attempt.
-        print("[PUNCH-PROC] awaiting reverse_server.accept (130s)", flush=True)
         log("[PUNCH-PROC] awaiting reverse_server.accept (130s)")
         punch_process_connection = await asyncio.wait_for(
             reverse_server.accept(), timeout=130
         )
-        print("[PUNCH-PROC] reverse_server.accept returned conn={0}".format(
-            punch_process_connection is not None,
-        ), flush=True)
         log("[PUNCH-PROC] reverse_server.accept returned conn={0}".format(
             punch_process_connection is not None,
         ))
 
         return punch_process_connection
     except asyncio.CancelledError:
-        print("[PUNCH-PROC] reverse_server.accept cancelled", flush=True)
         log("[PUNCH-PROC] start_punching_process cancelled")
         raise
     except asyncio.TimeoutError as e:
-        print("[PUNCH-PROC] reverse_server.accept timed out: " + repr(e), flush=True)
         log("[PUNCH-PROC] start_punching_process timed out: " + repr(e))
     except (OSError, ConnectionError) as e:
-        print("[PUNCH-PROC] OS/Connection error: " + repr(e), flush=True)
         log("[PUNCH-PROC] start_punching_process OS/Connection error: " + repr(e))
         log_exception()
     finally:
-        print("[PUNCH-PROC] cleanup", flush=True)
         log("[PUNCH-PROC] start_punching_process exiting (cleanup)")
         if worker_fut is not None and not worker_fut.done():
             worker_fut.cancel()

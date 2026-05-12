@@ -210,13 +210,11 @@ async def workspace():
     nat_predict.set_punch_mode()
     nat_predict.set_nat_info()
     send_alloc = await nat_predict.port_alloc()
-    print(send_alloc)
 
     # Simulate receiving mappings by just using our own.
     # Obviously this is meaningless and real would come from a client.
     recv_mappings = nat_predict.send_mappings
     updated_alloc = await nat_predict.port_alloc(recv_mappings)
-    print(updated_alloc)
 
 
 if __name__ == "__main__":

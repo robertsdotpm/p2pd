@@ -101,10 +101,6 @@ class TURNPlugin(Plugin):
             "responder" if is_responder
             else ("renego-initiator" if is_renegotiating_initiator else "initiator")
         )
-        print("[TURN-DBG] run plugin_id={0} af={1} reply={2} role={3} renego_count={4} tried_servers_before={5}".format(
-            self.plugin_id, self.af, reply is not None, role_label,
-            self.renego_count, sorted(self.tried_servers),
-        ))
         log(fstr(
             "turn[{0}]: run af={1} reply={2} role={3} renego_count={4}",
             (
@@ -138,11 +134,6 @@ class TURNPlugin(Plugin):
                 if not self.result.done():
                     self.result.set_result(None)
                 return
-            print("[TURN-DBG] peer rejected our server reason={0!r} round={1}/{2} tried={3}".format(
-                getattr(reply.payload, "reject_reason", None),
-                self.renego_count, self.MAX_RENEGOTIATIONS,
-                sorted(self.tried_servers),
-            ))
             log(fstr(
                 "turn[{0}]: peer rejected our server with reason={1}; "
                 "renegotiating (round {2}/{3}, tried_servers={4})",
@@ -177,21 +168,14 @@ class TURNPlugin(Plugin):
 
         # --- Allocate a TURN relay for this session ---
         client = self.turn_clients.get(self.plugin_id)
-        print("[TURN-DBG] cached_client_present={0} for plugin_id={1}".format(
-            client is not None, self.plugin_id,
-        ))
         if client is None:
             groups = get_infra(self.af, UDP, "TURN", no=100)
             all_servers = [g[0] for g in groups]
-            print("[TURN-DBG] infra returned {0} TURN groups for af={1}".format(
-                len(all_servers), self.af,
-            ))
             # Filter out any server already in the joint tried set.
             all_servers = [
                 s for s in all_servers
                 if (s.get("ip"), int(s.get("port", 0))) not in self.tried_servers
             ]
-            print("[TURN-DBG] after tried-filter: {0} candidates remain".format(len(all_servers)))
 
             # Responder path: if the incoming TURNMsg specified a server
             # the initiator already allocated on, use it directly so we
@@ -210,9 +194,6 @@ class TURNPlugin(Plugin):
                 # If we don't have it in INFRA, treat as unreachable too --
                 # send rejection so the initiator picks something we share.
                 if chosen_servers is None:
-                    print("[TURN-DBG] initiator chose {0}:{1} not in our INFRA -> sending rejection (not_in_infra)".format(
-                        target_host, target_port,
-                    ))
                     log(fstr(
                         "turn[{0}]: initiator chose {1}:{2} but it's not in our "
                         "INFRA / already-tried; rejecting",
@@ -227,10 +208,6 @@ class TURNPlugin(Plugin):
             if chosen_servers is None:
                 chosen_servers = rendezvous_rank(self.plugin_id, all_servers)
 
-            print("[TURN-DBG] trying {0} candidate server(s); first={1}".format(
-                len(chosen_servers),
-                (chosen_servers[0].get("ip"), chosen_servers[0].get("port")) if chosen_servers else None,
-            ))
             log(fstr(
                 "turn[{0}]: trying {1} candidate server(s)",
                 (self.plugin_id, len(chosen_servers)),
@@ -241,10 +218,6 @@ class TURNPlugin(Plugin):
                 self.nic,
                 self.msg_cb,
             )
-            print("[TURN-DBG] get_first_working_turn_client returned client={0} dest={1}".format(
-                client is not None,
-                getattr(client, "dest", None) if client is not None else None,
-            ))
 
             if client is None:
                 # If we are the responder and the initiator picked a
@@ -252,9 +225,6 @@ class TURNPlugin(Plugin):
                 # we're the initiator (or renego-initiator) and have no
                 # working server left, abort.
                 if initiator_choice is not None:
-                    print("[TURN-DBG] failed to allocate on initiator's pick {0}:{1} -> sending rejection (unreachable)".format(
-                        initiator_choice[0], initiator_choice[1],
-                    ))
                     log(fstr(
                         "turn[{0}]: failed to allocate on initiator's server "
                         "{1}:{2}; sending rejection",
@@ -265,7 +235,6 @@ class TURNPlugin(Plugin):
                     if not self.result.done():
                         self.result.set_result(None)
                     return
-                print("[TURN-DBG] no working TURN server -- aborting")
                 log(fstr(
                     "turn[{0}]: no working TURN server -- aborting",
                     (self.plugin_id,),
@@ -273,7 +242,6 @@ class TURNPlugin(Plugin):
                 if not self.result.done():
                     self.result.set_result(None)
                 return
-            print("[TURN-DBG] allocated relay on {0}".format(getattr(client, "dest", "?")))
             log(fstr(
                 "turn[{0}]: allocated relay on {1}",
                 (self.plugin_id, getattr(client, "dest", "?")),
@@ -307,25 +275,19 @@ class TURNPlugin(Plugin):
         if reply is not None:
             dest_peer = reply.payload.peer_tup
             dest_relay = reply.payload.relay_tup
-            print("[TURN-DBG] accept_peer dest_peer={0} dest_relay={1}".format(
-                dest_peer, dest_relay,
-            ))
             try:
                 already_accepted = await asyncio.wait_for(
                     client.accept_peer(dest_peer, dest_relay), 30,
                 )
             except asyncio.TimeoutError:
-                print("[TURN-DBG] accept_peer timed out; sending rejection")
                 await self.send_rejection("accept_peer_timeout")
                 await self.close()
                 if not self.result.done():
                     self.result.set_result(None)
                 return
-            print("[TURN-DBG] accept_peer returned already_accepted={0}".format(already_accepted))
 
             # Unblock any initiating run() that is waiting for the peer's info.
             if not self.ready.done():
-                print("[TURN-DBG] resolving self.ready (unblock the initiating run)")
                 self.ready.set_result(client)
 
             # If both sides have already whitelisted each other we still
@@ -333,12 +295,10 @@ class TURNPlugin(Plugin):
             # run() gets triggered and can resolve its self.ready Future.
             # (Without the message the initiator times out after 40s.)
             if already_accepted:
-                print("[TURN-DBG] both sides whitelisted -> will send follow-up TURNMsg then return")
                 if not self.result.done():
                     self.result.set_result(client)
 
             our_relay = await client.relay_tup_future
-            print("[TURN-DBG] our_relay={0} -- sending follow-up TURNMsg".format(our_relay))
             log_p2p(
                 fstr(
                     "Whitelist {0} -> {1} to '{2}'",
@@ -369,12 +329,7 @@ class TURNPlugin(Plugin):
             }
         )
         msg.meta.plugin_name = "turn"
-        print("[TURN-DBG] sending TURNMsg server={0}:{1} relay={2} tried={3}".format(
-            server_host, server_port, msg.payload.relay_tup,
-            [list(t) for t in sorted(self.tried_servers)],
-        ))
         await self.send_signal(msg)
-        print("[TURN-DBG] TURNMsg sent OK")
 
         # --- Wait for the peer to whitelist our relay ---
         # self.ready is resolved by a second run() call when the peer's reply
@@ -382,15 +337,12 @@ class TURNPlugin(Plugin):
         # ~35s (6s alloc + 25s accept_peer max), plus signaling overhead.
         # Without this cap, a non-responding peer makes us burn the full
         # 60s plugin timeout at the initiator side.
-        print("[TURN-DBG] awaiting self.ready (peer-whitelist barrier)")
         try:
             pipe = await asyncio.wait_for(self.ready, 40)
         except asyncio.TimeoutError:
-            print("[TURN-DBG] self.ready timed out (peer never whitelisted)")
             if not self.result.done():
                 self.result.set_result(None)
             return
-        print("[TURN-DBG] self.ready resolved -> setting final result")
         if not self.result.done():
             self.result.set_result(pipe)
 

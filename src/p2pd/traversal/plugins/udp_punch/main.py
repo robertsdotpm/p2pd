@@ -157,7 +157,6 @@ class UdpPunchPlugin(Plugin):
             if retry:
                 stuns = retry
                 self.stun_clients.setdefault(self.af, {})[if_index] = retry
-                print("[UDP-PUNCH-RUN] lazy STUN retry recovered n={0}".format(len(retry)))
         if not stuns:
             return None, None
 
@@ -224,9 +223,6 @@ class UdpPunchPlugin(Plugin):
             min_run_window=p["min_run_window"],
             max_error=p["max_clock_error"],
         )
-        print("[CLOCK] udp_punch my_now={0} punch_time={1} delta={2} window={3} max_clock_error={4}".format(
-            timestamp, punch_time, punch_time - timestamp, p["window"], p["max_clock_error"],
-        ))
         # Two-bucket overlap dual-fire: a peer pair whose
         # compute_rendezvous calls land on opposite sides of a bucket
         # boundary picks adjacent buckets; their {primary, primary+1}

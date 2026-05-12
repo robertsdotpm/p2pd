@@ -329,10 +329,7 @@ if __name__ == "__main__":
             # Calculate a future timestamp to use as the punch time.
             _, punch_time = compute_rendezvous(timestamp)
             punch.set_punch_time(punch_time)
-            print("future punch time = ", punch_time)
-            print("Current ntp time = ", timestamp)
         except RuntimeError as e:
-            print("CRITICAL ERROR: ", e)
             sys.exit(1)
 
         # Default uses deterministic ports from NTP boundaries.

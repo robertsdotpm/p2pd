@@ -152,5 +152,5 @@ tasks are only processed after input finishes -- how to do this with async?
 - move to new repos
 - push to pypi
 - rename
-- local smoke test for syntax using local nics (should yield a pipe)
-- remove all print crap
+
+-

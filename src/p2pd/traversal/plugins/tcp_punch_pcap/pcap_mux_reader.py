@@ -136,7 +136,6 @@ class PcapMuxReader(object):
                 return existing
             sub = MuxSubscriber(self, four_tuple)
             self.subscribers[four_tuple] = sub
-        print(fstr("pcap mux: subscribe ft={0}", (four_tuple,)))
         return sub
 
     def unsubscribe(self, sub):
@@ -153,8 +152,6 @@ class PcapMuxReader(object):
             target=self.run_loop, name="pcap-mux-reader", daemon=True,
         )
         self.thread.start()
-        print(fstr("pcap mux reader started iface={0}",
-                   (getattr(self.backend, "iface_name", "?"),)))
 
     def stop(self):
         self.stop_flag.set()
@@ -173,7 +170,6 @@ class PcapMuxReader(object):
             try:
                 frame = self.backend.recv(timeout_ms=self.poll_ms)
             except Exception as exc:
-                print(fstr("pcap mux reader recv failed: {0}", (exc,)))
                 # Send EOF sentinel to all subscribers.
                 with self.lock:
                     subs = list(self.subscribers.values())
@@ -249,7 +245,7 @@ class PcapMuxReader(object):
         except RuntimeError:
             pass
         except asyncio.QueueFull:
-            print("pcap mux: subscriber queue full; dropping frame")
+            pass
 
     def broadcast_frame(self, frame):
         """Push frame to every subscriber (used for ARP)."""

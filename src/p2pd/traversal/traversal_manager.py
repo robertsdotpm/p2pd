@@ -417,9 +417,6 @@ class TraversalManager:
     # Use signal router to send a message to the destination.
     async def send_signal(self, msg, plugin, relay_no=2):
         """Encrypt and deliver a signalling message to the peer via the MQTT router."""
-        print("[SIG-TX] send_signal plugin_id={0!r} wire_name={1!r}".format(
-            plugin.plugin_id, getattr(msg, "wire_name", "?"),
-        ))
         try:
             # Specify the plugin to use in the destination.
             msg.meta = ProtoMsg.Meta.from_dict(
@@ -457,39 +454,20 @@ class TraversalManager:
 
             # Convert to bytes and send via MQTT.
             buf = to_s(sig_msg_to_buf(msg, h_to_b(plugin.dest_map["pub_key_hex"])))
-            print("[SIG-TX]   buf len={0} ttl={1} pipe_id={2!r} dest_pub={3}...".format(
-                len(buf), msg.meta.ttl, plugin.plugin_id,
-                plugin.dest_map["pub_key_hex"][:12],
-            ))
-            print("[SIG-TX]   awaiting plugin.sig_pipe.send(...)")
             await plugin.sig_pipe.send(buf)
-            print("[SIG-TX]   plugin.sig_pipe.send returned (sent OK)")
         except (OSError, ConnectionError, asyncio.TimeoutError) as exc:
-            print("[SIG-TX]   send_signal raised: {0!r}".format(exc))
             log_exception()
 
     # Receive a signal message from the router and pass it to a plugin.
     # Called by the MQTT client as: handler(msg, src_pk, queue_id, client)
     async def recv_signal_msg(self, msg, src_pk_hex, pipe_id_hex, client):
         """Decrypt an incoming signal message and dispatch it to the matching or new plugin."""
-        print("[SIG-RX] recv_signal_msg src_pk_hex={0}... pipe_id_hex={1}...".format(
-            (src_pk_hex or "?")[:12], (pipe_id_hex or "?")[:12],
-        ))
         msg = try_unpack_msg(to_b(msg), self.kp.private_key, self.sig_proto)
-        print("[SIG-RX]   unpacked: type={0} wire_name={1!r} pipe_id={2!r} ttl={3}".format(
-            type(msg).__name__,
-            getattr(msg, "wire_name", "?"),
-            getattr(msg.meta, "pipe_id", "?"),
-            getattr(msg.meta, "ttl", "?"),
-        ))
 
         # Message has expired.
         if int(self.router.get_time()) >= msg.meta.ttl:
             now = int(self.router.get_time())
             skew = now - msg.meta.ttl
-            print("[SIG-RX]   EXPIRED ttl={0} now={1} skew={2}s; dropping".format(
-                msg.meta.ttl, now, skew,
-            ))
             # log() so this also lands in aionetiface logs -- when this
             # fires it's almost always a sender/receiver clock-skew bug
             # rather than a genuinely-stale message, and stdout output
@@ -519,17 +497,9 @@ class TraversalManager:
         # reverse_connect plugin is awaiting on.
         wire_name = getattr(msg, "wire_name", None)
         handler = self.proto_handlers.get(wire_name)
-        print("[SIG-RX]   proto_handlers keys={0!r}".format(
-            list(self.proto_handlers.keys()),
-        ))
         if handler is not None:
-            print("[SIG-RX]   dispatching to PROTO_HANDLER for {0!r}".format(wire_name))
             handler(self, msg)
-            print("[SIG-RX]   PROTO_HANDLER returned for {0!r}".format(wire_name))
             return
-        print("[SIG-RX]   no PROTO_HANDLER for {0!r}; plugin-creation fallthrough".format(
-            wire_name,
-        ))
 
         # If plugin exists check sender is authorized to reach plugin.
         if msg.meta.pipe_id in self.plugins:
@@ -571,17 +541,10 @@ class TraversalManager:
         """Resolve the reverse_connect inbound future for plugin_id with pipe."""
         fut = self.inbound_pipes.get(plugin_id)
         if fut is None:
-            print("[CON-ID-RX]   no inbound future registered under plugin_id={0!r} "
-                  "-- reverse_connect probably timed out before this frame "
-                  "arrived; dropping pipe".format(plugin_id))
             return
         if fut.done():
-            print("[CON-ID-RX]   inbound future for plugin_id={0!r} already done; "
-                  "skipping set_result".format(plugin_id))
             return
         fut.set_result(pipe)
-        print("[CON-ID-RX]   resolved inbound future for plugin_id={0!r} -- "
-              "reverse_connect should now wake up".format(plugin_id))
 
     async def close(self):
         """Cancel all pending plugins and background tasks, releasing their resources."""

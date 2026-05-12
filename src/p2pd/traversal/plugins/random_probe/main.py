@@ -325,11 +325,6 @@ class RandomProbePlugin(Plugin):
         # without coordination.
         own_ext_ip = self.my_addr_ip or bind_ip
 
-        print("[RP-FIRE] role={0} bind_ip={1} peer_addr={2} peer_known_port={3} "
-              "punch_time={4} now={5}".format(
-                  my_role, bind_ip, peer_addr_ip, peer_known_port,
-                  punch_time, int(self.sys_clock.time()),
-              ))
 
         # Algorithm phase runs in a thread executor with PURE
         # blocking-socket I/O (select + recvfrom) -- no
@@ -355,9 +350,6 @@ class RandomProbePlugin(Plugin):
         # See investigation in 2026-05-03 commit history for the full
         # case.
         loop_for_algo = get_running_loop()
-        print("[RP-SPRAY-DISPATCH] role-label={0} (ignored) bind={1} peer={2}".format(
-            my_role, bind_ip, peer_addr_ip,
-        ))
         res = await loop_for_algo.run_in_executor(
             None,
             lambda: sync_run_bidirectional_spray(
@@ -371,10 +363,6 @@ class RandomProbePlugin(Plugin):
             ),
         )
 
-        print("[RP-FIRE-DONE] role={0} res={1}".format(
-            my_role,
-            "<converged>" if res else "None (timeout)",
-        ))
 
         if res is None:
             log("RandomProbePlugin: round did not converge; aborting")
@@ -556,7 +544,6 @@ class RandomProbePlugin(Plugin):
                         late += 1
                     except OSError:
                         break
-                print("[RP-BRIDGE] drain done: {0}+{1} probes".format(drained, late))
 
                 try:
                     punched_sock_ref.connect(peer_ref)
@@ -586,16 +573,13 @@ class RandomProbePlugin(Plugin):
                     except (ConnectionRefusedError, OSError):
                         rp_stale_errors += 1
                 if rp_stale_drained or rp_stale_errors:
-                    print("[RP-BRIDGE] post-connect stale drain: {0} frames {1} errors".format(
-                        rp_stale_drained, rp_stale_errors,
-                    ))
+                    pass
 
                 # Signal convergence BEFORE entering selector_proxy so
                 # main can resolve result and the demo can start sending.
                 # selector_proxy starts on the very next line -- by the
                 # time asyncio processes the call_soon_threadsafe the
                 # proxy is already in its select() loop.
-                print("[RP-BRIDGE] connect OK, signaling, entering selector_proxy")
                 loop_for_bridge.call_soon_threadsafe(
                     signal_bridge_ready, True,
                 )
@@ -611,7 +595,6 @@ class RandomProbePlugin(Plugin):
                 loop_for_bridge.call_soon_threadsafe(
                     signal_bridge_ready, False,
                 )
-            print("[RP-BRIDGE] worker exiting")
 
         worker_fut = loop_for_bridge.run_in_executor(None, bridge_worker)
 
@@ -631,9 +614,6 @@ class RandomProbePlugin(Plugin):
         except asyncio.TimeoutError:
             bridge_ready = False
 
-        print("[RP-BRIDGE] bridge_ready={0} role={1} listener={2} peer={3}".format(
-            bridge_ready, my_role, listener_addr, res["peer"],
-        ))
         if not self.result.done():
             self.result.set_result(pipe if bridge_ready else None)
 

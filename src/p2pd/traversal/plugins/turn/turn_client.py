@@ -12,8 +12,6 @@ Key differences from a standard TURN library:
   - Multi-interface and IPv6 support
   - Multiple simultaneous client sessions
   - Full Pipe object compatibility
-
-TODO: implement shared-secret authentication (currently uses static credentials)
 """
 import asyncio
 from struct import pack

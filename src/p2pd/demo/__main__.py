@@ -4,16 +4,16 @@ code a function for is_node_reachable_over_mqtt for debugging
 I did delete the thing that saves send msg tasks in the mqtt client
 idk if thats relevant.
 
-python3 -m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 --cmd 0dl4 \
+python3 -m p2pd.demo --pnp_server 0,4,<ntp-host>,5300 --cmd 0dl4 \
     --dest_addr 5b5ed965936a5f28c2795724a.p2p --echo "hello world"
 
 python3 -m p2pd.demo --disable_upnp 1 \
-    --pnp_server 0,4,10.0.1.204,5300 --ip 10.0.1.230
+    --pnp_server 0,4,<ntp-host>,5300 --ip <local-ip>
 python3 -m p2pd.demo --disable_upnp 1 \
-    --pnp_server 0,4,10.0.1.204,5300 --ip 10.0.1.19
+    --pnp_server 0,4,<ntp-host>,5300 --ip <local-ip>
 
-python3 -m p2pd.demo --disable_upnp 1 --nic 000c2957d05c
-python3 -m p2pd.demo --disable_upnp 1 --nic ens34
+python3 -m p2pd.demo --disable_upnp 1 --nic <mac-or-name>
+python3 -m p2pd.demo --disable_upnp 1 --nic <mac-or-name>
 """
 import asyncio
 import time
