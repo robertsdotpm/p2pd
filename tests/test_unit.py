@@ -116,7 +116,7 @@ class TestParseNodeAddr(unittest.TestCase):
 # ===========================================================================
 class TestNicknameTLD(unittest.TestCase):
     def test_has_tld_all_valid(self):
-        for tld in (".warpgate", ".node", ".peer"):
+        for tld in (".p2p", ".node", ".peer"):
             with self.subTest(tld=tld):
                 self.assertTrue(pnp_name_has_tld("alice" + tld))
 
@@ -126,7 +126,7 @@ class TestNicknameTLD(unittest.TestCase):
         self.assertFalse(pnp_name_has_tld(""))
 
     def test_strip_tld_removes_suffix(self):
-        for tld in (".warpgate", ".node", ".peer"):
+        for tld in (".p2p", ".node", ".peer"):
             with self.subTest(tld=tld):
                 self.assertEqual(pnp_strip_tlds("alice" + tld), "alice")
 
@@ -135,7 +135,7 @@ class TestNicknameTLD(unittest.TestCase):
         self.assertEqual(pnp_strip_tlds("alice.com"), "alice.com")
 
     def test_get_tld_roundtrip(self):
-        for tld in (".warpgate", ".node", ".peer"):
+        for tld in (".p2p", ".node", ".peer"):
             with self.subTest(tld=tld):
                 offsets = pnp_get_offsets(tld)
                 back = pnp_get_tld(offsets)
@@ -146,7 +146,7 @@ class TestNicknameTLD(unittest.TestCase):
         self.assertEqual(sorted(offsets), [0, 1])
 
     def test_p2p_offset_is_zero(self):
-        offsets = pnp_get_offsets(".warpgate")
+        offsets = pnp_get_offsets(".p2p")
         self.assertEqual(list(offsets), [0])
 
     def test_node_offset_is_one(self):
@@ -179,12 +179,12 @@ class TestNicknameNotStarted(AsyncTestCase):
     async def test_get_before_start_raises(self):
         nick = await self._make_nick()
         with self.assertRaises(AssertionError):
-            await nick.get("name.warpgate")
+            await nick.get("name.p2p")
 
     async def test_delete_before_start_raises(self):
         nick = await self._make_nick()
         with self.assertRaises(AssertionError):
-            await nick.delete("name.warpgate")
+            await nick.delete("name.p2p")
 
 
 # ===========================================================================

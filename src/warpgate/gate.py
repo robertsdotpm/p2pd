@@ -40,7 +40,7 @@ class peer(object):
     def find(name):
         # Auto-append the active PNP TLD when the caller passes a bare
         # nickname.  Lets `peer.find("alice")` Just Work alongside the
-        # explicit `peer.find("alice.warpgate")` form.  Resolution downstream
+        # explicit `peer.find("alice.p2p")` form.  Resolution downstream
         # (resolve_pnp_addr) requires a TLD-suffixed name; without this
         # the bare-name case silently falls through as raw addr_bytes
         # and connect explodes on a malformed addr.
@@ -164,7 +164,7 @@ class Gate(object):
 
     @property
     def full_name(self):
-        """Return ``<pnp_name><tld>`` (e.g. "alice.warpgate") once
+        """Return ``<pnp_name><tld>`` (e.g. "alice.p2p") once
         registration has completed; returns None if registration was
         skipped or failed."""
         return getattr(self.node, "full_name", None) if self.node else None

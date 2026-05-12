@@ -49,13 +49,13 @@ def pnp_unwrap_ts(value):
     return ts, bytes(value[12:])
 
 PNP_INDEX_TO_TLD = {
-    frozenset([0]): ".warpgate",
+    frozenset([0]): ".p2p",
     frozenset([1]): ".node",
     frozenset([0, 1]): ".peer",
 }
 
 PNP_TLD_TO_INDEX = {
-    ".warpgate": frozenset([0]),
+    ".p2p": frozenset([0]),
     ".node": frozenset([1]),
     ".peer": frozenset([0, 1]),
 }

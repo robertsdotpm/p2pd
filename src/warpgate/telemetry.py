@@ -26,7 +26,7 @@ class TelemetryWriter(object):
     def __init__(self, path=None):
         if path is None:
             home = os.path.expanduser("~")
-            path = os.path.join(home, ".warpgate", "telemetry.jsonl")
+            path = os.path.join(home, ".p2p", "telemetry.jsonl")
         self.path = path
         self.fh = None
         self._open()

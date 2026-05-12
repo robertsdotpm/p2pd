@@ -5,7 +5,7 @@ I did delete the thing that saves send msg tasks in the mqtt client
 idk if thats relevant.
 
 python3 -m warpgate.demo --pnp_server 0,4,<ntp-host>,5300 --cmd 0dl4 \
-    --dest_addr 5b5ed965936a5f28c2795724a.warpgate --echo "hello world"
+    --dest_addr 5b5ed965936a5f28c2795724a.p2p --echo "hello world"
 
 python3 -m warpgate.demo --disable_upnp 1 \
     --pnp_server 0,4,<ntp-host>,5300 --ip <local-ip>

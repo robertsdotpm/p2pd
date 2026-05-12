@@ -161,7 +161,7 @@ def main():
     parser.add_argument(
         "addrs",
         nargs="+",
-        help="One or two PNP nicknames (e.g. abc123.warpgate) or raw "
+        help="One or two PNP nicknames (e.g. abc123.p2p) or raw "
              "addr_bytes hex strings. Single arg = local host is side A.",
     )
     args = parser.parse_args()
