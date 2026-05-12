@@ -1,6 +1,6 @@
 # Nodes
 
-A `Node` is the central object in p2pd.  It manages your identity, your servers,
+A `Node` is the central object in warpgate.  It manages your identity, your servers,
 your connections, and the traversal engine.
 
 > **Most users want `Gate`, not `Node`.**  `Gate` is a thin async-context
@@ -14,7 +14,7 @@ your connections, and the traversal engine.
 ## Creating a Node
 
 ```python
-from p2pd import Node
+from warpgate import Node
 
 node = Node()             # defaults
 node = Node(port=12345)   # explicit listen port
@@ -197,7 +197,7 @@ real NAT traversal isn't needed.
 
 ```python
 from aionetiface import dict_child
-from p2pd.node.node_defs import NODE_TEST_CONF
+from warpgate.node.node_defs import NODE_TEST_CONF
 
 MY_CONF = dict_child({"enable_upnp": True}, NODE_TEST_CONF)
 node = await Node(conf=MY_CONF).start()

@@ -1,13 +1,17 @@
-# p2pd Documentation
+# warpgate Documentation
+
+**Any peer. Any NAT.** — async NAT traversal library for Python.
 
 Project site: <https://www.warpgate.io/>
 
-p2pd is a Python library for peer-to-peer NAT traversal.  If two
-computers are each behind their own routers, p2pd establishes a direct
-connection between them — across home routers, corporate firewalls,
-and CGNATs — without port forwarding, relay servers, or a VPN.
+Warpgate is a 100% open-source Python 3 library for one-shot NAT
+traversal. If two computers are each behind their own routers, warpgate
+establishes a direct connection between them — across home routers,
+corporate firewalls, and CGNATs — without port forwarding, relay
+servers, or a VPN. Eight plugins, every major OS back to Windows XP,
+IPv4 and IPv6, multi-NIC, all in one library.
 
-## When to use p2pd
+## When to use warpgate
 
 - You want two programs to talk to each other directly over the internet.
 - You don't control the network infrastructure (no port forwarding).
@@ -17,7 +21,7 @@ and CGNATs — without port forwarding, relay servers, or a VPN.
 
 ## Documentation pages
 
-- [introduction.md](introduction.md) — what NAT traversal is + how p2pd approaches it
+- [introduction.md](introduction.md) — what NAT traversal is + how warpgate approaches it
 - [quickstart.md](quickstart.md) — two peers exchanging a message in ~15 lines
 - [nodes.md](nodes.md) — Node lifecycle if you skip the Gate wrapper
 - [connections.md](connections.md) — `auto_connect`, `Pipe`, subscriptions
@@ -29,29 +33,23 @@ and CGNATs — without port forwarding, relay servers, or a VPN.
 
 ```python
 import asyncio
-from p2pd import Gate, peer
-from aionetiface import SUB_ALL
+from warpgate import Gate, TCP, peer
 
 
-async def echo(link):
-    async for msg in link:
-        await link.send(b"echo:" + msg)
+async def main():
+    async with Gate("peer.alpha") as gate:
+        link = await gate.connect(
+            peer.find("peer.bravo"),
+            transport=TCP,
+            timeout=5.0,
+        )
+        async with link:
+            await link.send(b"Hello world")
+            async for msg in link:
+                print(msg)
 
 
-async def alice():
-    async with Gate("alice") as gate:
-        await gate.listen(echo)
-
-
-async def bob():
-    async with Gate("bob") as gate:
-        pipe, _ = await gate.connect(peer.find("alice"))
-        pipe.subscribe(SUB_ALL)
-        await pipe.send(b"hi")
-        print(await pipe.recv(SUB_ALL))       # b"echo:hi"
-
-
-asyncio.run(asyncio.gather(alice(), bob()))
+asyncio.run(main())
 ```
 
 `Gate` derives a stable identity, registers a public nickname, and
@@ -60,10 +58,17 @@ in parallel and returning the first that succeeds.
 
 ## Platform support
 
-Python 3.5+, Linux, macOS, Windows, BSD, Android.
+CPython 3.5 → 3.13 (PyPy 3.x tested). Windows XP–11, Linux, macOS,
+FreeBSD/OpenBSD, Android (Termux / Chaquopy). IPv4 and IPv6 are
+first-class; multi-NIC is native.
 
 ## Installation
 
 ```bash
-pip install p2pd
+pip install warpgate
 ```
+
+## License
+
+MIT — every line, every sibling project. No paid tier, no telemetry,
+no vendor lock-in.

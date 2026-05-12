@@ -1,6 +1,6 @@
 # Plugins
 
-P2PD's connection layer is plugin-based.  Each plugin implements one
+Warpgate's connection layer is plugin-based.  Each plugin implements one
 traversal technique.  `auto_connect` walks them in *phase* order and
 runs every valid combo concurrently — first winner wins.
 
@@ -128,10 +128,10 @@ The `plugin_registry` is built at import time by every
 `@register(phase=...)` decorator.  `node.start()` calls
 `load_plugins(node)` which:
 
-1. Imports every `src/p2pd/traversal/plugins/<name>/main.py` (so all
+1. Imports every `src/warpgate/traversal/plugins/<name>/main.py` (so all
    built-in `@register` decorators fire).
 2. Calls `discover()` to import any external plugins advertised under
-   the `p2pd.strategies` entry-point group.
+   the `warpgate.strategies` entry-point group.
 3. Walks the registry and either:
    - Calls `cls.setup(node)` and uses the returned factory as the
      per-attempt builder, or

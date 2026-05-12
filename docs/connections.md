@@ -5,7 +5,7 @@ This page explains how to connect two nodes and how to use the resulting Pipe.
 ## auto_connect
 
 ```python
-from p2pd.node.auto_connect import auto_connect
+from warpgate.node.auto_connect import auto_connect
 
 pipe, plugin = await auto_connect(node, dest_addr, timeout=60.0)
 ```
@@ -75,7 +75,7 @@ that resolves to a `Pipe` when the connection succeeds.
 | `IP4` | IPv4 only |
 | `IP6` | IPv6 only |
 
-Pass `None` to let p2pd pick the first AF both nodes share.
+Pass `None` to let warpgate pick the first AF both nodes share.
 
 ### route types
 
@@ -90,7 +90,7 @@ Once you have a `Pipe`, you communicate with it like this:
 
 ### Subscribing
 
-Before you can receive messages you must subscribe. A subscription tells p2pd
+Before you can receive messages you must subscribe. A subscription tells warpgate
 which messages you're interested in:
 
 ```python

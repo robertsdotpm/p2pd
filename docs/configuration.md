@@ -92,7 +92,7 @@ Loading takes a few seconds as it probes multiple STUN servers.
 ### NODE_CONF — production defaults
 
 ```python
-from p2pd.node.node_defs import NODE_CONF
+from warpgate.node.node_defs import NODE_CONF
 ```
 
 Everything enabled. Use for deployed nodes that need to traverse real NATs.
@@ -101,7 +101,7 @@ Startup takes 5–15 seconds.
 ### NODE_TEST_CONF — fast tests
 
 ```python
-from p2pd.node.node_defs import NODE_TEST_CONF
+from warpgate.node.node_defs import NODE_TEST_CONF
 ```
 
 ```python
@@ -128,7 +128,7 @@ Extend a base preset with `dict_child`:
 
 ```python
 from aionetiface import dict_child
-from p2pd.node.node_defs import NODE_TEST_CONF
+from warpgate.node.node_defs import NODE_TEST_CONF
 
 # Enable signaling for cross-machine tests while keeping everything else minimal
 CROSS_MACHINE_TEST_CONF = dict_child(
@@ -189,7 +189,7 @@ node.traversal.install_plugin("tcp_punch", {
 
 ## Environment
 
-p2pd stores data in:
+Warpgate stores data in:
 
 | Data | Location |
 |------|----------|

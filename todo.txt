@@ -149,10 +149,8 @@ plugins and cause timeouts loading it for the first time in the plugin run call
 duplicate messages are occuring through router
 tasks are only processed after input finishes -- how to do this with async?
 
-- monitor
-- update docs
-- update read mwaite
 - move to new repos
 - push to pypi
+- rename
+- local smoke test for syntax using local nics (should yield a pipe)
 - remove all print crap
-- cleanup old pid files in aionetiface

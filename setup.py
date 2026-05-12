@@ -16,7 +16,7 @@ install_reqs = [
     "ecdsa",
 ]
 setup(
-    version="4.0.1",
+    version="4.0.2",
     name="p2pd",
     description="Asynchronous P2P networking library and service",
     keywords=(

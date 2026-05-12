@@ -10,7 +10,7 @@ TraversalManager's `finally` do it for you on exception).
 ## The minimum
 
 ```python
-from p2pd import Plugin, register
+from warpgate import Plugin, register
 
 
 @register(phase="direct")
@@ -28,7 +28,7 @@ class DirectTCP(Plugin):
         self.result.set_result(pipe)                    # winner
 ```
 
-Drop this in `src/p2pd/traversal/plugins/<dir>/main.py` (or anywhere
+Drop this in `src/warpgate/traversal/plugins/<dir>/main.py` (or anywhere
 on the Python path that gets imported during node startup) and the
 plugin loader picks it up automatically — `@register` adds the class
 to `plugin_registry` at import time, and `node.start()` walks that
@@ -123,8 +123,8 @@ Pick the phase that matches the strategy:
 This is `reverse_connect`, slightly trimmed:
 
 ```python
-from p2pd import Plugin, register
-from p2pd.protocol.proto_msg import ConMsg
+from warpgate import Plugin, register
+from warpgate.protocol.proto_msg import ConMsg
 
 
 @register(phase="direct")
@@ -164,7 +164,7 @@ message class in your plugin's `proto.py`, then register it via
 `proto_messages`:
 
 ```python
-from p2pd import Plugin, register
+from warpgate import Plugin, register
 from .proto import MyHandshakeMsg
 
 P2P_MY_PROTO = 99
@@ -228,12 +228,13 @@ Use `NODE_TEST_CONF` so the test doesn't need MQTT / STUN / PNP:
 
 ```python
 import unittest
-from p2pd import Node
-from p2pd.node.node_defs import NODE_TEST_CONF
-from p2pd.node.auto_connect import auto_connect
+from aionetiface.testing import AsyncTestCase
+from warpgate import Node
+from warpgate.node.node_defs import NODE_TEST_CONF
+from warpgate.node.auto_connect import auto_connect
 
 
-class TestMyPlugin(unittest.IsolatedAsyncioTestCase):
+class TestMyPlugin(AsyncTestCase):
     async def test_connects(self):
         alice = await Node(conf=NODE_TEST_CONF).start()
         bob   = await Node(conf=NODE_TEST_CONF).start()
@@ -263,4 +264,4 @@ for n in (alice, bob):
 - [ ] `async def run(self, reply=None)` that resolves `self.result`
 - [ ] On any failure: `self.result.set_result(None)` (or just raise — the manager handles it)
 - [ ] Register inbound *before* sending signals, not after
-- [ ] Drop the file at `src/p2pd/traversal/plugins/<name>/main.py` for auto-discovery, or expose it via the `p2pd.strategies` entry-point group
+- [ ] Drop the file at `src/warpgate/traversal/plugins/<name>/main.py` for auto-discovery, or expose it via the `warpgate.strategies` entry-point group

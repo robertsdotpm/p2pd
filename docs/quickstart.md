@@ -1,13 +1,13 @@
 # Quickstart
 
 This guide shows two peers exchanging a message.  It's the smallest
-useful P2PD program and a good base for your own code.
+useful warpgate program and a good base for your own code.
 
 ## Two peers, one message
 
 ```python
 import asyncio
-from p2pd import Gate, peer
+from warpgate import Gate, peer
 from aionetiface import SUB_ALL
 
 
@@ -103,7 +103,7 @@ address bytes out-of-band:
 
 ```python
 import asyncio
-from p2pd import Gate
+from warpgate import Gate
 from aionetiface import SUB_ALL
 
 
@@ -139,8 +139,8 @@ See [nodes.md](nodes.md) and [connections.md](connections.md).
 
 ```python
 import asyncio
-from p2pd import Node
-from p2pd.node.auto_connect import auto_connect
+from warpgate import Node
+from warpgate.node.auto_connect import auto_connect
 from aionetiface import SUB_ALL
 
 
@@ -165,8 +165,8 @@ Real `Gate` / `Node` startup contacts STUN servers, MQTT brokers, and
 the nickname server.  In tests you usually want none of that:
 
 ```python
-from p2pd import Node
-from p2pd.node.node_defs import NODE_TEST_CONF
+from warpgate import Node
+from warpgate.node.node_defs import NODE_TEST_CONF
 
 node = await Node(conf=NODE_TEST_CONF).start()
 ```

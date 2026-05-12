@@ -35,9 +35,9 @@ Person A                         Person B
 A wants to connect to B. B's packets reach NAT B, not B's laptop.
 ```
 
-## How p2pd solves it
+## How warpgate solves it
 
-p2pd tries multiple strategies in parallel and uses whichever works first:
+Warpgate runs a cascade of plugins in parallel and uses whichever works first:
 
 ```
                     ┌──────────────┐
@@ -56,8 +56,11 @@ The strategies, tried concurrently:
 
 1. **Direct connect** — just try TCP. Works if one side has an open port.
 2. **Reverse connect** — ask the other side to connect to us.
-3. **Hole punching** — both sides open the NAT simultaneously so packets get through.
-4. **TURN relay** — fall back to relaying traffic through a public server.
+3. **TCP / UDP hole punching** — both sides open the NAT simultaneously so packets get through.
+4. **Random probe** — birthday-paradox bridge for cone↔symmetric pairs.
+5. **UPnP / IPv6 pinhole** — opportunistically opens a port on the router.
+6. **TURN relay** — fall back to relaying traffic through a public server.
+7. **Custom** — drop in your own plugin via the `@register` decorator.
 
 ## Key concepts
 
@@ -83,7 +86,7 @@ A node's address is a compact byte string encoding:
 - The listen port
 
 You exchange this address with peers out-of-band (paste it in a chat, put it in a file,
-etc.). p2pd also offers a nickname service so you can register a human-readable name.
+etc.). Warpgate also offers a nickname service so you can register a human-readable name.
 
 ### Pipe
 
@@ -108,7 +111,7 @@ Plugins coordinate by exchanging small control messages over a public MQTT broke
 (the "signal channel"). These are just handshake packets — your actual data flows
 directly between the two nodes.
 
-## What p2pd is NOT
+## What warpgate is NOT
 
 - It is not a P2P networking framework (like libp2p or BitTorrent's DHT). It only
   handles the *connectivity* part — getting a socket open between two machines.
