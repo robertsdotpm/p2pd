@@ -49,7 +49,16 @@ def is_udp_punch_datagram(msg):
 
 
 async def node_protocol(node, msg, client_tup, pipe):
-    """Dispatch each newline-delimited message from the pipe to all registered msg_cbs."""
+    """Peel control frames at the start of the buffer, then dispatch the
+    remaining bytes as a single opaque payload to every registered msg_cb.
+
+    The earlier implementation split the whole inbound buffer on b"\\n",
+    which silently dropped every b"\\n" byte in user payloads. Any binary
+    stream that happened to contain newlines lost those bytes. Now we
+    only peel control-plane frames -- the one-shot CON_ID rendezvous and
+    the matrix reachability probe -- both of which are themselves newline-
+    terminated. Everything after that flows through unchanged.
+    """
     # Drop residual algorithm frames (random_probe probes, udp_punch
     # PROBE/CONFIRM): both protocols keep spraying for hundreds of ms
     # past convergence; without these filters the post-wrap Pipe
@@ -64,37 +73,50 @@ async def node_protocol(node, msg, client_tup, pipe):
     if pipe in node.resources.last_recv_queue:
         node.resources.last_recv_table[pipe.sock] = time.time()
 
-    # TCP may buffer multiple messages — split and dispatch each.
+    # In-band ConId rendezvous: the very first frame on every
+    # direct_connect inbound pipe is b"P2P-CID:<plugin_id>\n".
+    # Peel exactly that frame off (locating its terminating \n) so the
+    # rest of the buffer -- which may be application bytes that the
+    # peer already trailed onto the same TCP write -- flows through
+    # untouched. One-shot per pipe (con_id_seen guards against repeat
+    # rendezvous on the rare chance a payload happens to start with
+    # the prefix).
+    if not getattr(pipe, "con_id_seen", False) and msg.startswith(CON_ID_PREFIX):
+        nl = msg.find(b"\n")
+        if nl == -1:
+            # Partial frame -- treat the whole buffer as the plugin_id,
+            # nothing after.  Rare; direct_connect always appends \n.
+            plugin_id = to_s(msg[len(CON_ID_PREFIX):])
+            msg = b""
+        else:
+            plugin_id = to_s(msg[len(CON_ID_PREFIX):nl])
+            msg = msg[nl + 1:]
+        pipe.con_id_seen = True
+        if node.traversal is not None:
+            node.traversal.resolve_inbound_by_plugin_id(plugin_id, pipe)
+        if not msg:
+            return
+
+    # Reachability probe used by remote_reachability_cb / matrix smoke
+    # checks. Echo back and skip msg_cbs -- it isn't application traffic.
+    # Tolerate trailing \n (the sender appends one) and peel off if more
+    # data follows in the same TCP buffer.
+    probe = b"long_warpgate_test_string_abcd123"
+    if msg == probe or msg == probe + b"\n":
+        await pipe.send(b"warpgate test string\r\n\r\n", client_tup)
+        return
+    if msg.startswith(probe + b"\n"):
+        await pipe.send(b"warpgate test string\r\n\r\n", client_tup)
+        msg = msg[len(probe) + 1:]
+        if not msg:
+            return
+
+    # Deliver the remaining bytes as one opaque payload. Callers that
+    # need framed messages must do their own length-prefix or escape
+    # work -- a TCP stream doesn't preserve message boundaries.
     coros = []
-    for m in msg.split(b"\n"):
-        # split(b"\n") on a trailing-newline payload yields an empty
-        # tail element ([..., b""]).  In particular the in-band ConId
-        # frame b"P2P-CID:<id>\n" produces [b"P2P-CID:<id>", b""] --
-        # the prefix gets peeled off below, but without this guard
-        # the empty bytes fall through to the user msg_cbs as a
-        # phantom b"" message right before the real first payload.
-        if not m:
-            continue
-        # In-band ConId rendezvous: the very first frame on every
-        # direct_connect inbound pipe is b"P2P-CID:<plugin_id>".
-        # Peel it off, resolve the reverse_connect future, and keep
-        # walking the remaining frames in this batch. One-shot per
-        # pipe (con_id_seen guards against repeat rendezvous on the
-        # rare chance a payload happens to start with the prefix).
-        if not getattr(pipe, "con_id_seen", False) and m.startswith(CON_ID_PREFIX):
-            plugin_id = to_s(m[len(CON_ID_PREFIX):])
-            pipe.con_id_seen = True
-            if node.traversal is not None:
-                node.traversal.resolve_inbound_by_plugin_id(plugin_id, pipe)
-            continue
-        if m == b"long_warpgate_test_string_abcd123":
-            # Reachability probe used by remote_reachability_cb / matrix
-            # smoke checks. Echo back and skip msg_cbs -- it isn't
-            # application traffic.
-            await pipe.send(b"warpgate test string\r\n\r\n", client_tup)
-            continue
-        for cb in node.msg_cbs:
-            coros.append(cb(m, client_tup, pipe))
+    for cb in node.msg_cbs:
+        coros.append(cb(msg, client_tup, pipe))
 
     if not coros:
         return
