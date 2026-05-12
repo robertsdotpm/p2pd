@@ -21,7 +21,7 @@ This file keeps the parametric, network-free unit tests:
 import unittest
 
 from aionetiface import IP4, IP6, NIC_BIND, EXT_BIND, IPRange
-from p2pd.node.auto_connect import has_valid_pair, auto_combos
+from warpgate.node.auto_connect import has_valid_pair, auto_combos
 
 
 # ─────────────────────────────────────────────────────────────────────────────

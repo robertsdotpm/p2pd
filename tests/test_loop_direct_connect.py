@@ -21,7 +21,7 @@ import unittest
 
 from aionetiface import IP4
 from aionetiface.testing import AsyncTestCase
-from p2pd.node.auto_connect import auto_connect
+from warpgate.node.auto_connect import auto_connect
 
 from auto_connect_helpers import (
     LOOP_COUNT,

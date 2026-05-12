@@ -1,5 +1,5 @@
 """
-Tests for link-local IPv6 support with the --ip flag in p2pd Node.
+Tests for link-local IPv6 support with the --ip flag in warpgate Node.
 
 Covers three scenarios:
   1. sort_ips_by_nic finds a link-local on a NIC that has NO global IPv6 routes
@@ -25,8 +25,8 @@ from aionetiface.nic.route.rp_from_ip import sort_ips_by_nic, route_pool_from_ip
 from aionetiface.nic.interface import Interface
 from aionetiface.net.topology import make_node_addr, parse_node_addr
 
-from p2pd.node.node import Node
-from p2pd.node.node_defs import NODE_TEST_CONF
+from warpgate.node.node import Node
+from warpgate.node.node_defs import NODE_TEST_CONF
 
 # Canonical (fully-expanded) forms used throughout.
 LINK_LOCAL = str(IPR("fe80::1"))  # fe80:0000:0000:0000:0000:0000:0000:0001

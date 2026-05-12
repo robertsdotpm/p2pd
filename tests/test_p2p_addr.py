@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 from aionetiface.testing import AsyncTestCase
-from p2pd import *
+from warpgate import *
 
 
 class TestP2PAddr(AsyncTestCase):

@@ -91,9 +91,9 @@ async def main_coro(args):
     from aionetiface import (
         Interface, SysClock, TCP, get_n_stun_clients, RFC5389, USE_MAP_NO,
     )
-    from p2pd.traversal.plugins.tcp_punch import main as legacy_main
-    from p2pd.traversal.plugins.tcp_punch.punch_defs import PUNCH_CONF
-    from p2pd.traversal.plugins.tcp_punch.proto import PunchMsg
+    from warpgate.traversal.plugins.tcp_punch import main as legacy_main
+    from warpgate.traversal.plugins.tcp_punch.punch_defs import PUNCH_CONF
+    from warpgate.traversal.plugins.tcp_punch.proto import PunchMsg
 
     nic = await Interface(args.iface).start()
     log_print("interface up: {0}".format(nic.name))

@@ -108,13 +108,13 @@ After the tweaks, Defender section should show:
 
 Rebuild verification commands
 -----------------------------
-    python p2pd_test_run\windows_services_diag.py
+    python warpgate_test_run\windows_services_diag.py
     netsh advfirewall show allprofiles state
     reg query "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" /v EnableDeadGWDetect
     powershell Get-MpPreference
     powershell Get-MpComputerStatus
 
-Apply scripts (in p2pd_test_run/, copied to the VM)
+Apply scripts (in warpgate_test_run/, copied to the VM)
 ---------------------------------------------------
     set_services.bat              # services -> AUTO + RUNNING
     apply_xp_style_tweaks.bat     # firewall off, DeadGW=0, defender disable

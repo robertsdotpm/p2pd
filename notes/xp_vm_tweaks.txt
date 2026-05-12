@@ -9,10 +9,10 @@ will silently fail in ways that LOOK like punch / TCP bugs.
 Code-side fixes (already in git, listed for context)
 ----------------------------------------------------
 - SO_LINGER {1,0} on punch sockets        -> avoids TIME_WAIT (Event 4227)
-  src/p2pd/traversal/plugins/tcp_punch/...
+  src/warpgate/traversal/plugins/tcp_punch/...
 - Slower spray + wider port pool          -> stays under XP's 10-SYN cap
 - Loopback-bridge for the punch worker    -> sidesteps strict-host-model risk
-  src/p2pd/traversal/plugins/tcp_punch/punch_process.py
+  src/warpgate/traversal/plugins/tcp_punch/punch_process.py
 - --id <vm> -> per-VM signing-key file    -> stable identity across runs
 
 
@@ -80,7 +80,7 @@ Verification commands after a rebuild
 Python install
     - C:\py3\python.exe (only Python on this VM; see project_single_version_vms)
     - sibling repos at C:\Documents and Settings\matthew\projects\
-        aionetiface, p2pd, namebump, sidewire
+        aionetiface, warpgate, namebump, sidewire
 
 Account / SSH
     - matthew@10.0.1.132
@@ -90,7 +90,7 @@ Account / SSH
 How to verify after a rebuild
 -----------------------------
 1. ssh matthew@10.0.1.132 'C:\py3\python.exe -V'        -> 3.5.x
-2. Run p2pd_test_run/windows_tcpip_diag.py
+2. Run warpgate_test_run/windows_tcpip_diag.py
    (dumps Tcpip event log, firewall state, arp, netstat -s)
 3. Single-pair smoke from the matrix:
    bash run_xp_pairs.sh   (just XP pairs first)

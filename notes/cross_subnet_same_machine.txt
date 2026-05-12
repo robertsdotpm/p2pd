@@ -4,7 +4,7 @@ cross-subnet same-machine routing
 Context
 -------
 A node's "same_machine" flag (machine_id equality between src_map and
-dest_map) marks the case where two p2pd nodes are running on a single
+dest_map) marks the case where two warpgate nodes are running on a single
 physical host. Before the loopback-alias work, NIC_BIND attempts in
 that case used the peer's local NIC IP as the destination
 (`dest_info["nic"]`). For two NICs on the SAME LAN subnet (e.g.
@@ -52,7 +52,7 @@ is no longer blocked.
 When this is and isn't relevant
 -------------------------------
 Relevant:
-    - Tests / dev where two p2pd nodes run on one host (the matrix).
+    - Tests / dev where two warpgate nodes run on one host (the matrix).
     - Multi-NIC hosts that load_interfaces returns multiple distinct
       probe NICs for, with NICs sitting on different subnets.
 
@@ -73,10 +73,10 @@ the bridged case explicitly.
 
 Implementation pointers
 -----------------------
-- loopback_ip_for_node          src/p2pd/node/node_utils.py
-- enrich_addr_map_with_loopback src/p2pd/node/node_utils.py
-- listen_on_ifs (loopback bind) src/p2pd/node/node_utils.py
-- select_dest_ipr (preference)  src/p2pd/traversal/traversal_utils.py
+- loopback_ip_for_node          src/warpgate/node/node_utils.py
+- enrich_addr_map_with_loopback src/warpgate/node/node_utils.py
+- listen_on_ifs (loopback bind) src/warpgate/node/node_utils.py
+- select_dest_ipr (preference)  src/warpgate/traversal/traversal_utils.py
 - enrichment call sites:
     - node_start.py (src_map after parse)
     - auto_connect.py (dest_map after parse)

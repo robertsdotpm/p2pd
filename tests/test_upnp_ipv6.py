@@ -15,7 +15,7 @@ import unittest
 from aionetiface import IP6
 from aionetiface.testing import AsyncTestCase
 
-from p2pd.traversal.plugins.upnp.main import (
+from warpgate.traversal.plugins.upnp.main import (
     discover_upnp_devices,
     port_forward,
 )
@@ -42,7 +42,7 @@ class TestUPnPDiscoverIPv6(AsyncTestCase):
         self.assertIsInstance(replies, list)
 
     async def test_discover_replies_have_location_if_any(self):
-        from p2pd.traversal.plugins.upnp.upnp_utils import (
+        from warpgate.traversal.plugins.upnp.upnp_utils import (
             sort_upnp_replies_by_unique_location,
         )
         replies = await asyncio.wait_for(
@@ -79,7 +79,7 @@ class TestUPnPForwardIPv6(AsyncTestCase):
         src_ip = str(route.ext())
         src_tup = (src_ip, UPNP_TEST_PORT)
         result = await asyncio.wait_for(
-            port_forward(IP6, self.nic, UPNP_TEST_PORT, src_tup, "p2pd-test"),
+            port_forward(IP6, self.nic, UPNP_TEST_PORT, src_tup, "warpgate-test"),
             timeout=30,
         )
         self.assertIsInstance(result, int)
@@ -90,7 +90,7 @@ class TestUPnPForwardIPv6(AsyncTestCase):
         src_ip = str(route.ext())
         src_tup = (src_ip, UPNP_TEST_PORT)
         result = await asyncio.wait_for(
-            port_forward(IP6, self.nic, UPNP_TEST_PORT, src_tup, "p2pd-test"),
+            port_forward(IP6, self.nic, UPNP_TEST_PORT, src_tup, "warpgate-test"),
             timeout=30,
         )
         if result == 0:

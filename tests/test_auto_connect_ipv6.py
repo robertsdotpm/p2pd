@@ -11,7 +11,7 @@ import unittest
 
 from aionetiface import IP6, EXT_BIND, parse_node_addr
 from aionetiface.testing import AsyncTestCase
-from p2pd.node.auto_connect import auto_connect, auto_combos
+from warpgate.node.auto_connect import auto_connect, auto_combos
 
 from auto_connect_helpers import (
     PORT_A6_T1, PORT_B6_T1, PORT_A6_T2, PORT_B6_T2,

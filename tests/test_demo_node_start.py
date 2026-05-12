@@ -22,7 +22,7 @@ Ports: BASE_PORT + 30..35 to avoid the slot test_demo_smoke uses.
 import unittest
 
 from aionetiface.testing import AsyncTestCase
-from p2pd import log
+from warpgate import log
 
 from demo_smoke_helpers import BASE_PORT, start_demo_node, close_nodes
 

@@ -14,7 +14,7 @@ collisions when the runner schedules multiple test files in parallel.
 
 import asyncio
 from aionetiface import dict_child
-from p2pd.node.node_defs import NODE_TEST_CONF, NODE_PORT
+from warpgate.node.node_defs import NODE_TEST_CONF, NODE_PORT
 
 
 BASE_PORT = NODE_PORT + 3000

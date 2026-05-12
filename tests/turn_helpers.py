@@ -19,7 +19,7 @@ import platform
 from aionetiface import IP4, IP6, SUB_ALL, to_b, to_s
 from aionetiface.testing import FakeInterfaceFactory
 
-from p2pd.traversal.plugins.turn.turn_client import TURNClient
+from warpgate.traversal.plugins.turn.turn_client import TURNClient
 
 from turn_server import (
     TURN_TEST_PASS,

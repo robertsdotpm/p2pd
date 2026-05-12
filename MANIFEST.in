@@ -1,7 +1,7 @@
 include requirements.txt
 include LICENSE
 include CREDITS.md
-graft p2pd/scripts
+graft warpgate/scripts
 graft examples
 graft docs
 graft tests

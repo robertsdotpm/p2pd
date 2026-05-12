@@ -13,11 +13,11 @@ import asyncio
 import unittest
 from aionetiface import IP4, IP6, NIC_BIND, EXT_BIND, LOOPBACK_BIND
 from aionetiface.testing import AsyncTestCase
-from p2pd.traversal.plugins.fan_out.main import (
+from warpgate.traversal.plugins.fan_out.main import (
     FanOutPlugin,
     enumerate_viable_combos,
 )
-from p2pd.traversal.traversal_plugin import TraversalPlugin
+from warpgate.traversal.traversal_plugin import TraversalPlugin
 
 
 class FakeIP:

@@ -19,7 +19,7 @@ guarantees teardown via try/finally in the caller.
 Supported OS
 ------------
 - linux           iptables -I INPUT 1 -p tcp --dport N -j DROP
-- darwin (macOS)  pf with an anchor named "p2pd-pcap-block-<port>"
+- darwin (macOS)  pf with an anchor named "warpgate-pcap-block-<port>"
 - freebsd         same pf approach as macOS (syntax identical)
 - openbsd/netbsd  pf approach -- untested
 - windows         no-op; the XP test path doesn't use this helper
@@ -150,7 +150,7 @@ def linux_remove_block(port):
 def pf_anchor_name(port):
     # pfctl anchors don't allow long identifiers on some BSDs; keep it
     # short and per-port.
-    return "p2pd-pcap-block-{0}".format(int(port))
+    return "warpgate-pcap-block-{0}".format(int(port))
 
 
 def pf_install_block(port):

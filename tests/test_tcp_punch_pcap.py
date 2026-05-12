@@ -38,10 +38,10 @@ SRC = os.path.normpath(os.path.join(HERE, "..", "src"))
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
-from p2pd.traversal.plugins.tcp_punch_pcap import pcap_mux_reader
-from p2pd.traversal.plugins.tcp_punch_pcap import pcap_engine
-from p2pd.traversal.plugins.tcp_punch_pcap import firewall_helper
-from p2pd.traversal.plugins.tcp_punch.punch_defs import PortAlloc
+from warpgate.traversal.plugins.tcp_punch_pcap import pcap_mux_reader
+from warpgate.traversal.plugins.tcp_punch_pcap import pcap_engine
+from warpgate.traversal.plugins.tcp_punch_pcap import firewall_helper
+from warpgate.traversal.plugins.tcp_punch.punch_defs import PortAlloc
 
 
 # -------------------------------------------------------------------------

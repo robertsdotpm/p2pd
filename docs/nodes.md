@@ -99,16 +99,16 @@ Register a human-readable name in the PNP (Peer Name Protocol) system:
 
 ```python
 full = await node.nickname("alice")
-print(full)            # "alice.p2p"
+print(full)            # "alice.warpgate"
 ```
 
 Names use a TLD suffix derived from the configured PNP server set
-(currently `.p2p` for the default single-server config — see
+(currently `.warpgate` for the default single-server config — see
 `pnp_get_tld` in `nickname.py`).  Once registered, peers can connect
 by passing the full name:
 
 ```python
-pipe, _ = await auto_connect(node, "alice.p2p")
+pipe, _ = await auto_connect(node, "alice.warpgate")
 ```
 
 If the name is already registered to a different keypair, the server

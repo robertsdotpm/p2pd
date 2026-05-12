@@ -20,8 +20,8 @@ from aionetiface import (
     dict_child, list_interfaces, load_interfaces, sort_ips_by_nic,
 )
 
-from p2pd import Node
-from p2pd.node.node_defs import NODE_TEST_CONF, NODE_PORT
+from warpgate import Node
+from warpgate.node.node_defs import NODE_TEST_CONF, NODE_PORT
 
 
 AUTO_TEST_CONF = dict_child(
@@ -312,7 +312,7 @@ async def load_two_nodes(test_self, af, label="connectivity"):
     ip_b = pick_listen_ip(probe_ifs[1], af)
     if not ip_a or not ip_b:
         # AF asymmetry between NICs is environmental (e.g. a mobile carrier
-        # NIC that doesn't bring up IPv6). It's not a regression in p2pd, so
+        # NIC that doesn't bring up IPv6). It's not a regression in warpgate, so
         # skip rather than fail.
         test_self.skipTest(
             "probe_ifs[0/1] don't both carry a routable {0} IP "

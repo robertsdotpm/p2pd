@@ -11,8 +11,8 @@ import unittest
 
 from aionetiface import SUB_ALL
 from aionetiface.testing import AsyncTestCase
-from p2pd import Node
-from p2pd.node.auto_connect import auto_connect
+from warpgate import Node
+from warpgate.node.auto_connect import auto_connect
 
 from quickstart_helpers import BASE_PORT, QUICKSTART_CONF, close_nodes
 

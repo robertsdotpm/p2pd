@@ -52,7 +52,7 @@ from aionetiface import (
 )
 from aionetiface.testing import AsyncTestCase
 
-from p2pd.node.node import Node, NODE_PORT
+from warpgate.node.node import Node, NODE_PORT
 
 
 PORT_A = NODE_PORT + 2750
@@ -167,7 +167,7 @@ class TestRandomProbeRealNat(AsyncTestCase):
             return ""
 
     async def asyncTearDown(self):
-        from p2pd.traversal.traversal_utils import close_plugin
+        from warpgate.traversal.traversal_utils import close_plugin
         if self.plugin_a is not None and self.node_a is not None:
             try:
                 await close_plugin(

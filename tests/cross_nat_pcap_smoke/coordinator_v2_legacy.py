@@ -31,7 +31,7 @@ FEDORA_IFACE = "ens192"
 FEDORA_LOCAL_IP = "10.0.1.224"
 FEDORA_PUBLIC_IP = "113.29.240.148"
 FEDORA_DEST_DIR = "/tmp"
-FEDORA_REPO_P2PD = "/home/x/projects/p2pd"
+FEDORA_REPO_Warpgate = "/home/x/projects/warpgate"
 FEDORA_REPO_AIONETIFACE = "/home/x/projects/aionetiface"
 FEDORA_REPO_SIDEWIRE = "/home/x/projects/sidewire"
 FEDORA_REPO_NAMEBUMP = "/home/x/projects/namebump"
@@ -43,7 +43,7 @@ LINUX_IFACE = "eno1"
 LINUX_LOCAL_IP = "158.69.27.176"
 LINUX_PUBLIC_IP = "158.69.27.176"
 LINUX_DEST_DIR = "/tmp"
-LINUX_REPO_P2PD = "/tmp/sweep_repos/p2pd"
+LINUX_REPO_Warpgate = "/tmp/sweep_repos/warpgate"
 LINUX_REPO_AIONETIFACE = "/tmp/sweep_repos/aionetiface"
 LINUX_REPO_SIDEWIRE = "/tmp/sweep_repos/sidewire"
 LINUX_REPO_NAMEBUMP = "/tmp/sweep_repos/namebump"
@@ -207,22 +207,22 @@ def main():
 
     # Sync working trees so peers have the v2 plugin + latest tcp_punch.
     here = os.path.dirname(os.path.abspath(__file__))
-    repo_p2pd = os.path.abspath(os.path.join(here, "..", ".."))
-    repo_aionet = os.path.abspath(os.path.join(repo_p2pd, "..", "aionetiface"))
+    repo_warpgate = os.path.abspath(os.path.join(here, "..", ".."))
+    repo_aionet = os.path.abspath(os.path.join(repo_warpgate, "..", "aionetiface"))
 
-    repo_sidewire = os.path.abspath(os.path.join(repo_p2pd, "..", "sidewire"))
-    repo_namebump = os.path.abspath(os.path.join(repo_p2pd, "..", "namebump"))
+    repo_sidewire = os.path.abspath(os.path.join(repo_warpgate, "..", "sidewire"))
+    repo_namebump = os.path.abspath(os.path.join(repo_warpgate, "..", "namebump"))
 
-    print("coordinator: rsyncing p2pd -> fedora")
-    rsync_to(repo_p2pd, FEDORA_HOST, FEDORA_USER, FEDORA_REPO_P2PD)
+    print("coordinator: rsyncing warpgate -> fedora")
+    rsync_to(repo_warpgate, FEDORA_HOST, FEDORA_USER, FEDORA_REPO_Warpgate)
     print("coordinator: rsyncing aionetiface -> fedora")
     rsync_to(repo_aionet, FEDORA_HOST, FEDORA_USER, FEDORA_REPO_AIONETIFACE)
     print("coordinator: rsyncing sidewire -> fedora")
     rsync_to(repo_sidewire, FEDORA_HOST, FEDORA_USER, FEDORA_REPO_SIDEWIRE)
     print("coordinator: rsyncing namebump -> fedora")
     rsync_to(repo_namebump, FEDORA_HOST, FEDORA_USER, FEDORA_REPO_NAMEBUMP)
-    print("coordinator: rsyncing p2pd -> p2pd.net")
-    rsync_to(repo_p2pd, LINUX_HOST, LINUX_USER, LINUX_REPO_P2PD)
+    print("coordinator: rsyncing warpgate -> p2pd.net")
+    rsync_to(repo_warpgate, LINUX_HOST, LINUX_USER, LINUX_REPO_Warpgate)
     print("coordinator: rsyncing aionetiface -> p2pd.net")
     rsync_to(repo_aionet, LINUX_HOST, LINUX_USER, LINUX_REPO_AIONETIFACE)
     print("coordinator: rsyncing sidewire -> p2pd.net")
@@ -232,12 +232,12 @@ def main():
 
     # Driver scripts already live inside the synced trees at
     # tests/cross_nat_pcap_smoke/.
-    fedora_driver = FEDORA_REPO_P2PD + "/tests/cross_nat_pcap_smoke/v2_responder.py"
-    linux_driver = LINUX_REPO_P2PD + "/tests/cross_nat_pcap_smoke/legacy_connector.py"
+    fedora_driver = FEDORA_REPO_Warpgate + "/tests/cross_nat_pcap_smoke/v2_responder.py"
+    linux_driver = LINUX_REPO_Warpgate + "/tests/cross_nat_pcap_smoke/legacy_connector.py"
 
     # Build the remote invocations.
     fedora_pp = "{0}/src:{1}/src:{2}/src:{3}/src".format(
-        FEDORA_REPO_P2PD, FEDORA_REPO_AIONETIFACE,
+        FEDORA_REPO_Warpgate, FEDORA_REPO_AIONETIFACE,
         FEDORA_REPO_SIDEWIRE, FEDORA_REPO_NAMEBUMP)
     fedora_cmd = (
         "sudo PYTHONPATH={0} {1} {2} "
@@ -252,7 +252,7 @@ def main():
     )
 
     linux_pp = "{0}/src:{1}/src:{2}/src:{3}/src".format(
-        LINUX_REPO_P2PD, LINUX_REPO_AIONETIFACE,
+        LINUX_REPO_Warpgate, LINUX_REPO_AIONETIFACE,
         LINUX_REPO_SIDEWIRE, LINUX_REPO_NAMEBUMP)
     linux_cmd = (
         "PYTHONPATH={0} {1} {2} "

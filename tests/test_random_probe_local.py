@@ -28,7 +28,7 @@ import unittest
 
 from aionetiface.testing import AsyncTestCase, probe_loopback_ips
 
-from p2pd.traversal.plugins.random_probe.random_probe_lib import (
+from warpgate.traversal.plugins.random_probe.random_probe_lib import (
     recvfrom_async,
     run_non_sym_side,
     run_symmetric_side,

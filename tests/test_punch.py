@@ -78,17 +78,17 @@ from aionetiface import (
     ip_norm,
 )
 
-from p2pd.traversal.plugins.tcp_punch.punch_client import PunchClient
-from p2pd.traversal.plugins.tcp_punch.punch_defs import PortAlloc
-from p2pd.traversal.plugins.tcp_punch.boundary_lib import (
+from warpgate.traversal.plugins.tcp_punch.punch_client import PunchClient
+from warpgate.traversal.plugins.tcp_punch.punch_defs import PortAlloc
+from warpgate.traversal.plugins.tcp_punch.boundary_lib import (
     compute_rendezvous,
     stable_ports,
     stable_boundary,
     quantized_bucket,
 )
-from p2pd.traversal.plugins.tcp_punch.punch_utils import timestamp_from_ntp
-from p2pd.traversal.plugins.tcp_punch.boundary_alloc import boundary_port_alloc
-from p2pd.traversal.plugins.tcp_punch.tcp_punch_engine import (
+from warpgate.traversal.plugins.tcp_punch.punch_utils import timestamp_from_ntp
+from warpgate.traversal.plugins.tcp_punch.boundary_alloc import boundary_port_alloc
+from warpgate.traversal.plugins.tcp_punch.tcp_punch_engine import (
     tcp_selector_punch_engine,
 )
 
@@ -189,7 +189,7 @@ async def punch_to_server(src_ip, dest_ip, dest_port, num_ports=16, base_port=30
 
     Returns the socket if successful, None otherwise.
     """
-    from p2pd.traversal.plugins.tcp_punch.tcp_punch_engine import (
+    from warpgate.traversal.plugins.tcp_punch.tcp_punch_engine import (
         tcp_selector_punch_engine,
     )
 

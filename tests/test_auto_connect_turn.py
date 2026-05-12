@@ -4,7 +4,7 @@ Integration tests — TURN fallback.
 Strict on multi-NIC machines: once require_split_or_fail has handed us
 two real NICs each carrying an IPv6 IP, every subsequent failure is a
 real failure -- no skipTest fallbacks. The TURN-server-side bind (::1)
-remains a legitimate skip path because it's environmental, not a p2pd
+remains a legitimate skip path because it's environmental, not a warpgate
 bug.
 """
 
@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from aionetiface import IP6, Interface
 from aionetiface.testing import AsyncTestCase
-from p2pd.node.auto_connect import auto_connect
+from warpgate.node.auto_connect import auto_connect
 
 from auto_connect_helpers import (
     PORT_TURN_A_T1, PORT_TURN_B_T1, PORT_TURN_A_T2,
@@ -79,7 +79,7 @@ class TestAutoConnectTurnFallback(AsyncTestCase):
             port=self.turn_server.af_ports.get(IP6, self.turn_server.port), af=IP6
         )
         self.get_infra_patcher = patch(
-            "p2pd.traversal.plugins.turn.main.get_infra",
+            "warpgate.traversal.plugins.turn.main.get_infra",
             return_value=[[local_entry]],
         )
         self.get_infra_patcher.start()

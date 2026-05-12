@@ -36,8 +36,8 @@ from aionetiface import IP4
 from aionetiface.nic.nat.nat_defs import FULL_CONE, RESTRICT_PORT_NAT
 from aionetiface.testing import AsyncTestCase
 
-from p2pd.node.auto_connect import auto_connect
-from p2pd.node.node import NODE_PORT
+from warpgate.node.auto_connect import auto_connect
+from warpgate.node.node import NODE_PORT
 
 from auto_connect_helpers import (
     PUNCH_TEST_CONF,

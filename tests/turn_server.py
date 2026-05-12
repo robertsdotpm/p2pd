@@ -35,7 +35,7 @@ from hashlib import md5
 
 from aionetiface import *
 from aionetiface.testing import probe_loopback_ips
-from p2pd.traversal.plugins.turn.turn_defs import TURN_REFRESH_EXPIRY
+from warpgate.traversal.plugins.turn.turn_defs import TURN_REFRESH_EXPIRY
 
 
 # ──────────────────────────────────────────────────────────────

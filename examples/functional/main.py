@@ -6,7 +6,7 @@ from error import *
 """
 #not found
 # maybe log if this string occurs from running a command to avoid hiding errrors
-p2pd uses home for everything, allow install to the pyenv sub dir or its
+warpgate uses home for everything, allow install to the pyenv sub dir or its
 going to have conflicts so needs an install_dir cmd
 
 the bash -l pattern is stupid, launch a new, clean shell with -c
@@ -17,7 +17,7 @@ direct and reverse working on nix 3.5
 i dont think forked processes (for the process pool in
 punching are being closed properly?)
 
-pkill -9 -f 'p2pd'
+pkill -9 -f 'warpgate'
 disabling pp_executors for now as a test
 """
 
@@ -29,12 +29,12 @@ async def git_pull_latest(servers):
         print(f"{server['os']}> Git pull latest code.")
 
         """
-        Change to the P2PD code dir and then git pull the latest code
+        Change to the Warpgate code dir and then git pull the latest code
         on the folders branch.
         """
-        p2pd_dir = get_p2pd_code_path(server)
+        warpgate_dir = get_warpgate_code_path(server)
         async with ssh_connect(server) as con:
-            cmd = f"""cd "{p2pd_dir}" && git pull"""
+            cmd = f"""cd "{warpgate_dir}" && git pull"""
             await con.run(cmd, check=True)
 
 
@@ -43,11 +43,11 @@ async def pyenv_install_latest(servers):
         # For now just choose any Python version.
         pyver = PY_VER or choose_first_py_ver(server)
 
-        print(f"{server['os']}> Installing latest P2PD ({pyver}).")
+        print(f"{server['os']}> Installing latest Warpgate ({pyver}).")
         shell = await Shell(server).start()
 
         # Install this module through pyenv version.
-        pyenv_cmd = pyenv_install_p2pd(pyver, server)
+        pyenv_cmd = pyenv_install_warpgate(pyver, server)
 
         # Waits for the command to be done in the active shell session.
         await shell.await_cmd(pyenv_cmd)
@@ -63,8 +63,8 @@ async def tunnel_test(active, passive):
     passive_shell = active_shell = None
     try:
         # Use local machines PNP server so names have no limits.
-        p2pd_cmd = "-m p2pd.demo --pnp_server 0,4,10.0.1.204,5300 "
-        p2pd_cmd += "--disable_upnp 1 --run_time 120 --cmd "
+        warpgate_cmd = "-m warpgate.demo --pnp_server 0,4,10.0.1.204,5300 "
+        warpgate_cmd += "--disable_upnp 1 --run_time 120 --cmd "
 
         # Setup shell and env for passive server.
         print(f"{passive['os']} (p)> Starting passive shell.")
@@ -73,7 +73,7 @@ async def tunnel_test(active, passive):
         # Get PNP address of the passive node.
         print(f"{passive['os']} (p)> Getting passive node address.")
         py_ver = PY_VER or choose_first_py_ver(passive)
-        cmd = p2pd_cmd + "get_nickname"
+        cmd = warpgate_cmd + "get_nickname"
         cmd = pyenv_run_cmd(py_ver, passive, cmd)
         print(cmd)
         results = await passive_shell.await_cmd(cmd, timeout=20)
@@ -83,7 +83,7 @@ async def tunnel_test(active, passive):
 
         # Start passive node listening for cons.
         print(f"{passive['os']} (p)> Starting passive node.")
-        cmd = p2pd_cmd + "1"
+        cmd = warpgate_cmd + "1"
         cmd = pyenv_run_cmd(py_ver, passive, cmd) + "\n"  # TODO: background on win?
         print(cmd)
         cmd = "cmd.exe /k " + cmd
@@ -99,7 +99,7 @@ async def tunnel_test(active, passive):
         # (0) connect (d)irect (l)an ipv(4)
         # NOTE: changed to (r) to test reverse con
         print(f"{active['os']} (a)> Try connect and echo to passive node.")
-        cmd = f'{p2pd_cmd}0pl4 --echo "CLEAN_SHUTDOWN" --dest_addr {passive_pnp}'
+        cmd = f'{warpgate_cmd}0pl4 --echo "CLEAN_SHUTDOWN" --dest_addr {passive_pnp}'
         # print(cmd)
         cmd = pyenv_run_cmd(py_ver, active, cmd)
         # cmd = "start " + cmd

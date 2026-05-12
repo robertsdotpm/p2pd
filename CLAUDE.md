@@ -1,4 +1,4 @@
-# p2pd — project instructions
+# warpgate — project instructions
 
 ## Python compatibility
 
@@ -93,7 +93,7 @@ Rule: when a class spins up real `Node`s / MQTT clients / TURN servers, move it 
 Pull all four repos first:
 
 ```cmd
-cd C:\Users\<user>\projects\p2pd && git fetch origin && git reset --hard origin/ai_experiment
+cd C:\Users\<user>\projects\warpgate && git fetch origin && git reset --hard origin/ai_experiment
 cd C:\Users\<user>\projects\aionetiface && git fetch origin && git reset --hard origin/ai_experiment
 cd C:\Users\<user>\projects\namebump && git fetch origin && git reset --hard origin/main
 cd C:\Users\<user>\projects\sidewire && git fetch origin && git reset --hard origin/main
@@ -143,7 +143,7 @@ The full warning lives in the `node_start` docstring at `node/node_start.py`.
 
 ## Demo `--ip` vs `--nic`: bind/advertise asymmetry
 
-`p2pd.demo` accepts both `--nic <name>` and `--ip <addr>`. They are NOT interchangeable:
+`warpgate.demo` accepts both `--nic <name>` and `--ip <addr>`. They are NOT interchangeable:
 
 - `--nic <name>` (no `--ip`): leaves `node.listen_ips=[]`. `listen_on_ifs` takes the broad branch — `listen_local(TCP, port, nic)` for v4 + `nic.route(IP6).bind()` for the v6 ext. The bind set matches what `make_node_addr` advertises. **This is the safe default.**
 - `--ip <addr>` (with or without `--nic`): populates `node.listen_ips=[addr,...]`. `listen_on_ifs` takes the strict branch — only IPs literally in `listen_ips` get bound. But `make_node_addr` still advertises the full per-NIC surface (every NIC IP across both AFs, plus v6 link-locals via the `route.link_locals` override in the v6 NIC slot). Net result: the published address claims reachability the bind side never provided. Peers that hit those un-bound addresses get TCP RST (`ConnectionRefused`) — silent for `direct_connect`, NO_ECHO for `reverse_connect` / `tcp_punch` / etc.

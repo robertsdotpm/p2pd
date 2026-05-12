@@ -1,6 +1,6 @@
 # Credits
 
-The new version of p2pd features code from multiple sources that have been heavily modified. It's my intention to try document all these sources but if I've somehow missed some please don't assume this is intentional!
+The new version of warpgate features code from multiple sources that have been heavily modified. It's my intention to try document all these sources but if I've somehow missed some please don't assume this is intentional!
 
 - STUN: https://github.com/talkiq/pystun3 which is itself a fork from https://github.com/jtriley/pystun Numerous changes made to the code -- see file for more info.
 - clock_skew: taken from the original gtk-gnutella code and adapted to python by me https://github.com/gtk-gnutella/gtk-gnutella/

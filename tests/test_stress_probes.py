@@ -127,7 +127,7 @@ async def probe_interface_load():
 async def probe_stun_load():
     """TCP STUN clients on the default NIC across each AF."""
     from aionetiface import Interface
-    from p2pd.node.node_utils import load_stun_clients
+    from warpgate.node.node_utils import load_stun_clients
     nic = await Interface()
     stun_clients = await load_stun_clients([nic])
     out = {}
@@ -152,7 +152,7 @@ async def probe_nickname_round_trip():
     PNP regression flares as a warning before it tanks the matrix.
     """
     from aionetiface import Interface, SysClock
-    from p2pd.node.nickname import Nickname
+    from warpgate.node.nickname import Nickname
 
     nic = await Interface()
     sk_bytes = os.urandom(32)
@@ -182,8 +182,8 @@ async def probe_node_start():
     nickname / STUN clients so the probe measures the core startup
     path, not optional network reachability.
     """
-    from p2pd.node.node import Node, NODE_PORT
-    from p2pd.node.node_defs import NODE_TEST_CONF
+    from warpgate.node.node import Node, NODE_PORT
+    from warpgate.node.node_defs import NODE_TEST_CONF
     port = NODE_PORT + 6000 + (int(time.time() * 1000) % 5000)
     node = await asyncio.wait_for(
         Node(port=port, conf=NODE_TEST_CONF).start(), timeout=30,
@@ -205,8 +205,8 @@ async def probe_concurrent_node_init():
     contention on Windows, MQTT broker rate-limiting, NTP fan-out
     collisions on overlapping requests.
     """
-    from p2pd.node.node import Node, NODE_PORT
-    from p2pd.node.node_defs import NODE_TEST_CONF
+    from warpgate.node.node import Node, NODE_PORT
+    from warpgate.node.node_defs import NODE_TEST_CONF
     base = NODE_PORT + 7000 + (int(time.time() * 1000) % 4000)
     nodes = [Node(port=base + i, conf=NODE_TEST_CONF) for i in range(CONCURRENCY)]
 
@@ -279,9 +279,9 @@ async def probe_reverse_connect_local():
     direct_connect would normally win on isn't reachable.
     """
     from aionetiface import IP4, list_interfaces, load_interfaces, Interface
-    from p2pd.node.node import Node, NODE_PORT
-    from p2pd.node.node_defs import NODE_TEST_CONF
-    from p2pd.node.auto_connect import auto_connect
+    from warpgate.node.node import Node, NODE_PORT
+    from warpgate.node.node_defs import NODE_TEST_CONF
+    from warpgate.node.auto_connect import auto_connect
 
     if_names = await list_interfaces()
     if not if_names:

@@ -12,7 +12,7 @@ import unittest
 
 from aionetiface import IP4, SYMMETRIC_NAT, parse_node_addr  # noqa: F401  IP4 used in print()s
 from aionetiface.testing import AsyncTestCase
-from p2pd.node.auto_connect import auto_connect, auto_combos, is_same_machine
+from warpgate.node.auto_connect import auto_connect, auto_combos, is_same_machine
 
 from auto_connect_helpers import (
     PORT_PUNCH_A_T1, PORT_PUNCH_B_T1, PORT_PUNCH_A_T2, PORT_PUNCH_B_T2,
@@ -64,8 +64,8 @@ def all_punch_combos_loopback(node, dest_map):
     counted; if any non-loopback path exists we let the test run.
     """
     found_any = False
-    from p2pd.traversal.traversal_plugin import TraversalPlugin  # noqa: F401
-    from p2pd.traversal.traversal_utils import select_dest_ipr
+    from warpgate.traversal.traversal_plugin import TraversalPlugin  # noqa: F401
+    from warpgate.traversal.traversal_utils import select_dest_ipr
     from aionetiface import NIC_BIND, EXT_BIND
     src_map = node.addr_map
     same_pc = is_same_machine(src_map, dest_map)

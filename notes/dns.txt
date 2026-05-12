@@ -15,7 +15,7 @@ Consequently, when the magic breaks so does the software.
 
 You'll see that good software is written to bypass problems with
 DNS. Browsers will hardcode some backup DNS resolvers and they'll
-hardcode IP addresses for fallbacks. If the goal of P2PD is to
+hardcode IP addresses for fallbacks. If the goal of Warpgate is to
 improve connectivity it must properly handle DNS failure. They
 really are quite common on some networks. 
 
@@ -36,7 +36,7 @@ using the pool for your own work there won't be enough free
 executors to run DNS queries in. 
 
 All of this is very prone to having bottlenecks and timeouts.
-So the address class in P2PD wraps an actual async DNS library.
+So the address class in Warpgate wraps an actual async DNS library.
 This also helps mitigate issues with depending on a systems
 own configured DNS resolves and cache -- both of which
 are easily broken.

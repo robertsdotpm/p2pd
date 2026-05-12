@@ -99,7 +99,7 @@ WORKER_TIMEOUT_S = 25.0
 
 # Env-var sentinel: we re-exec ourselves under `unshare -Urn` if it isn't
 # set.  When set, we know we're already inside the new user+net ns.
-NETNS_READY_ENV = "P2PD_PCAP_INTEROP_NETNS"
+NETNS_READY_ENV = "WARPGATE_PCAP_INTEROP_NETNS"
 
 
 def have_unprivileged_userns():
@@ -190,15 +190,15 @@ def initiator_inner(mailbox_dir):
     what auto_connect runs in production on a non-XP peer."""
     # Import lazily so import failures attach to the worker's result
     # file rather than crashing test collection.
-    sys.path.insert(0, "/home/x/projects/p2pd/src")
+    sys.path.insert(0, "/home/x/projects/warpgate/src")
     sys.path.insert(0, "/home/x/projects/aionetiface/src")
-    from p2pd.traversal.plugins.tcp_punch.tcp_punch_utils import (
+    from warpgate.traversal.plugins.tcp_punch.tcp_punch_utils import (
         bind_tcp_sockets, connect_on_tcp_sockets,
     )
-    from p2pd.traversal.plugins.tcp_punch.tcp_punch_engine import (
+    from warpgate.traversal.plugins.tcp_punch.tcp_punch_engine import (
         socket_event_monitor,
     )
-    from p2pd.traversal.plugins.tcp_punch.punch_defs import PortAlloc
+    from warpgate.traversal.plugins.tcp_punch.punch_defs import PortAlloc
     import selectors
 
     # Hand-built PortAlloc: one src/dest pair only (NUM_PORTS=1 here).
@@ -347,7 +347,7 @@ def responder_main(mailbox_dir, iface_name):
 
 
 def responder_inner(mailbox_dir, iface_name):
-    sys.path.insert(0, "/home/x/projects/p2pd/src")
+    sys.path.insert(0, "/home/x/projects/warpgate/src")
     sys.path.insert(0, "/home/x/projects/aionetiface/src")
     from aionetiface.entrypoint import aionetiface_setup_event_loop
     aionetiface_setup_event_loop()
@@ -612,15 +612,15 @@ class TestPcapPunchInterop(AsyncTestCase):
         # nsenter and have it import + dispatch to responder_main.
         responder_runner = """
 import sys
-sys.path.insert(0, '{p2pd_src}')
+sys.path.insert(0, '{warpgate_src}')
 sys.path.insert(0, '{aio_src}')
 sys.path.insert(0, '{tests_dir}')
 from test_tcp_punch_pcap_interop import responder_main
 responder_main({mailbox!r}, {iface!r})
 """.format(
-            p2pd_src="/home/x/projects/p2pd/src",
+            warpgate_src="/home/x/projects/warpgate/src",
             aio_src="/home/x/projects/aionetiface/src",
-            tests_dir="/home/x/projects/p2pd/tests",
+            tests_dir="/home/x/projects/warpgate/tests",
             mailbox=self.tmpdir,
             iface="veth1",
         )

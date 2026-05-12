@@ -11,7 +11,7 @@ import unittest
 
 from aionetiface import SUB_ALL
 from aionetiface.testing import AsyncTestCase
-from p2pd import log
+from warpgate import log
 
 from demo_smoke_helpers import BASE_PORT, start_demo_node, close_nodes
 
@@ -35,7 +35,7 @@ class TestDemoTwoNodeConnectivity(AsyncTestCase):
         self.assertNotEqual(self.alice.address(), self.bob.address())
 
     async def test_two_nodes_connect(self):
-        from p2pd.node.auto_connect import auto_connect
+        from warpgate.node.auto_connect import auto_connect
         try:
             self.alice = await start_demo_node(BASE_PORT + 22)
             self.bob   = await start_demo_node(BASE_PORT + 23)
@@ -66,7 +66,7 @@ class TestDemoTwoNodeConnectivity(AsyncTestCase):
         # which the daemon hands to bob's msg_cb. So we capture there
         # instead of trying to read from a "bob_pipe" -- a separate
         # bob -> alice connection wouldn't see alice's outbound bytes.
-        from p2pd.node.auto_connect import auto_connect
+        from warpgate.node.auto_connect import auto_connect
         try:
             self.alice = await start_demo_node(BASE_PORT + 24)
             self.bob   = await start_demo_node(BASE_PORT + 25)
@@ -120,7 +120,7 @@ class TestDemoTwoNodeConnectivity(AsyncTestCase):
 
     async def test_node_receives_via_msg_cb(self):
         """demo's add_echo_support pattern: node receives message via msg_cb."""
-        from p2pd.node.auto_connect import auto_connect
+        from warpgate.node.auto_connect import auto_connect
         try:
             self.alice = await start_demo_node(BASE_PORT + 26)
             self.bob   = await start_demo_node(BASE_PORT + 27)

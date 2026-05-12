@@ -1,7 +1,7 @@
 """
 Smoke tests for the demo flow.
 
-These mirror what python3 -m p2pd.demo does at startup:
+These mirror what python3 -m warpgate.demo does at startup:
   1. list_interfaces / load_interfaces  (real NIC discovery)
   2. Node(...).start()                  (full startup sequence)
   3. node.address()                     (serialised identity)
@@ -23,7 +23,7 @@ from aionetiface import (
     Interface, list_interfaces, parse_node_addr,
 )
 from aionetiface.testing import AsyncTestCase
-from p2pd import log
+from warpgate import log
 
 from demo_smoke_helpers import BASE_PORT, start_demo_node, load_demo_ifs, close_nodes
 

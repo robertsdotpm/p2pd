@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "p2pd"
+name = "warpgate"
 version = "4.0.2"
 description = "Asynchronous P2P networking library and service"
 readme = "README.md"

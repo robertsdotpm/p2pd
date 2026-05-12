@@ -183,7 +183,7 @@ them together, or pull just the one you need.
 
 ## Documentation
 
-Full docs: <https://p2pd.readthedocs.io/>
+Full docs: <https://warpgate.readthedocs.io/>
 
 The same pages live under [`docs/`](docs/) in this repo:
 

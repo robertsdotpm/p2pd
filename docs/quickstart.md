@@ -48,7 +48,7 @@ a name does three things:
    key.  Different name (or no name) → fresh identity.
 2. Starts a `Node` underneath: discovers NICs, opens listen sockets,
    classifies the local NAT, syncs NTP, connects to MQTT brokers.
-3. Registers `alice.p2p` on the namebump nickname server so peers can
+3. Registers `alice.warpgate` on the namebump nickname server so peers can
    resolve the name to the node's full address (with all
    per-interface paths and broker hints).
 
@@ -74,7 +74,7 @@ await gate.listen(echo)
 
 Returns a `PeerHandle` — an opaque token saying "the peer registered
 as `alice.<active_tld>`".  When the input has no TLD, `peer.find`
-auto-appends the active one (`.p2p` for the default single-server PNP
+auto-appends the active one (`.warpgate` for the default single-server PNP
 config).  No network call yet; the actual nickname resolution happens
 inside `gate.connect`.
 
@@ -128,7 +128,7 @@ async def bob(alice_addr_bytes):
 ```
 
 `gate.connect` accepts either a `PeerHandle` (resolved via namebump),
-a `<name>.p2p` string (likewise), or raw `bytes` (the addr serialised
+a `<name>.warpgate` string (likewise), or raw `bytes` (the addr serialised
 by `node.address()`).
 
 ## Skipping the Gate wrapper

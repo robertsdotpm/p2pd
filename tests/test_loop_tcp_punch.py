@@ -20,7 +20,7 @@ import unittest
 
 from aionetiface import IP4, SYMMETRIC_NAT, parse_node_addr
 from aionetiface.testing import AsyncTestCase
-from p2pd.node.auto_connect import auto_connect, auto_combos, is_same_machine
+from warpgate.node.auto_connect import auto_connect, auto_combos, is_same_machine
 
 from auto_connect_helpers import (
     LOOP_COUNT,
@@ -54,7 +54,7 @@ def is_loopback_addr(s):
 
 
 def all_punch_combos_loopback(node, dest_map):
-    from p2pd.traversal.traversal_utils import select_dest_ipr
+    from warpgate.traversal.traversal_utils import select_dest_ipr
     found_any = False
     for combo in auto_combos(node, node.addr_map, dest_map):
         plugin_name, af, route_type, src, dest = combo

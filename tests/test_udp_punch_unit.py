@@ -21,8 +21,8 @@ import unittest
 
 from aionetiface.testing import AsyncTestCase
 
-from p2pd.traversal.plugins.tcp_punch.punch_defs import PortAlloc
-from p2pd.traversal.plugins.udp_punch.udp_punch_defs import (
+from warpgate.traversal.plugins.tcp_punch.punch_defs import PortAlloc
+from warpgate.traversal.plugins.udp_punch.udp_punch_defs import (
     UDP_PUNCH_FRAME_LEN,
     UDP_PUNCH_KIND_CONFIRM,
     UDP_PUNCH_KIND_PROBE,
@@ -30,7 +30,7 @@ from p2pd.traversal.plugins.udp_punch.udp_punch_defs import (
     build_frame,
     parse_frame,
 )
-from p2pd.traversal.plugins.udp_punch.udp_punch_engine import udp_punch_engine
+from warpgate.traversal.plugins.udp_punch.udp_punch_engine import udp_punch_engine
 
 
 class TestUdpPunchFrame(unittest.TestCase):

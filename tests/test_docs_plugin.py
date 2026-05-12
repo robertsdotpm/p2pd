@@ -12,10 +12,10 @@ import asyncio
 import unittest
 from aionetiface import TCP, IP4, Pipe, dict_child, log_exception
 from aionetiface.testing import AsyncTestCase
-from p2pd import Node
-from p2pd.node.node_defs import NODE_TEST_CONF, NODE_PORT
-from p2pd.node.auto_connect import auto_connect
-from p2pd.traversal.traversal_plugin import TraversalPlugin
+from warpgate import Node
+from warpgate.node.node_defs import NODE_TEST_CONF, NODE_PORT
+from warpgate.node.auto_connect import auto_connect
+from warpgate.traversal.traversal_plugin import TraversalPlugin
 
 
 BASE_PORT = NODE_PORT + 3100
@@ -78,7 +78,7 @@ class DocsReversePlugin(TraversalPlugin):
     """
 
     async def run(self, reply=None):
-        from p2pd.protocol.proto_msg import ConMsg
+        from warpgate.protocol.proto_msg import ConMsg
         msg = ConMsg()
         msg.meta.plugin_name = "direct_connect"
         self.register_inbound()

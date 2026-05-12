@@ -1,6 +1,6 @@
 # Examples
 
-At a low-level: P2PD can be used for general async network programming. At a high-level - it can be used for peer-to-peer
+At a low-level: Warpgate can be used for general async network programming. At a high-level - it can be used for peer-to-peer
 networking.
 
 ## Low level examples

@@ -76,7 +76,7 @@ class TestAutoConnectTurnLive(AsyncTestCase):
         property TURN fallback ultimately depends on.
         """
         from aionetiface import UDP, get_infra
-        from p2pd.traversal.plugins.turn.turn_client import TURNClient
+        from warpgate.traversal.plugins.turn.turn_client import TURNClient
 
         self.node_a = await start_node_with_ifs(
             self.ifs_a, [self.ip_a], PORT_TURN_LIVE_A, conf=AUTO_TEST_CONF

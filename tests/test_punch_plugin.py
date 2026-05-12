@@ -22,7 +22,7 @@ reverse-connect socket.
 
 Mocking / patching
 ───────────────────
-• p2pd.traversal.plugins.tcp_punch.nat_predict.preload_mappings is patched to return
+• warpgate.traversal.plugins.tcp_punch.nat_predict.preload_mappings is patched to return
   synthetic NATMapping objects so no real STUN servers are needed.  The full
   NAT-prediction state machine (init_predictions, get_single_mapping,
   NATPredictAlloc.port_alloc) is exercised unchanged.
@@ -68,10 +68,10 @@ from aionetiface import (
     EQUAL_DELTA,
 )
 
-from p2pd.traversal.plugins.tcp_punch.punch_defs import PUNCH_MAX_SLEEP
-from p2pd.traversal.plugins.tcp_punch.nat_predict import NATMapping
-from p2pd.traversal.plugins.tcp_punch.main import PunchPluginFactory
-from p2pd.traversal.plugins.tcp_punch.proto import PunchMsg
+from warpgate.traversal.plugins.tcp_punch.punch_defs import PUNCH_MAX_SLEEP
+from warpgate.traversal.plugins.tcp_punch.nat_predict import NATMapping
+from warpgate.traversal.plugins.tcp_punch.main import PunchPluginFactory
+from warpgate.traversal.plugins.tcp_punch.proto import PunchMsg
 
 from aionetiface.testing import make_fake_nic
 
@@ -355,7 +355,7 @@ class TestPunchPluginBidirectional(AsyncTestCase):
         # preload_mappings is patched to avoid real STUN connections while
         # keeping the full NATPredictAlloc state machine intact.
         with patch(
-            "p2pd.traversal.plugins.tcp_punch.nat_predict.preload_mappings",
+            "warpgate.traversal.plugins.tcp_punch.nat_predict.preload_mappings",
             side_effect=_fake_preload_mappings,
         ):
             # ── Step 1: A initiates ──────────────────────────────────────
@@ -742,7 +742,7 @@ class TestPunchPluginIPv6LinkLocal(AsyncTestCase):
         plugin_b.set_send_signal(sender_b)
 
         with patch(
-            "p2pd.traversal.plugins.tcp_punch.nat_predict.preload_mappings",
+            "warpgate.traversal.plugins.tcp_punch.nat_predict.preload_mappings",
             side_effect=_fake_preload_mappings,
         ):
             # Step 1 – A initiates

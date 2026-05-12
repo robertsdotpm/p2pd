@@ -1,5 +1,5 @@
 """
-Network integration tests for p2pd.
+Network integration tests for warpgate.
 
 These tests require real internet connectivity. Each test is self-contained
 and uses only the default network interface so they stay portable across
@@ -44,11 +44,11 @@ from aionetiface import (
 from aionetiface.utility.sys_clock import get_ntp
 from aionetiface.testing import AsyncTestCase
 
-from p2pd import Node
-from p2pd.node.nickname import Nickname, FullNameFailure
+from warpgate import Node
+from warpgate.node.nickname import Nickname, FullNameFailure
 from server_retry_helpers import with_server_retry
-from p2pd.node.node_utils import load_signing_key
-from p2pd.node.node_defs import NODE_TEST_CONF, NODE_PORT
+from warpgate.node.node_utils import load_signing_key
+from warpgate.node.node_defs import NODE_TEST_CONF, NODE_PORT
 
 
 # ---------------------------------------------------------------------------

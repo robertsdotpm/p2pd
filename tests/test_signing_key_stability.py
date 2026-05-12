@@ -20,7 +20,7 @@ import tempfile
 import time
 import unittest
 
-from p2pd.node.node_utils import load_signing_key
+from warpgate.node.node_utils import load_signing_key
 
 
 class FakeNIC:
@@ -34,7 +34,7 @@ class TestSigningKeyStability(unittest.TestCase):
     """Identity must persist across listen_ips churn."""
 
     def setUp(self):
-        self.install_path = tempfile.mkdtemp(prefix="p2pd-sk-test-")
+        self.install_path = tempfile.mkdtemp(prefix="warpgate-sk-test-")
 
     def tearDown(self):
         shutil.rmtree(self.install_path, ignore_errors=True)

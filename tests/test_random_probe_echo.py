@@ -33,8 +33,8 @@ import unittest
 from aionetiface import IP4, SUB_ALL, to_b
 from aionetiface.testing import AsyncTestCase
 
-from p2pd.node.node import NODE_PORT
-from p2pd.traversal.traversal_utils import close_plugin
+from warpgate.node.node import NODE_PORT
+from warpgate.traversal.traversal_utils import close_plugin
 
 from auto_connect_helpers import (
     close_nodes,

@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 from aionetiface import IP6, Interface
 from aionetiface.testing import AsyncTestCase
-from p2pd.node.auto_connect import auto_connect
+from warpgate.node.auto_connect import auto_connect
 
 from auto_connect_helpers import (
     LOOP_COUNT,
@@ -86,7 +86,7 @@ class TestLoopTurn(AsyncTestCase):
             af=IP6,
         )
         self.get_infra_patcher = patch(
-            "p2pd.traversal.plugins.turn.main.get_infra",
+            "warpgate.traversal.plugins.turn.main.get_infra",
             return_value=[[local_entry]],
         )
         self.get_infra_patcher.start()

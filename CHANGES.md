@@ -1,6 +1,6 @@
 # Changes
 
-- This release marks V3 of P2PD.
+- This release marks V3 of Warpgate.
 - Largest no of changes since project began.
 - Over 10k+ line changes covering every file.
 - Some files improved others - re-written from scratch.

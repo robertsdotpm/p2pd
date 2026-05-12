@@ -18,7 +18,7 @@ import asyncio
 import unittest
 
 from aionetiface.testing import AsyncTestCase
-from p2pd import Node
+from warpgate import Node
 
 from quickstart_helpers import BASE_PORT, QUICKSTART_CONF, close_nodes
 

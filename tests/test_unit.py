@@ -11,7 +11,7 @@ import socket
 import tempfile
 import unittest
 
-from p2pd import (
+from warpgate import (
     IP4,
     IP6,
     EXT_BIND,
@@ -19,20 +19,20 @@ from p2pd import (
     parse_node_addr,
 )
 from aionetiface.testing import AsyncTestCase
-from p2pd.node.node import Node
-from p2pd.node.node_defs import NODE_TEST_CONF
-from p2pd.node.node_utils import norm_listen_ips, load_signing_key
-from p2pd.node.nickname import (
+from warpgate.node.node import Node
+from warpgate.node.node_defs import NODE_TEST_CONF
+from warpgate.node.node_utils import norm_listen_ips, load_signing_key
+from warpgate.node.nickname import (
     Nickname,
     pnp_name_has_tld,
     pnp_strip_tlds,
     pnp_get_tld,
     pnp_get_offsets,
 )
-from p2pd.traversal.traversal_manager import TraversalManager
-from p2pd.traversal.traversal_plugin import TraversalPlugin
-from p2pd.traversal.traversal_utils import select_dest_ipr, sort_pairs_by_overlap
-from p2pd.protocol.proto_msg import (
+from warpgate.traversal.traversal_manager import TraversalManager
+from warpgate.traversal.traversal_plugin import TraversalPlugin
+from warpgate.traversal.traversal_utils import select_dest_ipr, sort_pairs_by_overlap
+from warpgate.protocol.proto_msg import (
     ConMsg,
     GetAddr,
     ReturnAddr,
@@ -43,11 +43,11 @@ from p2pd.protocol.proto_msg import (
 # names are derived at plugin-load time from "<plugin>.<class>" so the
 # class doesn't carry one until plugin_loader patches it -- patch in
 # the test fixture so direct unit tests see what runtime sees.
-from p2pd.traversal.plugins.tcp_punch.proto import PunchMsg
-from p2pd.traversal.plugins.turn.proto import TURNMsg
+from warpgate.traversal.plugins.tcp_punch.proto import PunchMsg
+from warpgate.traversal.plugins.turn.proto import TURNMsg
 PunchMsg.WIRE_NAME = "tcp_punch.PunchMsg"
 TURNMsg.WIRE_NAME = "turn.TURNMsg"
-from p2pd.traversal.traversal_utils import try_unpack_msg, sig_msg_to_buf
+from warpgate.traversal.traversal_utils import try_unpack_msg, sig_msg_to_buf
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +116,7 @@ class TestParseNodeAddr(unittest.TestCase):
 # ===========================================================================
 class TestNicknameTLD(unittest.TestCase):
     def test_has_tld_all_valid(self):
-        for tld in (".p2p", ".node", ".peer"):
+        for tld in (".warpgate", ".node", ".peer"):
             with self.subTest(tld=tld):
                 self.assertTrue(pnp_name_has_tld("alice" + tld))
 
@@ -126,7 +126,7 @@ class TestNicknameTLD(unittest.TestCase):
         self.assertFalse(pnp_name_has_tld(""))
 
     def test_strip_tld_removes_suffix(self):
-        for tld in (".p2p", ".node", ".peer"):
+        for tld in (".warpgate", ".node", ".peer"):
             with self.subTest(tld=tld):
                 self.assertEqual(pnp_strip_tlds("alice" + tld), "alice")
 
@@ -135,7 +135,7 @@ class TestNicknameTLD(unittest.TestCase):
         self.assertEqual(pnp_strip_tlds("alice.com"), "alice.com")
 
     def test_get_tld_roundtrip(self):
-        for tld in (".p2p", ".node", ".peer"):
+        for tld in (".warpgate", ".node", ".peer"):
             with self.subTest(tld=tld):
                 offsets = pnp_get_offsets(tld)
                 back = pnp_get_tld(offsets)
@@ -146,7 +146,7 @@ class TestNicknameTLD(unittest.TestCase):
         self.assertEqual(sorted(offsets), [0, 1])
 
     def test_p2p_offset_is_zero(self):
-        offsets = pnp_get_offsets(".p2p")
+        offsets = pnp_get_offsets(".warpgate")
         self.assertEqual(list(offsets), [0])
 
     def test_node_offset_is_one(self):
@@ -179,12 +179,12 @@ class TestNicknameNotStarted(AsyncTestCase):
     async def test_get_before_start_raises(self):
         nick = await self._make_nick()
         with self.assertRaises(AssertionError):
-            await nick.get("name.p2p")
+            await nick.get("name.warpgate")
 
     async def test_delete_before_start_raises(self):
         nick = await self._make_nick()
         with self.assertRaises(AssertionError):
-            await nick.delete("name.p2p")
+            await nick.delete("name.warpgate")
 
 
 # ===========================================================================

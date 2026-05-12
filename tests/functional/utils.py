@@ -29,10 +29,10 @@ def get_path_join(server):
     return path_join
 
 
-def get_p2pd_code_path(server):
+def get_warpgate_code_path(server):
     path_join = get_path_join(server)
-    p2pd_dir = path_join(*server["home"], "p2pd_dev", "p2pd")
-    return p2pd_dir
+    warpgate_dir = path_join(*server["home"], "warpgate_dev", "warpgate")
+    return warpgate_dir
 
 
 def ssh_connect(server):
@@ -81,10 +81,10 @@ def pyenv_run_cmd(py_ver, server, cmd):
     return out
 
 
-def pyenv_install_p2pd(py_ver, server):
-    p2pd_dir = get_p2pd_code_path(server)
-    assert "\n" not in p2pd_dir
-    pip_install = '-m pip install --force-reinstall -e "{}"'.format(p2pd_dir)
+def pyenv_install_warpgate(py_ver, server):
+    warpgate_dir = get_warpgate_code_path(server)
+    assert "\n" not in warpgate_dir
+    pip_install = '-m pip install --force-reinstall -e "{}"'.format(warpgate_dir)
     return pyenv_run_cmd(py_ver, server, pip_install)
 
 

@@ -1,6 +1,6 @@
 from aionetiface import *
 from aionetiface.testing import AsyncTestCase
-from p2pd import *
+from warpgate import *
 
 
 class TestInterface(AsyncTestCase):

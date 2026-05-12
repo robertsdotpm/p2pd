@@ -29,7 +29,7 @@ import traceback
 from aionetiface import (
     IP4, IP6, UDP, Interface, get_infra, list_interfaces, load_interfaces,
 )
-from p2pd.traversal.plugins.turn.turn_client import TURNClient
+from warpgate.traversal.plugins.turn.turn_client import TURNClient
 
 
 PROBE_PAYLOAD = b"TURN-PROBE-PAYLOAD-12345"

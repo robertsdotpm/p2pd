@@ -21,7 +21,7 @@ from aionetiface.nic.nat.nat_defs import (
     SYMMETRIC_NAT,
 )
 
-from p2pd.traversal.plugins.random_probe.random_probe_defs import (
+from warpgate.traversal.plugins.random_probe.random_probe_defs import (
     DEFAULT_PROBE_COUNT,
     PROBE_LEN,
     PROBE_MAGIC,
@@ -30,13 +30,13 @@ from p2pd.traversal.plugins.random_probe.random_probe_defs import (
     ROLE_CONE,
     ROLE_SYM,
 )
-from p2pd.traversal.plugins.random_probe.random_probe_lib import (
+from warpgate.traversal.plugins.random_probe.random_probe_lib import (
     decode_probe,
     encode_probe,
     random_probe_ports,
 )
-from p2pd.traversal.plugins.random_probe.main import is_symmetric_nat
-from p2pd.traversal.plugins.random_probe.proto import RandomProbeMsg
+from warpgate.traversal.plugins.random_probe.main import is_symmetric_nat
+from warpgate.traversal.plugins.random_probe.proto import RandomProbeMsg
 # Plugin loader patches WIRE_NAME at install; unit tests bypass the
 # loader so we set it here so pack() doesn't trip on the unset guard.
 RandomProbeMsg.WIRE_NAME = "random_probe.RandomProbeMsg"

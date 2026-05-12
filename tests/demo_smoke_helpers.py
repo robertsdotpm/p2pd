@@ -17,7 +17,7 @@ from aionetiface import (
     Interface,
     dict_child, list_interfaces, load_interfaces,
 )
-from p2pd.node.node_defs import NODE_TEST_CONF, NODE_PORT
+from warpgate.node.node_defs import NODE_TEST_CONF, NODE_PORT
 
 
 BASE_PORT = NODE_PORT + 4000
@@ -52,7 +52,7 @@ async def start_demo_node(port, ifs=None):
     the import cost (and don't tangle helper-loading errors with their
     own setup failures).
     """
-    from p2pd import Node
+    from warpgate import Node
     if ifs is None:
         ifs = await load_demo_ifs()
     node = Node(ifs=ifs, port=port, conf=DEMO_SMOKE_CONF)

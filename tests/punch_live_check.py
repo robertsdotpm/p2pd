@@ -34,9 +34,9 @@ from aionetiface import (
     IP4, Interface, SYMMETRIC_NAT,
     list_interfaces, load_interfaces,
 )
-from p2pd import Node
-from p2pd.node.auto_connect import auto_connect
-from p2pd.node.node_defs import NODE_PORT
+from warpgate import Node
+from warpgate.node.auto_connect import auto_connect
+from warpgate.node.node_defs import NODE_PORT
 
 
 PORT_A = NODE_PORT + 7000

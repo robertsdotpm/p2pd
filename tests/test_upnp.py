@@ -43,13 +43,13 @@ from aionetiface.testing import AsyncTestCase
 # and flaked the singular Interface() loader on XP. Helpers
 # (UPNP_TEST_PORT, get_test_nic) live in upnp_helpers.py.
 
-from p2pd.traversal.plugins.upnp.upnp_utils import (
+from warpgate.traversal.plugins.upnp.upnp_utils import (
     UPNP_IP,
     build_upnp_discover_buf,
     find_upnp_service_by_type,
     sort_upnp_replies_by_unique_location,
 )
-from p2pd.node.node_utils import remote_reachability_cb
+from warpgate.node.node_utils import remote_reachability_cb
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -263,7 +263,7 @@ PROBE_IP6 = "2607:5300:60:80b0::1"
 
 
 class TestRemoteReachabilityCb(AsyncTestCase):
-    """remote_reachability_cb resolves the right future when the p2pd probe connects."""
+    """remote_reachability_cb resolves the right future when the warpgate probe connects."""
 
     async def test_probe_ip4_resolves_future(self):
         reachability = {IP4: {}, IP6: {}}
@@ -350,18 +350,18 @@ class TestForwardWiring(AsyncTestCase):
         reachability = {IP4: {}, IP6: {}}
 
         with patch(
-            "p2pd.node.node_utils.upnp_port_forward" if False else
-            "p2pd.traversal.plugins.upnp.main.port_forward",
+            "warpgate.node.node_utils.upnp_port_forward" if False else
+            "warpgate.traversal.plugins.upnp.main.port_forward",
             new=AsyncMock(return_value=1),
         ):
-            with patch("p2pd.node.node_utils.forward.__module__"):
+            with patch("warpgate.node.node_utils.forward.__module__"):
                 pass
 
         async def fake_upnp(af, nic, port, src_tup, name):
             return 1
 
         with patch(
-            "p2pd.node.node_utils.forward",
+            "warpgate.node.node_utils.forward",
             wraps=lambda node, port, reach: _patched_forward(node, port, reach, fake_upnp),
         ):
             pass
@@ -422,7 +422,7 @@ async def _patched_forward(node, port, reachability, fake_upnp):
                 route = await nic.route(af).bind()
                 src_ip = route.nic() if af == IP4 else route.ext()
                 src_tup = (src_ip, port)
-                ret = await fake_upnp(af, nic, port, src_tup, "p2pd")
+                ret = await fake_upnp(af, nic, port, src_tup, "warpgate")
                 if ret:
                     return [af, nic.id]
 

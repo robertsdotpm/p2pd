@@ -1,5 +1,5 @@
 stun1.p2pd.net has only 1 IPv4 / IPv6.
-It needs 2 so it can be used as a 'change' server. There's only one offical p2pd server at the moment for that.
+It needs 2 so it can be used as a 'change' server. There's only one offical warpgate server at the moment for that.
 
 http client library doesnt work well
 [
@@ -18,21 +18,21 @@ trying write to close socket for MQTT?
     [TRYING WRITE TO CLOSED SOCKET]
 
 punch double close found:
-  File "/home/x/projects/p2pd/src/p2pd/demo/__main__.py", line 113, in main
+  File "/home/x/projects/warpgate/src/warpgate/demo/__main__.py", line 113, in main
     await stop_nodes_option(nodes)
-  File "/home/x/projects/p2pd/src/p2pd/demo/menu.py", line 211, in stop_nodes_option
+  File "/home/x/projects/warpgate/src/warpgate/demo/menu.py", line 211, in stop_nodes_option
     await n.close()
-  File "/home/x/projects/p2pd/src/p2pd/node/node.py", line 99, in close
+  File "/home/x/projects/warpgate/src/warpgate/node/node.py", line 99, in close
     await node_stop(self)
-  File "/home/x/projects/p2pd/src/p2pd/node/node_stop.py", line 36, in node_stop
+  File "/home/x/projects/warpgate/src/warpgate/node/node_stop.py", line 36, in node_stop
     await pipe.close()
-  File "/home/x/projects/p2pd/src/p2pd/traversal/plugins/tcp_punch/punch_client.py", line 211, in close
+  File "/home/x/projects/warpgate/src/warpgate/traversal/plugins/tcp_punch/punch_client.py", line 211, in close
     await self.pipe.close()
-  File "/home/x/projects/p2pd/src/p2pd/traversal/plugins/tcp_punch/punch_process.py", line 162, in close_patch
+  File "/home/x/projects/warpgate/src/warpgate/traversal/plugins/tcp_punch/punch_process.py", line 162, in close_patch
     await pipe_close()
-  File "/home/x/projects/p2pd/src/p2pd/net/pipe/pipe_events.py", line 374, in close
+  File "/home/x/projects/warpgate/src/warpgate/net/pipe/pipe_events.py", line 374, in close
     raise AlreadyClosedError()
-p2pd.errors.AlreadyClosedError
+warpgate.errors.AlreadyClosedError
 
 
 Windows: Requires obscure socket options (IP_UNICAST_IF) or specific routing table metrics, and Microsoft's "Strong Host Model" implementation can be finicky.
@@ -52,7 +52,7 @@ a sig pipe seems to be disconnecting and the error logger doesnt write all error
 
 i see this get delta error:
 
-  File "/home/x/projects/p2pd/src/p2pd/nic/nat/nat_utils.py", line 199, in get_delta_value
+  File "/home/x/projects/warpgate/src/warpgate/nic/nat/nat_utils.py", line 199, in get_delta_value
     if results[i - 1][MAPPED_INDEX] is not None:
 
 
@@ -70,10 +70,10 @@ unique, canonical identity for each server.
   and merge the results into a new list
 
 
-  File "/home/x/projects/p2pd/src/p2pd/protocol/pnp/pnp_client.py", line 66, in return_resp
+  File "/home/x/projects/warpgate/src/warpgate/protocol/pnp/pnp_client.py", line 66, in return_resp
     buf = decrypt(self.reply_sk, buf)
           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/x/projects/p2pd/src/p2pd/vendor/ecies/__init__.py", line 38, in decrypt
+  File "/home/x/projects/warpgate/src/warpgate/vendor/ecies/__init__.py", line 38, in decrypt
     ephemeral_pk = msg[0:33]
                    ~~~^^^^^^
 
